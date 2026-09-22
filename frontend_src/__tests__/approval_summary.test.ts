@@ -28,7 +28,7 @@ describe("friendly approval summary", () => {
     [
       "diff.patch_yaml_config.set",
       { path: "[11].sensor[3].state", file: "templates.yaml" },
-      "Update templates.yaml",
+      "Set configuration in templates.yaml",
       "Open Details to review the exact proposed change.",
     ],
     [

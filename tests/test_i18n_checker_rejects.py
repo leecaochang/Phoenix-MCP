@@ -73,6 +73,18 @@ def test_clean_pair_passes(checker, catalogs, capsys):
     assert "no problems" in out
 
 
+def test_permission_mnemonic_is_rejected_when_dropped(checker, catalogs, capsys, monkeypatch):
+    """The compact N/R/W/D buttons need their English word in the tooltip."""
+    monkeypatch.setattr(checker, "MNEMONICS", {"panel.perms.selGrey": "None"})
+    catalogs(
+        {"perms": {"selGrey": "None: no explicit grant"}},
+        {"perms": {"selGrey": "Nessuna autorizzazione esplicita"}},
+    )
+    code, out = run(checker, capsys)
+    assert code == 1
+    assert "English mnemonic 'None'" in out
+
+
 def test_missing_key_is_rejected(checker, catalogs, capsys):
     catalogs({"greet": "Hello", "bye": "Goodbye"}, {"greet": "你好"})
     code, out = run(checker, capsys)

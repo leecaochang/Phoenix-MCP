@@ -1061,11 +1061,11 @@ export function ImportModal({ onClose }: { onClose: (didImport: boolean) => void
 
   const summary = counts
     ? [
-        counts.entities && t("mesa.countEntity", { count: counts.entities }),
-        counts.devices && t("mesa.countDevice", { count: counts.devices }),
-        counts.domains && t("mesa.countDomain", { count: counts.domains }),
-        counts.integrations && t("mesa.countIntegration", { count: counts.integrations }),
-        counts.areas && t("mesa.countArea", { count: counts.areas }),
+        counts.entities && tn("mesa.countEntity", counts.entities),
+        counts.devices && tn("mesa.countDevice", counts.devices),
+        counts.domains && tn("mesa.countDomain", counts.domains),
+        counts.integrations && tn("mesa.countIntegration", counts.integrations),
+        counts.areas && tn("mesa.countArea", counts.areas),
       ].filter(Boolean).join(t("common.listSeparator"))
     : "";
 

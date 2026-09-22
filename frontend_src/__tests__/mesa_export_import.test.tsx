@@ -65,7 +65,7 @@ describe("ImportModal", () => {
 
     pickFile(container, JSON.stringify(archive));
     await findByText(/Archive contains/);
-    expect(getByText(/2 entity, 1 domain/)).toBeInTheDocument();
+    expect(getByText(/2 entities, 1 domain/)).toBeInTheDocument();
     expect((getByText("Import") as HTMLButtonElement).disabled).toBe(false);
   });
 

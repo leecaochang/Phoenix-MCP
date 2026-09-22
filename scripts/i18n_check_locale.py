@@ -104,6 +104,16 @@ KEEP_ENGLISH: dict[str, tuple[str, ...]] = {
 
 KEEP_ENGLISH_KEYS = {key for group in KEEP_ENGLISH.values() for key in group}
 
+# The permission tree keeps compact English buttons N/R/W/D. Every translated
+# tooltip must begin with the English word represented by that letter so the
+# relationship remains intelligible in a narrow control.
+MNEMONICS: dict[str, str] = {
+    "panel.perms.selGrey": "None",
+    "panel.perms.selYellow": "Read",
+    "panel.perms.selGreen": "Write",
+    "panel.perms.selRed": "Deny",
+}
+
 # Substrings that must survive verbatim into the translation because something
 # outside the catalog compares against them or a user is meant to type or read
 # them literally. <code> spans are checked automatically and are not listed.
@@ -249,6 +259,40 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.stepPersona",
         "panel.wizard.stepToken",
         "panel.wizard.tokenLabel",
+    }),
+    "it": frozenset({
+        # Italian shares these with English as loanwords, HA terms, product
+        # names, and bare separator/template fragments. Each is a genuine
+        # cognate or machine value, not an untranslated sentence.
+        "panel.mesa.countArea.one",         # "{count} area" is a genuine cognate
+        "panel.agentchat.approvalReason",      # " - {reason}", a bare separator fragment
+        "panel.agentchat.levelMax",            # "Max", the standard Italian abbreviation
+        "panel.agentchat.title",               # "Agent Chat", a product name
+        "panel.agentchat.token",               # "Token"
+        "panel.agentchat.toolResult",          # "<code>{name}</code>: {summary}", no prose to translate
+        "panel.approvalSummary.named.kind.script",  # "script", the invariant HA entity type
+        "panel.approvals.energyGas",           # "Gas"
+        "panel.approvals.metaToken",           # "Token"
+        "panel.audit.rowToken",                # "Token"
+        "panel.caps.cap_backup.label",         # "Backup"
+        "panel.changes.typeFile",              # "File", the same word in Italian
+        "panel.changes.typeScript",            # "Script"
+        "panel.mesa.addAreaShort",             # "+ Area", a compact picker label
+        "panel.mesa.no",                       # "No", the boolean answer
+        "panel.mesa.scopeLabelArea",           # "Area"
+        "panel.mesaSuggestion.noun.script",    # "script"
+        "panel.selectBy.area",                 # "Area"
+        "panel.settings.agentcliCard",         # "Agent Chat", a product name
+        "panel.settings.languageAuto",         # "Auto", HA Italian's own label
+        "panel.settings.providerOllamaCloud",  # "Ollama (cloud)", "cloud" is a cognate
+        "panel.settings.themeAuto",            # "Auto"
+        "panel.settings.token",                # "Token"
+        "panel.shell.agentChat",               # "Agent Chat", a product name
+        "panel.tokens.cardPersona",            # "Persona"
+        "panel.wizard.stepPersona",            # "Persona"
+        "panel.wizard.stepTest",               # "Test"
+        "panel.wizard.stepToken",              # "Token"
+        "panel.wizard.tokenLabel",             # "Token"
     }),
     "nl": frozenset({
         # Dutch keeps these as shared loanwords, technical terms, HA concepts,
@@ -620,6 +664,10 @@ def check(language: str) -> int:
             continue
 
         source = en_flat[key]
+        if key in MNEMONICS and not value.startswith(MNEMONICS[key]):
+            problems.append(
+                f"{key}: must start with the English mnemonic {MNEMONICS[key]!r}"
+            )
         want, got = placeholders(source), placeholders(value)
         if got is None:
             problems.append(f"{key}: unbalanced brace, HA cannot parse it")

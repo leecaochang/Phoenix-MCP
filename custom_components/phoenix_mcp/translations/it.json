@@ -1,0 +1,21 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "Phoenix MCP è già configurato."
+    },
+    "create_entry": {
+      "default": "Usa il pannello di Phoenix MCP per gestire i tuoi token"
+    },
+    "step": {
+      "user": {
+        "description": "Fai clic su Invia per installare l'integrazione Phoenix MCP. Tieni presente che è possibile configurare una sola istanza alla volta"
+      }
+    }
+  },
+  "issues": {
+    "mesa_runtime_unavailable": {
+      "description": "Phoenix MCP non è riuscito a inizializzare il suo runtime di sicurezza MESA. Le letture e il ripristino da parte dell'amministratore restano disponibili, ma le operazioni protette che modificano lo stato vengono rifiutate mentre la modalità MESA è Consultiva o Applicata. Controlla i registri di Home Assistant, poi ricarica l'integrazione Phoenix MCP. Puoi selezionare esplicitamente la modalità Disattivata solo se intendi operare senza la protezione MESA.",
+      "title": "Il runtime di sicurezza MESA non è disponibile"
+    }
+  }
+}

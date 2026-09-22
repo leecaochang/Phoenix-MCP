@@ -58,6 +58,7 @@ export const LANGUAGES: ReadonlyArray<{ code: string; endonym: string }> = [
   { code: "en", endonym: "English" },
   { code: "es", endonym: "Español" },
   { code: "fr", endonym: "Français" },
+  { code: "it", endonym: "Italiano" },
   { code: "ja", endonym: "日本語" },
   { code: "ko", endonym: "한국어" },
   { code: "nl", endonym: "Nederlands" },

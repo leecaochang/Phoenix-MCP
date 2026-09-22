@@ -259,11 +259,26 @@
       "costModerate": "中等",
       "costNone": "无",
       "costTrivial": "极低",
-      "countArea": "{count} 个区域",
-      "countDevice": "{count} 个设备",
-      "countDomain": "{count} 个域",
-      "countEntity": "{count} 个实体",
-      "countIntegration": "{count} 个集成",
+      "countArea": {
+        "one": "{count} 个区域",
+        "other": "{count} 个区域"
+      },
+      "countDevice": {
+        "one": "{count} 个设备",
+        "other": "{count} 个设备"
+      },
+      "countDomain": {
+        "one": "{count} 个域",
+        "other": "{count} 个域"
+      },
+      "countEntity": {
+        "one": "{count} 个实体",
+        "other": "{count} 个实体"
+      },
+      "countIntegration": {
+        "one": "{count} 个集成",
+        "other": "{count} 个集成"
+      },
       "currentFilter": "当前筛选：",
       "currently": "当前生效",
       "delete": "删除",
@@ -1564,7 +1579,7 @@
       "workingSpinner": "处理中…"
     },
     "wizard": {
-      "accessSub": "展开 <code>light</code> 分组，选择一个您可以亲自验证的灯。选择<strong> W</strong> 以授予读写权限。您可以授权整个设备，也可以展开后只选择其中一个实体。之后还可以添加更多权限。",
+      "accessSub": "展开 <code>light</code> 分组，选择一个您可以亲自验证的灯。选择 <strong>W</strong> 以授予读写权限。您可以授权整个设备，也可以展开后只选择其中一个实体。之后还可以添加更多权限。",
       "accessTitle": "为一个灯授予访问权限",
       "addingProvider": "正在添加 {label}",
       "agentClaudeHint": "在终端中运行此命令，然后用 claude mcp list 检查结果。",
@@ -1684,7 +1699,7 @@
       "concern.valve": "控制水流或燃气；状态错误可能导致无人看管时漏水或泄漏",
       "concern.siren": "会发出响亮的警报声；误触发会打扰住户和邻居",
       "concern.water_heater": "会达到烫伤温度并消耗大量能源，且恢复缓慢",
-      "concern.update": "固件更新几乎不可逆，并可能使设备变砖"
+      "concern.update": "会接收实际上不可逆的固件更新，并可能使设备变砖"
     },
     "approvalSummary": {
       "action.approve": "批准并执行",
@@ -1746,8 +1761,8 @@
       "delete_entity.title": "删除 {entity_id} 的注册表条目",
       "delete_esphome_yaml.body": "这将永久删除 {rel}。ESPHome 设备本身不会被更改。",
       "delete_esphome_yaml.device.body": "这将永久删除 {rel}。ESPHome 设备 {device} 本身不会被更改。",
-      "delete_esphome_yaml.device.title": "删除 ESPHome 设备配置 {rel}（{device}）。设备本身不会受到影响。",
-      "delete_esphome_yaml.title": "删除 ESPHome 设备配置 {rel}。设备本身不会受到影响。",
+      "delete_esphome_yaml.device.title": "删除 ESPHome 设备配置 {rel}（{device}）",
+      "delete_esphome_yaml.title": "删除 ESPHome 设备配置 {rel}",
       "delete_helper.body": "这将永久删除辅助工具 {helper_id}。",
       "delete_helper.title": "删除 {helper_type} 辅助元素“{helper_id}”",
       "delete_scene.body": "这将永久删除场景 {scene_id}。",
@@ -1872,17 +1887,17 @@
       "patch_dashboard.set.body": "这将更新 Home Assistant 仪表盘配置。打开详细信息可查看具体更改内容。",
       "patch_dashboard.set.title": "更新仪表盘“{label}”",
       "patch_yaml_config.append.body": "打开详细信息可查看具体更改内容。",
-      "patch_yaml_config.append.title": "更新 {file}",
+      "patch_yaml_config.append.title": "向 {file} 添加配置",
       "patch_yaml_config.remove.body": "这将从 {file} 中移除配置。打开详细信息可查看具体更改内容。",
-      "patch_yaml_config.remove.title": "更新 {file}",
+      "patch_yaml_config.remove.title": "从 {file} 删除配置",
       "patch_yaml_config.set.body": "打开详细信息可查看具体更改内容。",
-      "patch_yaml_config.set.title": "更新 {file}",
+      "patch_yaml_config.set.title": "在 {file} 中设置配置",
       "remove_device.body": "这将从所属集成中移除 {device_id}。可能需要重新添加该设备。",
       "remove_device.title": "从配置条目 {config_entry_id} 移除设备 {device_id}",
       "rename_esphome_device.body": "这将重命名 {device}、编译其配置并刷写设备。更新期间请勿断开设备连接。",
       "rename_esphome_device.services.body": "这将重命名 {device}、更新其操作服务、编译配置并刷写设备。更新期间请勿断开设备连接。",
-      "rename_esphome_device.services.title": "将 ESPHome 设备 {device} 重命名为 {new_name}，同时重命名 {count} 个动作服务。此操作会编译并刷写该设备。",
-      "rename_esphome_device.title": "将 ESPHome 设备 {device} 重命名为 {new_name}。此操作会编译并刷写该设备。",
+      "rename_esphome_device.services.title": "将 ESPHome 设备 {device} 重命名为 {new_name}，同时重命名 {count} 个动作服务",
+      "rename_esphome_device.title": "将 ESPHome 设备 {device} 重命名为 {new_name}",
       "restart_ha.body": "Home Assistant 重启期间将暂时不可用。",
       "restart_ha.title": "重启 Home Assistant",
       "set_dashboard_config.body": "这将应用建议的配置更改。打开详细信息可查看具体更改内容。",
@@ -1893,8 +1908,8 @@
       "set_entity.title": "更新 {entity_id} 的注册表元数据（{fields}）",
       "set_esphome_yaml.body": "这将应用建议的配置更改。打开详细信息可查看具体更改内容。",
       "set_esphome_yaml.device.body": "这将应用建议的配置更改。打开详细信息可查看具体更改内容。",
-      "set_esphome_yaml.device.title": "编辑 ESPHome 设备配置 {rel}（{device}，{count} 个实体）。此操作不会刷写设备。",
-      "set_esphome_yaml.title": "编辑 ESPHome 设备配置 {rel}。此操作不会刷写设备。",
+      "set_esphome_yaml.device.title": "编辑 ESPHome 设备配置 {rel}（{device}，{count} 个实体）",
+      "set_esphome_yaml.title": "编辑 ESPHome 设备配置 {rel}",
       "set_yaml_config.body": "这将替换 {file} 的全部内容。打开详细信息可查看具体更改内容。",
       "set_yaml_config.removing.body": "这将替换 {file} 的全部内容并移除配置。打开详细信息可查看具体更改内容。",
       "set_yaml_config.removing.title": "更新 {file}",

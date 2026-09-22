@@ -430,7 +430,10 @@ MESA_SUGGEST_RISKY_DOMAINS: dict[str, tuple[str, str]] = {
     "valve": ("confirm", "controls water or gas flow; a wrong state can flood or vent unattended"),
     "siren": ("confirm", "sounds a loud alarm; false activation disturbs occupants and neighbours"),
     "water_heater": ("confirm", "reaches scald temperatures and burns energy; slow to recover"),
-    "update": ("confirm", "firmware updates are effectively irreversible and can brick the device"),
+    "update": (
+        "confirm",
+        "receives firmware updates that are effectively irreversible and can brick the device",
+    ),
 }
 
 # Each domain's concern clause is interpolated INTO a reason template, so it
@@ -1364,9 +1367,17 @@ _APPROVAL_SUMMARY_TITLE_OVERRIDES = {
     "set_yaml_config.removing": "Update {file}",
     "set_yaml_config.removing_entry": "Update {file}",
     "set_yaml_config.removing_entries": "Update {file}",
-    "patch_yaml_config.set": "Update {file}",
-    "patch_yaml_config.append": "Update {file}",
-    "patch_yaml_config.remove": "Update {file}",
+    "patch_yaml_config.set": "Set configuration in {file}",
+    "patch_yaml_config.append": "Append configuration in {file}",
+    "patch_yaml_config.remove": "Remove configuration from {file}",
+    "set_esphome_yaml": "Edit ESPHome device configuration {rel}",
+    "set_esphome_yaml.device": "Edit ESPHome device configuration {rel} ({device}, {count} entities)",
+    "delete_esphome_yaml": "Delete ESPHome device configuration {rel}",
+    "delete_esphome_yaml.device": "Delete ESPHome device configuration {rel} ({device})",
+    "rename_esphome_device": "Rename ESPHome device {device} to {new_name}",
+    "rename_esphome_device.services": (
+        "Rename ESPHome device {device} to {new_name}, renaming {count} action service(s)"
+    ),
     "dashboard_card.add": "Add a card to dashboard '{label}'",
     "dashboard_card.add.section": "Add a card to dashboard '{label}'",
     "dashboard_card.edit": "Update a card on dashboard '{label}'",

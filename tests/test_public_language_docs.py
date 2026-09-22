@@ -19,6 +19,7 @@ PUBLIC_LANGUAGE_NAMES = {
     "en": "English",
     "es": "Spanish",
     "fr": "French",
+    "it": "Italian",
     "ja": "Japanese",
     "ko": "Korean",
     "nl": "Dutch",
@@ -43,7 +44,7 @@ def _shipped_codes() -> set[str]:
 
 def _documented_names() -> str:
     names = [PUBLIC_LANGUAGE_NAMES[code] for code in (
-        "en", "es", "fr", "de", "nl", "pl", "ru", "zh-Hans", "zh-Hant", "ko", "ja"
+        "en", "es", "fr", "it", "de", "nl", "pl", "ru", "zh-Hans", "zh-Hant", "ko", "ja"
     )]
     return ", ".join(names[:-1]) + f", and {names[-1]}"
 
@@ -80,7 +81,7 @@ def test_english_public_docs_list_every_shipped_language() -> None:
     assert f"The panel currently supports {names}." in readme
     assert f"The panel currently supports {names}." in install
     assert (
-        "Phoenix MCP ships English, Spanish, French, German, Dutch, Polish, Russian, "
+        "Phoenix MCP ships English, Spanish, French, Italian, German, Dutch, Polish, Russian, "
         "Simplified Chinese (<code>zh-Hans</code>), Traditional Chinese "
         "(<code>zh-Hant</code>), Korean, and Japanese."
     ) in panel

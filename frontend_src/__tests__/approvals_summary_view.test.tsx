@@ -161,12 +161,12 @@ describe("approval Summary modal", () => {
     });
     vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [resolved], total: 1, limit: 50, offset: 0 });
     const view = render(<ApprovalsView tab="history" onTabChange={() => {}} />);
-    expect(await view.findByText("Update templates.yaml")).toBeTruthy();
+    expect(await view.findByText("Set configuration in templates.yaml")).toBeTruthy();
     expect(view.queryByText("Set [11].sensor[3].state in templates.yaml")).toBeNull();
 
     fireEvent.click(view.getByRole("button", { name: "Details", pressed: false }));
     expect(await view.findByText("Set [11].sensor[3].state in templates.yaml")).toBeTruthy();
-    expect(view.queryByText("Update templates.yaml")).toBeNull();
+    expect(view.queryByText("Set configuration in templates.yaml")).toBeNull();
   });
 
   it("uses friendly titles in Pending before the modal opens", async () => {
@@ -181,7 +181,7 @@ describe("approval Summary modal", () => {
     });
     vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [pending], total: 1, limit: 50, offset: 0 });
     const view = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
-    expect(await view.findByText("Update templates.yaml")).toBeTruthy();
+    expect(await view.findByText("Set configuration in templates.yaml")).toBeTruthy();
     expect(view.queryByText("Set [11].sensor[3].state in templates.yaml")).toBeNull();
   });
 
