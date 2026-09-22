@@ -60,6 +60,35 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORMS = ["sensor"]
 
 
+@callback
+def _warn_on_computed_alias_loss(hass: HomeAssistant, event: Event) -> None:
+    """Warn when an external registry update removes the computed entity name."""
+    event_data = event.data
+    if event_data.get("action") != "update":
+        return
+    changes = event_data.get("changes")
+    if not isinstance(changes, dict) or "aliases" not in changes:
+        return
+    old_aliases = changes["aliases"]
+    if not isinstance(old_aliases, list) or er_mod.COMPUTED_NAME not in old_aliases:
+        return
+
+    entity_id = event_data.get("entity_id")
+    if not isinstance(entity_id, str):
+        return
+    entry = er_mod.async_get(hass).async_get(entity_id)
+    if entry is None or er_mod.COMPUTED_NAME in entry.aliases:
+        return
+
+    _LOGGER.warning(
+        "Phoenix MCP detected an entity registry update that removed Home "
+        "Assistant's computed-name alias from %s. The entity may stop "
+        "responding to its current name in Assist. No automatic repair was "
+        "applied.",
+        entity_id,
+    )
+
+
 def _entry_platforms() -> list[str]:
     """All platforms this entry may have forwarded (for a symmetric unload).
 
@@ -603,8 +632,17 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     def _invalidate_entity_tree(_event=None) -> None:
         data.entity_tree_cache_valid = False
 
+    @callback
+    def _on_entity_registry_updated(event: Event) -> None:
+        _invalidate_entity_tree(event)
+        _warn_on_computed_alias_loss(hass, event)
+
+    entry.async_on_unload(
+        hass.bus.async_listen(
+            er_mod.EVENT_ENTITY_REGISTRY_UPDATED, _on_entity_registry_updated  # type: ignore[arg-type]
+        )
+    )
     for _registry_event in (
-        er_mod.EVENT_ENTITY_REGISTRY_UPDATED,
         dr_mod.EVENT_DEVICE_REGISTRY_UPDATED,
         ar_mod.EVENT_AREA_REGISTRY_UPDATED,
     ):

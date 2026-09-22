@@ -216,6 +216,55 @@ async def test_setup_reconciles_approvals_interrupted_by_the_last_shutdown(hass:
     reconcile.assert_awaited_once()
 
 
+async def test_external_alias_sentinel_loss_is_logged_without_repair(
+    hass: HomeAssistant, caplog
+):
+    """Warn after an external update removes HA's computed-name sentinel."""
+    from homeassistant.helpers import entity_registry as er
+
+    await _run_setup(hass, kill_switch=False)
+    registry = er.async_get(hass)
+    entry = registry.async_get_or_create(
+        "light", "phoenix_test", "alias_watch", suggested_object_id="alias_watch"
+    )
+    assert entry.aliases == [er.COMPUTED_NAME]
+
+    caplog.set_level("WARNING", logger="custom_components.phoenix_mcp")
+    registry.async_update_entity(entry.entity_id, aliases=["old name"])
+    await hass.async_block_till_done()
+
+    assert registry.async_get(entry.entity_id).aliases == ["old name"]
+    assert any(
+        "removed Home Assistant's computed-name alias" in record.message
+        for record in caplog.records
+    )
+
+
+async def test_alias_updates_without_sentinel_transition_are_not_warned(
+    hass: HomeAssistant, caplog
+):
+    """Do not warn for unrelated updates or existing literal aliases."""
+    from homeassistant.helpers import entity_registry as er
+
+    await _run_setup(hass, kill_switch=False)
+    registry = er.async_get(hass)
+    entry = registry.async_get_or_create(
+        "light", "phoenix_test", "alias_watch_2", suggested_object_id="alias_watch_2"
+    )
+    registry.async_update_entity(entry.entity_id, aliases=["literal name"])
+    caplog.set_level("WARNING", logger="custom_components.phoenix_mcp")
+    caplog.clear()
+
+    registry.async_update_entity(entry.entity_id, aliases=["another literal name"])
+    registry.async_update_entity(entry.entity_id, name="Renamed")
+    await hass.async_block_till_done()
+
+    assert not any(
+        "removed Home Assistant's computed-name alias" in record.message
+        for record in caplog.records
+    )
+
+
 # --- one-shot event listeners ------------------------------------------------
 
 
