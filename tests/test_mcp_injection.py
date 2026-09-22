@@ -70,3 +70,38 @@ class TestLiveContextBoundary:
         out = _build_live_context(_token(), hass)
         # The malicious newline-injected "- names:" must not appear as its own line.
         assert "\n- names: Fake Admin Console" not in out
+
+    async def test_child_device_inherits_parent_area(self, hass: HomeAssistant):
+        from homeassistant.helpers import area_registry as ar
+        from homeassistant.helpers import device_registry as dr
+        from homeassistant.helpers import entity_registry as er
+        from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+        config_entry = MockConfigEntry(
+            domain="test_integration", entry_id="native-child"
+        )
+        config_entry.add_to_hass(hass)
+        area = ar.async_get(hass).async_create("Inherited room")
+        registry = dr.async_get(hass)
+        parent = registry.async_get_or_create(
+            config_entry_id=config_entry.entry_id,
+            identifiers={(config_entry.domain, "native-parent")},
+        )
+        registry.async_update_device(parent.id, area_id=area.id)
+        child = registry.async_get_or_create_child(
+            config_entry_id=config_entry.entry_id,
+            identifiers={(config_entry.domain, "native-child")},
+            parent_device_id=parent.id,
+        )
+        entity = er.async_get(hass).async_get_or_create(
+            "light",
+            config_entry.domain,
+            "native-child-light",
+            config_entry=config_entry,
+            device_id=child.id,
+        )
+        hass.states.async_set(entity.entity_id, "on", {"friendly_name": "Child"})
+
+        out = _build_live_context(_token(), hass)
+
+        assert "  areas: Inherited room" in out

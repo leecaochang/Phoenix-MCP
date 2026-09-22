@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
-from typing import Any, cast
+from typing import Any
 import dataclasses
 import difflib
 import functools
@@ -54,6 +54,11 @@ from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 
 from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_SEARCH_QUERY_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, SEARCH_FUZZY_MATCH_CUTOFF
 from ..data import PhoenixData
+from ..device_semantics import (
+    DeviceRegistrySnapshot,
+    device_entry_value,
+    device_registry_snapshot,
+)
 from ..service_targets import secondary_target_error, unsupported_secondary_targets
 from ..tool_contracts import normalize_tool_args
 from ..mesa import async_semantic_moments, build_expand_target, entity_control_mode, evaluate_service_entities
@@ -64,7 +69,7 @@ from .authoring import _AUTOMATION_YAML, _read_automations_yaml
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
 from ..tool_common import _resolve_area_id, _tool_error, _tool_success
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
-from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entries, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_token, filter_service_response, physical_gate_applies, resolve, resolve_device_registry_access, resolve_esphome_user_service, resolve_registry_access, resolve_service_targets, scrub_sensitive_attributes
+from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_token, filter_service_response, physical_gate_applies, resolve, resolve_device_registry_access, resolve_esphome_user_service, resolve_registry_access, resolve_service_targets, scrub_sensitive_attributes
 from ..token_store import TokenRecord
 from .. import yaml_includes
 
@@ -1029,18 +1034,18 @@ async def _tool_list_devices(
             "list_devices",
         )
 
-    dev_reg = dr.async_get(hass)
+    device_snapshot = device_registry_snapshot(hass)
     devices: list[dict] = []
-    for device in device_registry_entries(dev_reg):
+    for device in device_snapshot.entries:
         if registry_state == "enabled" and device.disabled_by is not None:
             continue
         if registry_state == "disabled" and device.disabled_by is None:
             continue
         if resolve_device_registry_access(
-            device.id, token, hass
+            device.id, token, hass, snapshot=device_snapshot
         ) not in (Permission.READ, Permission.WRITE):
             continue
-        devices.append(_device_list_projection(device, token, hass))
+        devices.append(_device_list_projection(device, token, hass, device_snapshot))
     devices.sort(key=lambda d: ((d["name"] or d["device_id"]).lower()))
     return _tool_success(json.dumps({"count": len(devices), "devices": devices}, default=str)), "allowed", "list_devices"
 
@@ -1060,26 +1065,28 @@ async def _tool_get_device(
     if not device_id:
         return _tool_error("Missing required argument: device_id"), "invalid_request", "get_device"
 
-    dev_reg = dr.async_get(hass)
-    device = cast(dr.DeviceEntry | None, dev_reg.async_get(device_id))
-    permission = resolve_device_registry_access(device_id, token, hass)
+    device_snapshot = device_registry_snapshot(hass)
+    device = device_snapshot.get(device_id)
+    permission = resolve_device_registry_access(
+        device_id, token, hass, snapshot=device_snapshot
+    )
     if device is None or permission not in (Permission.READ, Permission.WRITE):
         return _tool_error("Device not found."), "not_found", device_id
 
-    body = _device_list_projection(device, token, hass)
+    body = _device_list_projection(device, token, hass, device_snapshot)
     body.update({
-        "model_id": device.model_id,
-        "sw_version": device.sw_version,
-        "hw_version": device.hw_version,
+        "model_id": device_entry_value(device, "model_id"),
+        "sw_version": device_entry_value(device, "sw_version"),
+        "hw_version": device_entry_value(device, "hw_version"),
         "entities": _accessible_device_entity_ids(device.id, token, hass),
-        "child_device_ids": sorted(
-            child.id
-            for child in device_registry_entries(dev_reg)
-            if child.via_device_id == device.id
-            and resolve_device_registry_access(
-                child.id, token, hass
-            ) in (Permission.READ, Permission.WRITE)
-        ),
+        "child_device_ids": [
+            child_id
+            for child_id in device_snapshot.child_ids(device.id)
+            if resolve_device_registry_access(
+                child_id, token, hass, snapshot=device_snapshot
+            )
+            in (Permission.READ, Permission.WRITE)
+        ],
         "config_entries": _device_config_entry_summaries(device, hass),
     })
     return _tool_success(json.dumps(body, default=str)), "allowed", device_id
@@ -1104,29 +1111,39 @@ def _accessible_device_entity_ids(
 
 
 def _device_list_projection(
-    device: Any, token: TokenRecord, hass: HomeAssistant
+    device: Any,
+    token: TokenRecord,
+    hass: HomeAssistant,
+    snapshot: DeviceRegistrySnapshot | None = None,
 ) -> dict[str, Any]:
     """Safe compact projection shared by list_devices and get_device."""
-    parent_id = device.via_device_id
-    if parent_id is not None and resolve_device_registry_access(
-        parent_id, token, hass
+    snapshot = snapshot or device_registry_snapshot(hass)
+    parent_device_id = snapshot.child_parent_id(device.id)
+    via_device_id = (
+        None if parent_device_id is not None else snapshot.parent_id(device.id)
+    )
+    relation_parent_id = parent_device_id or via_device_id
+    if relation_parent_id is not None and resolve_device_registry_access(
+        relation_parent_id, token, hass, snapshot=snapshot
     ) not in (Permission.READ, Permission.WRITE):
-        parent_id = None
+        via_device_id = None
+        parent_device_id = None
     return {
         "device_id": device.id,
         "name": device.name_by_user or device.name,
         "original_name": device.name,
         "name_by_user": device.name_by_user,
-        "manufacturer": device.manufacturer,
-        "model": device.model,
-        "area_id": device.area_id,
+        "manufacturer": device_entry_value(device, "manufacturer"),
+        "model": device_entry_value(device, "model"),
+        "area_id": snapshot.effective_area_id(device.id),
         "disabled_by": _registry_value(device.disabled_by),
         "labels": sorted(device.labels),
         "accessible_entity_count": len(
             _accessible_device_entity_ids(device.id, token, hass)
         ),
         "owner_count": len(device_config_entry_ids(device)),
-        "via_device_id": parent_id,
+        "via_device_id": via_device_id,
+        "parent_device_id": parent_device_id,
     }
 
 

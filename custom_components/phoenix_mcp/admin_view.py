@@ -47,6 +47,7 @@ from .const import (
     TOKEN_NAME_REGEX,
 )
 from .data import PhoenixData
+from .device_semantics import device_registry_snapshot, effective_entity_area_id
 from .helpers import cancel_expiry_timer, panel_catalog
 from .locales import canonical_language
 from .policy_engine import (
@@ -322,12 +323,11 @@ def _build_entity_tree(hass: HomeAssistant) -> dict:
     PhoenixData.entity_tree_cache and invalidated on registry change events.
     """
     from homeassistant.helpers import area_registry as ar
-    from homeassistant.helpers import device_registry as dr
     from homeassistant.helpers import entity_registry as er
     from homeassistant.helpers import label_registry as lr
 
     entity_reg = er.async_get(hass)
-    device_reg = dr.async_get(hass)
+    device_snapshot = device_registry_snapshot(hass)
     area_reg = ar.async_get(hass)
     label_reg = lr.async_get(hass)
 
@@ -359,11 +359,7 @@ def _build_entity_tree(hass: HomeAssistant) -> dict:
         if domain not in tree:
             tree[domain] = {"devices": {}, "deviceless_entities": [], "entity_details": {}}
 
-        area_id = entry.area_id
-        if not area_id and entry.device_id:
-            device = device_reg.async_get(entry.device_id)
-            if device:
-                area_id = device.area_id
+        area_id = effective_entity_area_id(entry, device_snapshot)
 
         area_name = None
         if area_id:
@@ -374,7 +370,7 @@ def _build_entity_tree(hass: HomeAssistant) -> dict:
         # labels plus those of its device. Used by the "Select by Label" picker.
         label_ids: set[str] = set(entry.labels)
         if entry.device_id:
-            dev_for_labels = device_reg.async_get(entry.device_id)
+            dev_for_labels = device_snapshot.get(entry.device_id)
             if dev_for_labels:
                 label_ids |= dev_for_labels.labels
         labels = []
@@ -396,9 +392,9 @@ def _build_entity_tree(hass: HomeAssistant) -> dict:
         if entry.device_id:
             device_id = entry.device_id
             if device_id not in tree[domain]["devices"]:
-                device = device_reg.async_get(device_id)
+                device = device_snapshot.get(device_id)
                 if device:
-                    d_area_id = device.area_id
+                    d_area_id = device_snapshot.effective_area_id(device_id)
                     d_area_name = None
                     if d_area_id:
                         da = area_reg.async_get_area(d_area_id)
@@ -463,12 +459,12 @@ def _integration_permission_selection(
         else:
             registry_only_deviceless.append(entity_id)
 
-    device_reg = dr_mod.async_get(hass)
+    device_snapshot = device_registry_snapshot(hass)
     shared_devices = [
         device_id
         for device_id in context.device_ids
         if (
-            (device := device_reg.async_get(device_id)) is not None
+            (device := device_snapshot.get(device_id)) is not None
             and len(device_config_entry_ids(device)) > 1
         )
     ]

@@ -199,6 +199,33 @@ async def test_integration_may_remove_device_itself(
     assert dr.async_get(hass).async_get(device_id) is None
 
 
+async def test_child_device_removal_uses_child_ownership(
+    hass: HomeAssistant, removal_env
+):
+    registry = dr.async_get(hass)
+    child = registry.async_get_or_create_child(
+        config_entry_id=removal_env["owner"].entry_id,
+        identifiers={(removal_env["owner"].domain, "removable-child")},
+        name="Removable child",
+        parent_device_id=removal_env["device"].id,
+    )
+    hook = AsyncMock(return_value=True)
+    data = await _data(hass)
+
+    with patch(
+        "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
+        AsyncMock(return_value=hook),
+    ):
+        content, outcome, _ = await _call_tool(
+            "remove_device", {"device_id": child.id}, _token(child.id), hass, data
+        )
+
+    assert outcome == "allowed"
+    assert _body(content)["device_disappeared"] is True
+    assert registry.async_get(child.id) is None
+    hook.assert_awaited_once()
+
+
 async def test_multi_owner_requires_selection_and_removes_only_selected_owner(
     hass: HomeAssistant, removal_env
 ):

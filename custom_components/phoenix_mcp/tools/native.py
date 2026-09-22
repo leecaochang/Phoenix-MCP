@@ -40,7 +40,6 @@ from typing import Any, NamedTuple
 import voluptuous as vol
 from homeassistant.exceptions import HomeAssistantError, ServiceNotFound, ServiceValidationError
 from homeassistant.helpers import area_registry as ar
-from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.core import HomeAssistant
 
@@ -52,6 +51,7 @@ from ..const import (
     VACUUM_CLEAN_AREA_BIT, VACUUM_RETURN_HOME_BIT, VACUUM_START_BIT,
 )
 from ..data import PhoenixData
+from ..device_semantics import device_registry_snapshot, effective_entity_area_id
 from ..mesa import async_apply_mesa_to_call, fire_mesa_blocked_event
 from ..helpers import diff_summary_fields as _summary, effective_cap, str_arg, validation_error_message as _validation_error_message
 from ..tool_common import _approved_exec_ctx, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _pending_or_inline, _tool_error, _tool_success
@@ -189,7 +189,7 @@ def _yaml_scalar(value: Any) -> str:
 def _build_live_context(token: TokenRecord, hass: HomeAssistant) -> str:
     """Build a GetLiveContext-format YAML-like summary of accessible entities."""
     registry = er.async_get(hass)
-    dr_inst = dr.async_get(hass)
+    device_snapshot = device_registry_snapshot(hass)
     ar_inst = ar.async_get(hass)
     area_names: dict[str, str] = {a.id: a.name for a in ar_inst.async_list_areas()}
 
@@ -237,14 +237,7 @@ def _build_live_context(token: TokenRecord, hass: HomeAssistant) -> str:
         lines.append(f"  state: {_yaml_scalar(state.state)}")
 
         entry = registry.async_get(state.entity_id)
-        area_id = None
-        if entry:
-            if entry.area_id:
-                area_id = entry.area_id
-            elif entry.device_id:
-                device = dr_inst.async_get(entry.device_id)
-                if device and device.area_id:
-                    area_id = device.area_id
+        area_id = effective_entity_area_id(entry, device_snapshot)
         if area_id and area_id in area_names:
             lines.append(f"  areas: {_yaml_scalar(area_names[area_id])}")
 

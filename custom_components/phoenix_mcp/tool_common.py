@@ -30,6 +30,10 @@ from .const import (
     REDACTION_SENTINEL,
 )
 from .data import PhoenixData
+from .device_semantics import (
+    device_registry_snapshot_from_registry,
+    effective_entity_area_id,
+)
 from .mesa import mesa_confirm_preview
 from .helpers import (
     content_hash,
@@ -888,12 +892,6 @@ def _mesa_confirm_annotation(
 
 def _resolve_area_id(entry: Any, device_registry: Any) -> str | None:
     """Return the area_id for an entity registry entry, falling back to the device's area."""
-    if entry is None:
-        return None
-    if entry.area_id:
-        return entry.area_id
-    if entry.device_id:
-        device = device_registry.async_get(entry.device_id)
-        if device and device.area_id:
-            return device.area_id
-    return None
+    return effective_entity_area_id(
+        entry, device_registry_snapshot_from_registry(device_registry)
+    )

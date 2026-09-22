@@ -10,7 +10,6 @@ from collections.abc import Callable, Mapping
 from typing import Any, NamedTuple
 
 from homeassistant.core import HomeAssistant, State
-from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
 
@@ -21,6 +20,11 @@ from .const import (
     PHYSICAL_GATE_DOMAINS,
     SENSITIVE_ATTRIBUTES,
     SENSITIVE_KEY_SUBSTRINGS,
+)
+from .device_semantics import (
+    DeviceRegistrySnapshot,
+    device_registry_snapshot,
+    device_registry_snapshot_from_registry,
 )
 from .token_store import TokenRecord
 
@@ -45,8 +49,7 @@ class ConfigEntryRegistryContext(NamedTuple):
 
 def device_registry_entries(registry: Any) -> Any:
     """Iterate device entries across HA's mapping and registry-view APIs."""
-    devices = registry.devices
-    return devices.values() if isinstance(devices, Mapping) else devices
+    return device_registry_snapshot_from_registry(registry).entries
 
 
 class EntityCreationNotPermitted(Exception):
@@ -236,7 +239,11 @@ def _phoenix_owned_device(device: Any, hass: HomeAssistant) -> bool:
 
 
 def resolve_device_registry_access(
-    device_id: str, token: TokenRecord, hass: HomeAssistant
+    device_id: str,
+    token: TokenRecord,
+    hass: HomeAssistant,
+    *,
+    snapshot: DeviceRegistrySnapshot | None = None,
 ) -> Permission:
     """Resolve read access to a device-registry entry.
 
@@ -247,7 +254,8 @@ def resolve_device_registry_access(
     """
     if not isinstance(device_id, str):
         return Permission.NOT_FOUND
-    device = dr.async_get(hass).async_get(device_id)
+    snapshot = snapshot or device_registry_snapshot(hass)
+    device = snapshot.get(device_id)
     if device is None:
         return Permission.NOT_FOUND
     if _phoenix_owned_device(device, hass):
@@ -293,7 +301,11 @@ def resolve_device_registry_access(
 
 
 def resolve_device_registry_write(
-    device_id: str, token: TokenRecord, hass: HomeAssistant
+    device_id: str,
+    token: TokenRecord,
+    hass: HomeAssistant,
+    *,
+    snapshot: DeviceRegistrySnapshot | None = None,
 ) -> Permission:
     """Resolve the explicit device permission required for whole-device writes.
 
@@ -303,7 +315,8 @@ def resolve_device_registry_write(
     """
     if not isinstance(device_id, str):
         return Permission.NOT_FOUND
-    device = dr.async_get(hass).async_get(device_id)
+    snapshot = snapshot or device_registry_snapshot(hass)
+    device = snapshot.get(device_id)
     if device is None:
         return Permission.NOT_FOUND
     if _phoenix_owned_device(device, hass):
@@ -344,7 +357,7 @@ def config_entry_registry_context(
     ))
     device_ids = tuple(sorted(
         device.id
-        for device in device_registry_entries(dr.async_get(hass))
+        for device in device_registry_snapshot(hass).entries
         if entry_id in device_config_entry_ids(device)
         and not _phoenix_owned_device(device, hass)
     ))
@@ -381,8 +394,9 @@ def resolve_config_entry_registry_access(
         for entity_id in context.entity_ids
         if expose is None or expose(entity_id)
     ]
+    snapshot = device_registry_snapshot(hass)
     device_results = [
-        resolve_device_registry_access(device_id, token, hass)
+        resolve_device_registry_access(device_id, token, hass, snapshot=snapshot)
         for device_id in context.device_ids
     ]
     results = entity_results + device_results
@@ -425,8 +439,9 @@ def resolve_config_entry_registry_write(
         )
         for entity_id in context.entity_ids
     ]
+    snapshot = device_registry_snapshot(hass)
     device_results = [
-        resolve_device_registry_write(device_id, token, hass)
+        resolve_device_registry_write(device_id, token, hass, snapshot=snapshot)
         for device_id in context.device_ids
     ]
     results = entity_results + device_results
@@ -553,7 +568,7 @@ def expand_service_targets(
     a raw count is needed (e.g. X-Phoenix-Entities-Requested header).
     """
     entity_registry = er.async_get(hass)
-    device_registry = dr.async_get(hass)
+    device_snapshot = device_registry_snapshot(hass)
 
     candidates: set[str] = set()
     explicit_ids: list[str] = []
@@ -615,8 +630,8 @@ def expand_service_targets(
         for aid in aids:
             for eid in area_entity_index.get(aid, []):
                 candidates.add(eid)
-            for device in device_registry_entries(device_registry):
-                if device.area_id == aid:
+            for device in device_snapshot.entries:
+                if device_snapshot.effective_area_id(device.id) == aid:
                     for eid in device_entity_index.get(device.id, []):
                         candidates.add(eid)
 

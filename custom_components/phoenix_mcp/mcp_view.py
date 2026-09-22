@@ -45,6 +45,7 @@ from homeassistant.util.ulid import ulid_to_bytes_or_none
 from .audit import generate_request_id
 from .const import AGENTCLI_CLIENT_IP, AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, PHOENIX_VERSION, BLOCKED_DOMAINS, VOICE_AGENT_CLIENT_IP, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, CAPABILITY_NAMES, DOMAIN, DOMAIN_IMPORTANT_ATTRIBUTES, DUAL_GATE_SERVICES, LEAN_ALWAYS_ATTRS, HIGH_RISK_DOMAINS, MCP_DISCOVER_TTL_MS, MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSIONS, MCP_SSE_KEEPALIVE_SECONDS, MAX_APPROVAL_RESULT_CHARS, MAX_BATCH_APPROVALS, MAX_BATCH_ITEMS, LOG_LEVELS, LOG_LEVEL_ERROR_MESSAGE, MAX_LOG_ENTRIES, MAX_LOGBOOK_HOME_DAYS, MAX_LOGBOOK_NARROWED_DAYS, MAX_LOGBOOK_RESOURCE_IDS, MAX_SEARCH_QUERY_LEN, MAX_SUBSCRIPTION_SECONDS, MAX_ENTITY_ALIASES, MAX_ENTITY_ALIAS_LENGTH, MAX_TOOL_NAME_LENGTH, MESA_APPROVED_EXECUTOR, MESA_MODE_OFF, NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS
 from .data import PhoenixData
+from .device_semantics import device_registry_snapshot, update_device_registry_entry
 from .service_targets import secondary_target_error, unsupported_secondary_targets
 from .tool_contracts import normalize_tool_args
 from .mesa import (
@@ -217,7 +218,7 @@ from .tool_defs import (
 )
 from .audit import Outcome
 from .tool_common import _CAP_FORBIDDEN_MESSAGE, _resolve_area_id, _ProgressBus, _approved_exec_ctx, _approval_resource, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _operator_accepted_result, _pending_or_inline, _progress_ctx, _record_version, _restore_ctx, _set_progress_status, _tool_error, _tool_success
-from .policy_engine import (EntityCreationNotPermitted, Permission, assist_expose_check, call_needs_physical_gate, config_entry_registry_context, device_config_entry_ids, device_registry_entries, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_token, filter_service_response, get_effective_hint, resolve, resolve_config_entry_registry_access, resolve_config_entry_registry_write, resolve_device_registry_access, resolve_device_registry_write, resolve_esphome_user_service, resolve_registry_access, resolve_service_targets, scrub_sensitive_attributes, scrub_state_dict as _scrub_state_dict)
+from .policy_engine import (EntityCreationNotPermitted, Permission, assist_expose_check, call_needs_physical_gate, config_entry_registry_context, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_token, filter_service_response, get_effective_hint, resolve, resolve_config_entry_registry_access, resolve_config_entry_registry_write, resolve_device_registry_access, resolve_device_registry_write, resolve_esphome_user_service, resolve_registry_access, resolve_service_targets, scrub_sensitive_attributes, scrub_state_dict as _scrub_state_dict)
 from .rate_limiter import RateLimitResult
 from .token_store import TokenRecord
 from . import yaml_includes
@@ -2461,7 +2462,7 @@ def _set_entity_value_error(
     ):
         return f"This entity is hidden by {entry.hidden_by.value}, not by the user."
     if args.get("enabled") is True and entry.device_id:
-        device = dr.async_get(hass).async_get(entry.device_id)
+        device = device_registry_snapshot(hass).get(entry.device_id)
         if device is not None and device.disabled:
             return "The entity cannot be enabled while its device is disabled."
     return None
@@ -2882,7 +2883,7 @@ def _set_device_args_error(
     allow_restore_fields: bool = False,
 ) -> tuple[dict, str, str] | None:
     """Validate supported device fields and reject no-op-shaped requests."""
-    device = dr.async_get(hass).async_get(device_id)
+    device = device_registry_snapshot(hass).get(device_id)
     if device is None:
         return _tool_error("Device not found."), "not_found", device_id
     supported = _SET_DEVICE_UPDATE_ARGUMENTS | (
@@ -3162,7 +3163,7 @@ def _set_device_precheck(
     args_error = _set_device_args_error(args, hass, device_id)
     if args_error is not None:
         return args_error
-    device = dr.async_get(hass).async_get(device_id)
+    device = device_registry_snapshot(hass).get(device_id)
     if device is None:
         return _tool_error("Device not found."), "not_found", device_id
     return _device_child_write_error(
@@ -3177,7 +3178,7 @@ async def _build_diff_set_device(
     mesa_decision: _DeviceMesaDecision | None = None,
 ) -> dict[str, Any]:
     device_id = str(args.get("device_id") or "")
-    device = dr.async_get(hass).async_get(device_id)
+    device = device_registry_snapshot(hass).get(device_id)
     before = _device_meta_snapshot(device) if device is not None else {}
     fields: list[str] = []
     preview: dict[str, Any] = {}
@@ -3262,7 +3263,7 @@ async def _tool_set_device(
     if pre is not None:
         return pre
     device_id = str(args.get("device_id") or "").strip()
-    device = dr.async_get(hass).async_get(device_id)
+    device = device_registry_snapshot(hass).get(device_id)
     if device is None:
         return _tool_error("Device not found."), "not_found", device_id
     actions = _device_mesa_actions(args, restoring=False)
@@ -3340,7 +3341,7 @@ async def _execute_set_device(
     if perm_error is not None:
         return perm_error
     registry = dr.async_get(hass)
-    device = registry.async_get(device_id)
+    device = device_registry_snapshot(hass).get(device_id)
     if device is None:
         return _tool_error("Device not found."), "not_found", device_id
     restoring = _restore_ctx.get() is not None
@@ -3432,7 +3433,7 @@ async def _execute_set_device(
 
     before = _device_meta_snapshot(device)
     try:
-        updated = registry.async_update_device(device_id, **updates)
+        updated = update_device_registry_entry(registry, device_id, updates)
     except Exception as exc:  # noqa: BLE001 - surface a clean tool error
         _LOGGER.error("set_device failed for %s: %s", device_id, exc)
         return _tool_error("Failed to update device."), "denied", device_id
@@ -3599,8 +3600,8 @@ async def _resolve_device_removal_context(
     )
     if perm_error is not None:
         return perm_error
-    registry = dr.async_get(hass)
-    device = registry.async_get(device_id)
+    device_snapshot = device_registry_snapshot(hass)
+    device = device_snapshot.get(device_id)
     if device is None:
         return _tool_error("Device not found."), "not_found", device_id
 
@@ -3648,11 +3649,7 @@ async def _resolve_device_removal_context(
         if registry_entry.device_id == device_id
         and registry_entry.config_entry_id == selected
     )
-    child_device_ids = sorted(
-        child.id
-        for child in device_registry_entries(registry)
-        if child.via_device_id == device_id
-    )
+    child_device_ids = list(device_snapshot.child_ids(device_id))
     fingerprint = _device_removal_context_fingerprint(
         device_id,
         entry,
@@ -5525,7 +5522,6 @@ def _config_entry_private_identity(
     if not isinstance(getattr(entry, "modified_at", None), datetime):
         return None
     entity_registry = er.async_get(hass)
-    device_registry = dr.async_get(hass)
     entities: list[dict[str, Any]] = []
     devices: list[dict[str, Any]] = []
     same_domain: list[dict[str, str]] = []
@@ -5546,7 +5542,7 @@ def _config_entry_private_identity(
         })
 
     for device_id in context.device_ids:
-        device = device_registry.async_get(device_id)
+        device = device_registry_snapshot(hass).get(device_id)
         if device is None or entry.entry_id not in device_config_entry_ids(device):
             return None
         identifiers = sorted(
@@ -6849,11 +6845,10 @@ async def _build_diff_remove_integration(
     context = config_entry_registry_context(entry_id, hass)
     entity_ids = sorted(context.entity_ids) if context is not None else []
     device_ids = sorted(context.device_ids) if context is not None else []
-    registry = dr.async_get(hass)
     affected_devices: list[dict[str, Any]] = []
     shared_devices: list[dict[str, Any]] = []
     for device_id in device_ids:
-        device = registry.async_get(device_id)
+        device = device_registry_snapshot(hass).get(device_id)
         if device is None:
             continue
         remaining_owners = []
@@ -6963,7 +6958,6 @@ def _config_entry_removal_observation(
 ) -> dict[str, Any]:
     """Observe cleanup after HA returns or raises; never infer rollback."""
     entity_registry = er.async_get(hass)
-    device_registry = dr.async_get(hass)
     remaining_entity_ids = sorted(
         registry_entry.entity_id
         for registry_entry in entity_registry.entities.values()
@@ -6974,7 +6968,7 @@ def _config_entry_removal_observation(
     remaining_devices: list[dict[str, Any]] = []
     ownership_anomalies: list[str] = []
     for device_id in before_device_ids:
-        device = device_registry.async_get(device_id)
+        device = device_registry_snapshot(hass).get(device_id)
         if device is None:
             removed_device_ids.append(device_id)
             continue

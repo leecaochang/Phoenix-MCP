@@ -29,6 +29,7 @@ from custom_components.phoenix_mcp.admin_view import (
     PhoenixAdminAiTaskPreferredView,
     PhoenixAdminWipeView,
     ALL_ADMIN_VIEWS,
+    _bulk_permission_selection,
     _wipe_flag,
 )
 from custom_components.phoenix_mcp.audit import AuditLog
@@ -890,6 +891,42 @@ async def test_integration_bulk_selection_is_one_atomic_write_and_preserves_chil
     summary = json.loads(response.text)["summary"]
     assert summary["device_count"] == 1
     assert summary["entity_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_area_bulk_selection_includes_child_device_inherited_area(hass):
+    from homeassistant.helpers import area_registry as ar
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    entry = MockConfigEntry(domain="test_integration", entry_id="child-bulk")
+    entry.add_to_hass(hass)
+    area = ar.async_get(hass).async_create("Child bulk area")
+    registry = dr.async_get(hass)
+    parent = registry.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(entry.domain, "bulk-parent")},
+    )
+    registry.async_update_device(parent.id, area_id=area.id)
+    child = registry.async_get_or_create_child(
+        config_entry_id=entry.entry_id,
+        identifiers={(entry.domain, "bulk-child")},
+        parent_device_id=parent.id,
+    )
+    entity = er.async_get(hass).async_get_or_create(
+        "light",
+        entry.domain,
+        "bulk-child-light",
+        config_entry=entry,
+        device_id=child.id,
+    )
+    hass.states.async_set(entity.entity_id, "on")
+
+    selection = _bulk_permission_selection(hass, "area", area.id)
+
+    assert selection is not None
+    assert selection["entity_ids"] == [entity.entity_id]
 
 
 @pytest.mark.asyncio

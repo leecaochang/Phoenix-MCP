@@ -971,6 +971,33 @@ class TestResolveServiceTargetsAreaId:
         assert env["light_accent"].entity_id in entity_ids
         assert env["sensor"].entity_id not in entity_ids
 
+    async def test_area_id_expands_child_device_inherited_placement(
+        self, hass, device_env, config_entry, entity_reg, device_reg
+    ):
+        child = device_reg.async_get_or_create_child(
+            config_entry_id=config_entry.entry_id,
+            identifiers={("test_integration", "area-child")},
+            name="Area child",
+            parent_device_id=device_env["device"].id,
+        )
+        child_light = entity_reg.async_get_or_create(
+            "light",
+            "test_integration",
+            "area-child-light",
+            config_entry=config_entry,
+            device_id=child.id,
+        )
+        hass.states.async_set(child_light.entity_id, "on")
+
+        result, _ = resolve_service_targets(
+            area_id=device_env["area"].id,
+            service_domain="light",
+            token=_make_token(domains={"light": "GREEN"}),
+            hass=hass,
+        )
+
+        assert child_light.entity_id in result
+
     async def test_area_id_red_entity_silently_skipped(self, hass, device_env):
         env = device_env
         token = _make_token(

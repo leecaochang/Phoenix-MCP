@@ -49,6 +49,7 @@ from homeassistant.util.yaml import load_yaml as _load_yaml
 from homeassistant.util import dt as dt_util
 
 from . import mesa_audit
+from .device_semantics import device_registry_snapshot, effective_entity_area_id
 from .helpers import diff_summary_fields
 from .const import (
     MESA_APPROVED_EXECUTOR,
@@ -195,15 +196,7 @@ def _build_get_entity_area(hass: HomeAssistant) -> Callable[[str], str | None]:
     def _get_entity_area(entity_id: str) -> str | None:
         er = er_mod.async_get(hass)
         entry = er.async_get(entity_id)
-        if entry is None:
-            return None
-        if entry.area_id:
-            return entry.area_id
-        if entry.device_id:
-            device = dr_mod.async_get(hass).async_get(entry.device_id)
-            if device and device.area_id:
-                return device.area_id
-        return None
+        return effective_entity_area_id(entry, device_registry_snapshot(hass))
 
     return _get_entity_area
 
@@ -689,12 +682,7 @@ def refresh_orphans(hass: HomeAssistant, runtime: MesaRuntime) -> None:
     known = set(er.entities) | set(hass.states.async_entity_ids())
     runtime.orphans = runtime.store.find_orphans(known)
 
-    # HA 2026.9 exposes DeviceEntry values when the registry view is
-    # iterated, while older HA releases expose device IDs from the mapping.
-    known_devices = {
-        item.id if hasattr(item, "id") else item
-        for item in dr_mod.async_get(hass).devices
-    }
+    known_devices = set(device_registry_snapshot(hass).by_id)
     runtime.orphan_devices = [d for d in runtime.store.device_keys() if d not in known_devices]
 
     known_areas = set(ar_mod.async_get(hass).areas)

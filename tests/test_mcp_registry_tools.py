@@ -193,6 +193,45 @@ class TestListDevices:
         assert ids == {reg_env["hub"].id}  # Sensor Hub has no accessible entity
         assert body["devices"][0]["manufacturer"] == "Acme"
 
+    async def test_child_device_is_listed_with_inherited_area_and_parent(
+        self, hass, reg_env
+    ):
+        registry = dr.async_get(hass)
+        child = registry.async_get_or_create_child(
+            config_entry_id="e1",
+            identifiers={("test_integration", "child-light")},
+            name="Child Light",
+            parent_device_id=reg_env["hub"].id,
+        )
+        entity = er.async_get(hass).async_get_or_create(
+            "light",
+            "test_integration",
+            "child-light-entity",
+            config_entry=hass.config_entries.async_get_entry("e1"),
+            device_id=child.id,
+        )
+        hass.states.async_set(entity.entity_id, "on")
+
+        listed, _, _ = await _call("list_devices", {}, _token(), hass)
+        rows = {row["device_id"]: row for row in _result_json(listed)["devices"]}
+        assert rows[child.id]["area_id"] == reg_env["kitchen"].id
+        assert rows[child.id]["via_device_id"] is None
+        assert rows[child.id]["parent_device_id"] == reg_env["hub"].id
+        assert rows[child.id]["manufacturer"] is None
+
+        parent, _, _ = await _call(
+            "get_device", {"device_id": reg_env["hub"].id}, _token(), hass
+        )
+        assert _result_json(parent)["child_device_ids"] == [child.id]
+
+        areas, _, _ = await _call("list_areas", {}, _token(), hass)
+        kitchen = next(
+            row
+            for row in _result_json(areas)["areas"]
+            if row["area_id"] == reg_env["kitchen"].id
+        )
+        assert kitchen["accessible_entity_count"] == 2
+
     async def test_registry_state_filters_disabled_devices(self, hass, reg_env):
         device = reg_env["sensor_hub"]
         dr.async_get(hass).async_update_device(

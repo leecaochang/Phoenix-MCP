@@ -13,6 +13,7 @@ import pytest
 from homeassistant.core import HomeAssistant
 
 from custom_components.phoenix_mcp.mesa import (
+    _build_get_entity_area,
     async_import_sidecar_profiles,
     async_refresh_trigger_issues,
     async_setup_mesa,
@@ -41,6 +42,39 @@ def _token(persona: str = "voice_assistant") -> TokenRecord:
         persona=persona,
         permissions=PermissionTree(),
     )
+
+
+def test_mesa_area_callback_uses_child_device_effective_area(
+    hass: HomeAssistant,
+) -> None:
+    from homeassistant.helpers import area_registry as ar
+    from homeassistant.helpers import device_registry as dr
+    from homeassistant.helpers import entity_registry as er
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    config_entry = MockConfigEntry(domain="test_integration", entry_id="mesa-child")
+    config_entry.add_to_hass(hass)
+    area = ar.async_get(hass).async_create("MESA child area")
+    registry = dr.async_get(hass)
+    parent = registry.async_get_or_create(
+        config_entry_id=config_entry.entry_id,
+        identifiers={(config_entry.domain, "mesa-parent")},
+    )
+    registry.async_update_device(parent.id, area_id=area.id)
+    child = registry.async_get_or_create_child(
+        config_entry_id=config_entry.entry_id,
+        identifiers={(config_entry.domain, "mesa-child")},
+        parent_device_id=parent.id,
+    )
+    entity = er.async_get(hass).async_get_or_create(
+        "switch",
+        config_entry.domain,
+        "mesa-child-switch",
+        config_entry=config_entry,
+        device_id=child.id,
+    )
+
+    assert _build_get_entity_area(hass)(entity.entity_id) == area.id
 
 
 @pytest.mark.asyncio

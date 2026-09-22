@@ -153,6 +153,36 @@ async def test_whole_device_write_requires_explicit_device_green(
     assert "explicit WRITE" in content["content"][0]["text"]
 
 
+async def test_child_device_update_uses_child_registry_api(
+    hass: HomeAssistant, device_env
+):
+    registry = dr.async_get(hass)
+    child = registry.async_get_or_create_child(
+        config_entry_id=device_env["owner"].entry_id,
+        identifiers={("test_integration", "writable-child")},
+        name="Writable child",
+        parent_device_id=device_env["device_id"],
+    )
+    data = await _data(hass)
+
+    content, outcome, _ = await _execute_set_device(
+        {
+            "device_id": child.id,
+            "name": "Renamed child",
+            "area_id": device_env["area_id"],
+        },
+        _token(child.id),
+        hass,
+        data,
+    )
+
+    assert outcome == "allowed"
+    assert _body(content)["updated"]["name_by_user"] == "Renamed child"
+    updated = registry.async_get(child.id)
+    assert updated.name_by_user == "Renamed child"
+    assert updated.area_id == device_env["area_id"]
+
+
 async def test_nullable_fields_labels_and_version_restore(
     hass: HomeAssistant, device_env
 ):

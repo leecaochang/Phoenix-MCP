@@ -33,6 +33,7 @@ from homeassistant.core import HomeAssistant
 
 from ..const import CAP_CONFIRM, CAP_DENY, PROXY_TIMEOUT_SECONDS, Z2M_BASE_TOPIC
 from ..data import PhoenixData
+from ..device_semantics import device_registry_snapshot
 from ..mesa import (
     async_apply_mesa_to_call,
     entity_control_mode,
@@ -354,7 +355,7 @@ def _resolve_radio_device(
     device_id = str(args.get("device_id") or "").strip()
     if not device_id:
         return _tool_error("device_id is required."), "invalid_request", tool_name
-    device = dr.async_get(hass).async_get(device_id)
+    device = device_registry_snapshot(hass).get(device_id)
     ent_reg = er.async_get(hass)
     accessible = [
         eid for eid in _accessible_entity_ids(token, hass)
@@ -2108,8 +2109,9 @@ async def _tool_get_radio_device(
         return _tool_error(f"Failed to read Zigbee device: {exc}"), "invalid_request", device.id
     projected["device_id"] = device.id
     projected["name"] = device.name_by_user or device.name or projected.get("friendly_name")
-    if device.area_id:
-        projected["area_id"] = device.area_id
+    area_id = device_registry_snapshot(hass).effective_area_id(device.id)
+    if area_id:
+        projected["area_id"] = area_id
     return _tool_success(json.dumps(projected, default=str)), "allowed", device.id
 
 

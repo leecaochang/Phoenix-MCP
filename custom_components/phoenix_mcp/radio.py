@@ -50,6 +50,7 @@ from .const import (
     Z2M_RETAINED_READ_TIMEOUT_SECONDS,
     ZIGBEE_TOPOLOGY_SCAN_TIMEOUT_SECONDS,
 )
+from .device_semantics import device_registry_snapshot
 from .ws_dispatch import (
     WsDispatchError,
     async_ws_command,
@@ -188,10 +189,10 @@ def visible_zigbee_device_map(hass: HomeAssistant, accessible_entity_ids: set[st
         entry = ent_reg.async_get(entity_id)
         if entry is not None and entry.device_id:
             visible_device_ids.add(entry.device_id)
-    dev_reg = dr.async_get(hass)
+    device_snapshot = device_registry_snapshot(hass)
     ieee_map: dict[str, str] = {}
     for device_id in visible_device_ids:
-        device = dev_reg.async_get(device_id)
+        device = device_snapshot.get(device_id)
         if device is None:
             continue
         detected = zigbee_backend_for_device(device)
