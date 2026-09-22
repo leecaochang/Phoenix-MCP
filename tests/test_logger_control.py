@@ -53,10 +53,11 @@ async def test_capabilities_are_checked_before_arguments():
     {"integration": "mqtt", "level": "INFO", "persistence": "none", "duration_minutes": 121},
 ])
 async def test_invalid_shapes_fail_before_logger_access(args):
-    data = _make_data(_make_token()[0])
+    token = _make_token(cap_log_read="allow", cap_log_control="allow")[0]
+    data = _make_data(token)
     data.logger_control = MagicMock()
     with patch("custom_components.phoenix_mcp.mcp_view._visible_logger_domains") as visible:
-        _body, result, outcome = await _call(args, data=data)
+        _body, result, outcome = await _call(args, token=token, data=data)
     assert outcome == "invalid_request"
     assert result["isError"] is True
     visible.assert_not_called()

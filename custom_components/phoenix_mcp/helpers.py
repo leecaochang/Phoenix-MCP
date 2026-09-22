@@ -520,12 +520,28 @@ class ScrubbedState:
             return str(friendly)
         return self.object_id.replace("_", " ").title()
 
+    @classmethod
+    def from_dict(cls, row: dict) -> ScrubbedState:
+        """Restore the template facade without HA constructor timestamp defaults."""
+        from types import SimpleNamespace
+
+        context = row.get("context")
+        return cls(SimpleNamespace(
+            entity_id=row["entity_id"], state=row["state"],
+            attributes=row["attributes"],
+            last_changed=parse_datetime(row["last_changed"]) if row.get("last_changed") else None,
+            last_updated=parse_datetime(row["last_updated"]) if row.get("last_updated") else None,
+            last_reported=parse_datetime(row["last_reported"]) if row.get("last_reported") else None,
+            context=SimpleNamespace(**context) if context is not None else None,
+        ))
+
     def as_dict(self) -> dict:
         return {
             "entity_id": self.entity_id,
             "state": self.state,
             "attributes": self.attributes,
             "last_updated": self.last_updated.isoformat() if self.last_updated else None,
+            "last_reported": self.last_reported.isoformat() if self.last_reported else None,
             "last_changed": self.last_changed.isoformat() if self.last_changed else None,
             "context": {
                 "id": getattr(self.context, "id", None),

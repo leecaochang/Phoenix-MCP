@@ -253,3 +253,44 @@ def test_check_mode_writes_nothing():
     }
     assert before == after
     assert pathlib.Path(sync.MANIFEST).read_bytes() == manifest_before
+
+
+def test_vendor_copies_revision_blobs_despite_ignored_files_and_copy_race(tmp_path, monkeypatch):
+    import json
+    import subprocess
+
+    sync = _sync_module()
+    root = tmp_path / 'source'
+    package = root / 'mesa_core'
+    package.mkdir(parents=True)
+    init = package / '__init__.py'
+    init.write_text('__version__ = "9.9.9"\n', encoding='utf-8')
+    (root / '.gitignore').write_text('ignored*\n', encoding='utf-8')
+    def git(*args):
+        return subprocess.run(['git', '-C', str(root), *args], check=True, capture_output=True, text=True).stdout.strip()
+    git('init', '-q')
+    git('add', '.')
+    git('-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'source')
+    git('remote', 'add', 'origin', 'https://example.invalid/mesa-core.git')
+    revision = git('rev-parse', 'HEAD')
+    (package / 'ignored_extra.py').write_text('uncommitted = True\n', encoding='utf-8')
+    (package / 'ignored_data.bin').write_bytes(b'not in the revision')
+    original_read = sync._read_revision_files
+    def mutate_after_validation(source, pinned_revision):
+        init.write_text('__version__ = "changed-after-check"\n', encoding='utf-8')
+        return original_read(source, pinned_revision)
+    monkeypatch.setattr(sync, '_read_revision_files', mutate_after_validation)
+    destination = tmp_path / 'vendor'
+    manifest = tmp_path / 'manifest.json'
+    monkeypatch.setattr(sync, 'DEST', destination)
+    monkeypatch.setattr(sync, 'MANIFEST', manifest)
+    monkeypatch.setattr(sync, 'REPO_ROOT', tmp_path)
+    monkeypatch.setattr(sync.sys, 'argv', ['sync', str(package)])
+    assert sync.main() == 0
+    assert (destination / '__init__.py').read_text() == '__version__ = "9.9.9"\n'
+    assert not (destination / 'ignored_extra.py').exists()
+    assert not (destination / 'ignored_data.bin').exists()
+    record = json.loads(manifest.read_text())
+    assert record['source_revision'] == revision
+    assert record['source_version'] == '9.9.9'
+    assert set(record['files']) == {'__init__.py'}

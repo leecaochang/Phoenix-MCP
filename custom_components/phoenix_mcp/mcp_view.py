@@ -7744,15 +7744,22 @@ async def _dispatch_mcp(
     """
     request_id = request_id or generate_request_id()
     authority = request_authority.get()
-    if authority is not None:
-        try:
-            token = authority.current_token()
-        except AuthorityChangedError:
-            _log(data, token, request_id=request_id, method=method, resource="/api/phoenix-mcp",
-                 outcome="denied", client_ip=client_ip)
-            return _jsonrpc_error(msg_id, -32000, "Request authority is no longer valid."), method, "/api/phoenix-mcp", "denied"
-    context = policy_version.set(token.settings_version)
+    admitted_context = None
+    if authority is None:
+        authority = RequestAuthority(hass, data, token.id, token.token_hash)
+        admitted_context = request_authority.set(authority)
+    context = None
     try:
+        current = authority.current_token()
+        # Internal surfaces deliberately disable inline approval waiting. Refresh
+        # all authorization fields while preserving only that execution setting.
+        token = (
+            dataclasses.replace(current, confirm_inline_wait_seconds=0)
+            if admitted_context is not None and token.confirm_inline_wait_seconds == 0
+            and current.confirm_inline_wait_seconds != 0
+            else current
+        )
+        context = policy_version.set(token.settings_version)
         result = await _dispatch_mcp_authorized(method, msg_id, params, token, hass, data, client_ip, base_url, request_id)
         check_request_authority()
         return result
@@ -7761,7 +7768,10 @@ async def _dispatch_mcp(
              outcome="denied", client_ip=client_ip)
         return _jsonrpc_error(msg_id, -32000, "Request authority changed. Retry with current permissions."), method, "/api/phoenix-mcp", "denied"
     finally:
-        policy_version.reset(context)
+        if context is not None:
+            policy_version.reset(context)
+        if admitted_context is not None:
+            request_authority.reset(admitted_context)
 
 
 async def _dispatch_mcp_authorized(

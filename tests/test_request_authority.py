@@ -241,3 +241,131 @@ async def test_native_service_rechecks_authority_after_mesa_wait(hass):
     mesa.assert_awaited_once()
     assert 'error' in json.loads(response.text)
     sink.assert_not_called()
+
+
+async def _internal_ingress(kind, hass, data, token, name, arguments):
+    from types import SimpleNamespace
+    from custom_components.phoenix_mcp import agentcli
+    from custom_components.phoenix_mcp.assist_api import PhoenixAssistTool
+
+    if kind == 'assist':
+        tool = PhoenixAssistTool(name, '', MagicMock(), token.id)
+        return await tool.async_call(hass, SimpleNamespace(id='call', tool_args=arguments), None)
+    call = {'id': 'call', 'name': name, 'input': arguments}
+    if kind == 'interactive':
+        result = await agentcli._run_tool_batch(
+            [call], hass=hass, data=data, token_id=token.id, client_ip='agentcli',
+            base_url='http://example.invalid', emit=AsyncMock(), cancel=asyncio.Event(),
+        )
+        return result.results
+    captured = []
+    provider = MagicMock()
+    provider.format_tools.return_value = []
+    provider.append_tool_results.side_effect = lambda messages, results: captured.extend(results)
+    async def stream(*args, **kwargs):
+        yield {'type': agentcli.EV_TOOL, **call}
+        yield {'type': agentcli.EV_DONE, 'stop_reason': 'tool_use', 'assistant_msg': {'role': 'assistant', 'content': []}}
+    with patch.object(agentcli, '_stream_turn_resilient', stream):
+        await agentcli._run_headless_turn(
+            hass, data, token, provider, MagicMock(), 'http://example.invalid',
+            system='', seed='', client_ip='voice_agent', max_iterations=1,
+        )
+    return captured
+
+
+async def _change_authority(data, token, change):
+    if change == 'none':
+        return
+    if change == 'revoke':
+        await data.store.async_archive_token(token.id, revoked=True)
+    elif change == 'rotate':
+        await data.store.async_rotate_token(token.id)
+    elif change == 'expire':
+        token.expires_at = utcnow() - timedelta(seconds=1)
+    elif change == 'policy':
+        token.pass_through = False
+        token.settings_version += 1
+    else:
+        data.store.get_settings().kill_switch = True
+
+
+@pytest.mark.parametrize('ingress', ['assist', 'interactive', 'headless'])
+@pytest.mark.parametrize('change', ['revoke', 'rotate', 'expire', 'policy', 'kill', 'none'])
+async def test_internal_watch_suppresses_state_after_authority_changes(hass, ingress, change):
+    from custom_components.phoenix_mcp.request_authority import request_authority, policy_version
+
+    data, token, _ = await _environment(hass)
+    hass.states.async_set('sensor.audit', 'old')
+    subscribed = asyncio.Event()
+    callbacks = []
+    def subscribe(_hass, _ids, callback):
+        callbacks.append(callback)
+        subscribed.set()
+        return lambda: None
+    with patch.object(mcp_view, 'async_track_state_change_event', subscribe):
+        task = asyncio.create_task(_internal_ingress(
+            ingress, hass, data, token, 'watch_entity', {'entity_id': 'sensor.audit', 'timeout': 1},
+        ))
+        await asyncio.wait_for(subscribed.wait(), 2)
+        await _change_authority(data, token, change)
+        hass.states.async_set('sensor.audit', 'protected-after-wait')
+        callbacks[0](MagicMock(data={'new_state': hass.states.get('sensor.audit')}))
+        result = await task
+    if change == 'none':
+        assert 'protected-after-wait' in json.dumps(result)
+    elif ingress == 'assist':
+        assert 'error' in result
+    else:
+        assert result[0]['is_error'] is True
+    if change != 'none':
+        assert 'protected-after-wait' not in json.dumps(result)
+    assert request_authority.get() is None
+    assert policy_version.get() is None
+
+
+@pytest.mark.parametrize('ingress', ['assist', 'interactive', 'headless'])
+@pytest.mark.parametrize('change', ['revoke', 'rotate', 'expire', 'policy', 'kill', 'none'])
+async def test_internal_service_rechecks_before_side_effect(hass, ingress, change):
+    data, token, _ = await _environment(hass)
+    er.async_get(hass).async_get_or_create('light', 'test', 'audit', suggested_object_id='audit')
+    hass.states.async_set('light.audit', 'off')
+    sink = AsyncMock()
+    hass.services.async_register('light', 'turn_on', sink)
+    calls = 0
+    async def prepare(*args):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            await _change_authority(data, token, change)
+        return []
+    with patch.object(mcp_view, 'unsupported_secondary_targets', prepare):
+        result = await _internal_ingress(ingress, hass, data, token, 'call_service', {
+            'service': {'domain': 'light', 'name': 'turn_on'},
+            'targets': [{'kind': 'entity', 'ids': ['light.audit']}],
+        })
+    assert calls == 2
+    if change == 'none':
+        sink.assert_awaited_once()
+    else:
+        sink.assert_not_called()
+        assert 'error' in result if ingress == 'assist' else result[0]['is_error']
+
+
+async def test_internal_dispatch_preserves_zero_inline_wait_and_cleans_context(hass):
+    from custom_components.phoenix_mcp.agentcli import _current_dispatch_token
+    from custom_components.phoenix_mcp.request_authority import request_authority, policy_version
+
+    data, token, _ = await _environment(hass)
+    token.confirm_inline_wait_seconds = 60
+    captured = []
+    async def execute(method, msg_id, params, admitted, *args):
+        captured.append(admitted.confirm_inline_wait_seconds)
+        assert request_authority.get() is not None
+        raise RuntimeError('failure before return')
+    with patch.object(mcp_view, '_dispatch_mcp_authorized', execute):
+        with pytest.raises(RuntimeError, match='failure before return'):
+            await mcp_view._dispatch_mcp('ping', 1, {}, _current_dispatch_token(data, token.id), hass, data, 'assist', '')
+    assert captured == [0]
+    assert token.confirm_inline_wait_seconds == 60
+    assert request_authority.get() is None
+    assert policy_version.get() is None

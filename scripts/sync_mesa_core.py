@@ -113,7 +113,7 @@ def _read_source_provenance(source_root: Path, version: str) -> dict[str, str]:
         )
     revision = git("rev-parse", "HEAD")
     tag_result = subprocess.run(
-        ["git", "-C", str(source_root), "describe", "--tags", "--exact-match", "HEAD"],
+        ["git", "-C", str(source_root), "describe", "--tags", "--exact-match", revision],
         capture_output=True,
         text=True,
     )
@@ -131,6 +131,44 @@ def _read_source_provenance(source_root: Path, version: str) -> dict[str, str]:
     return provenance
 
 
+
+def _read_revision_files(source_root: Path, revision: str) -> dict[Path, bytes]:
+    """Read only immutable tracked blobs, never working-tree or ignored bytes."""
+    prefix = subprocess.run(
+        ["git", "-C", str(source_root), "rev-parse", "--show-prefix"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    repository = subprocess.run(
+        ["git", "-C", str(source_root), "rev-parse", "--show-toplevel"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip()
+    listing = subprocess.run(
+        ["git", "--literal-pathspecs", "-C", repository, "ls-tree", "-rz", "--full-tree", revision, "--", prefix or "."],
+        check=True, capture_output=True,
+    ).stdout
+    files = {}
+    for entry in listing.split(b"\0"):
+        if not entry:
+            continue
+        metadata, name = entry.split(b"\t", 1)
+        mode, kind, oid = metadata.decode().split()
+        full_name = name.decode("utf-8")
+        if not full_name.startswith(prefix):
+            raise SystemExit("ERROR: source revision contains an unexpected package path.")
+        rel = Path(full_name[len(prefix):])
+        if _is_excluded(source_root / rel, source_root):
+            continue
+        if kind != "blob" or mode not in ("100644", "100755"):
+            raise SystemExit(f"ERROR: unsupported source entry mode for {rel}: {mode}")
+        files[rel] = subprocess.run(
+            ["git", "-C", str(source_root), "cat-file", "blob", oid],
+            check=True, capture_output=True,
+        ).stdout
+    if Path("__init__.py") not in files:
+        raise SystemExit("ERROR: recorded revision does not contain the source package.")
+    return files
+
+
 def main() -> int:
     source = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else DEFAULT_SOURCE.resolve()
     if not source.is_dir():
@@ -139,26 +177,26 @@ def main() -> int:
     version = _read_source_version(source)
     provenance = _read_source_provenance(source, version)
 
+    source_files = _read_revision_files(source, provenance["source_revision"])
+    init = source_files[Path("__init__.py")].decode("utf-8")
+    match = re.search(r'__version__\s*=\s*"([^"]+)"', init)
+    version = match.group(1) if match else "unknown"
+    if provenance.get("source_tag", f"v{version}") != f"v{version}":
+        raise SystemExit("ERROR: recorded release tag does not match the committed version.")
+    prepared = {
+        rel: _rewrite_source(blob.decode("utf-8"), rel).encode("utf-8")
+        if rel.suffix == ".py" else blob
+        for rel, blob in source_files.items()
+    }
     if DEST.exists():
         shutil.rmtree(DEST)
     DEST.mkdir(parents=True)
 
     copied = 0
-    for src_path in sorted(source.rglob("*")):
-        if _is_excluded(src_path, source):
-            continue
-        rel = src_path.relative_to(source)
+    for rel, blob in sorted(prepared.items()):
         dest_path = DEST / rel
-        if src_path.is_dir():
-            dest_path.mkdir(parents=True, exist_ok=True)
-            continue
-        if src_path.suffix == ".py":
-            text = src_path.read_text(encoding="utf-8")
-            dest_path.parent.mkdir(parents=True, exist_ok=True)
-            dest_path.write_text(_rewrite_source(text, rel), encoding="utf-8")
-        else:
-            dest_path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src_path, dest_path)
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        dest_path.write_bytes(blob)
         copied += 1
 
     stamp = datetime.date.today().isoformat()

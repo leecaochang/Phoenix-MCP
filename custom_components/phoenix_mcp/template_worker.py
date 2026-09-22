@@ -24,7 +24,6 @@ def main() -> None:
         resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))
         resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
         phase = "imports"
-        from homeassistant.core import State
         from homeassistant.util import dt as dt_util
         from custom_components.phoenix_mcp.helpers import ScrubbedState, render_template_snapshot
 
@@ -45,9 +44,8 @@ def main() -> None:
     dt_util.set_default_time_zone(time_zone)
     permitted = {}
     for row in payload["states"]:
-        state = State.from_dict(row)
-        if state is not None:
-            permitted[state.entity_id] = ScrubbedState(state)
+        state = ScrubbedState.from_dict(row)
+        permitted[state.entity_id] = state
     sys.stdout.write(render_template_snapshot(payload["template"], permitted))
 
 

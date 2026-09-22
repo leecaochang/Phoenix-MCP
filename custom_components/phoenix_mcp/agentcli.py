@@ -2397,6 +2397,15 @@ def _agentcli_prepare_time_args(
     return prepared, None
 
 
+def dispatch_tool_result(response: dict | None) -> dict:
+    """Keep dispatcher refusals visible to internal callers as tool failures."""
+    if response and "error" in response:
+        return {"isError": True, "content": [{
+            "type": "text", "text": "The tool request was refused by Phoenix MCP.",
+        }]}
+    return (response or {}).get("result", {}) or {}
+
+
 def _parse_pending(
     result: dict,
     *,
@@ -3146,7 +3155,9 @@ async def _run_tool_batch(
                 request_id=dispatch_request_id,
             ),
         )
-        result = (resp_msg or {}).get("result", {}) or {}
+        result = dispatch_tool_result(resp_msg)
+        if outcome == "denied" and (resp_msg or {}).get("error"):
+            authority_lost = stop_turn = True
         pending = _parse_pending(
             result,
             outcome=outcome,
@@ -3573,7 +3584,9 @@ async def _run_headless_turn(
                 dispatch_token, hass, data, client_ip, base_url,
                 request_id=dispatch_request_id,
             )
-            result = (resp_msg or {}).get("result", {}) or {}
+            result = dispatch_tool_result(resp_msg)
+            if outcome == "denied" and (resp_msg or {}).get("error"):
+                authority_lost = True
             pending = _parse_pending(
                 result,
                 outcome=outcome,

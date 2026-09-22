@@ -117,3 +117,49 @@ async def test_worker_startup_failure_has_safe_diagnostic(hass, caplog):
     assert 'module=example_dependency' in caplog.text
     assert 'private-template-value' not in caplog.text
     process.wait.assert_awaited_once()
+
+
+def test_snapshot_preserves_all_template_metadata_without_user_identity(monkeypatch):
+    from datetime import datetime, timezone
+    from io import BytesIO, StringIO
+    from types import SimpleNamespace
+    from homeassistant.core import Context, State
+    from custom_components.phoenix_mcp import template_worker
+    from custom_components.phoenix_mcp.helpers import ScrubbedState, render_template_snapshot
+
+    original = ScrubbedState(State(
+        entity_id='sensor.metadata', state='42',
+        attributes={'unit_of_measurement': 'C', 'access_token': 'never-copy'},
+        last_changed=datetime(2026, 1, 2, 1, tzinfo=timezone.utc),
+        last_updated=datetime(2026, 1, 2, 2, tzinfo=timezone.utc),
+        last_reported=datetime(2026, 1, 2, 3, tzinfo=timezone.utc),
+        context=Context(id='context-id', parent_id='parent-id', user_id='never-copy'),
+    ))
+    encoded = json.dumps(original.as_dict())
+    restored = ScrubbedState.from_dict(json.loads(encoded))
+    assert 'never-copy' not in encoded
+    assert restored.last_changed == original.last_changed
+    assert restored.last_updated == original.last_updated
+    assert restored.last_reported == original.last_reported
+    assert restored.context == original.context
+    assert restored.context.user_id is None
+    template = (
+        '{{ states.sensor.metadata.last_changed.isoformat() }}|'
+        '{{ states.sensor.metadata.last_updated.isoformat() }}|'
+        '{{ states.sensor.metadata.last_reported.isoformat() }}|'
+        '{{ states.sensor.metadata.context.id }}|'
+        '{{ states.sensor.metadata.context.parent_id }}|'
+        '{{ states.sensor.metadata.context.user_id }}'
+    )
+    expected = render_template_snapshot(template, {original.entity_id: original})
+    assert render_template_snapshot(template, {original.entity_id: restored}) == expected
+    payload = json.dumps({'template': template, 'states': [original.as_dict()], 'time_zone': 'UTC'}).encode()
+    output = StringIO()
+    monkeypatch.setattr(sys, 'path', list(sys.path))
+    monkeypatch.setattr(sys, 'stdin', SimpleNamespace(buffer=BytesIO(payload)))
+    monkeypatch.setattr(sys, 'stdout', output)
+    # Exercise the actual worker's decode/reconstruction/render path in-process;
+    # OS resource enforcement is covered separately by the Linux-only tests.
+    with patch.object(template_worker.resource, 'setrlimit'), patch('homeassistant.util.dt.set_default_time_zone'):
+        template_worker.main()
+    assert output.getvalue() == expected

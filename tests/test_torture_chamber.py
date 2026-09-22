@@ -155,6 +155,17 @@ def _placeholder(name: str, schema: dict):
     return value[:maximum] if isinstance(maximum, int) else value
 
 
+def _baseline(tool_def: dict) -> dict:
+    """Use a semantic fixture when a schema omits a cross-field requirement."""
+    if tool_def["name"] == "edit_energy_config":
+        return {
+            "operation": "remove_device",
+            "target": {"kind": "statistic", "id": "sensor.phx_ghost"},
+            "changes": {},
+        }
+    return _placeholder("arguments", tool_def.get("inputSchema", {}) or {})
+
+
 def _hostile_values(kind: str | None) -> list:
     """Values of the wrong shape for a declared type, in the flavours real
     clients actually emit."""
@@ -189,7 +200,7 @@ def _attacks(tool_def: dict) -> list[tuple[str, dict]]:
     schema = tool_def.get("inputSchema", {}) or {}
     props: dict = schema.get("properties", {}) or {}
     required: list[str] = schema.get("required", []) or []
-    base = _placeholder("arguments", schema)
+    base = _baseline(tool_def)
 
     cases: list[tuple[str, dict]] = [("empty", {})]
     # A stray argument must not hard-fail: unknown-key rejection was deliberately
@@ -267,6 +278,12 @@ for _d in ALL_DEFS:
 # destructive tool excludes itself. They still get the denied-token pass below,
 # which is where the uniform-refusal invariant lives anyway.
 EXECUTABLE_DEFS = [d for d in ALL_DEFS if not d.get("annotations", {}).get("destructiveHint")]
+
+
+@pytest.mark.parametrize("tool_def", ALL_DEFS, ids=lambda item: item["name"])
+def test_every_adversarial_baseline_normalizes(tool_def):
+    _, error = normalize_tool_args(tool_def["name"], _baseline(tool_def))
+    assert error is None
 
 
 @pytest.mark.parametrize(
@@ -408,7 +425,6 @@ def test_every_tool_falls_into_a_known_archetype():
     for name in ("parameterless", "entity_target", "config_blob_write"):
         assert BY_ARCHETYPE.get(name), f"no tools classified as {name}"
 
-
 @pytest.mark.parametrize("tool_def", ALL_DEFS, ids=lambda d: d["name"])
 async def test_denied_token_survives_hostile_input(tool_def: dict, hass: HomeAssistant):
     """Invariants 1-3 against a token holding nothing."""
@@ -467,8 +483,7 @@ async def test_concurrent_identical_calls_do_not_break_each_other(
     a result list.
     """
     token, data, name = _token("allow"), _data(), tool_def["name"]
-    schema = tool_def.get("inputSchema", {}) or {}
-    args = _placeholder("arguments", schema)
+    args = _baseline(tool_def)
     outcomes = await asyncio.gather(*(
         _call_tool(name, dict(args), token, hass, data, f"req{i}", "1.2.3.4") for i in range(2)
     ))

@@ -149,7 +149,7 @@ if _ASSIST_API_SUPPORTED:
 
         async def async_call(self, hass, tool_input, llm_context) -> dict:
             """Run one tool call end-to-end through Phoenix MCP's scoped dispatch path."""
-            from .agentcli import _current_dispatch_token, _parse_pending  # noqa: PLC0415
+            from .agentcli import _current_dispatch_token, _parse_pending, dispatch_tool_result  # noqa: PLC0415
             from .audit import generate_request_id  # noqa: PLC0415
             from .mcp_view import _dispatch_mcp  # noqa: PLC0415
 
@@ -175,7 +175,7 @@ if _ASSIST_API_SUPPORTED:
                 _base_url(hass),
                 request_id=request_id,
             )
-            result = (resp_msg or {}).get("result", {}) or {}
+            result = dispatch_tool_result(resp_msg)
             pending = _parse_pending(
                 result,
                 outcome=outcome,
