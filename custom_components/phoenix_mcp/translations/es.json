@@ -16,6 +16,27 @@
     "mesa_runtime_unavailable": {
       "title": "El tiempo de ejecución de seguridad de MESA no está disponible",
       "description": "Phoenix MCP no pudo inicializar su tiempo de ejecución de seguridad de MESA. Las lecturas y la recuperación de administración siguen disponibles, pero las operaciones protegidas que cambian el estado se rechazan mientras el modo de MESA sea Asesoramiento o Forzado. Revise los registros de Home Assistant y, a continuación, recargue la integración Phoenix MCP. Puede seleccionar explícitamente el modo Desactivado solo si desea funcionar sin la protección de MESA."
+    },
+    "agent_recovery": {
+      "title": "Comprueba el resultado de {tool}",
+      "description": "Es posible que se hayan ejecutado acciones. Comprueba Home Assistant y las aprobaciones antes de reintentar. Resuelve las acciones inciertas en Ajustes > Sistema > Reparaciones.\n\n{tool}\n{request_id}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "description": "Es posible que se hayan ejecutado acciones. Comprueba Home Assistant y las aprobaciones antes de reintentar. Resuelve las acciones inciertas en Ajustes > Sistema > Reparaciones.\n\n{tool}\n{request_id}",
+            "data": {
+              "checked_home_assistant": "He comprobado el resultado en Home Assistant. Esto solo permite nuevas solicitudes; no repite ni deshace ninguna acción."
+            }
+          }
+        },
+        "error": {
+          "check_required": "He comprobado el resultado en Home Assistant. Esto solo permite nuevas solicitudes; no repite ni deshace ninguna acción.",
+          "operation_active": "La operación sigue en curso o ya se ha conciliado."
+        },
+        "abort": {
+          "not_ready": "Phoenix MCP no está listo."
+        }
+      }
     }
   }
 }

@@ -210,7 +210,19 @@
         "internal": "Interner Fehler.",
         "bad_tool_call": "Das Modell hat einen ungültigen Tool-Aufruf erzeugt.",
         "tool_call_truncated": "Das Modell hat mitten in einem Tool-Aufruf sein Ausgabelängenlimit erreicht, daher wurde die Aktion nicht ausgeführt. Die angeforderte Änderung war zu groß, um sie in einem Aufruf auszugeben; versuchen Sie, eine kleinere Änderung anzufordern.",
-        "tool_call_cut": "Die Verbindung zum Modell wurde mitten in einem Tool-Aufruf beendet, daher wurde die Aktion nicht ausgeführt. Es wurde nichts angewendet und die Anfrage selbst war nicht fehlerhaft; senden Sie sie erneut."
+        "tool_call_cut": "Die Verbindung zum Modell wurde mitten in einem Tool-Aufruf beendet, daher wurde die Aktion nicht ausgeführt. Es wurde nichts angewendet und die Anfrage selbst war nicht fehlerhaft; senden Sie sie erneut.",
+        "provider_malformed": "Der Anbieter hat eine fehlerhafte Antwort geliefert. Kein Werkzeug aus dieser Antwort wurde ausgeführt.",
+        "provider_incomplete": "Die Anbieterantwort endete vorzeitig. Kein Werkzeug aus dieser Antwort wurde ausgeführt.",
+        "provider_blocked": "Der Anbieter hat diese Antwort blockiert. Sie wird nicht erneut angefordert.",
+        "outcome_unknown": "Aktionen könnten ausgeführt worden sein. Prüfen Sie Home Assistant und die Genehmigungen vor einem erneuten Versuch. Klären Sie ungewisse Aktionen unter Einstellungen > System > Reparaturen.",
+        "provider_after_dispatch": "Aktionen könnten ausgeführt worden sein. Prüfen Sie Home Assistant und die Genehmigungen vor einem erneuten Versuch. Klären Sie ungewisse Aktionen unter Einstellungen > System > Reparaturen.",
+        "provider_transient": "Der Anbieter ist vorübergehend nicht verfügbar.",
+        "network": "Der Anbieter ist vorübergehend nicht verfügbar.",
+        "upstream": "Der Anbieter ist vorübergehend nicht verfügbar.",
+        "rate_limit": "Der Anbieter ist vorübergehend nicht verfügbar.",
+        "ollama_backend": "Der Anbieter ist vorübergehend nicht verfügbar.",
+        "auth": "Der Anbieter hat diese Antwort blockiert. Sie wird nicht erneut angefordert.",
+        "quota": "Der Anbieter hat diese Antwort blockiert. Sie wird nicht erneut angefordert."
       }
     },
     "caps": {
@@ -1979,6 +1991,7 @@
     "output_limit": "Entschuldigung, das Modell hat zu viel Ausgabe erzeugt, daher habe ich aufgehört.",
     "provider_error": "Entschuldigung, {reason}.",
     "token_unavailable": "Das Token des Phoenix-MCP-Sprachassistenten ist nicht mehr verfügbar.",
-    "unavailable": "Der Phoenix-MCP-Sprachassistent ist derzeit nicht verfügbar."
+    "unavailable": "Der Phoenix-MCP-Sprachassistent ist derzeit nicht verfügbar.",
+    "outcome_unknown": "Aktionen könnten ausgeführt worden sein. Prüfen Sie Home Assistant und die Genehmigungen vor einem erneuten Versuch. Klären Sie ungewisse Aktionen unter Einstellungen > System > Reparaturen."
   }
 }

@@ -16,6 +16,27 @@
     "mesa_runtime_unavailable": {
       "title": "MESA-veiligheidsruntime is niet beschikbaar",
       "description": "Phoenix MCP kon zijn MESA-veiligheidsruntime niet initialiseren. Lezen en adminherstel blijven beschikbaar, maar beschermde statuswijzigende bewerkingen worden geweigerd zolang de MESA-modus Adviserend of Afgedwongen is. Controleer de Home Assistant-logboeken en herlaad vervolgens de Phoenix MCP-integratie. Selecteer de modus Uit alleen als je zonder MESA-bescherming wilt werken."
+    },
+    "agent_recovery": {
+      "title": "Controleer het resultaat van {tool}",
+      "description": "Acties kunnen zijn uitgevoerd. Controleer Home Assistant en de goedkeuringen voordat u het opnieuw probeert. Controleer onzekere acties via Instellingen > Systeem > Reparaties.\n\n{tool}\n{request_id}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "description": "Acties kunnen zijn uitgevoerd. Controleer Home Assistant en de goedkeuringen voordat u het opnieuw probeert. Controleer onzekere acties via Instellingen > Systeem > Reparaties.\n\n{tool}\n{request_id}",
+            "data": {
+              "checked_home_assistant": "Ik heb het resultaat in Home Assistant gecontroleerd. Dit staat alleen nieuwe verzoeken toe en herhaalt of herstelt geen actie."
+            }
+          }
+        },
+        "error": {
+          "check_required": "Ik heb het resultaat in Home Assistant gecontroleerd. Dit staat alleen nieuwe verzoeken toe en herhaalt of herstelt geen actie.",
+          "operation_active": "De bewerking loopt nog of is al gecontroleerd."
+        },
+        "abort": {
+          "not_ready": "Phoenix MCP is niet gereed."
+        }
+      }
     }
   }
 }

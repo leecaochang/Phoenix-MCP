@@ -16,6 +16,27 @@
     "mesa_runtime_unavailable": {
       "title": "Środowisko bezpieczeństwa MESA jest niedostępne",
       "description": "Phoenix MCP nie mógł zainicjować środowiska bezpieczeństwa MESA. Odczyt i odzyskiwanie administracyjne pozostają dostępne, ale chronione operacje zmieniające stan są odrzucane, gdy tryb MESA to Doradczy lub Wymuszony. Przejrzyj logi Home Assistant, a następnie przeładuj integrację Phoenix MCP. Tryb Wyłączony możesz wybrać tylko wtedy, gdy zamierzasz działać bez ochrony MESA."
+    },
+    "agent_recovery": {
+      "title": "Sprawdź wynik {tool}",
+      "description": "Działania mogły zostać wykonane. Przed ponowieniem sprawdź Home Assistant i zatwierdzenia. Wyjaśnij niepewne działania w Ustawienia > System > Naprawy.\n\n{tool}\n{request_id}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "description": "Działania mogły zostać wykonane. Przed ponowieniem sprawdź Home Assistant i zatwierdzenia. Wyjaśnij niepewne działania w Ustawienia > System > Naprawy.\n\n{tool}\n{request_id}",
+            "data": {
+              "checked_home_assistant": "Sprawdzono wynik w Home Assistant. To umożliwia tylko nowe żądania i nie powtarza ani nie cofa żadnego działania."
+            }
+          }
+        },
+        "error": {
+          "check_required": "Sprawdzono wynik w Home Assistant. To umożliwia tylko nowe żądania i nie powtarza ani nie cofa żadnego działania.",
+          "operation_active": "Operacja nadal trwa lub została już zweryfikowana."
+        },
+        "abort": {
+          "not_ready": "Phoenix MCP nie jest gotowy."
+        }
+      }
     }
   }
 }

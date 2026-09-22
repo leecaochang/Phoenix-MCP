@@ -20,6 +20,9 @@ import asyncio
 import base64
 import binascii
 import dataclasses
+import codecs
+from contextlib import aclosing, suppress
+import functools
 from datetime import datetime, timedelta, tzinfo
 import ipaddress
 import json
@@ -28,7 +31,7 @@ import re
 import uuid
 from collections import Counter
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Awaitable, Callable, cast
+from typing import Any, AsyncGenerator, AsyncIterator, Awaitable, Callable, cast
 from urllib.parse import urlparse, urlunparse
 
 from aiohttp import ClientError, ClientSession, ClientTimeout, web
@@ -42,6 +45,7 @@ from homeassistant.util.dt import parse_datetime, utcnow
 
 from .admin_view import _err, _ok, _read_body, require_admin
 from .audit import generate_request_id
+from .agent_recovery import RecoveryRequired, dispatch_agent_tool, recovery_turn
 from .approvals import (
     REASON_AGENT_CHAT_ENDED,
     STATUS_APPROVED,
@@ -133,6 +137,7 @@ _CHAT_TIMEOUT = ClientTimeout(
 # is retried with this backoff until the total window elapses, then surfaced.
 _CONNECT_RETRY_WINDOW_SECONDS = 12.0
 _CONNECT_RETRY_BACKOFF_SECONDS = 1.5
+_CONNECT_RETRY_MAX_ATTEMPTS = 3
 # The Settings "Validate"/probe step retries a transient connection failure (e.g. a
 # DNS blip that fails within a second) a few times with a short backoff, so a
 # one-off hiccup does not reject a good credential. An auth rejection or a real HTTP
@@ -843,22 +848,91 @@ async def _sse_lines(resp: Any) -> AsyncIterator[str]:
     """
     buffer = ""
     total = 0
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="strict")
     async for chunk in resp.content.iter_chunked(2048):
         total += len(chunk)
         if total > AGENTCLI_MAX_STREAM_BYTES:
             raise ClientError("Provider stream exceeded the maximum total size.")
-        buffer += chunk.decode("utf-8", errors="replace")
+        buffer += decoder.decode(chunk)
         if len(buffer) > AGENTCLI_MAX_SSE_BUFFER_BYTES:
             raise ClientError("Provider stream frame exceeded the maximum size.")
         while "\n" in buffer:
             line, buffer = buffer.split("\n", 1)
             yield line.rstrip("\r")
+    buffer += decoder.decode(b"", final=True)
     if buffer:
         yield buffer.rstrip("\r")
 
 
 _THINK_OPEN = "<think>"
 _THINK_CLOSE = "</think>"
+
+
+class _ProviderResponseError(ValueError):
+    """A bounded, content-free provider failure classification."""
+
+    def __init__(self, code: str = "provider_malformed", *, retryable: bool = True) -> None:
+        super().__init__(code)
+        self.code = code
+        self.retryable = retryable
+
+
+def _provider_failure(code: str, *, retryable: bool = True) -> dict:
+    messages = {
+        "provider_malformed": "The provider returned a malformed response. No tool from this response was run.",
+        "provider_incomplete": "The provider response ended without a complete message. No tool from this response was run.",
+        "provider_blocked": "The provider blocked this response. It will not be retried.",
+        "provider_transient": "The provider is temporarily unavailable.",
+    }
+    return _norm(EV_ERROR, status=200, code=code, message=messages[code],
+                 retryable=retryable, diagnostic={"category": code})
+
+
+def _total_provider_response(parse: Callable) -> Callable:
+    """Keep malformed provider data out of tracebacks and tool dispatch."""
+    @functools.wraps(parse)
+    async def guarded(*args: Any, **kwargs: Any) -> AsyncIterator[dict]:
+        try:
+            async for event in parse(*args, **kwargs):
+                yield event
+        except _ProviderResponseError as exc:
+            yield _provider_failure(exc.code, retryable=exc.retryable)
+        except (TypeError, ValueError, KeyError, AttributeError, OverflowError, RecursionError):
+            # No exception text: it can contain arbitrary provider output.
+            yield _provider_failure("provider_malformed")
+    return guarded
+
+
+def _provider_object(payload: str) -> dict:
+    obj = json.loads(payload)
+    if not isinstance(obj, dict):
+        raise _ProviderResponseError()
+    feedback = obj.get("promptFeedback")
+    error = obj.get("error")
+    if (isinstance(feedback, dict) and feedback.get("blockReason")) or (
+        isinstance(error, dict) and str(error.get("code") or error.get("type")) in
+        {*_NON_RETRYABLE_ERROR_CODES, "content_filter", "content_policy_violation"}
+    ):
+        raise _ProviderResponseError("provider_blocked", retryable=False)
+    if isinstance(error, dict) and str(error.get("code") or error.get("type")) in {
+        "overloaded_error", "rate_limit_error", "server_error", "internal_server_error",
+        "rate_limit_exceeded", "429", "500", "503", "529",
+    }:
+        raise _ProviderResponseError("provider_transient")
+    if error:
+        # Unknown HTTP-200 errors are deliberate upstream refusals, not a reason
+        # to replay a request. The content itself must never become diagnostics.
+        raise _ProviderResponseError("provider_blocked", retryable=False)
+    return obj
+
+
+def _valid_tool_call(call_id: Any, name: Any, arguments: Any) -> bool:
+    return (
+        isinstance(call_id, str) and 0 < len(call_id) <= 256
+        and isinstance(name, str) and 0 < len(name) <= MAX_TOOL_NAME_LENGTH
+        and re.fullmatch(r"[A-Za-z0-9_.:-]+", name) is not None
+        and isinstance(arguments, dict)
+    )
 
 
 class _ThinkSplitter:
@@ -1103,41 +1177,52 @@ class ClaudeProvider:
                         retryable = False
                     yield _norm(EV_ERROR, status=resp.status,
                                 code=_claude_err_code(resp.status),
-                                message=msg[:600], retryable=retryable,
+                                message=f"Provider request failed (HTTP {resp.status}).", retryable=retryable,
                                 refused=_refused_option(resp.status, msg, body))
                     return
                 async for ev in self._parse(resp):
                     yield ev
-        except (ClientError, asyncio.TimeoutError) as exc:
-            yield _norm(EV_ERROR, status=0, code="network", message=str(exc), retryable=True)
+        except (ClientError, asyncio.TimeoutError):
+            yield _norm(EV_ERROR, status=0, code="network", message="Provider connection failed.", retryable=True)
 
+    @_total_provider_response
     async def _parse(self, resp: Any) -> AsyncIterator[dict]:
         # Assemble content blocks by index into an assistant message.
         blocks: dict[int, dict] = {}
         tool_json: dict[int, str] = {}
         order: list[int] = []
         stop_reason = "end_turn"
+        saw_stop = False
+        saw_reason = False
+        open_blocks: set[int] = set()
+        parsed_tools: list[dict] = []
         # message_start reports the call's input tokens; the closing
         # message_delta reports the final cumulative output tokens.
         input_tokens = 0
         async for line in _sse_lines(resp):
             if not line.startswith("data:"):
+                if line.lstrip().startswith(("{", "[")):
+                    _provider_object(line)
+                    raise _ProviderResponseError()
                 continue
             payload = line[5:].strip()
             if not payload:
                 continue
-            try:
-                ev = json.loads(payload)
-            except json.JSONDecodeError:
-                continue
+            ev = _provider_object(payload)
             etype = ev.get("type")
             if etype == "content_block_start":
                 idx = ev.get("index", 0)
                 cb = ev.get("content_block", {})
+                if type(idx) is not int or idx < 0 or idx in blocks or not isinstance(cb, dict):
+                    raise _ProviderResponseError()
+                open_blocks.add(idx)
                 order.append(idx)
                 if cb.get("type") == "tool_use":
+                    initial_input = cb.get("input", {})
+                    if not isinstance(initial_input, dict):
+                        raise _ProviderResponseError()
                     blocks[idx] = {"type": "tool_use", "id": cb.get("id"), "name": cb.get("name"), "input": {}}
-                    tool_json[idx] = ""
+                    tool_json[idx] = json.dumps(initial_input) if initial_input else ""
                 elif cb.get("type") == "thinking":
                     blocks[idx] = {"type": "thinking", "thinking": ""}
                 else:
@@ -1145,6 +1230,8 @@ class ClaudeProvider:
             elif etype == "content_block_delta":
                 idx = ev.get("index", 0)
                 delta = ev.get("delta", {})
+                if idx not in open_blocks or not isinstance(delta, dict):
+                    raise _ProviderResponseError()
                 dtype = delta.get("type")
                 if dtype == "text_delta":
                     blocks.setdefault(idx, {"type": "text", "text": ""})
@@ -1156,13 +1243,13 @@ class ClaudeProvider:
                     tool_json[idx] = tool_json.get(idx, "") + delta.get("partial_json", "")
             elif etype == "content_block_stop":
                 idx = ev.get("index", 0)
+                if idx not in open_blocks:
+                    raise _ProviderResponseError()
+                open_blocks.remove(idx)
                 blk = blocks.get(idx)
                 if blk and blk.get("type") == "tool_use":
-                    try:
-                        blk["input"] = json.loads(tool_json.get(idx) or "{}")
-                    except json.JSONDecodeError:
-                        blk["input"] = {}
-                    yield _norm(EV_TOOL, id=blk.get("id"), name=blk.get("name"), input=blk["input"])
+                    parsed_tools.append(_norm(EV_TOOL, id=blk["id"], name=blk["name"],
+                                              input=tool_json.get(idx) or "{}", _block_index=idx))
             elif etype == "message_start":
                 usage = (ev.get("message") or {}).get("usage") or {}
                 if usage:
@@ -1179,17 +1266,35 @@ class ClaudeProvider:
                 sr = ev.get("delta", {}).get("stop_reason")
                 if sr:
                     stop_reason = sr
+                    saw_reason = True
                 usage = ev.get("usage") or {}
                 if "output_tokens" in usage:
                     yield _norm(EV_USAGE, input_tokens=input_tokens,
                                 output_tokens=_usage_int(usage.get("output_tokens")))
             elif etype == "message_stop":
+                saw_stop = True
                 break
             elif etype == "error":
-                yield _norm(EV_ERROR, status=0, code="upstream",
-                            message=str(ev.get("error", {}).get("message", "stream error")),
-                            retryable=False)
-                return
+                raise _ProviderResponseError("provider_blocked", retryable=False)
+        if not saw_stop or not saw_reason or open_blocks:
+            raise _ProviderResponseError("provider_incomplete", retryable=stop_reason != "max_tokens")
+        if stop_reason in ("refusal", "content_filter"):
+            raise _ProviderResponseError("provider_blocked", retryable=False)
+        if stop_reason not in ("end_turn", "tool_use", "max_tokens", "stop_sequence"):
+            raise _ProviderResponseError()
+        if stop_reason == "tool_use" and not parsed_tools:
+            raise _ProviderResponseError()
+        if parsed_tools and stop_reason != "tool_use":
+            raise _ProviderResponseError("provider_incomplete", retryable=stop_reason != "max_tokens")
+        for tool in parsed_tools:
+            tool["input"] = json.loads(tool["input"])
+            if not _valid_tool_call(tool["id"], tool["name"], tool["input"]):
+                raise _ProviderResponseError()
+            blocks[tool.pop("_block_index")]["input"] = tool["input"]
+        if len({tool["id"] for tool in parsed_tools}) != len(parsed_tools):
+            raise _ProviderResponseError()
+        for tool in parsed_tools:
+            yield tool
         # Assemble the assistant message in block order; drop thinking blocks from
         # the persisted history (they are display-only and Anthropic re-derives).
         content = []
@@ -1927,15 +2032,16 @@ class OpenAICompatProvider:
                         if self.definition.model_filter == "mistral" and resp.status == 429 else {}
                     )
                     yield _norm(EV_ERROR, status=resp.status, code=code,
-                                message=msg[:600], retryable=retryable,
+                                message=f"Provider request failed (HTTP {resp.status}).", retryable=retryable,
                                 refused=_refused_option(resp.status, msg, body),
                                 **({"rate_limit": rate_limit} if rate_limit else {}))
                     return
                 async for ev in self._parse(resp, show_thinking):
                     yield ev
-        except (ClientError, asyncio.TimeoutError) as exc:
-            yield _norm(EV_ERROR, status=0, code="network", message=str(exc), retryable=True)
+        except (ClientError, asyncio.TimeoutError):
+            yield _norm(EV_ERROR, status=0, code="network", message="Provider connection failed.", retryable=True)
 
+    @_total_provider_response
     async def _parse(self, resp: Any, show_thinking: bool) -> AsyncIterator[dict]:
         text_parts: list[str] = []
         # Z.ai requires its reasoning_content to be returned verbatim with the
@@ -1966,16 +2072,16 @@ class OpenAICompatProvider:
         think = _ThinkSplitter()
         async for line in _sse_lines(resp):
             if not line.startswith("data:"):
+                if line.lstrip().startswith(("{", "[")):
+                    _provider_object(line)
+                    raise _ProviderResponseError()
                 continue
             payload = line[5:].strip()
             if not payload:
                 continue
             if payload == "[DONE]":
                 break
-            try:
-                chunk = json.loads(payload)
-            except json.JSONDecodeError:
-                continue
+            chunk = _provider_object(payload)
             # Usage must be read BEFORE the empty-choices skip: OpenAI's final
             # usage chunk (stream_options include_usage) carries choices: [].
             # Some backends (Gemini, Grok, Ollama) volunteer usage on content
@@ -1986,20 +2092,34 @@ class OpenAICompatProvider:
                 ct = _usage_int(usage.get("completion_tokens"))
                 if pt or ct:
                     yield _norm(EV_USAGE, input_tokens=pt, output_tokens=ct)
-            choices = chunk.get("choices") or []
+            choices = chunk.get("choices")
+            if not isinstance(choices, list):
+                raise _ProviderResponseError()
             if not choices:
                 continue
             choice = choices[0]
+            if not isinstance(choice, dict):
+                raise _ProviderResponseError()
             delta = choice.get("delta") or {}
+            if not isinstance(delta, dict):
+                raise _ProviderResponseError()
+            if delta.get("refusal") or choice.get("finish_reason") == "content_filter":
+                raise _ProviderResponseError("provider_blocked", retryable=False)
             # DeepSeek uses reasoning_content; Ollama's OpenAI-compatible path
             # uses reasoning. Both are display-only and never enter the assistant
             # message that Phoenix sends back on the next round.
             reasoning = delta.get("reasoning_content") or delta.get("reasoning")
+            if reasoning is not None and not isinstance(reasoning, str):
+                raise _ProviderResponseError()
             if reasoning and self.definition.reasoning == "zai":
                 replay_reasoning_parts.append(str(reasoning))
             if reasoning and show_thinking:
                 yield _norm(EV_THINKING, text=reasoning)
             content = delta.get("content")
+            if content is not None and not isinstance(content, str) and not (
+                self.definition.model_filter == "mistral" and isinstance(content, list)
+            ):
+                raise _ProviderResponseError()
             if self.definition.model_filter == "mistral" and isinstance(content, list):
                 for block in content:
                     if not isinstance(block, dict):
@@ -2040,15 +2160,24 @@ class OpenAICompatProvider:
                         yield _norm(EV_TEXT, text=seg)
                     elif show_thinking:
                         yield _norm(EV_THINKING, text=seg)
-            for tc in delta.get("tool_calls") or []:
+            fragments = delta.get("tool_calls", [])
+            if not isinstance(fragments, list):
+                raise _ProviderResponseError()
+            for tc in fragments:
                 idx = tc.get("index", 0)
+                if type(idx) is not int or idx < 0:
+                    raise _ProviderResponseError()
                 slot = calls.setdefault(idx, {"id": None, "name": None, "args": ""})
                 if tc.get("id"):
                     slot["id"] = tc["id"]
-                fn = tc.get("function") or {}
+                fn = tc.get("function", {})
+                if not isinstance(fn, dict):
+                    raise _ProviderResponseError()
                 if fn.get("name"):
                     slot["name"] = fn["name"]
-                if fn.get("arguments"):
+                if "arguments" in fn:
+                    if not isinstance(fn["arguments"], str):
+                        raise _ProviderResponseError()
                     slot["args"] += fn["arguments"]
             if choice.get("finish_reason"):
                 finish = choice["finish_reason"]
@@ -2069,15 +2198,13 @@ class OpenAICompatProvider:
             args_str = slot["args"] or "{}"
             try:
                 parsed = json.loads(args_str)
+                if not _valid_tool_call(slot["id"], slot["name"], parsed):
+                    raise _ProviderResponseError(retryable=finish != "length")
             except json.JSONDecodeError:
                 bad = True
                 parsed = None
                 # Content is deliberately not logged (tool args can carry
                 # sensitive values); name/size/finish is what diagnosis needs.
-                _LOGGER.debug(
-                    "agentCLI unparseable tool-call args: tool=%s args_len=%d finish_reason=%s",
-                    slot["name"], len(args_str), finish if saw_finish else "<none>",
-                )
             assistant_tool_calls.append({
                 "id": slot["id"], "type": "function",
                 "function": {"name": slot["name"], "arguments": args_str},
@@ -2133,12 +2260,21 @@ class OpenAICompatProvider:
                 )
             else:
                 code = "bad_tool_call"
-                retryable = False
+                retryable = True
                 message = "The model produced an invalid tool call."
             yield _norm(EV_ERROR, status=0, code=code,
                         message=message, retryable=retryable)
-            yield _norm(EV_DONE, stop_reason="error", assistant_msg=assistant_msg)
             return
+        if not saw_finish:
+            raise _ProviderResponseError("provider_incomplete")
+        if finish not in ("stop", "tool_calls", "length"):
+            raise _ProviderResponseError()
+        if finish == "tool_calls" and not parsed_tools:
+            raise _ProviderResponseError()
+        if parsed_tools and finish != "tool_calls":
+            raise _ProviderResponseError("provider_incomplete", retryable=finish != "length")
+        if len({tool["id"] for tool in parsed_tools}) != len(parsed_tools):
+            raise _ProviderResponseError()
         for tool_call in parsed_tools:
             yield _norm(EV_TOOL, id=tool_call["id"], name=tool_call["name"],
                         input=tool_call["input"])
@@ -2809,10 +2945,37 @@ def _agentcli_time_context(hass: HomeAssistant) -> str:
 # The agent loop
 # --------------------------------------------------------------------------- #
 
+async def _cancelable_provider_events(events: Any, cancel: asyncio.Event) -> AsyncGenerator[dict, None]:
+    """Close the HTTP generator even when cancellation arrives during a quiet stream."""
+    stopped = asyncio.create_task(cancel.wait())
+    next_event: asyncio.Task | None = None
+    try:
+        while not cancel.is_set():
+            next_event = asyncio.create_task(anext(events))
+            done, _ = await asyncio.wait((next_event, stopped), return_when=asyncio.FIRST_COMPLETED)
+            if stopped in done:
+                return
+            try:
+                event = next_event.result()
+            except StopAsyncIteration:
+                return
+            yield event
+    finally:
+        if next_event is not None:
+            next_event.cancel()
+            with suppress(asyncio.CancelledError, StopAsyncIteration):
+                await next_event
+        stopped.cancel()
+        with suppress(asyncio.CancelledError):
+            await stopped
+        await events.aclose()
+
+
 async def _stream_turn_resilient(
     provider: ClaudeProvider | OpenAICompatProvider, session: ClientSession, *,
     system_prompt: str, messages: list[dict], tools: list[dict], options: dict,
     cancel: asyncio.Event,
+    dispatch_started: bool = False,
 ) -> AsyncIterator[dict]:
     """provider.stream_turn wrapped with a bounded retry for a transient connection
     failure (e.g. a DNS/connect timeout) that occurs BEFORE any content is
@@ -2825,49 +2988,58 @@ async def _stream_turn_resilient(
     loop_time = asyncio.get_running_loop().time
     deadline = loop_time() + _CONNECT_RETRY_WINDOW_SECONDS
     attempt = 0
-    while True:
+    while not cancel.is_set():
         attempt += 1
         produced = False
         retry = False
-        async for ev in provider.stream_turn(
+        events = _cancelable_provider_events(provider.stream_turn(
             session, system_prompt=system_prompt, messages=messages, tools=tools, options=options,
-        ):
-            etype = ev.get("type")
-            if (etype == EV_ERROR and not produced and ev.get("retryable")
-                    and not cancel.is_set()
-                    and loop_time() + _CONNECT_RETRY_BACKOFF_SECONDS < deadline):
-                retry = True
-                break
-            if etype == EV_ERROR and attempt > 1:
-                detail = str(ev.get("message") or "").strip()
-                seconds = int(_CONNECT_RETRY_WINDOW_SECONDS)
-                explicit_rate_limit = (
-                    ev.get("status") == 429 and ev.get("code") == "rate_limit"
-                )
-                if explicit_rate_limit:
-                    code = "provider_rate_limit_exhausted"
-                    message = (
-                        f"The provider's rate limit remained exceeded after retrying for about "
-                        f"{seconds}s. Provider detail: {detail}"
+        ), cancel)
+        async with aclosing(events):
+            async for ev in events:
+                etype = ev.get("type")
+                if (etype == EV_ERROR and not produced and not dispatch_started and ev.get("retryable")
+                        and attempt < _CONNECT_RETRY_MAX_ATTEMPTS and not cancel.is_set()
+                        and loop_time() + _CONNECT_RETRY_BACKOFF_SECONDS < deadline):
+                    retry = True
+                    break
+                if etype == EV_ERROR and dispatch_started:
+                    ev = {**ev, "code": "provider_after_dispatch", "retryable": False,
+                          "dispatch_started": True, "outcome": "outcome_unknown",
+                          "message": "The provider failed after tool dispatch. Earlier actions may have run. Reconcile Home Assistant and approval results before retrying."}
+                if etype == EV_ERROR and attempt > 1:
+                    detail = str(ev.get("message") or "").strip()
+                    seconds = int(_CONNECT_RETRY_WINDOW_SECONDS)
+                    explicit_rate_limit = (
+                        ev.get("status") == 429 and ev.get("code") == "rate_limit"
                     )
-                else:
-                    code = "provider_retry_exhausted"
-                    message = (
-                        f"Could not reach the provider after retrying for about "
-                        f"{seconds}s. {detail}"
-                    )
-                ev = {
-                    **ev,
-                    "code": code,
-                    "message": message.strip(),
-                    "message_params": {"seconds": seconds, "detail": detail},
-                }
-            if etype in (EV_TEXT, EV_THINKING, EV_TOOL, EV_DONE):
-                produced = True
-            yield ev
+                    if explicit_rate_limit:
+                        code = "provider_rate_limit_exhausted"
+                        message = (
+                            f"The provider's rate limit remained exceeded after retrying for about "
+                            f"{seconds}s. Provider detail: {detail}"
+                        )
+                    else:
+                        code = "provider_retry_exhausted"
+                        message = (
+                            f"Could not reach the provider after retrying for about "
+                            f"{seconds}s. {detail}"
+                        )
+                    ev = {
+                        **ev,
+                        "code": code,
+                        "message": message.strip(),
+                        "message_params": {"seconds": seconds, "detail": detail},
+                    }
+                if etype in (EV_TEXT, EV_THINKING, EV_TOOL, EV_DONE):
+                    produced = True
+                yield ev
         if not retry or cancel.is_set():
             return
-        await asyncio.sleep(_CONNECT_RETRY_BACKOFF_SECONDS)
+        try:
+            await asyncio.wait_for(cancel.wait(), timeout=_CONNECT_RETRY_BACKOFF_SECONDS)
+        except asyncio.TimeoutError:
+            pass
 
 
 @dataclasses.dataclass
@@ -2975,6 +3147,7 @@ async def _consume_model_stream(
     usage_done_output: int,
     context_tokens: int,
     detect_focus_refusal: bool = False,
+    dispatch_started: bool = False,
 ) -> _ModelCallResult:
     """Drain one model call's normalized event stream into a result.
 
@@ -2995,7 +3168,7 @@ async def _consume_model_stream(
 
     async for ev in _stream_turn_resilient(
         provider, session, system_prompt=system, messages=messages,
-        tools=tools, options=options, cancel=cancel,
+        tools=tools, options=options, cancel=cancel, dispatch_started=dispatch_started,
     ):
         etype = ev["type"]
         if etype == EV_TEXT:
@@ -3035,6 +3208,8 @@ async def _consume_model_stream(
         elif etype == EV_ERROR:
             await emit("error", {"code": ev.get("code"), "message": ev.get("message"),
                                  "retryable": ev.get("retryable", False),
+                                 **({"outcome": "outcome_unknown"} if ev.get("dispatch_started") else {}),
+                                 **({"diagnostic": ev["diagnostic"]} if ev.get("diagnostic") else {}),
                                  **({"message_params": ev["message_params"]}
                                     if ev.get("message_params") else {}),
                                  # Mistral's adapter has already reduced response
@@ -3148,11 +3323,10 @@ async def _run_tool_batch(
         dispatch_request_id = generate_request_id()
         resp_msg, _m, _r, outcome = await _dispatch_with_progress(
             emit, tc.get("id"),
-            _dispatch_mcp(
-                "tools/call", tc.get("id"),
-                {"name": name, "arguments": args},
-                dispatch_token, hass, data, client_ip, base_url,
-                request_id=dispatch_request_id,
+            dispatch_agent_tool(
+                _dispatch_mcp, hass=hass, data=data, token=dispatch_token,
+                name=name, arguments=args, tool_id=tc.get("id"),
+                client_ip=client_ip, base_url=base_url, request_id=dispatch_request_id,
             ),
         )
         result = dispatch_tool_result(resp_msg)
@@ -3192,7 +3366,11 @@ async def _run_tool_batch(
                 "status": status,
                 "reason": _clip_display(reason) if reason else None,
             })
-            if status in (STATUS_APPROVED, STATUS_REJECTED, STATUS_FAILED, "execution_failed"):
+            if status in (STATUS_FAILED, "execution_failed"):
+                # The executor may have applied part of the approved action.
+                # Do not let the next model round turn its error into a replay.
+                raise RecoveryRequired("An approved action has an uncertain outcome.")
+            if status in (STATUS_APPROVED, STATUS_REJECTED):
                 human_resolved = True
         is_error = bool(result.get("isError"))
         content = result.get("content", [])
@@ -3222,6 +3400,7 @@ async def _run_tool_batch(
     )
 
 
+@recovery_turn
 async def async_run_agent_turn(
     *, hass: HomeAssistant, data: PhoenixData, token: TokenRecord,
     provider: ClaudeProvider | OpenAICompatProvider,
@@ -3242,6 +3421,14 @@ async def async_run_agent_turn(
     is the turn-level policy the phases must not own: the runaway-iteration cap
     and its human-in-the-loop reset, the output budget, and how the turn ends.
     """
+    await data.agent_recovery.reconcile(data.store, token.id)
+    if data.agent_recovery.blocks(token.id):
+        await emit("error", {"code": "outcome_unknown", "retryable": False,
+                             "message": "An earlier action outcome is unknown. Check Home Assistant Repairs before continuing."})
+        await emit("messages", {"messages": messages})
+        await emit("done", {"stop_reason": "error"})
+        return messages
+
     from .mcp_view import _build_instructions  # noqa: PLC0415
 
     system = (
@@ -3269,6 +3456,7 @@ async def async_run_agent_turn(
     token_id = token.id
 
     stop_reason = "end_turn"
+    dispatch_started = False
     saw_text = False
     turn_errored = False
     # Bound the TOTAL provider-generated output retained across the whole turn.
@@ -3314,7 +3502,7 @@ async def async_run_agent_turn(
             options=options, cancel=cancel, emit=emit,
             usage_done_input=usage_done_input, usage_done_output=usage_done_output,
             context_tokens=context_tokens,
-            detect_focus_refusal=home_focused,
+            detect_focus_refusal=home_focused, dispatch_started=dispatch_started,
         )
         tool_calls = call.tool_calls
         assistant_msg = call.assistant_msg
@@ -3333,6 +3521,7 @@ async def async_run_agent_turn(
             # turn terminal so the generic empty-reply notice cannot mislabel
             # a useful provider diagnostic, such as a billing refusal.
             turn_errored = True
+            stop_reason = "error"
             break
         if assistant_msg is not None:
             # Check the prospective total BEFORE appending, and reject the message
@@ -3350,10 +3539,18 @@ async def async_run_agent_turn(
         if stop_reason != "tool_use":
             break
 
-        batch = await _run_tool_batch(
-            tool_calls, hass=hass, data=data, token_id=token_id,
-            client_ip=client_ip, base_url=base_url, emit=emit, cancel=cancel,
-        )
+        dispatch_started = True
+        try:
+            batch = await _run_tool_batch(
+                tool_calls, hass=hass, data=data, token_id=token_id,
+                client_ip=client_ip, base_url=base_url, emit=emit, cancel=cancel,
+            )
+        except RecoveryRequired:
+            await emit("error", {"code": "outcome_unknown", "retryable": False,
+                                 "message": "An action outcome is unknown. Check Home Assistant Repairs before retrying."})
+            turn_errored = True
+            stop_reason = "error"
+            break
         results = batch.results
         human_resolved = batch.human_resolved
         stop_turn = batch.stop_turn
@@ -3421,6 +3618,7 @@ _HEADLESS_PROVIDER_ERROR = "the language model could not be reached"
 # error. The loop returning prose forced an English literal into a spoken reply.
 TURN_OK = "ok"
 TURN_PROVIDER_ERROR = "provider_error"
+TURN_OUTCOME_UNKNOWN = "outcome_unknown"
 TURN_OUTPUT_LIMIT = "output_limit"
 TURN_EXHAUSTED = "exhausted"
 TURN_AUTHORITY_LOST = "authority_lost"
@@ -3451,6 +3649,7 @@ class _HeadlessTurnResult:
     focus_declined: bool = False
 
 
+@recovery_turn
 async def _run_headless_turn(
     hass: HomeAssistant,
     data: PhoenixData,
@@ -3487,6 +3686,10 @@ async def _run_headless_turn(
     """
     from .mcp_view import _dispatch_mcp  # noqa: PLC0415
 
+    await data.agent_recovery.reconcile(data.store, token.id)
+    if data.agent_recovery.blocks(token.id):
+        return _HeadlessTurnResult("", [], outcome=TURN_OUTCOME_UNKNOWN)
+
     tools = provider.format_tools(build_mcp_tool_list(token, data))
     messages: list[dict] = [{"role": "user", "content": seed}]
     token_id = token.id
@@ -3509,6 +3712,7 @@ async def _run_headless_turn(
     # already reset final_text, so the caller would otherwise receive "".
     exhausted = True
     focus_declined = False
+    dispatch_started = False
 
     for _ in range(max_iterations):
         tool_calls: list[dict] = []
@@ -3517,7 +3721,7 @@ async def _run_headless_turn(
         call_text = ""
         async for ev in _stream_turn_resilient(
             provider, session, system_prompt=system, messages=messages,
-            tools=tools, options={}, cancel=cancel,
+            tools=tools, options={}, cancel=cancel, dispatch_started=dispatch_started,
         ):
             etype = ev["type"]
             if etype == EV_TEXT:
@@ -3529,7 +3733,8 @@ async def _run_headless_turn(
                 assistant_msg = ev["assistant_msg"]
             elif etype == EV_ERROR:
                 return _HeadlessTurnResult(
-                    final_text, review_urls, outcome=TURN_PROVIDER_ERROR,
+                    final_text, review_urls,
+                    outcome=TURN_OUTCOME_UNKNOWN if dispatch_started else TURN_PROVIDER_ERROR,
                     detail=str(ev.get("message") or _HEADLESS_PROVIDER_ERROR),
                     focus_declined=focus_declined,
                 )
@@ -3578,12 +3783,15 @@ async def _run_headless_turn(
                 })
                 continue
             dispatch_request_id = generate_request_id()
-            resp_msg, _m, _r, outcome = await _dispatch_mcp(
-                "tools/call", tc.get("id"),
-                {"name": name, "arguments": tc.get("input") or {}},
-                dispatch_token, hass, data, client_ip, base_url,
-                request_id=dispatch_request_id,
-            )
+            dispatch_started = True
+            try:
+                resp_msg, _m, _r, outcome = await dispatch_agent_tool(
+                    _dispatch_mcp, hass=hass, data=data, token=dispatch_token,
+                    name=name, arguments=tc.get("input") or {}, tool_id=tc.get("id"),
+                    client_ip=client_ip, base_url=base_url, request_id=dispatch_request_id,
+                )
+            except RecoveryRequired:
+                return _HeadlessTurnResult("", review_urls, outcome=TURN_OUTCOME_UNKNOWN)
             result = dispatch_tool_result(resp_msg)
             if outcome == "denied" and (resp_msg or {}).get("error"):
                 authority_lost = True
@@ -3740,6 +3948,8 @@ async def async_run_voice_turn(
     # Never raise at a microphone: every ending becomes something sayable, in the
     # CONVERSATION's language (voice_text), not the server's. A partial answer the
     # model already produced is preferred over an apology that discards it.
+    if turn.outcome == TURN_OUTCOME_UNKNOWN:
+        return voice_text(language, "outcome_unknown")
     if turn.outcome == TURN_PROVIDER_ERROR:
         return turn.text.strip() or voice_text(language, "provider_error", reason=turn.detail)
     if turn.outcome == TURN_OUTPUT_LIMIT:
@@ -3857,6 +4067,8 @@ async def async_run_ai_task(
     # automation asked for data, so every non-OK ending is an error the caller
     # wraps as a HomeAssistantError. These messages are operator-facing and
     # deliberately English, like the rest of the agent-facing error text.
+    if turn.outcome == TURN_OUTCOME_UNKNOWN:
+        raise AiTaskError("An action outcome is unknown. Reconcile Home Assistant and approval results before retrying.")
     if turn.outcome == TURN_PROVIDER_ERROR:
         raise AiTaskError(turn.detail)
     if turn.outcome == TURN_OUTPUT_LIMIT:

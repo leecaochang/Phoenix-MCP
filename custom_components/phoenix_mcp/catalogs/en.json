@@ -1429,7 +1429,19 @@
         "internal": "Internal error.",
         "bad_tool_call": "The model produced an invalid tool call.",
         "tool_call_truncated": "The model hit its output length limit in the middle of a tool call, so the action was not run. The requested change was too large to emit in one call; try asking for a smaller change.",
-        "tool_call_cut": "The connection to the model ended in the middle of a tool call, so the action was not run. Nothing was applied and the request itself was not at fault; send it again."
+        "tool_call_cut": "The connection to the model ended in the middle of a tool call, so the action was not run. Nothing was applied and the request itself was not at fault; send it again.",
+        "provider_malformed": "The provider returned a malformed response. No tool from this response was run.",
+        "provider_incomplete": "The provider response ended early. No tool from this response was run.",
+        "provider_blocked": "The provider blocked this response. It will not be retried.",
+        "outcome_unknown": "Actions may have run. Check Home Assistant and approval results before retrying. Resolve uncertain actions in Settings > System > Repairs.",
+        "provider_after_dispatch": "Actions may have run. Check Home Assistant and approval results before retrying. Resolve uncertain actions in Settings > System > Repairs.",
+        "provider_transient": "The provider is temporarily unavailable.",
+        "network": "The provider is temporarily unavailable.",
+        "upstream": "The provider is temporarily unavailable.",
+        "rate_limit": "The provider is temporarily unavailable.",
+        "ollama_backend": "The provider is temporarily unavailable.",
+        "auth": "The provider blocked this response. It will not be retried.",
+        "quota": "The provider blocked this response. It will not be retried."
       }
     },
     "diff": {
@@ -1984,6 +1996,7 @@
     "output_limit": "Sorry, the model produced too much output, so I stopped.",
     "provider_error": "Sorry, {reason}.",
     "token_unavailable": "The Phoenix MCP voice agent's token is no longer available.",
-    "unavailable": "The Phoenix MCP voice agent is currently unavailable."
+    "unavailable": "The Phoenix MCP voice agent is currently unavailable.",
+    "outcome_unknown": "Actions may have run. Check Home Assistant and approval results before retrying. Resolve uncertain actions in Settings > System > Repairs."
   }
 }

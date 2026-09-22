@@ -57,6 +57,7 @@ from .mesa import (
     fire_mesa_blocked_event,
 )
 from .ws_dispatch import WsDispatchError, async_ws_command
+from .agent_recovery import tool_is_read_only
 from .mesa_tools import MESA_TOOL_NAMES, async_call_mesa_tool, mesa_tool_defs
 from .helpers import build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_token as _async_get_authenticated_token, get_client_ip as _get_client_ip, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, token_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
 from .recorder_queries import (
@@ -4642,6 +4643,7 @@ async def _tool_get_approval_status(
     """
     from .approvals import STATUS_PENDING, get_approval, list_approvals  # noqa: PLC0415
 
+    await data.agent_recovery.reconcile(data.store, token.id)
     approval_id = args.get("approval_id")
     if approval_id is None:
         # No id: enumerate this token's own pending approvals (own data only).
@@ -4657,6 +4659,7 @@ async def _tool_get_approval_status(
             for a in pending
         ]
         body = {"count": len(items), "pending_approvals": items}
+        body["agent_recovery"] = data.agent_recovery.records(token.id)
         return _tool_success(json.dumps(body, default=str)), "allowed", "get_approval_status"
 
     if not isinstance(approval_id, str) or not approval_id:
@@ -7760,6 +7763,13 @@ async def _dispatch_mcp(
             else current
         )
         context = policy_version.set(token.settings_version)
+        if method == "tools/call" and isinstance(params.get("name"), str) and not tool_is_read_only(params["name"]):
+            await data.agent_recovery.reconcile(data.store, token.id)
+            if data.agent_recovery.blocks(token.id, request_id):
+                _log(data, token, request_id=request_id, method=params["name"], resource=params["name"],
+                     outcome="denied", client_ip=client_ip)
+                recovery_error = _tool_error("An earlier agent action has an unknown outcome. Check Home Assistant Repairs before retrying; reads remain available.")
+                return _jsonrpc_result(msg_id, recovery_error), method, params["name"], "denied"
         result = await _dispatch_mcp_authorized(method, msg_id, params, token, hass, data, client_ip, base_url, request_id)
         check_request_authority()
         return result

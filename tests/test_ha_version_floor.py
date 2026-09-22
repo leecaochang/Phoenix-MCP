@@ -72,6 +72,8 @@ FLOOR = _version(MIN_HA_VERSION)
 # against that tag's source at
 # https://raw.githubusercontent.com/home-assistant/core/<tag>/<path>.
 KNOWN_IMPORTS: dict[str, dict[str, str]] = {
+    # Verified exported in 2024.5.0, the earliest original claim.
+    "homeassistant.components.repairs": {"RepairsFlow": "0.0.0"},
     "homeassistant": {
         # Integration loading predates Phoenix's minimum HA version and is the
         # same public module used by HA's 2025.2 device-removal endpoint.

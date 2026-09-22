@@ -16,6 +16,27 @@
     "mesa_runtime_unavailable": {
       "title": "Le moteur de sécurité MESA est indisponible",
       "description": "Phoenix MCP n'a pas pu initialiser son moteur de sécurité MESA. Les lectures et la récupération administrative restent disponibles, mais les opérations protégées qui modifient l'état sont refusées tant que le mode MESA est Consultatif ou Appliqué. Consultez les journaux de Home Assistant, puis rechargez l'intégration Phoenix MCP. Vous pouvez sélectionner explicitement le mode Désactivé uniquement si vous souhaitez fonctionner sans protection MESA."
+    },
+    "agent_recovery": {
+      "title": "Vérifier le résultat de {tool}",
+      "description": "Des actions peuvent avoir été exécutées. Vérifiez Home Assistant et les approbations avant de réessayer. Résolvez les actions incertaines dans Paramètres > Système > Réparations.\n\n{tool}\n{request_id}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "description": "Des actions peuvent avoir été exécutées. Vérifiez Home Assistant et les approbations avant de réessayer. Résolvez les actions incertaines dans Paramètres > Système > Réparations.\n\n{tool}\n{request_id}",
+            "data": {
+              "checked_home_assistant": "J’ai vérifié le résultat dans Home Assistant. Cela autorise uniquement de nouvelles demandes, sans répéter ni annuler aucune action."
+            }
+          }
+        },
+        "error": {
+          "check_required": "J’ai vérifié le résultat dans Home Assistant. Cela autorise uniquement de nouvelles demandes, sans répéter ni annuler aucune action.",
+          "operation_active": "L’opération est encore en cours ou a déjà été vérifiée."
+        },
+        "abort": {
+          "not_ready": "Phoenix MCP n’est pas prêt."
+        }
+      }
     }
   }
 }

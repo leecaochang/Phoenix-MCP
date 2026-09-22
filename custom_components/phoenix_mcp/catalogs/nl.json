@@ -15,7 +15,8 @@
     "output_limit": "Sorry, het model produceerde te veel uitvoer, dus ik ben gestopt.",
     "provider_error": "Sorry, {reason}.",
     "token_unavailable": "Het token van de Phoenix MCP-spraakagent is niet meer beschikbaar.",
-    "unavailable": "De Phoenix MCP-spraakagent is momenteel niet beschikbaar."
+    "unavailable": "De Phoenix MCP-spraakagent is momenteel niet beschikbaar.",
+    "outcome_unknown": "Acties kunnen zijn uitgevoerd. Controleer Home Assistant en de goedkeuringen voordat u het opnieuw probeert. Controleer onzekere acties via Instellingen > Systeem > Reparaties."
   },
   "panel": {
     "shell": {
@@ -754,7 +755,19 @@
         "provider_retry_exhausted": "Kon de provider niet bereiken na ongeveer {seconds} s opnieuw proberen. {detail}",
         "tool_call_cut": "De verbinding met het model werd verbroken midden in een toolaanroep, dus de actie is niet uitgevoerd. Er is niets toegepast en het verzoek zelf was niet de oorzaak; stuur het opnieuw.",
         "tool_call_truncated": "Het model bereikte zijn uitvoerlimiet midden in een toolaanroep, dus de actie is niet uitgevoerd. De gevraagde wijziging was te groot om in één aanroep te verzenden; vraag om een kleinere wijziging.",
-        "unauthorized": "Dit token is niet langer geautoriseerd."
+        "unauthorized": "Dit token is niet langer geautoriseerd.",
+        "provider_malformed": "De provider gaf een ongeldige reactie. Geen hulpmiddel uit deze reactie is uitgevoerd.",
+        "provider_incomplete": "De reactie van de provider eindigde voortijdig. Geen hulpmiddel uit deze reactie is uitgevoerd.",
+        "provider_blocked": "De provider heeft deze reactie geblokkeerd. Er volgt geen nieuwe poging.",
+        "outcome_unknown": "Acties kunnen zijn uitgevoerd. Controleer Home Assistant en de goedkeuringen voordat u het opnieuw probeert. Controleer onzekere acties via Instellingen > Systeem > Reparaties.",
+        "provider_after_dispatch": "Acties kunnen zijn uitgevoerd. Controleer Home Assistant en de goedkeuringen voordat u het opnieuw probeert. Controleer onzekere acties via Instellingen > Systeem > Reparaties.",
+        "provider_transient": "De provider is tijdelijk niet beschikbaar.",
+        "network": "De provider is tijdelijk niet beschikbaar.",
+        "upstream": "De provider is tijdelijk niet beschikbaar.",
+        "rate_limit": "De provider is tijdelijk niet beschikbaar.",
+        "ollama_backend": "De provider is tijdelijk niet beschikbaar.",
+        "auth": "De provider heeft deze reactie geblokkeerd. Er volgt geen nieuwe poging.",
+        "quota": "De provider heeft deze reactie geblokkeerd. Er volgt geen nieuwe poging."
       },
       "options": "Opties",
       "pausedAfter": "Gepauzeerd na {count} stappen. Verder onderzoeken?",

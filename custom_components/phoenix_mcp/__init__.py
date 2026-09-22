@@ -18,6 +18,7 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.storage import Store
 from .audit import AuditLog
 from .version_store import VersionStore
+from .agent_recovery import AgentRecovery, STORAGE_KEY as AGENT_RECOVERY_STORAGE_KEY
 from .card_catalog import CardCatalogStore
 from .const import APPROVAL_SWEEP_INTERVAL, AUDIT_STORAGE_KEY, AUDIT_STORAGE_VERSION, CARD_CATALOG_STORAGE_KEY, CARD_CATALOG_STORAGE_VERSION, DOMAIN, EXPIRY_CHECK_INTERVAL, FLUSH_INTERVAL, RUNTIME_READY_KEY, SENSOR_PUSH_INTERVAL, VERSION_STORAGE_KEY, VERSION_STORAGE_VERSION
 from .data import PhoenixData
@@ -317,12 +318,16 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     )
     await card_catalog.async_load()
 
+    agent_recovery = AgentRecovery(Store(hass, 1, AGENT_RECOVERY_STORAGE_KEY))
+    await agent_recovery.async_load()
+
     data = PhoenixData(
         hass=hass,
         store=store,
         rate_limiter=rate_limiter,
         audit=audit,
         versions=versions,
+        agent_recovery=agent_recovery,
         card_catalog=card_catalog,
         ready=False,
         enforce_mcp_lifecycle=True,
@@ -331,6 +336,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     # flow enforces a single Phoenix MCP instance via async_abort("already_configured"), so there
     # is always at most one entry. Keying by entry ID would add complexity for no benefit.
     hass.data[DOMAIN] = data
+    agent_recovery.publish_issues(hass)
 
     from .logger_control import async_get_logger_override_manager
     data.logger_control = await async_get_logger_override_manager(hass)

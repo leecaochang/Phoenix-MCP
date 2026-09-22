@@ -243,7 +243,10 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "approvals. With approval_id: returns that approval's status (pending, approved, rejected, "
             "failed, expired, cancelled) and any stored execution result. Without approval_id: returns all of this "
             "token's currently pending approvals (id, tool, created/expires), useful after a reconnect "
-            "or to resume polling. Tokens only ever see approvals they themselves created."
+            "or to resume polling. Also returns agent_recovery records for this token's interrupted "
+            "Phoenix-owned provider turns. outcome_unknown blocks further writes until an administrator "
+            "checks Home Assistant and resolves the associated Repair. dispatch_result is a receipt, not "
+            "proof of physical completion. Never replay an uncertain action. Tokens only see their own records."
         ),
         "inputSchema": {
             "type": "object",

@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import voluptuous as vol
 
+from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
 from custom_components.phoenix_mcp import ai_task, agentcli
 from custom_components.phoenix_mcp.agentcli import AiTaskError, async_run_ai_task
 from custom_components.phoenix_mcp.const import AGENTCLI_MAX_TURN_OUTPUT_BYTES, AI_TASK_CLIENT_IP
@@ -71,7 +72,7 @@ def _make_data(**settings_over):
     settings = GlobalSettings(**settings_over)
     store = MagicMock()
     store.get_settings.return_value = settings
-    return SimpleNamespace(store=store, mesa=None, ready=True, shutting_down=False)
+    return SimpleNamespace(store=store, mesa=None, ready=True, shutting_down=False, agent_recovery=AgentRecovery())
 
 
 _FULL = dict(

@@ -16,6 +16,27 @@
     "mesa_runtime_unavailable": {
       "description": "Phoenix MCP 無法初始化 MESA 安全執行時。讀取和管理員恢復功能仍然可用，但當 MESA 模式為「建議」或「強制」時，受保護的狀態更改操作將被拒絕。請檢查 Home Assistant 日誌，然後重新載入 Phoenix MCP 整合。只有在您明確打算不使用 MESA 保護時，才應選擇「關閉」模式。",
       "title": "MESA 安全執行時不可用"
+    },
+    "agent_recovery": {
+      "title": "核實 {tool} 的結果",
+      "description": "操作可能已經執行。重試前請檢查 Home Assistant 和審批結果。請在設定 > 系統 > 修復中核實結果未知的操作。\n\n{tool}\n{request_id}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "description": "操作可能已經執行。重試前請檢查 Home Assistant 和審批結果。請在設定 > 系統 > 修復中核實結果未知的操作。\n\n{tool}\n{request_id}",
+            "data": {
+              "checked_home_assistant": "我已在 Home Assistant 中核實操作結果，並理解此步驟僅允許新請求，不會重複或復原任何操作。"
+            }
+          }
+        },
+        "error": {
+          "check_required": "我已在 Home Assistant 中核實操作結果，並理解此步驟僅允許新請求，不會重複或復原任何操作。",
+          "operation_active": "操作仍在執行或已經核實。"
+        },
+        "abort": {
+          "not_ready": "Phoenix MCP 尚未就緒。"
+        }
+      }
     }
   }
 }

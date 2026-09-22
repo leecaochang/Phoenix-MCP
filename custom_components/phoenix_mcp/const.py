@@ -1625,6 +1625,7 @@ VOICE_TEMPLATES: dict[str, str] = {
     # the provider produced: it is third-party output, not ours to translate.
     "could_not_complete": "Sorry, I could not complete that.",
     "provider_error": "Sorry, {reason}.",
+    "outcome_unknown": 'Actions may have run. Check Home Assistant and approval results before retrying. Resolve uncertain actions in Settings > System > Repairs.',
     "output_limit": "Sorry, the model produced too much output, so I stopped.",
     "out_of_steps": "Sorry, I ran out of steps before finishing that.",
     "focus_declined": (

@@ -2524,6 +2524,7 @@ class PhoenixAdminWipeView(PhoenixView):
                     data.stale_tools_advised.clear()
                     await data.audit.async_wipe()
                     await data.versions.async_wipe()
+                    await data.agent_recovery.async_wipe(self.hass)
                     # The card catalog is a regenerable cache of what this instance
                     # can render, not user data, but it is Phoenix-owned storage and
                     # a wipe must not leave a file behind. The panel re-harvests on

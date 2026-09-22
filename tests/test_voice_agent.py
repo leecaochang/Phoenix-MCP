@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
 from custom_components.phoenix_mcp import agentcli, voice_agent
 from custom_components.phoenix_mcp.agentcli import EV_DONE, EV_ERROR, EV_TEXT, EV_TOOL, async_run_voice_turn
 from custom_components.phoenix_mcp.const import (
@@ -78,7 +79,7 @@ def _make_data(**settings_over):
     settings = GlobalSettings(**settings_over)
     store = MagicMock()
     store.get_settings.return_value = settings
-    return SimpleNamespace(store=store, mesa=None, ready=True, shutting_down=False)
+    return SimpleNamespace(store=store, mesa=None, ready=True, shutting_down=False, agent_recovery=AgentRecovery())
 
 
 # --------------------------------------------------------------------------- #

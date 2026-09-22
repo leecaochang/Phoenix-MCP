@@ -1426,7 +1426,19 @@
         "internal": "Erreur interne.",
         "bad_tool_call": "Le modèle a produit un appel d'outil invalide.",
         "tool_call_truncated": "Le modèle a atteint sa limite de longueur de sortie au milieu d'un appel d'outil, l'action n'a donc pas été exécutée. La modification demandée était trop volumineuse pour être émise en un seul appel ; essayez de demander une modification plus petite.",
-        "tool_call_cut": "La connexion au modèle s'est terminée au milieu d'un appel d'outil, l'action n'a donc pas été exécutée. Rien n'a été appliqué et la requête elle-même n'était pas en cause ; renvoyez-la."
+        "tool_call_cut": "La connexion au modèle s'est terminée au milieu d'un appel d'outil, l'action n'a donc pas été exécutée. Rien n'a été appliqué et la requête elle-même n'était pas en cause ; renvoyez-la.",
+        "provider_malformed": "Le fournisseur a renvoyé une réponse mal formée. Aucun outil de cette réponse n’a été exécuté.",
+        "provider_incomplete": "La réponse du fournisseur s’est terminée prématurément. Aucun outil de cette réponse n’a été exécuté.",
+        "provider_blocked": "Le fournisseur a bloqué cette réponse. Aucun nouvel essai ne sera effectué.",
+        "outcome_unknown": "Des actions peuvent avoir été exécutées. Vérifiez Home Assistant et les approbations avant de réessayer. Résolvez les actions incertaines dans Paramètres > Système > Réparations.",
+        "provider_after_dispatch": "Des actions peuvent avoir été exécutées. Vérifiez Home Assistant et les approbations avant de réessayer. Résolvez les actions incertaines dans Paramètres > Système > Réparations.",
+        "provider_transient": "Le fournisseur est temporairement indisponible.",
+        "network": "Le fournisseur est temporairement indisponible.",
+        "upstream": "Le fournisseur est temporairement indisponible.",
+        "rate_limit": "Le fournisseur est temporairement indisponible.",
+        "ollama_backend": "Le fournisseur est temporairement indisponible.",
+        "auth": "Le fournisseur a bloqué cette réponse. Aucun nouvel essai ne sera effectué.",
+        "quota": "Le fournisseur a bloqué cette réponse. Aucun nouvel essai ne sera effectué."
       }
     },
     "diff": {
@@ -1979,6 +1991,7 @@
     "output_limit": "Désolé, le modèle a produit trop de contenu en sortie, je me suis donc arrêté.",
     "provider_error": "Désolé, {reason}.",
     "token_unavailable": "Le jeton de l'agent vocal Phoenix MCP n'est plus disponible.",
-    "unavailable": "L'agent vocal Phoenix MCP est actuellement indisponible."
+    "unavailable": "L'agent vocal Phoenix MCP est actuellement indisponible.",
+    "outcome_unknown": "Des actions peuvent avoir été exécutées. Vérifiez Home Assistant et les approbations avant de réessayer. Résolvez les actions incertaines dans Paramètres > Système > Réparations."
   }
 }

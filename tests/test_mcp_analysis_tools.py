@@ -17,6 +17,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
 from custom_components.phoenix_mcp.mcp_view import _call_tool
 from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
 
@@ -40,6 +41,7 @@ def _json(content: dict) -> dict:
 
 def _data(mesa=None) -> MagicMock:
     d = MagicMock()
+    d.agent_recovery = AgentRecovery()
     d.mesa = mesa
     return d
 

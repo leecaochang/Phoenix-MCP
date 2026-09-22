@@ -16,6 +16,27 @@
     "mesa_runtime_unavailable": {
       "title": "MESA-Sicherheitslaufzeit ist nicht verfügbar",
       "description": "Phoenix MCP konnte seine MESA-Sicherheitslaufzeit nicht initialisieren. Lesezugriffe und die Administratorwiederherstellung bleiben verfügbar, geschützte zustandsändernde Vorgänge werden jedoch abgelehnt, solange der MESA-Modus „Beratend“ oder „Erzwungen“ ist. Überprüfen Sie die Home Assistant-Protokolle und laden Sie die Phoenix-MCP-Integration neu. Wählen Sie den Modus „Aus“ nur, wenn Sie ohne MESA-Schutz arbeiten möchten."
+    },
+    "agent_recovery": {
+      "title": "Ergebnis von {tool} prüfen",
+      "description": "Aktionen könnten ausgeführt worden sein. Prüfen Sie Home Assistant und die Genehmigungen vor einem erneuten Versuch. Klären Sie ungewisse Aktionen unter Einstellungen > System > Reparaturen.\n\n{tool}\n{request_id}",
+      "fix_flow": {
+        "step": {
+          "confirm": {
+            "description": "Aktionen könnten ausgeführt worden sein. Prüfen Sie Home Assistant und die Genehmigungen vor einem erneuten Versuch. Klären Sie ungewisse Aktionen unter Einstellungen > System > Reparaturen.\n\n{tool}\n{request_id}",
+            "data": {
+              "checked_home_assistant": "Ich habe das Ergebnis in Home Assistant geprüft. Dies erlaubt nur neue Anfragen und wiederholt oder widerruft keine Aktion."
+            }
+          }
+        },
+        "error": {
+          "check_required": "Ich habe das Ergebnis in Home Assistant geprüft. Dies erlaubt nur neue Anfragen und wiederholt oder widerruft keine Aktion.",
+          "operation_active": "Der Vorgang läuft noch oder wurde bereits abgeglichen."
+        },
+        "abort": {
+          "not_ready": "Phoenix MCP ist nicht bereit."
+        }
+      }
     }
   }
 }

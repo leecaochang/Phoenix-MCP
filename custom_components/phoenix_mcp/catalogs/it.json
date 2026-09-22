@@ -172,7 +172,19 @@
         "provider_retry_exhausted": "Impossibile raggiungere il provider dopo nuovi tentativi per circa {seconds}s. {detail}",
         "tool_call_cut": "La connessione al modello è terminata nel mezzo di una chiamata a uno strumento, quindi l'azione non è stata eseguita. Nulla è stato applicato e la richiesta non era difettosa; inviala di nuovo.",
         "tool_call_truncated": "Il modello ha raggiunto il limite di lunghezza dell'output nel mezzo di una chiamata a uno strumento, quindi l'azione non è stata eseguita. La modifica richiesta era troppo grande per essere emessa in una sola chiamata; prova a chiedere una modifica più piccola.",
-        "unauthorized": "Questo token non è più autorizzato."
+        "unauthorized": "Questo token non è più autorizzato.",
+        "provider_malformed": "Il fornitore ha restituito una risposta non valida. Nessuno strumento di questa risposta è stato eseguito.",
+        "provider_incomplete": "La risposta del fornitore è terminata prematuramente. Nessuno strumento di questa risposta è stato eseguito.",
+        "provider_blocked": "Il fornitore ha bloccato questa risposta. Non verrà ritentata.",
+        "outcome_unknown": "Le azioni potrebbero essere state eseguite. Controlla Home Assistant e le approvazioni prima di riprovare. Risolvi le azioni incerte in Impostazioni > Sistema > Riparazioni.",
+        "provider_after_dispatch": "Le azioni potrebbero essere state eseguite. Controlla Home Assistant e le approvazioni prima di riprovare. Risolvi le azioni incerte in Impostazioni > Sistema > Riparazioni.",
+        "provider_transient": "Il fornitore è temporaneamente non disponibile.",
+        "network": "Il fornitore è temporaneamente non disponibile.",
+        "upstream": "Il fornitore è temporaneamente non disponibile.",
+        "rate_limit": "Il fornitore è temporaneamente non disponibile.",
+        "ollama_backend": "Il fornitore è temporaneamente non disponibile.",
+        "auth": "Il fornitore ha bloccato questa risposta. Non verrà ritentata.",
+        "quota": "Il fornitore ha bloccato questa risposta. Non verrà ritentata."
       },
       "options": "Opzioni",
       "pausedAfter": "In pausa dopo {count} passaggi. Continuare l'analisi?",
@@ -1979,6 +1991,7 @@
     "output_limit": "Mi dispiace, il modello ha prodotto troppo output, quindi mi sono fermato.",
     "provider_error": "Mi dispiace, {reason}.",
     "token_unavailable": "Il token dell'agente vocale di Phoenix MCP non è più disponibile.",
-    "unavailable": "L'agente vocale di Phoenix MCP al momento non è disponibile."
+    "unavailable": "L'agente vocale di Phoenix MCP al momento non è disponibile.",
+    "outcome_unknown": "Le azioni potrebbero essere state eseguite. Controlla Home Assistant e le approvazioni prima di riprovare. Risolvi le azioni incerte in Impostazioni > Sistema > Riparazioni."
   }
 }

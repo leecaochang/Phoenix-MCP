@@ -177,7 +177,19 @@
         "provider_retry_exhausted": "嘗試約 {seconds} 秒後仍無法連線提供者。{detail}",
         "tool_call_cut": "與模型的連線在工具呼叫中途中斷，因此該操作未執行。沒有任何改動被套用，問題也不在請求本身；請重新發送。",
         "tool_call_truncated": "模型在工具呼叫中途達到輸出長度上限，因此該操作未執行。所請求的改動過大，無法在一次呼叫中輸出；請嘗試改為更小的改動。",
-        "unauthorized": "此權杖已不再獲得授權。"
+        "unauthorized": "此權杖已不再獲得授權。",
+        "provider_malformed": "提供方傳回了格式錯誤的回應。此回應中的工具均未執行。",
+        "provider_incomplete": "提供方的回應提前結束。此回應中的工具均未執行。",
+        "provider_blocked": "提供方封鎖了此回應，不會重試。",
+        "outcome_unknown": "操作可能已經執行。重試前請檢查 Home Assistant 和審批結果。請在設定 > 系統 > 修復中核實結果未知的操作。",
+        "provider_after_dispatch": "操作可能已經執行。重試前請檢查 Home Assistant 和審批結果。請在設定 > 系統 > 修復中核實結果未知的操作。",
+        "provider_transient": "提供方暫時無法使用。",
+        "network": "提供方暫時無法使用。",
+        "upstream": "提供方暫時無法使用。",
+        "rate_limit": "提供方暫時無法使用。",
+        "ollama_backend": "提供方暫時無法使用。",
+        "auth": "提供方封鎖了此回應，不會重試。",
+        "quota": "提供方封鎖了此回應，不會重試。"
       },
       "options": "選項",
       "pausedAfter": "已在 {count} 步後暫停。是否繼續處理？",
@@ -1979,6 +1991,7 @@
     "output_limit": "抱歉，模型輸出過多，我已經停止了。",
     "provider_error": "抱歉，{reason}。",
     "token_unavailable": "Phoenix MCP 語音智慧體的權杖已不可用。",
-    "unavailable": "Phoenix MCP 語音智慧體目前不可用。"
+    "unavailable": "Phoenix MCP 語音智慧體目前不可用。",
+    "outcome_unknown": "操作可能已經執行。重試前請檢查 Home Assistant 和審批結果。請在設定 > 系統 > 修復中核實結果未知的操作。"
   }
 }

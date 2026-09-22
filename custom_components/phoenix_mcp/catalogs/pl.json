@@ -15,7 +15,8 @@
     "output_limit": "Przepraszam, model wygenerował zbyt dużo danych wyjściowych, więc się zatrzymałem.",
     "provider_error": "Przepraszam, {reason}.",
     "token_unavailable": "Token agenta głosowego Phoenix MCP nie jest już dostępny.",
-    "unavailable": "Agent głosowy Phoenix MCP jest obecnie niedostępny."
+    "unavailable": "Agent głosowy Phoenix MCP jest obecnie niedostępny.",
+    "outcome_unknown": "Działania mogły zostać wykonane. Przed ponowieniem sprawdź Home Assistant i zatwierdzenia. Wyjaśnij niepewne działania w Ustawienia > System > Naprawy."
   },
   "panel": {
     "shell": {
@@ -760,7 +761,19 @@
         "provider_retry_exhausted": "Nie można było połączyć się z dostawcą po około {seconds} s ponawiania. {detail}",
         "tool_call_cut": "Połączenie z modelem zakończyło się w trakcie wywołania narzędzia, więc akcja nie została wykonana. Nic nie zostało zastosowane, a samo żądanie nie było przyczyną; wyślij je ponownie.",
         "tool_call_truncated": "Model osiągnął limit długości danych wyjściowych w trakcie wywołania narzędzia, więc akcja nie została wykonana. Żądana zmiana była zbyt duża, aby wysłać ją w jednym wywołaniu; spróbuj poprosić o mniejszą zmianę.",
-        "unauthorized": "Ten token nie jest już autoryzowany."
+        "unauthorized": "Ten token nie jest już autoryzowany.",
+        "provider_malformed": "Dostawca zwrócił nieprawidłową odpowiedź. Żadne narzędzie z tej odpowiedzi nie zostało uruchomione.",
+        "provider_incomplete": "Odpowiedź dostawcy zakończyła się przedwcześnie. Żadne narzędzie z tej odpowiedzi nie zostało uruchomione.",
+        "provider_blocked": "Dostawca zablokował tę odpowiedź. Próba nie zostanie ponowiona.",
+        "outcome_unknown": "Działania mogły zostać wykonane. Przed ponowieniem sprawdź Home Assistant i zatwierdzenia. Wyjaśnij niepewne działania w Ustawienia > System > Naprawy.",
+        "provider_after_dispatch": "Działania mogły zostać wykonane. Przed ponowieniem sprawdź Home Assistant i zatwierdzenia. Wyjaśnij niepewne działania w Ustawienia > System > Naprawy.",
+        "provider_transient": "Dostawca jest tymczasowo niedostępny.",
+        "network": "Dostawca jest tymczasowo niedostępny.",
+        "upstream": "Dostawca jest tymczasowo niedostępny.",
+        "rate_limit": "Dostawca jest tymczasowo niedostępny.",
+        "ollama_backend": "Dostawca jest tymczasowo niedostępny.",
+        "auth": "Dostawca zablokował tę odpowiedź. Próba nie zostanie ponowiona.",
+        "quota": "Dostawca zablokował tę odpowiedź. Próba nie zostanie ponowiona."
       },
       "options": "Opcje",
       "pausedAfter": "Wstrzymano po {count} krokach. Kontynuować badanie?",
