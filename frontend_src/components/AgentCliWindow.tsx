@@ -41,7 +41,7 @@ type ChatEntry =
   | { kind: "tool_result"; id: string; name: string; isError: boolean; summary: string }
   | { kind: "tool_image"; id: string; name: string; mimeType: string; dataUrl?: string; unavailable?: boolean }
   | { kind: "progress"; id: string; message: string; activity?: boolean }
-  | { kind: "approval"; approvalId: string; toolName: string; reviewUrl?: string; status: string; reason?: string }
+  | { kind: "approval"; approvalId: string; toolName: string; status: string; reason?: string }
   | { kind: "notice"; code?: string; message: string; messageParams?: Record<string, string | number> }
   | { kind: "focus_declined"; prompt: string }
   | { kind: "error"; code: string; message: string; messageParams?: Record<string, string | number>;
@@ -607,6 +607,7 @@ export function AgentCliWindow({
   // wizard's one-shot prefill still wins when present.
   const [input, setInput] = useState(saved.prefill || getSessionDraft());
   const [sending, setSending] = useState(false);
+  const turnGenerationRef = useRef(0);
   // Non-null when the last turn paused at the round-cap checkpoint (its value is
   // the round count reached); drives the Continue/Stop control.
   const [pendingContinue, setPendingContinue] = useState<number | null>(null);
@@ -907,6 +908,7 @@ export function AgentCliWindow({
   // in flight. Shared by the gear's "Clear chat history" button and the /clear
   // slash command.
   const clearHistory = useCallback(() => {
+    turnGenerationRef.current += 1;
     cancelledRef.current = true;
     abortRef.current?.abort();
     abortRef.current = null;
@@ -922,6 +924,7 @@ export function AgentCliWindow({
   // agentic loop keeps running (and can still fire tool calls) after the operator
   // dismissed the chat. Same for unmount (e.g. navigating away).
   const handleClose = useCallback(() => {
+    turnGenerationRef.current += 1;
     cancelledRef.current = true;
     abortRef.current?.abort();
     abortRef.current = null;
@@ -929,6 +932,7 @@ export function AgentCliWindow({
   }, [onClose]);
 
   useEffect(() => () => {
+    turnGenerationRef.current += 1;
     cancelledRef.current = true;
     abortRef.current?.abort();
     abortRef.current = null;
@@ -987,6 +991,7 @@ export function AgentCliWindow({
     memoryOverride?: unknown[],
   ) => {
     if (sending) return;
+    const generation = ++turnGenerationRef.current;
     setGearOpen(false);
     setPendingContinue(null);
     cancelledRef.current = false;
@@ -1052,7 +1057,7 @@ export function AgentCliWindow({
           options: buildOptions(kind, options, caps),
         },
         (name, payload) => {
-          if (cancelledRef.current) return;  // cancelled: ignore any late events
+          if (cancelledRef.current || turnGenerationRef.current !== generation) return;
           const p = (payload ?? {}) as Record<string, unknown>;
           switch (name) {
             case "assistant_delta":
@@ -1103,7 +1108,7 @@ export function AgentCliWindow({
             }
             case "approval_required":
               push({ kind: "approval", approvalId: String(p.approval_id ?? ""),
-                     toolName: String(p.tool_name ?? ""), reviewUrl: p.review_url as string | undefined,
+                     toolName: String(p.tool_name ?? ""),
                      status: "pending" });
               setAnnouncement(t("agentchat.announceApproval", { name: String(p.tool_name ?? "") }));
               break;
@@ -1167,12 +1172,12 @@ export function AgentCliWindow({
       );
     } catch (err) {
       // An intentional cancel aborts the fetch; don't surface that as an error.
-      if (!cancelledRef.current) {
+      if (!cancelledRef.current && turnGenerationRef.current === generation) {
         push({ kind: "error", code: "network", message: err instanceof Error ? err.message : t("agentchat.requestFailed") });
       }
     } finally {
-      abortRef.current = null;
-      if (!cancelledRef.current) {
+      if (abortRef.current === ac) abortRef.current = null;
+      if (!cancelledRef.current && turnGenerationRef.current === generation) {
         setSending(false);
         // A completed turn with no usage report (and nothing counted so far)
         // means this provider does not report usage; the footer says so
@@ -1243,6 +1248,7 @@ export function AgentCliWindow({
   // the aborted exchange is kept for display but deliberately not replayed as
   // model memory, since the restored query is usually edited and resent.
   const cancel = useCallback(() => {
+    turnGenerationRef.current += 1;
     cancelledRef.current = true;
     abortRef.current?.abort();
     abortRef.current = null;
@@ -1472,7 +1478,7 @@ export function AgentCliWindow({
   // it after a decision. Desktop keeps the floating window open and in place;
   // a popped-out chat is already in a separate browser window. Navigation stays
   // on HA's soft SPA path so the turn survives.
-  const openReview = useCallback((reviewUrl: string | undefined, approvalId: string) => {
+  const openReview = useCallback((approvalId: string) => {
     if (!poppedOut && isNarrowViewport()) {
       reviewRestoreRef.current = mode !== "min"
         ? { approvalId, mode }
@@ -1486,7 +1492,7 @@ export function AgentCliWindow({
     } else {
       reviewRestoreRef.current = null;
     }
-    const url = reviewUrl || `/phoenix-mcp/approvals/${encodeURIComponent(approvalId)}`;
+    const url = `/phoenix-mcp/approvals/${encodeURIComponent(approvalId)}`;
     try {
       window.history.pushState(null, "", url);
       window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
@@ -1994,7 +2000,7 @@ function ChatItem({
   verbose: boolean;
   showTs: boolean;
   onResolve: (id: string, approve: boolean) => void;
-  onReview: (reviewUrl: string | undefined, approvalId: string) => void;
+  onReview: (approvalId: string) => void;
   onAnswerAnyway: (prompt: string) => void;
   showAnswerAnyway: boolean;
 }) {
@@ -2087,7 +2093,7 @@ function ChatItem({
           <div>{tRich("agentchat.approvalNeeded", { code: (c) => <code>{c}</code> }, { name: entry.toolName })}</div>
           {entry.status === "pending" ? (
             <div className="agentcli-approval-actions">
-              <button className="btn btn-outline btn-sm" onClick={() => onReview(entry.reviewUrl, entry.approvalId)}>{t("agentchat.review")}</button>
+              <button className="btn btn-outline btn-sm" onClick={() => onReview(entry.approvalId)}>{t("agentchat.review")}</button>
               <button className="btn btn-primary btn-sm" onClick={() => onResolve(entry.approvalId, true)}>{t("agentchat.approve")}</button>
               <button className="btn btn-sm" onClick={() => onResolve(entry.approvalId, false)}>{t("agentchat.reject")}</button>
             </div>

@@ -25,6 +25,8 @@ import json
 import logging
 from typing import Any
 
+from .request_authority import check_request_authority
+
 import voluptuous as vol
 from homeassistant.components.websocket_api import const as ws_const
 from homeassistant.components.websocket_api.connection import ActiveConnection
@@ -242,6 +244,7 @@ async def async_ws_command(
             raise WsDispatchError(f"Invalid arguments for {command}: {err}") from err
 
     user = await _resolve_admin_user(hass)
+    check_request_authority()
 
     # Everything from here leans on HA internals: ActiveConnection construction,
     # the require_admin/async_response decorators, and the handler delivering its
@@ -445,6 +448,7 @@ async def async_save_lovelace_config(
             "only storage-mode dashboards can be written; this dashboard is YAML-mode"
         )
     try:
+        check_request_authority()
         await config.async_save(config_data)
     except Exception as exc:  # noqa: BLE001
         raise WsDispatchError(f"failed to save dashboard config: {exc}") from exc

@@ -2,8 +2,9 @@
 """Vendor a copy of mesa-core into custom_components/phoenix_mcp/mesa_core/.
 
 mesa-core is developed as a separate, read-only project. Phoenix MCP ships HACS users a
-vendored copy rather than depending on a (not-yet-published) PyPI package. The
-source uses absolute imports rooted at ``mesa_core``; vendoring under
+vendored copy so the integration remains self-contained rather than resolving a
+separate mesa-core package at install time. The source uses absolute imports rooted
+at ``mesa_core``; vendoring under
 ``custom_components.phoenix_mcp`` requires rewriting those to the vendored path so the
 copy is hermetic and never collides with a future ``pip install mesa-core`` or
 another integration's copy.
@@ -32,6 +33,7 @@ import hashlib
 import json
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -87,12 +89,55 @@ def _read_source_version(source_root: Path) -> str:
     return match.group(1) if match else "unknown"
 
 
+def _read_source_provenance(source_root: Path, version: str) -> dict[str, str]:
+    """Return immutable Git provenance, refusing a modified source package."""
+    def git(*args: str) -> str:
+        try:
+            return subprocess.run(
+                ["git", "-C", str(source_root), *args],
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+        except (OSError, subprocess.CalledProcessError) as err:
+            raise SystemExit(
+                "ERROR: mesa-core source must be a clean Git checkout so its "
+                "immutable revision can be recorded."
+            ) from err
+
+    dirty = git("status", "--porcelain", "--", ".")
+    if dirty:
+        raise SystemExit(
+            "ERROR: mesa-core source package has local changes. Refusing to vendor "
+            "content that is not identified by the recorded Git revision."
+        )
+    revision = git("rev-parse", "HEAD")
+    tag_result = subprocess.run(
+        ["git", "-C", str(source_root), "describe", "--tags", "--exact-match", "HEAD"],
+        capture_output=True,
+        text=True,
+    )
+    tag = tag_result.stdout.strip() if tag_result.returncode == 0 else None
+    if tag is not None and tag != f"v{version}":
+        raise SystemExit(
+            f"ERROR: mesa-core source version is {version}, but HEAD is tagged {tag!r}."
+        )
+    provenance = {
+        "source_repository": git("remote", "get-url", "origin"),
+        "source_revision": revision,
+    }
+    if tag is not None:
+        provenance["source_tag"] = tag
+    return provenance
+
+
 def main() -> int:
     source = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else DEFAULT_SOURCE.resolve()
     if not source.is_dir():
         raise SystemExit(f"ERROR: source mesa_core package not found at {source}")
 
     version = _read_source_version(source)
+    provenance = _read_source_provenance(source, version)
 
     if DEST.exists():
         shutil.rmtree(DEST)
@@ -125,7 +170,7 @@ def main() -> int:
         f"source_path: {source}\n",
         encoding="utf-8",
     )
-    _write_manifest(version)
+    _write_manifest(version, provenance)
 
     print(f"Vendored mesa-core {version} -> {DEST} ({copied} files, import prefix rewritten).")
     print(f"Wrote {MANIFEST.relative_to(REPO_ROOT)}; commit it with the vendored tree.")
@@ -160,7 +205,7 @@ def _tree_digest() -> tuple[str, dict[str, str]]:
     return combined, per_file
 
 
-def _write_manifest(version: str) -> None:
+def _write_manifest(version: str, provenance: dict[str, str]) -> None:
     combined, per_file = _tree_digest()
     MANIFEST.parent.mkdir(parents=True, exist_ok=True)
     MANIFEST.write_text(
@@ -174,6 +219,7 @@ def _write_manifest(version: str) -> None:
                     "checkout can tell a hand-edit from a re-sync."
                 ),
                 "source_version": version,
+                **provenance,
                 "vendor_prefix": VENDOR_PREFIX,
                 "tree_sha256": combined,
                 "files": per_file,

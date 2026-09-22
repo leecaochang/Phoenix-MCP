@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable
 
 from .audit import AuditLog
+from .const import TEMPLATE_WORKER_CONCURRENCY
 from .card_catalog import CardCatalogStore
 from .rate_limiter import RateLimiter
 from .token_store import TokenStore
@@ -64,6 +65,7 @@ class PhoenixData:
     # side effect; in memory only (a restart drops it, leaving the approval
     # pending for retry).
     approvals_in_progress: set[str] = field(default_factory=set)
+    template_slots: asyncio.Semaphore = field(default_factory=lambda: asyncio.Semaphore(TEMPLATE_WORKER_CONCURRENCY))
     entity_tree_cache: dict | None = None
     entity_tree_cache_valid: bool = False
     entity_tree_lock: asyncio.Lock = field(default_factory=asyncio.Lock)

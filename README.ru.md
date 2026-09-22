@@ -26,7 +26,7 @@ Phoenix MCP полностью работает внутри Home Assistant: б�
 ## Требования
 
 - Home Assistant 2025.2.0 или новее.
-- Один экземпляр Phoenix MCP на Home Assistant. Никаких зависимостей Python сверх тех, что поставляет HA.
+- Один экземпляр Phoenix MCP на Home Assistant. Home Assistant устанавливает закреплённую зависимость Python `voluptuous-serialize==2.7.0`; MESA включена в Phoenix MCP.
 
 ## Установка через HACS
 

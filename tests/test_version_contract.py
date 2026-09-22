@@ -51,6 +51,13 @@ def test_the_manifest_states_the_same_version():
     )
 
 
+def test_the_manifest_pins_its_direct_python_requirement():
+    manifest = json.loads(
+        (REPO / "custom_components" / "phoenix_mcp" / "manifest.json").read_text()
+    )
+    assert manifest["requirements"] == ["voluptuous-serialize==2.7.0"]
+
+
 def test_the_panel_package_states_the_same_version():
     package = json.loads((REPO / "package.json").read_text())
     assert package["version"] == PHOENIX_VERSION, (

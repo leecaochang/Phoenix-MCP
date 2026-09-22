@@ -15,6 +15,7 @@ import pytest
 import yaml
 
 from custom_components.phoenix_mcp import yaml_includes as yi
+from custom_components.phoenix_mcp.helpers import content_hash
 
 
 def write(base: Path, rel: str, content: str = "") -> Path:
@@ -649,6 +650,22 @@ def test_delete_preserves_heading_and_trailing_comments(tmp_path):
 
         # trailing notes
     """)
+
+
+def test_delete_expected_hash_is_checked_against_located_entry(tmp_path):
+    write(tmp_path, "configuration.yaml", DEFAULT_CONFIGURATION)
+    write(tmp_path, "automations.yaml", SPLICE_FILE)
+    original = read(tmp_path, "automations.yaml")
+
+    res = yi.perform_delete(
+        str(tmp_path), "automation", "aaa",
+        content_hash({"id": "aaa", "alias": "Previously reviewed"}),
+    )
+
+    assert not res.ok
+    assert res.error_kind == "conflict"
+    assert "expected_hash no longer matches" in res.error_text
+    assert read(tmp_path, "automations.yaml") == original
 
 
 def test_delete_last_entry_keeps_trailing_comments(tmp_path):

@@ -88,7 +88,7 @@
       "reasonExecutionFailedDetail": "Execution failed: {detail}",
       "reasonLabel": "Optional rejection reason",
       "othersPending": {
-        "one": "1 other approval is waiting for review.",
+        "one": "{count} other approval is waiting for review.",
         "other": "{count} other approvals are waiting for review."
       },
       "reviewAll": "Review all",

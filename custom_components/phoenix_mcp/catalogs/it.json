@@ -605,7 +605,7 @@
       "noResult": "Nessun risultato. {status}: {reason}",
       "noResultRecorded": "Nessun risultato registrato (stato: {status}).",
       "othersPending": {
-        "one": "1 altra approvazione è in attesa di revisione.",
+        "one": "{count} altra approvazione è in attesa di revisione.",
         "other": "{count} altre approvazioni sono in attesa di revisione."
       },
       "processing": "In elaborazione",

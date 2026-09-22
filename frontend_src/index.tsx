@@ -696,7 +696,9 @@ class PhoenixPanelElement extends HTMLElement {
     setHass(hass);
     if (!this._i18nStarted) {
       this._i18nStarted = true;
-      loadTranslations(hass, resolveLanguage(hass)).then(() => this._render());
+      loadTranslations(hass, resolveLanguage(hass)).then((committed) => {
+        if (committed) this._render();
+      });
     } else {
       // Under "auto" the language follows the HA profile, which an admin can
       // change without reloading the page. A no-op unless it actually differs.
@@ -742,7 +744,9 @@ class PhoenixPanelElement extends HTMLElement {
     // the new catalog lands. Without the first render the select would appear
     // stuck on the old value for the length of a round trip.
     this._render();
-    loadTranslations(this._hass, resolveLanguage(this._hass)).then(() => this._render());
+    loadTranslations(this._hass, resolveLanguage(this._hass)).then((committed) => {
+      if (committed) this._render();
+    });
   }
 
   private _setTheme(t: Theme) {

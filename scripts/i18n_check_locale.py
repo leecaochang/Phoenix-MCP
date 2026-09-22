@@ -609,6 +609,24 @@ def tag_shape(value: str) -> list[str]:
     return [f"{slash}{name}" for slash, name in TAG.findall(value)]
 
 
+PLURAL_CATEGORIES = frozenset({"zero", "one", "two", "few", "many", "other"})
+
+
+def plural_source(key: str, english: dict[str, str]) -> str | None:
+    """English sibling contract for a locale-specific CLDR plural category."""
+    base, separator, category = key.rpartition(".")
+    if not separator or category not in PLURAL_CATEGORIES - {"one", "other"}:
+        return None
+    one = english.get(f"{base}.one")
+    other = english.get(f"{base}.other")
+    if one is None or other is None:
+        return None
+    # Extra categories are alternate forms of the same counted message. The
+    # English `other` form is the fallback used by the frontend and therefore
+    # the authoritative placeholder, tag, literal, and whitespace contract.
+    return other
+
+
 def check(language: str) -> int:
     english = load("en")
     if not any((d / f"{language}.json").exists() for d in (CATALOGS, TRANSLATIONS)):
@@ -656,14 +674,16 @@ def check(language: str) -> int:
 
     for key in sorted(tr_flat):
         value = tr_flat[key]
-        if key not in en_flat:
+        source = en_flat.get(key)
+        if source is None:
+            source = plural_source(key, en_flat)
+        if source is None:
             problems.append(f"{key}: not a key in en.json (typo, or a stale rename)")
             continue
         if key in KEEP_ENGLISH_KEYS:
             problems.append(f"{key}: deliberately stays English; remove it")
             continue
 
-        source = en_flat[key]
         if key in MNEMONICS and not value.startswith(MNEMONICS[key]):
             problems.append(
                 f"{key}: must start with the English mnemonic {MNEMONICS[key]!r}"

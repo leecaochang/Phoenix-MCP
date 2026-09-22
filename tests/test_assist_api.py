@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 import uuid
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -239,6 +240,8 @@ async def test_tool_call_dispatches_with_assist_sentinel(hass):
 
 @pytest.mark.asyncio
 async def test_confirm_gated_call_returns_queued(hass):
+    from homeassistant.util.dt import utcnow
+
     token = _make_token()
     data = _make_data(token, bound_id=token.id)
     hass.data[DOMAIN] = data
@@ -248,12 +251,18 @@ async def test_confirm_gated_call_returns_queued(hass):
             "content": [{"type": "text", "text": '{"status": "pending_approval", "approval_id": "ap-1"}'}],
         }
     }
+    record = SimpleNamespace(
+        id="ap-1", status="pending", expires_at=utcnow() + timedelta(minutes=5),
+        token_id=token.id, tool_name="call_service", request_id="",
+    )
 
     async def fake_dispatch(*a, **k):
+        record.request_id = k["request_id"]
         return (pending, "call_service", "call_service", "pending_approval")
 
     tool = PhoenixAssistTool("call_service", "d", MagicMock(), token.id)
-    with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=fake_dispatch):
+    with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=fake_dispatch), \
+         patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=record):
         result = await tool.async_call(hass, _tool_input({}), _ctx())
 
     assert result["status"] == "queued_for_approval"

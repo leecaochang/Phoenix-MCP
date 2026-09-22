@@ -45,6 +45,8 @@ from homeassistant.util.ulid import ulid_to_bytes_or_none
 from .audit import generate_request_id
 from .const import AGENTCLI_CLIENT_IP, AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, PHOENIX_VERSION, BLOCKED_DOMAINS, VOICE_AGENT_CLIENT_IP, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, CAPABILITY_NAMES, DOMAIN, DOMAIN_IMPORTANT_ATTRIBUTES, DUAL_GATE_SERVICES, LEAN_ALWAYS_ATTRS, HIGH_RISK_DOMAINS, MCP_DISCOVER_TTL_MS, MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSIONS, MCP_SSE_KEEPALIVE_SECONDS, MAX_APPROVAL_RESULT_CHARS, MAX_BATCH_APPROVALS, MAX_BATCH_ITEMS, LOG_LEVELS, LOG_LEVEL_ERROR_MESSAGE, MAX_LOG_ENTRIES, MAX_LOGBOOK_HOME_DAYS, MAX_LOGBOOK_NARROWED_DAYS, MAX_LOGBOOK_RESOURCE_IDS, MAX_SEARCH_QUERY_LEN, MAX_SUBSCRIPTION_SECONDS, MAX_ENTITY_ALIASES, MAX_ENTITY_ALIAS_LENGTH, MAX_TOOL_NAME_LENGTH, MESA_APPROVED_EXECUTOR, MESA_MODE_OFF, NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS
 from .data import PhoenixData
+from .template_render import TemplateRenderError, async_render_template_for_token
+from .request_authority import (AuthorityChangedError, RequestAuthority, check_request_authority, finite_json_numbers, policy_version, request_authority)
 from .device_semantics import device_registry_snapshot, update_device_registry_entry
 from .service_targets import secondary_target_error, unsupported_secondary_targets
 from .tool_contracts import normalize_tool_args
@@ -56,7 +58,7 @@ from .mesa import (
 )
 from .ws_dispatch import WsDispatchError, async_ws_command
 from .mesa_tools import MESA_TOOL_NAMES, async_call_mesa_tool, mesa_tool_defs
-from .helpers import build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_token as _async_get_authenticated_token, get_client_ip as _get_client_ip, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, render_template_for_token as _render_template_for_token, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, token_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
+from .helpers import build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_token as _async_get_authenticated_token, get_client_ip as _get_client_ip, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, token_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
 from .recorder_queries import (
     MAX_SIGNIFICANT_STATES_RANGE,
     STATISTIC_PERIOD_LIMITS,
@@ -500,6 +502,7 @@ _MCP_CACHEABLE_METHODS = frozenset({
 })
 _MCP_LEGACY_SESSION_TTL_SECONDS = 3600.0
 _MCP_LEGACY_SESSION_LIMIT = 256
+_MCP_LEGACY_SESSION_TOKEN_LIMIT = 8
 
 
 def _protocol_error_response(
@@ -1190,6 +1193,16 @@ async def _tool_call_service(
         entity_id=args.get("entity_id"), device_id=args.get("device_id"),
         area_id=args.get("area_id"), token=token, hass=hass,
     ):
+        if effective_cap(token, "cap_physical_control") != CAP_DENY:
+            try:
+                targets, _ = resolve_service_targets(
+                    entity_id=args.get("entity_id"), device_id=args.get("device_id"),
+                    area_id=args.get("area_id"), service_domain=domain, token=token, hass=hass,
+                )
+            except EntityCreationNotPermitted:
+                targets = []
+            if not targets:
+                return _tool_error("Forbidden."), "denied", "call_service"
         blocked = await _gate(
             "cap_physical_control", token, hass, data,
             tool_name="call_service", args=args, request_id=request_id,
@@ -1301,6 +1314,7 @@ async def _execute_call_service(
             resource,
         )
 
+    check_request_authority()
     entity_id = args.get("entity_id")
     device_id = args.get("device_id")
     area_id = args.get("area_id")
@@ -1393,6 +1407,7 @@ async def _execute_call_service(
         return await _pending_or_inline(hass, data, token, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
         return _tool_error("Forbidden."), "denied", resource
+    check_request_authority()
     permitted_entities = mesa_outcome.entities
 
     if domain in HIGH_RISK_DOMAINS:
@@ -4552,7 +4567,7 @@ async def _execute_delete_entity(
 
 
 async def _tool_render_template(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """MCP tool: render a Jinja2 template against permitted entity state."""
     if effective_cap(token, "cap_template_render") == CAP_DENY:
@@ -4563,9 +4578,11 @@ async def _tool_render_template(
         return _tool_error("Missing required argument: template"), "invalid_request", "render_template"
 
     try:
-        rendered = _render_template_for_token(template_str, token, hass)
+        rendered = await async_render_template_for_token(template_str, token, hass, data)
+    except TemplateRenderError as exc:
+        return _tool_error(str(exc)), "invalid_request", "render_template"
     except Exception:
-        return _tool_error("Template rendering failed. Check your template syntax."), "invalid_request", "render_template"
+        return _tool_error("Template rendering failed. Check syntax, input size, and resource limits."), "invalid_request", "render_template"
 
     return _tool_success(rendered), "allowed", "render_template"
 
@@ -4843,11 +4860,11 @@ async def _tool_wait_for_approval(
 
     A bounded server-side wait (not a stream): returns immediately if already
     resolved, else waits on the phoenix_mcp_approval_resolved event filtered to this
-    approval_id. Own-data only (cross-token lookups 404, matching
+    approval IDs. Own-data only (cross-token lookups 404, matching
     get_approval_status); no capability required.
 
-    Accepts `approval_ids` (a list) as well as a single `approval_id`, and that
-    plural form is what makes staged approvals workable. Confirm-gated calls
+    Accepts `approval_ids` (a list), including a one-item list for a single
+    approval. This makes staged approvals workable. Confirm-gated calls
     return pending_approval immediately by default (see
     DEFAULT_CONFIRM_INLINE_WAIT_SECONDS), so an agent making a run of writes ends
     up holding N approval ids and wanting ONE place to block until the operator
@@ -5195,6 +5212,8 @@ async def async_execute_approved_tool(
     Raises ExecutorNotRegistered if no executor is registered for the tool_name,
     which is the ONLY failure here that proves nothing was dispatched.
     """
+    if not finite_json_numbers(args):
+        return _tool_error("Non-finite numbers are not allowed."), "invalid_request", tool_name
     fn = _EXECUTOR_REGISTRY.get(tool_name)
     if fn is None:
         raise ExecutorNotRegistered(f"No executor registered for tool {tool_name!r}")
@@ -7305,15 +7324,20 @@ async def _call_tool(
     them as Any, so their own returns are erased here. A valid outcome per tool
     is enforced by an adversarial sweep over the whole surface instead.
     """
+    check_request_authority()
+    if not finite_json_numbers(arguments):
+        return _tool_error("Non-finite numbers are not allowed."), "invalid_request", tool_name
     internal_name = _NATIVE_TOOL_PUBLIC_TO_INTERNAL.get(tool_name, tool_name)
     entry = _TOOL_HANDLERS.get(internal_name)
     if entry is None:
         return _tool_error(f"Unknown tool: {tool_name}"), "denied", tool_name
     handler, wanted, bound = entry
     context = {"data": data, "request_id": request_id, "client_ip": client_ip}
-    return await handler(
+    result = await handler(
         arguments, token, hass, **{k: context[k] for k in wanted}, **bound
     )
+    check_request_authority()
+    return result
 
 
 async def _get_ha_assist_api(hass: HomeAssistant) -> Any:
@@ -7644,6 +7668,8 @@ async def _dispatch_tools_call(
             tool_name, arguments, token, hass, data,
             request_id=request_id, client_ip=client_ip,
         )
+    except AuthorityChangedError:
+        raise
     except Exception:
         # _call_tool is a bare dispatcher with no exception handling of its own,
         # and post() has none either: an unhandled exception here previously
@@ -7717,7 +7743,33 @@ async def _dispatch_mcp(
     response_msg is None for notifications that require no response.
     """
     request_id = request_id or generate_request_id()
+    authority = request_authority.get()
+    if authority is not None:
+        try:
+            token = authority.current_token()
+        except AuthorityChangedError:
+            _log(data, token, request_id=request_id, method=method, resource="/api/phoenix-mcp",
+                 outcome="denied", client_ip=client_ip)
+            return _jsonrpc_error(msg_id, -32000, "Request authority is no longer valid."), method, "/api/phoenix-mcp", "denied"
+    context = policy_version.set(token.settings_version)
+    try:
+        result = await _dispatch_mcp_authorized(method, msg_id, params, token, hass, data, client_ip, base_url, request_id)
+        check_request_authority()
+        return result
+    except AuthorityChangedError:
+        _log(data, token, request_id=request_id, method=method, resource="/api/phoenix-mcp",
+             outcome="denied", client_ip=client_ip)
+        return _jsonrpc_error(msg_id, -32000, "Request authority changed. Retry with current permissions."), method, "/api/phoenix-mcp", "denied"
+    finally:
+        policy_version.reset(context)
 
+
+async def _dispatch_mcp_authorized(
+    method: str, msg_id: Any, params: dict, token: TokenRecord,
+    hass: HomeAssistant, data: PhoenixData, client_ip: str,
+    base_url: str, request_id: str,
+) -> tuple[dict | None, str, str, str]:
+    """Dispatch with current request authority established by the outer boundary."""
     if method == "server/discover":
         # The stateless-era replacement for initialize: identity, versions and
         # capabilities in one call, with no handshake to establish. It matters
@@ -8043,6 +8095,7 @@ async def _dispatch_streamable_batch(
     interleave writes; order is preserved and one item's failure stays isolated.
     """
     bus = _progress_ctx.get()
+    batch_policy_version = token.settings_version
 
     async def _dispatch_one(item: Any) -> dict | None:
         if not isinstance(item, dict) or item.get("jsonrpc") != "2.0":
@@ -8073,6 +8126,12 @@ async def _dispatch_streamable_batch(
                 return None
             return _jsonrpc_error(msg_id, *payload)
         method, params = payload
+        if data.enforce_mcp_lifecycle and method not in _MCP_LEGACY_METHODS:
+            _audit_mcp_transport(
+                data, token, request_id or generate_request_id(), client_ip,
+                body=item, outcome="not_implemented", resource="mcp:batch",
+            )
+            return None if is_notification else _jsonrpc_error(msg_id, -32601, "Method not found.")
         if bus is not None:
             # Progress is per-request in MCP, and each batch item carries its own
             # token; items run one at a time, so one field is enough.
@@ -8099,6 +8158,23 @@ async def _dispatch_streamable_batch(
             continue
         if r is not None:
             responses.append(r)
+    # Earlier replies remain buffered while later items await. Revalidate their
+    # common authority before disclosing any buffered result in the final batch.
+    authority = request_authority.get()
+    if authority is not None:
+        try:
+            current = authority.current_token()
+            if current.settings_version != batch_policy_version:
+                raise AuthorityChangedError("Permissions changed.")
+        except AuthorityChangedError:
+            _audit_mcp_transport(
+                data, token, request_id or generate_request_id(), client_ip,
+                outcome="denied", resource="mcp:batch",
+            )
+            return [
+                _jsonrpc_error(row.get("id"), -32000, "Request authority changed. Retry with current permissions.")
+                for row in responses
+            ]
     return responses
 
 
@@ -8320,6 +8396,14 @@ def _reject_non_finite(_value: str) -> None:
     raise ValueError("Non-finite JSON numbers are not allowed.")
 
 
+def _parse_finite_float(value: str) -> float:
+    """Reject exponent overflow as well as literal non-finite constants."""
+    result = float(value)
+    if not math.isfinite(result):
+        raise ValueError("Non-finite JSON numbers are not allowed.")
+    return result
+
+
 def _origin_rejected(hass: HomeAssistant, request: web.Request, request_id: str) -> web.Response | None:
     """Refuse a browser cross-origin (DNS-rebinding) request per the MCP transport spec.
 
@@ -8360,12 +8444,6 @@ def _prune_legacy_sessions(data: PhoenixData) -> None:
     ]
     for session_id in expired:
         data.mcp_sessions.pop(session_id, None)
-    while len(data.mcp_sessions) > _MCP_LEGACY_SESSION_LIMIT:
-        oldest = min(
-            data.mcp_sessions,
-            key=lambda key: float(data.mcp_sessions[key].get("last_seen", 0.0)),
-        )
-        data.mcp_sessions.pop(oldest, None)
 
 
 def _validate_legacy_initialize(params: dict) -> tuple[int, str] | None:
@@ -8384,14 +8462,12 @@ def _validate_legacy_initialize(params: dict) -> tuple[int, str] | None:
     return None
 
 
-def _open_legacy_session(data: PhoenixData, token: TokenRecord) -> str:
+def _open_legacy_session(data: PhoenixData, token: TokenRecord) -> str | None:
+    """Allocate within both quotas without evicting another active session."""
     _prune_legacy_sessions(data)
-    while len(data.mcp_sessions) >= _MCP_LEGACY_SESSION_LIMIT:
-        oldest = min(
-            data.mcp_sessions,
-            key=lambda key: float(data.mcp_sessions[key].get("last_seen", 0.0)),
-        )
-        data.mcp_sessions.pop(oldest, None)
+    owned = sum(state.get("token_id") == token.id for state in data.mcp_sessions.values())
+    if owned >= _MCP_LEGACY_SESSION_TOKEN_LIMIT or len(data.mcp_sessions) >= _MCP_LEGACY_SESSION_LIMIT:
+        return None
     session_id = secrets.token_urlsafe(32)
     data.mcp_sessions[session_id] = {
         "token_id": token.id,
@@ -8446,7 +8522,15 @@ class PhoenixMcpView(PhoenixView):
     requires_auth = False
 
     async def post(self, request: web.Request) -> web.Response:
-        """Handle one Streamable HTTP request."""
+        """Handle one request with task-local credential identity."""
+        context = request_authority.set(None)
+        try:
+            return await self._post(request)
+        finally:
+            request_authority.reset(context)
+
+    async def _post(self, request: web.Request) -> web.Response:
+        """Authenticate, read, and dispatch one Streamable HTTP request."""
         hass = self.hass
         request_id = generate_request_id()
         data = hass.data.get(DOMAIN)
@@ -8466,6 +8550,8 @@ class PhoenixMcpView(PhoenixView):
         if isinstance(result, web.Response):
             return result
         token, rl_result = result
+        authority = RequestAuthority(hass, data, token.id, token.token_hash)
+        request_authority.set(authority)
 
         def audited_transport_response(
             response: web.Response,
@@ -8511,6 +8597,15 @@ class PhoenixMcpView(PhoenixView):
             return audited_transport_response(
                 _error("invalid_request", "Failed to read request body.", 400, request_id)
             )
+        try:
+            token = authority.current_token()
+        except AuthorityChangedError:
+            unavailable = not data.ready or data.shutting_down or data.store.get_settings().kill_switch or hass.data.get(DOMAIN) is not data
+            return _error(
+                "service_unavailable" if unavailable else "unauthorized",
+                "Service unavailable." if unavailable else "Unauthorized.",
+                503 if unavailable else 401, request_id,
+            )
         body_bytes = b"".join(chunks)
         if not body_bytes:
             return audited_transport_response(web.Response(
@@ -8520,7 +8615,7 @@ class PhoenixMcpView(PhoenixView):
                 headers={"X-Phoenix-Request-ID": request_id},
             ))
         try:
-            parsed = json.loads(body_bytes, parse_constant=_reject_non_finite)
+            parsed = json.loads(body_bytes, parse_constant=_reject_non_finite, parse_float=_parse_finite_float)
         except ValueError:  # JSONDecodeError, or non-finite rejected above
             _LOGGER.warning(
                 "MCP POST: invalid JSON body (%d bytes read, Content-Length %s) rid=%s",
@@ -8707,6 +8802,11 @@ class PhoenixMcpView(PhoenixView):
                             msg_id, *invalid_initialize, request_id
                         ), body=body)
                     legacy_session_id = _open_legacy_session(data, token)
+                    if legacy_session_id is None:
+                        return audited_transport_response(_protocol_error_response(
+                            msg_id, -32000, "Legacy MCP session capacity reached. Close unused sessions or retry after they expire.", request_id,
+                            status=429,
+                        ), body=body)
                 else:
                     session = _legacy_session(data, request, token)
                     if session is None:

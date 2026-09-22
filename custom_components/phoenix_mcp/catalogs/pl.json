@@ -135,6 +135,8 @@
       "cancel": "Anuluj",
       "entities": {
         "one": "{count} encja",
+        "few": "{count} encje",
+        "many": "{count} encji",
         "other": "{count} encji"
       },
       "entryId": "ID wpisu konfiguracji",
@@ -154,6 +156,8 @@
       "registryOnlyWarning": "{count} encji bez urządzenia istniejących tylko w rejestrze nie zostało wybranych. Przyznaj te domeny, jeśli potrzebują dziedziczonego dostępu: {domains}.",
       "resources": {
         "one": "{count} zasób",
+        "few": "{count} zasoby",
+        "many": "{count} zasobów",
         "other": "{count} zasobów"
       },
       "selectArea": "-- Wybierz obszar --",
@@ -661,7 +665,9 @@
       "noResult": "Brak wyniku. {status}: {reason}",
       "noResultRecorded": "Nie zapisano wyniku (status: {status}).",
       "othersPending": {
-        "one": "1 inne zatwierdzenie oczekuje na przejrzenie.",
+        "one": "{count} inne zatwierdzenie oczekuje na przejrzenie.",
+        "few": "{count} inne zatwierdzenia oczekują na przejrzenie.",
+        "many": "{count} innych zatwierdzeń oczekuje na przejrzenie.",
         "other": "{count} innych zatwierdzeń oczekuje na przejrzenie."
       },
       "processing": "Przetwarzane",
@@ -1271,23 +1277,33 @@
       "costTrivial": "Trywialny",
       "countArea": {
         "one": "{count} profil obszaru",
-        "other": "{count} profile obszarów"
+        "few": "{count} profile obszarów",
+        "many": "{count} profili obszarów",
+        "other": "{count} profilu obszaru"
       },
       "countDevice": {
         "one": "{count} profil urządzenia",
-        "other": "{count} profile urządzeń"
+        "few": "{count} profile urządzeń",
+        "many": "{count} profili urządzeń",
+        "other": "{count} profilu urządzenia"
       },
       "countDomain": {
         "one": "{count} profil domeny",
-        "other": "{count} profile domen"
+        "few": "{count} profile domen",
+        "many": "{count} profili domen",
+        "other": "{count} profilu domeny"
       },
       "countEntity": {
         "one": "{count} profil encji",
-        "other": "{count} profile encji"
+        "few": "{count} profile encji",
+        "many": "{count} profili encji",
+        "other": "{count} profilu encji"
       },
       "countIntegration": {
         "one": "{count} profil integracji",
-        "other": "{count} profile integracji"
+        "few": "{count} profile integracji",
+        "many": "{count} profili integracji",
+        "other": "{count} profilu integracji"
       },
       "currentFilter": "Bieżący filtr: ",
       "currently": "Obecnie",
@@ -1330,7 +1346,9 @@
       "export": "Eksportuj",
       "exportBody": {
         "one": "Pobierz {count} profil MESA i domyślne ustawienia wdrożenia jako standardowe archiwum MESA JSON.",
-        "other": "Pobierz {count} profili MESA i domyślne ustawienia wdrożenia jako standardowe archiwum MESA JSON."
+        "few": "Pobierz {count} profile MESA i domyślne ustawienia wdrożenia jako standardowe archiwum MESA JSON.",
+        "many": "Pobierz {count} profili MESA i domyślne ustawienia wdrożenia jako standardowe archiwum MESA JSON.",
+        "other": "Pobierz {count} profilu MESA i domyślne ustawienia wdrożenia jako standardowe archiwum MESA JSON."
       },
       "exportFailed": "Eksport nie powiódł się.",
       "exportNote": "Plik zawiera Twoją kompletną politykę bezpieczeństwa agenta i notatki profili. Przechowuj go bezpiecznie.",
@@ -1371,7 +1389,9 @@
       "importNotJson": "Nie można było odczytać pliku jako JSON.",
       "importResult": {
         "one": "Dodano {count} profil, zastąpiono {overwritten}, pominięto {skipped} (już skonfigurowane w tym wdrożeniu).",
-        "other": "Dodano {count} profili, zastąpiono {overwritten}, pominięto {skipped} (już skonfigurowane w tym wdrożeniu)."
+        "few": "Dodano {count} profile, zastąpiono {overwritten}, pominięto {skipped} (już skonfigurowane w tym wdrożeniu).",
+        "many": "Dodano {count} profili, zastąpiono {overwritten}, pominięto {skipped} (już skonfigurowane w tym wdrożeniu).",
+        "other": "Dodano {count} profilu, zastąpiono {overwritten}, pominięto {skipped} (już skonfigurowane w tym wdrożeniu)."
       },
       "importTitle": "Importuj profile MESA",
       "importing": "Importowanie...",

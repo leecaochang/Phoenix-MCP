@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -189,9 +190,14 @@ async def test_voice_turn_pending_becomes_queued_without_blocking():
     token = _make_token()
     data = _make_data()
     provider = _MockProvider()
+    record = SimpleNamespace(
+        id="ap1", status="pending", expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        token_id=token.id, tool_name="call_service", request_id="",
+    )
 
     async def dispatch_pending(method, msg_id, params, *a, **k):
-        return ({"result": {"content": [{"type": "text", "text": '{"status":"pending_approval","approval_id":"ap1"}'}]}}, "n", "r", "pending")
+        record.request_id = k["request_id"]
+        return ({"result": {"content": [{"type": "text", "text": '{"status":"pending_approval","approval_id":"ap1"}'}]}}, "n", "r", "pending_approval")
 
     stream = _staged_stream(
         [_tool_ev("call_service", "t1"), _done("tool_use")],
@@ -200,6 +206,7 @@ async def test_voice_turn_pending_becomes_queued_without_blocking():
     with patch.object(agentcli, "_stream_turn_resilient", stream), \
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
          patch.object(agentcli, "_current_dispatch_token", return_value=token), \
+         patch.object(agentcli, "get_approval", return_value=record), \
          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=dispatch_pending), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
         text = await async_run_voice_turn(MagicMock(), data, token, provider, MagicMock(), "http://h", "unlock the door")
@@ -213,9 +220,14 @@ async def test_voice_turn_pending_becomes_queued_without_blocking():
 async def test_voice_turn_appends_review_link_only_when_requested():
     token = _make_token()
     data = _make_data()
+    record = SimpleNamespace(
+        id="ap1", status="pending", expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        token_id=token.id, tool_name="call_service", request_id="",
+    )
 
     async def dispatch_pending(method, msg_id, params, *a, **k):
-        return ({"result": {"content": [{"type": "text", "text": '{"status":"pending_approval","approval_id":"ap1","review_url":"/phoenix-mcp/approvals/ap1"}'}]}}, "n", "r", "pending")
+        record.request_id = k["request_id"]
+        return ({"result": {"content": [{"type": "text", "text": '{"status":"pending_approval","approval_id":"ap1","review_url":"https://example.invalid/"}'}]}}, "n", "r", "pending_approval")
 
     def stream_factory():
         return _staged_stream(
@@ -227,6 +239,7 @@ async def test_voice_turn_appends_review_link_only_when_requested():
         with patch.object(agentcli, "_stream_turn_resilient", stream_factory()), \
              patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
              patch.object(agentcli, "_current_dispatch_token", return_value=token), \
+             patch.object(agentcli, "get_approval", return_value=record), \
              patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=dispatch_pending), \
              patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
             text = await async_run_voice_turn(

@@ -26,7 +26,7 @@ Nieuw hier? Begin met de **[Snelstart](https://leecaochang.github.io/phoenix-mcp
 ## Vereisten
 
 - Home Assistant 2025.2.0 of nieuwer.
-- Eén Phoenix MCP-instantie per Home Assistant. Geen Python-afhankelijkheden buiten wat HA meelevert.
+- Eén Phoenix MCP-instantie per Home Assistant. Home Assistant installeert de vastgepinde Python-afhankelijkheid `voluptuous-serialize==2.7.0`; MESA is gebundeld met Phoenix MCP.
 
 ## Installeren via HACS
 

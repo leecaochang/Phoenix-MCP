@@ -220,6 +220,44 @@ def test_mixed_retired_service_fields_are_reported_together(tool):
     assert f"service -> {_SERVICE_OBJECT_SYNTAX}" in error
 
 
+@pytest.mark.parametrize("tool", ["call_service", "dry_run_service"])
+def test_repeated_service_target_groups_merge_and_deduplicate(tool):
+    normalized, error = normalize_tool_args(
+        tool,
+        {
+            "service": {"domain": "light", "name": "turn_on"},
+            "targets": [
+                {"kind": "entity", "ids": ["light.a", "light.shared"]},
+                {"kind": "device", "ids": ["device-a"]},
+                {"kind": "entity", "ids": ["light.shared", "light.b"]},
+                {"kind": "device", "ids": ["device-a", "device-b"]},
+            ],
+        },
+    )
+
+    assert error is None
+    assert normalized["entity_id"] == ["light.a", "light.shared", "light.b"]
+    assert normalized["device_id"] == ["device-a", "device-b"]
+
+
+@pytest.mark.parametrize("tool", ["call_service", "dry_run_service"])
+def test_all_service_target_cannot_be_mixed_with_narrower_groups(tool):
+    _, error = normalize_tool_args(
+        tool,
+        {
+            "service": {"domain": "light", "name": "turn_on"},
+            "targets": [
+                {"kind": "all"},
+                {"kind": "entity", "ids": ["light.a"]},
+            ],
+        },
+    )
+
+    assert error == (
+        "A target with kind all cannot be combined with entity, device, or area targets."
+    )
+
+
 def test_unrelated_unknown_fields_remain_tolerated():
     normalized, error = normalize_tool_args(
         "get_logbook", {"unrelated_future_field": True}

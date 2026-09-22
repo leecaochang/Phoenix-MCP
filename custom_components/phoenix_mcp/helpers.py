@@ -52,6 +52,7 @@ from .policy_engine import (
     template_blocklist_vars,
 )
 from .locales import canonical_language
+from .request_authority import check_request_authority
 from .token_store import token_name_slug
 
 if TYPE_CHECKING:
@@ -620,11 +621,15 @@ def render_template_for_token(template_str: str, token: TokenRecord, hass: HomeA
     environment lacks. Raises (TemplateError, ValueError, jinja2 errors) on any
     failure; callers map exceptions to an invalid_request response.
     """
-    from homeassistant.helpers.template import MAX_TEMPLATE_OUTPUT  # noqa: PLC0415
-    from homeassistant.exceptions import TemplateError  # noqa: PLC0415
-    from homeassistant.util import dt as dt_util  # noqa: PLC0415
+    return render_template_snapshot(template_str, build_permitted_states(token, hass))
 
-    permitted = build_permitted_states(token, hass)
+
+def render_template_snapshot(template_str: str, permitted: dict) -> str:
+    """Render a detached state snapshot; production calls run in the worker."""
+    from homeassistant.helpers.template import MAX_TEMPLATE_OUTPUT
+    from homeassistant.exceptions import TemplateError
+    from homeassistant.util import dt as dt_util
+
     filtered_states = FilteredStates(permitted)
 
     # Permission-restricted versions of the HA template state helpers.
@@ -695,12 +700,14 @@ def render_template_for_token(template_str: str, token: TokenRecord, hass: HomeA
     }
 
     compiled = safe_template_env().from_string(template_str)
-    rendered = compiled.render(variables)
-    if len(rendered) > MAX_TEMPLATE_OUTPUT:
-        raise TemplateError(
-            f"Template output exceeded maximum size of {MAX_TEMPLATE_OUTPUT} characters"
-        )
-    return rendered.strip()
+    chunks = []
+    size = 0
+    for chunk in compiled.generate(variables):
+        size += len(chunk)
+        if size > MAX_TEMPLATE_OUTPUT:
+            raise TemplateError("Template output exceeded maximum size.")
+        chunks.append(chunk)
+    return "".join(chunks).strip()
 
 
 # Ranks the level of a RECORD, which is why DEBUG and INFO stay here even though
@@ -1599,6 +1606,7 @@ async def async_evaluate_capability(
     # nowhere else. Both early returns above leave it untouched.
     resolved_diff = await _resolve_diff(diff)
     async with data.store.async_lock:
+        check_request_authority()
         approval = await async_create_pending_approval(
             data.store,
             token_id=token.id,

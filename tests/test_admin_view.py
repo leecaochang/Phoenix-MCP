@@ -2323,6 +2323,195 @@ async def test_voice_pipeline_delete_removes():
 
 
 @pytest.mark.asyncio
+async def test_voice_pipeline_create_serializes_with_disable_cleanup():
+    token = _make_active_token()
+    data, holder = _settings_data([token])
+    holder["s"] = GlobalSettings(
+        voice_agent_enabled=True, voice_agent_token_id=token.id,
+        voice_agent_provider_id="p", voice_agent_model="m",
+    )
+    data.async_sync_voice_agent = MagicMock()
+    hass = _make_hass(data)
+    pipeline_ids: set[str] = set()
+    create_entered = asyncio.Event()
+    release_create = asyncio.Event()
+
+    async def create_pipeline(*args, **kwargs):
+        create_entered.set()
+        await release_create.wait()
+        pipeline_ids.add("pl-race")
+        async with data.store.async_lock:
+            await data.store.async_patch_settings(voice_agent_pipeline_id="pl-race")
+        return {"pipeline_id": "pl-race", "name": "Phoenix MCP", "preferred": True}
+
+    async def remove_pipeline(*args, **kwargs):
+        pipeline_ids.discard(holder["s"].voice_agent_pipeline_id)
+        async with data.store.async_lock:
+            await data.store.async_patch_settings(voice_agent_pipeline_id=None)
+
+    pipeline_view = PhoenixAdminVoiceAgentPipelineView()
+    pipeline_view.hass = hass
+    settings_view = PhoenixAdminSettingsView()
+    settings_view.hass = hass
+
+    with patch(
+        "custom_components.phoenix_mcp.voice_agent.async_create_assist_pipeline",
+        side_effect=create_pipeline,
+    ), patch(
+        "custom_components.phoenix_mcp.voice_agent.async_remove_assist_pipeline",
+        side_effect=remove_pipeline,
+    ):
+        create_task = asyncio.create_task(
+            pipeline_view.post(_make_admin_request(body=b"{}"))
+        )
+        await create_entered.wait()
+        disable_task = asyncio.create_task(
+            settings_view.patch(
+                _make_admin_request(body=json.dumps({"voice_agent_enabled": False}).encode())
+            )
+        )
+        await asyncio.sleep(0)
+        assert not disable_task.done()
+        release_create.set()
+        create_response, disable_response = await asyncio.gather(
+            create_task, disable_task
+        )
+
+    assert create_response.status == 200
+    assert disable_response.status == 200
+    assert holder["s"].voice_agent_enabled is False
+    assert holder["s"].voice_agent_pipeline_id is None
+    assert pipeline_ids == set()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "wipe_flags",
+    [
+        {"wipe_core": True, "wipe_providers": False},
+        {"wipe_core": False, "wipe_providers": True},
+    ],
+    ids=["core", "providers"],
+)
+async def test_voice_pipeline_create_serializes_with_wipe_cleanup(wipe_flags):
+    token = _make_active_token()
+    data = _make_wipe_data([token])
+    holder = {"s": GlobalSettings(
+        voice_agent_enabled=True, voice_agent_token_id=token.id,
+        voice_agent_provider_id="p", voice_agent_model="m",
+    )}
+    data.store.get_settings.side_effect = lambda: holder["s"]
+
+    async def patch_settings(**changes):
+        holder["s"] = GlobalSettings.from_dict({
+            **holder["s"].to_dict(), **changes,
+        })
+        return holder["s"]
+
+    async def wipe_store():
+        holder["s"] = GlobalSettings()
+
+    data.store.async_patch_settings = AsyncMock(side_effect=patch_settings)
+    data.store.async_wipe = AsyncMock(side_effect=wipe_store)
+    data.async_sync_voice_agent = MagicMock()
+    data.async_sync_ai_task = MagicMock()
+    hass = _make_hass(data)
+    pipeline_ids: set[str] = set()
+    create_entered = asyncio.Event()
+    release_create = asyncio.Event()
+
+    async def create_pipeline(*args, **kwargs):
+        create_entered.set()
+        await release_create.wait()
+        pipeline_ids.add("pl-wipe-race")
+        async with data.store.async_lock:
+            await data.store.async_patch_settings(
+                voice_agent_pipeline_id="pl-wipe-race"
+            )
+        return {
+            "pipeline_id": "pl-wipe-race", "name": "Phoenix MCP",
+            "preferred": True,
+        }
+
+    async def remove_pipeline(*args, **kwargs):
+        pipeline_ids.discard(holder["s"].voice_agent_pipeline_id)
+        async with data.store.async_lock:
+            await data.store.async_patch_settings(voice_agent_pipeline_id=None)
+
+    pipeline_view = PhoenixAdminVoiceAgentPipelineView()
+    pipeline_view.hass = hass
+    wipe_view = PhoenixAdminWipeView()
+    wipe_view.hass = hass
+
+    with patch(
+        "custom_components.phoenix_mcp.voice_agent.async_create_assist_pipeline",
+        side_effect=create_pipeline,
+    ), patch(
+        "custom_components.phoenix_mcp.voice_agent.async_remove_assist_pipeline",
+        side_effect=remove_pipeline,
+    ), patch(
+        "custom_components.phoenix_mcp.agentcli.async_wipe_agentcli_secrets",
+        new=AsyncMock(),
+    ):
+        create_task = asyncio.create_task(
+            pipeline_view.post(_make_admin_request(body=b"{}"))
+        )
+        await create_entered.wait()
+        wipe_task = asyncio.create_task(wipe_view.delete(_make_admin_request(
+            body=_wipe_body(wipe_mesa=False, **wipe_flags)
+        )))
+        await asyncio.sleep(0)
+        assert not wipe_task.done()
+        release_create.set()
+        create_response, wipe_response = await asyncio.gather(
+            create_task, wipe_task
+        )
+
+    assert create_response.status == 200
+    assert wipe_response.status == 204
+    assert holder["s"].voice_agent_pipeline_id is None
+    assert pipeline_ids == set()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_voice_pipeline_posts_create_once():
+    token = _make_active_token()
+    data, holder = _settings_data([token])
+    holder["s"] = GlobalSettings(
+        voice_agent_enabled=True, voice_agent_token_id=token.id,
+        voice_agent_provider_id="p", voice_agent_model="m",
+    )
+    view = PhoenixAdminVoiceAgentPipelineView()
+    view.hass = _make_hass(data)
+    physical_creates = 0
+
+    async def create_pipeline(*args, **kwargs):
+        nonlocal physical_creates
+        existing = holder["s"].voice_agent_pipeline_id
+        if existing is None:
+            physical_creates += 1
+            await asyncio.sleep(0)
+            existing = "pl-once"
+            async with data.store.async_lock:
+                await data.store.async_patch_settings(voice_agent_pipeline_id=existing)
+        return {"pipeline_id": existing, "name": "Phoenix MCP", "preferred": True}
+
+    with patch(
+        "custom_components.phoenix_mcp.voice_agent.async_create_assist_pipeline",
+        side_effect=create_pipeline,
+    ):
+        first, second = await asyncio.gather(
+            view.post(_make_admin_request(body=b"{}")),
+            view.post(_make_admin_request(body=b"{}")),
+        )
+
+    assert first.status == second.status == 200
+    assert json.loads(first.text)["pipeline_id"] == "pl-once"
+    assert json.loads(second.text)["pipeline_id"] == "pl-once"
+    assert physical_creates == 1
+
+
+@pytest.mark.asyncio
 async def test_disabling_voice_agent_removes_tracked_pipeline():
     token = _make_active_token()
     data, holder = _settings_data([token])

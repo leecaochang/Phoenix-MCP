@@ -170,6 +170,19 @@ def test_shared_volume_article_attributes_each_target_contract() -> None:
         assert documented == expected
 
 
+def test_service_target_expansion_modes_are_explicit() -> None:
+    """Broad no-target calls and category filtering must not share vague prose."""
+    article = _tools_articles()["call_service"]
+    plain = " ".join(re.sub(r"<[^>]+>", " ", article).lower().split())
+
+    assert "omitting targets" in plain
+    assert "every entity in the service domain" in plain
+    assert all(word in plain for word in ("configuration", "diagnostic", "hidden"))
+    assert "permission filtering still applies in every mode" in plain
+    assert "repeated groups of the same kind are merged" in plain
+    assert "all cannot be combined with another target kind" in plain
+
+
 # (tool, parameter) pairs whose enum values are deliberately not spelled out in
 # the docs, each with the reason. An exemption is a claim that listing the values
 # would make the page WORSE, which is a higher bar than "it would be tedious".

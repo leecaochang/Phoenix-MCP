@@ -607,7 +607,7 @@ class TestMethodRegistryMatchesDispatcher:
 
 def _dispatcher_methods() -> set[str]:
     """Every literal `_dispatch_mcp` compares its `method` argument against."""
-    tree = ast.parse(textwrap.dedent(inspect.getsource(_dispatch_mcp)))
+    tree = ast.parse(textwrap.dedent(inspect.getsource(mcp_view._dispatch_mcp_authorized)))
     found: set[str] = set()
     for node in ast.walk(tree):
         if not isinstance(node, ast.Compare):
@@ -628,3 +628,52 @@ def test_dispatcher_method_extraction_actually_finds_branches():
     # silently matches nothing, so prove it reads real branches out.
     assert "tools/call" in _dispatcher_methods()
     assert len(_dispatcher_methods()) > 5
+
+
+async def test_session_quota_cannot_evict_another_token():
+    victim, _, data, _ = _strict_env()
+    attacker, _ = _make_token()
+    victim_id = mcp_view._open_legacy_session(data, victim)
+    allocated = [mcp_view._open_legacy_session(data, attacker) for _ in range(300)]
+    assert victim_id in data.mcp_sessions
+    assert sum(s is not None for s in allocated) == mcp_view._MCP_LEGACY_SESSION_TOKEN_LIMIT
+    assert len(data.mcp_sessions) == 1 + mcp_view._MCP_LEGACY_SESSION_TOKEN_LIMIT
+
+
+async def test_global_session_capacity_refuses_without_eviction():
+    token, _, data, _ = _strict_env()
+    for i in range(mcp_view._MCP_LEGACY_SESSION_LIMIT):
+        data.mcp_sessions[str(i)] = {'token_id': str(i), 'last_seen': mcp_view.time.monotonic()}
+    original = dict(data.mcp_sessions)
+    assert mcp_view._open_legacy_session(data, token) is None
+    assert data.mcp_sessions == original
+
+
+async def test_session_capacity_returns_retryable_http_error():
+    token, raw, data, hass = _strict_env()
+    for _ in range(mcp_view._MCP_LEGACY_SESSION_TOKEN_LIMIT):
+        assert mcp_view._open_legacy_session(data, token)
+    response = await _view(hass).post(_make_request(
+        TestLegacyProtocolEra._initialize_body(), 'application/json', raw))
+    assert response.status == 429
+    assert 'error' in json.loads(response.text)
+    assert 'Mcp-Session-Id' not in response.headers
+
+
+async def test_legacy_batch_and_single_reject_same_modern_only_method():
+    token, raw, data, hass = _strict_env()
+    session = mcp_view._open_legacy_session(data, token)
+    data.mcp_sessions[session]['initialized'] = True
+    headers = {'Mcp-Session-Id': session}
+    discover = {'jsonrpc': '2.0', 'id': 1, 'method': 'server/discover'}
+    single = await _view(hass).post(_make_request(discover, 'application/json', raw, headers))
+    mixed = await _view(hass).post(_make_request([
+        discover, {'jsonrpc': '2.0', 'id': 2, 'method': 'ping'},
+        {'jsonrpc': '2.0', 'method': 'server/discover'},
+    ], 'application/json', raw, headers))
+    assert single.status == 404
+    rows = json.loads(mixed.text)
+    assert rows[0] == json.loads(single.text)
+    assert rows[1] == {'jsonrpc': '2.0', 'id': 2, 'result': {}}
+    assert len(rows) == 2
+    assert 'resultType' not in mixed.text

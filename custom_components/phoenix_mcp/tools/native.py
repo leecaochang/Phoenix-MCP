@@ -53,6 +53,7 @@ from ..const import (
 from ..data import PhoenixData
 from ..device_semantics import device_registry_snapshot, effective_entity_area_id
 from ..mesa import async_apply_mesa_to_call, fire_mesa_blocked_event
+from ..request_authority import check_request_authority
 from ..helpers import diff_summary_fields as _summary, effective_cap, str_arg, validation_error_message as _validation_error_message
 from ..tool_common import _approved_exec_ctx, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _pending_or_inline, _tool_error, _tool_success
 from ..policy_engine import Permission, normalize_intent_selectors, resolve, resolve_intent_entities
@@ -418,6 +419,7 @@ async def _tool_intent_action(
     call_data["entity_id"] = entities
     try:
         async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
+            check_request_authority()
             await hass.services.async_call(
                 service_domain,
                 service_name,
@@ -1139,6 +1141,7 @@ async def _execute_hass_set_volume_relative(
             level, grouped_entities = grouped_items[index]
             call_results[index] = _RELATIVE_VOLUME_DISPATCHED
             try:
+                check_request_authority()
                 await hass.services.async_call(
                     "media_player",
                     "volume_set",
@@ -1496,6 +1499,7 @@ async def _tool_hass_cancel_all_timers(
     if entities:
         try:
             async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
+                check_request_authority()
                 await hass.services.async_call(
                     "timer", "cancel", {"entity_id": entities},
                     blocking=True, return_response=False,
@@ -1703,6 +1707,7 @@ async def _tool_hass_broadcast(
 
     try:
         async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
+            check_request_authority()
             await hass.services.async_call(
                 "assist_satellite",
                 "announce",

@@ -41,6 +41,7 @@ from homeassistant.util import dt as dt_util
 from homeassistant.util.dt import parse_datetime, utcnow
 
 from .admin_view import _err, _ok, _read_body, require_admin
+from .audit import generate_request_id
 from .approvals import (
     REASON_AGENT_CHAT_ENDED,
     STATUS_APPROVED,
@@ -109,6 +110,7 @@ from .const import (
     DETAIL_LEVEL_CONCISE,
     DOMAIN,
     MAX_TOOL_NAME_LENGTH,
+    MESA_APPROVED_EXECUTOR,
     VOICE_AGENT_CLIENT_IP,
 )
 from .data import PhoenixData
@@ -2395,14 +2397,19 @@ def _agentcli_prepare_time_args(
     return prepared, None
 
 
-def _parse_pending(result: dict) -> dict | None:
-    """Detect a pending_approval CallToolResult, returning its fields or None.
-
-    Strict: a text content item whose JSON has status=="pending_approval" AND the
-    result carries no isError key (matches mcp_view._tool_pending).
-    """
-    if result.get("isError"):
+def _parse_pending(
+    result: dict,
+    *,
+    outcome: str,
+    data: PhoenixData,
+    token_id: str,
+    tool_name: str,
+    request_id: str,
+) -> dict | None:
+    """Return trusted control data for this exact pending approval dispatch."""
+    if result.get("isError") or outcome != "pending_approval":
         return None
+    approval_id = None
     for item in result.get("content", []):
         if not isinstance(item, dict) or item.get("type") != "text":
             continue
@@ -2410,13 +2417,37 @@ def _parse_pending(result: dict) -> dict | None:
             parsed = json.loads(item.get("text", ""))
         except (json.JSONDecodeError, TypeError):
             continue
-        if isinstance(parsed, dict) and parsed.get("status") == "pending_approval" and parsed.get("approval_id"):
-            return {
-                "approval_id": parsed["approval_id"],
-                "review_url": parsed.get("review_url"),
-                "expires_at": parsed.get("expires_at"),
-            }
-    return None
+        if (
+            isinstance(parsed, dict)
+            and parsed.get("status") == "pending_approval"
+            and isinstance(parsed.get("approval_id"), str)
+            and parsed["approval_id"]
+        ):
+            approval_id = parsed["approval_id"]
+            break
+    if approval_id is None:
+        return None
+
+    record = get_approval(data.store, approval_id)
+    if record is None:
+        return None
+    from .tool_defs import _NATIVE_TOOL_PUBLIC_TO_INTERNAL  # noqa: PLC0415
+
+    internal_name = _NATIVE_TOOL_PUBLIC_TO_INTERNAL.get(tool_name, tool_name)
+    if (
+        record.status != STATUS_PENDING
+        or record.expires_at <= utcnow()
+        or record.token_id != token_id
+        or record.tool_name not in (internal_name, MESA_APPROVED_EXECUTOR)
+        or record.request_id != request_id
+    ):
+        return None
+    return {
+        "approval_id": record.id,
+        "review_url": f"/phoenix-mcp/approvals/{record.id}",
+        "expires_at": record.expires_at.isoformat(),
+        "record": record,
+    }
 
 
 def execution_failure_text(approval: Any) -> str | None:
@@ -3105,24 +3136,33 @@ async def _run_tool_batch(
                 "result_text": time_error, "is_error": True,
             })
             continue
-        resp_msg, _m, _r, _o = await _dispatch_with_progress(
+        dispatch_request_id = generate_request_id()
+        resp_msg, _m, _r, outcome = await _dispatch_with_progress(
             emit, tc.get("id"),
             _dispatch_mcp(
                 "tools/call", tc.get("id"),
                 {"name": name, "arguments": args},
                 dispatch_token, hass, data, client_ip, base_url,
+                request_id=dispatch_request_id,
             ),
         )
         result = (resp_msg or {}).get("result", {}) or {}
-        pending = _parse_pending(result)
+        pending = _parse_pending(
+            result,
+            outcome=outcome,
+            data=data,
+            token_id=token_id,
+            tool_name=name,
+            request_id=dispatch_request_id,
+        )
         if pending:
-            record = get_approval(data.store, pending["approval_id"])
+            record = pending["record"]
             await emit("approval_required", {
                 "approval_id": pending["approval_id"],
                 "tool_name": name,
                 "review_url": pending.get("review_url"),
                 "expires_at": pending.get("expires_at"),
-                "diff": getattr(record, "diff", None) if record else None,
+                "diff": record.diff,
             })
             result = await _await_agent_approval(
                 hass, data, pending["approval_id"], cancel, AGENTCLI_APPROVAL_WAIT_SECONDS,
@@ -3526,13 +3566,22 @@ async def _run_headless_turn(
                     "is_error": True,
                 })
                 continue
-            resp_msg, _m, _r, _o = await _dispatch_mcp(
+            dispatch_request_id = generate_request_id()
+            resp_msg, _m, _r, outcome = await _dispatch_mcp(
                 "tools/call", tc.get("id"),
                 {"name": name, "arguments": tc.get("input") or {}},
                 dispatch_token, hass, data, client_ip, base_url,
+                request_id=dispatch_request_id,
             )
             result = (resp_msg or {}).get("result", {}) or {}
-            pending = _parse_pending(result)
+            pending = _parse_pending(
+                result,
+                outcome=outcome,
+                data=data,
+                token_id=token_id,
+                tool_name=name,
+                request_id=dispatch_request_id,
+            )
             if pending:
                 if pending.get("review_url"):
                     review_urls.append(pending["review_url"])

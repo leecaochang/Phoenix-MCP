@@ -151,17 +151,26 @@ def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any]
         if targets is not None:
             if not isinstance(targets, list) or not targets:
                 return out, "targets must be a non-empty array when supplied."
+            target_ids: dict[str, list[Any]] = {}
+            has_all = False
             for target in targets:
                 if not isinstance(target, dict):
                     return out, "Each target must be an object."
                 kind, ids = target.get("kind"), target.get("ids")
                 if kind == "all":
-                    out["entity_id"] = "all"
+                    has_all = True
                 elif kind in {"entity", "device", "area"} and isinstance(ids, list) and ids:
-                    key = f"{kind}_id"
-                    out[key] = ids
+                    merged = target_ids.setdefault(kind, [])
+                    merged.extend(item for item in ids if item not in merged)
                 else:
                     return out, "Each target needs kind all, or entity/device/area with non-empty ids."
+            if has_all and target_ids:
+                return out, "A target with kind all cannot be combined with entity, device, or area targets."
+            if has_all:
+                out["entity_id"] = "all"
+            else:
+                for kind, ids in target_ids.items():
+                    out[f"{kind}_id"] = ids
     elif tool == "get_relationships":
         scope = out.pop("scope", None)
         if not isinstance(scope, dict) or scope.get("kind") not in {"entity", "device", "integration", "area", "label"} or not isinstance(scope.get("id"), str):

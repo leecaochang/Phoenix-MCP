@@ -246,11 +246,15 @@ export function showAgentChat(tokenId?: string): void {
   // This bundle loads on any HA page, so it fetches its own catalog. The window
   // opens right away and repaints a round trip later with the strings in place;
   // paintAgentChat() no-ops if it was closed before then.
-  void loadTranslations(hass, resolveLanguage(hass)).then(paintAgentChat);
+  void loadTranslations(hass, resolveLanguage(hass)).then((committed) => {
+    if (committed) paintAgentChat();
+  });
   // The panel's language dropdown lives in a different element and can be used
   // while this window is open, so re-fetch on its event the same way the theme
   // is re-resolved below.
-  reloadStrings = () => void loadTranslations(getHass(), resolveLanguage(getHass())).then(paintAgentChat);
+  reloadStrings = () => void loadTranslations(getHass(), resolveLanguage(getHass())).then((committed) => {
+    if (committed) paintAgentChat();
+  });
   window.addEventListener("phx-language-changed", reloadStrings);
   host = document.createElement("div");
   // Fixed, full-viewport, but click-through and transparent: only the window

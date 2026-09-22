@@ -1295,6 +1295,40 @@ describe("AgentCliWindow streaming", () => {
     expect((textarea as HTMLTextAreaElement).value).toBe("add a chart card");
   });
 
+  it("ignores a cancelled turn's late events and finalizer after a resend starts", async () => {
+    const callbacks: Array<(name: string, payload: unknown) => void> = [];
+    const resolvers: Array<() => void> = [];
+    agentCliChat.mockImplementation((_body, onEvent: (name: string, payload: unknown) => void) => {
+      callbacks.push(onEvent);
+      return new Promise<void>((resolve) => { resolvers.push(resolve); });
+    });
+    render(
+      <AgentCliWindow tokens={TOKENS} instances={INSTANCES} scrollbackLines={500}
+                      initialTokenId="t1" onClose={() => {}} />,
+    );
+    const textarea = await screen.findByPlaceholderText(/Message Agent Chat/i);
+    fireEvent.change(textarea, { target: { value: "turn A" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(agentCliChat).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    fireEvent.change(textarea, { target: { value: "turn B" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await waitFor(() => expect(agentCliChat).toHaveBeenCalledTimes(2));
+    act(() => callbacks[1]("assistant_delta", { text: "current B" }));
+    expect(screen.getAllByText("current B").length).toBeGreaterThan(0);
+
+    act(() => callbacks[0]("assistant_delta", { text: "late A" }));
+    await act(async () => { resolvers[0](); });
+    expect(screen.queryByText("late A")).toBeNull();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+
+    act(() => callbacks[1]("messages", { messages: [] }));
+    await act(async () => { resolvers[1](); });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull());
+    expect(screen.getAllByText("current B").length).toBeGreaterThan(0);
+  });
+
   it("the /clear slash command starts a new conversation without calling the model", async () => {
     agentCliChat.mockImplementation(async (_body, onEvent: (n: string, p: unknown) => void) => {
       onEvent("assistant_delta", { text: "Hello there." });
@@ -1371,7 +1405,7 @@ describe("AgentCliWindow streaming", () => {
       onEvent("approval_required", {
         approval_id: "ap9",
         tool_name: "restart_ha",
-        review_url: "/phoenix-mcp/approvals/ap9",
+        review_url: "javascript:alert(1)",
       });
       onEvent("messages", { messages: [] });
       onEvent("done", { stop_reason: "tool_use" });

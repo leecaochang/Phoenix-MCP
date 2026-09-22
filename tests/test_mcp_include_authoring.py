@@ -9,10 +9,11 @@ async_restore_version tag guard, and approval-replay determinism.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import textwrap
 import uuid
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -25,12 +26,20 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import (
     _call_tool,
     _execute_edit_automation,
+    async_execute_approved_tool,
     async_restore_version,
 )
+from custom_components.phoenix_mcp.helpers import content_hash
 from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
 from custom_components.phoenix_mcp.tools.authoring import (
     _build_diff_create_script,
     _build_diff_delete_automation,
+    _execute_delete_automation,
+    _execute_delete_scene,
+    _execute_delete_script,
+    _tool_delete_automation,
+    _tool_delete_scene,
+    _tool_delete_script,
 )
 from custom_components.phoenix_mcp.version_store import VersionStore
 
@@ -420,3 +429,160 @@ class TestApprovalReplay:
             token, hass, MagicMock())
         assert outcome == "allowed"
         assert "alias: Approved" in (env / "automations/one.yaml").read_text(encoding="utf-8")
+
+    async def test_stale_legacy_automation_delete_replay_is_refused(self, hass, env):
+        write(env, "automations.yaml", "- id: aaa\n  alias: Reviewed\n")
+        token = _token(cap_automation_write="confirm")
+        captured: dict = {}
+        captured_diff: dict = {}
+        reviewed = {"id": "aaa", "alias": "Reviewed"}
+
+        async def capture_gate(*args, **kwargs):
+            captured.update(kwargs["args"])
+            write(env, "automations.yaml", "- id: aaa\n  alias: Replacement\n")
+            captured_diff.update(await kwargs["diff"]())
+            return {"content": []}, "pending_approval", "approval:test"
+
+        with patch(
+            "custom_components.phoenix_mcp.tools.authoring._gate",
+            new=AsyncMock(side_effect=capture_gate),
+        ):
+            _, outcome, _ = await _tool_delete_automation(
+                {
+                    "automation_id": "aaa",
+                    "_phoenix_delete_expected_hash": "0" * 64,
+                },
+                token, hass, MagicMock(),
+        )
+        assert outcome == "pending_approval"
+        assert captured["_phoenix_delete_expected_hash"] == content_hash(reviewed)
+        assert "Reviewed" in captured_diff["before"]
+        assert "Replacement" not in captured_diff["before"]
+
+        content, outcome, _ = await _execute_delete_automation(
+            captured, token, hass, MagicMock()
+        )
+        assert outcome == "invalid_request"
+        assert "expected_hash no longer matches" in _text(content)
+        assert "Replacement" in (env / "automations.yaml").read_text(encoding="utf-8")
+
+        content, outcome, _ = await _execute_delete_automation(
+            {"automation_id": "aaa"}, token, hass, MagicMock()
+        )
+        assert outcome == "invalid_request"
+        assert "not bound to reviewed content" in _text(content)
+        assert "Replacement" in (env / "automations.yaml").read_text(encoding="utf-8")
+
+    async def test_unchanged_delete_approval_executes_from_stored_args(self, hass, env):
+        class ApprovalStore:
+            def __init__(self) -> None:
+                self.pending: list = []
+                self.async_lock = asyncio.Lock()
+                self.async_save = AsyncMock()
+
+            def get_pending_approvals(self) -> list:
+                return self.pending
+
+            def set_pending_approvals(self, approvals: list) -> None:
+                self.pending = approvals
+
+        write(env, "configuration.yaml", "automation: !include automations.yaml\n")
+        write(env, "automations.yaml", "- id: aaa\n  alias: Reviewed\n")
+        store = ApprovalStore()
+        data = PhoenixData(
+            store=store, rate_limiter=MagicMock(), audit=MagicMock(),
+            versions=VersionStore(), mesa=None,
+        )
+        token = _token(cap_automation_write="confirm")
+
+        _, outcome, _ = await _call_tool(
+            "delete_automation", {"automation_id": "aaa"}, token, hass, data
+        )
+        assert outcome == "pending_approval"
+        approval = store.pending[0]
+        assert approval["args"]["_phoenix_delete_expected_hash"] == content_hash(
+            {"id": "aaa", "alias": "Reviewed"}
+        )
+
+        result = await async_execute_approved_tool(
+            "delete_automation", approval["args"], token, hass, data
+        )
+        assert result[1] == "allowed"
+        assert yi.read_entry(str(env), "automation", "aaa") is None
+
+    async def test_stale_split_script_delete_replay_is_refused(self, hass, env):
+        write(env, "configuration.yaml", "script: !include_dir_named scripts\n")
+        write(env, "scripts/hello.yaml", "alias: Reviewed\nsequence: []\n")
+        token = _token(cap_script_write="confirm")
+        captured: dict = {}
+
+        async def capture_gate(*args, **kwargs):
+            captured.update(kwargs["args"])
+            return {"content": []}, "pending_approval", "approval:test"
+
+        with patch(
+            "custom_components.phoenix_mcp.tools.authoring._gate",
+            new=AsyncMock(side_effect=capture_gate),
+        ):
+            _, outcome, _ = await _tool_delete_script(
+                {"script_id": "hello"}, token, hass, MagicMock()
+            )
+        assert outcome == "pending_approval"
+
+        write(env, "scripts/hello.yaml", "alias: Replacement\nsequence: []\n")
+        content, outcome, _ = await _execute_delete_script(
+            captured, token, hass, MagicMock()
+        )
+        assert outcome == "invalid_request"
+        assert "expected_hash no longer matches" in _text(content)
+        assert "Replacement" in (env / "scripts/hello.yaml").read_text(encoding="utf-8")
+
+    async def test_stale_split_scene_delete_replay_is_refused(self, hass, env):
+        entry = MockConfigEntry(domain="test_integration", entry_id="stale-scene")
+        entry.add_to_hass(hass)
+        light = er.async_get(hass).async_get_or_create(
+            "light", "test_integration", "stale-scene-light",
+            config_entry=entry, suggested_object_id="kitchen",
+        )
+        hass.states.async_set(light.entity_id, "on", {})
+        write(env, "configuration.yaml", "scene: !include_dir_merge_list scenes\n")
+        write(env, "scenes/pack.yaml", """\
+            - id: movie
+              name: Reviewed
+              entities:
+                light.kitchen: off
+        """)
+        token = _token(
+            tree=PermissionTree(domains={
+                "light": PermissionNode(state="GREEN"),
+                "scene": PermissionNode(state="GREEN"),
+            }),
+            cap_scene_write="confirm", cap_registry_read="allow",
+        )
+        captured: dict = {}
+
+        async def capture_gate(*args, **kwargs):
+            captured.update(kwargs["args"])
+            return {"content": []}, "pending_approval", "approval:test"
+
+        with patch(
+            "custom_components.phoenix_mcp.tools.authoring._gate",
+            new=AsyncMock(side_effect=capture_gate),
+        ):
+            _, outcome, _ = await _tool_delete_scene(
+                {"scene_id": "movie"}, token, hass, MagicMock()
+            )
+        assert outcome == "pending_approval"
+
+        write(env, "scenes/pack.yaml", """\
+            - id: movie
+              name: Replacement
+              entities:
+                light.kitchen: on
+        """)
+        content, outcome, _ = await _execute_delete_scene(
+            captured, token, hass, MagicMock()
+        )
+        assert outcome == "invalid_request"
+        assert "expected_hash no longer matches" in _text(content)
+        assert "Replacement" in (env / "scenes/pack.yaml").read_text(encoding="utf-8")

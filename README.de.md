@@ -26,7 +26,7 @@ Neu hier? Beginnen Sie mit dem **[Schnellstart](https://leecaochang.github.io/ph
 ## Voraussetzungen
 
 - Home Assistant 2025.2.0 oder neuer.
-- Eine Phoenix MCP-Instanz pro Home Assistant. Keine Python-Abhängigkeiten über die von HA bereitgestellten hinaus.
+- Eine Phoenix MCP-Instanz pro Home Assistant. Home Assistant installiert die festgelegte Python-Abhängigkeit `voluptuous-serialize==2.7.0`; MESA ist in Phoenix MCP enthalten.
 
 ## Installation über HACS
 

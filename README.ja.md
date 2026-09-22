@@ -26,7 +26,7 @@ Phoenix MCP は Home Assistant 内で完結して動作します。追加のプ�
 ## 動作要件
 
 - Home Assistant 2025.2.0 以降。
-- Home Assistant ごとに Phoenix MCP インスタンスを一つだけ設定できます。HA に同梱されているもの以外に Python の依存関係はありません。
+- Home Assistant ごとに Phoenix MCP インスタンスを一つだけ設定できます。Home Assistant が固定バージョンの Python 依存関係 `voluptuous-serialize==2.7.0` をインストールし、MESA は Phoenix MCP に同梱されています。
 
 ## HACS からインストール
 

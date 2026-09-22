@@ -459,7 +459,7 @@
       "noResult": "Sin resultado. {status}: {reason}",
       "noResultRecorded": "No se registró ningún resultado (estado: {status}).",
       "othersPending": {
-        "one": "Hay 1 aprobación más pendiente de revisión.",
+        "one": "Hay {count} aprobación más pendiente de revisión.",
         "other": "Hay {count} aprobaciones más pendientes de revisión."
       },
       "processing": "En proceso",

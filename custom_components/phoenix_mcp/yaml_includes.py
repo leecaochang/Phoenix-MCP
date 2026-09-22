@@ -46,6 +46,8 @@ import yaml
 
 from homeassistant.util.file import write_utf8_file_atomic
 
+from .helpers import content_hash
+
 CONFIGURATION_YAML = "configuration.yaml"
 SECRETS_YAML = "secrets.yaml"
 MAX_INCLUDE_DEPTH = 8
@@ -1060,7 +1062,7 @@ class OpResult:
     ok: bool
     fallback: bool = False
     error_kind: str | None = None  # refused | not_found | duplicate | ambiguous |
-                                   # already_exists | io_error
+                                   # already_exists | conflict | io_error
     message: str | None = None
     before: Any = None             # tag-encoded prior entry (edit/delete)
     file: str | None = None        # leaf file written or removed
@@ -1156,8 +1158,13 @@ def perform_edit(config_dir: str, domain: str, entry_id: str, config: dict) -> O
     return _write_entry_files(located, domain, config)
 
 
-def perform_delete(config_dir: str, domain: str, entry_id: str) -> OpResult:
-    """Remove an entry in place, preserving the include layout."""
+def perform_delete(
+    config_dir: str,
+    domain: str,
+    entry_id: str,
+    expected_hash: str | None = None,
+) -> OpResult:
+    """Remove an entry in place if it still matches the reviewed content."""
     layout = _layout_or_result(config_dir, domain)
     if isinstance(layout, OpResult):
         return layout
@@ -1166,6 +1173,15 @@ def perform_delete(config_dir: str, domain: str, entry_id: str) -> OpResult:
     except LocateError as exc:
         return _locate_error_result(exc)
     encoded_before = encode_tags(located.config)
+    if expected_hash is not None and content_hash(encoded_before) != expected_hash:
+        return OpResult(
+            ok=False,
+            error_kind="conflict",
+            message=(
+                "This configuration changed since you last read it (expected_hash no "
+                "longer matches). Re-read it and reapply your change."
+            ),
+        )
 
     if located.ref_kind == "whole_file":
         os.unlink(located.ref_file)

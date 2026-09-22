@@ -26,6 +26,7 @@ from custom_components.phoenix_mcp.approvals import (
     STATUS_REJECTED,
 )
 from custom_components.phoenix_mcp.const import AGENTCLI_DEEPSEEK_MAX_TOKENS, AGENTCLI_PROVIDERS
+from custom_components.phoenix_mcp.const import MESA_APPROVED_EXECUTOR
 from custom_components.phoenix_mcp.token_store import GlobalSettings
 
 
@@ -1305,13 +1306,37 @@ def test_mistral_vision_uses_a_base64_data_uri_string():
 
 def test_parse_pending_strict():
     pend = {"content": [{"type": "text", "text": json.dumps(
-        {"status": "pending_approval", "approval_id": "a1", "review_url": "/x"})}]}
-    assert _parse_pending(pend)["approval_id"] == "a1"
-    # isError present -> not pending
-    err = dict(pend, isError=True)
-    assert _parse_pending(err) is None
-    # look-alike without approval_id -> not pending
-    assert _parse_pending({"content": [{"type": "text", "text": '{"status":"pending_approval"}'}]}) is None
+        {"status": "pending_approval", "approval_id": "a1",
+         "review_url": "javascript:alert(1)"})}]}
+    record = SimpleNamespace(
+        id="a1", status=STATUS_PENDING,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        token_id="t1", tool_name="call_service", request_id="rid-1",
+    )
+    data = SimpleNamespace(store=object())
+
+    def parse(result=pend, **overrides):
+        context = {
+            "outcome": "pending_approval", "data": data, "token_id": "t1",
+            "tool_name": "call_service", "request_id": "rid-1",
+        }
+        context.update(overrides)
+        return _parse_pending(result, **context)
+
+    with patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=record):
+        trusted = parse()
+        assert trusted["approval_id"] == "a1"
+        assert trusted["review_url"] == "/phoenix-mcp/approvals/a1"
+        assert parse(outcome="allowed") is None
+        assert parse(token_id="foreign") is None
+        assert parse(tool_name="get_state") is None
+        assert parse(request_id="other-invocation") is None
+        record.tool_name = MESA_APPROVED_EXECUTOR
+        assert parse()["approval_id"] == "a1"
+        assert parse(dict(pend, isError=True)) is None
+        assert parse({"content": [{"type": "text", "text": '{"status":"pending_approval"}'}]}) is None
+    with patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=None):
+        assert parse() is None
 
 
 def test_resolved_result_reports_execution_failure_with_the_executor_error():
@@ -1993,9 +2018,13 @@ async def test_run_agent_turn_repeated_rejections_stay_iteration_friendly(hass):
         events.append((name, payload))
 
     with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
-         patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=rejected_record):
+        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
+        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
+        patch("custom_components.phoenix_mcp.agentcli._parse_pending", return_value={
+            "approval_id": "ap1", "review_url": "/phoenix-mcp/approvals/ap1",
+            "expires_at": None, "record": rejected_record,
+        }), \
+        patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=rejected_record):
         task = hass.async_create_task(async_run_agent_turn(
             hass=hass, data=data, token=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -2084,9 +2113,13 @@ async def test_run_agent_turn_inline_approval_resume(hass):
         events.append((name, payload))
 
     with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
-         patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=approved_record):
+        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
+        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
+        patch("custom_components.phoenix_mcp.agentcli._parse_pending", return_value={
+            "approval_id": "ap1", "review_url": "/phoenix-mcp/approvals/ap1",
+            "expires_at": None, "record": approved_record,
+        }), \
+        patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=approved_record):
         task = hass.async_create_task(async_run_agent_turn(
             hass=hass, data=data, token=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -2132,9 +2165,13 @@ async def test_cancel_mid_approval_wait_skips_remaining_batch_calls(hass):
 
     cancel = asyncio.Event()
     with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
-         patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=pending_record):
+        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
+        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
+        patch("custom_components.phoenix_mcp.agentcli._parse_pending", return_value={
+            "approval_id": "ap1", "review_url": "/phoenix-mcp/approvals/ap1",
+            "expires_at": None, "record": pending_record,
+        }), \
+        patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=pending_record):
         task = hass.async_create_task(async_run_agent_turn(
             hass=hass, data=data, token=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -2626,9 +2663,13 @@ async def test_run_agent_turn_rejection_reason_reaches_agent(hass):
         events.append((name, payload))
 
     with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
-         patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=rejected_record):
+        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
+        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
+        patch("custom_components.phoenix_mcp.agentcli._parse_pending", return_value={
+            "approval_id": "ap1", "review_url": "/phoenix-mcp/approvals/ap1",
+            "expires_at": None, "record": rejected_record,
+        }), \
+        patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=rejected_record):
         task = hass.async_create_task(async_run_agent_turn(
             hass=hass, data=data, token=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
@@ -2790,9 +2831,13 @@ async def test_human_rejection_resets_iteration_budget(hass):
         events.append((name, payload))
 
     with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
-         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
-         patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
-         patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=None), \
+        patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
+        patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
+        patch("custom_components.phoenix_mcp.agentcli._parse_pending", return_value={
+            "approval_id": "ap1", "review_url": "/phoenix-mcp/approvals/ap1",
+            "expires_at": None, "record": MagicMock(diff=None),
+        }), \
+        patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=None), \
          patch("custom_components.phoenix_mcp.agentcli._await_agent_approval", AsyncMock(return_value=rejected)):
         await async_run_agent_turn(
             hass=hass, data=data, token=MagicMock(), provider=provider,

@@ -1638,7 +1638,7 @@
       "reasonExecutionFailedDetail": "실행에 실패했습니다: {detail}",
       "reasonLabel": "거부 사유(선택 사항)",
       "othersPending": {
-        "one": "다른 승인 1건이 검토를 기다리고 있습니다.",
+        "one": "다른 승인 {count}건이 검토를 기다리고 있습니다.",
         "other": "다른 승인 {count}건이 검토를 기다리고 있습니다."
       },
       "reviewAll": "모두 검토",

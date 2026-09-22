@@ -87,7 +87,7 @@
       "reasonExecutionFailedDetail": "実行に失敗しました: {detail}",
       "reasonLabel": "拒否理由（任意）",
       "othersPending": {
-        "one": "ほかに 1 件の承認がレビューを待っています。",
+        "one": "ほかに {count} 件の承認がレビューを待っています。",
         "other": "ほかに {count} 件の承認がレビューを待っています。"
       },
       "reviewAll": "すべてレビュー",

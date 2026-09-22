@@ -509,7 +509,9 @@ function start(): void {
   // These buttons are painted once per scan, so without this their labels stay
   // in the old language until the next full page load.
   const languageHandler = () => {
-    void loadTranslations(getHass(), resolveLanguage(getHass())).then(() => safe(scan));
+    void loadTranslations(getHass(), resolveLanguage(getHass())).then((committed) => {
+      if (committed) safe(scan);
+    });
   };
   window.addEventListener("phx-language-changed", languageHandler);
   listeners.push({ type: "phx-language-changed", handler: languageHandler });

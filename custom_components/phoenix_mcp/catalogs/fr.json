@@ -87,7 +87,7 @@
       "reasonExecutionFailedDetail": "Échec de l'exécution : {detail}",
       "reasonLabel": "Motif de rejet facultatif",
       "othersPending": {
-        "one": "1 autre approbation attend une révision.",
+        "one": "{count} autre approbation attend une révision.",
         "other": "{count} autres approbations attendent une révision."
       },
       "reviewAll": "Tout réviser",

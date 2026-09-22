@@ -38,7 +38,7 @@ Phoenix MCP 脱胎于一个被弃置的开源项目，它的名字也由此而�
 ## 要求
 
 - Home Assistant 2025.2.0 或更高版本。
-- 每个 Home Assistant 只能配置一个 Phoenix MCP 实例。除 HA 自带的内容外，不需要其他 Python 依赖项。
+- 每个 Home Assistant 只能配置一个 Phoenix MCP 实例。Home Assistant 会安装固定版本的 Python 依赖项 `voluptuous-serialize==2.7.0`；MESA 已随 Phoenix MCP 一起提供。
 
 ## 通过 HACS 安装
 

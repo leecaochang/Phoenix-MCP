@@ -26,7 +26,7 @@ Phoenix MCP 完全執行於 Home Assistant 內部：無需額外程序，核心�
 ## 需求
 
 - Home Assistant 2025.2.0 或更高版本。
-- 每個 Home Assistant 只能設定一個 Phoenix MCP 實例。除 HA 內建的內容外，不需要其他 Python 相依套件。
+- 每個 Home Assistant 只能設定一個 Phoenix MCP 實例。Home Assistant 會安裝固定版本的 Python 相依套件 `voluptuous-serialize==2.7.0`；MESA 已隨 Phoenix MCP 一起提供。
 
 ## 透過 HACS 安裝
 

@@ -63,7 +63,7 @@
       "reasonExecutionFailedDetail": "Ausführung fehlgeschlagen: {detail}",
       "reasonLabel": "Optionaler Ablehnungsgrund",
       "othersPending": {
-        "one": "1 weitere Genehmigung wartet auf Prüfung.",
+        "one": "{count} weitere Genehmigung wartet auf Prüfung.",
         "other": "{count} weitere Genehmigungen warten auf Prüfung."
       },
       "reviewAll": "Alle prüfen",

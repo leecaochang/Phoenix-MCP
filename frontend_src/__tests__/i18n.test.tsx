@@ -1,6 +1,8 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import en from "../../custom_components/phoenix_mcp/catalogs/en.json";
+import pl from "../../custom_components/phoenix_mcp/catalogs/pl.json";
+import ru from "../../custom_components/phoenix_mcp/catalogs/ru.json";
 import {
   flattenCatalog,
   interpolate,
@@ -62,18 +64,35 @@ describe("t", () => {
 });
 
 describe("tn", () => {
-  it("picks one for a count of exactly 1 and other for anything else", () => {
+  it("uses the active locale's plural categories with explicit fallback", () => {
     primeTranslations({
-      selectBy: { entities: { one: "{count} entity", other: "{count} entities" } },
-    });
-    expect(tn("selectBy.entities", 1)).toBe("1 entity");
-    expect(tn("selectBy.entities", 0)).toBe("0 entities");
-    expect(tn("selectBy.entities", 7)).toBe("7 entities");
+      approvals: { others: {
+        one: "{count} один", few: "{count} несколько",
+        many: "{count} много", other: "{count} прочее",
+      } },
+      neutral: { one: "one {count}", other: "other {count}" },
+    }, "ru");
+    expect(tn("approvals.others", 1)).toBe("1 один");
+    expect(tn("approvals.others", 21)).toBe("21 один");
+    expect(tn("approvals.others", 22)).toBe("22 несколько");
+    expect(tn("approvals.others", 25)).toBe("25 много");
+    expect(tn("neutral", 22)).toBe("other 22");
   });
 
   it("passes extra params through alongside count", () => {
     primeTranslations({ p: { one: "{count} {noun}", other: "{count} {noun}s" } });
     expect(tn("p", 2, { noun: "profile" })).toBe("2 profiles");
+  });
+
+  it("renders shipped Russian and Polish forms for representative counts", () => {
+    primeTranslations(ru.panel, "ru");
+    expect(tn("approvals.othersPending", 21)).toBe("Ещё 21 одобрение ожидает проверки.");
+    expect(tn("approvals.othersPending", 22)).toBe("Ещё 22 одобрения ожидают проверки.");
+    expect(tn("approvals.othersPending", 25)).toBe("Ещё 25 одобрений ожидают проверки.");
+
+    primeTranslations(pl.panel, "pl");
+    expect(tn("selectBy.entities", 2)).toBe("2 encje");
+    expect(tn("selectBy.entities", 5)).toBe("5 encji");
   });
 });
 
@@ -247,6 +266,57 @@ describe("loadTranslations", () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
     await loadTranslations(authenticatedHass(), "en");
     expect(isI18nReady()).toBe(true);
+  });
+
+  it("lets only the latest language request commit, even when responses arrive out of order", async () => {
+    let resolveEnglish!: (value: unknown) => void;
+    let resolveRussian!: (value: unknown) => void;
+    const responses = {
+      en: new Promise((resolve) => { resolveEnglish = resolve; }),
+      ru: new Promise((resolve) => { resolveRussian = resolve; }),
+    };
+    const hass = {
+      fetchWithAuth: vi.fn((path: string) => path.endsWith("/ru") ? responses.ru : responses.en),
+    };
+
+    const oldRequest = loadTranslations(hass, "en");
+    const latestRequest = loadTranslations(hass, "ru");
+    resolveRussian({ ok: true, json: async () => ({ resources: { audit: "RU" } }) });
+    expect(await latestRequest).toBe(true);
+    resolveEnglish({ ok: true, json: async () => ({ resources: { audit: "EN" } }) });
+    expect(await oldRequest).toBe(false);
+    expect(t("audit")).toBe("RU");
+  });
+
+  it("deduplicates same-language requests while the catalog is in flight", async () => {
+    let resolveRequest!: (value: unknown) => void;
+    const hass = {
+      fetchWithAuth: vi.fn(() => new Promise((resolve) => { resolveRequest = resolve; })),
+    };
+    const first = loadTranslations(hass, "ru");
+    const latest = loadTranslations(hass, "ru");
+    expect(hass.fetchWithAuth).toHaveBeenCalledOnce();
+    resolveRequest({ ok: true, json: async () => ({ resources: { audit: "RU" } }) });
+    expect(await first).toBe(false);
+    expect(await latest).toBe(true);
+    expect(t("audit")).toBe("RU");
+  });
+
+  it("does not let an older failure disturb a newer successful catalog", async () => {
+    let rejectEnglish!: (reason: unknown) => void;
+    let resolveRussian!: (value: unknown) => void;
+    const hass = {
+      fetchWithAuth: vi.fn((path: string) => path.endsWith("/ru")
+        ? new Promise((resolve) => { resolveRussian = resolve; })
+        : new Promise((_resolve, reject) => { rejectEnglish = reject; })),
+    };
+    const oldRequest = loadTranslations(hass, "en");
+    const latestRequest = loadTranslations(hass, "ru");
+    resolveRussian({ ok: true, json: async () => ({ resources: { audit: "RU" } }) });
+    expect(await latestRequest).toBe(true);
+    rejectEnglish(new Error("late offline"));
+    expect(await oldRequest).toBe(false);
+    expect(t("audit")).toBe("RU");
   });
 });
 

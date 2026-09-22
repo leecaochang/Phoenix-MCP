@@ -107,6 +107,48 @@ def test_placeholder_drift_is_rejected(checker, catalogs, capsys):
     assert "placeholders" in out
 
 
+def test_locale_specific_plural_categories_are_checked_against_other(
+    checker, catalogs, capsys,
+):
+    catalogs(
+        {"items": {"one": "{count} item", "other": "{count} items"}},
+        {"items": {
+            "one": "{count} элемент", "few": "{count} элемента",
+            "many": "{count} элементов", "other": "{count} элемента",
+        }},
+    )
+    code, out = run(checker, capsys)
+    assert code == 0, out
+
+
+def test_locale_specific_plural_category_rejects_placeholder_drift(
+    checker, catalogs, capsys,
+):
+    catalogs(
+        {"items": {"one": "{count} item", "other": "{count} items"}},
+        {"items": {
+            "one": "{count} элемент", "few": "несколько элементов",
+            "other": "{count} элемента",
+        }},
+    )
+    code, out = run(checker, capsys)
+    assert code == 1
+    assert "panel.items.few: placeholders" in out
+
+
+def test_unknown_plural_sibling_is_still_rejected(checker, catalogs, capsys):
+    catalogs(
+        {"items": {"one": "{count} item", "other": "{count} items"}},
+        {"items": {
+            "one": "{count} элемент", "several": "{count} элемента",
+            "other": "{count} элемента",
+        }},
+    )
+    code, out = run(checker, capsys)
+    assert code == 1
+    assert "panel.items.several: not a key in en.json" in out
+
+
 def test_unbalanced_brace_is_rejected(checker, catalogs, capsys):
     catalogs({"greet": "Hello {name}"}, {"greet": "你好 {name"})
     code, out = run(checker, capsys)

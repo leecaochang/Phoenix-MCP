@@ -17,7 +17,7 @@
 // This module must never import from api.ts. 17 test files mock "../api" with
 // exhaustive factory objects, so an import edge would break all of them at once.
 
-import { setFormatLocale } from "./format";
+import { localePluralCategory, setFormatLocale } from "./format";
 
 // Date, time and number formatting lives in ./format and is re-exported here so
 // every consumer has one import for "anything locale-dependent". The dependency
@@ -32,6 +32,7 @@ export {
   localeDateTime,
   localeDateTimeShort,
   localeNumber,
+  localePluralCategory,
   setFormatLocale,
 } from "./format";
 export type { HassLocale } from "./format";
@@ -158,6 +159,9 @@ function formatLanguage(hass: any, resolved: string): string {
 let strings: Record<string, string> = {};
 let ready = false;
 let loaded: string | null = null;
+let requested: string | null = null;
+let requestGeneration = 0;
+const catalogRequests = new Map<string, Promise<Record<string, string> | null>>();
 
 // The injected bundles can outlive one <home-assistant> root while HA replaces
 // it during navigation or a frontend reload. Prefer the current root whenever
@@ -192,8 +196,13 @@ export function flattenCatalog(obj: unknown, prefix = ""): Record<string, string
 }
 
 /** Install a nested catalog synchronously. Used by tests and any sync path. */
-export function primeTranslations(catalog: unknown): void {
+export function primeTranslations(catalog: unknown, language = "en"): void {
+  const resolved = canonicalLanguage(language);
   strings = flattenCatalog(catalog);
+  loaded = resolved;
+  requested = resolved;
+  setFormatLocale({}, resolved);
+  requestGeneration += 1;
   ready = true;
 }
 
@@ -204,37 +213,47 @@ export function primeTranslations(catalog: unknown): void {
  * visibly broken deploy, which beats a spinner that never resolves.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function loadTranslations(hass: any, language: string): Promise<void> {
-  // Before the fetch, and outside the try: the formatting locale is read off
-  // hass and does not depend on the catalog arriving, so a failed fetch must
-  // still leave dates in the language the panel is about to render in.
+export async function loadTranslations(hass: any, language: string): Promise<boolean> {
   const resolved = canonicalLanguage(language || "en");
-  setFormatLocale(hass, formatLanguage(hass, resolved));
+  requested = resolved;
+  const generation = ++requestGeneration;
+  const formattingLocale = formatLanguage(hass, resolved);
+  let request = catalogRequests.get(resolved);
+  if (!request) {
+    request = (async () => {
+      const url = `${CATALOG_URL}${encodeURIComponent(resolved)}`;
+      const requestHass = catalogHass(hass);
+      if (typeof requestHass?.fetchWithAuth !== "function") return null;
+      const res = await requestHass.fetchWithAuth(url);
+      const body = res.ok ? await res.json() : null;
+      const next: Record<string, string> = {};
+      for (const [key, value] of Object.entries(body?.resources ?? {})) {
+        if (typeof value === "string") next[key] = value;
+      }
+      return Object.keys(next).length > 0 ? next : null;
+    })();
+    catalogRequests.set(resolved, request);
+    void request.finally(() => {
+      if (catalogRequests.get(resolved) === request) catalogRequests.delete(resolved);
+    }).catch(() => { /* the awaiting owner reports the failure */ });
+  }
   try {
-    // This module must not import api.ts (see the file header), but it can use
-    // HA's own authenticated fetch directly. HA alone owns token refresh.
-    const url = `${CATALOG_URL}${encodeURIComponent(resolved)}`;
-    const requestHass = catalogHass(hass);
-    // Never probe an admin endpoint anonymously while HA is replacing its root.
-    if (typeof requestHass?.fetchWithAuth !== "function") return;
-    const res = await requestHass.fetchWithAuth(url);
-    const body = res.ok ? await res.json() : null;
-    const next: Record<string, string> = {};
-    for (const [key, value] of Object.entries(body?.resources ?? {})) {
-      if (typeof value === "string") next[key] = value;
-    }
-    // A fetch that yields nothing keeps whatever is already loaded. Replacing a
-    // working catalog with an empty one turns every label into a raw key, which
-    // is worse than showing the previous language after a failed refetch.
-    if (Object.keys(next).length > 0) {
+    const next = await request;
+    if (generation === requestGeneration && next) {
       strings = next;
       loaded = resolved;
     }
   } catch (e) {
-    console.error("Phoenix MCP: could not load panel translations", e);
+    if (generation === requestGeneration) {
+      console.error("Phoenix MCP: could not load panel translations", e);
+    }
   } finally {
-    ready = true;
+    if (generation === requestGeneration) {
+      setFormatLocale(hass, formattingLocale);
+      ready = true;
+    }
   }
+  return generation === requestGeneration;
 }
 
 /**
@@ -250,12 +269,14 @@ export async function loadTranslations(hass: any, language: string): Promise<voi
 export async function syncTranslations(hass: any): Promise<boolean> {
   const want = resolveLanguage(hass);
   if (want === loaded) {
+    const superseded = requested !== null && requested !== want;
+    requested = want;
+    requestGeneration += 1;
     // Same language, but HA's own 24-hour or number-format preference may have
     // moved; adopting it is a repaint even though no catalog is refetched.
-    return setFormatLocale(hass, formatLanguage(hass, want));
+    return setFormatLocale(hass, formatLanguage(hass, want)) || superseded;
   }
-  await loadTranslations(hass, want);
-  return true;
+  return loadTranslations(hass, want);
 }
 
 /** True when the catalog has this key. */
@@ -280,9 +301,13 @@ export function t(key: string, params?: Params): string {
 }
 
 /**
- * Plural form. The catalog holds "<base>.one" and "<base>.other"; count is
- * always available to the template as {count}.
+ * Plural form selected by the active catalog locale. A missing locale-specific
+ * category falls back to "other", then "one", while count is always available
+ * to the template as {count}.
  */
 export function tn(base: string, count: number, params?: Params): string {
-  return t(`${base}.${count === 1 ? "one" : "other"}`, { count, ...params });
+  const category = localePluralCategory(count);
+  const keys = [`${base}.${category}`, `${base}.other`, `${base}.one`];
+  const key = keys.find((candidate) => hasMessage(candidate)) ?? keys[0];
+  return t(key, { count, ...params });
 }

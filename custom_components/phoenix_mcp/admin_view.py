@@ -2370,9 +2370,10 @@ class PhoenixAdminVoiceAgentPipelineView(PhoenixView):
 
         from .voice_agent import async_create_assist_pipeline, VoicePipelineError  # noqa: PLC0415
         try:
-            result = await async_create_assist_pipeline(
-                self.hass, entries[0], data, preferred=preferred
-            )
+            async with data.settings_update_lock:
+                result = await async_create_assist_pipeline(
+                    self.hass, entries[0], data, preferred=preferred
+                )
         except VoicePipelineError as err:
             _LOGGER.warning("Assist pipeline setup failed", exc_info=True)
             return _err(
@@ -2386,7 +2387,8 @@ class PhoenixAdminVoiceAgentPipelineView(PhoenixView):
         rid = request["phoenix_mcp_rid"]
         data: PhoenixData = self.hass.data[DOMAIN]
         from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
-        await async_remove_assist_pipeline(self.hass, data)
+        async with data.settings_update_lock:
+            await async_remove_assist_pipeline(self.hass, data)
         return _ok({"ok": True}, request_id=rid)
 
 
@@ -2499,12 +2501,6 @@ class PhoenixAdminWipeView(PhoenixView):
                 fire_approval_resolved_event,
             )
 
-            # Remove any Phoenix-created Assist pipeline first (outside the store lock,
-            # which it takes to clear its tracked id): once async_wipe resets settings
-            # the id is gone and the pipeline would be orphaned in HA.
-            from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
-            await async_remove_assist_pipeline(hass, data)
-
             # Logger restoration records live outside hass.data[DOMAIN] so a
             # Phoenix reload cannot strand them. Restore matching runtime-only
             # changes before the core wipe removes their ownership context.
@@ -2515,6 +2511,12 @@ class PhoenixAdminWipeView(PhoenixView):
             # takes the store lock. Core wipe must use the same order so it cannot
             # remove every token between validation and settings persistence.
             async with data.settings_update_lock:
+                # Pipeline creation uses this same lock through HA creation and id
+                # persistence. Remove it here before settings are reset so a
+                # concurrent one-click create cannot leave an untracked pipeline.
+                from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
+                await async_remove_assist_pipeline(hass, data)
+
                 async with data.store.async_lock:
                     data.rate_limiter.destroy_all()
                     data.rate_limit_notified.clear()

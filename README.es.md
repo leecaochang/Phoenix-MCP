@@ -26,7 +26,7 @@ La documentación completa, incluida la referencia de herramientas, los permisos
 ## Requisitos
 
 - Home Assistant 2025.2.0 o posterior.
-- Una instancia de Phoenix MCP por Home Assistant. No hay dependencias de Python más allá de las que incluye HA.
+- Una instancia de Phoenix MCP por Home Assistant. Home Assistant instala la dependencia de Python fijada `voluptuous-serialize==2.7.0`; MESA viene incluido con Phoenix MCP.
 
 ## Instalación mediante HACS
 

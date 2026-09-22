@@ -191,6 +191,48 @@ def test_manifest_version_matches_the_package_it_describes():
     assert manifest["source_version"] == mesa_core.__version__
 
 
+def test_manifest_records_the_immutable_release_source():
+    """The content hashes identify the copy; this identifies its upstream commit."""
+    import json
+    import pathlib
+
+    sync = _sync_module()
+    manifest = json.loads(pathlib.Path(sync.MANIFEST).read_text(encoding="utf-8"))
+
+    assert manifest["source_repository"] == "https://github.com/leecaochang/mesa-core.git"
+    assert manifest["source_revision"] == "0b321a5d1ddb70905bd747b392d3534de95d7d6b"
+    assert manifest["source_tag"] == "v1.3.0"
+
+
+def test_sync_accepts_a_clean_untagged_source_revision(tmp_path):
+    """A commit SHA is immutable provenance even before a release tag exists."""
+    import subprocess
+
+    source = tmp_path / "mesa-core"
+    package = source / "mesa_core"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text('__version__ = "9.9.9"\n', encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(source)], check=True)
+    subprocess.run(["git", "-C", str(source), "add", "mesa_core/__init__.py"], check=True)
+    subprocess.run(
+        [
+            "git", "-C", str(source), "-c", "user.name=Test", "-c",
+            "user.email=test@example.invalid", "commit", "-q", "-m", "source",
+        ],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(source), "remote", "add", "origin", "https://example.invalid/mesa-core.git"],
+        check=True,
+    )
+
+    provenance = _sync_module()._read_source_provenance(package, "9.9.9")
+
+    assert provenance["source_repository"] == "https://example.invalid/mesa-core.git"
+    assert len(provenance["source_revision"]) == 40
+    assert "source_tag" not in provenance
+
+
 def test_check_mode_writes_nothing():
     # It has to be safe to run on a clean tree and in CI; a "verify" that mutates
     # the thing it verifies is worse than no verify.

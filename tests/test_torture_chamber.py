@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from unittest.mock import MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -45,6 +45,8 @@ from custom_components.phoenix_mcp.const import CAPABILITY_NAMES
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool
 from custom_components.phoenix_mcp.token_store import GlobalSettings, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.tool_contracts import normalize_tool_args
+from custom_components.phoenix_mcp.tools import config_files, discovery
 from custom_components.phoenix_mcp.version_store import VersionStore
 
 # Threaded through every attack string. Its absence from a denied response is
@@ -97,22 +99,60 @@ def _archetype(tool_def: dict) -> str:
 # ------------------------------------------------------------------ the attacks
 
 def _placeholder(name: str, schema: dict):
-    """A structurally VALID value, so an attack on one field is not masked by a
-    second field being absent."""
+    """Build a recursively valid seed so one hostile field reaches its own boundary."""
+    if "const" in schema:
+        return schema["const"]
+    if schema.get("enum"):
+        return schema["enum"][0]
+    for choice_key in ("oneOf", "anyOf"):
+        choices = schema.get(choice_key)
+        if choices and not schema.get("type") and not schema.get("properties"):
+            return _placeholder(name, choices[0])
     kind = schema.get("type")
+    if isinstance(kind, list):
+        kind = next((item for item in kind if item != "null"), kind[0])
     if kind == "object":
-        return {}
+        properties = schema.get("properties", {}) or {}
+        required = set(schema.get("required", []) or [])
+        if schema.get("anyOf"):
+            required.update(schema["anyOf"][0].get("required", []) or [])
+        for clause in schema.get("allOf", []) or []:
+            options = clause.get("anyOf", []) or []
+            if options:
+                required.update(options[0].get("required", []) or [])
+            required.update(clause.get("required", []) or [])
+        minimum = int(schema.get("minProperties", 0) or 0)
+        if len(required) < minimum:
+            required.update(list(properties)[:minimum])
+        return {
+            field: _placeholder(field, properties.get(field, {}))
+            for field in properties
+            if field in required
+        }
     if kind == "array":
-        return []
+        count = max(0, int(schema.get("minItems", 0) or 0))
+        return [_placeholder(name, schema.get("items", {})) for _ in range(count)]
     if kind == "boolean":
         return False
     if kind in ("integer", "number"):
-        return 1
+        value = schema.get("minimum", 1)
+        exclusive = schema.get("exclusiveMinimum")
+        if isinstance(exclusive, (int, float)) and not isinstance(exclusive, bool):
+            value = max(value, exclusive + 1)
+        maximum = schema.get("maximum")
+        if isinstance(maximum, (int, float)):
+            value = min(value, maximum)
+        return int(value) if kind == "integer" else value
     if name == "entity_id":
         return "light.phx_ghost"
     if name.endswith("_id"):
         return "phx_ghost_id"
-    return f"{MARKER}_value"
+    value = "light.phx_ghost" if name == "entity_id" else f"{MARKER}_value"
+    minimum = int(schema.get("minLength", 0) or 0)
+    if len(value) < minimum:
+        value += "x" * (minimum - len(value))
+    maximum = schema.get("maxLength")
+    return value[:maximum] if isinstance(maximum, int) else value
 
 
 def _hostile_values(kind: str | None) -> list:
@@ -149,7 +189,7 @@ def _attacks(tool_def: dict) -> list[tuple[str, dict]]:
     schema = tool_def.get("inputSchema", {}) or {}
     props: dict = schema.get("properties", {}) or {}
     required: list[str] = schema.get("required", []) or []
-    base = {name: _placeholder(name, spec) for name, spec in props.items()}
+    base = _placeholder("arguments", schema)
 
     cases: list[tuple[str, dict]] = [("empty", {})]
     # A stray argument must not hard-fail: unknown-key rejection was deliberately
@@ -229,6 +269,133 @@ for _d in ALL_DEFS:
 EXECUTABLE_DEFS = [d for d in ALL_DEFS if not d.get("annotations", {}).get("destructiveHint")]
 
 
+@pytest.mark.parametrize(
+    "tool_name",
+    [
+        "get_state",
+        "get_states",
+        "call_service",
+        "dry_run_service",
+        "get_relationships",
+        "patch_yaml_config",
+    ],
+)
+def test_structured_adversarial_baseline_passes_normalization(tool_name: str):
+    """Positive control for every structured family the audit found vacuous."""
+    tool_def = next(item for item in ALL_DEFS if item["name"] == tool_name)
+    schema = tool_def["inputSchema"]
+    seed = _placeholder("arguments", schema)
+
+    _, error = normalize_tool_args(tool_name, seed)
+
+    assert error is None
+
+
+async def test_structured_get_state_seed_reaches_permission_resolution(
+    hass: HomeAssistant,
+):
+    """Positive control for the boundary hidden by the former empty projection seed."""
+    tool_def = next(item for item in ALL_DEFS if item["name"] == "get_state")
+    properties = tool_def["inputSchema"]["properties"]
+    seed = {name: _placeholder(name, spec) for name, spec in properties.items()}
+    resolver = MagicMock(return_value=mcp_view.Permission.NOT_FOUND)
+
+    with patch.object(mcp_view, "resolve", resolver):
+        result, outcome, resource = await _call_tool(
+            "get_state", seed, _token("allow"), hass, _data(), "req", "1.2.3.4"
+        )
+
+    resolver.assert_called_once_with(seed["entity_id"], ANY, hass)
+    _assert_contract(result, outcome, resource, "get_state/positive-control")
+
+
+async def test_structured_get_states_seed_reaches_scope_filter(
+    hass: HomeAssistant,
+):
+    tool_def = next(item for item in ALL_DEFS if item["name"] == "get_states")
+    seed = _placeholder("arguments", tool_def["inputSchema"])
+    scope_filter = MagicMock(return_value=[])
+
+    with patch.object(mcp_view, "filter_entities_for_token", scope_filter):
+        await _call_tool("get_states", seed, _token("allow"), hass, _data())
+
+    scope_filter.assert_called_once()
+
+
+async def test_structured_call_service_seed_reaches_executor(hass: HomeAssistant):
+    tool_def = next(item for item in ALL_DEFS if item["name"] == "call_service")
+    seed = _placeholder("arguments", tool_def["inputSchema"])
+    expected = ({"content": [{"type": "text", "text": "reached"}]}, "allowed", "service")
+    executor = AsyncMock(return_value=expected)
+
+    with patch.object(mcp_view, "_execute_call_service", executor):
+        result = await _call_tool("call_service", seed, _token("allow"), hass, _data())
+
+    assert result == expected
+    executor.assert_awaited_once()
+
+
+async def test_structured_dry_run_seed_reaches_target_resolution(
+    hass: HomeAssistant,
+):
+    tool_def = next(item for item in ALL_DEFS if item["name"] == "dry_run_service")
+    seed = _placeholder("arguments", tool_def["inputSchema"])
+    resolver = MagicMock(return_value=([], 0))
+
+    with patch.object(discovery, "resolve_service_targets", resolver):
+        await _call_tool("dry_run_service", seed, _token("allow"), hass, _data())
+
+    resolver.assert_called_once()
+
+
+async def test_structured_relationship_seed_reaches_scope_resolution(
+    hass: HomeAssistant,
+):
+    tool_def = next(item for item in ALL_DEFS if item["name"] == "get_relationships")
+    seed = _placeholder("arguments", tool_def["inputSchema"])
+    expected = ({"content": [{"type": "text", "text": "reached"}]}, "not_found", "scope")
+    resolver = MagicMock(return_value=expected)
+
+    with patch.object(discovery, "_relationship_scope", resolver):
+        result = await _call_tool("get_relationships", seed, _token("allow"), hass, _data())
+
+    assert result == expected
+    resolver.assert_called_once()
+
+
+async def test_structured_yaml_patch_seed_reaches_target_resolution(
+    hass: HomeAssistant,
+):
+    tool_def = next(item for item in ALL_DEFS if item["name"] == "patch_yaml_config")
+    seed = _placeholder("arguments", tool_def["inputSchema"])
+
+    with patch.object(
+        config_files, "_yaml_write_target", side_effect=RuntimeError("target reached")
+    ):
+        with pytest.raises(RuntimeError, match="target reached"):
+            await _call_tool(
+                "patch_yaml_config", seed, _token("allow"), hass, _data()
+            )
+
+
+async def test_get_state_attack_reaches_deliberately_broken_resolver(
+    hass: HomeAssistant,
+):
+    """Mutation control: unrelated seed fields cannot mask the resolver boundary."""
+    tool_def = next(item for item in ALL_DEFS if item["name"] == "get_state")
+    attack = next(
+        args
+        for _, args in _attacks(tool_def)
+        if str(args.get("entity_id", "")).startswith("../../../etc/")
+    )
+
+    with patch.object(mcp_view, "resolve", side_effect=RuntimeError("mutation reached")):
+        with pytest.raises(RuntimeError, match="mutation reached"):
+            await _call_tool(
+                "get_state", attack, _token("allow"), hass, _data(), "req", "1.2.3.4"
+            )
+
+
 def test_every_tool_falls_into_a_known_archetype():
     # A tool whose shape matches nothing would silently get no torture at all.
     assert set(BY_ARCHETYPE) <= {
@@ -301,8 +468,7 @@ async def test_concurrent_identical_calls_do_not_break_each_other(
     """
     token, data, name = _token("allow"), _data(), tool_def["name"]
     schema = tool_def.get("inputSchema", {}) or {}
-    props = schema.get("properties", {}) or {}
-    args = {n: _placeholder(n, s) for n, s in props.items()}
+    args = _placeholder("arguments", schema)
     outcomes = await asyncio.gather(*(
         _call_tool(name, dict(args), token, hass, data, f"req{i}", "1.2.3.4") for i in range(2)
     ))

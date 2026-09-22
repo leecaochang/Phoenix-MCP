@@ -50,6 +50,7 @@ let hour12: boolean | undefined;
 // comparators where it would otherwise be rebuilt once per comparison.
 let compactFormatter: Intl.NumberFormat | null = null;
 let collator: Intl.Collator | null = null;
+let pluralRules: Intl.PluralRules | null = null;
 
 /** HA's numberFormatToLocale. The default branch is the display language. */
 function resolveNumberLocale(format: string | undefined, language: string | undefined): string | string[] | undefined {
@@ -98,6 +99,7 @@ export function setFormatLocale(hass: unknown, language?: string): boolean {
   hour12 = resolveHour12(locale.time_format, dateLocale);
   compactFormatter = null;
   collator = null;
+  pluralRules = null;
   return signature() !== before;
 }
 
@@ -148,6 +150,12 @@ export function localeClock(ts: string | number | Date): string {
 /** A plain number, grouped per the operator's HA number-format preference. */
 export function localeNumber(value: number): string {
   return value.toLocaleString(numberLocale, numberGrouping ? undefined : { useGrouping: false });
+}
+
+/** CLDR plural category for a count in the active panel language. */
+export function localePluralCategory(value: number): Intl.LDMLPluralRule {
+  if (pluralRules === null) pluralRules = new Intl.PluralRules(dateLocale);
+  return pluralRules.select(value);
 }
 
 /**

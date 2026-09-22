@@ -26,7 +26,7 @@ New here? Start with the **[Quick start](https://leecaochang.github.io/phoenix-m
 ## Requirements
 
 - Home Assistant 2025.2.0 or later.
-- One Phoenix MCP instance per Home Assistant. No Python dependencies beyond what HA ships.
+- One Phoenix MCP instance per Home Assistant. Home Assistant installs the pinned Python requirement `voluptuous-serialize==2.7.0`; MESA is bundled with Phoenix MCP.
 
 ## Install via HACS
 

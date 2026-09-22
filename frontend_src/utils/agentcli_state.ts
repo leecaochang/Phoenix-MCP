@@ -2,9 +2,8 @@
 // from the panel and back, and closing/reopening. Two tiers:
 //   - Durable (localStorage): open flag, geometry, and the token/provider/model/
 //     options selections. Restored after a full page reload too.
-//   - Session (module variable): the transcript. Survives a panel remount within
-//     the same page load, but clears on a full reload (the conversation is
-//     intentionally ephemeral).
+//   - Conversation (localStorage plus a module cache): transcript, draft, and
+//     usage. Survives panel remounts and full page reloads until Clear is used.
 
 export interface AgentCliOptions {
   thinking: boolean;

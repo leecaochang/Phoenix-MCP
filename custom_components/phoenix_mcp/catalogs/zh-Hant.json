@@ -552,7 +552,7 @@
       "noResult": "無結果。{status}：{reason}",
       "noResultRecorded": "未記錄結果（狀態：{status}）。",
       "othersPending": {
-        "one": "還有 1 項核准等待處理。",
+        "one": "還有 {count} 項核准等待處理。",
         "other": "還有 {count} 項核准等待處理。"
       },
       "processing": "處理中",

@@ -49,6 +49,8 @@ come from ..tool_common.
 
 from __future__ import annotations
 
+from ..request_authority import check_request_authority
+
 from collections.abc import Sequence
 from typing import Any
 import asyncio
@@ -246,6 +248,7 @@ async def _execute_write_file(
     if conflict is not None:
         return conflict
     try:
+        check_request_authority()
         await hass.async_add_executor_job(_write_text_atomic, target, content)
     except OSError:
         _LOGGER.exception("write_file failed")
@@ -800,6 +803,7 @@ async def _execute_set_yaml_config(
         if conflict is not None:
             return conflict
         try:
+            check_request_authority()
             await hass.async_add_executor_job(_write_utf8_file_atomic, path, content)
         except OSError:
             _LOGGER.exception("set_yaml_config failed for %s", rel)
@@ -1012,6 +1016,7 @@ async def _execute_patch_yaml_config(
         if conflict is not None:
             return conflict
         try:
+            check_request_authority()
             await hass.async_add_executor_job(_write_utf8_file_atomic, path, content)
         except OSError:
             _LOGGER.exception("patch_yaml_config failed for %s", rel)

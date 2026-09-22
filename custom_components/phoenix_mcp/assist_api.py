@@ -150,6 +150,7 @@ if _ASSIST_API_SUPPORTED:
         async def async_call(self, hass, tool_input, llm_context) -> dict:
             """Run one tool call end-to-end through Phoenix MCP's scoped dispatch path."""
             from .agentcli import _current_dispatch_token, _parse_pending  # noqa: PLC0415
+            from .audit import generate_request_id  # noqa: PLC0415
             from .mcp_view import _dispatch_mcp  # noqa: PLC0415
 
             data = hass.data[DOMAIN]
@@ -162,7 +163,8 @@ if _ASSIST_API_SUPPORTED:
             if token is None:
                 return {"error": "This Phoenix MCP token is no longer available."}
 
-            resp_msg, _m, _r, _o = await _dispatch_mcp(
+            request_id = generate_request_id()
+            resp_msg, _m, _r, outcome = await _dispatch_mcp(
                 "tools/call",
                 tool_input.id,
                 {"name": self.name, "arguments": tool_input.tool_args or {}},
@@ -171,9 +173,17 @@ if _ASSIST_API_SUPPORTED:
                 data,
                 ASSIST_CLIENT_IP,
                 _base_url(hass),
+                request_id=request_id,
             )
             result = (resp_msg or {}).get("result", {}) or {}
-            pending = _parse_pending(result)
+            pending = _parse_pending(
+                result,
+                outcome=outcome,
+                data=data,
+                token_id=self._token_id,
+                tool_name=self.name,
+                request_id=request_id,
+            )
             if pending:
                 return {
                     "status": "queued_for_approval",

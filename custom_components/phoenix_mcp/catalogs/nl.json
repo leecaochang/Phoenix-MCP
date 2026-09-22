@@ -661,7 +661,7 @@
       "noResult": "Geen resultaat. {status}: {reason}",
       "noResultRecorded": "Geen resultaat vastgelegd (status: {status}).",
       "othersPending": {
-        "one": "Er wacht nog 1 andere goedkeuring op beoordeling.",
+        "one": "Er wacht nog {count} andere goedkeuring op beoordeling.",
         "other": "Er wachten nog {count} andere goedkeuringen op beoordeling."
       },
       "processing": "Wordt verwerkt",

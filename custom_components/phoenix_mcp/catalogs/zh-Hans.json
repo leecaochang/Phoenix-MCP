@@ -986,7 +986,7 @@
       "reasonExecutionFailedDetail": "执行失败：{detail}",
       "reasonLabel": "拒绝原因（可选）",
       "othersPending": {
-        "one": "还有 1 项审批等待处理。",
+        "one": "还有 {count} 项审批等待处理。",
         "other": "还有 {count} 项审批等待处理。"
       },
       "reviewAll": "查看全部",
