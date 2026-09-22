@@ -1468,7 +1468,15 @@
       "providerZai": "Z.ai",
       "mesaModeOff": "关闭",
       "mesaModeAdvisory": "建议",
-      "mesaModeEnforced": "强制"
+      "mesaModeEnforced": "强制",
+      "agentcliSite": "站点",
+      "agentcliSingapore": "新加坡",
+      "agentcliGuangzhou": "广州",
+      "agentcliSiliconValley": "硅谷",
+      "agentcliTencentHint": "请选择创建 TokenHub API 密钥的站点。密钥不能跨站点使用。请在 TokenHub 控制台开通所需模型。",
+      "agentcliMiMoHint": "请使用小米 MiMo 按量付费 API 密钥。Token Plan 订阅密钥使用独立的接口地址，此处不支持。",
+      "providerMiMo": "Xiaomi MiMo",
+      "providerTencent": "Tencent Cloud TokenHub"
     },
     "agentchat": {
       "answerAnyway": "仍然回答",

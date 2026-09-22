@@ -133,6 +133,8 @@ const PROVIDER_KINDS = {
   openrouter: true,
   nvidia: true,
   opencode: true,
+  mimo: true,
+  tencent: true,
   ollama: true,
   ollama_cloud: true,
   together: true,

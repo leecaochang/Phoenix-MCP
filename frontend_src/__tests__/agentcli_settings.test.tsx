@@ -38,6 +38,17 @@ function instances() {
   return {
     instances: [{ id: "i1", kind: "deepseek", name: "DeepSeek", model: "deepseek-v4-flash" }],
     provider_types: [
+      { kind: "mimo", label: "Xiaomi MiMo", label_key: "settings.providerMiMo",
+        fields: [{ id: "api_key", type: "secret", required: true,
+          label_key: "settings.agentcliApiKey" }] },
+      { kind: "tencent", label: "Tencent Cloud TokenHub", label_key: "settings.providerTencent", fields: [
+        { id: "endpoint_id", type: "choice", required: true, label_key: "settings.agentcliSite", choices: [
+          { value: "singapore", label: "Singapore", label_key: "settings.agentcliSingapore" },
+          { value: "guangzhou", label: "Guangzhou", label_key: "settings.agentcliGuangzhou" },
+          { value: "silicon_valley", label: "Silicon Valley", label_key: "settings.agentcliSiliconValley" },
+        ] },
+        { id: "api_key", type: "secret", required: true, label_key: "settings.agentcliApiKey" },
+      ] },
       { kind: "claude", label: "Anthropic", label_key: "settings.providerAnthropic",
         fields: [{ id: "api_key", type: "secret", required: true,
           label_key: "settings.agentcliApiKey" }] },
@@ -183,6 +194,32 @@ describe("AgentCliSettings", () => {
     fireEvent.click(screen.getByText("Validate"));
     expect(picker.value).toBe("");
     expect(screen.getByLabelText("API key")).toBeInTheDocument();
+  });
+
+  it("validates and saves the chosen Tencent site with its key", async () => {
+    renderCard();
+    await beginAdd("tencent");
+    expect(screen.getByLabelText("Site")).toHaveValue("singapore");
+    expect(screen.getByText(/Keys are site-specific/)).toBeInTheDocument();
+    expect(document.querySelector(".agentcli-add-form img")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Site"), { target: { value: "silicon_valley" } });
+    fireEvent.change(screen.getByLabelText("API key"), { target: { value: "t-key" } });
+    fireEvent.click(screen.getByText("Validate"));
+    await waitFor(() => expect(probeAgentCliProvider).toHaveBeenCalledWith("tencent", {
+      endpoint_id: "silicon_valley", api_key: "t-key",
+    }));
+    fireEvent.click(await screen.findByText("Done"));
+    await waitFor(() => expect(createAgentCliProvider).toHaveBeenCalledWith("tencent", expect.objectContaining({
+      endpoint_id: "silicon_valley", api_key: "t-key",
+    })));
+  });
+
+  it("shows MiMo pay-as-you-go guidance without a logo", async () => {
+    renderCard();
+    await beginAdd("mimo");
+    expect(screen.getByText(/Use a pay-as-you-go Xiaomi MiMo API key/)).toBeInTheDocument();
+    expect(document.querySelector(".agentcli-add-form img")).toBeNull();
+    expect(screen.queryByLabelText("Site")).toBeNull();
   });
 
   it("serializes the Z.ai endpoint choice", async () => {

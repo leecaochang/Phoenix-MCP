@@ -1480,7 +1480,15 @@
       "wipeSubmit": "選択したデータを消去",
       "wipeTitle": "Phoenix MCP データを消去",
       "wipeTypeConfirm": "確認するには WIPE と入力",
-      "wipeWarning": "削除するデータを選択してください。この操作は元に戻せません。"
+      "wipeWarning": "削除するデータを選択してください。この操作は元に戻せません。",
+      "agentcliSite": "サイト",
+      "agentcliSingapore": "シンガポール",
+      "agentcliGuangzhou": "広州",
+      "agentcliSiliconValley": "シリコンバレー",
+      "agentcliTencentHint": "TokenHub API キーを作成したサイトを選択してください。キーはサイトごとに異なります。使用するモデルを TokenHub コンソールで有効にしてください。",
+      "agentcliMiMoHint": "Xiaomi MiMo の従量課金 API キーを使用してください。Token Plan のサブスクリプションキーは別のエンドポイントを使用するため、ここでは対応していません。",
+      "providerMiMo": "Xiaomi MiMo",
+      "providerTencent": "Tencent Cloud TokenHub"
     },
     "mesa": {
       "addAreaProfile": "エリアプロファイルを追加",

@@ -1730,7 +1730,15 @@
       "wipeSubmit": "Geselecteerde gegevens wissen",
       "wipeTitle": "Phoenix MCP-gegevens wissen",
       "wipeTypeConfirm": "Typ WIPE om te bevestigen",
-      "wipeWarning": "Kies wat je wilt verwijderen. Dit kan niet ongedaan worden gemaakt."
+      "wipeWarning": "Kies wat je wilt verwijderen. Dit kan niet ongedaan worden gemaakt.",
+      "agentcliSite": "Locatie",
+      "agentcliSingapore": "Singapore",
+      "agentcliGuangzhou": "Guangzhou",
+      "agentcliSiliconValley": "Silicon Valley",
+      "agentcliTencentHint": "Kies de locatie waar u uw TokenHub-API-sleutel hebt aangemaakt. Sleutels gelden alleen voor die locatie. Activeer de gewenste modellen in de TokenHub-console.",
+      "agentcliMiMoHint": "Gebruik een Xiaomi MiMo-API-sleutel met betaling per gebruik. Token Plan-abonnementssleutels gebruiken aparte eindpunten en worden hier niet ondersteund.",
+      "providerMiMo": "Xiaomi MiMo",
+      "providerTencent": "Tencent Cloud TokenHub"
     },
     "approvalSummary": {
       "action.approve": "Goedkeuren en uitvoeren",

@@ -2091,11 +2091,11 @@ describe("modelCaps with probed effort levels", () => {
 describe("modelCaps for aggregator providers", () => {
   const vals4 = (c: { thinking: { value: string }[] }) => c.thinking.map((o) => o.value);
 
-  it.each(["openrouter", "nvidia"] as const)("%s starts with no thinking control", (kind) => {
+  it.each(["openrouter", "nvidia", "tencent"] as const)("%s starts with no thinking control", (kind) => {
     expect(modelCaps(kind, "vendor/model", false).thinking).toEqual([]);
   });
 
-  it.each(["openrouter", "nvidia"] as const)("probed levels CREATE the control on %s", (kind) => {
+  it.each(["openrouter", "nvidia", "tencent"] as const)("probed levels CREATE the control on %s", (kind) => {
     const c = modelCaps(kind, "vendor/reasoner", false, { effort_levels: ["low", "high"] });
     // "off" is added because a created control the operator cannot decline is
     // worse than no control at all.
@@ -2117,5 +2117,16 @@ describe("modelCaps for aggregator providers", () => {
   it("Ollama cloud also adopts levels proved by its selected model", () => {
     const c = modelCaps("ollama_cloud", "deepseek-r1:8b", false, { effort_levels: ["low", "high"] });
     expect(vals4(c)).toEqual(["off", "low", "high"]);
+  });
+});
+
+
+describe("Xiaomi MiMo controls", () => {
+  it("uses a thinking toggle and only offers temperature with thinking off", () => {
+    const on = modelCaps("mimo", "mimo-v2.5-pro", true);
+    expect(on.style).toBe("boolean");
+    expect(on.thinking.map((option) => option.value)).toEqual(["off", "on"]);
+    expect(on.temperature).toBe(false);
+    expect(modelCaps("mimo", "mimo-v2.5-pro", false).temperature).toBe(true);
   });
 });

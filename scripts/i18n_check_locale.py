@@ -118,6 +118,9 @@ MNEMONICS: dict[str, str] = {
 # outside the catalog compares against them or a user is meant to type or read
 # them literally. <code> spans are checked automatically and are not listed.
 LITERALS: dict[str, tuple[str, ...]] = {
+    # Official provider brands retain their spelling in every locale.
+    "panel.settings.providerMiMo": ("Xiaomi MiMo",),
+    "panel.settings.providerTencent": ("Tencent Cloud TokenHub",),
     # WipeConfirmModal compares typed !== "WIPE" and its placeholder attribute
     # is a hardcoded literal, so a translated WIPE tells the operator to type
     # something the button will never accept.
@@ -164,6 +167,8 @@ ALLOW_IDENTICAL = frozenset({
     "panel.settings.providerMeta",
     "panel.settings.providerMiniMax",
     "panel.settings.providerMistral",
+    "panel.settings.providerMiMo",
+    "panel.settings.providerTencent",
     "panel.settings.providerNvidia",
     "panel.settings.providerOpenCodeZen",
     "panel.settings.providerOpenAI",
@@ -171,6 +176,10 @@ ALLOW_IDENTICAL = frozenset({
     "panel.settings.providerQwen",
     "panel.settings.providerTogether",
     "panel.settings.providerZai",
+    # Site names retain their conventional spelling in several locales.
+    "panel.settings.agentcliSingapore",
+    "panel.settings.agentcliGuangzhou",
+    "panel.settings.agentcliSiliconValley",
 })
 
 # Cognates that are valid in one language but must not exempt the same key in
@@ -220,6 +229,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.tokenLabel",             # "Token"
     }),
     "fr": frozenset({
+        "panel.settings.agentcliSite",  # French cognate: Site.
         "panel.approvalSummary.named.kind.script",  # HA entity type: "script"
         "panel.changes.typeBlueprint",              # HA term: "Blueprint"
         "panel.changes.typeScript",                 # "Script"

@@ -196,7 +196,7 @@ export interface AiTaskPreferredStatus {
 export type AgentCliProviderKind =
   "claude" | "deepseek" | "chatgpt" | "gemini" | "grok" | "kimi" | "meta"
   | "minimax" | "mistral" | "openrouter" | "nvidia" | "ollama" | "ollama_cloud"
-  | "zai" | "groq" | "together" | "cerebras" | "fireworks" | "qwen" | "opencode";
+  | "zai" | "groq" | "together" | "cerebras" | "fireworks" | "qwen" | "opencode" | "mimo" | "tencent";
 
 export interface AgentCliProviderChoice {
   value: string;

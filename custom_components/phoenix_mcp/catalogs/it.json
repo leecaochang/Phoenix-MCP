@@ -1448,7 +1448,15 @@
       "wipeSubmit": "Cancella i dati selezionati",
       "wipeTitle": "Cancella i dati di Phoenix MCP",
       "wipeTypeConfirm": "Digita WIPE per confermare",
-      "wipeWarning": "Scegli cosa eliminare. L'operazione non può essere annullata."
+      "wipeWarning": "Scegli cosa eliminare. L'operazione non può essere annullata.",
+      "agentcliSite": "Sito",
+      "agentcliSingapore": "Singapore",
+      "agentcliGuangzhou": "Guangzhou",
+      "agentcliSiliconValley": "Silicon Valley",
+      "agentcliTencentHint": "Scegli il sito in cui hai creato la chiave API TokenHub. Le chiavi sono specifiche per sito. Attiva i modelli da usare nella console TokenHub.",
+      "agentcliMiMoHint": "Usa una chiave API Xiaomi MiMo con pagamento a consumo. Le chiavi di abbonamento Token Plan usano endpoint separati e non sono supportate qui.",
+      "providerMiMo": "Xiaomi MiMo",
+      "providerTencent": "Tencent Cloud TokenHub"
     },
     "version": {
       "card.added": "aggiunto {subject} ({where})",

@@ -679,6 +679,8 @@ def test_provider_registry_catalog_is_complete_and_secret_free():
 @pytest.mark.parametrize(("kind", "base_url"), [
     ("groq", "https://api.groq.com/openai/v1"),
     ("opencode", "https://opencode.ai/zen/v1"),
+    ("mimo", "https://api.xiaomimimo.com/v1"),
+    ("tencent", "https://tokenhub-intl.tencentcloudmaas.com/v1"),
     ("together", "https://api.together.ai/v1"),
     ("cerebras", "https://api.cerebras.ai/v1"),
     ("fireworks", "https://api.fireworks.ai/inference/v1"),
@@ -3860,7 +3862,7 @@ class TestAggregatorEffort:
     against ONE selected model, which is exactly what per-model variation needs.
     """
 
-    @pytest.mark.parametrize("kind", ["openrouter", "nvidia", "opencode"])
+    @pytest.mark.parametrize("kind", ["openrouter", "nvidia", "opencode", "tencent"])
     def test_the_probe_asks_them_about_effort(self, kind):
         assert agentcli._effort_probe_body(kind, "high") == {"reasoning_effort": "high"}
 
@@ -3874,7 +3876,7 @@ class TestAggregatorEffort:
         assert agentcli._effort_probe_body(kind, "high") == {"reasoning_effort": "high"}
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("kind", ["openrouter", "nvidia", "opencode"])
+    @pytest.mark.parametrize("kind", ["openrouter", "nvidia", "opencode", "tencent"])
     async def test_an_effort_reaches_the_request(self, hass, kind):
         cfg = agentcli.ProviderConfig(kind=kind, model="vendor/m", base_url="https://x", api_key="k")
         # Capture the request the real builder produces.
@@ -4136,3 +4138,121 @@ async def test_unreconciled_action_cannot_be_reported_complete_by_a_new_model_tu
     assert result.outcome == agentcli.TURN_OUTCOME_UNKNOWN
     assert result.text == ""
     assert provider.i == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("site", "host"), [
+    ("singapore", "tokenhub-intl.tencentcloudmaas.com"),
+    ("guangzhou", "tokenhub.tencentcloudmaas.com"),
+    ("silicon_valley", "tokenhub-us.tencentcloudmaas.com"),
+])
+async def test_tencent_site_persists_and_routes_validation_catalog_and_chat(site, host):
+    cfg = await agentcli._probe_config("tencent", {
+        "api_key": "site-key", "endpoint_id": site, "base_url": "https://ignored.invalid",
+    })
+    assert isinstance(cfg, ProviderConfig)
+    assert cfg.base_url == f"https://{host}/v1"
+    stored = agentcli._stored_setup_config(cfg, "hy3")
+    assert "base_url" not in stored
+    store = agentcli.AgentCliStore(AsyncMock())
+    instance_id = await store.add("tencent", stored)
+    restored = store.resolve(instance_id)
+    assert restored.base_url == cfg.base_url
+    provider = agentcli.build_provider(restored)
+    session = _FakeSession(_FakeResp(json_data={"data": [{"id": "hy3", "status": "online"}]}))
+    assert await provider.validate(session) == (True, "")
+    assert await provider.list_models(session) == ["hy3"]
+    assert all(call[1]["url"] == f"https://{host}/v1/models" for call in session.calls)
+    assert provider._chat_url() == f"https://{host}/v1/chat/completions"
+    assert provider._headers()["Authorization"] == "Bearer site-key"
+    assert "site-key" not in json.dumps(store.list_instances())
+
+
+@pytest.mark.asyncio
+async def test_tencent_site_validation_and_duplicate_identity():
+    default = await agentcli._probe_config("tencent", {"api_key": "key"})
+    assert default.endpoint_id == "singapore"
+    invalid = await agentcli._probe_config("tencent", {"api_key": "key", "endpoint_id": "unknown"})
+    assert isinstance(invalid, agentcli.ProbeConfigError)
+    store = agentcli.AgentCliStore(AsyncMock())
+    await store.add("tencent", {"api_key": "key"})
+    with pytest.raises(agentcli.DuplicateProviderError):
+        await store.add("tencent", {"api_key": "key", "endpoint_id": "singapore"})
+    await store.add("tencent", {"api_key": "key", "endpoint_id": "guangzhou"})
+    assert {row["name"] for row in store.list_instances()} == {
+        "Tencent Cloud TokenHub (Singapore)", "Tencent Cloud TokenHub (Guangzhou)",
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["mimo", "tencent"])
+async def test_new_provider_catalog_excludes_non_chat_and_offline_models(kind):
+    rows = [
+        {"id": "mimo-v2.5-pro", "status": "online"},
+        {"id": "mimo-v2.5-asr", "status": "online"},
+        {"id": "mimo-v2.5-tts", "status": "online"},
+        {"id": "kinfra-text-embedding-0.6b", "status": "online"},
+    ]
+    cfg = ProviderConfig(kind, "mimo-v2.5-asr", agentcli._default_base_url(kind), "key")
+    provider = agentcli.build_provider(cfg)
+    session = _FakeSession(_FakeResp(json_data={"data": rows}))
+    assert await provider.list_models(session) == ["mimo-v2.5-pro"]
+    session = _FakeSession(_FakeResp(json_data={"data": rows[1:]}))
+    assert await provider.list_models(session) == []
+    if kind == "tencent":
+        session = _FakeSession(_FakeResp(json_data={"data": [
+            {"id": "hy3", "status": "online"},
+            {"id": "retired", "status": "offline"},
+            {"id": "retiring", "status": "pre-offline"},
+        ]}))
+        assert await provider.list_models(session) == ["hy3"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("thinking", [True, False])
+async def test_mimo_thinking_and_tool_reasoning_round_trip(thinking):
+    cfg = await agentcli._probe_config("mimo", {"api_key": "key", "model": "mimo-v2.5-pro"})
+    assert cfg.base_url == "https://api.xiaomimimo.com/v1"
+    provider = agentcli.build_provider(cfg)
+    frame = {"choices": [{"delta": {"reasoning_content": "inspect", "tool_calls": [
+        {"index": 0, "id": "tool-1", "function": {"name": "get_state", "arguments": "{}"}},
+    ]}, "finish_reason": "tool_calls"}]}
+    session = _FakeSession(_FakeResp(body=_sse("data: " + json.dumps(frame), "data: [DONE]")))
+    events = await _collect(provider.stream_turn(
+        session, system_prompt="s", messages=[], tools=[],
+        options={"thinking": thinking, "temperature": 0.7},
+    ))
+    sent = session.calls[-1][1]["json"]
+    assert sent["thinking"] == {"type": "enabled" if thinking else "disabled"}
+    assert ("temperature" in sent) is (not thinking)
+    assert "reasoning_effort" not in sent
+    assert "tool_stream" not in sent
+    done = next(event for event in events if event["type"] == agentcli.EV_DONE)
+    messages = []
+    provider.append_assistant(messages, done["assistant_msg"])
+    provider.append_tool_results(messages, [{"tool_use_id": "tool-1", "tool_name": "get_state", "content": "ok"}])
+    assert messages[0]["reasoning_content"] == "inspect"
+    assert messages[1]["tool_call_id"] == "tool-1"
+    await _collect(provider.stream_turn(session, system_prompt="s", messages=messages, tools=[], options={}))
+    assert session.calls[-1][1]["json"]["messages"][1]["reasoning_content"] == "inspect"
+    await provider.probe_option(session, {"temperature": 0.7})
+    assert session.calls[-1][1]["json"]["max_completion_tokens"] == 1
+    assert "max_tokens" not in session.calls[-1][1]["json"]
+
+
+@pytest.mark.asyncio
+async def test_tencent_replays_reasoning_without_inventing_provider_specific_flags():
+    provider = agentcli.build_provider(ProviderConfig(
+        "tencent", "hy3", agentcli._default_base_url("tencent"), "key",
+    ))
+    frame = {"choices": [{"delta": {"reasoning_content": "reason", "content": "answer"}, "finish_reason": "stop"}]}
+    session = _FakeSession(_FakeResp(body=_sse("data: " + json.dumps(frame), "data: [DONE]")))
+    events = await _collect(provider.stream_turn(
+        session, system_prompt="s", messages=[], tools=[], options={"effort": "high"},
+    ))
+    sent = session.calls[-1][1]["json"]
+    assert sent["reasoning_effort"] == "high"
+    assert "thinking" not in sent and "tool_stream" not in sent
+    done = next(event for event in events if event["type"] == agentcli.EV_DONE)
+    assert done["assistant_msg"]["reasoning_content"] == "reason"
+    assert done["assistant_msg"]["content"] == "answer"

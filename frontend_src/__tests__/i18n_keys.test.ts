@@ -74,6 +74,8 @@ const BACKEND_NAMED = [
   "agentchat.progress.", "adminError.",
   "settings.provider", "settings.agentcliApiKey", "settings.agentcliBaseUrl",
   "settings.agentcliServerUrl", "settings.agentcliZai",
+  "settings.agentcliSite", "settings.agentcliSingapore",
+  "settings.agentcliGuangzhou", "settings.agentcliSiliconValley",
 ];
 
 const catalog = flattenCatalog(en.panel);

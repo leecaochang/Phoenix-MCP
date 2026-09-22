@@ -1,7 +1,7 @@
 {
   "agentcli_provider_kinds": [
-    "chatgpt",
     "cerebras",
+    "chatgpt",
     "claude",
     "deepseek",
     "fireworks",
@@ -10,14 +10,16 @@
     "groq",
     "kimi",
     "meta",
+    "mimo",
     "minimax",
     "mistral",
     "nvidia",
-    "opencode",
     "ollama",
     "ollama_cloud",
+    "opencode",
     "openrouter",
     "qwen",
+    "tencent",
     "together",
     "zai"
   ]

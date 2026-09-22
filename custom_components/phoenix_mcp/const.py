@@ -121,7 +121,7 @@ AGENTCLI_SECRETS_STORAGE_VERSION = 1
 AGENTCLI_PROVIDERS = frozenset({
     "claude", "deepseek", "chatgpt", "gemini", "grok", "kimi", "meta",
     "minimax", "mistral", "openrouter", "nvidia", "ollama", "ollama_cloud",
-    "zai", "groq", "together", "cerebras", "fireworks", "qwen", "opencode"})
+    "zai", "groq", "together", "cerebras", "fireworks", "qwen", "opencode", "mimo", "tencent"})
 # Default endpoints/models; the panel may override the model per conversation.
 AGENTCLI_CLAUDE_BASE_URL = "https://api.anthropic.com"
 AGENTCLI_CLAUDE_DEFAULT_MODEL = "claude-opus-4-8"
@@ -197,6 +197,10 @@ AGENTCLI_CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
 AGENTCLI_FIREWORKS_BASE_URL = "https://api.fireworks.ai/inference/v1"
 # OpenCode Zen publishes an OpenAI-compatible Chat Completions API and a live
 # account-scoped model catalog at this base URL.
+AGENTCLI_MIMO_BASE_URL = "https://api.xiaomimimo.com/v1"
+AGENTCLI_TENCENT_SINGAPORE_BASE_URL = "https://tokenhub-intl.tencentcloudmaas.com/v1"
+AGENTCLI_TENCENT_GUANGZHOU_BASE_URL = "https://tokenhub.tencentcloudmaas.com/v1"
+AGENTCLI_TENCENT_US_BASE_URL = "https://tokenhub-us.tencentcloudmaas.com/v1"
 AGENTCLI_OPENCODE_BASE_URL = "https://opencode.ai/zen/v1"
 AGENTCLI_DEFAULT_MAX_TOKENS = 8192
 # Explicit output cap sent to DeepSeek only. DeepSeek's undocumented default

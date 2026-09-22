@@ -1179,7 +1179,15 @@
       "wipeSubmit": "Ausgewählte Daten löschen",
       "wipeTitle": "Phoenix-MCP-Daten löschen",
       "wipeTypeConfirm": "WIPE eingeben, um zu bestätigen",
-      "wipeWarning": "Wählen Sie, was gelöscht werden soll. Dies kann nicht rückgängig gemacht werden."
+      "wipeWarning": "Wählen Sie, was gelöscht werden soll. Dies kann nicht rückgängig gemacht werden.",
+      "agentcliSite": "Standort",
+      "agentcliSingapore": "Singapur",
+      "agentcliGuangzhou": "Guangzhou",
+      "agentcliSiliconValley": "Silicon Valley",
+      "agentcliTencentHint": "Wählen Sie den Standort, an dem Sie Ihren TokenHub-API-Schlüssel erstellt haben. Schlüssel gelten nur für diesen Standort. Aktivieren Sie die gewünschten Modelle in der TokenHub-Konsole.",
+      "agentcliMiMoHint": "Verwenden Sie einen nutzungsabhängig abgerechneten Xiaomi-MiMo-API-Schlüssel. Token-Plan-Abonnementschlüssel verwenden separate Endpunkte und werden hier nicht unterstützt.",
+      "providerMiMo": "Xiaomi MiMo",
+      "providerTencent": "Tencent Cloud TokenHub"
     },
     "diff": {
       "blueprint.create": "{domain}-Blueprint '{rel}' erstellen",

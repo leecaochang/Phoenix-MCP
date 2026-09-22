@@ -1641,7 +1641,15 @@
       "wipeSubmit": "清除選定的資料",
       "wipeTitle": "清除 Phoenix MCP 資料",
       "wipeTypeConfirm": "輸入 WIPE 以確認",
-      "wipeWarning": "請選擇要刪除的內容。此操作無法撤銷。"
+      "wipeWarning": "請選擇要刪除的內容。此操作無法撤銷。",
+      "agentcliSite": "站點",
+      "agentcliSingapore": "新加坡",
+      "agentcliGuangzhou": "廣州",
+      "agentcliSiliconValley": "矽谷",
+      "agentcliTencentHint": "請選擇建立 TokenHub API 金鑰的站點。金鑰不能跨站點使用。請在 TokenHub 控制台啟用所需模型。",
+      "agentcliMiMoHint": "請使用小米 MiMo 隨用隨付 API 金鑰。Token Plan 訂閱金鑰使用獨立的端點，此處不支援。",
+      "providerMiMo": "Xiaomi MiMo",
+      "providerTencent": "Tencent Cloud TokenHub"
     },
     "shell": {
       "agentChat": "智慧體對話",

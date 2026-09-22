@@ -1324,7 +1324,15 @@
       "wipeSubmit": "선택한 데이터 삭제",
       "wipeTitle": "Phoenix MCP 데이터 삭제",
       "wipeTypeConfirm": "확인하려면 WIPE를 입력하세요",
-      "wipeWarning": "삭제할 항목을 선택하세요. 이 작업은 되돌릴 수 없습니다."
+      "wipeWarning": "삭제할 항목을 선택하세요. 이 작업은 되돌릴 수 없습니다.",
+      "agentcliSite": "사이트",
+      "agentcliSingapore": "싱가포르",
+      "agentcliGuangzhou": "광저우",
+      "agentcliSiliconValley": "실리콘밸리",
+      "agentcliTencentHint": "TokenHub API 키를 생성한 사이트를 선택하세요. 키는 해당 사이트에서만 사용할 수 있습니다. TokenHub 콘솔에서 사용할 모델을 활성화하세요.",
+      "agentcliMiMoHint": "Xiaomi MiMo 종량제 API 키를 사용하세요. Token Plan 구독 키는 별도 엔드포인트를 사용하며 여기서는 지원되지 않습니다.",
+      "providerMiMo": "Xiaomi MiMo",
+      "providerTencent": "Tencent Cloud TokenHub"
     },
     "approvalSummary": {
       "action.approve": "승인 및 실행",

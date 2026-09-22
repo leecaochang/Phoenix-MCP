@@ -93,6 +93,10 @@ from .const import (
     AGENTCLI_OLLAMA_CLOUD_BASE_URL,
     AGENTCLI_OPENAI_BASE_URL,
     AGENTCLI_OPENCODE_BASE_URL,
+    AGENTCLI_MIMO_BASE_URL,
+    AGENTCLI_TENCENT_SINGAPORE_BASE_URL,
+    AGENTCLI_TENCENT_GUANGZHOU_BASE_URL,
+    AGENTCLI_TENCENT_US_BASE_URL,
     AGENTCLI_OPENROUTER_BASE_URL,
     AGENTCLI_TOGETHER_BASE_URL,
     AGENTCLI_ZAI_BASE_URL,
@@ -293,6 +297,15 @@ _ZAI_ENDPOINT_FIELD = ProviderField(
     choices=_ZAI_ENDPOINTS,
 )
 
+_TENCENT_ENDPOINTS = (
+    ProviderChoice("singapore", "Singapore", "settings.agentcliSingapore", AGENTCLI_TENCENT_SINGAPORE_BASE_URL),
+    ProviderChoice("guangzhou", "Guangzhou", "settings.agentcliGuangzhou", AGENTCLI_TENCENT_GUANGZHOU_BASE_URL),
+    ProviderChoice("silicon_valley", "Silicon Valley", "settings.agentcliSiliconValley", AGENTCLI_TENCENT_US_BASE_URL),
+)
+_TENCENT_ENDPOINT_FIELD = ProviderField(
+    "endpoint_id", "choice", "settings.agentcliSite", choices=_TENCENT_ENDPOINTS,
+)
+
 _PROVIDER_LABEL_KEYS = {
     "claude": "settings.providerAnthropic",
     "deepseek": "settings.providerDeepSeek",
@@ -304,6 +317,8 @@ _PROVIDER_LABEL_KEYS = {
     "meta": "settings.providerMeta",
     "minimax": "settings.providerMiniMax",
     "mistral": "settings.providerMistral",
+    "mimo": "settings.providerMiMo",
+    "tencent": "settings.providerTencent",
     "nvidia": "settings.providerNvidia",
     "opencode": "settings.providerOpenCodeZen",
     "ollama_cloud": "settings.providerOllamaCloud",
@@ -347,6 +362,12 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
         _definition("minimax", "MiniMax", AGENTCLI_MINIMAX_BASE_URL, adapter="anthropic", model=AGENTCLI_MINIMAX_DEFAULT_MODEL),
         _definition("mistral", "Mistral AI", AGENTCLI_MISTRAL_BASE_URL, reasoning="mistral", model_filter="mistral"),
         _definition("nvidia", "NVIDIA NIM", AGENTCLI_NVIDIA_BASE_URL, model=AGENTCLI_NVIDIA_DEFAULT_MODEL, reasoning="probed_effort", model_filter="nvidia"),
+        _definition("mimo", "Xiaomi MiMo", AGENTCLI_MIMO_BASE_URL, reasoning="mimo", model_filter="mimo"),
+        _definition(
+            "tencent", "Tencent Cloud TokenHub", AGENTCLI_TENCENT_SINGAPORE_BASE_URL,
+            fields=(_TENCENT_ENDPOINT_FIELD, _API_KEY_FIELD), endpoints=_TENCENT_ENDPOINTS,
+            reasoning="probed_effort", model_filter="tencent",
+        ),
         _definition("opencode", "OpenCode Zen", AGENTCLI_OPENCODE_BASE_URL, reasoning="probed_effort"),
         _definition("ollama_cloud", "Ollama (cloud)", AGENTCLI_OLLAMA_CLOUD_BASE_URL, reasoning="ollama", ollama="cloud"),
         _definition("ollama", "Ollama (local)", "", fields=(_OLLAMA_URL_FIELD,), reasoning="ollama", ollama="local"),
@@ -427,10 +448,11 @@ def _instance_name(inst: dict, has_dupes: bool) -> str:
     if kind == "qwen":
         host = _host_of(inst.get("base_url", ""))
         return f"{label} ({host})" if host else label
-    if kind == "zai":
-        endpoint_id = str(inst.get("endpoint_id") or "standard")
+    if kind in ("zai", "tencent"):
+        endpoints = PROVIDER_DEFINITIONS[kind].endpoints
+        endpoint_id = str(inst.get("endpoint_id") or endpoints[0].value)
         endpoint = next(
-            (choice.label for choice in _ZAI_ENDPOINTS if choice.value == endpoint_id),
+            (choice.label for choice in endpoints if choice.value == endpoint_id),
             endpoint_id,
         )
         return f"{label} ({endpoint})"
@@ -505,9 +527,9 @@ def _provider_identity(kind: str, cfg: dict) -> tuple[str, str]:
             _normalized_provider_url(cfg.get("base_url")),
             str(cfg.get("api_key") or "").strip(),
         ))
-    if kind == "zai":
+    if kind in ("zai", "tencent"):
         return kind, "\0".join((
-            str(cfg.get("endpoint_id") or "standard"),
+            str(cfg.get("endpoint_id") or PROVIDER_DEFINITIONS[kind].endpoints[0].value),
             str(cfg.get("api_key") or "").strip(),
         ))
     return kind, str(cfg.get("api_key") or "").strip()
@@ -1469,7 +1491,7 @@ def _effort_probe_body(kind: str, level: str) -> dict | None:
         return {"thinking": {"type": "enabled"}, "reasoning_effort": level}
     if kind in (
         "chatgpt", "grok", "gemini", "kimi", "meta", "mistral", "openrouter",
-        "nvidia", "opencode", "ollama", "ollama_cloud", "groq", "together", "cerebras",
+        "nvidia", "opencode", "tencent", "ollama", "ollama_cloud", "groq", "together", "cerebras",
         "fireworks",
     ):
         return {"reasoning_effort": level}
@@ -1803,6 +1825,16 @@ class OpenAICompatProvider:
                 return _filter_openrouter_models(data) or ([self.cfg.model] if self.cfg.model else [])
             if self.definition.model_filter == "mistral":
                 return _filter_mistral_models(data)
+            if self.definition.model_filter in ("mimo", "tencent"):
+                # These catalogs include non-chat products. Never restore a
+                # configured model after the catalog explicitly excluded it.
+                return sorted(
+                    row["id"] for row in data
+                    if isinstance(row, dict) and isinstance(row.get("id"), str)
+                    and row["id"] and not _NON_CHAT_MODEL_RE.search(row["id"])
+                    and not re.search(r"(?:^|[-/])(?:asr|video)(?:[-/]|$)", row["id"], re.I)
+                    and (self.kind != "tencent" or row.get("status") == "online")
+                )
             models = [m["id"] for m in data if m.get("id")]
             if self.definition.model_filter == "openai":
                 models = _filter_chatgpt_models(models)
@@ -1824,7 +1856,8 @@ class OpenAICompatProvider:
         None when the provider could not be reached at all, which is not an
         answer about the option and must not be recorded as one.
         """
-        body = {"model": self.cfg.model, "max_tokens": 1, "stream": False,
+        token_limit = "max_completion_tokens" if self.kind == "mimo" else "max_tokens"
+        body = {"model": self.cfg.model, token_limit: 1, "stream": False,
                 "messages": [{"role": "user", "content": "hi"}], **extra}
         try:
             async with session.post(self._chat_url(), headers=self._headers(), json=body,
@@ -1869,7 +1902,7 @@ class OpenAICompatProvider:
                         return {}
                     body = await resp.json(content_type=None)
                 return _mistral_capabilities(body.get("data", []), models)
-            if self.definition.reasoning in ("zai", "qwen"):
+            if self.definition.reasoning in ("zai", "qwen", "mimo"):
                 return {model: {"thinking": True} for model in models}
         except (ClientError, asyncio.TimeoutError, ValueError):
             return {}
@@ -1985,6 +2018,9 @@ class OpenAICompatProvider:
             if tools:
                 body["tool_stream"] = True
                 body["clear_thinking"] = False
+        elif self.definition.reasoning == "mimo":
+            if thinking is not None:
+                body["thinking"] = {"type": "enabled" if thinking else "disabled"}
         elif self.definition.reasoning == "qwen":
             if thinking is not None:
                 body["enable_thinking"] = bool(thinking)
@@ -2003,7 +2039,7 @@ class OpenAICompatProvider:
             # therefore means a kimi-k* model, which rejects the field.
             or (self.definition.reasoning == "kimi" and (thinking is not None or bool(effort)))
             or self.definition.reasoning == "meta"
-            or (self.definition.reasoning in ("zai", "qwen") and thinking is True)
+            or (self.definition.reasoning in ("zai", "qwen", "mimo") and thinking is True)
         )
         if temp is not None and not skip_temp:
             try:
@@ -2044,7 +2080,7 @@ class OpenAICompatProvider:
     @_total_provider_response
     async def _parse(self, resp: Any, show_thinking: bool) -> AsyncIterator[dict]:
         text_parts: list[str] = []
-        # Z.ai requires its reasoning_content to be returned verbatim with the
+        # Z.ai, MiMo, and TokenHub retain reasoning_content verbatim with the
         # assistant tool call on the next round. Other compatible providers use
         # this field for display only, so retention is profile-controlled.
         replay_reasoning_parts: list[str] = []
@@ -2111,7 +2147,7 @@ class OpenAICompatProvider:
             reasoning = delta.get("reasoning_content") or delta.get("reasoning")
             if reasoning is not None and not isinstance(reasoning, str):
                 raise _ProviderResponseError()
-            if reasoning and self.definition.reasoning == "zai":
+            if reasoning and self.kind in ("zai", "mimo", "tencent"):
                 replay_reasoning_parts.append(str(reasoning))
             if reasoning and show_thinking:
                 yield _norm(EV_THINKING, text=reasoning)

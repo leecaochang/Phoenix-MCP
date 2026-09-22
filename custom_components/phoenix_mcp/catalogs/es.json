@@ -1627,7 +1627,15 @@
       "wipeSubmit": "Borrar los datos seleccionados",
       "wipeTitle": "Borrar datos de Phoenix MCP",
       "wipeTypeConfirm": "Escriba WIPE para confirmar",
-      "wipeWarning": "Elija qué eliminar. Esto no se puede deshacer."
+      "wipeWarning": "Elija qué eliminar. Esto no se puede deshacer.",
+      "agentcliSite": "Sitio",
+      "agentcliSingapore": "Singapur",
+      "agentcliGuangzhou": "Cantón",
+      "agentcliSiliconValley": "Silicon Valley",
+      "agentcliTencentHint": "Seleccione el sitio donde creó su clave API de TokenHub. Las claves son específicas de cada sitio. Active los modelos que desee usar en la consola de TokenHub.",
+      "agentcliMiMoHint": "Use una clave API de pago por uso de Xiaomi MiMo. Las claves de suscripción Token Plan usan otros endpoints y no se admiten aquí.",
+      "providerMiMo": "Xiaomi MiMo",
+      "providerTencent": "Tencent Cloud TokenHub"
     },
     "approvalSummary": {
       "action.approve": "Aprobar y ejecutar",

@@ -1675,7 +1675,15 @@
       "wipeSubmit": "Удалить выбранные данные",
       "wipeTitle": "Удаление данных Phoenix MCP",
       "wipeTypeConfirm": "Введите WIPE для подтверждения",
-      "wipeWarning": "Выберите, что удалить. Это действие нельзя отменить."
+      "wipeWarning": "Выберите, что удалить. Это действие нельзя отменить.",
+      "agentcliSite": "Площадка",
+      "agentcliSingapore": "Сингапур",
+      "agentcliGuangzhou": "Гуанчжоу",
+      "agentcliSiliconValley": "Кремниевая долина",
+      "agentcliTencentHint": "Выберите площадку, на которой создан ваш API-ключ TokenHub. Ключи действуют только на своей площадке. Активируйте нужные модели в консоли TokenHub.",
+      "agentcliMiMoHint": "Используйте API-ключ Xiaomi MiMo с оплатой по использованию. Ключи подписки Token Plan используют отдельные конечные точки и здесь не поддерживаются.",
+      "providerMiMo": "Xiaomi MiMo",
+      "providerTencent": "Tencent Cloud TokenHub"
     },
     "shell": {
       "agentChat": "Чат с агентом",

@@ -349,6 +349,7 @@ function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: bool
     case "openrouter":
     case "nvidia":
     case "opencode":
+    case "tencent":
       // Aggregators: one key fronting many vendors' models, so no built-in
       // answer fits and none is guessed at. This is the starting point rather
       // than the verdict: checking a model's options establishes its real levels
@@ -356,6 +357,7 @@ function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: bool
       // it. Until then the model still reasons at its own default; what is
       // missing is the ability to choose.
       return { thinking: [], style: "effort", defaultLevel: "high", temperature: true };
+    case "mimo":
     case "zai":
     case "qwen":
       // These providers publish a boolean thinking control. Their APIs own the

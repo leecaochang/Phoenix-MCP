@@ -1322,7 +1322,15 @@
       "wipeSubmit": "Wipe Selected Data",
       "wipeTitle": "Wipe Phoenix MCP Data",
       "wipeTypeConfirm": "Type WIPE to confirm",
-      "wipeWarning": "Choose what to delete. This cannot be undone."
+      "wipeWarning": "Choose what to delete. This cannot be undone.",
+      "agentcliSite": "Site",
+      "agentcliSingapore": "Singapore",
+      "agentcliGuangzhou": "Guangzhou",
+      "agentcliSiliconValley": "Silicon Valley",
+      "agentcliTencentHint": "Choose the site where you created your TokenHub API key. Keys are site-specific. Activate the models you want to use in the TokenHub console.",
+      "agentcliMiMoHint": "Use a pay-as-you-go Xiaomi MiMo API key. Token Plan subscription keys use separate endpoints and are not supported here.",
+      "providerMiMo": "Xiaomi MiMo",
+      "providerTencent": "Tencent Cloud TokenHub"
     },
     "agentchat": {
       "answerAnyway": "Answer anyway",
