@@ -295,7 +295,7 @@ async def test_routing_settings_persist_and_active_modes_fail_closed(token_store
     assert restored.voice_agent_routing_mode == "local_shadow"
     assert restored.command_routing_timeout_ms == 1700
     assert GlobalSettings.from_dict({}).voice_agent_routing_mode == "off"
-    assert GlobalSettings.from_dict({"voice_agent_routing_mode": "hybrid"}).voice_agent_routing_mode == "hybrid"
+    assert GlobalSettings.from_dict({"voice_agent_routing_mode": "hybrid"}).voice_agent_routing_mode == "off"
     assert GlobalSettings.from_dict({"voice_agent_routing_mode": "future"}).voice_agent_routing_mode == "off"
 
 
@@ -406,3 +406,38 @@ async def test_invalid_routing_language_selection_fails_closed(hass, routing, se
     _, error = await _validated_settings_patch({"command_routing_languages": selection}, data, hass, "test")
     assert error.status == 400
     assert GlobalSettings.from_dict({"command_routing_languages": selection}).command_routing_languages == []
+
+
+@pytest.mark.parametrize("ingress", ["voice", "chat"])
+@pytest.mark.parametrize("language,ha_language", [("es-MX", "es"), ("zh-Hans", "zh-CN"), ("fr", None), ("zh-Hant", None)])
+async def test_auto_follows_supported_ingress_language_without_legacy_allowlist(hass, routing, english_home, ingress, language, ha_language):
+    data, token = routing
+    key = "agentcli_routing_mode" if ingress == "chat" else "voice_agent_routing_mode"
+    await data.store.async_patch_settings(**{key: "auto", "command_routing_languages": []})
+    with patch("custom_components.phoenix_mcp.command_routing.async_recognize", AsyncMock(return_value=recognition(name="Desk lamp"))) as recognize:
+        result = await async_evaluate_command(hass, data, token, "command", language, ingress=ingress)
+    if ha_language:
+        recognize.assert_awaited_once_with(hass, "command", ha_language, strict=True)
+        assert result["proposal"]
+    else:
+        recognize.assert_not_called()
+        assert result["reason"] == "unsupported_language"
+
+
+def test_experimental_settings_migrate_off_but_preserve_accounts_and_new_opt_in():
+    from custom_components.phoenix_mcp.token_store import GlobalSettings
+    from custom_components.phoenix_mcp.const import COMMAND_ROUTING_SETTINGS_VERSION
+
+    restored = GlobalSettings.from_dict({
+        "voice_agent_routing_mode": "local", "agentcli_routing_mode": "hybrid",
+        "decision_shadow_enabled": True, "agentcli_routing_shadow_enabled": True,
+        "decision_provider_id": "configured-account", "decision_timeout_ms": 12000,
+    })
+    assert restored.voice_agent_routing_mode == restored.agentcli_routing_mode == "off"
+    assert not restored.decision_shadow_enabled and not restored.agentcli_routing_shadow_enabled
+    assert restored.decision_provider_id == "configured-account"
+    assert restored.decision_timeout_ms == 12000
+    saved = restored.to_dict()
+    assert saved["command_routing_version"] == COMMAND_ROUTING_SETTINGS_VERSION
+    saved.update(voice_agent_routing_mode="auto", agentcli_routing_mode="auto")
+    assert GlobalSettings.from_dict(saved).to_dict() == saved

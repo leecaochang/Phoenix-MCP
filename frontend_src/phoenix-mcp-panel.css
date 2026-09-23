@@ -2774,6 +2774,21 @@ hui-card { display: block; min-width: 0; }
 .agentcli-add-row select { flex: 0 1 auto; }
 .agentcli-add-form { border: 1px dashed var(--phx-border); border-radius: var(--phx-radius-sm); padding: 10px; margin-bottom: 10px; }
 .agentcli-settings-hint { font-size: 12px; color: var(--phx-text-2); }
+
+/* Routing keeps switches and accounts visible; connection timing expands in place. */
+.command-routing-settings .agentcli-settings-hint { line-height: 1.5; }
+.routing-provider-section { margin-top: 24px; }
+.routing-provider-section h4 { font-size: 14px; margin: 0 0 8px; }
+.routing-account-choice { display: flex; align-items: center; gap: 12px; min-width: 0; cursor: pointer; }
+.routing-account-choice > input { flex: 0 0 auto; accent-color: var(--phx-accent); }
+.routing-account-choice > span { min-width: 0; overflow-wrap: anywhere; }
+.routing-provider-section .agentcli-add-row { margin-top: 12px; }
+.routing-disclosure { border-top: 1px solid var(--phx-divider); margin-top: 12px; }
+.routing-disclosure > summary { padding: 14px 0; cursor: pointer; font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.routing-disclosure > summary:hover { color: var(--phx-accent); }
+.routing-disclosure > summary:focus-visible { outline: 2px solid var(--phx-accent); outline-offset: 2px; border-radius: 4px; }
+.routing-disclosure > .agentcli-settings-hint:first-of-type { margin-top: 0; }
+
 /* These were once .agentcli-icon-btn, which the chat window's TITLEBAR buttons
    have used since long before. Defined later, they silently won, and the
    titlebar's gear/minimize/maximize/close picked up a border and a fixed box.

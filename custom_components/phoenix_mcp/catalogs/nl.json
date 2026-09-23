@@ -962,7 +962,9 @@
       "versionNotFound": "Versie niet gevonden.",
       "versionResourcePairRequired": "Geef zowel resource_type als resource_id op, of geen van beide voor de recente feed.",
       "wipeConfirmationRequired": "confirm moet WIPE zijn.",
-      "routingPreviewInvalid": "Controleer het token, de taal van de opdracht en de routeringsinstellingen."
+      "routingPreviewInvalid": "Controleer het token, de taal van de opdracht en de routeringsinstellingen.",
+      "providerModelNotListed": "Kies een model dat deze provider heeft teruggegeven.",
+      "providerAccountChanged": "Het provideraccount is gewijzigd. Herlaad en probeer het opnieuw."
     },
     "wizard": {
       "accessSub": "Vouw de <code>light</code>-groep uit en kies een licht dat je kunt controleren. Selecteer <strong>W</strong> om lees- en schrijftoegang te verlenen. Ken een heel apparaat toe of vouw het uit om één entiteit te kiezen. Je kunt later meer machtigingen toevoegen.",
@@ -2011,27 +2013,22 @@
       "zigbee_topology.title": "Zigbee-topologie scannen"
     },
     "routing": {
-      "title": "Experiment met opdrachtroutering",
-      "observe": "Opdrachten van de spraakagent observeren",
-      "budget": "Tijdslimiet voor herkenning (ms)",
-      "token": "Tokenbereik",
-      "command": "Opdracht voor de voorvertoning",
-      "test": "Opdracht testen",
-      "candidate": "Lokale kandidaat gevonden",
-      "fallback": "Gekozen provider gebruiken",
-      "resultHint": "Er is niets uitgevoerd. Een kandidaat vereist bij uitvoering nog controles op rechten, goedkeuring en MESA.",
-      "noMatchHint": "Home Assistant heeft deze opdracht niet herkend. Probeer de exacte naam of alias van een entiteit die beschikbaar is voor Assist. Er is niets uitgevoerd of naar een provider verzonden.",
-      "fallbackHint": "Er is geen lokale kandidaat beschikbaar. Bij normaal gebruik verwerkt de geselecteerde provider dit verzoek. Deze test heeft niets uitgevoerd of naar een provider verzonden.",
-      "elapsed": "Lokale evaluatie: {ms} ms",
-      "observations": "Spraakobservaties sinds herstart: {total}; lokale kandidaten: {candidates}.",
-      "details": "Technische details",
-      "failed": "Voorbeeld kon niet worden geladen. Controleer het token en de verbinding en probeer het opnieuw.",
-      "previewLanguage": "Taal van de voorvertoning",
-      "languageEnglish": "Engels",
-      "languageChinese": "Vereenvoudigd Chinees",
-      "languageSpanish": "Spaans",
-      "enabledLanguages": "Talen voor automatische routering",
-      "languagesHint": "Geldt voor Voice en het eerste tekstbericht in een nieuwe chat. Niet-geselecteerde talen gebruiken je gebruikelijke provider. Zonder geselecteerde talen pauzeert de routering. De taal van de voorvertoning staat hier los van."
+      "title": "Opdrachtroutering",
+      "intro": "Verwerk eenvoudige opdrachten lokaal voordat je gebruikelijke AI-provider wordt ingeschakeld. Machtigingen en goedkeuringen van Phoenix blijven gelden.",
+      "enableVoice": "Inschakelen voor spraak",
+      "enableChat": "Inschakelen voor chat",
+      "languageHint": "Gebruikt je spraak- of Phoenix-taal. Chatroutering geldt voor het eerste bericht van een nieuw gesprek.",
+      "providerSection": "Beslissingsprovider",
+      "providerHint": "Optioneel. Door een account te selecteren, mag ingeschakelde routering niet-herkende opdrachten en toegestane entiteitsgegevens ernaartoe sturen. Er kunnen API-kosten gelden.",
+      "decisionAccount": "Beslissingsaccount",
+      "localOnly": "Alleen lokaal (geen beslissingsprovider)",
+      "removeAccount": "{name} verwijderen",
+      "connectionSettings": "Verbindingsinstellingen",
+      "decisionBudget": "Beslissingstime-out (ms)",
+      "timeoutHint": "Geef tragere verbindingen meer tijd. Als er niet op tijd een beslissing is, verwerkt je gebruikelijke provider het verzoek.",
+      "failed": "Routeringsinstellingen konden niet worden opgeslagen of geladen.",
+      "accountModel": "Model voor {name}",
+      "connectionHint": "De basis-URL is het serveradres. Voeg alleen een API-sleutel toe als die server verificatie vereist."
     }
   }
 }

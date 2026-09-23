@@ -27,6 +27,10 @@ const EMPTY_FORM: FormState = {
 export interface ProviderAddFormProps {
   providerTypes: AgentCliProviderType[];
   disabled?: boolean;
+  allowCapabilityProbe?: boolean;
+  requireModel?: boolean;
+  idPrefix?: string;
+  connectionHint?: string;
   completeLabel: string;
   addingLabelKey: string;
   onActiveChange?: (active: boolean) => void;
@@ -50,10 +54,13 @@ function initialValues(provider: AgentCliProviderType): Record<string, string> {
 
 export function ProviderAddForm({
   providerTypes, disabled, completeLabel, addingLabelKey, onActiveChange, onCreated,
+  allowCapabilityProbe = true, requireModel = false, idPrefix = "agentcli-add", connectionHint,
 }: ProviderAddFormProps) {
   const [pickerValue, setPickerValue] = useState("");
   const [adding, setAdding] = useState<AgentCliProviderType | null>(null);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
+  const generation = useRef(0);
+  useEffect(() => () => { generation.current++; }, []);
   const pickerRef = useRef<HTMLSelectElement>(null);
   const firstFieldRef = useRef<HTMLInputElement | HTMLSelectElement>(null);
 
@@ -63,6 +70,7 @@ export function ProviderAddForm({
   }, [adding]);
 
   const selectProvider = (kind: string) => {
+    generation.current++;
     setPickerValue(kind);
     const provider = providerTypes.find((item) => item.kind === kind) ?? null;
     setAdding(provider);
@@ -70,6 +78,7 @@ export function ProviderAddForm({
   };
 
   const reset = (focus = true) => {
+    generation.current++;
     setPickerValue("");
     setAdding(null);
     setForm(EMPTY_FORM);
@@ -77,10 +86,13 @@ export function ProviderAddForm({
   };
 
   const setValue = (id: string, value: string) => {
+    generation.current++;
     setForm((current) => ({
       ...current,
       values: { ...current.values, [id]: value },
       validated: false,
+      models: [],
+      model: "",
       error: null,
     }));
   };
@@ -100,6 +112,7 @@ export function ProviderAddForm({
       }));
       return;
     }
+    const currentGeneration = ++generation.current;
     setForm((current) => ({ ...current, validating: true, error: null }));
     try {
       const payload = Object.fromEntries(
@@ -109,6 +122,7 @@ export function ProviderAddForm({
         adding.kind as AgentCliProviderKind,
         payload,
       );
+      if (generation.current !== currentGeneration) return;
       if (!response || !response.ok || !Array.isArray(response.models)) {
         const error = response?.error
           ? localizedApiMessage(response.error, response.message_key, response.message_params)
@@ -128,6 +142,7 @@ export function ProviderAddForm({
           ? current.model : response.models[0] ?? "",
       }));
     } catch (error: unknown) {
+      if (generation.current !== currentGeneration) return;
       setForm((current) => ({
         ...current,
         validating: false,
@@ -139,7 +154,8 @@ export function ProviderAddForm({
   };
 
   const complete = async () => {
-    if (!adding) return;
+    if (!adding || !form.validated || (requireModel && !form.models.includes(form.model))) return;
+    const currentGeneration = ++generation.current;
     setForm((current) => ({ ...current, saving: true, error: null }));
     try {
       const payload = {
@@ -149,9 +165,11 @@ export function ProviderAddForm({
         ...(form.model ? { model: form.model } : {}),
       };
       const response = await api.createAgentCliProvider(adding.kind, payload);
-      await onCreated(response.instance, form.probe && Boolean(form.model));
-      reset(false);
+      if (generation.current !== currentGeneration) return;
+      await onCreated(response.instance, allowCapabilityProbe && form.probe && Boolean(form.model));
+      if (generation.current === currentGeneration) reset(false);
     } catch (error: unknown) {
+      if (generation.current !== currentGeneration) return;
       setForm((current) => ({
         ...current,
         saving: false,
@@ -187,8 +205,9 @@ export function ProviderAddForm({
           </div>
           {adding.kind === "tencent" && <div className="agentcli-settings-hint">{t("settings.agentcliTencentHint")}</div>}
           {adding.kind === "mimo" && <div className="agentcli-settings-hint">{t("settings.agentcliMiMoHint")}</div>}
+          {connectionHint && adding.fields.some(field => field.id === "base_url") && <p className="agentcli-settings-hint">{connectionHint}</p>}
           {adding.fields.map((field, index) => {
-            const id = `agentcli-add-${adding.kind}-${field.id}`;
+            const id = `${idPrefix}-${adding.kind}-${field.id}`;
             return (
               <label className="agentcli-settings-field" htmlFor={id} key={field.id}>
                 <span>{fieldLabel(field)}</span>
@@ -199,7 +218,7 @@ export function ProviderAddForm({
                     ref={index === 0 ? (element) => { firstFieldRef.current = element; } : undefined}
                     value={form.values[field.id] ?? ""}
                     disabled={form.validating || form.saving}
-                    aria-describedby={form.error ? "agentcli-add-error" : undefined}
+                    aria-describedby={form.error ? `${idPrefix}-error` : undefined}
                     aria-invalid={form.error ? true : undefined}
                     onChange={(event) => setValue(field.id, event.target.value)}
                   >
@@ -217,7 +236,7 @@ export function ProviderAddForm({
                     placeholder={field.placeholder ?? fieldLabel(field)}
                     value={form.values[field.id] ?? ""}
                     disabled={form.validating || form.saving}
-                    aria-describedby={form.error ? "agentcli-add-error" : undefined}
+                    aria-describedby={form.error ? `${idPrefix}-error` : undefined}
                     aria-invalid={form.error ? true : undefined}
                     onChange={(event) => setValue(field.id, event.target.value)}
                   />
@@ -234,15 +253,15 @@ export function ProviderAddForm({
             {form.validated ? t("settings.agentcliValidated") : ""}
           </span>
           {form.error && (
-            <div id="agentcli-add-error" className="banner banner-error" role="alert">
+            <div id={`${idPrefix}-error`} className="banner banner-error" role="alert">
               {form.error}
             </div>
           )}
           {form.validated && (
-            <label className="agentcli-settings-model-row" htmlFor="agentcli-add-model">
+            <label className="agentcli-settings-model-row" htmlFor={`${idPrefix}-model`}>
               <span>{t("settings.agentcliSelectModel")}</span>
               <select
-                id="agentcli-add-model"
+                id={`${idPrefix}-model`}
                 className="input input-auto"
                 value={form.model}
                 disabled={form.saving || !form.models.length}
@@ -256,7 +275,7 @@ export function ProviderAddForm({
           )}
           {form.validated && (
             <div className="agentcli-settings-model-actions">
-              <div className="agentcli-settings-probe-opt">
+              {allowCapabilityProbe && <div className="agentcli-settings-probe-opt">
                 <label className="toggle-switch" htmlFor="agentcli-add-probe-on-save">
                   <input
                     id="agentcli-add-probe-on-save"
@@ -269,12 +288,12 @@ export function ProviderAddForm({
                 <label className="agentcli-settings-probe-copy" htmlFor="agentcli-add-probe-on-save">
                   {t("settings.agentcliProbeOnAdd")}
                 </label>
-              </div>
+              </div>}
               <div className="agentcli-settings-form-actions">
                 <button
                   type="button"
                   className="btn btn-primary btn-sm"
-                  disabled={form.saving}
+                  disabled={form.saving || Boolean(disabled) || (requireModel && !form.models.includes(form.model))}
                   onClick={() => void complete()}
                 >
                   {completeLabel}

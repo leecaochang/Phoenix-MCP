@@ -24,7 +24,7 @@ from .const import (
     AGENTCLI_SCROLLBACK_MAX,
     AGENTCLI_SCROLLBACK_MIN,
     APPROVAL_REASON_FORMAT_INCOMPATIBLE,
-    COMMAND_ROUTING_MODES, COMMAND_ROUTING_LANGUAGES, COMMAND_ROUTING_DEFAULT_LANGUAGES,
+    COMMAND_ROUTING_SETTINGS_VERSION, COMMAND_ROUTING_MODES, COMMAND_ROUTING_LANGUAGES, COMMAND_ROUTING_DEFAULT_LANGUAGES,
     CHAT_COMMAND_ROUTING_MODES,
     COMMAND_ROUTING_TIMEOUT_DEFAULT_MS,
     DECISION_TIMEOUT_DEFAULT_MS, DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS,
@@ -672,6 +672,7 @@ class GlobalSettings:
             "agentcli_conversation_style": self.agentcli_conversation_style,
             "agentcli_detail_level": self.agentcli_detail_level,
             "agentcli_home_focused": self.agentcli_home_focused,
+            "command_routing_version": COMMAND_ROUTING_SETTINGS_VERSION,
             "agentcli_routing_shadow_enabled": self.agentcli_routing_shadow_enabled,
             "agentcli_routing_mode": self.agentcli_routing_mode,
             "assist_bound_token_id": self.assist_bound_token_id,
@@ -699,6 +700,10 @@ class GlobalSettings:
 
     @classmethod
     def from_dict(cls, data: dict) -> GlobalSettings:
+        # Old experiments must not silently opt into broader language coverage or API calls.
+        if data.get("command_routing_version") != COMMAND_ROUTING_SETTINGS_VERSION:
+            data = {**data, "voice_agent_routing_mode": "off", "agentcli_routing_mode": "off",
+                    "decision_shadow_enabled": False, "agentcli_routing_shadow_enabled": False}
         mesa_mode = data.get("mesa_mode", MESA_MODE_ADVISORY)
         languages = data.get("command_routing_languages", list(COMMAND_ROUTING_DEFAULT_LANGUAGES))
         return cls(

@@ -135,9 +135,10 @@ async def async_voice_answer(
     if token is None:
         return voice_text(language, "token_unavailable")
 
-    from .command_routing import RoutingAuthority, async_evaluate_command
+    from .command_routing import RoutingAuthority, async_evaluate_command, effective_routing_mode
 
-    authority = RoutingAuthority.capture(data, token) if settings.voice_agent_routing_mode in ("local_shadow", "local", "hybrid") else None
+    routing_mode = effective_routing_mode(settings)
+    authority = RoutingAuthority.capture(data, token) if routing_mode in ("local_shadow", "local", "hybrid") else None
     store = await _get_secret_store(hass)
     cfg = store.resolve(settings.voice_agent_provider_id, settings.voice_agent_model or None)
     if cfg is None or not cfg.model:
@@ -155,11 +156,11 @@ async def async_voice_answer(
         token = _current_dispatch_token(data, token.id)
         if token is None:
             return voice_text(language, "token_unavailable")
-        if (settings.voice_agent_routing_mode != "hybrid" and settings.decision_shadow_enabled and settings.decision_provider_id
+        if (settings.voice_agent_routing_mode in ("local", "local_shadow") and settings.decision_shadow_enabled and settings.decision_provider_id
                 and observation["reason"] in ("no_match", "unsupported", "no_target")):
             # Single-flight background observation cannot delay or influence the provider turn.
             data.decision_shadow.start(hass, data, token, user_text, language or "en", observe=True)
-        if settings.voice_agent_routing_mode in ("local", "hybrid") and observation["proposal"]:
+        if routing_mode in ("local", "hybrid") and observation["proposal"]:
             from .command_execution import async_execute_local_command
 
             answer = await async_execute_local_command(
@@ -169,7 +170,7 @@ async def async_voice_answer(
                 return answer
             if authority.current(hass) is None:
                 return voice_text(language, "token_unavailable")
-        if settings.voice_agent_routing_mode == "hybrid" and not observation["proposal"]:
+        if routing_mode == "hybrid" and not observation["proposal"]:
             from .decision_shadow import async_preview_decision
             from .command_execution import async_execute_command_plan
 

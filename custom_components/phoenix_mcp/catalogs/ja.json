@@ -1008,7 +1008,9 @@
       "versionNotFound": "バージョンが見つかりません。",
       "versionResourcePairRequired": "resource_type と resource_id の両方を指定するか、最近のフィードでは両方とも省略してください。",
       "wipeConfirmationRequired": "confirm は WIPE にしてください。",
-      "routingPreviewInvalid": "トークン、コマンドの言語、ルーティング設定を確認してください。"
+      "routingPreviewInvalid": "トークン、コマンドの言語、ルーティング設定を確認してください。",
+      "providerModelNotListed": "このプロバイダーが返したモデルを選んでください。",
+      "providerAccountChanged": "プロバイダーのアカウントが変更されました。再読み込みしてやり直してください。"
     },
     "agentchat": {
       "answerAnyway": "そのまま回答",
@@ -1984,27 +1986,22 @@
       "zigbee_topology.title": "Zigbee トポロジーをスキャン"
     },
     "routing": {
-      "title": "コマンドルーティングの試験",
-      "observe": "音声エージェントのコマンドを観測",
-      "budget": "認識の制限時間（ms）",
-      "token": "トークンの権限範囲",
-      "command": "プレビューするコマンド",
-      "test": "コマンドをテスト",
-      "candidate": "ローカルの候補が見つかりました",
-      "fallback": "選択したプロバイダーを使用",
-      "resultHint": "何も実行していません。候補には実行時の権限、承認、MESA の確認が引き続き必要です。",
-      "noMatchHint": "Home Assistant はこのコマンドを認識できませんでした。Assist に公開されているエンティティの正確な名前またはエイリアスを試してください。実行もプロバイダーへの送信も行われていません。",
-      "fallbackHint": "ローカル候補がありません。通常の利用では、選択したプロバイダーがこのリクエストを処理します。このテストでは実行もプロバイダーへの送信も行われていません。",
-      "elapsed": "ローカル評価：{ms} ms",
-      "observations": "再起動後の音声観測数：{total}、ローカル候補数：{candidates}。",
-      "details": "技術情報",
-      "failed": "プレビューを読み込めませんでした。トークンと接続を確認して再試行してください。",
-      "previewLanguage": "プレビューの言語",
-      "languageEnglish": "英語",
-      "languageChinese": "中国語（簡体字）",
-      "languageSpanish": "スペイン語",
-      "enabledLanguages": "自動ルーティングの言語",
-      "languagesHint": "音声と新しいチャットの最初のテキストメッセージに適用されます。選択されていない言語は通常のプロバイダーを使用します。言語を選択しない場合、ルーティングは一時停止します。プレビューの言語は独立しています。"
+      "title": "コマンドルーティング",
+      "intro": "簡単なコマンドは通常のAIプロバイダーを使う前にローカルで処理します。Phoenixの権限と承認は引き続き適用されます。",
+      "enableVoice": "音声で有効にする",
+      "enableChat": "チャットで有効にする",
+      "languageHint": "音声またはPhoenixの言語を使います。チャットでは新しい会話の最初のメッセージに適用されます。",
+      "providerSection": "判断プロバイダー",
+      "providerHint": "任意です。アカウントを選ぶと、有効なルーティングが未認識のコマンドと許可されたエンティティの詳細を送信できます。API料金が発生する場合があります。",
+      "decisionAccount": "判断用アカウント",
+      "localOnly": "ローカルのみ（判断プロバイダーなし）",
+      "removeAccount": "{name}を削除",
+      "connectionSettings": "接続設定",
+      "decisionBudget": "判断のタイムアウト（ミリ秒）",
+      "timeoutHint": "低速な接続には長めの時間を設定してください。時間内に判断が得られなければ、通常のプロバイダーが処理します。",
+      "failed": "ルーティング設定を保存または読み込めませんでした。",
+      "accountModel": "{name}のモデル",
+      "connectionHint": "ベースURLはサーバーのアドレスです。サーバーが認証を要求する場合のみAPIキーを追加してください。"
     }
   },
   "notification": {

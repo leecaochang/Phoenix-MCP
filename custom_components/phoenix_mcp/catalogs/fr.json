@@ -1701,7 +1701,9 @@
       "versionNotFound": "Version introuvable.",
       "versionResourcePairRequired": "Fournissez à la fois resource_type et resource_id, ou aucun des deux pour le flux récent.",
       "wipeConfirmationRequired": "confirm doit être WIPE.",
-      "routingPreviewInvalid": "Vérifiez le jeton, la langue de la commande et les paramètres de routage."
+      "routingPreviewInvalid": "Vérifiez le jeton, la langue de la commande et les paramètres de routage.",
+      "providerModelNotListed": "Choisissez un modèle renvoyé par ce fournisseur.",
+      "providerAccountChanged": "Le compte du fournisseur a changé. Rechargez et réessayez."
     },
     "mesaSuggestion": {
       "baseline_note": " Interdit correspond à la ligne de base intégrée pour ce domaine, le profil créé rend donc cette intention explicite ; choisissez Confirmer dans Révision pour autoriser plutôt le contrôle de l'agent derrière les approbations.",
@@ -1984,27 +1986,22 @@
       "zigbee_topology.title": "Analyser la topologie Zigbee"
     },
     "routing": {
-      "title": "Expérimentation du routage des commandes",
-      "observe": "Observer les commandes de l’agent vocal",
-      "budget": "Délai maximal de reconnaissance (ms)",
-      "token": "Périmètre du jeton",
-      "command": "Commande à prévisualiser",
-      "test": "Tester la commande",
-      "candidate": "Candidat local trouvé",
-      "fallback": "Utiliser le fournisseur choisi",
-      "resultHint": "Rien n’a été exécuté. Le candidat nécessite encore des vérifications des autorisations, des approbations et de MESA lors de l’exécution.",
-      "noMatchHint": "Home Assistant n’a pas reconnu cette commande. Essayez le nom ou l’alias exact d’une entité exposée à Assist. Rien n’a été exécuté ni envoyé à un fournisseur.",
-      "fallbackHint": "Aucun candidat local n’est disponible. En utilisation normale, le fournisseur sélectionné traite cette demande. Ce test n’a rien exécuté ni envoyé à un fournisseur.",
-      "elapsed": "Évaluation locale : {ms} ms",
-      "observations": "Observations vocales depuis le redémarrage : {total} ; candidats locaux : {candidates}.",
-      "details": "Détails techniques",
-      "failed": "Impossible de charger l’aperçu. Vérifiez le jeton et la connexion, puis réessayez.",
-      "previewLanguage": "Langue de la prévisualisation",
-      "languageEnglish": "Anglais",
-      "languageChinese": "Chinois simplifié",
-      "languageSpanish": "Espagnol",
-      "enabledLanguages": "Langues du routage automatique",
-      "languagesHint": "Concerne Voice et le premier message texte d’un nouveau chat. Les langues non sélectionnées utilisent votre fournisseur habituel. Sans sélection, le routage est suspendu. La langue de prévisualisation est indépendante."
+      "title": "Routage des commandes",
+      "intro": "Traite les commandes simples localement avant de solliciter votre fournisseur IA habituel. Les autorisations et approbations Phoenix restent applicables.",
+      "enableVoice": "Activer pour la voix",
+      "enableChat": "Activer pour le chat",
+      "languageHint": "Utilise la langue de la voix ou de Phoenix. Dans le chat, le routage concerne le premier message d’une nouvelle conversation.",
+      "providerSection": "Fournisseur de décisions",
+      "providerHint": "Facultatif. Sélectionner un compte autorise le routage activé à lui envoyer les commandes non reconnues et les détails des entités autorisées. Des frais d’API peuvent s’appliquer.",
+      "decisionAccount": "Compte de décisions",
+      "localOnly": "Local uniquement (sans fournisseur de décisions)",
+      "removeAccount": "Supprimer {name}",
+      "connectionSettings": "Paramètres de connexion",
+      "decisionBudget": "Délai de décision (ms)",
+      "timeoutHint": "Accordez plus de temps aux connexions lentes. Sans décision à temps, votre fournisseur habituel traite la demande.",
+      "failed": "Impossible d’enregistrer ou de charger les paramètres de routage.",
+      "accountModel": "Modèle pour {name}",
+      "connectionHint": "L’URL de base est l’adresse du serveur. Ajoutez une clé API uniquement si ce serveur exige une authentification."
     }
   },
   "notification": {

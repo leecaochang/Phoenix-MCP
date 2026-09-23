@@ -2247,6 +2247,9 @@ async def _validated_settings_patch(
         for key in ("voice_agent_routing_mode", "agentcli_routing_mode"):
             if getattr(data.store.get_settings(), key) == "hybrid":
                 patchable.setdefault(key, "off")
+    if any(patchable.get(key) in ("auto", "off")
+           for key in ("voice_agent_routing_mode", "agentcli_routing_mode")):
+        patchable.update(decision_shadow_enabled=False, agentcli_routing_shadow_enabled=False)
     return patchable, None
 
 

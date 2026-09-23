@@ -628,7 +628,9 @@
       "versionNotFound": "未找到版本。",
       "versionResourcePairRequired": "请同时提供 resource_type 和 resource_id，或两者都不提供以查看最近记录。",
       "wipeConfirmationRequired": "confirm 必须为 WIPE。",
-      "routingPreviewInvalid": "请检查令牌、指令语言和路由设置。"
+      "routingPreviewInvalid": "请检查令牌、指令语言和路由设置。",
+      "providerModelNotListed": "请选择此提供商返回的模型。",
+      "providerAccountChanged": "提供商账户已更改，请刷新后重试。"
     },
     "audit": {
       "allOutcomes": "所有结果",
@@ -1984,27 +1986,22 @@
       "zigbee_topology.title": "扫描 Zigbee 拓扑"
     },
     "routing": {
-      "title": "命令路由实验",
-      "observe": "观察语音助手命令",
-      "budget": "识别时限（毫秒）",
-      "token": "令牌权限范围",
-      "command": "要预览的指令",
-      "test": "测试命令",
-      "candidate": "找到本地候选命令",
-      "fallback": "使用所选提供商",
-      "resultHint": "未执行任何操作。候选命令仍需在执行时检查权限、审批和 MESA。",
-      "noMatchHint": "Home Assistant 未识别此命令。请尝试使用已向 Assist 公开的实体的准确名称或别名。未执行任何操作，也未向提供商发送请求。",
-      "fallbackHint": "没有可用的本地候选操作。正常使用时，此请求由所选提供商处理。本次测试未执行任何操作，也未向提供商发送请求。",
-      "elapsed": "本地评估：{ms} 毫秒",
-      "observations": "自重启以来的语音观察次数：{total}；本地候选：{candidates}。",
-      "details": "技术详情",
-      "failed": "无法加载预览。请检查令牌和连接后重试。",
-      "previewLanguage": "预览语言",
-      "languageEnglish": "英语",
-      "languageChinese": "简体中文",
-      "languageSpanish": "西班牙语",
-      "enabledLanguages": "自动路由语言",
-      "languagesHint": "适用于语音和新聊天的第一条文本消息。未选择的语言使用常规提供商。未选择任何语言时暂停路由。预览语言可独立选择。"
+      "title": "命令路由",
+      "intro": "先在本地处理简单命令，再使用常规 AI 提供商。Phoenix 权限和审批仍然适用。",
+      "enableVoice": "为语音启用",
+      "enableChat": "为聊天启用",
+      "languageHint": "使用语音或 Phoenix 的语言设置。聊天路由仅适用于新对话的第一条消息。",
+      "providerSection": "决策提供商",
+      "providerHint": "可选。选择账户后，已启用的路由可向其发送未识别的命令及授权范围内的实体详情，可能产生 API 费用。",
+      "decisionAccount": "决策账户",
+      "localOnly": "仅本地（不使用决策提供商）",
+      "removeAccount": "删除 {name}",
+      "connectionSettings": "连接设置",
+      "decisionBudget": "决策超时（毫秒）",
+      "timeoutHint": "网络较慢时可延长等待时间。若未及时收到决策，将由常规提供商处理请求。",
+      "failed": "无法保存或加载命令路由设置。",
+      "accountModel": "{name} 的模型",
+      "connectionHint": "基础 URL 是服务器地址。仅当该服务器要求身份验证时才需要填写 API 密钥。"
     }
   },
   "notification": {

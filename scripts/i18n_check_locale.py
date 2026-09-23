@@ -78,35 +78,6 @@ KEEP_ENGLISH_SECTIONS = ("entity",)
 # can tell a decision from an oversight. Absence from the locale file IS the
 # mechanism: HA falls back per key.
 KEEP_ENGLISH: dict[str, tuple[str, ...]] = {
-    # Longer experimental routing guidance remains English during staged language rollout.
-    "English command routing experiment": (
-        "panel.routing.chatHybridHint", "panel.routing.chatMode", "panel.routing.chatExecutionHint", "panel.routing.chatObservationPaused",
-        "panel.routing.chatObserve", "panel.routing.chatObserveHint",
-        "panel.routing.experimentHint", "panel.routing.hybridMode", "panel.routing.hybridHint",
-        "panel.routing.remotePreviewHint", "panel.routing.selectedBrightness", "panel.routing.hybridShadowHint",
-        "panel.routing.decisionTitle",
-        "panel.routing.decisionHint",
-        "panel.routing.decisionAccount",
-        "panel.routing.addDecision",
-        "panel.routing.removeDecision",
-        "panel.routing.decisionService",
-        "panel.routing.saveDecision",
-        "panel.routing.decisionEnable",
-        "panel.routing.decisionPrivacy",
-        "panel.routing.decisionBudget",
-        "panel.routing.decisionBudgetHint",
-        "panel.routing.compareTargets",
-        "panel.routing.targetsPrivacy",
-        "panel.routing.targetResultHint",
-        "panel.routing.selectedTarget",
-        "panel.routing.noSelectedTarget",
-        "panel.routing.compareDecision",
-        "panel.routing.decisionResultHint",
-        "panel.routing.decisionElapsed",
-        "panel.routing.decisionObservations",
-        "panel.routing.mode", "panel.routing.offMode", "panel.routing.localMode",
-        "panel.routing.localHint", "panel.routing.localBudgetHint",
-    ),
     # NOTE (2026-07-30): the MESA enum values and the permission states
     # (READ/WRITE/DENY/INHERIT) USED to live here, on the argument
     # that the effective-resolution table prints the raw mesa-core value beside

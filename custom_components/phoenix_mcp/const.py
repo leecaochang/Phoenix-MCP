@@ -1651,9 +1651,10 @@ VOICE_TEMPLATES: dict[str, str] = {
     ),
 }
 
-# Command routing defaults to English; execution remains opt-in.
-COMMAND_ROUTING_MODES = frozenset({"off", "local_shadow", "local", "hybrid"})
-CHAT_COMMAND_ROUTING_MODES = frozenset({"off", "local", "hybrid"})
+# Auto routing follows the ingress language; legacy diagnostic modes retain their allowlist.
+COMMAND_ROUTING_SETTINGS_VERSION = 1
+COMMAND_ROUTING_MODES = frozenset({"off", "auto", "local_shadow", "local", "hybrid"})
+CHAT_COMMAND_ROUTING_MODES = frozenset({"off", "auto", "local", "hybrid"})
 # Canonical routing tags map to the HA sentence variant; previews use the same set.
 COMMAND_ROUTING_LANGUAGES = {"en": "en", "zh-Hans": "zh-CN", "es": "es"}
 COMMAND_ROUTING_DEFAULT_LANGUAGES = ("en",)

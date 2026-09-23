@@ -1414,7 +1414,9 @@
       "versionNotFound": "Version nicht gefunden.",
       "versionResourcePairRequired": "Geben Sie entweder resource_type und resource_id zusammen an, oder keines von beiden für den aktuellen Feed.",
       "wipeConfirmationRequired": "confirm muss WIPE sein.",
-      "routingPreviewInvalid": "Prüfe das Token, die Befehlssprache und die Routing-Einstellungen."
+      "routingPreviewInvalid": "Prüfe das Token, die Befehlssprache und die Routing-Einstellungen.",
+      "providerModelNotListed": "Wählen Sie ein vom Anbieter zurückgegebenes Modell.",
+      "providerAccountChanged": "Das Anbieterkonto wurde geändert. Laden Sie neu und versuchen Sie es erneut."
     },
     "approvalSummary": {
       "action.approve": "Genehmigen und ausführen",
@@ -1984,27 +1986,22 @@
       "shown.more": "{shown} + {extra} weitere"
     },
     "routing": {
-      "title": "Experimentelle Befehlsweiterleitung",
-      "observe": "Befehle des Sprachassistenten beobachten",
-      "budget": "Zeitbudget für die Erkennung (ms)",
-      "token": "Token-Berechtigungsbereich",
-      "command": "Befehl für die Vorschau",
-      "test": "Befehl testen",
-      "candidate": "Lokaler Kandidat gefunden",
-      "fallback": "Gewählten Anbieter verwenden",
-      "resultHint": "Es wurde nichts ausgeführt. Ein Kandidat benötigt bei der Ausführung weiterhin Berechtigungs-, Genehmigungs- und MESA-Prüfungen.",
-      "noMatchHint": "Home Assistant hat diesen Befehl nicht erkannt. Verwenden Sie den genauen Namen oder Alias einer für Assist freigegebenen Entität. Es wurde nichts ausgeführt oder an einen Anbieter gesendet.",
-      "fallbackHint": "Kein lokaler Kandidat verfügbar. Im normalen Betrieb verarbeitet der ausgewählte Anbieter diese Anfrage. Dieser Test hat nichts ausgeführt oder an einen Anbieter gesendet.",
-      "elapsed": "Lokale Auswertung: {ms} ms",
-      "observations": "Sprachbeobachtungen seit Neustart: {total}; lokale Kandidaten: {candidates}.",
-      "details": "Technische Details",
-      "failed": "Vorschau konnte nicht geladen werden. Token und Verbindung prüfen und erneut versuchen.",
-      "previewLanguage": "Sprache der Vorschau",
-      "languageEnglish": "Englisch",
-      "languageChinese": "Vereinfachtes Chinesisch",
-      "languageSpanish": "Spanisch",
-      "enabledLanguages": "Sprachen für automatisches Routing",
-      "languagesHint": "Gilt für Voice und die erste Textnachricht in einem neuen Chat. Nicht ausgewählte Sprachen verwenden den üblichen Anbieter. Ohne Auswahl pausiert das Routing. Die Vorschausprache ist unabhängig."
+      "title": "Befehlsweiterleitung",
+      "intro": "Einfache Befehle werden lokal verarbeitet, bevor Ihr üblicher KI-Anbieter zum Einsatz kommt. Phoenix-Berechtigungen und Genehmigungen gelten weiterhin.",
+      "enableVoice": "Für Sprache aktivieren",
+      "enableChat": "Für Chat aktivieren",
+      "languageHint": "Verwendet Ihre Sprach- oder Phoenix-Sprache. Im Chat gilt dies für die erste Nachricht einer neuen Unterhaltung.",
+      "providerSection": "Entscheidungsanbieter",
+      "providerHint": "Optional. Mit der Auswahl eines Kontos darf die aktivierte Weiterleitung nicht erkannte Befehle und zulässige Entitätsdetails dorthin senden. Es können API-Kosten entstehen.",
+      "decisionAccount": "Entscheidungskonto",
+      "localOnly": "Nur lokal (kein Entscheidungsanbieter)",
+      "removeAccount": "{name} löschen",
+      "connectionSettings": "Verbindungseinstellungen",
+      "decisionBudget": "Zeitlimit für Entscheidungen (ms)",
+      "timeoutHint": "Geben Sie langsameren Verbindungen mehr Zeit. Liegt nicht rechtzeitig eine Entscheidung vor, übernimmt Ihr üblicher Anbieter die Anfrage.",
+      "failed": "Einstellungen zur Befehlsweiterleitung konnten nicht gespeichert oder geladen werden.",
+      "accountModel": "Modell für {name}",
+      "connectionHint": "Die Basis-URL ist die Serveradresse. Fügen Sie nur dann einen API-Schlüssel hinzu, wenn der Server eine Anmeldung erfordert."
     }
   },
   "notification": {

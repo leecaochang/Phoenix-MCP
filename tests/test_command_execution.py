@@ -53,7 +53,9 @@ async def run_voice(hass, data, sentence, **kwargs):
     ("turn off the desk lamp", "turn_off", {}),
     ("set the desk lamp brightness to 50 percent", "turn_on", {"brightness_pct": 50.0}),
 ])
-async def test_local_voice_dispatches_exactly_once_without_model(hass, local_home, sentence, service, extra):
+@pytest.mark.parametrize("routing_mode", ["local", "auto"])
+async def test_local_voice_dispatches_exactly_once_without_model(hass, local_home, sentence, service, extra, routing_mode):
+    await local_home[0].store.async_patch_settings(voice_agent_routing_mode=routing_mode)
     data, token, entity_id = local_home
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):

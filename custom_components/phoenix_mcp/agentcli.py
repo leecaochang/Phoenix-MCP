@@ -4524,8 +4524,6 @@ async def _probe_config(kind: str, body: dict) -> ProviderConfig | ProbeConfigEr
     if definition.purpose == "decision":
         if urlparse(base_url).query:
             return ProbeConfigError("The base URL must not contain a query.", "providerUrlInvalid")
-        if not model and not definition.model:
-            return ProbeConfigError("A model is required.", "providerModelRequired")
         if len(model) > 200 or (api_key and (len(api_key) > 4096 or any(ch in api_key for ch in "\r\n"))):
             return ProbeConfigError("Invalid provider configuration.", "providerUrlInvalid")
     return ProviderConfig(kind=kind, model=model or _default_model(kind),
@@ -4553,6 +4551,23 @@ def _build_setup_provider(cfg: ProviderConfig):
         from .decision_provider import DecisionProvider
         return DecisionProvider(cfg, PROVIDER_DEFINITIONS[cfg.kind].adapter)
     return build_provider(cfg)
+
+
+async def _checked_decision_models(provider, session, model: object, rid: str) -> tuple[list[str], web.Response | None]:
+    """Require a real advertised model before persisting a decision account."""
+    from .decision_provider import DecisionError
+
+    if not isinstance(model, str) or not model.strip() or len(model) > 200:
+        return [], _err("invalid_request", "A model is required.", 400, rid, key="providerModelRequired")
+    try:
+        models = await provider.list_models(session)
+    except DecisionError as error:
+        return [], _err("invalid_request", "Could not load decision provider models.", 400, rid,
+                       key="providerConnectionFailed", params={"detail": str(error)})
+    if model.strip() not in models:
+        return [], _err("invalid_request", "Choose a model returned by this provider.", 400, rid,
+                       key="providerModelNotListed")
+    return models, None
 
 
 class PhoenixAgentCliProvidersView(PhoenixView):
@@ -4604,12 +4619,18 @@ class PhoenixAgentCliProvidersView(PhoenixView):
 
         session = async_get_clientsession(self.hass)
         provider = _build_setup_provider(probe)
-        ok, reason = await provider.validate(session)
-        if not ok:
-            return _err(
-                "invalid_request", f"Connection failed: {reason}", 400, rid,
-                key="providerConnectionFailed", params={"detail": reason},
-            )
+        decision_models = None
+        if provider_purpose(kind) == "decision":
+            decision_models, error = await _checked_decision_models(provider, session, body.get("model"), rid)
+            if error is not None:
+                return error
+        else:
+            ok, reason = await provider.validate(session)
+            if not ok:
+                return _err(
+                    "invalid_request", f"Connection failed: {reason}", 400, rid,
+                    key="providerConnectionFailed", params={"detail": reason},
+                )
 
         try:
             instance_id = await store.add(kind, cfg)
@@ -4624,7 +4645,7 @@ class PhoenixAgentCliProvidersView(PhoenixView):
         # Ollama. The account is already valid and stored, so a transient
         # catalogue failure must not turn a successful setup into a failure.
         try:
-            models = await provider.list_models(session)
+            models = decision_models if decision_models is not None else await provider.list_models(session)
             capabilities = await provider.list_model_capabilities(session, models)
             await store.set_capabilities(instance_id, capabilities, utcnow().isoformat())
         except Exception:  # noqa: BLE001 - capability discovery is best effort
@@ -4644,12 +4665,8 @@ class PhoenixAgentCliProviderView(PhoenixView):
     async def patch(self, request: web.Request, instance_id: str) -> web.Response:
         """Change this account's default model.
 
-        The model is NOT validated against the provider's live list here, and
-        that is deliberate: the panel offers the discovered list, but a
-        self-hosted server can serve a model its own index does not advertise,
-        and a network round trip inside a PATCH would let an unreachable
-        provider block an edit the operator can already see is correct. The UI
-        guides; the endpoint records.
+        Conversational accounts permit unlisted model IDs for custom deployments.
+        Decision accounts require a current advertised model, including API writes.
         """
         rid = request.get("phoenix_mcp_rid", "")
         body = await _read_body(request, rid)
@@ -4662,6 +4679,26 @@ class PhoenixAgentCliProviderView(PhoenixView):
                 key="providerModelRequired",
             )
         store = await _get_secret_store(self.hass)
+        record = store.get(instance_id)
+        if record and provider_purpose(record.get("kind", "")) == "decision":
+            cfg = store.resolve(instance_id, purpose="decision")
+            if cfg is None:
+                return _err("not_found", "Provider account not found.", 404, rid,
+                            key="providerAccountNotFound")
+            _, error = await _checked_decision_models(
+                _build_setup_provider(cfg), async_get_clientsession(self.hass), body.get("model"), rid,
+            )
+            if error is not None:
+                return error
+            data: PhoenixData = self.hass.data[DOMAIN]
+            async with data.settings_update_lock:
+                if store.get(instance_id) != record:
+                    return _err("invalid_request", "Provider account changed. Reload and try again.", 409, rid,
+                                key="providerAccountChanged")
+                if not await store.set_model(instance_id, model):
+                    return _err("not_found", "Provider account not found.", 404, rid,
+                                key="providerAccountNotFound")
+            return _ok({"instance": {"id": instance_id, "model": model}}, request_id=rid)
         if not await store.set_model(instance_id, model):
             return _err(
                 "not_found", "Provider account not found.", 404, rid,

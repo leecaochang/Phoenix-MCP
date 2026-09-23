@@ -968,7 +968,9 @@
       "versionNotFound": "Nie znaleziono wersji.",
       "versionResourcePairRequired": "Podaj zarówno resource_type, jak i resource_id, albo żadne z nich dla ostatniego kanału.",
       "wipeConfirmationRequired": "confirm musi mieć wartość WIPE.",
-      "routingPreviewInvalid": "Sprawdź token, język polecenia i ustawienia routingu."
+      "routingPreviewInvalid": "Sprawdź token, język polecenia i ustawienia routingu.",
+      "providerModelNotListed": "Wybierz model zwrócony przez tego dostawcę.",
+      "providerAccountChanged": "Konto dostawcy uległo zmianie. Odśwież i spróbuj ponownie."
     },
     "wizard": {
       "accessSub": "Rozwiń grupę <code>light</code> i wybierz światło, które możesz zweryfikować. Wybierz <strong>W</strong>, aby przyznać dostęp do odczytu i zapisu. Przyznaj całe urządzenie lub rozwiń je, aby wybrać jedną encję. Więcej uprawnień możesz dodać później.",
@@ -2031,27 +2033,22 @@
       "zigbee_topology.title": "Skanuj topologię Zigbee"
     },
     "routing": {
-      "title": "Eksperymentalne kierowanie poleceń",
-      "observe": "Obserwuj polecenia agenta głosowego",
-      "budget": "Limit czasu rozpoznawania (ms)",
-      "token": "Zakres tokenu",
-      "command": "Polecenie do podglądu",
-      "test": "Testuj polecenie",
-      "candidate": "Znaleziono lokalnego kandydata",
-      "fallback": "Użyj wybranego dostawcy",
-      "resultHint": "Nic nie wykonano. Kandydat nadal wymaga kontroli uprawnień, zatwierdzenia i MESA podczas wykonywania.",
-      "noMatchHint": "Home Assistant nie rozpoznał tego polecenia. Spróbuj użyć dokładnej nazwy lub aliasu encji udostępnionej Assist. Nic nie zostało wykonane ani wysłane do dostawcy.",
-      "fallbackHint": "Brak lokalnego kandydata. Podczas normalnego użytkowania wybrany dostawca obsługuje to żądanie. Ten test niczego nie wykonał ani nie wysłał do dostawcy.",
-      "elapsed": "Ocena lokalna: {ms} ms",
-      "observations": "Obserwacje głosowe od ponownego uruchomienia: {total}; lokalni kandydaci: {candidates}.",
-      "details": "Szczegóły techniczne",
-      "failed": "Nie udało się wczytać podglądu. Sprawdź token i połączenie, a następnie spróbuj ponownie.",
-      "previewLanguage": "Język podglądu",
-      "languageEnglish": "Angielski",
-      "languageChinese": "Chiński uproszczony",
-      "languageSpanish": "Hiszpański",
-      "enabledLanguages": "Języki automatycznego routingu",
-      "languagesHint": "Dotyczy Voice i pierwszej wiadomości tekstowej w nowym czacie. Niewybrane języki korzystają ze zwykłego dostawcy. Brak wybranych języków wstrzymuje routing. Język podglądu jest niezależny."
+      "title": "Kierowanie poleceń",
+      "intro": "Obsługuj proste polecenia lokalnie przed użyciem zwykłego dostawcy AI. Uprawnienia i zatwierdzenia Phoenix nadal obowiązują.",
+      "enableVoice": "Włącz dla głosu",
+      "enableChat": "Włącz dla czatu",
+      "languageHint": "Używa języka głosu lub Phoenix. Na czacie dotyczy pierwszej wiadomości w nowej rozmowie.",
+      "providerSection": "Dostawca decyzji",
+      "providerHint": "Opcjonalnie. Wybranie konta pozwala aktywnemu kierowaniu wysyłać do niego nierozpoznane polecenia i szczegóły dozwolonych encji. Mogą obowiązywać opłaty API.",
+      "decisionAccount": "Konto dostawcy decyzji",
+      "localOnly": "Tylko lokalnie (bez dostawcy decyzji)",
+      "removeAccount": "Usuń {name}",
+      "connectionSettings": "Ustawienia połączenia",
+      "decisionBudget": "Limit czasu decyzji (ms)",
+      "timeoutHint": "Daj więcej czasu wolniejszym połączeniom. Jeśli decyzja nie nadejdzie na czas, żądanie obsłuży zwykły dostawca.",
+      "failed": "Nie udało się zapisać lub wczytać ustawień kierowania poleceń.",
+      "accountModel": "Model dla {name}",
+      "connectionHint": "Bazowy adres URL to adres serwera. Dodaj klucz API tylko wtedy, gdy serwer wymaga uwierzytelniania."
     }
   }
 }

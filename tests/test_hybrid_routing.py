@@ -71,7 +71,9 @@ async def run_voice(hass, home, *, category="light_on", sentence="Please illumin
     ("light_brightness", "turn_on", {"brightness_pct": 50}),
     ("light_brightness", "turn_on", {"brightness_pct": 100}),
 ])
-async def test_two_requests_dispatch_once_and_do_not_duplicate_shadow(hass, hybrid_home, category, service, extra):
+@pytest.mark.parametrize("routing_mode", ["hybrid", "auto"])
+async def test_two_requests_dispatch_once_and_do_not_duplicate_shadow(hass, hybrid_home, category, service, extra, routing_mode):
+    await hybrid_home[0].store.async_patch_settings(voice_agent_routing_mode=routing_mode)
     data, token, _, _, entity_id = hybrid_home
     await data.store.async_patch_settings(decision_shadow_enabled=True)
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
@@ -162,7 +164,9 @@ async def set_mesa(hass, home, mode):
 
 
 @pytest.mark.parametrize("restriction", ["mesa_prohibited", "mesa_read_only", "mesa_confirm", "pass_through"])
-async def test_decision_execution_preserves_mesa_and_approval(hass, hybrid_home, restriction):
+@pytest.mark.parametrize("routing_mode", ["hybrid", "auto"])
+async def test_decision_execution_preserves_mesa_and_approval(hass, hybrid_home, restriction, routing_mode):
+    await hybrid_home[0].store.async_patch_settings(voice_agent_routing_mode=routing_mode)
     data, token, *_ = hybrid_home
     if restriction.startswith("mesa_") or restriction == "pass_through":
         await set_mesa(hass, hybrid_home, restriction[5:] if restriction.startswith("mesa_") else "prohibited")
@@ -258,6 +262,8 @@ async def test_changed_authority_during_decision_stops_turn(hass, hybrid_home, c
 
 async def test_uncertain_effect_blocks_replay_and_next_write(hass, hybrid_home):
     data, token, *_ = hybrid_home
+    # Exercise service recovery even when HA sentence loading is cold.
+    await data.store.async_patch_settings(command_routing_timeout_ms=5000)
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", AsyncMock(side_effect=TimeoutError)) as call):
         first, _, provider = await run_voice(hass, hybrid_home)
@@ -324,7 +330,9 @@ async def test_hybrid_settings_require_account_and_clearing_disables_mode(hass, 
     ("zh-Hans", "请将台灯亮度设置为百分之三十七", "指令已发送。"),
     ("es", "pon la lámpara al treinta y siete por ciento", "Orden enviada."),
 ])
-async def test_enabled_language_hybrid_voice_carries_language_through_dispatch(hass, hybrid_home, language, sentence, reply):
+@pytest.mark.parametrize("routing_mode", ["hybrid", "auto"])
+async def test_enabled_language_hybrid_voice_carries_language_through_dispatch(hass, hybrid_home, language, sentence, reply, routing_mode):
+    await hybrid_home[0].store.async_patch_settings(voice_agent_routing_mode=routing_mode)
     data, _, _, _, entity_id = hybrid_home
     await data.store.async_patch_settings(command_routing_languages=[language])
     local = {"reason": "no_match", "proposal": None, "elapsed_ms": 1, "route": "provider"}

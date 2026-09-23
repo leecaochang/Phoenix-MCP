@@ -8,7 +8,7 @@ from typing import Any
 
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .command_routing import RoutingAuthority, routing_language
+from .command_routing import RoutingAuthority, routing_language, routing_languages, effective_routing_mode
 from .const import MAX_SEARCH_QUERY_LEN, DECISION_TARGET_INTENTS, DECISION_HYBRID_REASONS
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 
@@ -104,7 +104,7 @@ class DecisionShadow:
                     "elapsed_ms": round((monotonic() - started) * 1000, 2)}
 
         decision_language = routing_language(language, preview=ingress == "preview",
-                                             enabled=authority.settings.command_routing_languages)
+                                             enabled=routing_languages(authority.settings, ingress))
         if decision_language is None:
             return result("unsupported_language")
         if not isinstance(sentence, str) or not sentence.strip() or len(sentence) > MAX_SEARCH_QUERY_LEN:
@@ -116,9 +116,9 @@ class DecisionShadow:
             settings = data.store.get_settings()
             if prepare:
                 if ingress == "chat":
-                    enabled = settings.agentcli_routing_mode == "hybrid"
+                    enabled = effective_routing_mode(settings, "chat") == "hybrid"
                 elif ingress == "voice":
-                    enabled = (settings.voice_agent_routing_mode == "hybrid" and settings.voice_agent_enabled
+                    enabled = (effective_routing_mode(settings) == "hybrid" and settings.voice_agent_enabled
                                and settings.voice_agent_token_id == authority.token_id)
                 else:
                     enabled = False

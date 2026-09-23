@@ -130,7 +130,9 @@
       "versionNotFound": "未找到版本。",
       "versionResourcePairRequired": "請同時提供 resource_type 和 resource_id，或兩者都不提供以檢視最近記錄。",
       "wipeConfirmationRequired": "confirm 必須為 WIPE。",
-      "routingPreviewInvalid": "請檢查權杖、指令語言和路由設定。"
+      "routingPreviewInvalid": "請檢查權杖、指令語言和路由設定。",
+      "providerModelNotListed": "請選取此提供者傳回的模型。",
+      "providerAccountChanged": "提供者帳戶已變更，請重新整理後再試。"
     },
     "agentchat": {
       "answerAnyway": "仍然回答",
@@ -1989,27 +1991,22 @@
       "yourDevice": "您的裝置"
     },
     "routing": {
-      "title": "命令路由實驗",
-      "observe": "觀察語音助理命令",
-      "budget": "辨識時限（毫秒）",
-      "token": "權杖權限範圍",
-      "command": "要預覽的指令",
-      "test": "測試命令",
-      "candidate": "找到本機候選命令",
-      "fallback": "使用所選提供者",
-      "resultHint": "未執行任何操作。候選命令仍需在執行時檢查權限、核准和 MESA。",
-      "noMatchHint": "Home Assistant 未辨識此命令。請嘗試使用已向 Assist 公開的實體的準確名稱或別名。未執行任何操作，也未向供應商傳送請求。",
-      "fallbackHint": "沒有可用的本機候選操作。正常使用時，此請求由所選供應商處理。本次測試未執行任何操作，也未向供應商傳送請求。",
-      "elapsed": "本機評估：{ms} 毫秒",
-      "observations": "自重新啟動以來的語音觀察次數：{total}；本機候選：{candidates}。",
-      "details": "技術詳情",
-      "failed": "無法載入預覽。請檢查權杖和連線後重試。",
-      "previewLanguage": "預覽語言",
-      "languageEnglish": "英語",
-      "languageChinese": "簡體中文",
-      "languageSpanish": "西班牙語",
-      "enabledLanguages": "自動路由語言",
-      "languagesHint": "適用於語音和新聊天的第一則文字訊息。未選取的語言使用一般供應商。未選取任何語言時暫停路由。預覽語言可獨立選取。"
+      "title": "命令路由",
+      "intro": "先在本機處理簡單命令，再使用一般 AI 提供者。Phoenix 權限和核准仍然適用。",
+      "enableVoice": "為語音啟用",
+      "enableChat": "為聊天啟用",
+      "languageHint": "使用語音或 Phoenix 的語言設定。聊天路由僅適用於新對話的第一則訊息。",
+      "providerSection": "決策提供者",
+      "providerHint": "選用。選取帳戶後，已啟用的路由可向其傳送未辨識的命令及授權範圍內的實體詳情，可能產生 API 費用。",
+      "decisionAccount": "決策帳戶",
+      "localOnly": "僅本機（不使用決策提供者）",
+      "removeAccount": "刪除 {name}",
+      "connectionSettings": "連線設定",
+      "decisionBudget": "決策逾時（毫秒）",
+      "timeoutHint": "網路較慢時可延長等待時間。若未及時收到決策，將由一般提供者處理請求。",
+      "failed": "無法儲存或載入命令路由設定。",
+      "accountModel": "{name} 的模型",
+      "connectionHint": "基礎 URL 是伺服器位址。僅當該伺服器要求驗證身分時才需要填寫 API 金鑰。"
     }
   },
   "voice": {

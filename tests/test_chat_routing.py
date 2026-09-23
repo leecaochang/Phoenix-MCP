@@ -141,7 +141,7 @@ async def test_changes_during_recognition_stop_before_provider(hass, chat_home, 
     data, token = chat_home
     cancel = asyncio.Event()
     if execute: await data.store.async_patch_settings(agentcli_routing_mode='local')
-    async def local(*args):
+    async def local(*args, **kwargs):
         if change == 'token': token.revoked = True
         if change == 'settings': await data.store.async_patch_settings(agentcli_routing_shadow_enabled=False)
         if change == 'cancel': cancel.set()
@@ -218,7 +218,9 @@ async def executing_chat(chat_home, hass):
     ('turn off the desk lamp', 'turn_off', {}),
     ('set the desk lamp brightness to 50 percent', 'turn_on', {'brightness_pct': 50.0}),
 ])
-async def test_chat_local_dispatches_once_without_either_model(hass, executing_chat, sentence, service, extra):
+@pytest.mark.parametrize('routing_mode', ['local', 'auto'])
+async def test_chat_local_dispatches_once_without_either_model(hass, executing_chat, sentence, service, extra, routing_mode):
+    await executing_chat[0].store.async_patch_settings(agentcli_routing_mode=routing_mode)
     from custom_components.phoenix_mcp import mcp_view
     data, token = executing_chat
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
@@ -250,7 +252,7 @@ async def test_chat_read_uses_dispatch_and_followup_uses_provider(hass, executin
 
 
 @pytest.mark.parametrize('case', ['history', 'non_english', 'missing_language', 'blocks', 'extra_fields'])
-@pytest.mark.parametrize('mode', ['local', 'hybrid'])
+@pytest.mark.parametrize('mode', ['local', 'hybrid', 'auto'])
 async def test_execution_exclusions_preserve_provider(hass, executing_chat, case, mode):
     await executing_chat[0].store.async_patch_settings(agentcli_routing_mode=mode)
     messages = [{'role': 'user', 'content': 'turn on the desk lamp'}]
@@ -373,7 +375,7 @@ async def test_chat_command_retains_recovery_through_response_delivery(hass, exe
 async def test_execution_mode_is_closed_and_default_off(hass, chat_home):
     data, _ = chat_home
     assert GlobalSettings().agentcli_routing_mode == 'off'
-    assert GlobalSettings.from_dict({'agentcli_routing_mode': 'local'}).agentcli_routing_mode == 'local'
+    assert GlobalSettings.from_dict({'agentcli_routing_mode': 'local'}).agentcli_routing_mode == 'off'
     for invalid in ('unknown', 'local_shadow', True, [], None):
         assert GlobalSettings.from_dict({'agentcli_routing_mode': invalid}).agentcli_routing_mode == 'off'
         _, error = await _validated_settings_patch({'agentcli_routing_mode': invalid}, data, hass, 'test')
@@ -450,7 +452,9 @@ async def decision_chat_turn(hass, home, *, category='light_on', percent=50, req
     ('light_brightness', 0, 'turn_on'), ('light_brightness', 50, 'turn_on'),
     ('light_brightness', 100, 'turn_on'), ('state_query', 50, None),
 ])
-async def test_chat_hybrid_uses_real_decision_validation_and_one_dispatch(hass, hybrid_chat, category, percent, service):
+@pytest.mark.parametrize('routing_mode', ['hybrid', 'auto'])
+async def test_chat_hybrid_uses_real_decision_validation_and_one_dispatch(hass, hybrid_chat, category, percent, service, routing_mode):
+    await hybrid_chat[0].store.async_patch_settings(agentcli_routing_mode=routing_mode)
     from custom_components.phoenix_mcp import mcp_view
     data, token = hybrid_chat
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
@@ -574,7 +578,9 @@ async def test_chat_hybrid_cancellation_closes_owned_job_and_never_dispatches(ha
 
 
 @pytest.mark.parametrize('change', ['none', 'account', 'deleted', 'mode', 'new_candidate', 'alias'])
-async def test_chat_hybrid_saved_approval_revalidates_decision_constraints(hass, hybrid_chat, change):
+@pytest.mark.parametrize('routing_mode', ['hybrid', 'auto'])
+async def test_chat_hybrid_saved_approval_revalidates_decision_constraints(hass, hybrid_chat, change, routing_mode):
+    await hybrid_chat[0].store.async_patch_settings(agentcli_routing_mode=routing_mode)
     from custom_components.phoenix_mcp import mcp_view
     from custom_components.phoenix_mcp.const import COMMAND_ROUTING_PLAN_KEY
     from custom_components.phoenix_mcp.mesa import async_setup_mesa
@@ -653,10 +659,12 @@ async def test_chat_hybrid_recovery_covers_effect_and_response_delivery(hass, hy
     ('zh-Hans', '台灯', '打开台灯', '指令已发送。'),
     ('es', 'Lámpara', 'enciende la lámpara', 'Orden enviada.'),
 ])
-async def test_selected_language_local_chat_executes_without_a_model(hass, executing_chat, language, alias, sentence, reply):
+@pytest.mark.parametrize('routing_mode', ['local', 'auto'])
+async def test_selected_language_local_chat_executes_without_a_model(hass, executing_chat, language, alias, sentence, reply, routing_mode):
+    await executing_chat[0].store.async_patch_settings(agentcli_routing_mode=routing_mode)
     from custom_components.phoenix_mcp import mcp_view
     data, _ = executing_chat
-    await data.store.async_patch_settings(command_routing_languages=[language])
+    await data.store.async_patch_settings(command_routing_languages=[] if routing_mode == "auto" else [language])
     er.async_get(hass).async_update_entity('light.test_desk', aliases={alias})
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call,
@@ -713,3 +721,27 @@ async def test_unselected_chat_language_skips_recognition_and_decision(hass, hyb
     local.assert_not_called()
     remote.assert_not_called()
     provider.stream_turn.assert_called_once()
+
+
+async def test_auto_account_clear_keeps_local_routing_and_stops_remote_calls(hass, executing_chat):
+    data, _ = executing_chat
+    changes, error = await _validated_settings_patch({'agentcli_routing_mode': 'auto'}, data, hass, 'test')
+    assert error is None
+    await data.store.async_patch_settings(**changes)
+    assert not data.store.get_settings().agentcli_routing_shadow_enabled
+    changes, error = await _validated_settings_patch({'decision_provider_id': None}, data, hass, 'test')
+    assert error is None
+    await data.store.async_patch_settings(**changes)
+    assert data.store.get_settings().agentcli_routing_mode == 'auto'
+    with patch.object(DecisionProvider, '_request') as remote:
+        provider, _, _ = await chat_turn(hass, executing_chat)
+    provider.stream_turn.assert_called_once()
+    remote.assert_not_called()
+    assert data.command_routing.summary()['agent_chat']['observations'] == 1
+    changes, error = await _validated_settings_patch({'agentcli_routing_mode': 'off'}, data, hass, 'test')
+    assert error is None
+    await data.store.async_patch_settings(**changes)
+    with patch.object(chat_routing, 'async_evaluate_command') as local:
+        provider, _, _ = await chat_turn(hass, executing_chat)
+    provider.stream_turn.assert_called_once()
+    local.assert_not_called()

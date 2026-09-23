@@ -4262,8 +4262,8 @@ async def test_tencent_replays_reasoning_without_inventing_provider_specific_fla
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("mode", ["local_shadow", "hybrid"])
-@pytest.mark.parametrize("chat_mode", ["off", "local", "hybrid"])
+@pytest.mark.parametrize("mode", ["local_shadow", "hybrid", "auto"])
+@pytest.mark.parametrize("chat_mode", ["off", "local", "hybrid", "auto"])
 async def test_decision_account_admin_catalog_isolated_and_delete_clears_binding(hass, token_store, mode, chat_mode):
     from custom_components.phoenix_mcp.const import DOMAIN
     from custom_components.phoenix_mcp.data import PhoenixData
@@ -4288,3 +4288,68 @@ async def test_decision_account_admin_catalog_isolated_and_delete_clears_binding
     assert token_store.get_settings().voice_agent_routing_mode == ("off" if mode == "hybrid" else mode)
     assert token_store.get_settings().agentcli_routing_mode == ("off" if chat_mode == "hybrid" else chat_mode)
     assert store.resolve(chat).model == 'chat'
+
+
+@pytest.mark.parametrize('kind', ['typesafe', 'systemone', 'classifier'])
+@pytest.mark.parametrize('model', ['real-model', 'abcdefg', '', None, ['real-model']])
+async def test_decision_create_requires_advertised_model(hass, kind, model):
+    from custom_components.phoenix_mcp.decision_provider import DecisionProvider
+
+    store = agentcli.AgentCliStore(AsyncMock())
+    view = agentcli.PhoenixAgentCliProvidersView()
+    view.hass = hass
+    request = _admin_request({
+        'kind': kind, 'api_key': 'private-key', 'base_url': 'http://localhost:8000/v1', 'model': model,
+    })
+    with (patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)),
+          patch.object(agentcli, '_validate_base_url', AsyncMock(return_value=None)),
+          patch.object(DecisionProvider, '_request', AsyncMock(return_value={'data': [{'id': 'real-model'}]})) as transport):
+        response = await view.post(request)
+    assert response.status == (201 if model == 'real-model' else 400)
+    assert bool(store.list_instances()) == (model == 'real-model')
+    assert all(call.args[1:3] == ('GET', 'models') for call in transport.await_args_list)
+    assert 'private-key' not in response.text
+
+
+@pytest.mark.parametrize('kind', ['systemone', 'classifier'])
+async def test_decision_discovery_needs_endpoint_but_not_model_or_key(hass, kind):
+    from custom_components.phoenix_mcp.decision_provider import DecisionProvider
+
+    store = agentcli.AgentCliStore(AsyncMock())
+    view = agentcli.PhoenixAgentCliProbeView()
+    view.hass = hass
+    request = _admin_request({'kind': kind, 'base_url': 'http://localhost:8000/v1'})
+    with (patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)),
+          patch.object(agentcli, '_validate_base_url', AsyncMock(return_value=None)),
+          patch.object(DecisionProvider, '_request', AsyncMock(return_value={'models': [{'name': 'local-model'}]})) as transport):
+        response = await view.post(request)
+    body = json.loads(response.body)
+    assert body['ok'] and body['models'] == ['local-model']
+    assert not store.list_instances()
+    assert all(call.args[1:3] == ('GET', 'models') for call in transport.await_args_list)
+
+
+@pytest.mark.parametrize('case', ['valid', 'unlisted', 'offline', 'deleted', 'changed'])
+async def test_decision_model_edits_validate_before_save_and_recheck_account(hass, token_store, case):
+    from custom_components.phoenix_mcp.const import DOMAIN
+    from custom_components.phoenix_mcp.data import PhoenixData
+    from custom_components.phoenix_mcp.decision_provider import DecisionError, DecisionProvider
+
+    hass.data[DOMAIN] = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+    store = agentcli.AgentCliStore(AsyncMock())
+    account = await store.add('typesafe', {'api_key': 'private-key', 'model': 'old-model'})
+    view = agentcli.PhoenixAgentCliProviderView()
+    view.hass = hass
+    request = _admin_request({'model': 'new-model' if case != 'unlisted' else 'abcdefg'})
+    async def models(*args, **kwargs):
+        if case == 'offline': raise DecisionError('unavailable')
+        if case == 'deleted': await store.delete(account)
+        if case == 'changed': await store.set_model(account, 'other-model')
+        return {'models': [{'name': 'new-model'}]}
+    with (patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)),
+          patch.object(DecisionProvider, '_request', AsyncMock(side_effect=models))):
+        response = await view.patch(request, instance_id=account)
+    assert response.status == (200 if case == 'valid' else 409 if case in ('deleted', 'changed') else 400)
+    assert 'private-key' not in response.text
+    if case == 'deleted': assert store.get(account) is None
+    else: assert store.get(account)['model'] == ('new-model' if case == 'valid' else 'other-model' if case == 'changed' else 'old-model')

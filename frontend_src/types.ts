@@ -154,9 +154,9 @@ export interface GlobalSettings {
   assist_api_supported?: boolean;
   // Phoenix MCP voice agent: Phoenix MCP registered as HA's own conversation agent, running its
   // own model on the chosen token's scope. Independent of the Assist bridge above.
-  voice_agent_routing_mode?: "off" | "local_shadow" | "local" | "hybrid";
+  voice_agent_routing_mode?: "off" | "auto" | "local_shadow" | "local" | "hybrid";
   agentcli_routing_shadow_enabled?: boolean;
-  agentcli_routing_mode?: "off" | "local" | "hybrid";
+  agentcli_routing_mode?: "off" | "auto" | "local" | "hybrid";
   command_routing_languages?: string[];
   command_routing_timeout_ms?: number;
   decision_provider_id?: string | null;

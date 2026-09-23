@@ -11,7 +11,7 @@ from typing import Any
 
 from .agent_recovery import RecoveryRequired, dispatch_agent_tool, recovery_turn
 from .audit import generate_request_id
-from .command_routing import RoutingAuthority
+from .command_routing import RoutingAuthority, effective_routing_mode
 from .const import COMMAND_ROUTING_PLAN_KEY, VOICE_AGENT_CLIENT_IP, DECISION_TARGET_INTENTS
 from .device_semantics import device_registry_snapshot
 from .helpers import voice_text
@@ -91,7 +91,7 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
 
     settings = data.store.get_settings()
     category = plan["decision_category"]
-    mode = settings.agentcli_routing_mode if plan.get("ingress") == "chat" else settings.voice_agent_routing_mode
+    mode = effective_routing_mode(settings, plan.get("ingress", "voice"))
     return bool(mode == "hybrid" and settings.decision_provider_id
                 and DECISION_TARGET_INTENTS.get(category) == plan["proposal"]["intent"]
                 and plan.get("decision_account") is not None
@@ -106,9 +106,9 @@ def plan_is_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
         proposal = plan["proposal"]
         ingress = plan.get("ingress", "voice")
         if ingress == "chat":
-            enabled = settings.agentcli_routing_mode in ("local", "hybrid")
+            enabled = effective_routing_mode(settings, "chat") in ("local", "hybrid")
         elif ingress == "voice":
-            enabled = (settings.voice_agent_enabled and settings.voice_agent_routing_mode in ("local", "hybrid")
+            enabled = (settings.voice_agent_enabled and effective_routing_mode(settings) in ("local", "hybrid")
                        and settings.voice_agent_token_id == token.id)
         else:
             return False

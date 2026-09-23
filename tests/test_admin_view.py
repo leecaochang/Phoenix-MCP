@@ -3007,7 +3007,10 @@ async def test_routing_settings_validation(patch_body, accepted):
     patchable, error = await _validated_settings_patch(patch_body, data, _make_hass(data), "rid")
     assert (error is None) == accepted
     if accepted:
-        assert patchable == patch_body
+        expected = dict(patch_body)
+        if patch_body.get("voice_agent_routing_mode") in ("off", "auto"):
+            expected.update(decision_shadow_enabled=False, agentcli_routing_shadow_enabled=False)
+        assert patchable == expected
 
 
 @pytest.mark.parametrize("targets", [False, True])

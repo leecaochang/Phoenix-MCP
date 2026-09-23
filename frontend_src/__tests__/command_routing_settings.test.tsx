@@ -1,271 +1,35 @@
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { expect, it, vi } from "vitest";
 import type { GlobalSettings } from "../types";
-
-const preview = vi.fn();
-vi.mock("../api", () => ({ api: {
-  getDecisionProviders: () => Promise.resolve({ instances: [], provider_types: [] }),
-  listTokens: () => Promise.resolve([{ id: "t", name: "Voice" }]),
-  previewCommandRoute: (...args: unknown[]) => preview(...args),
-} }));
+vi.mock("../components/DecisionProviderSettings", () => ({ DecisionProviderSettings: () => <div>Accounts</div> }));
 import { CommandRoutingSettings } from "../components/CommandRoutingSettings";
 
-const settings = { voice_agent_token_id: "t", command_routing_timeout_ms: 500 } as GlobalSettings;
-const candidate = {
-  route: "local_candidate", reason: "supported", executed: false, elapsed_ms: 12,
-  proposal: { intent: "HassTurnOn", entity_ids: ["light.desk"] },
-  voice_observations: { observations: 3, candidates: 2 },
-};
-beforeEach(() => { preview.mockReset(); });
-
-it("keeps Chat observation separately opt-in and disables its control while saving", async () => {
-  const onChange = vi.fn();
-  const { rerender } = render(<CommandRoutingSettings settings={settings} onChange={onChange} saving={false} />);
-  const control = screen.getByLabelText("Observe command routing in Agent Chat");
-  expect(control).not.toBeChecked();
-  expect(screen.getByText(/may operate devices normally/)).toBeTruthy();
-  fireEvent.click(control);
-  expect(onChange).toHaveBeenCalledExactlyOnceWith("agentcli_routing_shadow_enabled", true);
-  expect(preview).not.toHaveBeenCalled();
-  rerender(<CommandRoutingSettings settings={{ ...settings, agentcli_routing_shadow_enabled: true }} onChange={onChange} saving />);
-  expect(control).toBeChecked();
-  expect(control).toBeDisabled();
-  await screen.findByText("Voice");
+it("shows two independent switches without experiment or diagnostic controls", () => {
+  const change = vi.fn();
+  render(<CommandRoutingSettings settings={{} as GlobalSettings} onChange={change} saving={false} />);
+  expect(screen.getByRole("heading", { name: "Command routing" })).toBeVisible();
+  expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+  expect(screen.queryByRole("combobox")).toBeNull();
+  expect(screen.queryByText("Test a command")).toBeNull();
+  expect(screen.queryByText("Automatic routing languages")).toBeNull();
+  expect(screen.getByLabelText("Enable for Voice")).not.toBeChecked();
+  expect(screen.getByLabelText("Enable for Chat")).not.toBeChecked();
+  expect(change).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByLabelText("Enable for Voice"));
+  expect(change).toHaveBeenCalledExactlyOnceWith("voice_agent_routing_mode", "auto");
+  fireEvent.click(screen.getByLabelText("Enable for Chat"));
+  expect(change).toHaveBeenLastCalledWith("agentcli_routing_mode", "auto");
 });
 
-it("previews explicitly and changes Voice routing only on request", async () => {
-  const onChange = vi.fn();
-  render(<CommandRoutingSettings settings={settings} onChange={onChange} saving={false} />);
-  await screen.findByText("Voice");
-  expect(preview).not.toHaveBeenCalled();
-  expect(screen.getByLabelText("Voice command routing")).toHaveValue("off");
-  fireEvent.change(screen.getByLabelText("Voice command routing"), { target: { value: "local_shadow" } });
-  expect(onChange).toHaveBeenCalledWith("voice_agent_routing_mode", "local_shadow");
-  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "turn on desk lamp" } });
-  preview.mockResolvedValue(candidate);
-  fireEvent.click(screen.getByText("Test command"));
-  await screen.findByText("Local candidate found");
-  expect(preview).toHaveBeenCalledWith("t", "turn on desk lamp", false, false, "en");
-  expect(screen.getByText(/Nothing was executed/)).toBeTruthy();
-});
-
-it("supports opting into local execution while previews remain inert", async () => {
-  const onChange = vi.fn();
-  render(<CommandRoutingSettings settings={{ ...settings, voice_agent_routing_mode: "local" }} onChange={onChange} saving={false} />);
-  await screen.findByText("Voice");
-  expect(screen.getByLabelText("Voice command routing")).toHaveValue("local");
-  expect(screen.getByText(/Run locally can operate devices/)).toBeTruthy();
-  fireEvent.change(screen.getByLabelText("Voice command routing"), { target: { value: "off" } });
-  expect(onChange).toHaveBeenCalledWith("voice_agent_routing_mode", "off");
-  expect(preview).not.toHaveBeenCalled();
-});
-
-it("discards a preview when its command is edited", async () => {
-  let resolve!: (value: unknown) => void;
-  preview.mockReturnValue(new Promise(done => { resolve = done; }));
-  render(<CommandRoutingSettings settings={settings} onChange={vi.fn()} saving={false} />);
-  await screen.findByText("Voice");
-  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "old" } });
-  fireEvent.click(screen.getByText("Test command"));
-  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "new" } });
-  await act(async () => resolve(candidate));
-  expect(screen.queryByText("Local candidate found")).toBeNull();
-});
-
-it.each(["no_match", "unsupported", "timeout"])("explains %s without implying an execution approval", async reason => {
-  preview.mockResolvedValue({ ...candidate, route: "provider", reason, proposal: null });
-  render(<CommandRoutingSettings settings={settings} onChange={vi.fn()} saving={false} />);
-  await screen.findByText("Voice");
-  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "turn on desk lamp" } });
-  fireEvent.click(screen.getByText("Test command"));
-  await screen.findByText("Use the selected provider");
-  expect(screen.queryByText(/execution-time permission/)).toBeNull();
-  expect(screen.getByText(/Nothing was executed/)).toBeTruthy();
-  if (reason === "no_match") {
-    expect(screen.getByText(/exact name or alias/)).toBeTruthy();
-  } else {
-    expect(screen.getByText(/No local candidate/)).toBeTruthy();
+it("turns routing off and locks controls during a save", () => {
+  const change = vi.fn();
+  const settings = { voice_agent_routing_mode: "auto", agentcli_routing_mode: "auto" } as GlobalSettings;
+  const view = render(<CommandRoutingSettings settings={settings} onChange={change} saving={false} />);
+  fireEvent.click(screen.getByLabelText("Enable for Chat"));
+  expect(change).toHaveBeenCalledExactlyOnceWith("agentcli_routing_mode", "off");
+  view.rerender(<CommandRoutingSettings settings={settings} onChange={change} saving />);
+  for (const toggle of screen.getAllByRole("checkbox")) {
+    expect(toggle).toBeChecked();
+    expect(toggle).toBeDisabled();
   }
-});
-
-it("shows recoverable errors and rejects invalid budgets", async () => {
-  const onChange = vi.fn();
-  preview.mockRejectedValue(new Error("network"));
-  render(<CommandRoutingSettings settings={settings} onChange={onChange} saving={false} />);
-  await screen.findByText("Voice");
-  const budget = screen.getByLabelText("Recognition budget (ms)");
-  fireEvent.change(budget, { target: { value: "1" } });
-  fireEvent.blur(budget);
-  expect(onChange).not.toHaveBeenCalled();
-  expect(budget).toHaveValue(500);
-  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "hello" } });
-  fireEvent.click(screen.getByText("Test command"));
-  await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("try again"));
-});
-
-it("requires an explicit choice before sending a preview to the decision account", async () => {
-  preview.mockResolvedValue({ ...candidate, route: "provider", proposal: null, reason: "no_match",
-    decision_shadow: { reason: "observed", decision: { choice: "light_on", confidence: 0.8 }, executed: false, elapsed_ms: 100 },
-  });
-  render(<CommandRoutingSettings settings={{ ...settings, decision_provider_id: "decision" }} onChange={vi.fn()} saving={false} />);
-  await screen.findByText("Voice");
-  const compare = screen.getByLabelText(/Also compare local misses/);
-  expect(compare).not.toBeChecked();
-  fireEvent.click(compare);
-  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "light up the desk" } });
-  fireEvent.click(screen.getByText("Test command"));
-  await screen.findByText(/Decision results are observations only/);
-  expect(preview).toHaveBeenCalledWith("t", "light up the desk", true, false, "en");
-  expect(screen.getByText(/Nothing was executed/)).toBeTruthy();
-});
-
-it("asks separately before sharing target metadata and shows the inert selection", async () => {
-  preview.mockResolvedValue({ ...candidate, route: "provider", proposal: null, reason: "no_match",
-    decision_shadow: { reason: "observed", decision: { choice: "light_on", confidence: 0.8 }, executed: false, elapsed_ms: 600,
-      target_selection: { reason: "target_selected", entity_id: "light.desk", elapsed_ms: 300 } },
-  });
-  const props = { settings: { ...settings, decision_provider_id: "decision" }, onChange: vi.fn(), saving: false };
-  const { rerender } = render(<CommandRoutingSettings {...props} />);
-  await screen.findByText("Voice");
-  expect(screen.queryByLabelText(/Also preview a single target/)).toBeNull();
-  fireEvent.click(screen.getByLabelText(/Also compare local misses/));
-  const targets = screen.getByLabelText(/Also preview a single target/);
-  expect(targets).not.toBeChecked();
-  expect(screen.getByText(/No state values or other attributes are sent/)).toBeTruthy();
-  fireEvent.click(targets);
-  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "light up my desk" } });
-  fireEvent.click(screen.getByText("Test command"));
-  await screen.findByText("Suggested target:");
-  expect(screen.getByText("light.desk")).toBeTruthy();
-  expect(screen.getByText(/Target selection is a preview only/)).toBeTruthy();
-  expect(preview).toHaveBeenCalledWith("t", "light up my desk", true, true, "en");
-  rerender(<CommandRoutingSettings {...props} settings={{ ...props.settings, decision_provider_id: "new" }} />);
-  expect(screen.queryByText("Suggested target:")).toBeNull();
-  expect(screen.getByLabelText(/Also compare local misses/)).not.toBeChecked();
-  fireEvent.click(screen.getByLabelText(/Also compare local misses/));
-  expect(screen.getByLabelText(/Also preview a single target/)).not.toBeChecked();
-});
-
-it("discards target results if metadata sharing is disabled during a request", async () => {
-  let resolve!: (value: unknown) => void;
-  preview.mockReturnValue(new Promise(done => { resolve = done; }));
-  render(<CommandRoutingSettings settings={{ ...settings, decision_provider_id: "decision" }} onChange={vi.fn()} saving={false} />);
-  await screen.findByText("Voice");
-  fireEvent.click(screen.getByLabelText(/Also compare local misses/));
-  fireEvent.click(screen.getByLabelText(/Also preview a single target/));
-  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "light up my desk" } });
-  fireEvent.click(screen.getByText("Test command"));
-  fireEvent.click(screen.getByLabelText(/Also compare local misses/));
-  await act(async () => resolve({ ...candidate, decision_shadow: { target_selection: { entity_id: "light.desk" } } }));
-  expect(screen.queryByText("Suggested target:")).toBeNull();
-  fireEvent.click(screen.getByLabelText(/Also compare local misses/));
-  expect(screen.getByLabelText(/Also preview a single target/)).not.toBeChecked();
-});
-
-it("requires an account for hybrid mode without enabling it automatically", async () => {
-  const onChange = vi.fn();
-  const view = render(<CommandRoutingSettings settings={settings} onChange={onChange} saving={false} />);
-  await screen.findByText("Voice");
-  expect(within(screen.getByLabelText("Voice command routing")).getByRole("option", { name: "Run locally, then use the decision provider" })).toBeDisabled();
-  view.rerender(<CommandRoutingSettings settings={{ ...settings, decision_provider_id: "decision" }} onChange={onChange} saving={false} />);
-  expect(within(screen.getByLabelText("Voice command routing")).getByRole("option", { name: "Run locally, then use the decision provider" })).not.toBeDisabled();
-  expect(onChange).not.toHaveBeenCalled();
-  fireEvent.change(screen.getByLabelText("Voice command routing"), { target: { value: "hybrid" } });
-  expect(onChange).toHaveBeenCalledWith("voice_agent_routing_mode", "hybrid");
-  expect(preview).not.toHaveBeenCalled();
-});
-
-it("shows a zero brightness proposal without implying execution or no remote usage", async () => {
-  preview.mockResolvedValue({ ...candidate, route: "provider", proposal: null, reason: "no_match",
-    decision_shadow: { reason: "observed", elapsed_ms: 600, executed: false,
-      target_selection: { reason: "target_selected", entity_id: "light.desk", elapsed_ms: 300,
-        proposal: { intent: "HassLightSet", entity_ids: ["light.desk"], brightness_pct: 0 } } },
-  });
-  render(<CommandRoutingSettings settings={{ ...settings, decision_provider_id: "decision", voice_agent_routing_mode: "hybrid" }} onChange={vi.fn()} saving={false} />);
-  await screen.findByText("Voice");
-  fireEvent.click(screen.getByLabelText(/Also compare local misses/));
-  fireEvent.click(screen.getByLabelText(/Also preview a single target/));
-  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "zero brightness" } });
-  fireEvent.click(screen.getByText("Test command"));
-  await screen.findByText("Suggested brightness: 0%");
-  expect(screen.queryByText(/Nothing was executed or sent to a provider/)).toBeNull();
-  expect(screen.getByText(/Nothing was executed or queued for approval/)).toBeTruthy();
-  expect(preview).toHaveBeenCalledWith("t", "zero brightness", true, true, "en");
-});
-
-
-it("keeps Chat execution opt-in and pauses observation without clearing its preference", async () => {
-  const onChange = vi.fn();
-  const view = render(<CommandRoutingSettings settings={{ ...settings, agentcli_routing_shadow_enabled: true }} onChange={onChange} saving={false} />);
-  await screen.findByText("Voice");
-  const mode = screen.getByLabelText("Agent Chat execution");
-  expect(mode).toHaveValue("off");
-  fireEvent.change(mode, { target: { value: "local" } });
-  expect(onChange).toHaveBeenCalledExactlyOnceWith("agentcli_routing_mode", "local");
-  view.rerender(<CommandRoutingSettings settings={{ ...settings, agentcli_routing_mode: "local", agentcli_routing_shadow_enabled: true }} onChange={onChange} saving={false} />);
-  const observation = screen.getByLabelText("Observe command routing in Agent Chat");
-  expect(observation).toBeChecked();
-  expect(observation).toBeDisabled();
-  expect(screen.getByText(/Background Chat observation is paused/)).toBeTruthy();
-  expect(screen.getByText(/Approvals are queued for review/)).toBeTruthy();
-  expect(preview).not.toHaveBeenCalled();
-  view.rerender(<CommandRoutingSettings settings={settings} onChange={onChange} saving />);
-  expect(mode).toBeDisabled();
-});
-
-
-it("requires a decision account for Chat hybrid mode and explains shared metadata", async () => {
-  const onChange = vi.fn();
-  const view = render(<CommandRoutingSettings settings={settings} onChange={onChange} saving={false} />);
-  await screen.findByText("Voice");
-  const mode = screen.getByLabelText("Agent Chat execution");
-  const hybrid = within(mode).getByRole("option", { name: "Run locally, then use the decision provider" });
-  expect(hybrid).toBeDisabled();
-  view.rerender(<CommandRoutingSettings settings={{ ...settings, decision_provider_id: "decision" }} onChange={onChange} saving={false} />);
-  expect(hybrid).not.toBeDisabled();
-  expect(mode).toHaveValue("off");
-  expect(screen.getByText(/It sends no state values or conversation history/)).toBeTruthy();
-  fireEvent.change(mode, { target: { value: "hybrid" } });
-  expect(onChange).toHaveBeenCalledExactlyOnceWith("agentcli_routing_mode", "hybrid");
-  view.rerender(<CommandRoutingSettings settings={{ ...settings, decision_provider_id: "decision", agentcli_routing_mode: "hybrid", agentcli_routing_shadow_enabled: true }} onChange={onChange} saving={false} />);
-  expect(screen.getByLabelText("Observe command routing in Agent Chat")).toBeDisabled();
-  expect(screen.getByLabelText("Observe command routing in Agent Chat")).toBeChecked();
-  expect(preview).not.toHaveBeenCalled();
-});
-
-it("keeps preview language independent of execution and discards results from an old language", async () => {
-  let resolve!: (value: unknown) => void;
-  preview.mockReturnValue(new Promise(done => { resolve = done; }));
-  const onChange = vi.fn();
-  render(<CommandRoutingSettings settings={settings} onChange={onChange} saving={false} />);
-  await screen.findByText("Voice");
-  fireEvent.change(screen.getByLabelText("Preview language"), { target: { value: "zh-Hans" } });
-  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "打开台灯" } });
-  expect(preview).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByText("Test command"));
-  expect(preview).toHaveBeenCalledWith("t", "打开台灯", false, false, "zh-Hans");
-  fireEvent.change(screen.getByLabelText("Preview language"), { target: { value: "es" } });
-  await act(async () => resolve(candidate));
-  expect(screen.queryByText("Local candidate found")).toBeNull();
-  expect(onChange).not.toHaveBeenCalled();
-});
-
-it("requires language opt-in independently of preview selection and disables edits while saving", async () => {
-  const onChange = vi.fn();
-  const view = render(<CommandRoutingSettings settings={settings} onChange={onChange} saving={false} />);
-  await screen.findByText("Voice");
-  const group = screen.getByRole("group", { name: "Automatic routing languages" });
-  expect(within(group).getByLabelText("English")).toBeChecked();
-  expect(within(group).getByLabelText("Simplified Chinese")).not.toBeChecked();
-  expect(within(group).getByLabelText("Spanish")).not.toBeChecked();
-  fireEvent.change(screen.getByLabelText("Preview language"), { target: { value: "zh-Hans" } });
-  expect(onChange).not.toHaveBeenCalled();
-  fireEvent.click(within(group).getByLabelText("Simplified Chinese"));
-  expect(onChange).toHaveBeenCalledExactlyOnceWith("command_routing_languages", ["en", "zh-Hans"]);
-  view.rerender(<CommandRoutingSettings settings={{ ...settings, command_routing_languages: ["en", "zh-Hans"] }} onChange={onChange} saving />);
-  expect(within(group).getByLabelText("Simplified Chinese")).toBeChecked();
-  expect(within(group).getByLabelText("Spanish")).toBeDisabled();
-  view.rerender(<CommandRoutingSettings settings={{ ...settings, command_routing_languages: [] }} onChange={onChange} saving={false} />);
-  expect(within(group).getAllByRole("checkbox").every(input => !(input as HTMLInputElement).checked)).toBe(true);
-  expect(screen.getByLabelText("Preview language")).toHaveValue("zh-Hans");
 });

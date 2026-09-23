@@ -1,4 +1,4 @@
-"""Route standalone Agent Chat commands in explicitly enabled languages before the provider loop."""
+"""Route standalone Agent Chat commands before the provider loop."""
 
 from __future__ import annotations
 
@@ -7,7 +7,9 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from .command_execution import LocalCommandReply, async_execute_chat_command, async_execute_chat_plan
-from .command_routing import RoutingAuthority, async_evaluate_command, routing_language
+from .command_routing import (
+    RoutingAuthority, async_evaluate_command, effective_routing_mode, routing_language, routing_languages,
+)
 from .decision_shadow import async_preview_decision
 from .helpers import voice_text
 
@@ -18,9 +20,10 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
                                    emit: Callable[[str, dict], Awaitable[None]]) -> bool:
     """True continues the provider; False means this turn has already finished."""
     settings = data.store.get_settings()
-    execute = settings.agentcli_routing_mode in ("local", "hybrid")
+    mode = effective_routing_mode(settings, "chat")
+    execute = mode in ("local", "hybrid")
     if (not (execute or settings.agentcli_routing_shadow_enabled)
-            or routing_language(language, enabled=settings.command_routing_languages) is None
+            or routing_language(language, enabled=routing_languages(settings, "chat")) is None
             or len(messages) != 1 or not isinstance(messages[0], dict)
             or set(messages[0]) != {"role", "content"} or messages[0]["role"] != "user"
             or not isinstance(messages[0]["content"], str)):
@@ -47,7 +50,7 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
 
     if cancel.is_set() or authority.current(hass) is None:
         return await stop()
-    result = await async_evaluate_command(hass, data, token, messages[0]["content"], language)
+    result = await async_evaluate_command(hass, data, token, messages[0]["content"], language, ingress="chat")
     current = authority.current(hass)
     if cancel.is_set() or current is None:
         return await stop()
@@ -60,7 +63,7 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
                 return await finish(reply)
             if cancel.is_set() or authority.current(hass) is None:
                 return await stop()
-        if settings.agentcli_routing_mode == "hybrid" and not result["proposal"]:
+        if mode == "hybrid" and not result["proposal"]:
             decision = await async_preview_decision(hass, data, current, messages[0]["content"], language,
                                                     result, targets=True, prepare=True, ingress="chat", cancel=cancel)
             current = authority.current(hass)

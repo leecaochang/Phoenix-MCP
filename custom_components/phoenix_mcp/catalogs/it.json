@@ -125,7 +125,9 @@
       "versionNotFound": "Versione non trovata.",
       "versionResourcePairRequired": "Specifica sia resource_type sia resource_id, oppure nessuno dei due per il feed recente.",
       "wipeConfirmationRequired": "confirm deve essere WIPE.",
-      "routingPreviewInvalid": "Controlla il token, la lingua del comando e le impostazioni di instradamento."
+      "routingPreviewInvalid": "Controlla il token, la lingua del comando e le impostazioni di instradamento.",
+      "providerModelNotListed": "Scegli un modello restituito da questo fornitore.",
+      "providerAccountChanged": "L’account del fornitore è cambiato. Ricarica e riprova."
     },
     "agentchat": {
       "announceApproval": "L'azione {name} richiede la tua approvazione.",
@@ -1984,27 +1986,22 @@
       "yourDevice": "il tuo dispositivo"
     },
     "routing": {
-      "title": "Esperimento di instradamento dei comandi",
-      "observe": "Osserva i comandi dell’agente vocale",
-      "budget": "Tempo massimo di riconoscimento (ms)",
-      "token": "Ambito del token",
-      "command": "Comando da visualizzare in anteprima",
-      "test": "Prova comando",
-      "candidate": "Candidato locale trovato",
-      "fallback": "Usa il fornitore selezionato",
-      "resultHint": "Non è stato eseguito nulla. Il candidato richiede ancora verifiche di permessi, approvazione e MESA al momento dell’esecuzione.",
-      "noMatchHint": "Home Assistant non ha riconosciuto questo comando. Prova il nome o alias esatto di un’entità esposta ad Assist. Non è stato eseguito né inviato nulla a un fornitore.",
-      "fallbackHint": "Non è disponibile alcun candidato locale. Nell’uso normale, il fornitore selezionato gestisce questa richiesta. Questo test non ha eseguito né inviato nulla a un fornitore.",
-      "elapsed": "Valutazione locale: {ms} ms",
-      "observations": "Osservazioni vocali dal riavvio: {total}; candidati locali: {candidates}.",
-      "details": "Dettagli tecnici",
-      "failed": "Impossibile caricare l’anteprima. Controlla il token e la connessione, poi riprova.",
-      "previewLanguage": "Lingua dell’anteprima",
-      "languageEnglish": "Inglese",
-      "languageChinese": "Cinese semplificato",
-      "languageSpanish": "Spagnolo",
-      "enabledLanguages": "Lingue per l’instradamento automatico",
-      "languagesHint": "Si applica a Voice e al primo messaggio di testo di una nuova chat. Le lingue non selezionate usano il provider abituale. Senza lingue selezionate, l’instradamento è sospeso. La lingua dell’anteprima è indipendente."
+      "title": "Instradamento dei comandi",
+      "intro": "Gestisce i comandi semplici localmente prima di usare il consueto fornitore IA. Le autorizzazioni e le approvazioni di Phoenix restano valide.",
+      "enableVoice": "Abilita per la voce",
+      "enableChat": "Abilita per la chat",
+      "languageHint": "Usa la lingua della voce o di Phoenix. Nella chat si applica al primo messaggio di una nuova conversazione.",
+      "providerSection": "Fornitore di decisioni",
+      "providerHint": "Facoltativo. Selezionando un account, l’instradamento attivo può inviargli comandi non riconosciuti e dettagli delle entità consentite. Potrebbero essere applicati costi API.",
+      "decisionAccount": "Account per le decisioni",
+      "localOnly": "Solo locale (nessun fornitore di decisioni)",
+      "removeAccount": "Elimina {name}",
+      "connectionSettings": "Impostazioni di connessione",
+      "decisionBudget": "Tempo massimo di decisione (ms)",
+      "timeoutHint": "Concedi più tempo alle connessioni lente. Se la decisione non arriva in tempo, il fornitore abituale gestisce la richiesta.",
+      "failed": "Impossibile salvare o caricare le impostazioni di instradamento.",
+      "accountModel": "Modello per {name}",
+      "connectionHint": "L’URL di base è l’indirizzo del server. Aggiungi una chiave API solo se il server richiede l’autenticazione."
     }
   },
   "notification": {

@@ -168,6 +168,18 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant) -> tuple[str
     return "supported", proposal
 
 
+def effective_routing_mode(settings: GlobalSettings, ingress: str = "voice") -> str:
+    """Resolve the simple switch without changing stored settings or provider consent."""
+    mode = settings.agentcli_routing_mode if ingress == "chat" else settings.voice_agent_routing_mode
+    return ("hybrid" if settings.decision_provider_id else "local") if mode == "auto" else mode
+
+
+def routing_languages(settings: GlobalSettings, ingress: str = "voice") -> list[str]:
+    """Auto follows supported ingress languages; diagnostic modes retain their allowlist."""
+    mode = settings.agentcli_routing_mode if ingress == "chat" else settings.voice_agent_routing_mode
+    return list(COMMAND_ROUTING_LANGUAGES) if mode == "auto" else settings.command_routing_languages
+
+
 def routing_language(language: object, *, preview: bool = False,
                      enabled: list[str] | tuple[str, ...] = COMMAND_ROUTING_DEFAULT_LANGUAGES) -> str | None:
     """Admit only selected routing languages, without an unknown-to-English fallback."""
@@ -183,7 +195,7 @@ def routing_language(language: object, *, preview: bool = False,
 
 async def async_evaluate_command(
     hass: HomeAssistant, data: PhoenixData, token: TokenRecord,
-    sentence: object, language: object = "en", *, preview: bool = False,
+    sentence: object, language: object = "en", *, preview: bool = False, ingress: str = "voice",
 ) -> dict:
     """Return an inert candidate or fallback with elapsed local wall time.
 
@@ -204,7 +216,7 @@ async def async_evaluate_command(
     if (not isinstance(sentence, str) or not sentence.strip()
             or len(sentence) > MAX_SEARCH_QUERY_LEN):
         return outcome("invalid_input")
-    recognition_language = routing_language(language, preview=preview, enabled=authority.settings.command_routing_languages)
+    recognition_language = routing_language(language, preview=preview, enabled=routing_languages(authority.settings, ingress))
     if recognition_language is None:
         return outcome("unsupported_language")
     runtime = data.command_routing
