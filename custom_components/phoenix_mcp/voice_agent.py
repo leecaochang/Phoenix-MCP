@@ -155,6 +155,10 @@ async def async_voice_answer(
         token = _current_dispatch_token(data, token.id)
         if token is None:
             return voice_text(language, "token_unavailable")
+        if (settings.decision_shadow_enabled and settings.decision_provider_id
+                and observation["reason"] in ("no_match", "unsupported", "no_target")):
+            # Single-flight background observation cannot delay or influence the provider turn.
+            data.decision_shadow.start(hass, data, token, user_text, language or "en", observe=True)
         if settings.voice_agent_routing_mode == "local" and observation["proposal"]:
             from .command_execution import async_execute_local_command
 

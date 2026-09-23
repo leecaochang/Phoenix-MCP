@@ -261,6 +261,7 @@ async def _rollback_failed_setup(
     if data is not None:
         data.ready = False
         data.shutting_down = True
+        data.decision_shadow.cancel()
         try:
             from .assist_api import async_unregister_assist_api  # noqa: PLC0415
 
@@ -617,6 +618,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     entry.async_on_unload(cancel_approval_sweep)
 
     async def _on_stop(event: Event) -> None:
+        data.decision_shadow.cancel()
         # Both writes are best-effort, for the reason spelled out on
         # async_unload_entry: this runs inside Home Assistant's own stop
         # sequence, so an unwritable store must not raise into it. The first

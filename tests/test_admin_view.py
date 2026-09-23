@@ -2551,7 +2551,7 @@ async def test_settings_patch_ai_task_config():
     view = PhoenixAdminSettingsView()
     view.hass = _make_hass(data)
     provider_store = MagicMock()
-    provider_store.get.return_value = object()
+    provider_store.get.return_value = {"kind": "deepseek"}
     body = json.dumps({
         "ai_task_enabled": True, "ai_task_token_id": token.id,
         "ai_task_provider_id": "i1", "ai_task_model": "m",

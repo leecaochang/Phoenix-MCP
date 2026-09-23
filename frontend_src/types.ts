@@ -156,6 +156,9 @@ export interface GlobalSettings {
   // own model on the chosen token's scope. Independent of the Assist bridge above.
   voice_agent_routing_mode?: "off" | "local_shadow" | "local";
   command_routing_timeout_ms?: number;
+  decision_provider_id?: string | null;
+  decision_shadow_enabled?: boolean;
+  decision_timeout_ms?: number;
   voice_agent_enabled?: boolean;
   voice_agent_token_id?: string | null;
   voice_agent_provider_id?: string | null;
@@ -198,7 +201,7 @@ export interface AiTaskPreferredStatus {
 export type AgentCliProviderKind =
   "claude" | "deepseek" | "chatgpt" | "gemini" | "grok" | "kimi" | "meta"
   | "minimax" | "mistral" | "openrouter" | "nvidia" | "ollama" | "ollama_cloud"
-  | "zai" | "groq" | "together" | "cerebras" | "fireworks" | "qwen" | "opencode" | "mimo" | "tencent";
+  | "zai" | "groq" | "together" | "cerebras" | "fireworks" | "qwen" | "opencode" | "mimo" | "tencent" | "typesafe" | "systemone" | "classifier";
 
 export interface AgentCliProviderChoice {
   value: string;
@@ -765,7 +768,22 @@ declare global {
   }
 }
 
+export interface DecisionObservation {
+  reason: string;
+  executed: false;
+  elapsed_ms: number;
+  decision: { choice: string; confidence: number; probabilities: Record<string, number>; model: string } | null;
+}
+export interface DecisionSummary {
+  observations: number;
+  reasons: Record<string, number>;
+  choices: Record<string, number>;
+  busy: boolean;
+  mean_elapsed_ms: number | null;
+}
 export interface CommandRoutePreview {
+  decision_shadow?: DecisionObservation;
+  decision_observations?: DecisionSummary;
   route: "local_candidate" | "provider";
   reason: string;
   executed: false;

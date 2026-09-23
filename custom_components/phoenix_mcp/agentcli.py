@@ -59,6 +59,7 @@ from .approvals import (
     async_update_approval_status,
 )
 from .const import (
+    DECISION_TYPESAFE_BASE_URL, DECISION_TYPESAFE_MODEL,
     AGENTCLI_ANTHROPIC_VERSION,
     AGENTCLI_APPROVAL_WAIT_SECONDS,
     AGENTCLI_PROGRESS_INTERVAL_SECONDS,
@@ -261,6 +262,7 @@ class ProviderDefinition:
     models_shape: str = "data"
     validation_error: str | None = None
     ollama: str | None = None
+    purpose: str = "conversation"
 
     def public(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -390,6 +392,29 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
     )
 }
 
+# Decision accounts share credential storage but cannot enter conversational loops.
+for _decision_kind, _decision_label, _decision_adapter in (
+    ("typesafe", "TypeSafe / JEV", "systemone"),
+    ("systemone", "System One compatible", "systemone"),
+    ("classifier", "Simple-JEV compatible", "classifier"),
+):
+    PROVIDER_DEFINITIONS[_decision_kind] = ProviderDefinition(
+        kind=_decision_kind, label=_decision_label, adapter=_decision_adapter,
+        base_url=DECISION_TYPESAFE_BASE_URL if _decision_kind == "typesafe" else "",
+        model=DECISION_TYPESAFE_MODEL if _decision_kind == "typesafe" else "",
+        fields=(_API_KEY_FIELD,) if _decision_kind == "typesafe" else (
+            ProviderField("base_url", "url", "settings.agentcliBaseUrl", placeholder="http://host:8000/v1"),
+            ProviderField("api_key", "secret", "settings.agentcliApiKey", required=False),
+        ),
+        purpose="decision",
+    )
+
+
+def provider_purpose(kind: str) -> str:
+    definition = PROVIDER_DEFINITIONS.get(kind)
+    return definition.purpose if definition else "conversation"
+
+
 # Compatibility projection for tests and internal code being moved to the typed
 # registry. It contains no independent provider facts.
 _KINDS: dict[str, dict[str, Any]] = {
@@ -403,10 +428,11 @@ _KINDS: dict[str, dict[str, Any]] = {
 }
 
 
-def _provider_catalog() -> list[dict[str, Any]]:
+def _provider_catalog(purpose: str = "conversation") -> list[dict[str, Any]]:
     return [
         definition.public()
         for definition in sorted(PROVIDER_DEFINITIONS.values(), key=lambda item: item.label.lower())
+        if definition.purpose == purpose
     ]
 
 
@@ -445,7 +471,7 @@ def _instance_name(inst: dict, has_dupes: bool) -> str:
     if kind == "ollama":
         host = _host_of(inst.get("base_url", ""))
         return f"{label} ({host})" if host else label
-    if kind == "qwen":
+    if kind in ("qwen", "systemone", "classifier"):
         host = _host_of(inst.get("base_url", ""))
         return f"{label} ({host})" if host else label
     if kind in ("zai", "tencent"):
@@ -522,7 +548,7 @@ def _provider_identity(kind: str, cfg: dict) -> tuple[str, str]:
     """Return the non-secret identity used to reject exact duplicate accounts."""
     if kind == "ollama":
         return kind, _normalized_provider_url(cfg.get("base_url"))
-    if kind == "qwen":
+    if kind in ("qwen", "systemone", "classifier"):
         return kind, "\0".join((
             _normalized_provider_url(cfg.get("base_url")),
             str(cfg.get("api_key") or "").strip(),
@@ -676,7 +702,9 @@ class AgentCliStore:
             out.append({
                 "id": iid,
                 "kind": kind,
-                "name": _instance_name(inst, counts[kind] > 1),
+                "name": (f"{PROVIDER_DEFINITIONS[kind].label} ({iid[:8]})"
+                         if provider_purpose(kind) == "decision" and counts[kind] > 1
+                         else _instance_name(inst, counts[kind] > 1)),
                 "model": inst.get("model", ""),
                 "base_url": inst.get("base_url", ""),
                 "endpoint_id": inst.get("endpoint_id") or None,
@@ -689,7 +717,8 @@ class AgentCliStore:
         out.sort(key=lambda x: (x["name"].lower(), x["id"]))
         return out
 
-    def resolve(self, instance_id: str, model_override: str | None = None) -> ProviderConfig | None:
+    def resolve(self, instance_id: str, model_override: str | None = None, *,
+                purpose: str = "conversation") -> ProviderConfig | None:
         """Build a ProviderConfig for one instance, or None if it is unknown.
 
         The model may be empty (Ollama is added before a model is chosen); the
@@ -699,6 +728,8 @@ class AgentCliStore:
         if cfg is None:
             return None
         kind = cfg.get("kind", "")
+        if provider_purpose(kind) != purpose:
+            return None
         endpoint_id = str(cfg.get("endpoint_id") or "") or None
         base_url = (
             cfg.get("base_url") or _default_base_url(kind, endpoint_id) or ""
@@ -2329,6 +2360,8 @@ def build_provider(cfg: ProviderConfig) -> ClaudeProvider | OpenAICompatProvider
     definition = PROVIDER_DEFINITIONS.get(cfg.kind)
     if definition is None:
         raise ValueError(f"Unknown provider kind: {cfg.kind}")
+    if definition.purpose != "conversation":
+        raise ValueError("Decision accounts cannot provide conversation or AI Task responses.")
     if definition.adapter == "anthropic":
         return ClaudeProvider(cfg)
     return OpenAICompatProvider(cfg)
@@ -4446,7 +4479,7 @@ async def _probe_config(kind: str, body: dict) -> ProviderConfig | ProbeConfigEr
     api_key: str | None = None
     if any(field.id == "api_key" for field in definition.fields):
         api_key = str(body.get("api_key") or "").strip()
-        if not api_key:
+        if not api_key and any(field.id == "api_key" and field.required for field in definition.fields):
             return ProbeConfigError("Enter your API key.", "providerApiKeyRequired")
 
     endpoint_id: str | None = None
@@ -4467,12 +4500,19 @@ async def _probe_config(kind: str, body: dict) -> ProviderConfig | ProbeConfigEr
             return ProbeConfigError(
                 "Enter the provider base URL.", "providerBaseUrlRequired",
             )
-        err = await _validate_base_url(base_url, allow_private=kind == "ollama")
+        err = await _validate_base_url(base_url, allow_private=kind in ("ollama", "systemone", "classifier"))
         if err:
             return err
     else:
         base_url = _default_base_url(kind, endpoint_id)
     model = str(body.get("model") or "").strip()
+    if definition.purpose == "decision":
+        if urlparse(base_url).query:
+            return ProbeConfigError("The base URL must not contain a query.", "providerUrlInvalid")
+        if not model and not definition.model:
+            return ProbeConfigError("A model is required.", "providerModelRequired")
+        if len(model) > 200 or (api_key and (len(api_key) > 4096 or any(ch in api_key for ch in "\r\n"))):
+            return ProbeConfigError("Invalid provider configuration.", "providerUrlInvalid")
     return ProviderConfig(kind=kind, model=model or _default_model(kind),
                           base_url=base_url.rstrip("/"), api_key=api_key,
                           endpoint_id=endpoint_id)
@@ -4493,6 +4533,13 @@ def _stored_setup_config(cfg: ProviderConfig, model: str = "") -> dict[str, Any]
     return out
 
 
+def _build_setup_provider(cfg: ProviderConfig):
+    if provider_purpose(cfg.kind) == "decision":
+        from .decision_provider import DecisionProvider
+        return DecisionProvider(cfg, PROVIDER_DEFINITIONS[cfg.kind].adapter)
+    return build_provider(cfg)
+
+
 class PhoenixAgentCliProvidersView(PhoenixView):
     """GET (list accounts) / POST (create an account) for agentCLI providers."""
 
@@ -4504,9 +4551,10 @@ class PhoenixAgentCliProvidersView(PhoenixView):
     async def get(self, request: web.Request) -> web.Response:
         rid = request.get("phoenix_mcp_rid", "")
         store = await _get_secret_store(self.hass)
+        purpose = request.query.get("purpose", "conversation")
         return _ok({
-            "instances": store.list_instances(),
-            "provider_types": _provider_catalog(),
+            "instances": [i for i in store.list_instances() if provider_purpose(i["kind"]) == purpose],
+            "provider_types": _provider_catalog(purpose),
         }, request_id=rid)
 
     @require_admin
@@ -4540,7 +4588,7 @@ class PhoenixAgentCliProvidersView(PhoenixView):
             )
 
         session = async_get_clientsession(self.hass)
-        provider = build_provider(probe)
+        provider = _build_setup_provider(probe)
         ok, reason = await provider.validate(session)
         if not ok:
             return _err(
@@ -4625,6 +4673,9 @@ class PhoenixAgentCliProviderView(PhoenixView):
                 voice_removed = settings.voice_agent_provider_id == instance_id
                 ai_task_removed = settings.ai_task_provider_id == instance_id
                 patchable: dict[str, Any] = {}
+                if settings.decision_provider_id == instance_id:
+                    data.decision_shadow.cancel()
+                    patchable.update(decision_provider_id=None, decision_shadow_enabled=False)
                 if voice_removed:
                     patchable.update(
                         voice_agent_provider_id=None,
@@ -4663,14 +4714,14 @@ class PhoenixAgentCliModelsView(PhoenixView):
     async def get(self, request: web.Request, instance_id: str) -> web.Response:
         rid = request.get("phoenix_mcp_rid", "")
         store = await _get_secret_store(self.hass)
-        cfg = store.resolve(instance_id)
+        cfg = store.resolve(instance_id, purpose=provider_purpose((store.get(instance_id) or {}).get("kind", "")))
         if cfg is None:
             return _err(
                 "invalid_request", "Provider account is not configured.", 400, rid,
                 key="providerNotConfigured",
             )
         session = async_get_clientsession(self.hass)
-        models = await build_provider(cfg).list_models(session)
+        models = await _build_setup_provider(cfg).list_models(session)
         return _ok({"models": models}, request_id=rid)
 
 
@@ -4696,14 +4747,14 @@ class PhoenixAgentCliRefreshView(PhoenixView):
     async def post(self, request: web.Request, instance_id: str) -> web.Response:
         rid = request.get("phoenix_mcp_rid", "")
         store = await _get_secret_store(self.hass)
-        cfg = store.resolve(instance_id)
+        cfg = store.resolve(instance_id, purpose=provider_purpose((store.get(instance_id) or {}).get("kind", "")))
         if cfg is None:
             return _err(
                 "invalid_request", "Provider account is not configured.", 400, rid,
                 key="providerNotConfigured",
             )
         session = async_get_clientsession(self.hass)
-        provider = build_provider(cfg)
+        provider = _build_setup_provider(cfg)
         models = await provider.list_models(session)
         capabilities = await provider.list_model_capabilities(session, models)
         checked_at = utcnow().isoformat()
@@ -4829,7 +4880,7 @@ class PhoenixAgentCliProbeView(PhoenixView):
                 key="providerAlreadyConfigured",
             )
         session = async_get_clientsession(self.hass)
-        provider = build_provider(probe)
+        provider = _build_setup_provider(probe)
         ok, reason = await provider.validate(session)
         if not ok:
             if reason:

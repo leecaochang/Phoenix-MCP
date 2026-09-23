@@ -1657,3 +1657,20 @@ COMMAND_ROUTING_TIMEOUT_MIN_MS = 50
 COMMAND_ROUTING_TIMEOUT_MAX_MS = 5000
 COMMAND_ROUTING_INTENTS = frozenset({"HassTurnOn", "HassTurnOff", "HassLightSet", "HassGetState"})
 COMMAND_ROUTING_TARGET_SLOTS = frozenset({"name", "area", "domain", "device_class"})
+
+# Decision-only shadow routing: configurable network time, independent of HA recognition.
+DECISION_TYPESAFE_BASE_URL = "https://api.typesafe.ai/v1"
+DECISION_TYPESAFE_MODEL = "jev-latest"
+DECISION_TIMEOUT_DEFAULT_MS = 5000
+DECISION_TIMEOUT_MIN_MS = 250
+DECISION_TIMEOUT_MAX_MS = 30000
+DECISION_MAX_RESPONSE_BYTES = 65536
+DECISION_ROUTE_CHOICES = {
+    "light_on": "One immediate, explicit request to turn on a light.",
+    "light_off": "One immediate, explicit request to turn off a light.",
+    "light_brightness": "One immediate, explicit request for an absolute light brightness.",
+    "state_query": "A question about the current primary state of one named entity.",
+    "provider": "Anything else, including ambiguity, negation, quoted commands, deferred or conditional actions, multiple actions, comparisons, counts and general conversation.",
+}
+
+DECISION_PROVIDERS = frozenset({"typesafe", "systemone", "classifier"})

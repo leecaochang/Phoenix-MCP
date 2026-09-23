@@ -2008,7 +2008,22 @@
       "elapsed": "Local evaluation: {ms} ms",
       "observations": "Voice observations since restart: {total}; local candidates: {candidates}.",
       "details": "Technical details",
-      "failed": "Could not load the preview. Check the token and connection, then try again."
+      "failed": "Could not load the preview. Check the token and connection, then try again.",
+      "decisionTitle": "Decision provider experiment",
+      "decisionHint": "Compare command categories using TypeSafe / JEV or a compatible endpoint. Decisions cannot select targets or operate devices in this stage. Decision accounts are separate from Chat, Voice conversation and AI Task providers.",
+      "decisionAccount": "Decision account",
+      "addDecision": "Add a decision account",
+      "removeDecision": "Remove selected decision account",
+      "decisionService": "Decision service",
+      "saveDecision": "Check and save account",
+      "decisionEnable": "Observe unmatched English Voice requests",
+      "decisionPrivacy": "When Voice routing is Observe or Run locally, this sends unmatched English utterances to the decision account while your selected provider handles the request. Provider usage may be charged. No entity inventory is sent. Phoenix retains aggregate counts only; the provider has its own data policy. Off sends nothing automatically.",
+      "decisionBudget": "Decision request budget (ms)",
+      "decisionBudgetHint": "250 to 30,000 ms, separate from local recognition. Adjust for your connection. Shadow requests run in the background and never hold up the normal reply. One request at a time; no automatic retries.",
+      "compareDecision": "Also compare local misses with the decision provider (sends text; may incur usage)",
+      "decisionResultHint": "Decision results are observations only. Confidence is provider-defined and is not an execution permission or a measured accuracy rate. Local matches skip the decision call.",
+      "decisionElapsed": "Decision request: {ms} ms",
+      "decisionObservations": "Completed Voice shadow observations: {count}"
     }
   },
   "notification": {

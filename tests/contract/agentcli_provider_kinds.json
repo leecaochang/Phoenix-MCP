@@ -2,6 +2,7 @@
   "agentcli_provider_kinds": [
     "cerebras",
     "chatgpt",
+    "classifier",
     "claude",
     "deepseek",
     "fireworks",
@@ -19,8 +20,10 @@
     "opencode",
     "openrouter",
     "qwen",
+    "systemone",
     "tencent",
     "together",
+    "typesafe",
     "zai"
   ]
 }

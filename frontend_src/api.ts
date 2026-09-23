@@ -210,8 +210,8 @@ export const api = {
 
   getInfo: () => req<{ version: string; min_ha_version: string; github_url: string }>("GET", "/info"),
 
-  previewCommandRoute: (tokenId: string, sentence: string) =>
-    req<CommandRoutePreview>("POST", "/command-routing/preview", { token_id: tokenId, sentence, language: "en" }),
+  previewCommandRoute: (tokenId: string, sentence: string, decision = false) =>
+    req<CommandRoutePreview>("POST", "/command-routing/preview", { token_id: tokenId, sentence, language: "en", ...(decision ? { decision: true } : {}) }),
 
   getSettings: () => req<GlobalSettings>("GET", "/settings"),
   patchSettings: (body: Partial<GlobalSettings>) =>
@@ -366,6 +366,8 @@ export const api = {
 
   // agentCLI: provider accounts live on the admin surface. Multiple accounts of
   // the same kind are allowed; each has an opaque instance id.
+  getDecisionProviders: () =>
+    req<AgentCliProvidersResponse>("GET", "/agentcli/providers?purpose=decision"),
   getAgentCliProviders: () =>
     req<AgentCliProvidersResponse>("GET", "/agentcli/providers"),
   createAgentCliProvider: (

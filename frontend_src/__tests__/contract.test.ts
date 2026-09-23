@@ -142,6 +142,9 @@ const PROVIDER_KINDS = {
   fireworks: true,
   qwen: true,
   zai: true,
+  typesafe: true,
+  systemone: true,
+  classifier: true,
 } satisfies Record<AgentCliProviderKind, true>;
 
 describe("frontend/backend agentCLI provider contract", () => {

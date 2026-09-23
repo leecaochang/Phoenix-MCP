@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { CommandRoutePreview, GlobalSettings, TokenRecord } from "../types";
+import { DecisionProviderSettings } from "./DecisionProviderSettings";
 import { api } from "../api";
 import { localeNumber, t } from "../i18n";
 
@@ -15,6 +16,7 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
   const [sentence, setSentence] = useState("");
   const [budget, setBudget] = useState(String(settings.command_routing_timeout_ms ?? 500));
   const [result, setResult] = useState<CommandRoutePreview | null>(null);
+  const [compare, setCompare] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const generation = useRef(0);
@@ -32,6 +34,8 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
     setBusy(false);
   }, [settings]);
 
+  useEffect(() => { setCompare(false); }, [settings.decision_provider_id]);
+
   function invalidate() {
     generation.current++;
     setResult(null);
@@ -45,7 +49,7 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
     setError("");
     setResult(null);
     try {
-      const next = await api.previewCommandRoute(tokenId, sentence);
+      const next = await api.previewCommandRoute(tokenId, sentence, compare);
       if (generation.current === current) setResult(next);
     } catch {
       if (generation.current === current) setError(t("routing.failed"));
@@ -80,6 +84,7 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
         }} />
     </div>
     <p className="agentcli-settings-hint">{t("routing.localBudgetHint")}</p>
+    <DecisionProviderSettings settings={settings} onChange={onChange} saving={saving} />
     <form onSubmit={e => { e.preventDefault(); void preview(); }}>
       <div className="toggle-row toggle-row-stacked-control">
         <label htmlFor="routing-token">{t("routing.token")}</label>
@@ -92,6 +97,11 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
       <label htmlFor="routing-sentence">{t("routing.command")}</label>
       <textarea id="routing-sentence" className="input" rows={2} maxLength={512} required
         value={sentence} onChange={e => { invalidate(); setSentence(e.target.value); }} />
+      <div className="toggle-row">
+        <label htmlFor="routing-compare">{t("routing.compareDecision")}</label>
+        <input id="routing-compare" type="checkbox" checked={compare} disabled={!settings.decision_provider_id || saving}
+          onChange={e => { invalidate(); setCompare(e.target.checked); }} />
+      </div>
       <div className="toggle-row">
         <button className="btn btn-primary" type="submit" disabled={busy || !tokenId || !sentence.trim() || saving}>
           {busy ? t("common.loading") : t("routing.test")}
@@ -107,7 +117,12 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
       <p>{t("routing.elapsed", { ms: localeNumber(result.elapsed_ms) })}</p>
       {result.proposal && <ul>{result.proposal.entity_ids.map(id => <li key={id}><code>{id}</code></li>)}</ul>}
       <p>{t("routing.observations", { total: localeNumber(result.voice_observations.observations), candidates: localeNumber(result.voice_observations.candidates) })}</p>
-      <details><summary>{t("routing.details")}</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify({ reason: result.reason, proposal: result.proposal }, null, 2)}</pre></details>
+      {result.decision_shadow && <>
+        <p>{t("routing.decisionResultHint")}</p>
+        <p>{t("routing.decisionElapsed", { ms: localeNumber(result.decision_shadow.elapsed_ms) })}</p>
+      </>}
+      {result.decision_observations && <p>{t("routing.decisionObservations", { count: localeNumber(result.decision_observations.observations) })}</p>}
+      <details><summary>{t("routing.details")}</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify({ reason: result.reason, proposal: result.proposal, decision: result.decision_shadow, decision_observations: result.decision_observations }, null, 2)}</pre></details>
     </div>}
   </section>;
 }

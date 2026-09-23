@@ -657,10 +657,10 @@ async def test_meta_sends_reasoning_effort_and_never_temperature():
 
 
 def test_provider_kinds_match_the_const_allowlist():
-    # AGENTCLI_PROVIDERS gates instance creation while _KINDS supplies each kind's
-    # endpoint defaults, so a kind added to one and not the other is either
-    # uncreatable or created with an empty base URL.
-    assert set(agentcli._KINDS) == set(AGENTCLI_PROVIDERS)
+    from custom_components.phoenix_mcp.const import DECISION_PROVIDERS
+    assert set(agentcli._KINDS) == set(AGENTCLI_PROVIDERS | DECISION_PROVIDERS)
+    assert {key for key, value in agentcli.PROVIDER_DEFINITIONS.items() if value.purpose == "decision"} == DECISION_PROVIDERS
+
 
 
 def test_provider_registry_catalog_is_complete_and_secret_free():
@@ -4256,3 +4256,27 @@ async def test_tencent_replays_reasoning_without_inventing_provider_specific_fla
     done = next(event for event in events if event["type"] == agentcli.EV_DONE)
     assert done["assistant_msg"]["reasoning_content"] == "reason"
     assert done["assistant_msg"]["content"] == "answer"
+
+
+@pytest.mark.asyncio
+async def test_decision_account_admin_catalog_isolated_and_delete_clears_binding(hass, token_store):
+    from custom_components.phoenix_mcp.const import DOMAIN
+    from custom_components.phoenix_mcp.data import PhoenixData
+    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+    hass.data[DOMAIN] = data
+    store = agentcli.AgentCliStore(AsyncMock())
+    account = await store.add('typesafe', {'api_key':'decision-private-key','model':'jev-latest'})
+    chat = await store.add('deepseek', {'api_key':'chat-private-key','model':'chat'})
+    await token_store.async_patch_settings(decision_provider_id=account,decision_shadow_enabled=True)
+    view = agentcli.PhoenixAgentCliProvidersView(); view.hass = hass
+    with patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)):
+        for purpose, expected in [('conversation',[chat]), ('decision',[account])]:
+            request = _admin_request(); request.query = {'purpose':purpose}
+            result = json.loads((await view.get(request)).body)
+            assert [item['id'] for item in result['instances']] == expected
+            assert 'private-key' not in json.dumps(result)
+        delete = agentcli.PhoenixAgentCliProviderView(); delete.hass = hass
+        assert (await delete.delete(_admin_request(), instance_id=account)).status == 200
+    assert not token_store.get_settings().decision_shadow_enabled
+    assert token_store.get_settings().decision_provider_id is None
+    assert store.resolve(chat).model == 'chat'

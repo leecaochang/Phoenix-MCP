@@ -21,6 +21,7 @@ from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 from .audit import Outcome
 from .const import (
     COMMAND_ROUTING_MODES,
+    DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS,
     COMMAND_ROUTING_TIMEOUT_MIN_MS,
     COMMAND_ROUTING_TIMEOUT_MAX_MS,
     MAX_SEARCH_QUERY_LEN,
@@ -2006,7 +2007,7 @@ _BOOL_SETTINGS = frozenset({
     "log_rate_limited", "log_entity_names", "log_client_ip", "notify_on_rate_limit",
     "notify_on_approval", "mesa_inject_enabled", "token_presets_enabled",
     "agentcli_global", "agentcli_home_focused", "voice_agent_enabled",
-    "voice_agent_home_focused", "ai_task_enabled",
+    "voice_agent_home_focused", "ai_task_enabled", "decision_shadow_enabled",
 })
 
 _CONVERSATION_STYLE_SETTINGS = frozenset({
@@ -2022,7 +2023,7 @@ _DETAIL_LEVEL_SETTINGS = frozenset({
 # below, so the panel cannot point a surface at a dead token or provider.
 _NULLABLE_STRING_SETTINGS = (
     "voice_agent_token_id", "voice_agent_provider_id", "voice_agent_model",
-    "ai_task_token_id", "ai_task_provider_id", "ai_task_model",
+    "ai_task_token_id", "ai_task_provider_id", "ai_task_model", "decision_provider_id",
 )
 
 # (token setting, provider setting) pairs validated against live records.
@@ -2032,7 +2033,7 @@ _SURFACE_TOKEN_PROVIDER_PAIRS = (
 )
 
 _PATCHABLE_SETTINGS = _BOOL_SETTINGS | {
-    "voice_agent_routing_mode", "command_routing_timeout_ms",
+    "voice_agent_routing_mode", "command_routing_timeout_ms", "decision_timeout_ms",
     "audit_flush_interval", "audit_log_maxlen", "mesa_mode",
     "agentcli_scrollback_lines", "agentcli_max_iterations", "assist_bound_token_id",
     *_NULLABLE_STRING_SETTINGS,
@@ -2147,6 +2148,11 @@ async def _validated_settings_patch(
                 key="routingPreviewInvalid",
             )
 
+    if "decision_timeout_ms" in patchable:
+        value = patchable["decision_timeout_ms"]
+        if type(value) is not int or not DECISION_TIMEOUT_MIN_MS <= value <= DECISION_TIMEOUT_MAX_MS:
+            return {}, _err("invalid_request", "Invalid decision time budget.", 400, rid, key="routingPreviewInvalid")
+
     int_checks = (
         ("audit_flush_interval", {"allowed": _VALID_FLUSH_INTERVALS}),
         ("audit_log_maxlen", {"allowed": _VALID_LOG_MAXLENS}),
@@ -2209,12 +2215,29 @@ async def _validated_settings_patch(
             if provider_store is None:
                 from .agentcli import _get_secret_store  # noqa: PLC0415
                 provider_store = await _get_secret_store(hass)
-            if provider_store.get(patchable[pkey]) is None:
+            from .agentcli import provider_purpose
+            record = provider_store.get(patchable[pkey])
+            if not isinstance(record, dict) or provider_purpose(record.get("kind", "")) != "conversation":
                 return {}, _err(
                     "invalid_request", f"{pkey} must reference a configured provider account.",
                     400, rid, key="configuredProviderRequired", params={"field": pkey},
                 )
 
+    if patchable.get("decision_provider_id"):
+        from .agentcli import _get_secret_store
+        provider_store = await _get_secret_store(hass)
+        if provider_store.resolve(patchable["decision_provider_id"], purpose="decision") is None:
+            return {}, _err("invalid_request", "Choose a decision provider account.", 400, rid,
+                            key="configuredProviderRequired", params={"field": "decision_provider_id"})
+    if patchable.get("decision_shadow_enabled"):
+        account = patchable.get("decision_provider_id", data.store.get_settings().decision_provider_id)
+        from .agentcli import _get_secret_store
+        provider_store = await _get_secret_store(hass)
+        if not account or provider_store.resolve(account, purpose="decision") is None:
+            return {}, _err("invalid_request", "Choose a decision provider account.", 400, rid,
+                            key="configuredProviderRequired", params={"field": "decision_provider_id"})
+    if "decision_provider_id" in patchable and patchable["decision_provider_id"] is None:
+        patchable["decision_shadow_enabled"] = False
     return patchable, None
 
 
@@ -2304,7 +2327,8 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
     @require_admin
     async def get(self, request: web.Request) -> web.Response:
         data: PhoenixData = self.hass.data[DOMAIN]
-        return _ok(data.command_routing.summary(), request_id=request["phoenix_mcp_rid"])
+        return _ok({**data.command_routing.summary(), "decision_shadow": data.decision_shadow.summary()},
+                   request_id=request["phoenix_mcp_rid"])
 
     @require_admin
     async def post(self, request: web.Request) -> web.Response:
@@ -2317,19 +2341,28 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
             return body
         sentence = body.get("sentence")
         token_id = body.get("token_id")
-        if (set(body) - {"sentence", "token_id", "language"}
+        if (set(body) - {"token_id", "sentence", "language", "decision"}
                 or not isinstance(sentence, str) or not sentence.strip()
                 or len(sentence) > MAX_SEARCH_QUERY_LEN
                 or not isinstance(token_id, str)
-                or body.get("language", "en") != "en"):
+                or body.get("language", "en") != "en" or type(body.get("decision", False)) is not bool):
             return _err("invalid_request", "Invalid command preview request.", 400, rid,
                         key="routingPreviewInvalid")
         token = data.store.get_token_by_id(token_id)
         if token is None or not token.is_valid():
             return _err("invalid_request", "Select an active token.", 400, rid,
                         key="activeTokenRequired", params={"field": "token_id"})
+        from .command_routing import RoutingAuthority
+        authority = RoutingAuthority.capture(data, token)
         result = await async_evaluate_command(self.hass, data, token, sentence, "en")
-        return _ok({**result, "voice_observations": data.command_routing.summary()}, request_id=rid)
+        if body.get("decision"):
+            from .decision_shadow import async_preview_decision
+            result["decision_shadow"] = await async_preview_decision(self.hass, data, token, sentence, "en", result)
+        if authority.current(self.hass) is None:
+            result = {"route": "provider", "reason": "authority_changed", "proposal": None,
+                      "executed": False, "elapsed_ms": result["elapsed_ms"]}
+        return _ok({**result, "voice_observations": data.command_routing.summary(),
+                    "decision_observations": data.decision_shadow.summary()}, request_id=rid)
 
 
 class PhoenixAdminSettingsView(PhoenixView):
@@ -2366,6 +2399,7 @@ class PhoenixAdminSettingsView(PhoenixView):
                 return invalid
 
             async with data.store.async_lock:
+                data.decision_shadow.cancel()
                 old_kill_switch = data.store.get_settings().kill_switch
                 old_presets_enabled = data.store.get_settings().token_presets_enabled
                 updated = await data.store.async_patch_settings(**patchable)

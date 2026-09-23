@@ -4,6 +4,7 @@ import type { GlobalSettings } from "../types";
 
 const preview = vi.fn();
 vi.mock("../api", () => ({ api: {
+  getDecisionProviders: () => Promise.resolve({ instances: [], provider_types: [] }),
   listTokens: () => Promise.resolve([{ id: "t", name: "Voice" }]),
   previewCommandRoute: (...args: unknown[]) => preview(...args),
 } }));
@@ -29,7 +30,7 @@ it("previews explicitly and changes Voice routing only on request", async () => 
   preview.mockResolvedValue(candidate);
   fireEvent.click(screen.getByText("Test command"));
   await screen.findByText("Local candidate found");
-  expect(preview).toHaveBeenCalledWith("t", "turn on desk lamp");
+  expect(preview).toHaveBeenCalledWith("t", "turn on desk lamp", false);
   expect(screen.getByText(/Nothing was executed/)).toBeTruthy();
 });
 
@@ -85,4 +86,20 @@ it("shows recoverable errors and rejects invalid budgets", async () => {
   fireEvent.change(screen.getByLabelText("Command in English"), { target: { value: "hello" } });
   fireEvent.click(screen.getByText("Test command"));
   await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("try again"));
+});
+
+it("requires an explicit choice before sending a preview to the decision account", async () => {
+  preview.mockResolvedValue({ ...candidate, route: "provider", proposal: null, reason: "no_match",
+    decision_shadow: { reason: "observed", decision: { choice: "light_on", confidence: 0.8 }, executed: false, elapsed_ms: 100 },
+  });
+  render(<CommandRoutingSettings settings={{ ...settings, decision_provider_id: "decision" }} onChange={vi.fn()} saving={false} />);
+  await screen.findByText("Voice");
+  const compare = screen.getByLabelText(/Also compare local misses/);
+  expect(compare).not.toBeChecked();
+  fireEvent.click(compare);
+  fireEvent.change(screen.getByLabelText("Command in English"), { target: { value: "light up the desk" } });
+  fireEvent.click(screen.getByText("Test command"));
+  await screen.findByText(/Decision results are observations only/);
+  expect(preview).toHaveBeenCalledWith("t", "light up the desk", true);
+  expect(screen.getByText(/Nothing was executed/)).toBeTruthy();
 });

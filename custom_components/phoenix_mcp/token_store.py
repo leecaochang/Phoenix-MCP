@@ -26,6 +26,7 @@ from .const import (
     APPROVAL_REASON_FORMAT_INCOMPATIBLE,
     COMMAND_ROUTING_MODES,
     COMMAND_ROUTING_TIMEOUT_DEFAULT_MS,
+    DECISION_TIMEOUT_DEFAULT_MS, DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS,
     COMMAND_ROUTING_TIMEOUT_MIN_MS,
     COMMAND_ROUTING_TIMEOUT_MAX_MS,
     CONVERSATION_STYLES,
@@ -612,6 +613,9 @@ class GlobalSettings:
     # When enabled it needs a token (scope), an Agent Chat provider account, and a model.
     voice_agent_routing_mode: str = "off"
     command_routing_timeout_ms: int = COMMAND_ROUTING_TIMEOUT_DEFAULT_MS
+    decision_provider_id: str | None = None
+    decision_shadow_enabled: bool = False
+    decision_timeout_ms: int = DECISION_TIMEOUT_DEFAULT_MS
     voice_agent_enabled: bool = False
     voice_agent_token_id: str | None = None
     voice_agent_provider_id: str | None = None
@@ -660,6 +664,9 @@ class GlobalSettings:
             "assist_bound_token_id": self.assist_bound_token_id,
             "voice_agent_routing_mode": self.voice_agent_routing_mode,
             "command_routing_timeout_ms": self.command_routing_timeout_ms,
+            "decision_provider_id": self.decision_provider_id,
+            "decision_shadow_enabled": self.decision_shadow_enabled,
+            "decision_timeout_ms": self.decision_timeout_ms,
             "voice_agent_enabled": self.voice_agent_enabled,
             "voice_agent_token_id": self.voice_agent_token_id,
             "voice_agent_provider_id": self.voice_agent_provider_id,
@@ -712,6 +719,10 @@ class GlobalSettings:
             ),
             agentcli_home_focused=bool(data.get("agentcli_home_focused", False)),
             assist_bound_token_id=_coerce_opt_str(data.get("assist_bound_token_id")),
+            decision_provider_id=data.get("decision_provider_id") if isinstance(data.get("decision_provider_id"), str) else None,
+            decision_shadow_enabled=data.get("decision_shadow_enabled") is True,
+            decision_timeout_ms=_clamp_range(data.get("decision_timeout_ms", DECISION_TIMEOUT_DEFAULT_MS),
+                                            DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS, DECISION_TIMEOUT_DEFAULT_MS),
             voice_agent_routing_mode=_closed_choice(
                 data.get("voice_agent_routing_mode"), COMMAND_ROUTING_MODES, "off",
             ),

@@ -130,18 +130,16 @@ _PROVIDER_CONTRACT = os.path.join(
 
 
 def test_agentcli_provider_kinds_match_the_frontend_contract():
-    """The provider allowlist is hand-mirrored into the panel three times.
+    """Shared account transport includes both isolated provider purposes.
 
-    A kind added to the backend but not to the frontend KINDS table is simply
-    absent from the "Add new provider" dropdown, i.e. shipped and unreachable,
-    with nothing failing. The matching frontend test pins the TS union AND that
-    dropdown table against this same fixture.
+    Eligibility for conversation is enforced separately by the registry,
+    account resolver and catalog filtering, not by this transport union.
     """
-    from custom_components.phoenix_mcp.const import AGENTCLI_PROVIDERS
+    from custom_components.phoenix_mcp.const import AGENTCLI_PROVIDERS, DECISION_PROVIDERS
 
     with open(_PROVIDER_CONTRACT, encoding="utf-8") as f:
         expected = set(json.load(f)["agentcli_provider_kinds"])
-    assert set(AGENTCLI_PROVIDERS) == expected, (
+    assert set(AGENTCLI_PROVIDERS | DECISION_PROVIDERS) == expected, (
         "const.AGENTCLI_PROVIDERS drifted from the frontend contract fixture. "
         "Update tests/contract/agentcli_provider_kinds.json, the "
         "AgentCliProviderKind union and KINDS table in the frontend, and add the "
