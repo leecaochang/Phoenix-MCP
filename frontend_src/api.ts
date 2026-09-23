@@ -210,8 +210,8 @@ export const api = {
 
   getInfo: () => req<{ version: string; min_ha_version: string; github_url: string }>("GET", "/info"),
 
-  previewCommandRoute: (tokenId: string, sentence: string, decision = false, targets = false) =>
-    req<CommandRoutePreview>("POST", "/command-routing/preview", { token_id: tokenId, sentence, language: "en", ...(decision ? { decision: true, ...(targets ? { targets: true } : {}) } : {}) }),
+  previewCommandRoute: (tokenId: string, sentence: string, decision = false, targets = false, language = "en") =>
+    req<CommandRoutePreview>("POST", "/command-routing/preview", { token_id: tokenId, sentence, language, ...(decision ? { decision: true, ...(targets ? { targets: true } : {}) } : {}) }),
 
   getSettings: () => req<GlobalSettings>("GET", "/settings"),
   patchSettings: (body: Partial<GlobalSettings>) =>

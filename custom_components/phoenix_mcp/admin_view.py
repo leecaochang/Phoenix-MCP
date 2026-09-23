@@ -2337,7 +2337,7 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
 
     @require_admin
     async def post(self, request: web.Request) -> web.Response:
-        from .command_routing import async_evaluate_command
+        from .command_routing import async_evaluate_command, routing_language
 
         rid = request["phoenix_mcp_rid"]
         data: PhoenixData = self.hass.data[DOMAIN]
@@ -2350,7 +2350,8 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
                 or not isinstance(sentence, str) or not sentence.strip()
                 or len(sentence) > MAX_SEARCH_QUERY_LEN
                 or not isinstance(token_id, str)
-                or body.get("language", "en") != "en" or type(body.get("decision", False)) is not bool
+                or routing_language(body.get("language", "en"), preview=True) is None
+                or type(body.get("decision", False)) is not bool
                 or type(body.get("targets", False)) is not bool or (body.get("targets") and not body.get("decision"))):
             return _err("invalid_request", "Invalid command preview request.", 400, rid,
                         key="routingPreviewInvalid")
@@ -2360,11 +2361,12 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
                         key="activeTokenRequired", params={"field": "token_id"})
         from .command_routing import RoutingAuthority
         authority = RoutingAuthority.capture(data, token)
-        result = await async_evaluate_command(self.hass, data, token, sentence, "en")
+        language = body.get("language", "en")
+        result = await async_evaluate_command(self.hass, data, token, sentence, language, preview=True)
         if body.get("decision"):
             from .decision_shadow import async_preview_decision
             result["decision_shadow"] = await async_preview_decision(
-                self.hass, data, token, sentence, "en", result, targets=body.get("targets", False))
+                self.hass, data, token, sentence, language, result, targets=body.get("targets", False), ingress="preview")
         if authority.current(self.hass) is None:
             result = {"route": "provider", "reason": "authority_changed", "proposal": None,
                       "executed": False, "elapsed_ms": result["elapsed_ms"]}

@@ -76,7 +76,7 @@ async def test_real_http_contract(protocol, socket_enabled):
     assert requests[0][0]=='/v1/'+protocol
     assert requests[0][1]=='Bearer test-secret'
     payload=requests[0][2]
-    assert payload['state']=={'utterance':'Switch the lamp on'}
+    assert payload['state']=={'utterance':'Switch the lamp on','language':'en'}
     assert set(payload)=={'model','state','questions'}
     assert set(payload['questions']['route']['criteria'])==set(DECISION_ROUTE_CHOICES)
 
@@ -223,10 +223,11 @@ async def test_single_flight_cancellation_releases_slot_without_retaining_text(h
     assert 'private utterance' not in repr(data.decision_shadow)
 
 
-async def test_non_english_never_sends(hass,decision_home):
+@pytest.mark.parametrize("language", ["fr", "zh-Hans", "es"])
+async def test_non_english_never_sends(hass,decision_home,language):
     data,token,*_=decision_home
     with patch.object(DecisionProvider,'classify',AsyncMock()) as classify:
-        result=await data.decision_shadow.start(hass,data,token,'allume','fr')
+        result=await data.decision_shadow.start(hass,data,token,'allume',language)
     assert result['reason']=='unsupported_language'
     classify.assert_not_called()
 
@@ -291,3 +292,31 @@ async def test_voice_shadow_never_waits_for_decision_or_replaces_provider(hass,d
         dispatch.assert_not_called()
     assert data.decision_shadow.observations==expected
     assert 'private utterance' not in json.dumps(data.decision_shadow.summary())
+
+
+@pytest.mark.parametrize('language,expected', [('zh-Hans', 'zh-CN'), ('es', 'es')])
+async def test_multilingual_decision_preview_sends_language_without_execution(hass, decision_home, language, expected):
+    data, token, *_ = decision_home
+    with (patch.object(DecisionProvider, '_request', AsyncMock(return_value=response())) as request,
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        result = await async_preview_decision(hass, data, token, '打开台灯', language,
+                                              {'reason': 'no_match', 'proposal': None}, ingress='preview')
+    assert result['reason'] == 'observed' and result['executed'] is False
+    assert '_plan' not in result
+    payload = request.call_args.args[4]
+    assert payload['state'] == {'utterance': '打开台灯', 'language': expected}
+    assert 'English' not in payload['questions']['route']['instructions']
+    dispatch.assert_not_called()
+    assert data.store.get_pending_approvals() == []
+    assert data.decision_shadow.summary()['observations'] == 0
+
+
+async def test_preview_ingress_cannot_prepare_plan_even_with_hybrid_enabled(hass, decision_home):
+    data, token, *_ = decision_home
+    await data.store.async_patch_settings(agentcli_routing_mode='hybrid')
+    with patch.object(DecisionProvider, '_request', AsyncMock()) as request:
+        result = await async_preview_decision(hass, data, token, '打开台灯', 'zh-Hans',
+                                              {'reason': 'no_match', 'proposal': None},
+                                              targets=True, prepare=True, ingress='preview')
+    assert result['reason'] == 'not_enabled' and '_plan' not in result
+    request.assert_not_called()

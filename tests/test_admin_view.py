@@ -3031,3 +3031,23 @@ async def test_command_preview_target_opt_in_and_authority_recheck(hass, token_s
     assert body["reason"] == "authority_changed"
     assert "decision_shadow" not in body and body["proposal"] is None
     assert "light.private" not in response.text
+
+
+@pytest.mark.parametrize("language,ha_language", [("zh-Hans", "zh-CN"), ("es", "es")])
+async def test_command_preview_passes_explicit_language_without_plan_authority(hass, token_store, language, ha_language):
+    token, _ = await token_store.async_create_token("language_preview", "admin")
+    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+    hass.data[DOMAIN] = data
+    view = PhoenixAdminCommandPreviewView()
+    view.hass = hass
+    with (patch("custom_components.phoenix_mcp.command_routing.async_recognize", AsyncMock(return_value=None)) as recognize,
+          patch("custom_components.phoenix_mcp.decision_shadow.async_preview_decision", AsyncMock(return_value={"reason": "observed"})) as decision):
+        response = await view.post(_make_admin_request(body=json.dumps({
+            "token_id": token.id, "sentence": "打开台灯", "language": language, "decision": True, "targets": True,
+        }).encode()))
+    assert response.status == 200
+    recognize.assert_awaited_once_with(hass, "打开台灯", ha_language, strict=True)
+    assert decision.call_args.args[4] == language
+    assert decision.call_args.kwargs == {"targets": True, "ingress": "preview"}
+    assert json.loads(response.text)["executed"] is False
+    assert token_store.get_pending_approvals() == []

@@ -1988,7 +1988,7 @@
       "observe": "音声エージェントのコマンドを観測",
       "budget": "認識の制限時間（ms）",
       "token": "トークンの権限範囲",
-      "command": "英語のコマンド",
+      "command": "プレビューするコマンド",
       "test": "コマンドをテスト",
       "candidate": "ローカルの候補が見つかりました",
       "fallback": "選択したプロバイダーを使用",
@@ -1998,7 +1998,11 @@
       "elapsed": "ローカル評価：{ms} ms",
       "observations": "再起動後の音声観測数：{total}、ローカル候補数：{candidates}。",
       "details": "技術情報",
-      "failed": "プレビューを読み込めませんでした。トークンと接続を確認して再試行してください。"
+      "failed": "プレビューを読み込めませんでした。トークンと接続を確認して再試行してください。",
+      "previewLanguage": "プレビューの言語",
+      "languageEnglish": "英語",
+      "languageChinese": "中国語（簡体字）",
+      "languageSpanish": "スペイン語"
     }
   },
   "notification": {

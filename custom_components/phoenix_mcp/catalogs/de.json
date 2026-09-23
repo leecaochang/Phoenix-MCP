@@ -1988,7 +1988,7 @@
       "observe": "Befehle des Sprachassistenten beobachten",
       "budget": "Zeitbudget für die Erkennung (ms)",
       "token": "Token-Berechtigungsbereich",
-      "command": "Befehl auf Englisch",
+      "command": "Befehl für die Vorschau",
       "test": "Befehl testen",
       "candidate": "Lokaler Kandidat gefunden",
       "fallback": "Gewählten Anbieter verwenden",
@@ -1998,7 +1998,11 @@
       "elapsed": "Lokale Auswertung: {ms} ms",
       "observations": "Sprachbeobachtungen seit Neustart: {total}; lokale Kandidaten: {candidates}.",
       "details": "Technische Details",
-      "failed": "Vorschau konnte nicht geladen werden. Token und Verbindung prüfen und erneut versuchen."
+      "failed": "Vorschau konnte nicht geladen werden. Token und Verbindung prüfen und erneut versuchen.",
+      "previewLanguage": "Sprache der Vorschau",
+      "languageEnglish": "Englisch",
+      "languageChinese": "Vereinfachtes Chinesisch",
+      "languageSpanish": "Spanisch"
     }
   },
   "notification": {

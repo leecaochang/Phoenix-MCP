@@ -1,4 +1,4 @@
-"""Single-flight, English-only decision observation with no dispatch authority."""
+"""Single-flight decision evaluation with no dispatch authority."""
 from __future__ import annotations
 
 import asyncio
@@ -8,7 +8,7 @@ from typing import Any
 
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .command_routing import RoutingAuthority
+from .command_routing import RoutingAuthority, routing_language
 from .const import MAX_SEARCH_QUERY_LEN, DECISION_TARGET_INTENTS, DECISION_HYBRID_REASONS
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 
@@ -103,7 +103,8 @@ class DecisionShadow:
             return {"reason": reason, "decision": decision, "executed": False,
                     "elapsed_ms": round((monotonic() - started) * 1000, 2)}
 
-        if not isinstance(language, str) or language.lower().split("-", 1)[0] != "en":
+        decision_language = routing_language(language, preview=ingress == "preview")
+        if decision_language is None:
             return result("unsupported_language")
         if not isinstance(sentence, str) or not sentence.strip() or len(sentence) > MAX_SEARCH_QUERY_LEN:
             return result("invalid_input")
@@ -132,13 +133,13 @@ class DecisionShadow:
             session = async_get_clientsession(hass)
             # Category and optional target selection share one wall-clock budget.
             async with asyncio.timeout(settings.decision_timeout_ms / 1000):
-                answer = await provider.classify(session, sentence.strip(), settings.decision_timeout_ms)
+                answer = await provider.classify(session, sentence.strip(), settings.decision_timeout_ms, decision_language)
                 if (authority.current(hass) is None or store.resolve(account, purpose="decision") != cfg):
                     return result("authority_changed")
                 if not targets:
                     return result("observed", answer)
                 selection = await self._select_target(hass, authority, provider, session, sentence.strip(),
-                                                      answer, settings.decision_timeout_ms, prepare=prepare, ingress=ingress)
+                                                      answer, settings.decision_timeout_ms, prepare=prepare, ingress=ingress, language=decision_language)
                 if (authority.current(hass) is None or store.resolve(account, purpose="decision") != cfg):
                     return result("authority_changed")
                 plan = selection.pop("_plan", None)
@@ -160,7 +161,7 @@ class DecisionShadow:
 
     async def _select_target(self, hass: Any, authority: RoutingAuthority, provider: DecisionProvider,
                              session: Any, sentence: str, category: dict, timeout_ms: int,
-                             *, prepare: bool = False, ingress: str = "voice") -> dict:
+                             *, prepare: bool = False, ingress: str = "voice", language: str = "en") -> dict:
         from .decision_targets import capture_targets
 
         started = monotonic()
@@ -179,7 +180,7 @@ class DecisionShadow:
             snapshot = capture_targets(hass, token, category["choice"])
             if not snapshot.targets:
                 return result("no_target")
-            answer = await provider.select_target(session, sentence, category["choice"], snapshot.targets, timeout_ms)
+            answer = await provider.select_target(session, sentence, category["choice"], snapshot.targets, timeout_ms, language)
             token = authority.current(hass)
             if token is None:
                 return result("authority_changed")

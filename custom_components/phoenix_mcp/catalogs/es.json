@@ -1988,7 +1988,7 @@
       "observe": "Observar órdenes del agente de voz",
       "budget": "Tiempo máximo de reconocimiento (ms)",
       "token": "Ámbito del token",
-      "command": "Orden en inglés",
+      "command": "Orden para la vista previa",
       "test": "Probar orden",
       "candidate": "Candidato local encontrado",
       "fallback": "Usar el proveedor seleccionado",
@@ -1998,7 +1998,11 @@
       "elapsed": "Evaluación local: {ms} ms",
       "observations": "Observaciones de voz desde el reinicio: {total}; candidatos locales: {candidates}.",
       "details": "Detalles técnicos",
-      "failed": "No se pudo cargar la vista previa. Comprueba el token y la conexión y vuelve a intentarlo."
+      "failed": "No se pudo cargar la vista previa. Comprueba el token y la conexión y vuelve a intentarlo.",
+      "previewLanguage": "Idioma de la vista previa",
+      "languageEnglish": "Inglés",
+      "languageChinese": "Chino simplificado",
+      "languageSpanish": "Español"
     }
   },
   "notification": {

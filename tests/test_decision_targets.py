@@ -231,7 +231,7 @@ async def test_target_http_contract_and_generated_id_rejection(protocol, invalid
         else:
             assert (await provider.select_target(session, "lamp on", "light_on", targets, 1000))["choice"] == "t0"
     assert len(requests) == 1
-    assert requests[0]["state"] == {"utterance": "lamp on", "category": "light_on", "targets": targets}
+    assert requests[0]["state"] == {"utterance": "lamp on", "language": "en", "category": "light_on", "targets": targets}
     assert set(requests[0]["questions"]["target"]["criteria"]) == {"t0", "none"}
 
 
@@ -357,3 +357,31 @@ async def test_manual_brightness_preview_exposes_proposal_but_never_execution_pl
     assert "_plan" not in json.dumps(result)
     dispatch.assert_not_called()
     assert not target_home[0].store.get_pending_approvals()
+
+
+@pytest.mark.parametrize("language,wire_language,sentence", [
+    ("zh-Hans", "zh-CN", "把台灯亮度设为百分之五十"),
+    ("es", "es", "pon la lámpara al cincuenta por ciento"),
+])
+async def test_multilingual_target_and_brightness_preview_keeps_language_and_no_plan(hass, target_home, language, wire_language, sentence):
+    data, token, _, _, entity_id = target_home
+    payloads = []
+    async def request(session, method, path, timeout, payload):
+        payloads.append(payload)
+        selected = {"route": "light_brightness", "target": "t0", "brightness_tens": "5", "brightness_units": "0"}
+        return {"model": "test-model", "answers": {
+            question: {"type": "choice", **choice(selected[question], spec["criteria"])}
+            for question, spec in payload["questions"].items()}}
+    with (patch.object(DecisionProvider, "_request", AsyncMock(side_effect=request)),
+          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp") as dispatch):
+        result = await async_preview_decision(hass, data, token, sentence, language,
+                                              {"reason": "no_match", "proposal": None}, targets=True, ingress="preview")
+    assert result["target_selection"]["proposal"] == {
+        "intent": "HassLightSet", "entity_ids": [entity_id], "brightness_pct": 50}
+    assert len(payloads) == 2
+    assert all(payload["state"]["language"] == wire_language for payload in payloads)
+    assert all(payload["state"]["utterance"] == sentence for payload in payloads)
+    assert "English" not in json.dumps(payloads)
+    assert "_plan" not in json.dumps(result)
+    dispatch.assert_not_called()
+    assert not data.store.get_pending_approvals()

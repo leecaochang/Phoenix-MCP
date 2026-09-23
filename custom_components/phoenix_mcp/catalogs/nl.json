@@ -2007,7 +2007,7 @@
       "observe": "Opdrachten van de spraakagent observeren",
       "budget": "Tijdslimiet voor herkenning (ms)",
       "token": "Tokenbereik",
-      "command": "Opdracht in het Engels",
+      "command": "Opdracht voor de voorvertoning",
       "test": "Opdracht testen",
       "candidate": "Lokale kandidaat gevonden",
       "fallback": "Gekozen provider gebruiken",
@@ -2017,7 +2017,11 @@
       "elapsed": "Lokale evaluatie: {ms} ms",
       "observations": "Spraakobservaties sinds herstart: {total}; lokale kandidaten: {candidates}.",
       "details": "Technische details",
-      "failed": "Voorbeeld kon niet worden geladen. Controleer het token en de verbinding en probeer het opnieuw."
+      "failed": "Voorbeeld kon niet worden geladen. Controleer het token en de verbinding en probeer het opnieuw.",
+      "previewLanguage": "Taal van de voorvertoning",
+      "languageEnglish": "Engels",
+      "languageChinese": "Vereenvoudigd Chinees",
+      "languageSpanish": "Spaans"
     }
   }
 }

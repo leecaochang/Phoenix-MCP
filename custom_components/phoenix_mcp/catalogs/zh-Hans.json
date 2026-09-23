@@ -1988,7 +1988,7 @@
       "observe": "观察语音助手命令",
       "budget": "识别时限（毫秒）",
       "token": "令牌权限范围",
-      "command": "英语命令",
+      "command": "要预览的指令",
       "test": "测试命令",
       "candidate": "找到本地候选命令",
       "fallback": "使用所选提供商",
@@ -1998,7 +1998,11 @@
       "elapsed": "本地评估：{ms} 毫秒",
       "observations": "自重启以来的语音观察次数：{total}；本地候选：{candidates}。",
       "details": "技术详情",
-      "failed": "无法加载预览。请检查令牌和连接后重试。"
+      "failed": "无法加载预览。请检查令牌和连接后重试。",
+      "previewLanguage": "预览语言",
+      "languageEnglish": "英语",
+      "languageChinese": "简体中文",
+      "languageSpanish": "西班牙语"
     }
   },
   "notification": {

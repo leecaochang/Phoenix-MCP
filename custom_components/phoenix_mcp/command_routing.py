@@ -13,7 +13,7 @@ from homeassistant.components.light import ATTR_SUPPORTED_COLOR_MODES, brightnes
 from homeassistant.core import HomeAssistant
 
 from .const import (
-    COMMAND_ROUTING_INTENTS, COMMAND_ROUTING_TARGET_SLOTS,
+    COMMAND_ROUTING_INTENTS, COMMAND_ROUTING_TARGET_SLOTS, COMMAND_ROUTING_PREVIEW_LANGUAGES,
     MAX_SEARCH_QUERY_LEN,
 )
 from .intent_recognition import RecognitionUnavailable, SentenceTriggerMatch, async_recognize
@@ -167,9 +167,18 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant) -> tuple[str
     return "supported", proposal
 
 
+def routing_language(language: object, *, preview: bool = False) -> str | None:
+    """Keep multilingual admission confined to explicit administrator previews."""
+    if not isinstance(language, str):
+        return None
+    if preview:
+        return COMMAND_ROUTING_PREVIEW_LANGUAGES.get(language)
+    return "en" if language.lower().split("-", 1)[0] == "en" else None
+
+
 async def async_evaluate_command(
     hass: HomeAssistant, data: PhoenixData, token: TokenRecord,
-    sentence: object, language: object = "en",
+    sentence: object, language: object = "en", *, preview: bool = False,
 ) -> dict:
     """Return an inert candidate or fallback with elapsed local wall time.
 
@@ -190,14 +199,15 @@ async def async_evaluate_command(
     if (not isinstance(sentence, str) or not sentence.strip()
             or len(sentence) > MAX_SEARCH_QUERY_LEN):
         return outcome("invalid_input")
-    if not isinstance(language, str) or language.lower().split("-", 1)[0] != "en":
+    recognition_language = routing_language(language, preview=preview)
+    if recognition_language is None:
         return outcome("unsupported_language")
     runtime = data.command_routing
     if runtime.task is not None and not runtime.task.done():
         return outcome("busy")
     # Only recognition runs in the background. Projection and disclosure happen
     # synchronously after the authority check, never in a timed-out task.
-    task = asyncio.create_task(async_recognize(hass, sentence.strip(), "en", strict=True))
+    task = asyncio.create_task(async_recognize(hass, sentence.strip(), recognition_language, strict=True))
     runtime.task = task
     task.add_done_callback(runtime._finished)
     try:

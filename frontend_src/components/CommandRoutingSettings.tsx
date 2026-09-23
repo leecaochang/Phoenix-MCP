@@ -14,6 +14,7 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
   const [tokens, setTokens] = useState<TokenRecord[]>([]);
   const [tokenId, setTokenId] = useState(settings.voice_agent_token_id ?? "");
   const [sentence, setSentence] = useState("");
+  const [language, setLanguage] = useState("en");
   const [budget, setBudget] = useState(String(settings.command_routing_timeout_ms ?? 500));
   const [result, setResult] = useState<CommandRoutePreview | null>(null);
   const [compare, setCompare] = useState(false);
@@ -50,7 +51,7 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
     setError("");
     setResult(null);
     try {
-      const next = await api.previewCommandRoute(tokenId, sentence, compare, compare && targets);
+      const next = await api.previewCommandRoute(tokenId, sentence, compare, compare && targets, language);
       if (generation.current === current) setResult(next);
     } catch {
       if (generation.current === current) setError(t("routing.failed"));
@@ -115,6 +116,15 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
           onChange={e => { invalidate(); setTokenId(e.target.value); }}>
           <option value="">{t("common.none")}</option>
           {tokens.filter(token => !token.revoked).map(token => <option key={token.id} value={token.id}>{token.name}</option>)}
+        </select>
+      </div>
+      <div className="toggle-row toggle-row-stacked-control">
+        <label htmlFor="routing-language">{t("routing.previewLanguage")}</label>
+        <select id="routing-language" className="input input-auto" value={language} disabled={saving}
+          onChange={e => { invalidate(); setLanguage(e.target.value); }}>
+          <option value="en">{t("routing.languageEnglish")}</option>
+          <option value="zh-Hans">{t("routing.languageChinese")}</option>
+          <option value="es">{t("routing.languageSpanish")}</option>
         </select>
       </div>
       <label htmlFor="routing-sentence">{t("routing.command")}</label>

@@ -2027,7 +2027,7 @@
       "observe": "Obserwuj polecenia agenta głosowego",
       "budget": "Limit czasu rozpoznawania (ms)",
       "token": "Zakres tokenu",
-      "command": "Polecenie po angielsku",
+      "command": "Polecenie do podglądu",
       "test": "Testuj polecenie",
       "candidate": "Znaleziono lokalnego kandydata",
       "fallback": "Użyj wybranego dostawcy",
@@ -2037,7 +2037,11 @@
       "elapsed": "Ocena lokalna: {ms} ms",
       "observations": "Obserwacje głosowe od ponownego uruchomienia: {total}; lokalni kandydaci: {candidates}.",
       "details": "Szczegóły techniczne",
-      "failed": "Nie udało się wczytać podglądu. Sprawdź token i połączenie, a następnie spróbuj ponownie."
+      "failed": "Nie udało się wczytać podglądu. Sprawdź token i połączenie, a następnie spróbuj ponownie.",
+      "previewLanguage": "Język podglądu",
+      "languageEnglish": "Angielski",
+      "languageChinese": "Chiński uproszczony",
+      "languageSpanish": "Hiszpański"
     }
   }
 }

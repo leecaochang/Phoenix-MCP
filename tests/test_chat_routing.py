@@ -78,7 +78,8 @@ async def test_real_local_match_is_observed_without_dispatch_or_decision(hass, c
 async def test_decision_does_not_delay_or_replace_provider_and_keeps_only_counts(hass, chat_home):
     data, _ = chat_home
     entered, release = asyncio.Event(), asyncio.Event()
-    async def classify(self, session, sentence, timeout):
+    async def classify(self, session, sentence, timeout, language):
+        assert language == "en"
         assert sentence == 'Please illuminate the desk lamp'
         entered.set()
         await release.wait()

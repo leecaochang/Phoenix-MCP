@@ -41,11 +41,11 @@ it("previews explicitly and changes Voice routing only on request", async () => 
   expect(screen.getByLabelText("Voice command routing")).toHaveValue("off");
   fireEvent.change(screen.getByLabelText("Voice command routing"), { target: { value: "local_shadow" } });
   expect(onChange).toHaveBeenCalledWith("voice_agent_routing_mode", "local_shadow");
-  fireEvent.change(screen.getByLabelText("Command in English"), { target: { value: "turn on desk lamp" } });
+  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "turn on desk lamp" } });
   preview.mockResolvedValue(candidate);
   fireEvent.click(screen.getByText("Test command"));
   await screen.findByText("Local candidate found");
-  expect(preview).toHaveBeenCalledWith("t", "turn on desk lamp", false, false);
+  expect(preview).toHaveBeenCalledWith("t", "turn on desk lamp", false, false, "en");
   expect(screen.getByText(/Nothing was executed/)).toBeTruthy();
 });
 
@@ -65,9 +65,9 @@ it("discards a preview when its command is edited", async () => {
   preview.mockReturnValue(new Promise(done => { resolve = done; }));
   render(<CommandRoutingSettings settings={settings} onChange={vi.fn()} saving={false} />);
   await screen.findByText("Voice");
-  fireEvent.change(screen.getByLabelText("Command in English"), { target: { value: "old" } });
+  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "old" } });
   fireEvent.click(screen.getByText("Test command"));
-  fireEvent.change(screen.getByLabelText("Command in English"), { target: { value: "new" } });
+  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "new" } });
   await act(async () => resolve(candidate));
   expect(screen.queryByText("Local candidate found")).toBeNull();
 });
@@ -76,7 +76,7 @@ it.each(["no_match", "unsupported", "timeout"])("explains %s without implying an
   preview.mockResolvedValue({ ...candidate, route: "provider", reason, proposal: null });
   render(<CommandRoutingSettings settings={settings} onChange={vi.fn()} saving={false} />);
   await screen.findByText("Voice");
-  fireEvent.change(screen.getByLabelText("Command in English"), { target: { value: "turn on desk lamp" } });
+  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "turn on desk lamp" } });
   fireEvent.click(screen.getByText("Test command"));
   await screen.findByText("Use the selected provider");
   expect(screen.queryByText(/execution-time permission/)).toBeNull();
@@ -98,7 +98,7 @@ it("shows recoverable errors and rejects invalid budgets", async () => {
   fireEvent.blur(budget);
   expect(onChange).not.toHaveBeenCalled();
   expect(budget).toHaveValue(500);
-  fireEvent.change(screen.getByLabelText("Command in English"), { target: { value: "hello" } });
+  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "hello" } });
   fireEvent.click(screen.getByText("Test command"));
   await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("try again"));
 });
@@ -112,10 +112,10 @@ it("requires an explicit choice before sending a preview to the decision account
   const compare = screen.getByLabelText(/Also compare local misses/);
   expect(compare).not.toBeChecked();
   fireEvent.click(compare);
-  fireEvent.change(screen.getByLabelText("Command in English"), { target: { value: "light up the desk" } });
+  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "light up the desk" } });
   fireEvent.click(screen.getByText("Test command"));
   await screen.findByText(/Decision results are observations only/);
-  expect(preview).toHaveBeenCalledWith("t", "light up the desk", true, false);
+  expect(preview).toHaveBeenCalledWith("t", "light up the desk", true, false, "en");
   expect(screen.getByText(/Nothing was executed/)).toBeTruthy();
 });
 
@@ -133,12 +133,12 @@ it("asks separately before sharing target metadata and shows the inert selection
   expect(targets).not.toBeChecked();
   expect(screen.getByText(/No state values or other attributes are sent/)).toBeTruthy();
   fireEvent.click(targets);
-  fireEvent.change(screen.getByLabelText("Command in English"), { target: { value: "light up my desk" } });
+  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "light up my desk" } });
   fireEvent.click(screen.getByText("Test command"));
   await screen.findByText("Suggested target:");
   expect(screen.getByText("light.desk")).toBeTruthy();
   expect(screen.getByText(/Target selection is a preview only/)).toBeTruthy();
-  expect(preview).toHaveBeenCalledWith("t", "light up my desk", true, true);
+  expect(preview).toHaveBeenCalledWith("t", "light up my desk", true, true, "en");
   rerender(<CommandRoutingSettings {...props} settings={{ ...props.settings, decision_provider_id: "new" }} />);
   expect(screen.queryByText("Suggested target:")).toBeNull();
   expect(screen.getByLabelText(/Also compare local misses/)).not.toBeChecked();
@@ -153,7 +153,7 @@ it("discards target results if metadata sharing is disabled during a request", a
   await screen.findByText("Voice");
   fireEvent.click(screen.getByLabelText(/Also compare local misses/));
   fireEvent.click(screen.getByLabelText(/Also preview a single target/));
-  fireEvent.change(screen.getByLabelText("Command in English"), { target: { value: "light up my desk" } });
+  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "light up my desk" } });
   fireEvent.click(screen.getByText("Test command"));
   fireEvent.click(screen.getByLabelText(/Also compare local misses/));
   await act(async () => resolve({ ...candidate, decision_shadow: { target_selection: { entity_id: "light.desk" } } }));
@@ -185,12 +185,12 @@ it("shows a zero brightness proposal without implying execution or no remote usa
   await screen.findByText("Voice");
   fireEvent.click(screen.getByLabelText(/Also compare local misses/));
   fireEvent.click(screen.getByLabelText(/Also preview a single target/));
-  fireEvent.change(screen.getByLabelText("Command in English"), { target: { value: "zero brightness" } });
+  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "zero brightness" } });
   fireEvent.click(screen.getByText("Test command"));
   await screen.findByText("Suggested brightness: 0%");
   expect(screen.queryByText(/Nothing was executed or sent to a provider/)).toBeNull();
   expect(screen.getByText(/Nothing was executed or queued for approval/)).toBeTruthy();
-  expect(preview).toHaveBeenCalledWith("t", "zero brightness", true, true);
+  expect(preview).toHaveBeenCalledWith("t", "zero brightness", true, true, "en");
 });
 
 
@@ -231,4 +231,21 @@ it("requires a decision account for Chat hybrid mode and explains shared metadat
   expect(screen.getByLabelText("Observe command routing in Agent Chat")).toBeDisabled();
   expect(screen.getByLabelText("Observe command routing in Agent Chat")).toBeChecked();
   expect(preview).not.toHaveBeenCalled();
+});
+
+it("keeps preview language independent of execution and discards results from an old language", async () => {
+  let resolve!: (value: unknown) => void;
+  preview.mockReturnValue(new Promise(done => { resolve = done; }));
+  const onChange = vi.fn();
+  render(<CommandRoutingSettings settings={settings} onChange={onChange} saving={false} />);
+  await screen.findByText("Voice");
+  fireEvent.change(screen.getByLabelText("Preview language"), { target: { value: "zh-Hans" } });
+  fireEvent.change(screen.getByLabelText("Command to preview"), { target: { value: "打开台灯" } });
+  expect(preview).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByText("Test command"));
+  expect(preview).toHaveBeenCalledWith("t", "打开台灯", false, false, "zh-Hans");
+  fireEvent.change(screen.getByLabelText("Preview language"), { target: { value: "es" } });
+  await act(async () => resolve(candidate));
+  expect(screen.queryByText("Local candidate found")).toBeNull();
+  expect(onChange).not.toHaveBeenCalled();
 });

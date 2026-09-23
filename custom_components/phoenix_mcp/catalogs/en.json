@@ -2003,7 +2003,7 @@
       "observe": "Observe Voice Agent commands",
       "budget": "Recognition budget (ms)",
       "token": "Token scope",
-      "command": "Command in English",
+      "command": "Command to preview",
       "test": "Test command",
       "candidate": "Local candidate found",
       "fallback": "Use the selected provider",
@@ -2034,12 +2034,16 @@
       "decisionResultHint": "Decision results are observations only. Confidence is provider-defined and is not an execution permission or a measured accuracy rate. Local matches skip the decision call.",
       "decisionElapsed": "Decision request: {ms} ms",
       "decisionObservations": "Completed Voice shadow observations: {count}",
-      "experimentHint": "English commands only. Voice routing is off by default. Test command below is always a preview; decision comparisons contact the selected decision provider only when you opt in.",
+      "experimentHint": "Automatic Voice and Chat routing supports English only. Test command below is always a preview and also accepts Simplified Chinese and Spanish. Decision comparisons contact the selected decision provider only when you opt in.",
       "hybridMode": "Run locally, then use the decision provider",
       "hybridHint": "Hybrid mode requires a decision account. It tries local recognition first, then lets the decision provider propose a single light command or state query. It can operate devices through Phoenix permissions, approval and MESA checks. Local misses share your utterance and eligible entity IDs, names, aliases and area names. Provider usage may be charged. Declines and timeouts before dispatch use your regular provider.",
       "remotePreviewHint": "No local candidate was found. Nothing was executed. The decision comparison below shows whether a remote request was made and whether it suggested a candidate.",
       "selectedBrightness": "Suggested brightness: {value}%",
-      "hybridShadowHint": "Hybrid mode waits for decisions and uses them for routing. Background observation is paused; its saved preference applies again in Observe or Run locally mode."
+      "hybridShadowHint": "Hybrid mode waits for decisions and uses them for routing. Background observation is paused; its saved preference applies again in Observe or Run locally mode.",
+      "previewLanguage": "Preview language",
+      "languageEnglish": "English",
+      "languageChinese": "Simplified Chinese",
+      "languageSpanish": "Spanish"
     }
   },
   "notification": {

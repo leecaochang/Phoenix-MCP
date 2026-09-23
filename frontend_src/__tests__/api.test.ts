@@ -518,3 +518,14 @@ it("sends the current panel language with chat using live HA authentication", as
   expect(JSON.parse(fetchWithAuth.mock.calls[1][1].body).language).toBe("en");
   setLanguagePreference("auto");
 });
+
+describe("api.previewCommandRoute", () => {
+  it.each(["en", "zh-Hans", "es"])("sends the chosen %s preview language without execution flags", async language => {
+    globalThis.fetch = mockFetchResponse(200, { executed: false });
+    await api.previewCommandRoute("t", "打开台灯", true, true, language);
+    expect(fetch).toHaveBeenCalledWith("/api/phoenix-mcp/admin/command-routing/preview", expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ token_id: "t", sentence: "打开台灯", language, decision: true, targets: true }),
+    }));
+  });
+});

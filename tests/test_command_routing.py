@@ -170,7 +170,7 @@ async def test_timeout_and_cancellation_keep_worker_capacity(hass, routing, canc
         assert (await async_evaluate_command(hass, data, token, "turn on the lamp"))["reason"] == "no_match"
 
 
-@pytest.mark.parametrize("language", ["fr", "zh", "", None, []])
+@pytest.mark.parametrize("language", ["fr", "zh", "zh-Hans", "es", "", None, []])
 async def test_non_english_never_calls_recognizer(hass, routing, language):
     data, token = routing
     with patch("custom_components.phoenix_mcp.command_routing.async_recognize") as recognize:
@@ -320,3 +320,47 @@ async def test_strict_recognition_uses_exposed_exact_aliases(
         assert result["proposal"]["entity_ids"] == [english_home]
     else:
         assert result["proposal"] is None
+
+
+@pytest.mark.parametrize("language,name,sentence", [
+    ("zh-Hans", "台灯", "打开台灯"),
+    ("es", "Lámpara", "enciende la lámpara"),
+])
+async def test_multilingual_preview_uses_real_ha_intents_without_effects(hass, routing, english_home, language, name, sentence):
+    data, token = routing
+    er.async_get(hass).async_update_entity(english_home, aliases={name})
+    with patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call:
+        result = await async_evaluate_command(hass, data, token, sentence, language, preview=True)
+    assert result["reason"] == "supported", result
+    assert result["proposal"] == {"intent": "HassTurnOn", "entity_ids": [english_home]}
+    assert result["executed"] is False
+    call.assert_not_called()
+    assert data.store.get_pending_approvals() == []
+    # The same text and tag cannot enter automatic routing at this checkpoint.
+    assert (await async_evaluate_command(hass, data, token, sentence, language))["reason"] == "unsupported_language"
+    token.permissions = PermissionTree()
+    hidden = await async_evaluate_command(hass, data, token, sentence, language, preview=True)
+    assert hidden["proposal"] is None and hidden["reason"] == "no_target"
+
+
+@pytest.mark.parametrize("language", ["fr", "zh", "zh-TW", "unknown", "", [], None])
+async def test_preview_rejects_unadmitted_languages_before_recognition(hass, routing, language):
+    data, token = routing
+    with patch("custom_components.phoenix_mcp.command_routing.async_recognize") as recognize:
+        result = await async_evaluate_command(hass, data, token, "command", language, preview=True)
+    assert result["reason"] == "unsupported_language"
+    recognize.assert_not_called()
+
+
+@pytest.mark.parametrize("language,name,sentence", [
+    ("zh-Hans", "台灯", "不要打开台灯"),
+    ("zh-Hans", "台灯", "十分钟后打开台灯"),
+    ("es", "Lámpara", "no enciendas la lámpara"),
+    ("es", "Lámpara", "enciende la lámpara dentro de diez minutos"),
+])
+async def test_real_multilingual_preview_declines_negated_and_deferred_commands(hass, routing, english_home, language, name, sentence):
+    data, token = routing
+    er.async_get(hass).async_update_entity(english_home, aliases={name})
+    result = await async_evaluate_command(hass, data, token, sentence, language, preview=True)
+    assert result["proposal"] is None, result
+    assert result["route"] == "provider"

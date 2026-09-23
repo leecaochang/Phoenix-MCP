@@ -1988,7 +1988,7 @@
       "observe": "Observer les commandes de l’agent vocal",
       "budget": "Délai maximal de reconnaissance (ms)",
       "token": "Périmètre du jeton",
-      "command": "Commande en anglais",
+      "command": "Commande à prévisualiser",
       "test": "Tester la commande",
       "candidate": "Candidat local trouvé",
       "fallback": "Utiliser le fournisseur choisi",
@@ -1998,7 +1998,11 @@
       "elapsed": "Évaluation locale : {ms} ms",
       "observations": "Observations vocales depuis le redémarrage : {total} ; candidats locaux : {candidates}.",
       "details": "Détails techniques",
-      "failed": "Impossible de charger l’aperçu. Vérifiez le jeton et la connexion, puis réessayez."
+      "failed": "Impossible de charger l’aperçu. Vérifiez le jeton et la connexion, puis réessayez.",
+      "previewLanguage": "Langue de la prévisualisation",
+      "languageEnglish": "Anglais",
+      "languageChinese": "Chinois simplifié",
+      "languageSpanish": "Espagnol"
     }
   },
   "notification": {

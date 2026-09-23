@@ -1993,7 +1993,7 @@
       "observe": "觀察語音助理命令",
       "budget": "辨識時限（毫秒）",
       "token": "權杖權限範圍",
-      "command": "英語命令",
+      "command": "要預覽的指令",
       "test": "測試命令",
       "candidate": "找到本機候選命令",
       "fallback": "使用所選提供者",
@@ -2003,7 +2003,11 @@
       "elapsed": "本機評估：{ms} 毫秒",
       "observations": "自重新啟動以來的語音觀察次數：{total}；本機候選：{candidates}。",
       "details": "技術詳情",
-      "failed": "無法載入預覽。請檢查權杖和連線後重試。"
+      "failed": "無法載入預覽。請檢查權杖和連線後重試。",
+      "previewLanguage": "預覽語言",
+      "languageEnglish": "英語",
+      "languageChinese": "簡體中文",
+      "languageSpanish": "西班牙語"
     }
   },
   "voice": {
