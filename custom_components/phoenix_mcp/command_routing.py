@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import math
 from dataclasses import dataclass, field
 from time import monotonic
 from typing import Any, TYPE_CHECKING
 
-from homeassistant.components.light import ATTR_SUPPORTED_COLOR_MODES, brightness_supported
 from homeassistant.core import HomeAssistant
 
+from .command_operations import command_domain, numeric_operation, supports_command
 from .const import (
     COMMAND_ROUTING_INTENTS, COMMAND_ROUTING_TARGET_SLOTS, COMMAND_ROUTING_LANGUAGES,
     COMMAND_ROUTING_DEFAULT_LANGUAGES, COMMAND_ROUTING_LANGUAGE_ALIASES,
@@ -117,7 +116,8 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant) -> tuple[str
     if intent_name not in COMMAND_ROUTING_INTENTS:
         return "unsupported", None
     slots = {name: entity.value for name, entity in result.entities.items()}
-    allowed = COMMAND_ROUTING_TARGET_SLOTS | ({"brightness"} if intent_name == "HassLightSet" else set())
+    operation = numeric_operation(intent_name)
+    allowed = COMMAND_ROUTING_TARGET_SLOTS | ({operation.slot} if operation else set())
     # State comparisons, counts, relative brightness, floor/global commands,
     # custom slots and contextual/deferred actions belong to the normal provider.
     if slots.keys() - allowed:
@@ -133,11 +133,17 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant) -> tuple[str
     if any(value is not None and not isinstance(value, str) for value in (domains, device_class)):
         return "unsupported", None
     read_only = intent_name == "HassGetState"
+    expected_domain = command_domain(intent_name)
+    if operation and domains and domains != expected_domain:
+        return "unsupported", None
     if read_only and (not name or getattr(result, "response", None) not in (None, "default", "one")):
         return "unsupported", None
+    # Match the HA intent's domains, not only the domains we can execute.
+    # Paired remotes cannot set volume; valves still make position ambiguous.
+    target_domains = [domains] if domains else list(operation.match_domains) if operation else None
     ids = resolve_intent_entities(
         hass, token, name=name, area=area,
-        domains=[domains] if domains else None,
+        domains=target_domains,
         device_classes=[device_class] if device_class else None, read_only=True,
     )
     if not ids or (name and len(ids) != 1) or (read_only and len(ids) != 1):
@@ -146,25 +152,20 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant) -> tuple[str
     if any(state is None or state.state in ("unknown", "unavailable") for state in states):
         return "no_target", None
     if not read_only and any(
-        not entity_id.startswith("light.") or resolve(entity_id, token, hass) != Permission.WRITE
+        not entity_id.startswith(f"{expected_domain}.") or resolve(entity_id, token, hass) != Permission.WRITE
         for entity_id in ids
     ):
         return "no_target", None
-    if not read_only and not name and domains != "light":
+    if not read_only and not name and not operation and domains != expected_domain:
         return "unsupported", None
     proposal: dict[str, Any] = {"intent": intent_name, "entity_ids": sorted(ids)}
-    if intent_name == "HassLightSet":
-        value = slots.get("brightness")
-        if (isinstance(value, bool) or not isinstance(value, (int, float))
-                or not math.isfinite(value) or not 0 <= value <= 100):
+    if operation:
+        value = slots.get(operation.slot)
+        if not operation.valid_value(value):
             return "unsupported", None
-        for state in states:
-            modes = state.attributes.get(ATTR_SUPPORTED_COLOR_MODES) if state else None
-            if (not isinstance(modes, (list, tuple, set, frozenset))
-                    or not all(isinstance(mode, str) for mode in modes)
-                    or not brightness_supported(modes)):
-                return "unsupported", None
-        proposal["brightness_pct"] = value
+        if any(state is None or not supports_command(state, intent_name) for state in states):
+            return "unsupported", None
+        proposal[operation.proposal_field] = value
     return "supported", proposal
 
 

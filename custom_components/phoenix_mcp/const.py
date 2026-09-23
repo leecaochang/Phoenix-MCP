@@ -1663,7 +1663,14 @@ COMMAND_ROUTING_PLAN_KEY = "_phoenix_command_route"
 COMMAND_ROUTING_TIMEOUT_DEFAULT_MS = 500
 COMMAND_ROUTING_TIMEOUT_MIN_MS = 50
 COMMAND_ROUTING_TIMEOUT_MAX_MS = 5000
-COMMAND_ROUTING_INTENTS = frozenset({"HassTurnOn", "HassTurnOff", "HassLightSet", "HassGetState"})
+# Domain, HA slot, proposal field, service, service field, divisor, whole percent, HA matching domains.
+COMMAND_ROUTING_NUMERIC_OPERATIONS = {
+    "HassLightSet": ("light", "brightness", "brightness_pct", "turn_on", "brightness_pct", 1, False, ("light",)),
+    "HassSetVolume": ("media_player", "volume_level", "volume_pct", "volume_set", "volume_level", 100, True, ("media_player",)),
+    "HassSetPosition": ("cover", "position", "position_pct", "set_cover_position", "position", 1, True, ("cover", "valve")),
+}
+COMMAND_ROUTING_SWITCH_SERVICES = {"HassTurnOn": "turn_on", "HassTurnOff": "turn_off"}
+COMMAND_ROUTING_INTENTS = frozenset({*COMMAND_ROUTING_SWITCH_SERVICES, *COMMAND_ROUTING_NUMERIC_OPERATIONS, "HassGetState"})
 COMMAND_ROUTING_TARGET_SLOTS = frozenset({"name", "area", "domain", "device_class"})
 
 # Decision-only shadow routing: configurable network time, independent of HA recognition.

@@ -11,6 +11,7 @@ from typing import Any
 
 from .agent_recovery import RecoveryRequired, dispatch_agent_tool, recovery_turn
 from .audit import generate_request_id
+from .command_operations import service_arguments, supports_command
 from .command_routing import RoutingAuthority, effective_routing_mode
 from .const import COMMAND_ROUTING_PLAN_KEY, VOICE_AGENT_CLIENT_IP, DECISION_TARGET_INTENTS, DECISION_EXECUTION_CATEGORIES
 from .device_semantics import device_registry_snapshot
@@ -27,7 +28,6 @@ def _digest(value: Any) -> str:
 
 def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str) -> str | None:
     from homeassistant.components.homeassistant.exposed_entities import async_should_expose
-    from homeassistant.components.light import ATTR_SUPPORTED_COLOR_MODES, brightness_supported
     from homeassistant.helpers import entity_registry as er
 
     state = hass.states.get(entity_id)
@@ -39,13 +39,7 @@ def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str) -> s
             or "entity_id" in state.attributes or resolve(entity_id, token, hass) not in permissions
             or not async_should_expose(hass, "conversation", entity_id)):
         return None
-    if not readable and not entity_id.startswith("light."):
-        return None
-    modes = state.attributes.get(ATTR_SUPPORTED_COLOR_MODES)
-    if intent == "HassLightSet" and (
-        not isinstance(modes, (list, tuple, set, frozenset))
-        or not all(isinstance(mode, str) for mode in modes) or not brightness_supported(modes)
-    ):
+    if not supports_command(state, intent):
         return None
     devices = device_registry_snapshot(hass)
     if entry.device_id and (devices.get(entry.device_id) is None
@@ -65,16 +59,9 @@ def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str) -> s
     })
 
 
-def _service_args(proposal: dict) -> dict:
-    intent = proposal["intent"]
-    return {
-        "domain": "light", "service": "turn_off" if intent == "HassTurnOff" else "turn_on",
-        "entity_id": proposal["entity_ids"],
-        "service_data": {"brightness_pct": proposal["brightness_pct"]} if intent == "HassLightSet" else {},
-    }
-
-
 def _capture_plan(hass: Any, data: Any, token: Any, proposal: dict, *, ingress: str = "voice") -> dict | None:
+    if proposal["intent"] != "HassGetState" and service_arguments(proposal) is None:
+        return None
     fingerprints = {entity_id: _target_fingerprint(hass, token, entity_id, proposal["intent"])
                     for entity_id in proposal["entity_ids"]}
     if not fingerprints or any(value is None for value in fingerprints.values()):
@@ -105,6 +92,8 @@ def plan_is_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
     try:
         settings = data.store.get_settings()
         proposal = plan["proposal"]
+        if proposal["intent"] != "HassGetState" and service_arguments(proposal) is None:
+            return False
         ingress = plan.get("ingress", "voice")
         if ingress == "chat":
             enabled = effective_routing_mode(settings, "chat") in ("local", "hybrid")
@@ -147,9 +136,9 @@ def service_plan_is_current(args: dict, hass: Any, data: Any, token: Any,
     if not isinstance(plan, dict) or not plan_is_current(plan, hass, data, token):
         return False
     proposal = plan["proposal"]
-    if proposal["intent"] not in ("HassTurnOn", "HassTurnOff", "HassLightSet"):
+    expected = service_arguments(proposal)
+    if expected is None:
         return False
-    expected = _service_args(proposal)
     return (all(args.get(key, {} if key == "service_data" else None) == value for key, value in expected.items())
             and not args.get("area_id") and not args.get("device_id")
             and (entities is None or sorted(entities) == sorted(proposal["entity_ids"])))
@@ -188,8 +177,10 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
         arguments = {"entity_id": proposal["entity_ids"][0], "projection": {"kind": "fields", "fields": ["state"]}}
     else:
         name = "call_service"
-        service_args = _service_args(proposal)
-        arguments = {"service": {"domain": "light", "name": service_args["service"], "data": service_args["service_data"]},
+        service_args = service_arguments(proposal)
+        if service_args is None:
+            return LocalCommandReply(voice_text(language, "token_unavailable"))
+        arguments = {"service": {"domain": service_args["domain"], "name": service_args["service"], "data": service_args["service_data"]},
                      "targets": [{"kind": "entity", "ids": proposal["entity_ids"]}]}
     request_id = generate_request_id()
     context = _local_plan.set(plan)

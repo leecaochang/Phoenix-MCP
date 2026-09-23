@@ -104,6 +104,14 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "ATTR_SUPPORTED_COLOR_MODES": "0.0.0",
         "brightness_supported": "0.0.0",
     },
+    "homeassistant.components.cover": {
+        # Export and SET_POSITION member verified in 2025.2.0 cover/__init__.py.
+        "CoverEntityFeature": "0.0.0",
+    },
+    "homeassistant.components.media_player": {
+        # Re-export and VOLUME_SET usage verified in 2025.2.0 media_player/__init__.py.
+        "MediaPlayerEntityFeature": "0.0.0",
+    },
     "homeassistant.components.script.config": {
         "async_validate_config_item": "0.0.0",
     },
