@@ -953,7 +953,8 @@
       "valueAllowed": "{field} moet een van de volgende zijn: {values}.",
       "versionNotFound": "Versie niet gevonden.",
       "versionResourcePairRequired": "Geef zowel resource_type als resource_id op, of geen van beide voor de recente feed.",
-      "wipeConfirmationRequired": "confirm moet WIPE zijn."
+      "wipeConfirmationRequired": "confirm moet WIPE zijn.",
+      "routingPreviewInvalid": "Gebruik een actief token en een Engelse opdracht van maximaal 512 tekens. De tijdslimiet moet een geheel getal van 50 tot 5000 ms zijn."
     },
     "wizard": {
       "accessSub": "Vouw de <code>light</code>-groep uit en kies een licht dat je kunt controleren. Selecteer <strong>W</strong> om lees- en schrijftoegang te verlenen. Ken een heel apparaat toe of vouw het uit om één entiteit te kiezen. Je kunt later meer machtigingen toevoegen.",
@@ -2000,6 +2001,24 @@
       "zigbee_topology.backend.title": "Buurtabellen van {backend} scannen voor de afgebakende Zigbee-kaart",
       "zigbee_topology.body": "Hiermee worden Zigbee-routers actief bevraagd. Het mesh-netwerk kan minder responsief zijn tijdens de scan.",
       "zigbee_topology.title": "Zigbee-topologie scannen"
+    },
+    "routing": {
+      "title": "Experiment met opdrachtroutering",
+      "hint": "Alleen Engelse opdrachten. Test herkenning zonder opdrachten uit te voeren of een AI-provider te benaderen.",
+      "observe": "Opdrachten van de spraakagent observeren",
+      "budget": "Tijdslimiet voor herkenning (ms)",
+      "token": "Tokenbereik",
+      "command": "Opdracht in het Engels",
+      "test": "Opdracht testen",
+      "candidate": "Lokale kandidaat gevonden",
+      "fallback": "Gekozen provider gebruiken",
+      "resultHint": "Er is niets uitgevoerd. Een kandidaat vereist bij uitvoering nog controles op rechten, goedkeuring en MESA.",
+      "noMatchHint": "Home Assistant heeft deze opdracht niet herkend. Probeer de exacte naam of alias van een entiteit die beschikbaar is voor Assist. Er is niets uitgevoerd of naar een provider verzonden.",
+      "fallbackHint": "Er is geen lokale kandidaat beschikbaar. Bij normaal gebruik verwerkt de geselecteerde provider dit verzoek. Deze test heeft niets uitgevoerd of naar een provider verzonden.",
+      "elapsed": "Lokale evaluatie: {ms} ms",
+      "observations": "Spraakobservaties sinds herstart: {total}; lokale kandidaten: {candidates}.",
+      "details": "Technische details",
+      "failed": "Voorbeeld kon niet worden geladen. Controleer het token en de verbinding en probeer het opnieuw."
     }
   }
 }

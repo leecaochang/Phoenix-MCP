@@ -99,6 +99,11 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "KEY_AUTHENTICATED": "0.0.0",
         "KEY_HASS_USER": "0.0.0",
     },
+    "homeassistant.components.light": {
+        # Both exports verified in the 2025.2.0 light/__init__.py source.
+        "ATTR_SUPPORTED_COLOR_MODES": "0.0.0",
+        "brightness_supported": "0.0.0",
+    },
     "homeassistant.components.script.config": {
         "async_validate_config_item": "0.0.0",
     },

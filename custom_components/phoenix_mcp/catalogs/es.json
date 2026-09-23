@@ -954,7 +954,8 @@
       "valueAllowed": "{field} debe ser uno de: {values}.",
       "versionNotFound": "No se encontró la versión.",
       "versionResourcePairRequired": "Proporcione tanto resource_type como resource_id, o ninguno para la fuente reciente.",
-      "wipeConfirmationRequired": "confirm debe ser WIPE."
+      "wipeConfirmationRequired": "confirm debe ser WIPE.",
+      "routingPreviewInvalid": "Usa un token activo y una orden en inglés de hasta 512 caracteres. El tiempo máximo debe ser un entero de 50 a 5000 ms."
     },
     "tokens": {
       "advanced": "Avanzado",
@@ -1981,6 +1982,24 @@
       "killSwitchShort": "INTERRUPTOR DE EMERGENCIA ACTIVADO",
       "agentChat": "Chat de agente",
       "approvalsTabAria": "Aprobaciones ({count} pendientes)"
+    },
+    "routing": {
+      "title": "Experimento de enrutamiento de órdenes",
+      "hint": "Solo órdenes en inglés. Prueba el reconocimiento sin ejecutar órdenes ni contactar con un proveedor de IA.",
+      "observe": "Observar órdenes del agente de voz",
+      "budget": "Tiempo máximo de reconocimiento (ms)",
+      "token": "Ámbito del token",
+      "command": "Orden en inglés",
+      "test": "Probar orden",
+      "candidate": "Candidato local encontrado",
+      "fallback": "Usar el proveedor seleccionado",
+      "resultHint": "No se ha ejecutado nada. El candidato aún requiere comprobaciones de permisos, aprobación y MESA al ejecutarse.",
+      "noMatchHint": "Home Assistant no ha reconocido este comando. Prueba con el nombre o alias exacto de una entidad expuesta a Assist. No se ha ejecutado nada ni se ha enviado nada a un proveedor.",
+      "fallbackHint": "No hay ningún candidato local disponible. En el uso normal, el proveedor seleccionado procesa esta solicitud. Esta prueba no ha ejecutado nada ni ha enviado nada a un proveedor.",
+      "elapsed": "Evaluación local: {ms} ms",
+      "observations": "Observaciones de voz desde el reinicio: {total}; candidatos locales: {candidates}.",
+      "details": "Detalles técnicos",
+      "failed": "No se pudo cargar la vista previa. Comprueba el token y la conexión y vuelve a intentarlo."
     }
   },
   "notification": {

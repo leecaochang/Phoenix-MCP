@@ -1,4 +1,5 @@
 import type {
+  CommandRoutePreview,
   AgentCliProviderKind,
   AgentCliInstance,
   AgentCliProvidersResponse,
@@ -208,6 +209,9 @@ export const api = {
     req<AuditListResponse>("GET", `/audit${buildQuery(params)}`),
 
   getInfo: () => req<{ version: string; min_ha_version: string; github_url: string }>("GET", "/info"),
+
+  previewCommandRoute: (tokenId: string, sentence: string) =>
+    req<CommandRoutePreview>("POST", "/command-routing/preview", { token_id: tokenId, sentence, language: "en" }),
 
   getSettings: () => req<GlobalSettings>("GET", "/settings"),
   patchSettings: (body: Partial<GlobalSettings>) =>

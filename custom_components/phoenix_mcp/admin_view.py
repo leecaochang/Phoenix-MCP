@@ -20,6 +20,10 @@ from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 
 from .audit import Outcome
 from .const import (
+    COMMAND_ROUTING_MODES,
+    COMMAND_ROUTING_TIMEOUT_MIN_MS,
+    COMMAND_ROUTING_TIMEOUT_MAX_MS,
+    MAX_SEARCH_QUERY_LEN,
     AGENTCLI_MAX_ITERATIONS_MAX,
     AGENTCLI_MAX_ITERATIONS_MIN,
     AGENTCLI_SCROLLBACK_MAX,
@@ -2028,6 +2032,7 @@ _SURFACE_TOKEN_PROVIDER_PAIRS = (
 )
 
 _PATCHABLE_SETTINGS = _BOOL_SETTINGS | {
+    "voice_agent_routing_mode", "command_routing_timeout_ms",
     "audit_flush_interval", "audit_log_maxlen", "mesa_mode",
     "agentcli_scrollback_lines", "agentcli_max_iterations", "assist_bound_token_id",
     *_NULLABLE_STRING_SETTINGS,
@@ -2123,6 +2128,23 @@ async def _validated_settings_patch(
                 "invalid_request", f"{key} must be one of: {sorted(DETAIL_LEVELS)}.",
                 400, rid, key="valueAllowed",
                 params={"field": key, "values": ", ".join(sorted(DETAIL_LEVELS))},
+            )
+
+    if "voice_agent_routing_mode" in patchable:
+        value = patchable["voice_agent_routing_mode"]
+        if not isinstance(value, str) or value not in COMMAND_ROUTING_MODES:
+            return {}, _err(
+                "invalid_request", "Unsupported voice routing mode.", 400, rid,
+                key="valueAllowed", params={"field": "voice_agent_routing_mode",
+                "values": ", ".join(sorted(COMMAND_ROUTING_MODES))},
+            )
+    if "command_routing_timeout_ms" in patchable:
+        value = patchable["command_routing_timeout_ms"]
+        if (type(value) is not int or not
+                COMMAND_ROUTING_TIMEOUT_MIN_MS <= value <= COMMAND_ROUTING_TIMEOUT_MAX_MS):
+            return {}, _err(
+                "invalid_request", "Invalid recognition time budget.", 400, rid,
+                key="routingPreviewInvalid",
             )
 
     int_checks = (
@@ -2270,6 +2292,44 @@ async def _apply_settings_side_effects(
         # next full HA page load (already-open tabs are unaffected).
         from .panel import async_sync_agentchat_inject  # noqa: PLC0415
         await async_sync_agentchat_inject(hass)
+
+
+class PhoenixAdminCommandPreviewView(PhoenixView):
+    """Admin-only inert recognition preview; not an MCP tool."""
+
+    url = "/api/phoenix-mcp/admin/command-routing/preview"
+    name = "api:phoenix-mcp:admin:command-routing:preview"
+    requires_auth = True
+
+    @require_admin
+    async def get(self, request: web.Request) -> web.Response:
+        data: PhoenixData = self.hass.data[DOMAIN]
+        return _ok(data.command_routing.summary(), request_id=request["phoenix_mcp_rid"])
+
+    @require_admin
+    async def post(self, request: web.Request) -> web.Response:
+        from .command_routing import async_evaluate_command
+
+        rid = request["phoenix_mcp_rid"]
+        data: PhoenixData = self.hass.data[DOMAIN]
+        body = await _read_body(request, rid)
+        if isinstance(body, web.Response):
+            return body
+        sentence = body.get("sentence")
+        token_id = body.get("token_id")
+        if (set(body) - {"sentence", "token_id", "language"}
+                or not isinstance(sentence, str) or not sentence.strip()
+                or len(sentence) > MAX_SEARCH_QUERY_LEN
+                or not isinstance(token_id, str)
+                or body.get("language", "en") != "en"):
+            return _err("invalid_request", "Invalid command preview request.", 400, rid,
+                        key="routingPreviewInvalid")
+        token = data.store.get_token_by_id(token_id)
+        if token is None or not token.is_valid():
+            return _err("invalid_request", "Select an active token.", 400, rid,
+                        key="activeTokenRequired", params={"field": "token_id"})
+        result = await async_evaluate_command(self.hass, data, token, sentence, "en")
+        return _ok({**result, "voice_observations": data.command_routing.summary()}, request_id=rid)
 
 
 class PhoenixAdminSettingsView(PhoenixView):
@@ -4560,6 +4620,7 @@ ALL_ADMIN_VIEWS: list[type[PhoenixView]] = [
     PhoenixAdminTokenAuditView,
     PhoenixAdminAuditView,
     PhoenixAdminSettingsView,
+    PhoenixAdminCommandPreviewView,
     PhoenixAdminVoiceAgentPipelineView,
     PhoenixAdminAiTaskPreferredView,
     PhoenixAdminWipeView,

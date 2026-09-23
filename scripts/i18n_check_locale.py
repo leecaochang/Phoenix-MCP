@@ -78,6 +78,13 @@ KEEP_ENGLISH_SECTIONS = ("entity",)
 # can tell a decision from an oversight. Absence from the locale file IS the
 # mechanism: HA falls back per key.
 KEEP_ENGLISH: dict[str, tuple[str, ...]] = {
+    # Local routing is an explicitly English-only experiment until its final stage.
+    "English command routing experiment": (
+        "panel.routing.mode", "panel.routing.offMode", "panel.routing.localMode",
+        "panel.routing.localHint", "panel.routing.localBudgetHint",
+        "voice.local_sent", "voice.local_pending", "voice.local_review",
+        "voice.local_failed", "voice.local_state", "voice.local_read_failed",
+    ),
     # NOTE (2026-07-30): the MESA enum values and the permission states
     # (READ/WRITE/DENY/INHERIT) USED to live here, on the argument
     # that the effective-resolution table prints the raw mesa-core value beside

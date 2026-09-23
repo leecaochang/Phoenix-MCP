@@ -856,47 +856,15 @@ async def _tool_recognize_intent(
         )
     language = language_arg.strip() if isinstance(language_arg, str) else hass.config.language
 
-    from homeassistant.components.conversation.agent_manager import (  # noqa: PLC0415
-        async_get_agent,
-    )
-    from homeassistant.components.conversation.const import (  # noqa: PLC0415
-        HOME_ASSISTANT_AGENT,
-    )
-    from homeassistant.components.conversation.models import (  # noqa: PLC0415
-        ConversationInput,
-    )
-    from homeassistant.core import Context  # noqa: PLC0415
+    from ..intent_recognition import RecognitionUnavailable, async_recognize
 
     try:
-        default_agent = async_get_agent(hass, HOME_ASSISTANT_AGENT)
-    except KeyError:
-        default_agent = None
-    recognize = getattr(default_agent, "async_recognize_intent", None)
-    if recognize is None:
+        result = await async_recognize(hass, sentence, language)
+    except RecognitionUnavailable:
         return (
             _tool_error("Home Assistant's default conversation agent is unavailable."),
             "not_implemented", "recognize_intent",
         )
-
-    # ConversationInput gained satellite_id after Phoenix's HA version floor.
-    # Supply only fields declared by the installed HA dataclass so one code path
-    # works on both shapes. agent_id is internal and fixed: it is not caller input.
-    wanted = {
-        "text": sentence,
-        "context": Context(),
-        "conversation_id": None,
-        "device_id": None,
-        "satellite_id": None,
-        "language": language,
-        "agent_id": HOME_ASSISTANT_AGENT,
-        "extra_system_prompt": None,
-    }
-    declared = {field.name for field in dataclasses.fields(ConversationInput)}
-    conversation_input_type: Any = ConversationInput
-    user_input = conversation_input_type(**{
-        key: value for key, value in wanted.items() if key in declared
-    })
-    result = await recognize(user_input)
 
     if result is None:
         body = {"match": False, "near_misses": []}

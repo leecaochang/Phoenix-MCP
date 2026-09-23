@@ -1023,8 +1023,11 @@ def resolve_intent_entities(
     name: str | None = None,
     area: str | None = None,
     floor: str | None = None,
+    read_only: bool = False,
 ) -> list[str]:
     """Resolve intent-based targeting (area/name/floor/domain/device_class) to entity_id list.
+
+    read_only includes readable entities for side-effect-free routing previews.
 
     Uses HA's async_match_targets for name/area/floor resolution to match native HA
     intent scoring behavior. Silently drops entities the token cannot WRITE. Never
@@ -1073,10 +1076,16 @@ def resolve_intent_entities(
 
     permitted: list[State] = [
         s for s in hass.states.async_all()
-        if resolve(s.entity_id, token, hass) == Permission.WRITE
+        if resolve(s.entity_id, token, hass) in (
+            (Permission.READ, Permission.WRITE) if read_only else (Permission.WRITE,)
+        )
         and (expose is None or expose(s.entity_id))
         and _intent_eligible(s.entity_id)
     ]
+
+    # HA interprets an empty states list as all states. Never pass it through.
+    if not permitted:
+        return []
 
     if not name and not area and not floor:
         if not domains and not device_classes:

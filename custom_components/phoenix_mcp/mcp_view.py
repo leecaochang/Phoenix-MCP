@@ -1181,6 +1181,13 @@ async def _tool_call_service(
 
     service_key = f"{domain}/{service}"
 
+    from .command_execution import bind_service_plan
+
+    bound_args = bind_service_plan(args, hass, data, token)
+    if bound_args is None:
+        return _tool_error("Command targets or configuration changed."), "denied", "call_service"
+    args = bound_args
+
     if service_key in DUAL_GATE_SERVICES:
         blocked = await _gate(
             "cap_restart", token, hass, data,
@@ -1323,6 +1330,12 @@ async def _execute_call_service(
     # explicit targets above are what this call may reach, and HA would union a
     # leftover selector with them. See helpers.sanitize_service_data.
     service_data = _sanitize_service_data(args.get("service_data"))
+    from .command_execution import service_plan_is_current
+    from .const import COMMAND_ROUTING_PLAN_KEY
+
+    local_plan = COMMAND_ROUTING_PLAN_KEY in args
+    if not service_plan_is_current(args, hass, data, token):
+        return _tool_error("Command targets or configuration changed."), "denied", resource
 
     # DUAL_GATE_SERVICES have no entities in hass.states; routing them through
     # resolve_service_targets always produces an empty list and a spurious 403.
@@ -1389,16 +1402,21 @@ async def _execute_call_service(
     if not permitted_entities:
         return _tool_error("Forbidden."), "denied", resource
 
+    if not service_plan_is_current(args, hass, data, token, permitted_entities):
+        return _tool_error("Command targets or configuration changed."), "denied", resource
+
     # MESA enforcement runs last, on the flattened entity list Phoenix MCP already
     # permitted (rule 15: never pass device_id/area_id/"all" to HA). MESA never
     # sees entities Phoenix MCP denied; it can drop entities, gate the whole call for
     # confirmation, or block outright.
+    local_constraints: dict[str, Any] = {"require_all": True, "approval_args": args} if local_plan else {}
     mesa_outcome = await async_apply_mesa_to_call(
         hass, data, token,
         domain=domain, service=service, service_data=service_data,
         entities=permitted_entities,
         request_id=request_id, client_ip=client_ip, session_id=request_id,
         confirm_approved=mesa_approved or _approved_exec_ctx.get(),
+        **local_constraints,
     )
     if mesa_outcome.blocked:
         fire_mesa_blocked_event(hass, token, mesa_outcome.blocked)
@@ -1410,6 +1428,8 @@ async def _execute_call_service(
         return _tool_error("Forbidden."), "denied", resource
     check_request_authority()
     permitted_entities = mesa_outcome.entities
+    if not service_plan_is_current(args, hass, data, token, permitted_entities):
+        return _tool_error("Command targets or configuration changed."), "denied", resource
 
     if domain in HIGH_RISK_DOMAINS:
         _LOGGER.info(

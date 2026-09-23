@@ -129,7 +129,8 @@
       "valueAllowed": "{field} 必須是以下值之一：{values}。",
       "versionNotFound": "未找到版本。",
       "versionResourcePairRequired": "請同時提供 resource_type 和 resource_id，或兩者都不提供以檢視最近記錄。",
-      "wipeConfirmationRequired": "confirm 必須為 WIPE。"
+      "wipeConfirmationRequired": "confirm 必須為 WIPE。",
+      "routingPreviewInvalid": "請使用有效權杖和不超過 512 個字元的英語命令。辨識時限必須是 50 至 5000 毫秒的整數。"
     },
     "agentchat": {
       "answerAnyway": "仍然回答",
@@ -1986,6 +1987,24 @@
       "waitingForAgent": "正在等待您的智慧體連線…",
       "working": "處理中…",
       "yourDevice": "您的裝置"
+    },
+    "routing": {
+      "title": "命令路由實驗",
+      "hint": "僅支援英語命令。測試辨識，不執行命令，也不聯絡 AI 提供者。",
+      "observe": "觀察語音助理命令",
+      "budget": "辨識時限（毫秒）",
+      "token": "權杖權限範圍",
+      "command": "英語命令",
+      "test": "測試命令",
+      "candidate": "找到本機候選命令",
+      "fallback": "使用所選提供者",
+      "resultHint": "未執行任何操作。候選命令仍需在執行時檢查權限、核准和 MESA。",
+      "noMatchHint": "Home Assistant 未辨識此命令。請嘗試使用已向 Assist 公開的實體的準確名稱或別名。未執行任何操作，也未向供應商傳送請求。",
+      "fallbackHint": "沒有可用的本機候選操作。正常使用時，此請求由所選供應商處理。本次測試未執行任何操作，也未向供應商傳送請求。",
+      "elapsed": "本機評估：{ms} 毫秒",
+      "observations": "自重新啟動以來的語音觀察次數：{total}；本機候選：{candidates}。",
+      "details": "技術詳情",
+      "failed": "無法載入預覽。請檢查權杖和連線後重試。"
     }
   },
   "voice": {

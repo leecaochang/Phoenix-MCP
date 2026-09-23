@@ -1616,6 +1616,12 @@ NOTIFICATION_TEMPLATES: dict[str, str] = {
 # a security control: naming it would announce the gateway's state to anyone
 # within earshot of the satellite.
 VOICE_TEMPLATES: dict[str, str] = {
+    "local_sent": "Command sent.",
+    "local_pending": "This command needs approval in the Phoenix MCP panel.",
+    "local_review": "Review command",
+    "local_failed": "Phoenix MCP could not complete this command.",
+    "local_state": "The state is {state}.",
+    "local_read_failed": "Phoenix MCP could not read the state.",
     "unavailable": "The Phoenix MCP voice agent is currently unavailable.",
     "not_configured": "The Phoenix MCP voice agent is not fully configured.",
     "token_unavailable": "The Phoenix MCP voice agent's token is no longer available.",
@@ -1642,3 +1648,12 @@ VOICE_TEMPLATES: dict[str, str] = {
         "To continue, repeat your complete request and explicitly say to answer anyway."
     ),
 }
+
+# English-only Voice routing; local execution remains opt-in.
+COMMAND_ROUTING_MODES = frozenset({"off", "local_shadow", "local"})
+COMMAND_ROUTING_PLAN_KEY = "_phoenix_command_route"
+COMMAND_ROUTING_TIMEOUT_DEFAULT_MS = 500
+COMMAND_ROUTING_TIMEOUT_MIN_MS = 50
+COMMAND_ROUTING_TIMEOUT_MAX_MS = 5000
+COMMAND_ROUTING_INTENTS = frozenset({"HassTurnOn", "HassTurnOff", "HassLightSet", "HassGetState"})
+COMMAND_ROUTING_TARGET_SLOTS = frozenset({"name", "area", "domain", "device_class"})

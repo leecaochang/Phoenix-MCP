@@ -1413,7 +1413,8 @@
       "valueAllowed": "{field} muss einer der folgenden Werte sein: {values}.",
       "versionNotFound": "Version nicht gefunden.",
       "versionResourcePairRequired": "Geben Sie entweder resource_type und resource_id zusammen an, oder keines von beiden für den aktuellen Feed.",
-      "wipeConfirmationRequired": "confirm muss WIPE sein."
+      "wipeConfirmationRequired": "confirm muss WIPE sein.",
+      "routingPreviewInvalid": "Aktives Token und englischen Befehl mit höchstens 512 Zeichen verwenden. Das Zeitbudget muss eine ganze Zahl von 50 bis 5000 ms sein."
     },
     "approvalSummary": {
       "action.approve": "Genehmigen und ausführen",
@@ -1981,6 +1982,24 @@
       "noun.scene": "Szene",
       "noun.script": "Skript",
       "shown.more": "{shown} + {extra} weitere"
+    },
+    "routing": {
+      "title": "Experimentelle Befehlsweiterleitung",
+      "hint": "Nur englische Befehle. Erkennung testen, ohne Befehle auszuführen oder einen KI-Anbieter zu kontaktieren.",
+      "observe": "Befehle des Sprachassistenten beobachten",
+      "budget": "Zeitbudget für die Erkennung (ms)",
+      "token": "Token-Berechtigungsbereich",
+      "command": "Befehl auf Englisch",
+      "test": "Befehl testen",
+      "candidate": "Lokaler Kandidat gefunden",
+      "fallback": "Gewählten Anbieter verwenden",
+      "resultHint": "Es wurde nichts ausgeführt. Ein Kandidat benötigt bei der Ausführung weiterhin Berechtigungs-, Genehmigungs- und MESA-Prüfungen.",
+      "noMatchHint": "Home Assistant hat diesen Befehl nicht erkannt. Verwenden Sie den genauen Namen oder Alias einer für Assist freigegebenen Entität. Es wurde nichts ausgeführt oder an einen Anbieter gesendet.",
+      "fallbackHint": "Kein lokaler Kandidat verfügbar. Im normalen Betrieb verarbeitet der ausgewählte Anbieter diese Anfrage. Dieser Test hat nichts ausgeführt oder an einen Anbieter gesendet.",
+      "elapsed": "Lokale Auswertung: {ms} ms",
+      "observations": "Sprachbeobachtungen seit Neustart: {total}; lokale Kandidaten: {candidates}.",
+      "details": "Technische Details",
+      "failed": "Vorschau konnte nicht geladen werden. Token und Verbindung prüfen und erneut versuchen."
     }
   },
   "notification": {

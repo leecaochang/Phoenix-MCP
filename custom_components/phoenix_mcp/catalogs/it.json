@@ -124,7 +124,8 @@
       "valueAllowed": "{field} deve essere uno tra: {values}.",
       "versionNotFound": "Versione non trovata.",
       "versionResourcePairRequired": "Specifica sia resource_type sia resource_id, oppure nessuno dei due per il feed recente.",
-      "wipeConfirmationRequired": "confirm deve essere WIPE."
+      "wipeConfirmationRequired": "confirm deve essere WIPE.",
+      "routingPreviewInvalid": "Usa un token attivo e un comando in inglese di massimo 512 caratteri. Il limite deve essere un intero da 50 a 5000 ms."
     },
     "agentchat": {
       "announceApproval": "L'azione {name} richiede la tua approvazione.",
@@ -1981,6 +1982,24 @@
       "waitingForAgent": "In attesa che il tuo agente si connetta...",
       "working": "In corso...",
       "yourDevice": "il tuo dispositivo"
+    },
+    "routing": {
+      "title": "Esperimento di instradamento dei comandi",
+      "hint": "Solo comandi in inglese. Prova il riconoscimento senza eseguire comandi né contattare un fornitore di IA.",
+      "observe": "Osserva i comandi dell’agente vocale",
+      "budget": "Tempo massimo di riconoscimento (ms)",
+      "token": "Ambito del token",
+      "command": "Comando in inglese",
+      "test": "Prova comando",
+      "candidate": "Candidato locale trovato",
+      "fallback": "Usa il fornitore selezionato",
+      "resultHint": "Non è stato eseguito nulla. Il candidato richiede ancora verifiche di permessi, approvazione e MESA al momento dell’esecuzione.",
+      "noMatchHint": "Home Assistant non ha riconosciuto questo comando. Prova il nome o alias esatto di un’entità esposta ad Assist. Non è stato eseguito né inviato nulla a un fornitore.",
+      "fallbackHint": "Non è disponibile alcun candidato locale. Nell’uso normale, il fornitore selezionato gestisce questa richiesta. Questo test non ha eseguito né inviato nulla a un fornitore.",
+      "elapsed": "Valutazione locale: {ms} ms",
+      "observations": "Osservazioni vocali dal riavvio: {total}; candidati locali: {candidates}.",
+      "details": "Dettagli tecnici",
+      "failed": "Impossibile caricare l’anteprima. Controlla il token e la connessione, poi riprova."
     }
   },
   "notification": {

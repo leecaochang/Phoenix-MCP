@@ -1704,7 +1704,8 @@
       "valueAllowed": "{field} must be one of: {values}.",
       "versionNotFound": "Version not found.",
       "versionResourcePairRequired": "Provide both resource_type and resource_id, or neither for the recent feed.",
-      "wipeConfirmationRequired": "confirm must be WIPE."
+      "wipeConfirmationRequired": "confirm must be WIPE.",
+      "routingPreviewInvalid": "Use an active token and an English command of up to 512 characters. The recognition budget must be an integer from 50 to 5000 ms."
     },
     "mesaSuggestion": {
       "baseline_note": " Prohibited matches the built-in baseline for this domain, so the authored profile makes that intent explicit; choose confirm in Review to allow agent control behind approvals instead.",
@@ -1985,6 +1986,29 @@
       "zigbee_topology.backend.title": "Scan {backend} neighbor tables for the scoped Zigbee map",
       "zigbee_topology.body": "This actively queries Zigbee routers. The mesh may be less responsive while the scan runs.",
       "zigbee_topology.title": "Scan Zigbee topology"
+    },
+    "routing": {
+      "mode": "Voice command routing",
+      "offMode": "Off: use the selected provider",
+      "localMode": "Run supported English commands locally",
+      "localHint": "Run locally can operate devices through Phoenix permissions, approval and MESA checks without a model call. Unmatched commands use the selected provider. Observe mode always uses the provider. Test command below remains a preview.",
+      "localBudgetHint": "50 to 5000 ms for recognition only. This does not limit device execution or internet requests. Adjust for your Home Assistant host.",
+      "title": "Command routing experiment",
+      "hint": "English commands only. Test recognition without executing a command or contacting an AI provider.",
+      "observe": "Observe Voice Agent commands",
+      "budget": "Recognition budget (ms)",
+      "token": "Token scope",
+      "command": "Command in English",
+      "test": "Test command",
+      "candidate": "Local candidate found",
+      "fallback": "Use the selected provider",
+      "resultHint": "Nothing was executed. A candidate still needs execution-time permission, approval, and MESA checks.",
+      "noMatchHint": "Home Assistant did not recognize this command. Try the exact name or alias of an entity exposed to Assist. Nothing was executed or sent to a provider.",
+      "fallbackHint": "No local candidate is available. In normal use, the selected provider handles this request. Nothing was executed or sent to a provider by this test.",
+      "elapsed": "Local evaluation: {ms} ms",
+      "observations": "Voice observations since restart: {total}; local candidates: {candidates}.",
+      "details": "Technical details",
+      "failed": "Could not load the preview. Check the token and connection, then try again."
     }
   },
   "notification": {
@@ -1999,12 +2023,18 @@
     "error": "Sorry, the Phoenix MCP voice agent hit an error.",
     "focus_answer_anyway": "To continue, repeat your complete request and explicitly say to answer anyway.",
     "focus_declined": "This conversation is in Home-focused mode, so I can only help with requests about your home and Home Assistant.",
+    "local_failed": "Phoenix MCP could not complete this command.",
+    "local_pending": "This command needs approval in the Phoenix MCP panel.",
+    "local_read_failed": "Phoenix MCP could not read the state.",
+    "local_review": "Review command",
+    "local_sent": "Command sent.",
+    "local_state": "The state is {state}.",
     "not_configured": "The Phoenix MCP voice agent is not fully configured.",
     "out_of_steps": "Sorry, I ran out of steps before finishing that.",
+    "outcome_unknown": "Actions may have run. Check Home Assistant and approval results before retrying. Resolve uncertain actions in Settings > System > Repairs.",
     "output_limit": "Sorry, the model produced too much output, so I stopped.",
     "provider_error": "Sorry, {reason}.",
     "token_unavailable": "The Phoenix MCP voice agent's token is no longer available.",
-    "unavailable": "The Phoenix MCP voice agent is currently unavailable.",
-    "outcome_unknown": "Actions may have run. Check Home Assistant and approval results before retrying. Resolve uncertain actions in Settings > System > Repairs."
+    "unavailable": "The Phoenix MCP voice agent is currently unavailable."
   }
 }

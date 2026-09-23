@@ -959,7 +959,8 @@
       "valueAllowed": "{field} musi być jedną z: {values}.",
       "versionNotFound": "Nie znaleziono wersji.",
       "versionResourcePairRequired": "Podaj zarówno resource_type, jak i resource_id, albo żadne z nich dla ostatniego kanału.",
-      "wipeConfirmationRequired": "confirm musi mieć wartość WIPE."
+      "wipeConfirmationRequired": "confirm musi mieć wartość WIPE.",
+      "routingPreviewInvalid": "Użyj aktywnego tokenu i polecenia po angielsku do 512 znaków. Limit czasu musi być liczbą całkowitą od 50 do 5000 ms."
     },
     "wizard": {
       "accessSub": "Rozwiń grupę <code>light</code> i wybierz światło, które możesz zweryfikować. Wybierz <strong>W</strong>, aby przyznać dostęp do odczytu i zapisu. Przyznaj całe urządzenie lub rozwiń je, aby wybrać jedną encję. Więcej uprawnień możesz dodać później.",
@@ -2020,6 +2021,24 @@
       "zigbee_topology.backend.title": "Skanuj tabele sąsiedztwa {backend} dla ograniczonej mapy Zigbee",
       "zigbee_topology.body": "Spowoduje to aktywne odpytywanie routerów Zigbee. Sieć mesh może być mniej responsywna podczas skanowania.",
       "zigbee_topology.title": "Skanuj topologię Zigbee"
+    },
+    "routing": {
+      "title": "Eksperymentalne kierowanie poleceń",
+      "hint": "Tylko polecenia po angielsku. Testuj rozpoznawanie bez wykonywania poleceń ani kontaktowania się z dostawcą AI.",
+      "observe": "Obserwuj polecenia agenta głosowego",
+      "budget": "Limit czasu rozpoznawania (ms)",
+      "token": "Zakres tokenu",
+      "command": "Polecenie po angielsku",
+      "test": "Testuj polecenie",
+      "candidate": "Znaleziono lokalnego kandydata",
+      "fallback": "Użyj wybranego dostawcy",
+      "resultHint": "Nic nie wykonano. Kandydat nadal wymaga kontroli uprawnień, zatwierdzenia i MESA podczas wykonywania.",
+      "noMatchHint": "Home Assistant nie rozpoznał tego polecenia. Spróbuj użyć dokładnej nazwy lub aliasu encji udostępnionej Assist. Nic nie zostało wykonane ani wysłane do dostawcy.",
+      "fallbackHint": "Brak lokalnego kandydata. Podczas normalnego użytkowania wybrany dostawca obsługuje to żądanie. Ten test niczego nie wykonał ani nie wysłał do dostawcy.",
+      "elapsed": "Ocena lokalna: {ms} ms",
+      "observations": "Obserwacje głosowe od ponownego uruchomienia: {total}; lokalni kandydaci: {candidates}.",
+      "details": "Szczegóły techniczne",
+      "failed": "Nie udało się wczytać podglądu. Sprawdź token i połączenie, a następnie spróbuj ponownie."
     }
   }
 }

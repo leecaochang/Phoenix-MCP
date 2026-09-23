@@ -154,6 +154,8 @@ export interface GlobalSettings {
   assist_api_supported?: boolean;
   // Phoenix MCP voice agent: Phoenix MCP registered as HA's own conversation agent, running its
   // own model on the chosen token's scope. Independent of the Assist bridge above.
+  voice_agent_routing_mode?: "off" | "local_shadow" | "local";
+  command_routing_timeout_ms?: number;
   voice_agent_enabled?: boolean;
   voice_agent_token_id?: string | null;
   voice_agent_provider_id?: string | null;
@@ -761,4 +763,13 @@ declare global {
       "hui-card": React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement>, HTMLElement>;
     }
   }
+}
+
+export interface CommandRoutePreview {
+  route: "local_candidate" | "provider";
+  reason: string;
+  executed: false;
+  elapsed_ms: number;
+  proposal: { intent: string; entity_ids: string[]; brightness_pct?: number } | null;
+  voice_observations: { observations: number; candidates: number; mean_elapsed_ms: number | null };
 }

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Callable
 
 from .agent_recovery import AgentRecovery
 from .audit import AuditLog
+from .command_routing import CommandRouting
 from .const import TEMPLATE_WORKER_CONCURRENCY
 from .card_catalog import CardCatalogStore
 from .rate_limiter import RateLimiter
@@ -38,6 +39,7 @@ class PhoenixData:
     # Configuration version history. Always present: __init__ supplies a
     # persistent store; direct constructions (tests) get an in-memory default.
     versions: VersionStore = field(default_factory=VersionStore)
+    command_routing: CommandRouting = field(default_factory=CommandRouting)
     agent_recovery: AgentRecovery = field(default_factory=AgentRecovery)
     # Which Lovelace cards this instance can render, harvested by the panel
     # frontend. Always present: __init__ supplies a persistent store; direct

@@ -135,10 +135,36 @@ async def async_voice_answer(
     if token is None:
         return voice_text(language, "token_unavailable")
 
+    from .command_routing import RoutingAuthority, async_evaluate_command
+
+    authority = RoutingAuthority.capture(data, token) if settings.voice_agent_routing_mode in ("local_shadow", "local") else None
     store = await _get_secret_store(hass)
     cfg = store.resolve(settings.voice_agent_provider_id, settings.voice_agent_model or None)
     if cfg is None or not cfg.model:
         return voice_text(language, "not_configured")
+
+    if authority is not None:
+        if authority.current(hass) is None:
+            return voice_text(language, "token_unavailable")
+        observation = await async_evaluate_command(hass, data, token, user_text, language or "en")
+        token = authority.current(hass)
+        if token is None:
+            return voice_text(language, "token_unavailable")
+        data.command_routing.observe(observation)
+        # Preserve the ordinary voice loop, including its zero inline wait.
+        token = _current_dispatch_token(data, token.id)
+        if token is None:
+            return voice_text(language, "token_unavailable")
+        if settings.voice_agent_routing_mode == "local" and observation["proposal"]:
+            from .command_execution import async_execute_local_command
+
+            answer = await async_execute_local_command(
+                hass, data, token, observation["proposal"], authority, _base_url(hass), include_review_links,
+            )
+            if answer is not None:
+                return answer
+            if authority.current(hass) is None:
+                return voice_text(language, "token_unavailable")
 
     provider = build_provider(cfg)
     session = async_get_clientsession(hass)

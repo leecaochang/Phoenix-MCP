@@ -1007,7 +1007,8 @@
       "valueAllowed": "{field} は次のいずれかにしてください: {values}。",
       "versionNotFound": "バージョンが見つかりません。",
       "versionResourcePairRequired": "resource_type と resource_id の両方を指定するか、最近のフィードでは両方とも省略してください。",
-      "wipeConfirmationRequired": "confirm は WIPE にしてください。"
+      "wipeConfirmationRequired": "confirm は WIPE にしてください。",
+      "routingPreviewInvalid": "有効なトークンと 512 文字以内の英語コマンドを使用してください。認識時間は 50 から 5000 ms の整数で指定してください。"
     },
     "agentchat": {
       "answerAnyway": "そのまま回答",
@@ -1981,6 +1982,24 @@
       "zigbee_topology.backend.title": "{backend} の近隣テーブルをスキャンしてスコープ内の Zigbee マップを生成",
       "zigbee_topology.body": "Zigbee ルーターへ能動的に問い合わせます。スキャン中はメッシュの応答性が低下する場合があります。",
       "zigbee_topology.title": "Zigbee トポロジーをスキャン"
+    },
+    "routing": {
+      "title": "コマンドルーティングの試験",
+      "hint": "英語のコマンドのみ対応。コマンドの実行や AI プロバイダーへの接続を行わずに認識をテストします。",
+      "observe": "音声エージェントのコマンドを観測",
+      "budget": "認識の制限時間（ms）",
+      "token": "トークンの権限範囲",
+      "command": "英語のコマンド",
+      "test": "コマンドをテスト",
+      "candidate": "ローカルの候補が見つかりました",
+      "fallback": "選択したプロバイダーを使用",
+      "resultHint": "何も実行していません。候補には実行時の権限、承認、MESA の確認が引き続き必要です。",
+      "noMatchHint": "Home Assistant はこのコマンドを認識できませんでした。Assist に公開されているエンティティの正確な名前またはエイリアスを試してください。実行もプロバイダーへの送信も行われていません。",
+      "fallbackHint": "ローカル候補がありません。通常の利用では、選択したプロバイダーがこのリクエストを処理します。このテストでは実行もプロバイダーへの送信も行われていません。",
+      "elapsed": "ローカル評価：{ms} ms",
+      "observations": "再起動後の音声観測数：{total}、ローカル候補数：{candidates}。",
+      "details": "技術情報",
+      "failed": "プレビューを読み込めませんでした。トークンと接続を確認して再試行してください。"
     }
   },
   "notification": {

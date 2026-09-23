@@ -15,6 +15,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from custom_components.phoenix_mcp.admin_view import (
+    PhoenixAdminCommandPreviewView,
     PhoenixAdminAuditView,
     PhoenixAdminEntityTreeView,
     PhoenixAdminPermissionDomainView,
@@ -1735,7 +1736,7 @@ async def test_entity_tree_force_reload_bypasses_cache():
 
 
 def test_all_admin_views_exported():
-    assert len(ALL_ADMIN_VIEWS) == 58
+    assert len(ALL_ADMIN_VIEWS) == 59
 
 
 def test_archived_views_before_token_view():
@@ -2934,3 +2935,63 @@ async def test_token_patch_rename_sensor_rebuild_failure_never_fails_the_patch()
     rename.assert_awaited_once()
     data.async_on_token_archived.assert_not_awaited()
     data.async_on_token_created.assert_not_awaited()
+
+
+@pytest.mark.parametrize("authenticated,admin,status", [(False, True, 401), (True, False, 403)])
+async def test_command_preview_requires_admin(authenticated, admin, status):
+    view = PhoenixAdminCommandPreviewView()
+    view.hass = _make_hass(_make_data())
+    response = await view.post(_make_admin_request(is_admin=admin, authenticated=authenticated))
+    assert response.status == status
+
+
+@pytest.mark.parametrize("body", [
+    {}, {"token_id": "t", "sentence": "x", "execute": True},
+    {"token_id": [], "sentence": "x"}, {"token_id": "t", "sentence": " "},
+    {"token_id": "t", "sentence": "x" * 513},
+    {"token_id": "t", "sentence": "x", "language": "fr"},
+])
+async def test_command_preview_rejects_bad_shapes(body):
+    view = PhoenixAdminCommandPreviewView()
+    view.hass = _make_hass(_make_data())
+    response = await view.post(_make_admin_request(body=json.dumps(body).encode()))
+    assert response.status == 400
+
+
+async def test_command_preview_is_scoped_inert_and_does_not_record_voice_observation(hass, token_store):
+    token, _ = await token_store.async_create_token("preview", "admin")
+    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+    hass.data[DOMAIN] = data
+    view = PhoenixAdminCommandPreviewView()
+    view.hass = hass
+    with patch("custom_components.phoenix_mcp.command_routing.async_recognize", AsyncMock(return_value=None)) as recognize:
+        response = await view.post(_make_admin_request(body=json.dumps({"token_id": token.id, "sentence": "hello"}).encode()))
+    assert response.status == 200
+    body = json.loads(response.text)
+    assert body["executed"] is False
+    assert body["voice_observations"]["observations"] == 0
+    assert body["proposal"] is None
+    recognize.assert_awaited_once()
+    assert token_store.get_pending_approvals() == []
+
+
+@pytest.mark.parametrize("patch_body,accepted", [
+    ({"voice_agent_routing_mode": "local_shadow"}, True),
+    ({"voice_agent_routing_mode": "local"}, True),
+    ({"voice_agent_routing_mode": "off"}, True),
+    ({"voice_agent_routing_mode": "hybrid"}, False),
+    ({"voice_agent_routing_mode": []}, False),
+    ({"command_routing_timeout_ms": 50}, True),
+    ({"command_routing_timeout_ms": 5000}, True),
+    ({"command_routing_timeout_ms": 49}, False),
+    ({"command_routing_timeout_ms": 5001}, False),
+    ({"command_routing_timeout_ms": True}, False),
+    ({"command_routing_timeout_ms": 50.5}, False),
+])
+async def test_routing_settings_validation(patch_body, accepted):
+    from custom_components.phoenix_mcp.admin_view import _validated_settings_patch
+    data = _make_data()
+    patchable, error = await _validated_settings_patch(patch_body, data, _make_hass(data), "rid")
+    assert (error is None) == accepted
+    if accepted:
+        assert patchable == patch_body

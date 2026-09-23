@@ -1700,7 +1700,8 @@
       "valueAllowed": "{field} doit être l'une des valeurs suivantes : {values}.",
       "versionNotFound": "Version introuvable.",
       "versionResourcePairRequired": "Fournissez à la fois resource_type et resource_id, ou aucun des deux pour le flux récent.",
-      "wipeConfirmationRequired": "confirm doit être WIPE."
+      "wipeConfirmationRequired": "confirm doit être WIPE.",
+      "routingPreviewInvalid": "Utilisez un jeton actif et une commande en anglais de 512 caractères maximum. Le délai doit être un entier de 50 à 5000 ms."
     },
     "mesaSuggestion": {
       "baseline_note": " Interdit correspond à la ligne de base intégrée pour ce domaine, le profil créé rend donc cette intention explicite ; choisissez Confirmer dans Révision pour autoriser plutôt le contrôle de l'agent derrière les approbations.",
@@ -1981,6 +1982,24 @@
       "zigbee_topology.backend.title": "Analyser les tables de voisinage {backend} pour la carte Zigbee limitée",
       "zigbee_topology.body": "Cela interroge activement les routeurs Zigbee. Le maillage peut être moins réactif pendant l'analyse.",
       "zigbee_topology.title": "Analyser la topologie Zigbee"
+    },
+    "routing": {
+      "title": "Expérimentation du routage des commandes",
+      "hint": "Commandes en anglais uniquement. Testez la reconnaissance sans exécuter de commande ni contacter un fournisseur d’IA.",
+      "observe": "Observer les commandes de l’agent vocal",
+      "budget": "Délai maximal de reconnaissance (ms)",
+      "token": "Périmètre du jeton",
+      "command": "Commande en anglais",
+      "test": "Tester la commande",
+      "candidate": "Candidat local trouvé",
+      "fallback": "Utiliser le fournisseur choisi",
+      "resultHint": "Rien n’a été exécuté. Le candidat nécessite encore des vérifications des autorisations, des approbations et de MESA lors de l’exécution.",
+      "noMatchHint": "Home Assistant n’a pas reconnu cette commande. Essayez le nom ou l’alias exact d’une entité exposée à Assist. Rien n’a été exécuté ni envoyé à un fournisseur.",
+      "fallbackHint": "Aucun candidat local n’est disponible. En utilisation normale, le fournisseur sélectionné traite cette demande. Ce test n’a rien exécuté ni envoyé à un fournisseur.",
+      "elapsed": "Évaluation locale : {ms} ms",
+      "observations": "Observations vocales depuis le redémarrage : {total} ; candidats locaux : {candidates}.",
+      "details": "Détails techniques",
+      "failed": "Impossible de charger l’aperçu. Vérifiez le jeton et la connexion, puis réessayez."
     }
   },
   "notification": {

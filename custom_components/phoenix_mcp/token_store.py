@@ -24,6 +24,10 @@ from .const import (
     AGENTCLI_SCROLLBACK_MAX,
     AGENTCLI_SCROLLBACK_MIN,
     APPROVAL_REASON_FORMAT_INCOMPATIBLE,
+    COMMAND_ROUTING_MODES,
+    COMMAND_ROUTING_TIMEOUT_DEFAULT_MS,
+    COMMAND_ROUTING_TIMEOUT_MIN_MS,
+    COMMAND_ROUTING_TIMEOUT_MAX_MS,
     CONVERSATION_STYLES,
     CONVERSATION_STYLE_DIRECT,
     DETAIL_LEVELS,
@@ -606,6 +610,8 @@ class GlobalSettings:
     # Phoenix MCP voice agent (voice_agent.py): Phoenix MCP registered as HA's own conversation
     # agent, running its own model loop. Independent of the llm.API bridge above.
     # When enabled it needs a token (scope), an Agent Chat provider account, and a model.
+    voice_agent_routing_mode: str = "off"
+    command_routing_timeout_ms: int = COMMAND_ROUTING_TIMEOUT_DEFAULT_MS
     voice_agent_enabled: bool = False
     voice_agent_token_id: str | None = None
     voice_agent_provider_id: str | None = None
@@ -652,6 +658,8 @@ class GlobalSettings:
             "agentcli_detail_level": self.agentcli_detail_level,
             "agentcli_home_focused": self.agentcli_home_focused,
             "assist_bound_token_id": self.assist_bound_token_id,
+            "voice_agent_routing_mode": self.voice_agent_routing_mode,
+            "command_routing_timeout_ms": self.command_routing_timeout_ms,
             "voice_agent_enabled": self.voice_agent_enabled,
             "voice_agent_token_id": self.voice_agent_token_id,
             "voice_agent_provider_id": self.voice_agent_provider_id,
@@ -704,6 +712,14 @@ class GlobalSettings:
             ),
             agentcli_home_focused=bool(data.get("agentcli_home_focused", False)),
             assist_bound_token_id=_coerce_opt_str(data.get("assist_bound_token_id")),
+            voice_agent_routing_mode=_closed_choice(
+                data.get("voice_agent_routing_mode"), COMMAND_ROUTING_MODES, "off",
+            ),
+            command_routing_timeout_ms=_clamp_range(
+                data.get("command_routing_timeout_ms", COMMAND_ROUTING_TIMEOUT_DEFAULT_MS),
+                COMMAND_ROUTING_TIMEOUT_MIN_MS, COMMAND_ROUTING_TIMEOUT_MAX_MS,
+                COMMAND_ROUTING_TIMEOUT_DEFAULT_MS,
+            ),
             voice_agent_enabled=bool(data.get("voice_agent_enabled", False)),
             voice_agent_token_id=_coerce_opt_str(data.get("voice_agent_token_id")),
             voice_agent_provider_id=_coerce_opt_str(data.get("voice_agent_provider_id")),

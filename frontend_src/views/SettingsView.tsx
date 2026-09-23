@@ -6,6 +6,7 @@ import { NotificationSettings } from "../components/NotificationSettings";
 import { KillSwitch } from "../components/KillSwitch";
 import { AgentCliSettings } from "../components/AgentCliSettings";
 import { AssistBridgeSettings } from "../components/AssistBridgeSettings";
+import { CommandRoutingSettings } from "../components/CommandRoutingSettings";
 import { VoiceAgentSettings } from "../components/VoiceAgentSettings";
 import { AiTaskSettings } from "../components/AiTaskSettings";
 import { WipeConfirmModal } from "../components/WipeConfirmModal";
@@ -147,6 +148,8 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
             onChange={patchSetting}
             saving={saving}
           />
+
+          <CommandRoutingSettings settings={settings} onChange={patchSetting} saving={saving} />
 
           <AiTaskSettings
             settings={settings}
