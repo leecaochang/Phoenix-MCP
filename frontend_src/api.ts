@@ -41,7 +41,7 @@ import type {
   VersionRestoreResponse,
 } from "./types";
 
-import { hasMessage, t } from "./i18n";
+import { hasMessage, resolveLanguage, t } from "./i18n";
 
 const BASE = "/api/phoenix-mcp/admin";
 
@@ -435,7 +435,7 @@ export async function agentCliChat(
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, language: resolveLanguage(hass) }),
     signal,
   });
   if (!res.ok || !res.body) {

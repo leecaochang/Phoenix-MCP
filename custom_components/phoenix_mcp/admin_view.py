@@ -2008,6 +2008,7 @@ _BOOL_SETTINGS = frozenset({
     "notify_on_approval", "mesa_inject_enabled", "token_presets_enabled",
     "agentcli_global", "agentcli_home_focused", "voice_agent_enabled",
     "voice_agent_home_focused", "ai_task_enabled", "decision_shadow_enabled",
+    "agentcli_routing_shadow_enabled",
 })
 
 _CONVERSATION_STYLE_SETTINGS = frozenset({

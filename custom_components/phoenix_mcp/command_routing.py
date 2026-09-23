@@ -43,9 +43,16 @@ class CommandRouting:
     candidates: int = 0
     reasons: dict[str, int] = field(default_factory=dict)
     total_elapsed_ms: float = 0
+    chat_reasons: dict[str, int] = field(default_factory=dict)
+    chat_candidates: int = 0
 
-    def observe(self, result: dict) -> None:
-        """Retain aggregate voice counts only, without utterances or entity IDs."""
+    def observe(self, result: dict, *, chat: bool = False) -> None:
+        """Retain separate aggregate counts, without utterances or entity IDs."""
+        if chat:
+            reason = result["reason"]
+            self.chat_reasons[reason] = self.chat_reasons.get(reason, 0) + 1
+            self.chat_candidates += result["route"] == "local_candidate"
+            return
         self.observations += 1
         self.candidates += result["route"] == "local_candidate"
         reason = result["reason"]
@@ -58,6 +65,8 @@ class CommandRouting:
             "reasons": dict(self.reasons),
             "mean_elapsed_ms": round(self.total_elapsed_ms / self.observations, 2)
             if self.observations else None,
+            "agent_chat": {"observations": sum(self.chat_reasons.values()),
+                           "candidates": self.chat_candidates, "reasons": dict(self.chat_reasons)},
         }
 
     def _finished(self, task: asyncio.Task) -> None:

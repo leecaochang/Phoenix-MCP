@@ -2352,7 +2352,8 @@ async def test_chat_view_refuses_revoked_or_missing_token():
 
 
 @pytest.mark.asyncio
-async def test_chat_view_streams_ready_and_cleans_up(hass):
+@pytest.mark.parametrize("mode", ["new", "bypass", "continue"])
+async def test_chat_view_streams_ready_and_cleans_up(hass, mode):
     # Happy path through the streaming view: it opens the SSE stream, writes the
     # `ready` frame, drives async_run_agent_turn, and closes the stream in finally.
     import custom_components.phoenix_mcp.agentcli as ac
@@ -2400,7 +2401,8 @@ async def test_chat_view_streams_ready_and_cleans_up(hass):
             {"role": "user", "content": "earlier"},
             {"role": "assistant", "content": "retained"},
         ],
-        "home_focus_bypass": True,
+        "language": "en",
+        **({"home_focus_bypass": True} if mode == "bypass" else {"continue": True} if mode == "continue" else {}),
     }).encode()
     with patch.object(ac.web, "StreamResponse", _FakeStream), \
          patch("custom_components.phoenix_mcp.agentcli._get_secret_store", AsyncMock(return_value=store)), \
@@ -2416,11 +2418,12 @@ async def test_chat_view_streams_ready_and_cleans_up(hass):
     kwargs = rat.call_args.kwargs
     assert kwargs["conversation_style"] == "warm"
     assert kwargs["detail_level"] == "detailed"
-    assert kwargs["home_focused"] is False
+    assert kwargs["home_focused"] is (mode != "bypass")
+    assert kwargs["routing_language"] == ("en" if mode == "new" else None)
     assert kwargs["messages"] == [
         {"role": "user", "content": "earlier"},
         {"role": "assistant", "content": "retained"},
-        {"role": "user", "content": "hi"},
+        *([] if mode == "continue" else [{"role": "user", "content": "hi"}]),
     ]
 
 

@@ -23,13 +23,17 @@ class DecisionShadow:
     choices: dict[str, int] = field(default_factory=dict)
     total_elapsed_ms: float = 0
     hybrid_reasons: dict[str, int] = field(default_factory=dict)
+    chat_reasons: dict[str, int] = field(default_factory=dict)
+    chat_choices: dict[str, int] = field(default_factory=dict)
 
     def summary(self) -> dict:
         return {"observations": self.observations, "reasons": dict(self.reasons),
                 "choices": dict(self.choices), "busy": self.task is not None,
                 "mean_elapsed_ms": round(self.total_elapsed_ms / self.observations, 2)
                 if self.observations else None,
-                "hybrid": {"evaluations": sum(self.hybrid_reasons.values()), "reasons": dict(self.hybrid_reasons)}}
+                "hybrid": {"evaluations": sum(self.hybrid_reasons.values()), "reasons": dict(self.hybrid_reasons)},
+                "agent_chat": {"observations": sum(self.chat_reasons.values()),
+                               "reasons": dict(self.chat_reasons), "choices": dict(self.chat_choices)}}
 
     def observe_hybrid(self, result: dict, *, authority_changed: bool = False) -> None:
         """Count Voice evaluations, never retain decision payloads or claim execution."""
@@ -54,7 +58,7 @@ class DecisionShadow:
 
     def start(self, hass: Any, data: Any, token: Any, sentence: object,
               language: object, *, observe: bool = False, targets: bool = False,
-              prepare: bool = False) -> asyncio.Task | None:
+              prepare: bool = False, observe_chat: bool = False) -> asyncio.Task | None:
         if self.task is not None:
             return None
         authority = RoutingAuthority.capture(data, token)
@@ -68,8 +72,15 @@ class DecisionShadow:
             if completed.cancelled():
                 return
             error = completed.exception()
-            if error is None and observe and authority.current(hass) is not None:
+            if error is None and (observe or observe_chat) and authority.current(hass) is not None:
                 result = completed.result()
+                if observe_chat:
+                    reason = result["reason"]
+                    self.chat_reasons[reason] = self.chat_reasons.get(reason, 0) + 1
+                    if result["decision"] is not None:
+                        choice = result["decision"]["choice"]
+                        self.chat_choices[choice] = self.chat_choices.get(choice, 0) + 1
+                    return
                 self.observations += 1
                 reason = result["reason"]
                 self.reasons[reason] = self.reasons.get(reason, 0) + 1

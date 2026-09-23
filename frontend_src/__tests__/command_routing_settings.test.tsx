@@ -18,6 +18,21 @@ const candidate = {
 };
 beforeEach(() => { preview.mockReset(); });
 
+it("keeps Chat observation separately opt-in and disables its control while saving", async () => {
+  const onChange = vi.fn();
+  const { rerender } = render(<CommandRoutingSettings settings={settings} onChange={onChange} saving={false} />);
+  const control = screen.getByLabelText("Observe command routing in Agent Chat");
+  expect(control).not.toBeChecked();
+  expect(screen.getByText(/may operate devices normally/)).toBeTruthy();
+  fireEvent.click(control);
+  expect(onChange).toHaveBeenCalledExactlyOnceWith("agentcli_routing_shadow_enabled", true);
+  expect(preview).not.toHaveBeenCalled();
+  rerender(<CommandRoutingSettings settings={{ ...settings, agentcli_routing_shadow_enabled: true }} onChange={onChange} saving />);
+  expect(control).toBeChecked();
+  expect(control).toBeDisabled();
+  await screen.findByText("Voice");
+});
+
 it("previews explicitly and changes Voice routing only on request", async () => {
   const onChange = vi.fn();
   render(<CommandRoutingSettings settings={settings} onChange={onChange} saving={false} />);

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { api, setHass, ApiError, localizedApiMessage } from "../api";
-import { primeTranslations } from "../i18n";
+import { api, setHass, ApiError, localizedApiMessage, agentCliChat } from "../api";
+import { primeTranslations, setLanguagePreference } from "../i18n";
 import en from "../../custom_components/phoenix_mcp/catalogs/en.json";
 
 function mockFetchResponse(status: number, body: unknown = {}) {
@@ -500,4 +500,21 @@ describe("api MESA suggestions", () => {
     expect(url).toBe("/api/phoenix-mcp/admin/mesa/suggestions/restore");
     expect(JSON.parse(opts.body)).toEqual({ all: true });
   });
+});
+
+
+it("sends the current panel language with chat using live HA authentication", async () => {
+  const fetchWithAuth = vi.fn().mockResolvedValue({
+    ok: true, body: { getReader: () => ({ read: async () => ({ done: true }) }) },
+  });
+  setLanguagePreference("auto");
+  setHass({ language: "fr", fetchWithAuth });
+  const body = { token_id: "t", instance_id: "i", messages: [], user: "hello" };
+  await agentCliChat(body, vi.fn());
+  expect(fetchWithAuth).toHaveBeenCalledTimes(1);
+  expect(JSON.parse(fetchWithAuth.mock.calls[0][1].body)).toEqual({ ...body, language: "fr" });
+  setLanguagePreference("en");
+  await agentCliChat(body, vi.fn());
+  expect(JSON.parse(fetchWithAuth.mock.calls[1][1].body).language).toBe("en");
+  setLanguagePreference("auto");
 });

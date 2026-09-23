@@ -3489,6 +3489,7 @@ async def async_run_agent_turn(
     conversation_style: str = CONVERSATION_STYLE_DIRECT,
     detail_level: str = DETAIL_LEVEL_CONCISE,
     home_focused: bool = False,
+    routing_language: object = None,
 ) -> list[dict]:
     """Run one user turn to completion, streaming SSE events. Returns updated messages.
 
@@ -3502,6 +3503,14 @@ async def async_run_agent_turn(
     if data.agent_recovery.blocks(token.id):
         await emit("error", {"code": "outcome_unknown", "retryable": False,
                              "message": "An earlier action outcome is unknown. Check Home Assistant Repairs before continuing."})
+        await emit("messages", {"messages": messages})
+        await emit("done", {"stop_reason": "error"})
+        return messages
+
+    from .chat_routing import async_observe_chat_command
+    if not await async_observe_chat_command(hass, data, token, messages, routing_language, cancel):
+        await emit("error", {"code": "cancelled" if cancel.is_set() else "unauthorized",
+                             "message": "Cancelled." if cancel.is_set() else "This token is no longer authorized."})
         await emit("messages", {"messages": messages})
         await emit("done", {"stop_reason": "error"})
         return messages
@@ -4369,6 +4378,7 @@ class PhoenixAgentCliChatView(PhoenixView):
                 conversation_style=settings.agentcli_conversation_style,
                 detail_level=settings.agentcli_detail_level,
                 home_focused=settings.agentcli_home_focused and not home_focus_bypass,
+                routing_language=body.get("language") if body.get("continue") is not True and not home_focus_bypass else None,
             )
         except Exception:  # noqa: BLE001 - never leak internals to the client
             _LOGGER.exception("agentCLI turn failed")

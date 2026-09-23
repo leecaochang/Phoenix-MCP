@@ -604,6 +604,7 @@ class GlobalSettings:
     agentcli_conversation_style: str = CONVERSATION_STYLE_DIRECT
     agentcli_detail_level: str = DETAIL_LEVEL_CONCISE
     agentcli_home_focused: bool = False
+    agentcli_routing_shadow_enabled: bool = False
     # Assist bridge: the id of the token whose scoped tool surface HA's native
     # Assist/voice pipeline resolves against (assist_api.py). None = unbound (the
     # registered llm.API offers zero tools). Cleared on revoke/expiry of that token.
@@ -661,6 +662,7 @@ class GlobalSettings:
             "agentcli_conversation_style": self.agentcli_conversation_style,
             "agentcli_detail_level": self.agentcli_detail_level,
             "agentcli_home_focused": self.agentcli_home_focused,
+            "agentcli_routing_shadow_enabled": self.agentcli_routing_shadow_enabled,
             "assist_bound_token_id": self.assist_bound_token_id,
             "voice_agent_routing_mode": self.voice_agent_routing_mode,
             "command_routing_timeout_ms": self.command_routing_timeout_ms,
@@ -718,6 +720,7 @@ class GlobalSettings:
                 data.get("agentcli_detail_level"), DETAIL_LEVELS, DETAIL_LEVEL_CONCISE,
             ),
             agentcli_home_focused=bool(data.get("agentcli_home_focused", False)),
+            agentcli_routing_shadow_enabled=data.get("agentcli_routing_shadow_enabled") is True,
             assist_bound_token_id=_coerce_opt_str(data.get("assist_bound_token_id")),
             decision_provider_id=data.get("decision_provider_id") if isinstance(data.get("decision_provider_id"), str) else None,
             decision_shadow_enabled=data.get("decision_shadow_enabled") is True,

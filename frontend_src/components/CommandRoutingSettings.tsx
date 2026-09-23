@@ -88,6 +88,13 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
     </div>
     <p className="agentcli-settings-hint">{t("routing.localBudgetHint")}</p>
     <DecisionProviderSettings settings={settings} onChange={onChange} saving={saving} />
+    <div className="toggle-row">
+      <label htmlFor="routing-chat-shadow">{t("routing.chatObserve")}</label>
+      <input id="routing-chat-shadow" type="checkbox" disabled={saving}
+        checked={settings.agentcli_routing_shadow_enabled ?? false} aria-describedby="routing-chat-hint"
+        onChange={e => onChange("agentcli_routing_shadow_enabled", e.target.checked)} />
+    </div>
+    <p id="routing-chat-hint" className="agentcli-settings-hint">{t("routing.chatObserveHint")}</p>
     <form onSubmit={e => { e.preventDefault(); void preview(); }}>
       <div className="toggle-row toggle-row-stacked-control">
         <label htmlFor="routing-token">{t("routing.token")}</label>
@@ -143,7 +150,7 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
         </>}
       </>}
       {result.decision_observations && <p>{t("routing.decisionObservations", { count: localeNumber(result.decision_observations.observations) })}</p>}
-      <details><summary>{t("routing.details")}</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify({ reason: result.reason, proposal: result.proposal, decision: result.decision_shadow, decision_observations: result.decision_observations }, null, 2)}</pre></details>
+      <details><summary>{t("routing.details")}</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify({ reason: result.reason, proposal: result.proposal, decision: result.decision_shadow, decision_observations: result.decision_observations, chat_observations: result.voice_observations.agent_chat }, null, 2)}</pre></details>
     </div>}
   </section>;
 }
