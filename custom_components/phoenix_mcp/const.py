@@ -1685,6 +1685,14 @@ DECISION_MAX_TARGET_TEXT = 256
 DECISION_MAX_TARGET_ALIASES = 8
 # Experimental admission heuristic, not a calibrated accuracy claim.
 DECISION_MIN_CHOICE_PROBABILITY = 0.90
+DECISION_HYBRID_REASONS = frozenset({
+    "plan_ready", "provider_fallback", "category_low_probability", "target_low_probability",
+    "target_declined", "ambiguous_target", "brightness_declined", "no_target", "targets_changed",
+    "unsupported_category", "too_many_targets", "target_metadata_too_large", "unsupported_language",
+    "invalid_input", "authority_changed", "not_enabled", "not_configured", "local_match",
+    "local_unavailable", "busy", "cancelled", "authentication", "rate_limited", "http_error",
+    "response_too_large", "malformed", "timeout", "unavailable",
+})
 DECISION_BRIGHTNESS_CHOICES = {
     "brightness_tens": {**{str(value): f"The whole requested percentage divided by ten, rounded down, is {value}."
                             for value in range(11)}, "none": "No explicit whole percentage from 0 to 100."},

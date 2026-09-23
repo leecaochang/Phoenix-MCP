@@ -2973,9 +2973,15 @@ async def test_command_preview_is_scoped_inert_and_does_not_record_voice_observa
     body = json.loads(response.text)
     assert body["executed"] is False
     assert body["voice_observations"]["observations"] == 0
+    assert body["decision_observations"]["hybrid"] == {"evaluations": 0, "reasons": {}}
     assert body["proposal"] is None
     recognize.assert_awaited_once()
     assert token_store.get_pending_approvals() == []
+    data.decision_shadow.observe_hybrid({"reason": "timeout"})
+    summary = await view.get(_make_admin_request())
+    assert json.loads(summary.text)["decision_shadow"]["hybrid"] == {
+        "evaluations": 1, "reasons": {"timeout": 1},
+    }
 
 
 @pytest.mark.parametrize("patch_body,accepted", [

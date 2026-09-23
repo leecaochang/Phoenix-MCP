@@ -176,6 +176,7 @@ async def async_voice_answer(
             decision = await async_preview_decision(hass, data, token, user_text, language or "en",
                                                     observation, targets=True, prepare=True)
             token = authority.current(hass)
+            data.decision_shadow.observe_hybrid(decision, authority_changed=token is None)
             if token is None or decision["reason"] in ("authority_changed", "cancelled"):
                 return voice_text(language, "token_unavailable")
             if decision.get("_plan") is not None:

@@ -9,7 +9,7 @@ from typing import Any
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .command_routing import RoutingAuthority
-from .const import MAX_SEARCH_QUERY_LEN, DECISION_TARGET_INTENTS
+from .const import MAX_SEARCH_QUERY_LEN, DECISION_TARGET_INTENTS, DECISION_HYBRID_REASONS
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 
 
@@ -22,12 +22,31 @@ class DecisionShadow:
     reasons: dict[str, int] = field(default_factory=dict)
     choices: dict[str, int] = field(default_factory=dict)
     total_elapsed_ms: float = 0
+    hybrid_reasons: dict[str, int] = field(default_factory=dict)
 
     def summary(self) -> dict:
         return {"observations": self.observations, "reasons": dict(self.reasons),
                 "choices": dict(self.choices), "busy": self.task is not None,
                 "mean_elapsed_ms": round(self.total_elapsed_ms / self.observations, 2)
-                if self.observations else None}
+                if self.observations else None,
+                "hybrid": {"evaluations": sum(self.hybrid_reasons.values()), "reasons": dict(self.hybrid_reasons)}}
+
+    def observe_hybrid(self, result: dict, *, authority_changed: bool = False) -> None:
+        """Count Voice evaluations, never retain decision payloads or claim execution."""
+        reason = result["reason"]
+        if authority_changed:
+            reason = "authority_changed"
+        elif result.get("_plan") is not None:
+            reason = "plan_ready"
+        elif reason == "observed":
+            selection = result.get("target_selection", {})
+            reason = selection.get("reason")
+            if reason == "low_probability":
+                reason = "category_low_probability" if selection.get("decision") is None else "target_low_probability"
+        # Only fixed internal codes may become keys; provider text is never retained.
+        if not isinstance(reason, str) or reason not in DECISION_HYBRID_REASONS:
+            reason = "unavailable"
+        self.hybrid_reasons[reason] = self.hybrid_reasons.get(reason, 0) + 1
 
     def cancel(self) -> None:
         if self.task is not None:

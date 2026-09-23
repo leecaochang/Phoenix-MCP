@@ -81,6 +81,7 @@ async def test_two_requests_dispatch_once_and_do_not_duplicate_shadow(hass, hybr
     call.assert_awaited_once_with("light", service, {"entity_id": [entity_id], **extra}, blocking=True, return_response=False)
     provider.assert_not_called()
     assert data.decision_shadow.observations == 0
+    assert data.decision_shadow.summary()["hybrid"] == {"evaluations": 1, "reasons": {"plan_ready": 1}}
     assert data.agent_recovery.records(token.id) == []
 
 
@@ -103,14 +104,18 @@ async def test_exact_local_match_spends_no_decision_request(hass, hybrid_home):
     call.assert_awaited_once()
     remote.assert_not_called()
     provider.assert_not_called()
+    assert hybrid_home[0].decision_shadow.summary()["hybrid"] == {"evaluations": 0, "reasons": {}}
 
 
-@pytest.mark.parametrize("case,expected_calls", [
-    ("provider", 1), ("decline", 2), ("low_category", 1), ("low_target", 2),
-    ("malformed", 1), ("timeout", 1), ("unavailable", 1), ("non_english", 0),
-    ("local_timeout", 0), ("trigger", 0), ("no_scope", 1), ("busy", 0), ("brightness_declined", 2),
+@pytest.mark.parametrize("case,expected_calls,reason", [
+    ("provider", 1, "provider_fallback"), ("decline", 2, "target_declined"),
+    ("low_category", 1, "category_low_probability"), ("low_target", 2, "target_low_probability"),
+    ("malformed", 1, "malformed"), ("timeout", 1, "timeout"), ("unavailable", 1, "unavailable"),
+    ("non_english", 0, "unsupported_language"), ("local_timeout", 0, "local_unavailable"),
+    ("trigger", 0, "local_unavailable"), ("no_scope", 1, "no_target"), ("busy", 0, "busy"),
+    ("brightness_declined", 2, "brightness_declined"),
 ])
-async def test_pre_dispatch_declines_keep_regular_provider(hass, hybrid_home, case, expected_calls):
+async def test_pre_dispatch_declines_keep_regular_provider(hass, hybrid_home, case, expected_calls, reason):
     data, token, *_ = hybrid_home
     async def respond(session, method, path, timeout, payload):
         if case in ("timeout", "unavailable"):
@@ -140,6 +145,8 @@ async def test_pre_dispatch_declines_keep_regular_provider(hass, hybrid_home, ca
     provider.assert_awaited_once()
     call.assert_not_called()
     assert not data.store.get_pending_approvals()
+    assert data.decision_shadow.summary()["hybrid"] == {"evaluations": 1, "reasons": {reason: 1}}
+    assert data.decision_shadow.observations == 0
 
 
 async def set_mesa(hass, home, mode):
@@ -238,6 +245,9 @@ async def test_changed_authority_during_decision_stops_turn(hass, hybrid_home, c
     assert remote.await_count == 1
     provider.assert_not_called()
     call.assert_not_called()
+    assert hybrid_home[0].decision_shadow.summary()["hybrid"] == {
+        "evaluations": 1, "reasons": {"authority_changed": 1},
+    }
 
 
 async def test_uncertain_effect_blocks_replay_and_next_write(hass, hybrid_home):
@@ -270,6 +280,25 @@ async def test_cancelled_decision_never_dispatches_or_falls_back(hass, hybrid_ho
         with pytest.raises(asyncio.CancelledError): await task
     assert closed.is_set()
     assert hybrid_home[0].decision_shadow.task is None
+    assert hybrid_home[0].decision_shadow.summary()["hybrid"]["evaluations"] == 0
+    provider.assert_not_called()
+    call.assert_not_called()
+
+
+async def test_owned_decision_cancellation_is_counted_without_fallback(hass, hybrid_home):
+    data = hybrid_home[0]
+    entered = asyncio.Event()
+    async def request(*args):
+        entered.set()
+        await asyncio.Event().wait()
+    with (patch.object(DecisionProvider, "_request", request),
+          patch.object(agentcli, "async_run_voice_turn", new_callable=AsyncMock) as provider,
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+        task = asyncio.create_task(voice_agent.async_voice_answer(hass, data, "Please illuminate my desk lamp", language="en"))
+        await entered.wait()
+        data.decision_shadow.cancel()
+        await task
+    assert data.decision_shadow.summary()["hybrid"] == {"evaluations": 1, "reasons": {"cancelled": 1}}
     provider.assert_not_called()
     call.assert_not_called()
 

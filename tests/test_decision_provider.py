@@ -13,7 +13,24 @@ from custom_components.phoenix_mcp.admin_view import _validated_settings_patch
 from custom_components.phoenix_mcp.const import DECISION_ROUTE_CHOICES, DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.decision_provider import DecisionError, DecisionProvider, parse_choice
-from custom_components.phoenix_mcp.decision_shadow import async_preview_decision
+from custom_components.phoenix_mcp.decision_shadow import DecisionShadow, async_preview_decision
+
+
+def test_hybrid_counters_keep_only_allowlisted_reasons_and_reset_with_runtime():
+    shadow = DecisionShadow()
+    private = {'entity_id': 'light.private', 'utterance': 'private command', 'api_key': 'private-key'}
+    for index in range(100):
+        shadow.observe_hybrid({'reason': f'private-key-{index}', 'decision': private})
+    shadow.observe_hybrid({'reason': 'observed', '_plan': private})
+    shadow.observe_hybrid({'reason': 'observed', '_plan': private}, authority_changed=True)
+    summary = shadow.summary()
+    assert summary['hybrid'] == {'evaluations': 102, 'reasons': {
+        'unavailable': 100, 'plan_ready': 1, 'authority_changed': 1,
+    }}
+    assert 'private' not in repr(shadow)
+    summary['hybrid']['reasons']['injected'] = 1
+    assert 'injected' not in shadow.summary()['hybrid']['reasons']
+    assert DecisionShadow().summary()['hybrid'] == {'evaluations': 0, 'reasons': {}}
 
 
 def response():
@@ -154,6 +171,7 @@ async def test_manual_observation_cannot_execute_or_create_approval(hass,decisio
     classify.assert_awaited_once();dispatch.assert_not_called()
     assert data.store.get_pending_approvals()==[]
     assert data.decision_shadow.summary()['observations']==0
+    assert data.decision_shadow.summary()['hybrid']=={'evaluations':0,'reasons':{}}
 
 
 @pytest.mark.parametrize('reason,proposal',[('supported',{'intent':'HassTurnOn'}),('sentence_trigger',None),
