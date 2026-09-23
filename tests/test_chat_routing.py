@@ -449,8 +449,7 @@ async def decision_chat_turn(hass, home, *, category='light_on', percent=50, req
 
 @pytest.mark.parametrize('category,percent,service', [
     ('light_on', 50, 'turn_on'), ('light_off', 50, 'turn_off'),
-    ('light_brightness', 0, 'turn_on'), ('light_brightness', 50, 'turn_on'),
-    ('light_brightness', 100, 'turn_on'), ('state_query', 50, None),
+    ('state_query', 50, None),
 ])
 @pytest.mark.parametrize('routing_mode', ['hybrid', 'auto'])
 async def test_chat_hybrid_uses_real_decision_validation_and_one_dispatch(hass, hybrid_chat, category, percent, service, routing_mode):
@@ -487,7 +486,7 @@ async def test_chat_hybrid_local_match_spends_no_decision_call(hass, hybrid_chat
 @pytest.mark.parametrize('case,calls,reason', [
     ('provider', 1, 'provider_fallback'), ('decline', 2, 'target_declined'),
     ('low_category', 1, 'category_low_probability'), ('low_target', 2, 'target_low_probability'),
-    ('brightness_declined', 2, 'brightness_declined'), ('malformed', 1, 'malformed'),
+    ('brightness_declined', 1, 'numeric_unverified'), ('malformed', 1, 'malformed'),
     ('timeout', 1, 'timeout'), ('unavailable', 1, 'unavailable'), ('no_scope', 1, 'no_target'),
     ('local_timeout', 0, 'local_unavailable'), ('trigger', 0, 'local_unavailable'), ('busy', 0, 'busy'),
 ])
@@ -591,13 +590,13 @@ async def test_chat_hybrid_saved_approval_revalidates_decision_constraints(hass,
     data.mesa.store.set('light.test_desk', SemanticProfile.from_dict('light.test_desk',
         {'semantic_profile': {'operational_boundaries': {'control_mode': 'confirm'}}}, default_origin=MetadataOrigin.USER))
     with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
-        provider, events, _, _ = await decision_chat_turn(hass, hybrid_chat, category='light_brightness', percent=0)
+        provider, events, _, _ = await decision_chat_turn(hass, hybrid_chat, category='light_off')
     provider.stream_turn.assert_not_called()
     assert any(name == 'approval_required' for name, _ in events)
     record = data.store.get_pending_approvals()[0]
     plan = record['args'][COMMAND_ROUTING_PLAN_KEY]
-    assert plan['ingress'] == 'chat' and plan['decision_category'] == 'light_brightness'
-    assert record['args']['service_data'] == {'brightness_pct': 0}
+    assert plan['ingress'] == 'chat' and plan['decision_category'] == 'light_off'
+    assert record['args']['service_data'] == {}
     assert 'secret' not in json.dumps(plan)
     store = await agentcli._get_secret_store(hass)
     account = data.store.get_settings().decision_provider_id
@@ -678,8 +677,8 @@ async def test_selected_language_local_chat_executes_without_a_model(hass, execu
 
 
 @pytest.mark.parametrize('language,sentence,pending_text', [
-    ('zh-Hans', '请将台灯亮度设置为百分之三十七', '此指令需要在 Phoenix MCP 面板中审批。'),
-    ('es', 'pon la lámpara al treinta y siete por ciento', 'Esta orden requiere aprobación en el panel de Phoenix MCP.'),
+    ('zh-Hans', '请打开台灯', '此指令需要在 Phoenix MCP 面板中审批。'),
+    ('es', 'enciende la lámpara', 'Esta orden requiere aprobación en el panel de Phoenix MCP.'),
 ])
 @pytest.mark.parametrize('remove_language', [False, True])
 async def test_multilingual_hybrid_chat_approval_and_language_revalidation(hass, hybrid_chat, language, sentence, pending_text, remove_language):
@@ -696,7 +695,7 @@ async def test_multilingual_hybrid_chat_approval_and_language_revalidation(hass,
           patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         provider, events, messages, remote = await decision_chat_turn(hass, hybrid_chat,
-            category='light_brightness', percent=37, sentence=sentence, language=language)
+            category='light_on', sentence=sentence, language=language)
         assert pending_text in messages[-1]['content']
         assert any(name == 'approval_required' for name, _ in events)
         assert remote.await_count == 2
@@ -745,3 +744,23 @@ async def test_auto_account_clear_keeps_local_routing_and_stops_remote_calls(has
         provider, _, _ = await chat_turn(hass, executing_chat)
     provider.stream_turn.assert_called_once()
     local.assert_not_called()
+
+
+@pytest.mark.parametrize('language', ['en', 'zh-Hans', 'es'])
+@pytest.mark.parametrize('routing_mode', ['hybrid', 'auto'])
+async def test_numeric_chat_automatically_falls_back_before_target_request(hass, hybrid_chat, language, routing_mode):
+    data, _ = hybrid_chat
+    await data.store.async_patch_settings(agentcli_routing_mode=routing_mode, command_routing_languages=[language])
+    local = {'reason': 'no_match', 'proposal': None, 'elapsed_ms': 1, 'route': 'provider'}
+    with (patch.object(chat_routing, 'async_evaluate_command', AsyncMock(return_value=local)),
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        provider, events, messages, remote = await decision_chat_turn(
+            hass, hybrid_chat, category='light_brightness', percent=55,
+            sentence='set the desk lamp to 50 percent', language=language)
+    provider.stream_turn.assert_called_once()
+    assert remote.await_count == 1
+    dispatch.assert_not_called()
+    assert not data.store.get_pending_approvals()
+    assert not any(name == 'approval_required' for name, _ in events)
+    assert messages[-1]['content'] == 'Normal provider reply'
+    assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'numeric_unverified': 1}

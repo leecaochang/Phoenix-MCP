@@ -1,6 +1,7 @@
 """Scoped target previews cannot disclose hidden metadata or execute model choices."""
 import asyncio
 import json
+import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -11,7 +12,9 @@ from homeassistant.helpers import area_registry as ar, entity_registry as er
 from homeassistant.setup import async_setup_component
 
 from custom_components.phoenix_mcp import agentcli
-from custom_components.phoenix_mcp.const import DOMAIN, DECISION_MAX_TARGETS, DECISION_ROUTE_CHOICES
+from custom_components.phoenix_mcp.const import (
+    DOMAIN, DECISION_BRIGHTNESS_CHOICES, DECISION_MAX_TARGETS, DECISION_ROUTE_CHOICES,
+)
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.decision_provider import DecisionError, DecisionProvider
 from custom_components.phoenix_mcp.decision_shadow import async_preview_decision
@@ -298,8 +301,24 @@ async def test_default_computed_alias_uses_home_assistant_name_resolution(hass, 
     assert updated != snapshot
 
 
+def test_brightness_option_lists_partition_all_whole_percentages():
+    """Every written percentage must identify exactly one lossless pair of choices."""
+    partitions = {}
+    for question, criteria in DECISION_BRIGHTNESS_CHOICES.items():
+        assert "none" in criteria and len(criteria) <= 50
+        buckets = {key: [int(value) for value in re.findall(r"(\d+)%", description)]
+                   for key, description in criteria.items() if key != "none"}
+        values = [value for bucket in buckets.values() for value in bucket]
+        assert sorted(values) == list(range(101))
+        partitions[question] = buckets
+    for percent in range(101):
+        selected = {question: next(key for key, values in buckets.items() if percent in values)
+                    for question, buckets in partitions.items()}
+        assert 10 * int(selected["brightness_tens"]) + int(selected["brightness_units"]) == percent
+
+
 @pytest.mark.parametrize("protocol", ["systemone", "classifier"])
-@pytest.mark.parametrize("percent", [0, 5, 50, 99, 100])
+@pytest.mark.parametrize("percent", [0, 5, 37, 50, 55, 99, 100])
 async def test_brightness_multi_question_http_contract(protocol, percent, socket_enabled):
     requests = []
     async def handler(request):
@@ -314,11 +333,15 @@ async def test_brightness_multi_question_http_contract(protocol, percent, socket
     async with TestServer(app) as server, ClientSession() as session:
         cfg = agentcli.ProviderConfig("systemone", "test-model", str(server.make_url("")).rstrip("/"))
         answer = await DecisionProvider(cfg, protocol).select_target(
-            session, "set the desk lamp to fifty percent", "light_brightness", {"t0": {"name": "Desk lamp"}}, 1000)
+            session, f"set the desk lamp to {percent} percent", "light_brightness", {"t0": {"name": "Desk lamp"}}, 1000)
     assert answer["brightness_pct"] == percent
     assert len(requests) == 1
     assert set(requests[0]["questions"]) == {"target", "brightness_tens", "brightness_units"}
     assert all(len(question["criteria"]) <= 50 for question in requests[0]["questions"].values())
+    for question in ("brightness_tens", "brightness_units"):
+        spec = requests[0]["questions"][question]
+        assert spec["criteria"] == DECISION_BRIGHTNESS_CHOICES[question]
+        assert "list contains that exact whole percentage" in spec["instructions"]
 
 
 @pytest.mark.parametrize("change", ["missing", "extra", "fractional", "out_of_range", "none", "low_probability", "bool"])

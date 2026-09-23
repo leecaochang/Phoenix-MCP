@@ -33,7 +33,7 @@ async def hybrid_home(hass, token_store):
     chat = await store.add("deepseek", {"api_key": "chat-secret", "model": "chat"})
     await token_store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=token.id,
         voice_agent_provider_id=chat, voice_agent_model="chat", voice_agent_routing_mode="hybrid",
-        decision_provider_id=decision, mesa_mode="off")
+        decision_provider_id=decision, mesa_mode="off", command_routing_timeout_ms=5000)
     assert await async_setup_component(hass, "homeassistant", {})
     assert await async_setup_component(hass, "conversation", {})
     registry = er.async_get(hass)
@@ -67,9 +67,6 @@ async def run_voice(hass, home, *, category="light_on", sentence="Please illumin
 
 @pytest.mark.parametrize("category,service,extra", [
     ("light_on", "turn_on", {}), ("light_off", "turn_off", {}),
-    ("light_brightness", "turn_on", {"brightness_pct": 0}),
-    ("light_brightness", "turn_on", {"brightness_pct": 50}),
-    ("light_brightness", "turn_on", {"brightness_pct": 100}),
 ])
 @pytest.mark.parametrize("routing_mode", ["hybrid", "auto"])
 async def test_two_requests_dispatch_once_and_do_not_duplicate_shadow(hass, hybrid_home, category, service, extra, routing_mode):
@@ -114,11 +111,11 @@ async def test_exact_local_match_spends_no_decision_request(hass, hybrid_home):
 @pytest.mark.parametrize("case,expected_calls,reason", [
     ("provider", 1, "provider_fallback"), ("decline", 2, "target_declined"),
     ("low_category", 1, "category_low_probability"), ("low_target", 2, "target_low_probability"),
-    ("low_zero_category", 1, "category_low_probability"),
+    ("low_zero_category", 1, "numeric_unverified"),
     ("malformed", 1, "malformed"), ("timeout", 1, "timeout"), ("unavailable", 1, "unavailable"),
     ("non_english", 0, "unsupported_language"), ("local_timeout", 0, "local_unavailable"),
     ("trigger", 0, "local_unavailable"), ("no_scope", 1, "no_target"), ("busy", 0, "busy"),
-    ("brightness_declined", 2, "brightness_declined"),
+    ("brightness_declined", 1, "numeric_unverified"),
 ])
 async def test_pre_dispatch_declines_keep_regular_provider(hass, hybrid_home, case, expected_calls, reason):
     data, token, *_ = hybrid_home
@@ -193,6 +190,9 @@ async def mutate(hass, home, change):
     data, token, store, account, entity_id = home
     registry = er.async_get(hass)
     if change == "account": await store.set_model(account, "new-model")
+    elif change == "model_restored":
+        await store.set_model(account, "other-model")
+        await store.set_model(account, "jev-latest")
     elif change == "deleted": await store.delete(account)
     elif change == "settings": await data.store.async_patch_settings(voice_agent_routing_mode="local")
     elif change == "revoked": token.revoked = True
@@ -206,23 +206,23 @@ async def mutate(hass, home, change):
             {"semantic_profile": {"operational_boundaries": {"control_mode": "prohibited"}}}, default_origin=MetadataOrigin.USER))
 
 
-@pytest.mark.parametrize("change", ["none", "account", "deleted", "settings", "revoked", "scope", "name", "new_candidate", "mesa"])
-@pytest.mark.parametrize("percent", [0, 50, 100])
-async def test_saved_decision_approval_revalidates_account_and_full_catalog(hass, hybrid_home, change, percent):
+@pytest.mark.parametrize("change", ["none", "account", "model_restored", "deleted", "settings", "revoked", "scope", "name", "new_candidate", "mesa"])
+@pytest.mark.parametrize("category,service", [("light_on", "turn_on"), ("light_off", "turn_off")])
+async def test_saved_decision_approval_revalidates_account_and_full_catalog(hass, hybrid_home, change, category, service):
     data, token, _, _, entity_id = hybrid_home
     await set_mesa(hass, hybrid_home, "confirm")
     with patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])):
-        answer, _, _ = await run_voice(hass, hybrid_home, category="light_brightness", percent=percent)
+        answer, _, _ = await run_voice(hass, hybrid_home, category=category)
     assert "needs approval" in answer
     record = data.store.get_pending_approvals()[0]
-    assert record["args"]["service_data"] == {"brightness_pct": percent}
+    assert record["args"]["service_data"] == {}
     await mutate(hass, hybrid_home, change)
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], record["args"], token, hass, data)
     if change == "none":
         assert outcome == "allowed"
-        call.assert_awaited_once_with("light", "turn_on", {"entity_id": [entity_id], "brightness_pct": percent},
+        call.assert_awaited_once_with("light", service, {"entity_id": [entity_id]},
                                     blocking=True, return_response=False)
     else:
         assert outcome == "denied"
@@ -245,7 +245,7 @@ async def test_mesa_wait_rechecks_decision_plan_without_provider_replay(hass, hy
     provider.assert_not_called()
 
 
-@pytest.mark.parametrize("change", ["account", "settings", "revoked"])
+@pytest.mark.parametrize("change", ["account", "model_restored", "settings", "revoked"])
 async def test_changed_authority_during_decision_stops_turn(hass, hybrid_home, change):
     async def respond(session, method, path, timeout, payload):
         await mutate(hass, hybrid_home, change)
@@ -327,8 +327,8 @@ async def test_hybrid_settings_require_account_and_clearing_disables_mode(hass, 
 
 
 @pytest.mark.parametrize("language,sentence,reply", [
-    ("zh-Hans", "请将台灯亮度设置为百分之三十七", "指令已发送。"),
-    ("es", "pon la lámpara al treinta y siete por ciento", "Orden enviada."),
+    ("zh-Hans", "请打开台灯", "指令已发送。"),
+    ("es", "enciende la lámpara", "Orden enviada."),
 ])
 @pytest.mark.parametrize("routing_mode", ["hybrid", "auto"])
 async def test_enabled_language_hybrid_voice_carries_language_through_dispatch(hass, hybrid_home, language, sentence, reply, routing_mode):
@@ -340,9 +340,76 @@ async def test_enabled_language_hybrid_voice_carries_language_through_dispatch(h
           patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, hybrid_home, sentence=sentence, language=language,
-                                                 category="light_brightness", percent=37)
+                                                 category="light_on")
     assert answer == reply
     assert remote.await_count == 2
     assert all(args.args[4]["state"]["language"] == ("zh-CN" if language == "zh-Hans" else "es") for args in remote.await_args_list)
-    call.assert_awaited_once_with("light", "turn_on", {"entity_id": [entity_id], "brightness_pct": 37}, blocking=True, return_response=False)
+    call.assert_awaited_once_with("light", "turn_on", {"entity_id": [entity_id]}, blocking=True, return_response=False)
     provider.assert_not_called()
+
+
+@pytest.mark.parametrize("kind", ["typesafe", "classifier", "systemone"])
+@pytest.mark.parametrize("language", ["en", "zh-Hans", "es"])
+@pytest.mark.parametrize("routing_mode", ["auto", "hybrid"])
+async def test_numeric_voice_automatically_falls_back_even_with_legacy_opt_in(hass, hybrid_home, kind, language, routing_mode):
+    data, _, store, _, _ = hybrid_home
+    account = await store.add(kind, {"api_key": "legacy-key", "model": "legacy-model",
+        "base_url": "http://server/v1", "decision_numeric_enabled": True,
+        "decision_numeric_categories": ["light_brightness"]})
+    await data.store.async_patch_settings(decision_provider_id=account, voice_agent_routing_mode=routing_mode,
+                                         command_routing_languages=[language])
+    local = {"reason": "no_match", "proposal": None, "elapsed_ms": 1, "route": "provider"}
+    with (patch("custom_components.phoenix_mcp.command_routing.async_evaluate_command", AsyncMock(return_value=local)),
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+        answer, remote, provider = await run_voice(hass, hybrid_home, category="light_brightness", percent=55,
+            sentence="set the desk lamp to 50 percent", language=language)
+    assert answer == "Provider answer"
+    provider.assert_awaited_once()
+    assert remote.await_count == 1
+    call.assert_not_called()
+    assert not data.store.get_pending_approvals()
+    assert data.decision_shadow.summary()["hybrid"]["reasons"] == {"numeric_unverified": 1}
+
+
+@pytest.mark.parametrize("percent", [0, 37, 50, 100])
+async def test_recognized_numeric_voice_uses_ha_value_without_either_provider(hass, hybrid_home, percent):
+    entity_id = hybrid_home[-1]
+    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+        answer, remote, provider = await run_voice(hass, hybrid_home,
+            sentence=f"set the desk lamp brightness to {percent} percent")
+    assert answer == "Command sent."
+    call.assert_awaited_once_with("light", "turn_on", {"entity_id": [entity_id], "brightness_pct": percent},
+                                blocking=True, return_response=False)
+    remote.assert_not_called()
+    provider.assert_not_called()
+
+
+@pytest.mark.parametrize("ingress", ["voice", "chat"])
+@pytest.mark.parametrize("percent", [0, 50, 100])
+async def test_preexisting_numeric_decision_approval_cannot_execute(hass, hybrid_home, ingress, percent):
+    from custom_components.phoenix_mcp.command_execution import _capture_plan, plan_is_current
+    from custom_components.phoenix_mcp.decision_targets import capture_targets
+    data, token, _, account, entity_id = hybrid_home
+    await data.store.async_patch_settings(agentcli_routing_mode="hybrid")
+    proposal = {"intent": "HassLightSet", "entity_ids": [entity_id], "brightness_pct": percent}
+    plan = _capture_plan(hass, data, token, proposal, ingress=ingress)
+    assert plan_is_current(plan, hass, data, token)  # A recognized local value still qualifies.
+    plan.update(decision_category="light_brightness",
+                decision_catalog=capture_targets(hass, token, "light_brightness").digest(),
+                decision_account=agentcli.decision_account_fingerprint(hass, account))
+    args = {"domain": "light", "service": "turn_on", "entity_id": [entity_id],
+            "service_data": {"brightness_pct": percent}, COMMAND_ROUTING_PLAN_KEY: plan}
+    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+        _, outcome, _ = await mcp_view.async_execute_approved_tool("call_service", args, token, hass, data)
+    assert outcome == "denied"
+    call.assert_not_called()
+    # Prove that the same otherwise-current approval reaches execution when the
+    # numeric category is admitted, so the policy is the refusal boundary.
+    with (patch("custom_components.phoenix_mcp.command_execution.DECISION_EXECUTION_CATEGORIES", {"light_brightness"}),
+          patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as control):
+        _, outcome, _ = await mcp_view.async_execute_approved_tool("call_service", args, token, hass, data)
+    assert outcome == "allowed"
+    control.assert_awaited_once()

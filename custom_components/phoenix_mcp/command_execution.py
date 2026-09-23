@@ -12,7 +12,7 @@ from typing import Any
 from .agent_recovery import RecoveryRequired, dispatch_agent_tool, recovery_turn
 from .audit import generate_request_id
 from .command_routing import RoutingAuthority, effective_routing_mode
-from .const import COMMAND_ROUTING_PLAN_KEY, VOICE_AGENT_CLIENT_IP, DECISION_TARGET_INTENTS
+from .const import COMMAND_ROUTING_PLAN_KEY, VOICE_AGENT_CLIENT_IP, DECISION_TARGET_INTENTS, DECISION_EXECUTION_CATEGORIES
 from .device_semantics import device_registry_snapshot
 from .helpers import voice_text
 from .policy_engine import Permission, resolve
@@ -92,7 +92,8 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
     settings = data.store.get_settings()
     category = plan["decision_category"]
     mode = effective_routing_mode(settings, plan.get("ingress", "voice"))
-    return bool(mode == "hybrid" and settings.decision_provider_id
+    return bool(category in DECISION_EXECUTION_CATEGORIES
+                and mode == "hybrid" and settings.decision_provider_id
                 and DECISION_TARGET_INTENTS.get(category) == plan["proposal"]["intent"]
                 and plan.get("decision_account") is not None
                 and decision_account_fingerprint(hass, settings.decision_provider_id) == plan["decision_account"]

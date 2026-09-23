@@ -4353,3 +4353,40 @@ async def test_decision_model_edits_validate_before_save_and_recheck_account(has
     assert 'private-key' not in response.text
     if case == 'deleted': assert store.get(account) is None
     else: assert store.get(account)['model'] == ('new-model' if case == 'valid' else 'other-model' if case == 'changed' else 'old-model')
+
+
+@pytest.mark.parametrize('kind', ['typesafe', 'classifier', 'systemone'])
+async def test_legacy_numeric_flags_are_inert_and_model_changes_invalidate_plans(hass, kind):
+    backing = AsyncMock()
+    backing.async_load.return_value = {'instances': {'legacy': {
+        'kind': kind, 'api_key': 'private-key', 'model': 'model-a', 'base_url': 'http://server/v1',
+        'decision_numeric_enabled': True, 'decision_numeric_categories': ['light_brightness'],
+        'decision_routing_revision': 'old-revision',
+    }}}
+    with patch.object(agentcli, 'Store', return_value=backing):
+        store = await agentcli.AgentCliStore.async_create(hass)
+    hass.data['_phoenix_agentcli_store'] = store
+    assert not hasattr(store.resolve('legacy', purpose='decision'), 'decision_numeric_enabled')
+    assert 'decision_numeric_enabled' not in store.list_instances()[0]
+    assert 'private-key' not in json.dumps(store.list_instances())
+    first = agentcli.decision_account_fingerprint(hass, 'legacy')
+    await store.set_model('legacy', 'model-a')
+    assert agentcli.decision_account_fingerprint(hass, 'legacy') == first
+    await store.set_model('legacy', 'model-b')
+    await store.set_model('legacy', 'model-a')
+    assert agentcli.decision_account_fingerprint(hass, 'legacy') != first
+
+
+@pytest.mark.parametrize('body', [
+    {'decision_numeric_enabled': True, 'expected_model': 'test-model'},
+    {'decision_numeric_enabled': False, 'expected_model': 'test-model'},
+    {'model': 'test-model', 'decision_numeric_enabled': True},
+])
+async def test_obsolete_numeric_patch_is_rejected_without_mutation(hass, body):
+    view = agentcli.PhoenixAgentCliProviderView()
+    view.hass = hass
+    with patch.object(agentcli, '_get_secret_store') as store:
+        response = await view.patch(_admin_request(body), instance_id='account')
+    assert response.status == 400
+    assert json.loads(response.text)['message_key'] == 'adminError.unknownFields'
+    store.assert_not_called()

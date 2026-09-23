@@ -1693,17 +1693,24 @@ DECISION_MAX_TARGET_TEXT = 256
 DECISION_MAX_TARGET_ALIASES = 8
 # Experimental admission heuristic, not a calibrated accuracy claim.
 DECISION_MIN_CHOICE_PROBABILITY = 0.90
+# Numeric proposals remain available to inert previews, not execution.
+DECISION_NUMERIC_CATEGORIES = frozenset({"light_brightness"})
+# Adding a preview category must not automatically authorize an execution path.
+DECISION_EXECUTION_CATEGORIES = frozenset({"light_on", "light_off", "state_query"})
 DECISION_HYBRID_REASONS = frozenset({
     "plan_ready", "provider_fallback", "category_low_probability", "target_low_probability",
     "target_declined", "ambiguous_target", "brightness_declined", "no_target", "targets_changed",
     "unsupported_category", "too_many_targets", "target_metadata_too_large", "unsupported_language",
-    "invalid_input", "authority_changed", "not_enabled", "not_configured", "local_match",
+    "invalid_input", "authority_changed", "not_enabled", "not_configured", "local_match", "numeric_unverified",
     "local_unavailable", "busy", "cancelled", "authentication", "rate_limited", "http_error",
     "response_too_large", "malformed", "timeout", "unavailable",
 })
 DECISION_BRIGHTNESS_CHOICES = {
-    "brightness_tens": {**{str(value): f"The whole requested percentage divided by ten, rounded down, is {value}."
-                            for value in range(11)}, "none": "No explicit whole percentage from 0 to 100."},
-    "brightness_units": {**{str(value): f"The units digit of the whole requested percentage is {value}."
-                             for value in range(10)}, "none": "No explicit whole percentage from 0 to 100."},
+    # Enumerate whole values so classification does not require digit arithmetic.
+    "brightness_tens": {**{str(value): "The requested brightness is exactly one of: " + ", ".join(
+        f"{percent}%" for percent in range(value * 10, min(value * 10 + 10, 101))) + "."
+        for value in range(11)}, "none": "No single explicit whole brightness percentage from 0% to 100%."},
+    "brightness_units": {**{str(value): "The requested brightness is exactly one of: " + ", ".join(
+        f"{percent}%" for percent in range(value, 101, 10)) + "."
+        for value in range(10)}, "none": "No single explicit whole brightness percentage from 0% to 100%."},
 }

@@ -184,6 +184,7 @@ class ProviderConfig:
     # refusal, and None means unknown. Unknown must remain text-only.
     vision: bool | None = None
     endpoint_id: str | None = None
+    decision_routing_revision: str = ""
 
 
 @dataclass(frozen=True)
@@ -635,6 +636,8 @@ class AgentCliStore:
             cfg = self._data.get(instance_id)
             if not isinstance(cfg, dict):
                 return False
+            if cfg.get("model") != model and provider_purpose(cfg.get("kind", "")) == "decision":
+                cfg["decision_routing_revision"] = uuid.uuid4().hex
             cfg["model"] = model
             await self._save()
             return True
@@ -743,6 +746,7 @@ class AgentCliStore:
         return ProviderConfig(
             kind=kind, model=model, base_url=base_url, api_key=cfg.get("api_key"),
             endpoint_id=endpoint_id, vision=vision,
+            decision_routing_revision=str(cfg.get("decision_routing_revision") or "") if purpose == "decision" else "",
         )
 
 
@@ -4672,6 +4676,10 @@ class PhoenixAgentCliProviderView(PhoenixView):
         body = await _read_body(request, rid)
         if isinstance(body, web.Response):
             return body
+        if unknown := set(body) - {"model"}:
+            fields = ", ".join(sorted(unknown))
+            return _err("invalid_request", f"Unknown field(s): {fields}.", 400, rid,
+                        key="unknownFields", params={"fields": fields})
         model = str(body.get("model") or "").strip()
         if not model:
             return _err(

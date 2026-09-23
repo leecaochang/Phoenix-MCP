@@ -9,7 +9,7 @@ from typing import Any
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .command_routing import RoutingAuthority, routing_language, routing_languages, effective_routing_mode
-from .const import MAX_SEARCH_QUERY_LEN, DECISION_TARGET_INTENTS, DECISION_HYBRID_REASONS
+from .const import MAX_SEARCH_QUERY_LEN, DECISION_TARGET_INTENTS, DECISION_HYBRID_REASONS, DECISION_NUMERIC_CATEGORIES, DECISION_EXECUTION_CATEGORIES
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 
 
@@ -139,6 +139,9 @@ class DecisionShadow:
                     return result("authority_changed")
                 if not targets:
                     return result("observed", answer)
+                if prepare and answer["choice"] not in DECISION_EXECUTION_CATEGORIES and answer["choice"] != "provider":
+                    return result("numeric_unverified" if answer["choice"] in DECISION_NUMERIC_CATEGORIES
+                                  else "unsupported_category", answer)
                 selection = await self._select_target(hass, authority, provider, session, sentence.strip(),
                                                       answer, settings.decision_timeout_ms, prepare=prepare, ingress=ingress, language=decision_language)
                 if (authority.current(hass) is None or store.resolve(account, purpose="decision") != cfg):
