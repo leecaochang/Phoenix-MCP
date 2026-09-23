@@ -25,6 +25,7 @@ from .const import (
     AGENTCLI_SCROLLBACK_MIN,
     APPROVAL_REASON_FORMAT_INCOMPATIBLE,
     COMMAND_ROUTING_MODES,
+    CHAT_COMMAND_ROUTING_MODES,
     COMMAND_ROUTING_TIMEOUT_DEFAULT_MS,
     DECISION_TIMEOUT_DEFAULT_MS, DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS,
     COMMAND_ROUTING_TIMEOUT_MIN_MS,
@@ -605,6 +606,7 @@ class GlobalSettings:
     agentcli_detail_level: str = DETAIL_LEVEL_CONCISE
     agentcli_home_focused: bool = False
     agentcli_routing_shadow_enabled: bool = False
+    agentcli_routing_mode: str = "off"
     # Assist bridge: the id of the token whose scoped tool surface HA's native
     # Assist/voice pipeline resolves against (assist_api.py). None = unbound (the
     # registered llm.API offers zero tools). Cleared on revoke/expiry of that token.
@@ -663,6 +665,7 @@ class GlobalSettings:
             "agentcli_detail_level": self.agentcli_detail_level,
             "agentcli_home_focused": self.agentcli_home_focused,
             "agentcli_routing_shadow_enabled": self.agentcli_routing_shadow_enabled,
+            "agentcli_routing_mode": self.agentcli_routing_mode,
             "assist_bound_token_id": self.assist_bound_token_id,
             "voice_agent_routing_mode": self.voice_agent_routing_mode,
             "command_routing_timeout_ms": self.command_routing_timeout_ms,
@@ -721,6 +724,7 @@ class GlobalSettings:
             ),
             agentcli_home_focused=bool(data.get("agentcli_home_focused", False)),
             agentcli_routing_shadow_enabled=data.get("agentcli_routing_shadow_enabled") is True,
+            agentcli_routing_mode=_closed_choice(data.get("agentcli_routing_mode"), CHAT_COMMAND_ROUTING_MODES, "off"),
             assist_bound_token_id=_coerce_opt_str(data.get("assist_bound_token_id")),
             decision_provider_id=data.get("decision_provider_id") if isinstance(data.get("decision_provider_id"), str) else None,
             decision_shadow_enabled=data.get("decision_shadow_enabled") is True,

@@ -80,6 +80,7 @@ KEEP_ENGLISH_SECTIONS = ("entity",)
 KEEP_ENGLISH: dict[str, tuple[str, ...]] = {
     # Local routing is an explicitly English-only experiment until its final stage.
     "English command routing experiment": (
+        "panel.routing.chatMode", "panel.routing.chatExecutionHint", "panel.routing.chatObservationPaused",
         "panel.routing.chatObserve", "panel.routing.chatObserveHint",
         "panel.routing.experimentHint", "panel.routing.hybridMode", "panel.routing.hybridHint",
         "panel.routing.remotePreviewHint", "panel.routing.selectedBrightness", "panel.routing.hybridShadowHint",

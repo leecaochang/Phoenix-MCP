@@ -156,6 +156,7 @@ export interface GlobalSettings {
   // own model on the chosen token's scope. Independent of the Assist bridge above.
   voice_agent_routing_mode?: "off" | "local_shadow" | "local" | "hybrid";
   agentcli_routing_shadow_enabled?: boolean;
+  agentcli_routing_mode?: "off" | "local";
   command_routing_timeout_ms?: number;
   decision_provider_id?: string | null;
   decision_shadow_enabled?: boolean;

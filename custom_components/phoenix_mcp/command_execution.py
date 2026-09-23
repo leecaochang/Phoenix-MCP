@@ -1,7 +1,8 @@
-"""Execute local Voice proposals through existing dispatch, approval and recovery."""
+"""Execute command proposals through existing dispatch, approval and recovery."""
 
 from __future__ import annotations
 
+import asyncio
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
 import hashlib
@@ -16,7 +17,7 @@ from .device_semantics import device_registry_snapshot
 from .helpers import voice_text
 from .policy_engine import Permission, resolve
 
-# Only a server-owned Voice turn can attach a plan to initial service dispatch.
+# Only a server-owned command turn can attach a plan to initial service dispatch.
 _local_plan: ContextVar[dict | None] = ContextVar("phoenix_local_command_plan", default=None)
 
 
@@ -73,12 +74,12 @@ def _service_args(proposal: dict) -> dict:
     }
 
 
-def _capture_plan(hass: Any, data: Any, token: Any, proposal: dict) -> dict | None:
+def _capture_plan(hass: Any, data: Any, token: Any, proposal: dict, *, ingress: str = "voice") -> dict | None:
     fingerprints = {entity_id: _target_fingerprint(hass, token, entity_id, proposal["intent"])
                     for entity_id in proposal["entity_ids"]}
     if not fingerprints or any(value is None for value in fingerprints.values()):
         return None
-    return {"proposal": proposal, "fingerprints": fingerprints, "token_id": token.id,
+    return {"proposal": proposal, "fingerprints": fingerprints, "token_id": token.id, "ingress": ingress,
             "token_version": token.settings_version, "settings": _digest(data.store.get_settings().to_dict())}
 
 
@@ -102,10 +103,16 @@ def plan_is_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
     try:
         settings = data.store.get_settings()
         proposal = plan["proposal"]
+        ingress = plan.get("ingress", "voice")
+        if ingress == "chat":
+            enabled = settings.agentcli_routing_mode == "local" and "decision_category" not in plan
+        elif ingress == "voice":
+            enabled = (settings.voice_agent_enabled and settings.voice_agent_routing_mode in ("local", "hybrid")
+                       and settings.voice_agent_token_id == token.id)
+        else:
+            return False
         return bool(
-            settings.voice_agent_enabled and settings.voice_agent_routing_mode in ("local", "hybrid")
-            and settings.voice_agent_token_id == token.id
-            and token.is_valid() and token.id == plan["token_id"]
+            enabled and token.is_valid() and token.id == plan["token_id"]
             and token.settings_version == plan["token_version"]
             and _digest(settings.to_dict()) == plan["settings"]
             and _decision_plan_current(plan, hass, data, token)
@@ -152,17 +159,21 @@ class LocalCommandReply:
 
     text: str
     outcome: str = "ok"
+    pending: dict | None = None
 
 
-@recovery_turn
-async def _run_local_command(hass: Any, data: Any, token: Any, plan: dict,
-                             authority: RoutingAuthority, base_url: str,
-                             include_review_links: bool) -> LocalCommandReply:
+async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
+                            authority: RoutingAuthority, base_url: str,
+                            include_review_links: bool, *, client_ip: str = VOICE_AGENT_CLIENT_IP,
+                            cancel: asyncio.Event | None = None) -> LocalCommandReply:
+    """Run inside the owning ingress's recovery turn, including response delivery."""
     from .agentcli import dispatch_tool_result, _parse_pending
     from .mcp_view import _dispatch_mcp
 
     await data.agent_recovery.reconcile(data.store, token.id)
     current = authority.current(hass)
+    if cancel is not None and cancel.is_set():
+        return LocalCommandReply("Cancelled.", "cancelled")
     if current is None or not plan_is_current(plan, hass, data, current):
         return LocalCommandReply(voice_text("en", "token_unavailable"))
     token = replace(current, confirm_inline_wait_seconds=0)
@@ -183,7 +194,7 @@ async def _run_local_command(hass: Any, data: Any, token: Any, plan: dict,
     try:
         response, _method, _resource, outcome = await dispatch_agent_tool(
             _dispatch_mcp, hass=hass, data=data, token=token, name=name, arguments=arguments,
-            tool_id=request_id, request_id=request_id, client_ip=VOICE_AGENT_CLIENT_IP, base_url=base_url,
+            tool_id=request_id, request_id=request_id, client_ip=client_ip, base_url=base_url,
         )
     except RecoveryRequired:
         return LocalCommandReply(voice_text("en", "outcome_unknown"), "outcome_unknown")
@@ -198,7 +209,11 @@ async def _run_local_command(hass: Any, data: Any, token: Any, plan: dict,
         text = voice_text("en", "local_pending")
         if include_review_links:
             text += f"\n\n[{voice_text('en', 'local_review')}]({base_url}{pending['review_url']})"
-        return LocalCommandReply(text)
+        return LocalCommandReply(text, pending={
+            "approval_id": pending["approval_id"], "tool_name": name,
+            "review_url": pending.get("review_url"), "expires_at": pending.get("expires_at"),
+            "diff": pending["record"].diff,
+        })
     if result.get("isError") or outcome != "allowed":
         return LocalCommandReply(voice_text("en", "local_failed"))
     payload = None
@@ -222,6 +237,31 @@ async def _run_local_command(hass: Any, data: Any, token: Any, plan: dict,
     warnings = payload.get("mesa_advisory", [])
     advisory = " ".join(warning for warning in warnings if isinstance(warning, str)) if isinstance(warnings, list) else ""
     return LocalCommandReply(voice_text("en", "local_sent") + (f" {advisory}" if advisory else ""))
+
+
+@recovery_turn
+async def _run_local_command(hass: Any, data: Any, token: Any, plan: dict,
+                             authority: RoutingAuthority, base_url: str,
+                             include_review_links: bool) -> LocalCommandReply:
+    """Voice owns a complete non-streaming command recovery turn."""
+    return await _dispatch_command(hass, data, token, plan, authority, base_url, include_review_links)
+
+
+async def async_execute_chat_command(hass: Any, data: Any, token: Any, proposal: dict,
+                                     authority: RoutingAuthority, base_url: str,
+                                     client_ip: str, cancel: asyncio.Event) -> LocalCommandReply | None:
+    """Reuse the outer Chat recovery turn; None permits pre-dispatch fallback."""
+    try:
+        plan = _capture_plan(hass, data, token, proposal, ingress="chat")
+    except Exception:
+        return None
+    if plan is None:
+        return None
+    try:
+        return await _dispatch_command(hass, data, token, plan, authority, base_url, True,
+                                       client_ip=client_ip, cancel=cancel)
+    except Exception:
+        return LocalCommandReply(voice_text("en", "outcome_unknown"), "outcome_unknown")
 
 
 async def async_execute_local_command(hass: Any, data: Any, token: Any, proposal: dict,

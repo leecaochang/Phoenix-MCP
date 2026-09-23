@@ -1649,8 +1649,9 @@ VOICE_TEMPLATES: dict[str, str] = {
     ),
 }
 
-# English-only Voice routing; local execution remains opt-in.
+# English-only command routing; execution remains opt-in.
 COMMAND_ROUTING_MODES = frozenset({"off", "local_shadow", "local", "hybrid"})
+CHAT_COMMAND_ROUTING_MODES = frozenset({"off", "local"})
 COMMAND_ROUTING_PLAN_KEY = "_phoenix_command_route"
 COMMAND_ROUTING_TIMEOUT_DEFAULT_MS = 500
 COMMAND_ROUTING_TIMEOUT_MIN_MS = 50

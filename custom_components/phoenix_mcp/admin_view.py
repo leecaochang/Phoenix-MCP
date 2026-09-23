@@ -21,6 +21,7 @@ from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 from .audit import Outcome
 from .const import (
     COMMAND_ROUTING_MODES,
+    CHAT_COMMAND_ROUTING_MODES,
     DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS,
     COMMAND_ROUTING_TIMEOUT_MIN_MS,
     COMMAND_ROUTING_TIMEOUT_MAX_MS,
@@ -2034,7 +2035,7 @@ _SURFACE_TOKEN_PROVIDER_PAIRS = (
 )
 
 _PATCHABLE_SETTINGS = _BOOL_SETTINGS | {
-    "voice_agent_routing_mode", "command_routing_timeout_ms", "decision_timeout_ms",
+    "voice_agent_routing_mode", "agentcli_routing_mode", "command_routing_timeout_ms", "decision_timeout_ms",
     "audit_flush_interval", "audit_log_maxlen", "mesa_mode",
     "agentcli_scrollback_lines", "agentcli_max_iterations", "assist_bound_token_id",
     *_NULLABLE_STRING_SETTINGS,
@@ -2132,13 +2133,12 @@ async def _validated_settings_patch(
                 params={"field": key, "values": ", ".join(sorted(DETAIL_LEVELS))},
             )
 
-    if "voice_agent_routing_mode" in patchable:
-        value = patchable["voice_agent_routing_mode"]
-        if not isinstance(value, str) or value not in COMMAND_ROUTING_MODES:
+    for key, modes in (("voice_agent_routing_mode", COMMAND_ROUTING_MODES),
+                       ("agentcli_routing_mode", CHAT_COMMAND_ROUTING_MODES)):
+        if key in patchable and (not isinstance(patchable[key], str) or patchable[key] not in modes):
             return {}, _err(
-                "invalid_request", "Unsupported voice routing mode.", 400, rid,
-                key="valueAllowed", params={"field": "voice_agent_routing_mode",
-                "values": ", ".join(sorted(COMMAND_ROUTING_MODES))},
+                "invalid_request", "Unsupported command routing mode.", 400, rid,
+                key="valueAllowed", params={"field": key, "values": ", ".join(sorted(modes))},
             )
     if "command_routing_timeout_ms" in patchable:
         value = patchable["command_routing_timeout_ms"]

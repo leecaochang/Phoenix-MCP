@@ -3507,12 +3507,9 @@ async def async_run_agent_turn(
         await emit("done", {"stop_reason": "error"})
         return messages
 
-    from .chat_routing import async_observe_chat_command
-    if not await async_observe_chat_command(hass, data, token, messages, routing_language, cancel):
-        await emit("error", {"code": "cancelled" if cancel.is_set() else "unauthorized",
-                             "message": "Cancelled." if cancel.is_set() else "This token is no longer authorized."})
-        await emit("messages", {"messages": messages})
-        await emit("done", {"stop_reason": "error"})
+    from .chat_routing import async_route_chat_command
+    if not await async_route_chat_command(hass, data, token, messages, routing_language, cancel,
+                                           base_url=base_url, client_ip=client_ip, emit=emit):
         return messages
 
     from .mcp_view import _build_instructions  # noqa: PLC0415

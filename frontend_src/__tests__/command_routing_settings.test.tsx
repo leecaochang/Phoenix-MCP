@@ -192,3 +192,23 @@ it("shows a zero brightness proposal without implying execution or no remote usa
   expect(screen.getByText(/Nothing was executed or queued for approval/)).toBeTruthy();
   expect(preview).toHaveBeenCalledWith("t", "zero brightness", true, true);
 });
+
+
+it("keeps Chat execution opt-in and pauses observation without clearing its preference", async () => {
+  const onChange = vi.fn();
+  const view = render(<CommandRoutingSettings settings={{ ...settings, agentcli_routing_shadow_enabled: true }} onChange={onChange} saving={false} />);
+  await screen.findByText("Voice");
+  const mode = screen.getByLabelText("Agent Chat execution");
+  expect(mode).toHaveValue("off");
+  fireEvent.change(mode, { target: { value: "local" } });
+  expect(onChange).toHaveBeenCalledExactlyOnceWith("agentcli_routing_mode", "local");
+  view.rerender(<CommandRoutingSettings settings={{ ...settings, agentcli_routing_mode: "local", agentcli_routing_shadow_enabled: true }} onChange={onChange} saving={false} />);
+  const observation = screen.getByLabelText("Observe command routing in Agent Chat");
+  expect(observation).toBeChecked();
+  expect(observation).toBeDisabled();
+  expect(screen.getByText(/Background Chat observation is paused/)).toBeTruthy();
+  expect(screen.getByText(/Approvals are queued for review/)).toBeTruthy();
+  expect(preview).not.toHaveBeenCalled();
+  view.rerender(<CommandRoutingSettings settings={settings} onChange={onChange} saving />);
+  expect(mode).toBeDisabled();
+});

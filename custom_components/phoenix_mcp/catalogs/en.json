@@ -1988,8 +1988,11 @@
       "zigbee_topology.title": "Scan Zigbee topology"
     },
     "routing": {
+      "chatMode": "Agent Chat execution",
+      "chatExecutionHint": "English experiment for the first text message in a new chat. Supported HA intent matches run through the existing permission, MESA and approval checks without calling a model. Other requests use your selected chat provider. Approvals are queued for review. History, continuations and focus overrides keep the regular provider path.",
+      "chatObservationPaused": "Background Chat observation is paused while local execution is enabled. Its saved preference is unchanged.",
       "chatObserve": "Observe command routing in Agent Chat",
-      "chatObserveHint": "English experiment for the first text message in a new chat. The selected chat provider still handles every turn and may operate devices normally. Local misses send the message alone to the selected decision account in the background, which may incur usage. No decision account means local observation only. History, continuations and focus overrides are excluded.",
+      "chatObserveHint": "When Agent Chat execution is Off, this experiment observes only the first English text message in a new chat. The selected chat provider still handles every turn and may operate devices normally. Local misses send the message alone to the selected decision account in the background, which may incur usage. No decision account means local observation only. History, continuations and focus overrides are excluded.",
       "mode": "Voice command routing",
       "offMode": "Off: use the selected provider",
       "localMode": "Run supported English commands locally",
