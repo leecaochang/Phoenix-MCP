@@ -282,3 +282,72 @@ async def test_approval_rechecks_current_mesa_restrictions(hass, local_home):
         _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], record["args"], token, hass, data)
     assert outcome == "denied"
     call.assert_not_called()
+
+
+@pytest.mark.parametrize("language,selection,alias,sentence,reply", [
+    ("zh-Hans", "zh-Hans", "台灯", "打开台灯", "指令已发送。"),
+    ("zh-CN", "zh-Hans", "台灯", "打开台灯", "指令已发送。"),
+    ("es-ES", "es", "Lámpara", "enciende la lámpara", "Orden enviada."),
+])
+async def test_enabled_language_runs_real_local_voice_once(hass, local_home, language, selection, alias, sentence, reply):
+    data, _, entity_id = local_home
+    await data.store.async_patch_settings(command_routing_languages=[selection])
+    er.async_get(hass).async_update_entity(entity_id, aliases={alias})
+    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+        answer, build, provider = await run_voice(hass, data, sentence, language=language)
+    assert answer == reply
+    call.assert_awaited_once_with("light", "turn_on", {"entity_id": [entity_id]}, blocking=True, return_response=False)
+    build.assert_not_called()
+    provider.assert_not_called()
+
+
+@pytest.mark.parametrize("language,alias,sentence,reply", [
+    ("zh-Hans", "台灯", "打开台灯", "此指令需要在 Phoenix MCP 面板中审批。"),
+    ("es", "Lámpara", "enciende la lámpara", "Esta orden requiere aprobación en el panel de Phoenix MCP."),
+])
+@pytest.mark.parametrize("remove_language", [False, True])
+async def test_multilingual_voice_approval_rechecks_language_selection(hass, local_home, language, alias, sentence, reply, remove_language):
+    data, token, entity_id = local_home
+    await data.store.async_patch_settings(command_routing_languages=[language])
+    er.async_get(hass).async_update_entity(entity_id, aliases={alias})
+    await enable_mesa(hass, data, entity_id, "confirm")
+    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+        answer, _, provider = await run_voice(hass, data, sentence, language=language)
+        assert answer == reply
+        provider.assert_not_called()
+        call.assert_not_called()
+        record = data.store.get_pending_approvals()[0]
+        if remove_language:
+            await data.store.async_patch_settings(command_routing_languages=[])
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], record["args"], token, hass, data)
+    assert outcome == ("denied" if remove_language else "allowed")
+    assert call.await_count == (0 if remove_language else 1)
+
+
+@pytest.mark.parametrize("language,expected", [("zh-Hans", "状态为 off。"), ("es", "El estado es off.")])
+async def test_command_state_reply_localizes_prose_without_rewriting_ha_state(hass, local_home, language, expected):
+    data, token, entity_id = local_home
+    await data.store.async_patch_settings(command_routing_languages=[language])
+    answer = await async_execute_local_command(hass, data, token,
+        {"intent": "HassGetState", "entity_ids": [entity_id]}, RoutingAuthority.capture(data, token),
+        "http://test", language=language)
+    assert answer == expected
+
+
+@pytest.mark.parametrize("language,alias,sentence,reply", [
+    ("zh-Hans", "台灯", "打开台灯", "Phoenix MCP 未能完成此指令。"),
+    ("es", "Lámpara", "enciende la lámpara", "Phoenix MCP no pudo completar esta orden."),
+])
+async def test_multilingual_local_command_keeps_mesa_denial(hass, local_home, language, alias, sentence, reply):
+    data, token, entity_id = local_home
+    await data.store.async_patch_settings(command_routing_languages=[language])
+    await enable_mesa(hass, data, entity_id, "prohibited")
+    er.async_get(hass).async_update_entity(entity_id, aliases={alias})
+    with patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call:
+        answer, build, provider = await run_voice(hass, data, sentence, language=language)
+    assert answer == reply
+    call.assert_not_called()
+    build.assert_not_called()
+    provider.assert_not_called()

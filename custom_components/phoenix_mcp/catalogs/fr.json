@@ -1701,7 +1701,7 @@
       "versionNotFound": "Version introuvable.",
       "versionResourcePairRequired": "Fournissez à la fois resource_type et resource_id, ou aucun des deux pour le flux récent.",
       "wipeConfirmationRequired": "confirm doit être WIPE.",
-      "routingPreviewInvalid": "Utilisez un jeton actif et une commande en anglais de 512 caractères maximum. Le délai doit être un entier de 50 à 5000 ms."
+      "routingPreviewInvalid": "Vérifiez le jeton, la langue de la commande et les paramètres de routage."
     },
     "mesaSuggestion": {
       "baseline_note": " Interdit correspond à la ligne de base intégrée pour ce domaine, le profil créé rend donc cette intention explicite ; choisissez Confirmer dans Révision pour autoriser plutôt le contrôle de l'agent derrière les approbations.",
@@ -2002,7 +2002,9 @@
       "previewLanguage": "Langue de la prévisualisation",
       "languageEnglish": "Anglais",
       "languageChinese": "Chinois simplifié",
-      "languageSpanish": "Espagnol"
+      "languageSpanish": "Espagnol",
+      "enabledLanguages": "Langues du routage automatique",
+      "languagesHint": "Concerne Voice et le premier message texte d’un nouveau chat. Les langues non sélectionnées utilisent votre fournisseur habituel. Sans sélection, le routage est suspendu. La langue de prévisualisation est indépendante."
     }
   },
   "notification": {
@@ -2022,6 +2024,14 @@
     "provider_error": "Désolé, {reason}.",
     "token_unavailable": "Le jeton de l'agent vocal Phoenix MCP n'est plus disponible.",
     "unavailable": "L'agent vocal Phoenix MCP est actuellement indisponible.",
-    "outcome_unknown": "Des actions peuvent avoir été exécutées. Vérifiez Home Assistant et les approbations avant de réessayer. Résolvez les actions incertaines dans Paramètres > Système > Réparations."
+    "outcome_unknown": "Des actions peuvent avoir été exécutées. Vérifiez Home Assistant et les approbations avant de réessayer. Résolvez les actions incertaines dans Paramètres > Système > Réparations.",
+    "local_sent": "Commande envoyée.",
+    "local_pending": "Cette commande nécessite une approbation dans le panneau Phoenix MCP.",
+    "local_review": "Examiner la commande",
+    "local_failed": "Phoenix MCP n’a pas pu terminer cette commande.",
+    "local_state": "L’état est {state}.",
+    "local_read_failed": "Phoenix MCP n’a pas pu lire l’état.",
+    "local_cancelled": "Annulé.",
+    "local_unauthorized": "Ce jeton n’est plus autorisé."
   }
 }

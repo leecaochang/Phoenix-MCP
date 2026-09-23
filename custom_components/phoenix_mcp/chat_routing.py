@@ -1,4 +1,4 @@
-"""Route standalone English Agent Chat commands before the provider loop."""
+"""Route standalone Agent Chat commands in explicitly enabled languages before the provider loop."""
 
 from __future__ import annotations
 
@@ -7,8 +7,9 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from .command_execution import LocalCommandReply, async_execute_chat_command, async_execute_chat_plan
-from .command_routing import RoutingAuthority, async_evaluate_command
+from .command_routing import RoutingAuthority, async_evaluate_command, routing_language
 from .decision_shadow import async_preview_decision
+from .helpers import voice_text
 
 
 async def async_route_chat_command(hass: Any, data: Any, token: Any,
@@ -19,11 +20,12 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
     settings = data.store.get_settings()
     execute = settings.agentcli_routing_mode in ("local", "hybrid")
     if (not (execute or settings.agentcli_routing_shadow_enabled)
-            or not isinstance(language, str) or language.lower().split("-", 1)[0] != "en"
+            or routing_language(language, enabled=settings.command_routing_languages) is None
             or len(messages) != 1 or not isinstance(messages[0], dict)
             or set(messages[0]) != {"role", "content"} or messages[0]["role"] != "user"
             or not isinstance(messages[0]["content"], str)):
         return True
+    assert isinstance(language, str)
     authority = RoutingAuthority.capture(data, token)
 
     async def finish(reply: LocalCommandReply) -> bool:
@@ -40,7 +42,7 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
 
     async def stop() -> bool:
         return await finish(LocalCommandReply(
-            "Cancelled." if cancel.is_set() else "This token is no longer authorized.",
+            voice_text(language, "local_cancelled" if cancel.is_set() else "local_unauthorized"),
             "cancelled" if cancel.is_set() else "unauthorized"))
 
     if cancel.is_set() or authority.current(hass) is None:
@@ -53,7 +55,7 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
     if execute:
         if result["proposal"]:
             reply = await async_execute_chat_command(hass, data, current, result["proposal"], authority,
-                                                     base_url, client_ip, cancel)
+                                                     base_url, client_ip, cancel, language=language)
             if reply is not None:
                 return await finish(reply)
             if cancel.is_set() or authority.current(hass) is None:
@@ -67,7 +69,7 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
                 return await stop()
             if decision.get("_plan") is not None:
                 reply = await async_execute_chat_plan(hass, data, current, decision["_plan"], authority,
-                                                      base_url, client_ip, cancel)
+                                                      base_url, client_ip, cancel, language=language)
                 return await finish(reply)
     elif (settings.decision_provider_id and result["reason"] in ("no_match", "unsupported", "no_target")):
         # Execution mode pauses observation without changing its stored preference.

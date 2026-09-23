@@ -87,7 +87,7 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
     };
   }, [refreshSettings]);
 
-  async function patchSetting(key: keyof GlobalSettings, value: boolean | number | string) {
+  async function patchSetting(key: keyof GlobalSettings, value: boolean | number | string | string[]) {
     const isLatest = beginMutation();
     // Invalidate a refresh that began before this mutation. Its snapshot can no
     // longer be authoritative once the write starts.

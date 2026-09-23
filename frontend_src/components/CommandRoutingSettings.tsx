@@ -8,9 +8,11 @@ import { localeNumber, t } from "../i18n";
 // and an inert result. The experiment's scope and effect stay beside its mode.
 export function CommandRoutingSettings({ settings, onChange, saving }: {
   settings: GlobalSettings;
-  onChange: (key: keyof GlobalSettings, value: string | number | boolean) => void;
+  onChange: (key: keyof GlobalSettings, value: string | number | boolean | string[]) => void;
   saving: boolean;
 }) {
+  const enabledLanguages = settings.command_routing_languages ?? ["en"];
+  const languageChoices = [["en", "routing.languageEnglish"], ["zh-Hans", "routing.languageChinese"], ["es", "routing.languageSpanish"]] as const;
   const [tokens, setTokens] = useState<TokenRecord[]>([]);
   const [tokenId, setTokenId] = useState(settings.voice_agent_token_id ?? "");
   const [sentence, setSentence] = useState("");
@@ -63,6 +65,19 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
   return <section className="card" aria-labelledby="command-routing-title">
     <h3 className="card-header" id="command-routing-title">{t("routing.title")}</h3>
     <p className="agentcli-settings-hint">{t("routing.experimentHint")}</p>
+    <div role="group" aria-labelledby="routing-languages-title" aria-describedby="routing-languages-hint">
+      <p id="routing-languages-title"><strong>{t("routing.enabledLanguages")}</strong></p>
+      <p id="routing-languages-hint" className="agentcli-settings-hint">{t("routing.languagesHint")}</p>
+      {languageChoices.map(([code, label]) => <div className="toggle-row" key={code}>
+        <label htmlFor={`routing-enabled-${code}`}>{t(label)}</label>
+        <input id={`routing-enabled-${code}`} type="checkbox" disabled={saving}
+          checked={enabledLanguages.includes(code)} onChange={e => {
+            invalidate();
+            onChange("command_routing_languages", e.target.checked
+              ? [...enabledLanguages, code] : enabledLanguages.filter(value => value !== code));
+          }} />
+      </div>)}
+    </div>
     <div className="toggle-row toggle-row-stacked-control">
       <label htmlFor="routing-mode">{t("routing.mode")}</label>
       <select id="routing-mode" className="input input-auto" disabled={saving}

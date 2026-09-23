@@ -364,3 +364,45 @@ async def test_real_multilingual_preview_declines_negated_and_deferred_commands(
     result = await async_evaluate_command(hass, data, token, sentence, language, preview=True)
     assert result["proposal"] is None, result
     assert result["route"] == "provider"
+
+
+@pytest.mark.parametrize("tag,expected", [
+    ("en-US", "en"), ("es-ES", "es"), ("es-MX", "es"),
+    ("zh-Hans", "zh-CN"), ("zh-CN", "zh-CN"),
+    ("zh-Hant", None), ("zh-TW", None), ("zh", None), ("fr", None),
+    ("unknown", None), (None, None), ([], None),
+])
+def test_selected_routing_languages_do_not_fall_back_to_english(tag, expected):
+    from custom_components.phoenix_mcp.command_routing import routing_language
+    assert routing_language(tag, enabled=["en", "zh-Hans", "es"]) == expected
+    assert routing_language(tag, enabled=[]) is None
+
+
+@pytest.mark.parametrize("selection", [[], ["en"], ["zh-Hans", "es"]])
+async def test_routing_language_selection_round_trip_and_snapshot(hass, routing, selection):
+    from custom_components.phoenix_mcp.admin_view import _validated_settings_patch
+    from custom_components.phoenix_mcp.command_routing import RoutingAuthority
+    from custom_components.phoenix_mcp.token_store import GlobalSettings
+    data, token = routing
+    assert GlobalSettings.from_dict({}).command_routing_languages == ["en"]
+    changes, error = await _validated_settings_patch({"command_routing_languages": selection}, data, hass, "test")
+    assert error is None
+    await data.store.async_patch_settings(**changes)
+    assert GlobalSettings.from_dict(data.store.get_settings().to_dict()).command_routing_languages == selection
+    authority = RoutingAuthority.capture(data, token)
+    data.store.get_settings().command_routing_languages.append("en")
+    assert authority.current(hass) is None
+    # Preview remains available independently of selected automatic languages.
+    with patch("custom_components.phoenix_mcp.command_routing.async_recognize", AsyncMock(return_value=None)) as recognize:
+        await async_evaluate_command(hass, data, token, "打开台灯", "zh-Hans", preview=True)
+    recognize.assert_awaited_once_with(hass, "打开台灯", "zh-CN", strict=True)
+
+
+@pytest.mark.parametrize("selection", [None, True, "es", [True], [["en"]], ["en", "en"], ["fr"], ["zh-CN"]])
+async def test_invalid_routing_language_selection_fails_closed(hass, routing, selection):
+    from custom_components.phoenix_mcp.admin_view import _validated_settings_patch
+    from custom_components.phoenix_mcp.token_store import GlobalSettings
+    data, _ = routing
+    _, error = await _validated_settings_patch({"command_routing_languages": selection}, data, hass, "test")
+    assert error.status == 400
+    assert GlobalSettings.from_dict({"command_routing_languages": selection}).command_routing_languages == []

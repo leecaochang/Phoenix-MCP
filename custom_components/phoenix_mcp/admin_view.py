@@ -65,6 +65,7 @@ from .policy_engine import (
     resolve,
 )
 from .token_store import (
+    valid_command_routing_languages,
     PermissionNode,
     PermissionTree,
     VALID_NODE_STATES,
@@ -2035,7 +2036,7 @@ _SURFACE_TOKEN_PROVIDER_PAIRS = (
 )
 
 _PATCHABLE_SETTINGS = _BOOL_SETTINGS | {
-    "voice_agent_routing_mode", "agentcli_routing_mode", "command_routing_timeout_ms", "decision_timeout_ms",
+    "voice_agent_routing_mode", "agentcli_routing_mode", "command_routing_languages", "command_routing_timeout_ms", "decision_timeout_ms",
     "audit_flush_interval", "audit_log_maxlen", "mesa_mode",
     "agentcli_scrollback_lines", "agentcli_max_iterations", "assist_bound_token_id",
     *_NULLABLE_STRING_SETTINGS,
@@ -2140,6 +2141,9 @@ async def _validated_settings_patch(
                 "invalid_request", "Unsupported command routing mode.", 400, rid,
                 key="valueAllowed", params={"field": key, "values": ", ".join(sorted(modes))},
             )
+    if "command_routing_languages" in patchable and not valid_command_routing_languages(patchable["command_routing_languages"]):
+        return {}, _err("invalid_request", "Invalid command routing languages.", 400, rid,
+                        key="routingPreviewInvalid")
     if "command_routing_timeout_ms" in patchable:
         value = patchable["command_routing_timeout_ms"]
         if (type(value) is not int or not

@@ -24,7 +24,7 @@ from .const import (
     AGENTCLI_SCROLLBACK_MAX,
     AGENTCLI_SCROLLBACK_MIN,
     APPROVAL_REASON_FORMAT_INCOMPATIBLE,
-    COMMAND_ROUTING_MODES,
+    COMMAND_ROUTING_MODES, COMMAND_ROUTING_LANGUAGES, COMMAND_ROUTING_DEFAULT_LANGUAGES,
     CHAT_COMMAND_ROUTING_MODES,
     COMMAND_ROUTING_TIMEOUT_DEFAULT_MS,
     DECISION_TIMEOUT_DEFAULT_MS, DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS,
@@ -569,6 +569,13 @@ def _closed_choice(value: object, valid: frozenset[str], default: str) -> str:
     return value if isinstance(value, str) and value in valid else default
 
 
+def valid_command_routing_languages(value: object) -> bool:
+    """A closed, duplicate-free language selection; an empty list pauses routing."""
+    return (isinstance(value, list) and len(value) <= len(COMMAND_ROUTING_LANGUAGES)
+            and all(isinstance(item, str) and item in COMMAND_ROUTING_LANGUAGES for item in value)
+            and len(set(value)) == len(value))
+
+
 @dataclass
 class GlobalSettings:
     """Integration-wide settings persisted to storage."""
@@ -615,6 +622,7 @@ class GlobalSettings:
     # agent, running its own model loop. Independent of the llm.API bridge above.
     # When enabled it needs a token (scope), an Agent Chat provider account, and a model.
     voice_agent_routing_mode: str = "off"
+    command_routing_languages: list[str] = field(default_factory=lambda: list(COMMAND_ROUTING_DEFAULT_LANGUAGES))
     command_routing_timeout_ms: int = COMMAND_ROUTING_TIMEOUT_DEFAULT_MS
     decision_provider_id: str | None = None
     decision_shadow_enabled: bool = False
@@ -668,6 +676,7 @@ class GlobalSettings:
             "agentcli_routing_mode": self.agentcli_routing_mode,
             "assist_bound_token_id": self.assist_bound_token_id,
             "voice_agent_routing_mode": self.voice_agent_routing_mode,
+            "command_routing_languages": list(self.command_routing_languages),
             "command_routing_timeout_ms": self.command_routing_timeout_ms,
             "decision_provider_id": self.decision_provider_id,
             "decision_shadow_enabled": self.decision_shadow_enabled,
@@ -691,6 +700,7 @@ class GlobalSettings:
     @classmethod
     def from_dict(cls, data: dict) -> GlobalSettings:
         mesa_mode = data.get("mesa_mode", MESA_MODE_ADVISORY)
+        languages = data.get("command_routing_languages", list(COMMAND_ROUTING_DEFAULT_LANGUAGES))
         return cls(
             kill_switch=bool(data.get("kill_switch", False)),
             disable_all_logging=bool(data.get("disable_all_logging", False)),
@@ -733,6 +743,7 @@ class GlobalSettings:
             voice_agent_routing_mode=_closed_choice(
                 data.get("voice_agent_routing_mode"), COMMAND_ROUTING_MODES, "off",
             ),
+            command_routing_languages=list(languages) if valid_command_routing_languages(languages) else [],
             command_routing_timeout_ms=_clamp_range(
                 data.get("command_routing_timeout_ms", COMMAND_ROUTING_TIMEOUT_DEFAULT_MS),
                 COMMAND_ROUTING_TIMEOUT_MIN_MS, COMMAND_ROUTING_TIMEOUT_MAX_MS,

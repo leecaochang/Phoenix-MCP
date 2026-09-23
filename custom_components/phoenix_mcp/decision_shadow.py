@@ -103,7 +103,8 @@ class DecisionShadow:
             return {"reason": reason, "decision": decision, "executed": False,
                     "elapsed_ms": round((monotonic() - started) * 1000, 2)}
 
-        decision_language = routing_language(language, preview=ingress == "preview")
+        decision_language = routing_language(language, preview=ingress == "preview",
+                                             enabled=authority.settings.command_routing_languages)
         if decision_language is None:
             return result("unsupported_language")
         if not isinstance(sentence, str) or not sentence.strip() or len(sentence) > MAX_SEARCH_QUERY_LEN:

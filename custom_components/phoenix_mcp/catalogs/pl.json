@@ -16,7 +16,15 @@
     "provider_error": "Przepraszam, {reason}.",
     "token_unavailable": "Token agenta głosowego Phoenix MCP nie jest już dostępny.",
     "unavailable": "Agent głosowy Phoenix MCP jest obecnie niedostępny.",
-    "outcome_unknown": "Działania mogły zostać wykonane. Przed ponowieniem sprawdź Home Assistant i zatwierdzenia. Wyjaśnij niepewne działania w Ustawienia > System > Naprawy."
+    "outcome_unknown": "Działania mogły zostać wykonane. Przed ponowieniem sprawdź Home Assistant i zatwierdzenia. Wyjaśnij niepewne działania w Ustawienia > System > Naprawy.",
+    "local_sent": "Polecenie wysłane.",
+    "local_pending": "To polecenie wymaga zatwierdzenia w panelu Phoenix MCP.",
+    "local_review": "Sprawdź polecenie",
+    "local_failed": "Phoenix MCP nie mógł wykonać tego polecenia.",
+    "local_state": "Stan to {state}.",
+    "local_read_failed": "Phoenix MCP nie mógł odczytać stanu.",
+    "local_cancelled": "Anulowano.",
+    "local_unauthorized": "Ten token nie jest już autoryzowany."
   },
   "panel": {
     "shell": {
@@ -960,7 +968,7 @@
       "versionNotFound": "Nie znaleziono wersji.",
       "versionResourcePairRequired": "Podaj zarówno resource_type, jak i resource_id, albo żadne z nich dla ostatniego kanału.",
       "wipeConfirmationRequired": "confirm musi mieć wartość WIPE.",
-      "routingPreviewInvalid": "Użyj aktywnego tokenu i polecenia po angielsku do 512 znaków. Limit czasu musi być liczbą całkowitą od 50 do 5000 ms."
+      "routingPreviewInvalid": "Sprawdź token, język polecenia i ustawienia routingu."
     },
     "wizard": {
       "accessSub": "Rozwiń grupę <code>light</code> i wybierz światło, które możesz zweryfikować. Wybierz <strong>W</strong>, aby przyznać dostęp do odczytu i zapisu. Przyznaj całe urządzenie lub rozwiń je, aby wybrać jedną encję. Więcej uprawnień możesz dodać później.",
@@ -2041,7 +2049,9 @@
       "previewLanguage": "Język podglądu",
       "languageEnglish": "Angielski",
       "languageChinese": "Chiński uproszczony",
-      "languageSpanish": "Hiszpański"
+      "languageSpanish": "Hiszpański",
+      "enabledLanguages": "Języki automatycznego routingu",
+      "languagesHint": "Dotyczy Voice i pierwszej wiadomości tekstowej w nowym czacie. Niewybrane języki korzystają ze zwykłego dostawcy. Brak wybranych języków wstrzymuje routing. Język podglądu jest niezależny."
     }
   }
 }

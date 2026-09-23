@@ -157,6 +157,7 @@ export interface GlobalSettings {
   voice_agent_routing_mode?: "off" | "local_shadow" | "local" | "hybrid";
   agentcli_routing_shadow_enabled?: boolean;
   agentcli_routing_mode?: "off" | "local" | "hybrid";
+  command_routing_languages?: string[];
   command_routing_timeout_ms?: number;
   decision_provider_id?: string | null;
   decision_shadow_enabled?: boolean;

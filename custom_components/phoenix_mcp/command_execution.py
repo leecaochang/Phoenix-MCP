@@ -166,7 +166,7 @@ class LocalCommandReply:
 async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
                             authority: RoutingAuthority, base_url: str,
                             include_review_links: bool, *, client_ip: str = VOICE_AGENT_CLIENT_IP,
-                            cancel: asyncio.Event | None = None) -> LocalCommandReply:
+                            cancel: asyncio.Event | None = None, language: object = "en") -> LocalCommandReply:
     """Run inside the owning ingress's recovery turn, including response delivery."""
     from .agentcli import dispatch_tool_result, _parse_pending
     from .mcp_view import _dispatch_mcp
@@ -174,14 +174,14 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
     await data.agent_recovery.reconcile(data.store, token.id)
     current = authority.current(hass)
     if cancel is not None and cancel.is_set():
-        return LocalCommandReply("Cancelled.", "cancelled")
+        return LocalCommandReply(voice_text(language, "local_cancelled"), "cancelled")
     if current is None or not plan_is_current(plan, hass, data, current):
-        return LocalCommandReply(voice_text("en", "token_unavailable"))
+        return LocalCommandReply(voice_text(language, "token_unavailable"))
     token = replace(current, confirm_inline_wait_seconds=0)
     proposal = plan["proposal"]
     read = proposal["intent"] == "HassGetState"
     if not read and data.agent_recovery.blocks(token.id):
-        return LocalCommandReply(voice_text("en", "outcome_unknown"), "outcome_unknown")
+        return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
     if read:
         name = "get_state"
         arguments = {"entity_id": proposal["entity_ids"][0], "projection": {"kind": "fields", "fields": ["state"]}}
@@ -198,25 +198,25 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
             tool_id=request_id, request_id=request_id, client_ip=client_ip, base_url=base_url,
         )
     except RecoveryRequired:
-        return LocalCommandReply(voice_text("en", "outcome_unknown"), "outcome_unknown")
+        return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
     finally:
         _local_plan.reset(context)
     if authority.current(hass) is None:
-        return LocalCommandReply(voice_text("en", "outcome_unknown" if not read else "token_unavailable"), "outcome_unknown")
+        return LocalCommandReply(voice_text(language, "outcome_unknown" if not read else "token_unavailable"), "outcome_unknown")
     result = dispatch_tool_result(response)
     pending = _parse_pending(result, outcome=outcome, data=data, token_id=token.id,
                              tool_name=name, request_id=request_id)
     if pending:
-        text = voice_text("en", "local_pending")
+        text = voice_text(language, "local_pending")
         if include_review_links:
-            text += f"\n\n[{voice_text('en', 'local_review')}]({base_url}{pending['review_url']})"
+            text += f"\n\n[{voice_text(language, 'local_review')}]({base_url}{pending['review_url']})"
         return LocalCommandReply(text, pending={
             "approval_id": pending["approval_id"], "tool_name": name,
             "review_url": pending.get("review_url"), "expires_at": pending.get("expires_at"),
             "diff": pending["record"].diff,
         })
     if result.get("isError") or outcome != "allowed":
-        return LocalCommandReply(voice_text("en", "local_failed"))
+        return LocalCommandReply(voice_text(language, "local_failed"))
     payload = None
     for item in result.get("content", []):
         if item.get("type") == "text":
@@ -226,31 +226,31 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
             except (ValueError, TypeError):
                 continue
     if not isinstance(payload, dict):
-        return LocalCommandReply(voice_text("en", "outcome_unknown"), "outcome_unknown")
+        return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
     if read:
         if not plan_is_current(plan, hass, data, token):
-            return LocalCommandReply(voice_text("en", "token_unavailable"))
+            return LocalCommandReply(voice_text(language, "token_unavailable"))
         state = payload.get("state")
-        return LocalCommandReply(voice_text("en", "local_state", state=state) if isinstance(state, str) and len(state) <= 255
-                                 else voice_text("en", "local_read_failed"))
+        return LocalCommandReply(voice_text(language, "local_state", state=state) if isinstance(state, str) and len(state) <= 255
+                                 else voice_text(language, "local_read_failed"))
     if payload.get("partial") or payload.get("success") is not True:
-        return LocalCommandReply(voice_text("en", "outcome_unknown"), "outcome_unknown")
+        return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
     warnings = payload.get("mesa_advisory", [])
     advisory = " ".join(warning for warning in warnings if isinstance(warning, str)) if isinstance(warnings, list) else ""
-    return LocalCommandReply(voice_text("en", "local_sent") + (f" {advisory}" if advisory else ""))
+    return LocalCommandReply(voice_text(language, "local_sent") + (f" {advisory}" if advisory else ""))
 
 
 @recovery_turn
 async def _run_local_command(hass: Any, data: Any, token: Any, plan: dict,
                              authority: RoutingAuthority, base_url: str,
-                             include_review_links: bool) -> LocalCommandReply:
+                             include_review_links: bool, language: object = "en") -> LocalCommandReply:
     """Voice owns a complete non-streaming command recovery turn."""
-    return await _dispatch_command(hass, data, token, plan, authority, base_url, include_review_links)
+    return await _dispatch_command(hass, data, token, plan, authority, base_url, include_review_links, language=language)
 
 
 async def async_execute_chat_command(hass: Any, data: Any, token: Any, proposal: dict,
                                      authority: RoutingAuthority, base_url: str,
-                                     client_ip: str, cancel: asyncio.Event) -> LocalCommandReply | None:
+                                     client_ip: str, cancel: asyncio.Event, *, language: object = "en") -> LocalCommandReply | None:
     """Reuse the outer Chat recovery turn; None permits pre-dispatch fallback."""
     try:
         plan = _capture_plan(hass, data, token, proposal, ingress="chat")
@@ -258,25 +258,25 @@ async def async_execute_chat_command(hass: Any, data: Any, token: Any, proposal:
         return None
     if plan is None:
         return None
-    return await async_execute_chat_plan(hass, data, token, plan, authority, base_url, client_ip, cancel)
+    return await async_execute_chat_plan(hass, data, token, plan, authority, base_url, client_ip, cancel, language=language)
 
 
 async def async_execute_chat_plan(hass: Any, data: Any, token: Any, plan: dict,
                                   authority: RoutingAuthority, base_url: str,
-                                  client_ip: str, cancel: asyncio.Event) -> LocalCommandReply:
+                                  client_ip: str, cancel: asyncio.Event, *, language: object = "en") -> LocalCommandReply:
     """Consume the frozen Chat plan within its outer recovery turn, without replay."""
     if plan.get("ingress") != "chat":
-        return LocalCommandReply(voice_text("en", "token_unavailable"), "unauthorized")
+        return LocalCommandReply(voice_text(language, "token_unavailable"), "unauthorized")
     try:
         return await _dispatch_command(hass, data, token, plan, authority, base_url, True,
-                                       client_ip=client_ip, cancel=cancel)
+                                       client_ip=client_ip, cancel=cancel, language=language)
     except Exception:
-        return LocalCommandReply(voice_text("en", "outcome_unknown"), "outcome_unknown")
+        return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
 
 
 async def async_execute_local_command(hass: Any, data: Any, token: Any, proposal: dict,
                                       authority: RoutingAuthority, base_url: str,
-                                      include_review_links: bool = False) -> str | None:
+                                      include_review_links: bool = False, *, language: object = "en") -> str | None:
     """None allows provider fallback only before any local dispatch is attempted."""
     try:
         plan = _capture_plan(hass, data, token, proposal)
@@ -284,16 +284,16 @@ async def async_execute_local_command(hass: Any, data: Any, token: Any, proposal
         return None
     if plan is None:
         return None
-    return await async_execute_command_plan(hass, data, token, plan, authority, base_url, include_review_links)
+    return await async_execute_command_plan(hass, data, token, plan, authority, base_url, include_review_links, language=language)
 
 
 async def async_execute_command_plan(hass: Any, data: Any, token: Any, plan: dict,
                                       authority: RoutingAuthority, base_url: str,
-                                      include_review_links: bool = False) -> str:
+                                      include_review_links: bool = False, *, language: object = "en") -> str:
     """Consume the exact frozen plan; never replan or fall back after this boundary."""
     try:
-        reply = await _run_local_command(hass, data, token, plan, authority, base_url, include_review_links)
+        reply = await _run_local_command(hass, data, token, plan, authority, base_url, include_review_links, language=language)
         return reply.text
     except Exception:
         # A failed dispatch or receipt save must never cause provider replay.
-        return voice_text("en", "outcome_unknown")
+        return voice_text(language, "outcome_unknown")

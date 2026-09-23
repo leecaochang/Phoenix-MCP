@@ -436,12 +436,12 @@ def chat_decision_wire(payload, category='light_on', target='t0', percent=50):
 
 
 async def decision_chat_turn(hass, home, *, category='light_on', percent=50, request=None,
-                             sentence='Please illuminate the desk lamp', cancel=None):
+                             sentence='Please illuminate the desk lamp', cancel=None, language='en'):
     async def respond(session, method, path, timeout, payload):
         return chat_decision_wire(payload, category, percent=percent)
     with patch.object(DecisionProvider, '_request', AsyncMock(side_effect=request or respond)) as remote:
         provider, events, messages = await chat_turn(hass, home,
-            [{'role': 'user', 'content': sentence}], cancel=cancel)
+            [{'role': 'user', 'content': sentence}], cancel=cancel, language=language)
     return provider, events, messages, remote
 
 
@@ -647,3 +647,69 @@ async def test_chat_hybrid_recovery_covers_effect_and_response_delivery(hass, hy
     call.assert_awaited_once()
     provider.stream_turn.assert_not_called()
     assert len(data.agent_recovery.records(token.id)) == 1
+
+
+@pytest.mark.parametrize('language,alias,sentence,reply', [
+    ('zh-Hans', '台灯', '打开台灯', '指令已发送。'),
+    ('es', 'Lámpara', 'enciende la lámpara', 'Orden enviada.'),
+])
+async def test_selected_language_local_chat_executes_without_a_model(hass, executing_chat, language, alias, sentence, reply):
+    from custom_components.phoenix_mcp import mcp_view
+    data, _ = executing_chat
+    await data.store.async_patch_settings(command_routing_languages=[language])
+    er.async_get(hass).async_update_entity('light.test_desk', aliases={alias})
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call,
+          patch.object(DecisionProvider, '_request') as remote):
+        provider, _, messages = await chat_turn(hass, executing_chat,
+            [{'role': 'user', 'content': sentence}], language=language)
+    assert messages[-1]['content'] == reply
+    call.assert_awaited_once_with('light', 'turn_on', {'entity_id': ['light.test_desk']}, blocking=True, return_response=False)
+    provider.stream_turn.assert_not_called()
+    remote.assert_not_called()
+
+
+@pytest.mark.parametrize('language,sentence,pending_text', [
+    ('zh-Hans', '请将台灯亮度设置为百分之三十七', '此指令需要在 Phoenix MCP 面板中审批。'),
+    ('es', 'pon la lámpara al treinta y siete por ciento', 'Esta orden requiere aprobación en el panel de Phoenix MCP.'),
+])
+@pytest.mark.parametrize('remove_language', [False, True])
+async def test_multilingual_hybrid_chat_approval_and_language_revalidation(hass, hybrid_chat, language, sentence, pending_text, remove_language):
+    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp.mesa import async_setup_mesa
+    from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
+    data, token = hybrid_chat
+    await data.store.async_patch_settings(command_routing_languages=[language], mesa_mode='enforced')
+    data.mesa = await async_setup_mesa(hass, 'enforced')
+    data.mesa.store.set('light.test_desk', SemanticProfile.from_dict('light.test_desk',
+        {'semantic_profile': {'operational_boundaries': {'control_mode': 'confirm'}}}, default_origin=MetadataOrigin.USER))
+    local = {'reason': 'no_match', 'proposal': None, 'elapsed_ms': 1, 'route': 'provider'}
+    with (patch.object(chat_routing, 'async_evaluate_command', AsyncMock(return_value=local)),
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        provider, events, messages, remote = await decision_chat_turn(hass, hybrid_chat,
+            category='light_brightness', percent=37, sentence=sentence, language=language)
+        assert pending_text in messages[-1]['content']
+        assert any(name == 'approval_required' for name, _ in events)
+        assert remote.await_count == 2
+        assert all(args.args[4]['state']['language'] == ('zh-CN' if language == 'zh-Hans' else 'es') for args in remote.await_args_list)
+        call.assert_not_called()
+        provider.stream_turn.assert_not_called()
+        record = data.store.get_pending_approvals()[0]
+        if remove_language:
+            await data.store.async_patch_settings(command_routing_languages=[])
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+    assert outcome == ('denied' if remove_language else 'allowed')
+    assert call.await_count == (0 if remove_language else 1)
+
+
+@pytest.mark.parametrize('language', ['zh-Hans', 'es', 'fr', 'unknown'])
+async def test_unselected_chat_language_skips_recognition_and_decision(hass, hybrid_chat, language):
+    data, _ = hybrid_chat
+    await data.store.async_patch_settings(command_routing_languages=[])
+    with (patch.object(chat_routing, 'async_evaluate_command') as local,
+          patch.object(DecisionProvider, '_request') as remote):
+        provider, _, _ = await chat_turn(hass, hybrid_chat, language=language)
+    local.assert_not_called()
+    remote.assert_not_called()
+    provider.stream_turn.assert_called_once()

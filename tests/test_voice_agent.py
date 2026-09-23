@@ -631,7 +631,8 @@ def test_every_voice_template_is_reachable_from_the_modules_that_speak():
     Scans the modules that produce spoken text. voice_agent.py owns the four
     declines it answers with before the loop starts; agentcli.py owns how a turn
     that did not finish cleanly is said, which used to be English literals inside
-    async_run_voice_turn. command_execution.py owns English local command replies.
+    async_run_voice_turn. command_execution.py owns localized routed replies, and
+    chat_routing.py uses the same catalog for cancellation and authorization replies.
     Checking only voice_agent would let a new key be added
     to const and used nowhere, or a spoken sentence be hardcoded in the loop again.
     """
@@ -639,11 +640,11 @@ def test_every_voice_template_is_reachable_from_the_modules_that_speak():
     import pathlib
 
     from custom_components.phoenix_mcp import agentcli as _agentcli
-    from custom_components.phoenix_mcp import command_execution
+    from custom_components.phoenix_mcp import chat_routing, command_execution
     from custom_components.phoenix_mcp.const import VOICE_TEMPLATES
 
     used: set[str] = set()
-    for mod in (voice_agent, _agentcli, command_execution):
+    for mod in (voice_agent, _agentcli, command_execution, chat_routing):
         src = pathlib.Path(mod.__file__).read_text(encoding="utf-8")
         for call in ast.walk(ast.parse(src)):
             if (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)

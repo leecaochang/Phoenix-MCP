@@ -163,7 +163,7 @@ async def async_voice_answer(
             from .command_execution import async_execute_local_command
 
             answer = await async_execute_local_command(
-                hass, data, token, observation["proposal"], authority, _base_url(hass), include_review_links,
+                hass, data, token, observation["proposal"], authority, _base_url(hass), include_review_links, language=language,
             )
             if answer is not None:
                 return answer
@@ -181,7 +181,7 @@ async def async_voice_answer(
                 return voice_text(language, "token_unavailable")
             if decision.get("_plan") is not None:
                 return await async_execute_command_plan(
-                    hass, data, token, decision["_plan"], authority, _base_url(hass), include_review_links,
+                    hass, data, token, decision["_plan"], authority, _base_url(hass), include_review_links, language=language,
                 )
 
     provider = build_provider(cfg)

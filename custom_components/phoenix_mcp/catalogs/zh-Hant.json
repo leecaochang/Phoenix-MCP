@@ -130,7 +130,7 @@
       "versionNotFound": "未找到版本。",
       "versionResourcePairRequired": "請同時提供 resource_type 和 resource_id，或兩者都不提供以檢視最近記錄。",
       "wipeConfirmationRequired": "confirm 必須為 WIPE。",
-      "routingPreviewInvalid": "請使用有效權杖和不超過 512 個字元的英語命令。辨識時限必須是 50 至 5000 毫秒的整數。"
+      "routingPreviewInvalid": "請檢查權杖、指令語言和路由設定。"
     },
     "agentchat": {
       "answerAnyway": "仍然回答",
@@ -2007,7 +2007,9 @@
       "previewLanguage": "預覽語言",
       "languageEnglish": "英語",
       "languageChinese": "簡體中文",
-      "languageSpanish": "西班牙語"
+      "languageSpanish": "西班牙語",
+      "enabledLanguages": "自動路由語言",
+      "languagesHint": "適用於語音和新聊天的第一則文字訊息。未選取的語言使用一般供應商。未選取任何語言時暫停路由。預覽語言可獨立選取。"
     }
   },
   "voice": {
@@ -2022,6 +2024,14 @@
     "provider_error": "抱歉，{reason}。",
     "token_unavailable": "Phoenix MCP 語音智慧體的權杖已不可用。",
     "unavailable": "Phoenix MCP 語音智慧體目前不可用。",
-    "outcome_unknown": "操作可能已經執行。重試前請檢查 Home Assistant 和審批結果。請在設定 > 系統 > 修復中核實結果未知的操作。"
+    "outcome_unknown": "操作可能已經執行。重試前請檢查 Home Assistant 和審批結果。請在設定 > 系統 > 修復中核實結果未知的操作。",
+    "local_sent": "指令已傳送。",
+    "local_pending": "此指令需要在 Phoenix MCP 面板中核准。",
+    "local_review": "檢視指令",
+    "local_failed": "Phoenix MCP 未能完成此指令。",
+    "local_state": "狀態為 {state}。",
+    "local_read_failed": "Phoenix MCP 未能讀取狀態。",
+    "local_cancelled": "已取消。",
+    "local_unauthorized": "此權杖已失去授權。"
   }
 }

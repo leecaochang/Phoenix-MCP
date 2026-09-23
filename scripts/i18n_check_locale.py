@@ -78,7 +78,7 @@ KEEP_ENGLISH_SECTIONS = ("entity",)
 # can tell a decision from an oversight. Absence from the locale file IS the
 # mechanism: HA falls back per key.
 KEEP_ENGLISH: dict[str, tuple[str, ...]] = {
-    # Automatic routing stays English-only while multilingual previews are validated.
+    # Longer experimental routing guidance remains English during staged language rollout.
     "English command routing experiment": (
         "panel.routing.chatHybridHint", "panel.routing.chatMode", "panel.routing.chatExecutionHint", "panel.routing.chatObservationPaused",
         "panel.routing.chatObserve", "panel.routing.chatObserveHint",
@@ -106,8 +106,6 @@ KEEP_ENGLISH: dict[str, tuple[str, ...]] = {
         "panel.routing.decisionObservations",
         "panel.routing.mode", "panel.routing.offMode", "panel.routing.localMode",
         "panel.routing.localHint", "panel.routing.localBudgetHint",
-        "voice.local_sent", "voice.local_pending", "voice.local_review",
-        "voice.local_failed", "voice.local_state", "voice.local_read_failed",
     ),
     # NOTE (2026-07-30): the MESA enum values and the permission states
     # (READ/WRITE/DENY/INHERIT) USED to live here, on the argument

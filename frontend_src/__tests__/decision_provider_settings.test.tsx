@@ -26,8 +26,8 @@ it("keeps remote observation opt-in and sends no completion on mount", async () 
   const change = vi.fn();
   render(<DecisionProviderSettings settings={settings} onChange={change} saving={false} />);
   await screen.findByText("TypeSafe / JEV");
-  expect(screen.getByLabelText("Observe unmatched English Voice requests")).not.toBeChecked();
-  expect(screen.getByLabelText("Observe unmatched English Voice requests")).toBeDisabled();
+  expect(screen.getByLabelText("Observe unmatched Voice requests")).not.toBeChecked();
+  expect(screen.getByLabelText("Observe unmatched Voice requests")).toBeDisabled();
   expect(mocks.create).not.toHaveBeenCalled();
   expect(change).not.toHaveBeenCalled();
 });
@@ -73,8 +73,8 @@ it("pauses background observation in hybrid mode without overwriting its prefere
   render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "decision",
     voice_agent_routing_mode: "hybrid", decision_shadow_enabled: true }} onChange={change} saving={false} />);
   await screen.findByText("TypeSafe / JEV");
-  expect(screen.getByLabelText("Observe unmatched English Voice requests")).toBeDisabled();
-  expect(screen.getByLabelText("Observe unmatched English Voice requests")).toBeChecked();
+  expect(screen.getByLabelText("Observe unmatched Voice requests")).toBeDisabled();
+  expect(screen.getByLabelText("Observe unmatched Voice requests")).toBeChecked();
   expect(screen.getByText(/Background observation is paused/)).toBeTruthy();
   expect(change).not.toHaveBeenCalled();
 });

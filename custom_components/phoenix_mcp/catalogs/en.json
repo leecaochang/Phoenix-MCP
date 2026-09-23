@@ -1705,7 +1705,7 @@
       "versionNotFound": "Version not found.",
       "versionResourcePairRequired": "Provide both resource_type and resource_id, or neither for the recent feed.",
       "wipeConfirmationRequired": "confirm must be WIPE.",
-      "routingPreviewInvalid": "Use an active token and an English command of up to 512 characters. The recognition budget must be an integer from 50 to 5000 ms."
+      "routingPreviewInvalid": "Check the token, command language and routing settings."
     },
     "mesaSuggestion": {
       "baseline_note": " Prohibited matches the built-in baseline for this domain, so the authored profile makes that intent explicit; choose confirm in Review to allow agent control behind approvals instead.",
@@ -1989,14 +1989,14 @@
     },
     "routing": {
       "chatMode": "Agent Chat execution",
-      "chatExecutionHint": "English experiment for the first text message in a new chat. Supported HA intent matches run through the existing permission, MESA and approval checks without calling a model. Other requests use your selected chat provider. Approvals are queued for review. History, continuations and focus overrides keep the regular provider path.",
+      "chatExecutionHint": "Opt-in experiment for the selected languages and the first text message in a new chat. Supported HA intent matches run through the existing permission, MESA and approval checks without calling a model. Other requests use your selected chat provider. Approvals are queued for review. History, continuations and focus overrides keep the regular provider path.",
       "chatHybridHint": "Hybrid mode asks the selected decision provider about eligible local misses. It may send the message and scoped entity IDs, names, aliases and area names, which may incur usage. It sends no state values or conversation history. Category and target selection share the decision budget above. Uncertain or unsupported decisions use your chat provider before any dispatch; submitted commands are never replayed by it.",
       "chatObservationPaused": "Background Chat observation is paused while Chat execution is enabled. Its saved preference is unchanged.",
       "chatObserve": "Observe command routing in Agent Chat",
-      "chatObserveHint": "When Agent Chat execution is Off, this experiment observes only the first English text message in a new chat. The selected chat provider still handles every turn and may operate devices normally. Local misses send the message alone to the selected decision account in the background, which may incur usage. No decision account means local observation only. History, continuations and focus overrides are excluded.",
+      "chatObserveHint": "When Agent Chat execution is Off, this experiment observes only the first text message in a selected language in a new chat. The selected chat provider still handles every turn and may operate devices normally. Local misses send the message alone to the selected decision account in the background, which may incur usage. No decision account means local observation only. History, continuations and focus overrides are excluded.",
       "mode": "Voice command routing",
       "offMode": "Off: use the selected provider",
-      "localMode": "Run supported English commands locally",
+      "localMode": "Run supported commands locally",
       "localHint": "Run locally can operate devices through Phoenix permissions, approval and MESA checks without a model call. Unmatched commands use the selected provider. Observe mode always uses the provider. Test command below remains a preview.",
       "localBudgetHint": "50 to 5000 ms for recognition only. This does not limit device execution or internet requests. Adjust for your Home Assistant host.",
       "title": "Command routing experiment",
@@ -2021,8 +2021,8 @@
       "removeDecision": "Remove selected decision account",
       "decisionService": "Decision service",
       "saveDecision": "Check and save account",
-      "decisionEnable": "Observe unmatched English Voice requests",
-      "decisionPrivacy": "When Voice routing is Observe or Run locally, this sends unmatched English utterances to the decision account while your selected provider handles the request. Provider usage may be charged. No entity inventory is sent. Phoenix retains aggregate counts only; the provider has its own data policy. Off sends nothing automatically.",
+      "decisionEnable": "Observe unmatched Voice requests",
+      "decisionPrivacy": "When Voice routing is Observe or Run locally, this sends unmatched utterances in selected languages to the decision account while your selected provider handles the request. Provider usage may be charged. No entity inventory is sent. Phoenix retains aggregate counts only; the provider has its own data policy. Off sends nothing automatically.",
       "decisionBudget": "Decision request budget (ms)",
       "decisionBudgetHint": "250 to 30,000 ms for all decision requests in one turn, separate from local recognition. Adjust for your connection. Hybrid mode waits within this budget before falling back; background observation never holds up the normal reply. One decision evaluation at a time; no automatic retries.",
       "compareTargets": "Also preview a single target (shares eligible entity details)",
@@ -2034,7 +2034,7 @@
       "decisionResultHint": "Decision results are observations only. Confidence is provider-defined and is not an execution permission or a measured accuracy rate. Local matches skip the decision call.",
       "decisionElapsed": "Decision request: {ms} ms",
       "decisionObservations": "Completed Voice shadow observations: {count}",
-      "experimentHint": "Automatic Voice and Chat routing supports English only. Test command below is always a preview and also accepts Simplified Chinese and Spanish. Decision comparisons contact the selected decision provider only when you opt in.",
+      "experimentHint": "English is selected by default. Add Simplified Chinese or Spanish below to include those commands in automatic routing. Test command remains an inert preview; decision comparisons contact the selected provider only when you opt in.",
       "hybridMode": "Run locally, then use the decision provider",
       "hybridHint": "Hybrid mode requires a decision account. It tries local recognition first, then lets the decision provider propose a single light command or state query. It can operate devices through Phoenix permissions, approval and MESA checks. Local misses share your utterance and eligible entity IDs, names, aliases and area names. Provider usage may be charged. Declines and timeouts before dispatch use your regular provider.",
       "remotePreviewHint": "No local candidate was found. Nothing was executed. The decision comparison below shows whether a remote request was made and whether it suggested a candidate.",
@@ -2043,7 +2043,9 @@
       "previewLanguage": "Preview language",
       "languageEnglish": "English",
       "languageChinese": "Simplified Chinese",
-      "languageSpanish": "Spanish"
+      "languageSpanish": "Spanish",
+      "enabledLanguages": "Automatic routing languages",
+      "languagesHint": "Applies to Voice and the first text message in a new Chat. Unselected languages use your usual provider. Selecting no languages pauses routing. Preview language is independent."
     }
   },
   "notification": {
@@ -2058,12 +2060,14 @@
     "error": "Sorry, the Phoenix MCP voice agent hit an error.",
     "focus_answer_anyway": "To continue, repeat your complete request and explicitly say to answer anyway.",
     "focus_declined": "This conversation is in Home-focused mode, so I can only help with requests about your home and Home Assistant.",
+    "local_cancelled": "Cancelled.",
     "local_failed": "Phoenix MCP could not complete this command.",
     "local_pending": "This command needs approval in the Phoenix MCP panel.",
     "local_read_failed": "Phoenix MCP could not read the state.",
     "local_review": "Review command",
     "local_sent": "Command sent.",
     "local_state": "The state is {state}.",
+    "local_unauthorized": "This token is no longer authorized.",
     "not_configured": "The Phoenix MCP voice agent is not fully configured.",
     "out_of_steps": "Sorry, I ran out of steps before finishing that.",
     "outcome_unknown": "Actions may have run. Check Home Assistant and approval results before retrying. Resolve uncertain actions in Settings > System > Repairs.",

@@ -16,7 +16,15 @@
     "provider_error": "Sorry, {reason}.",
     "token_unavailable": "Het token van de Phoenix MCP-spraakagent is niet meer beschikbaar.",
     "unavailable": "De Phoenix MCP-spraakagent is momenteel niet beschikbaar.",
-    "outcome_unknown": "Acties kunnen zijn uitgevoerd. Controleer Home Assistant en de goedkeuringen voordat u het opnieuw probeert. Controleer onzekere acties via Instellingen > Systeem > Reparaties."
+    "outcome_unknown": "Acties kunnen zijn uitgevoerd. Controleer Home Assistant en de goedkeuringen voordat u het opnieuw probeert. Controleer onzekere acties via Instellingen > Systeem > Reparaties.",
+    "local_sent": "Opdracht verzonden.",
+    "local_pending": "Deze opdracht vereist goedkeuring in het Phoenix MCP-paneel.",
+    "local_review": "Opdracht beoordelen",
+    "local_failed": "Phoenix MCP kon deze opdracht niet voltooien.",
+    "local_state": "De status is {state}.",
+    "local_read_failed": "Phoenix MCP kon de status niet lezen.",
+    "local_cancelled": "Geannuleerd.",
+    "local_unauthorized": "Dit token is niet langer geautoriseerd."
   },
   "panel": {
     "shell": {
@@ -954,7 +962,7 @@
       "versionNotFound": "Versie niet gevonden.",
       "versionResourcePairRequired": "Geef zowel resource_type als resource_id op, of geen van beide voor de recente feed.",
       "wipeConfirmationRequired": "confirm moet WIPE zijn.",
-      "routingPreviewInvalid": "Gebruik een actief token en een Engelse opdracht van maximaal 512 tekens. De tijdslimiet moet een geheel getal van 50 tot 5000 ms zijn."
+      "routingPreviewInvalid": "Controleer het token, de taal van de opdracht en de routeringsinstellingen."
     },
     "wizard": {
       "accessSub": "Vouw de <code>light</code>-groep uit en kies een licht dat je kunt controleren. Selecteer <strong>W</strong> om lees- en schrijftoegang te verlenen. Ken een heel apparaat toe of vouw het uit om één entiteit te kiezen. Je kunt later meer machtigingen toevoegen.",
@@ -2021,7 +2029,9 @@
       "previewLanguage": "Taal van de voorvertoning",
       "languageEnglish": "Engels",
       "languageChinese": "Vereenvoudigd Chinees",
-      "languageSpanish": "Spaans"
+      "languageSpanish": "Spaans",
+      "enabledLanguages": "Talen voor automatische routering",
+      "languagesHint": "Geldt voor Voice en het eerste tekstbericht in een nieuwe chat. Niet-geselecteerde talen gebruiken je gebruikelijke provider. Zonder geselecteerde talen pauzeert de routering. De taal van de voorvertoning staat hier los van."
     }
   }
 }

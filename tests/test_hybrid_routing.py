@@ -318,3 +318,23 @@ async def test_hybrid_settings_require_account_and_clearing_disables_mode(hass, 
     changes, error = await _validated_settings_patch({"decision_provider_id": None}, data, hass, "rid")
     assert error is None and changes["voice_agent_routing_mode"] == "off"
     assert data.store.get_settings().decision_provider_id == account
+
+
+@pytest.mark.parametrize("language,sentence,reply", [
+    ("zh-Hans", "请将台灯亮度设置为百分之三十七", "指令已发送。"),
+    ("es", "pon la lámpara al treinta y siete por ciento", "Orden enviada."),
+])
+async def test_enabled_language_hybrid_voice_carries_language_through_dispatch(hass, hybrid_home, language, sentence, reply):
+    data, _, _, _, entity_id = hybrid_home
+    await data.store.async_patch_settings(command_routing_languages=[language])
+    local = {"reason": "no_match", "proposal": None, "elapsed_ms": 1, "route": "provider"}
+    with (patch("custom_components.phoenix_mcp.command_routing.async_evaluate_command", AsyncMock(return_value=local)),
+          patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+        answer, remote, provider = await run_voice(hass, hybrid_home, sentence=sentence, language=language,
+                                                 category="light_brightness", percent=37)
+    assert answer == reply
+    assert remote.await_count == 2
+    assert all(args.args[4]["state"]["language"] == ("zh-CN" if language == "zh-Hans" else "es") for args in remote.await_args_list)
+    call.assert_awaited_once_with("light", "turn_on", {"entity_id": [entity_id], "brightness_pct": 37}, blocking=True, return_response=False)
+    provider.assert_not_called()

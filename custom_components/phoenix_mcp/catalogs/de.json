@@ -1414,7 +1414,7 @@
       "versionNotFound": "Version nicht gefunden.",
       "versionResourcePairRequired": "Geben Sie entweder resource_type und resource_id zusammen an, oder keines von beiden für den aktuellen Feed.",
       "wipeConfirmationRequired": "confirm muss WIPE sein.",
-      "routingPreviewInvalid": "Aktives Token und englischen Befehl mit höchstens 512 Zeichen verwenden. Das Zeitbudget muss eine ganze Zahl von 50 bis 5000 ms sein."
+      "routingPreviewInvalid": "Prüfe das Token, die Befehlssprache und die Routing-Einstellungen."
     },
     "approvalSummary": {
       "action.approve": "Genehmigen und ausführen",
@@ -2002,7 +2002,9 @@
       "previewLanguage": "Sprache der Vorschau",
       "languageEnglish": "Englisch",
       "languageChinese": "Vereinfachtes Chinesisch",
-      "languageSpanish": "Spanisch"
+      "languageSpanish": "Spanisch",
+      "enabledLanguages": "Sprachen für automatisches Routing",
+      "languagesHint": "Gilt für Voice und die erste Textnachricht in einem neuen Chat. Nicht ausgewählte Sprachen verwenden den üblichen Anbieter. Ohne Auswahl pausiert das Routing. Die Vorschausprache ist unabhängig."
     }
   },
   "notification": {
@@ -2022,6 +2024,14 @@
     "provider_error": "Entschuldigung, {reason}.",
     "token_unavailable": "Das Token des Phoenix-MCP-Sprachassistenten ist nicht mehr verfügbar.",
     "unavailable": "Der Phoenix-MCP-Sprachassistent ist derzeit nicht verfügbar.",
-    "outcome_unknown": "Aktionen könnten ausgeführt worden sein. Prüfen Sie Home Assistant und die Genehmigungen vor einem erneuten Versuch. Klären Sie ungewisse Aktionen unter Einstellungen > System > Reparaturen."
+    "outcome_unknown": "Aktionen könnten ausgeführt worden sein. Prüfen Sie Home Assistant und die Genehmigungen vor einem erneuten Versuch. Klären Sie ungewisse Aktionen unter Einstellungen > System > Reparaturen.",
+    "local_sent": "Befehl gesendet.",
+    "local_pending": "Dieser Befehl benötigt eine Genehmigung im Phoenix MCP-Panel.",
+    "local_review": "Befehl prüfen",
+    "local_failed": "Phoenix MCP konnte diesen Befehl nicht abschließen.",
+    "local_state": "Der Zustand ist {state}.",
+    "local_read_failed": "Phoenix MCP konnte den Zustand nicht lesen.",
+    "local_cancelled": "Abgebrochen.",
+    "local_unauthorized": "Dieses Token ist nicht mehr autorisiert."
   }
 }

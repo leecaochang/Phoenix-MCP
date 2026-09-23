@@ -249,3 +249,23 @@ it("keeps preview language independent of execution and discards results from an
   expect(screen.queryByText("Local candidate found")).toBeNull();
   expect(onChange).not.toHaveBeenCalled();
 });
+
+it("requires language opt-in independently of preview selection and disables edits while saving", async () => {
+  const onChange = vi.fn();
+  const view = render(<CommandRoutingSettings settings={settings} onChange={onChange} saving={false} />);
+  await screen.findByText("Voice");
+  const group = screen.getByRole("group", { name: "Automatic routing languages" });
+  expect(within(group).getByLabelText("English")).toBeChecked();
+  expect(within(group).getByLabelText("Simplified Chinese")).not.toBeChecked();
+  expect(within(group).getByLabelText("Spanish")).not.toBeChecked();
+  fireEvent.change(screen.getByLabelText("Preview language"), { target: { value: "zh-Hans" } });
+  expect(onChange).not.toHaveBeenCalled();
+  fireEvent.click(within(group).getByLabelText("Simplified Chinese"));
+  expect(onChange).toHaveBeenCalledExactlyOnceWith("command_routing_languages", ["en", "zh-Hans"]);
+  view.rerender(<CommandRoutingSettings settings={{ ...settings, command_routing_languages: ["en", "zh-Hans"] }} onChange={onChange} saving />);
+  expect(within(group).getByLabelText("Simplified Chinese")).toBeChecked();
+  expect(within(group).getByLabelText("Spanish")).toBeDisabled();
+  view.rerender(<CommandRoutingSettings settings={{ ...settings, command_routing_languages: [] }} onChange={onChange} saving={false} />);
+  expect(within(group).getAllByRole("checkbox").every(input => !(input as HTMLInputElement).checked)).toBe(true);
+  expect(screen.getByLabelText("Preview language")).toHaveValue("zh-Hans");
+});

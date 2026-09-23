@@ -13,7 +13,8 @@ from homeassistant.components.light import ATTR_SUPPORTED_COLOR_MODES, brightnes
 from homeassistant.core import HomeAssistant
 
 from .const import (
-    COMMAND_ROUTING_INTENTS, COMMAND_ROUTING_TARGET_SLOTS, COMMAND_ROUTING_PREVIEW_LANGUAGES,
+    COMMAND_ROUTING_INTENTS, COMMAND_ROUTING_TARGET_SLOTS, COMMAND_ROUTING_LANGUAGES,
+    COMMAND_ROUTING_DEFAULT_LANGUAGES, COMMAND_ROUTING_LANGUAGE_ALIASES,
     MAX_SEARCH_QUERY_LEN,
 )
 from .intent_recognition import RecognitionUnavailable, SentenceTriggerMatch, async_recognize
@@ -167,13 +168,17 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant) -> tuple[str
     return "supported", proposal
 
 
-def routing_language(language: object, *, preview: bool = False) -> str | None:
-    """Keep multilingual admission confined to explicit administrator previews."""
+def routing_language(language: object, *, preview: bool = False,
+                     enabled: list[str] | tuple[str, ...] = COMMAND_ROUTING_DEFAULT_LANGUAGES) -> str | None:
+    """Admit only selected routing languages, without an unknown-to-English fallback."""
     if not isinstance(language, str):
         return None
     if preview:
-        return COMMAND_ROUTING_PREVIEW_LANGUAGES.get(language)
-    return "en" if language.lower().split("-", 1)[0] == "en" else None
+        return COMMAND_ROUTING_LANGUAGES.get(language)
+    lowered = language.lower()
+    base = lowered.split("-", 1)[0]
+    canonical = base if base in ("en", "es") else COMMAND_ROUTING_LANGUAGE_ALIASES.get(lowered)
+    return COMMAND_ROUTING_LANGUAGES[canonical] if canonical in enabled and canonical in COMMAND_ROUTING_LANGUAGES else None
 
 
 async def async_evaluate_command(
@@ -199,7 +204,7 @@ async def async_evaluate_command(
     if (not isinstance(sentence, str) or not sentence.strip()
             or len(sentence) > MAX_SEARCH_QUERY_LEN):
         return outcome("invalid_input")
-    recognition_language = routing_language(language, preview=preview)
+    recognition_language = routing_language(language, preview=preview, enabled=authority.settings.command_routing_languages)
     if recognition_language is None:
         return outcome("unsupported_language")
     runtime = data.command_routing

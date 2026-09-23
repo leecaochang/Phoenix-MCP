@@ -1616,6 +1616,8 @@ NOTIFICATION_TEMPLATES: dict[str, str] = {
 # a security control: naming it would announce the gateway's state to anyone
 # within earshot of the satellite.
 VOICE_TEMPLATES: dict[str, str] = {
+    "local_cancelled": "Cancelled.",
+    "local_unauthorized": "This token is no longer authorized.",
     "local_sent": "Command sent.",
     "local_pending": "This command needs approval in the Phoenix MCP panel.",
     "local_review": "Review command",
@@ -1649,11 +1651,13 @@ VOICE_TEMPLATES: dict[str, str] = {
     ),
 }
 
-# English-only command routing; execution remains opt-in.
+# Command routing defaults to English; execution remains opt-in.
 COMMAND_ROUTING_MODES = frozenset({"off", "local_shadow", "local", "hybrid"})
 CHAT_COMMAND_ROUTING_MODES = frozenset({"off", "local", "hybrid"})
-# Canonical preview tags map to the HA sentence variant; automatic routing stays English.
-COMMAND_ROUTING_PREVIEW_LANGUAGES = {"en": "en", "zh-Hans": "zh-CN", "es": "es"}
+# Canonical routing tags map to the HA sentence variant; previews use the same set.
+COMMAND_ROUTING_LANGUAGES = {"en": "en", "zh-Hans": "zh-CN", "es": "es"}
+COMMAND_ROUTING_DEFAULT_LANGUAGES = ("en",)
+COMMAND_ROUTING_LANGUAGE_ALIASES = {"zh-hans": "zh-Hans", "zh-cn": "zh-Hans"}
 COMMAND_ROUTING_PLAN_KEY = "_phoenix_command_route"
 COMMAND_ROUTING_TIMEOUT_DEFAULT_MS = 500
 COMMAND_ROUTING_TIMEOUT_MIN_MS = 50
