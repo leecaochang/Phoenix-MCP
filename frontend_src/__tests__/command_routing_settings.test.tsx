@@ -30,7 +30,7 @@ it("previews explicitly and changes Voice routing only on request", async () => 
   preview.mockResolvedValue(candidate);
   fireEvent.click(screen.getByText("Test command"));
   await screen.findByText("Local candidate found");
-  expect(preview).toHaveBeenCalledWith("t", "turn on desk lamp", false);
+  expect(preview).toHaveBeenCalledWith("t", "turn on desk lamp", false, false);
   expect(screen.getByText(/Nothing was executed/)).toBeTruthy();
 });
 
@@ -100,6 +100,49 @@ it("requires an explicit choice before sending a preview to the decision account
   fireEvent.change(screen.getByLabelText("Command in English"), { target: { value: "light up the desk" } });
   fireEvent.click(screen.getByText("Test command"));
   await screen.findByText(/Decision results are observations only/);
-  expect(preview).toHaveBeenCalledWith("t", "light up the desk", true);
+  expect(preview).toHaveBeenCalledWith("t", "light up the desk", true, false);
   expect(screen.getByText(/Nothing was executed/)).toBeTruthy();
+});
+
+it("asks separately before sharing target metadata and shows the inert selection", async () => {
+  preview.mockResolvedValue({ ...candidate, route: "provider", proposal: null, reason: "no_match",
+    decision_shadow: { reason: "observed", decision: { choice: "light_on", confidence: 0.8 }, executed: false, elapsed_ms: 600,
+      target_selection: { reason: "target_selected", entity_id: "light.desk", elapsed_ms: 300 } },
+  });
+  const props = { settings: { ...settings, decision_provider_id: "decision" }, onChange: vi.fn(), saving: false };
+  const { rerender } = render(<CommandRoutingSettings {...props} />);
+  await screen.findByText("Voice");
+  expect(screen.queryByLabelText(/Also preview a single target/)).toBeNull();
+  fireEvent.click(screen.getByLabelText(/Also compare local misses/));
+  const targets = screen.getByLabelText(/Also preview a single target/);
+  expect(targets).not.toBeChecked();
+  expect(screen.getByText(/No state values or other attributes are sent/)).toBeTruthy();
+  fireEvent.click(targets);
+  fireEvent.change(screen.getByLabelText("Command in English"), { target: { value: "light up my desk" } });
+  fireEvent.click(screen.getByText("Test command"));
+  await screen.findByText("Suggested target:");
+  expect(screen.getByText("light.desk")).toBeTruthy();
+  expect(screen.getByText(/Target selection is a preview only/)).toBeTruthy();
+  expect(preview).toHaveBeenCalledWith("t", "light up my desk", true, true);
+  rerender(<CommandRoutingSettings {...props} settings={{ ...props.settings, decision_provider_id: "new" }} />);
+  expect(screen.queryByText("Suggested target:")).toBeNull();
+  expect(screen.getByLabelText(/Also compare local misses/)).not.toBeChecked();
+  fireEvent.click(screen.getByLabelText(/Also compare local misses/));
+  expect(screen.getByLabelText(/Also preview a single target/)).not.toBeChecked();
+});
+
+it("discards target results if metadata sharing is disabled during a request", async () => {
+  let resolve!: (value: unknown) => void;
+  preview.mockReturnValue(new Promise(done => { resolve = done; }));
+  render(<CommandRoutingSettings settings={{ ...settings, decision_provider_id: "decision" }} onChange={vi.fn()} saving={false} />);
+  await screen.findByText("Voice");
+  fireEvent.click(screen.getByLabelText(/Also compare local misses/));
+  fireEvent.click(screen.getByLabelText(/Also preview a single target/));
+  fireEvent.change(screen.getByLabelText("Command in English"), { target: { value: "light up my desk" } });
+  fireEvent.click(screen.getByText("Test command"));
+  fireEvent.click(screen.getByLabelText(/Also compare local misses/));
+  await act(async () => resolve({ ...candidate, decision_shadow: { target_selection: { entity_id: "light.desk" } } }));
+  expect(screen.queryByText("Suggested target:")).toBeNull();
+  fireEvent.click(screen.getByLabelText(/Also compare local misses/));
+  expect(screen.getByLabelText(/Also preview a single target/)).not.toBeChecked();
 });

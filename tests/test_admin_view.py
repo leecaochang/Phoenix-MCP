@@ -2950,6 +2950,8 @@ async def test_command_preview_requires_admin(authenticated, admin, status):
     {"token_id": [], "sentence": "x"}, {"token_id": "t", "sentence": " "},
     {"token_id": "t", "sentence": "x" * 513},
     {"token_id": "t", "sentence": "x", "language": "fr"},
+    {"token_id": "t", "sentence": "x", "targets": True},
+    {"token_id": "t", "sentence": "x", "decision": True, "targets": "true"},
 ])
 async def test_command_preview_rejects_bad_shapes(body):
     view = PhoenixAdminCommandPreviewView()
@@ -2995,3 +2997,26 @@ async def test_routing_settings_validation(patch_body, accepted):
     assert (error is None) == accepted
     if accepted:
         assert patchable == patch_body
+
+
+@pytest.mark.parametrize("targets", [False, True])
+async def test_command_preview_target_opt_in_and_authority_recheck(hass, token_store, targets):
+    token, _ = await token_store.async_create_token("preview_targets", "admin")
+    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+    hass.data[DOMAIN] = data
+    view = PhoenixAdminCommandPreviewView()
+    view.hass = hass
+    async def decision(*args, **kwargs):
+        assert kwargs["targets"] is targets
+        token.revoked = True
+        return {"reason": "observed", "target_selection": {"entity_id": "light.private"}}
+    with (patch("custom_components.phoenix_mcp.command_routing.async_recognize", AsyncMock(return_value=None)),
+          patch("custom_components.phoenix_mcp.decision_shadow.async_preview_decision", side_effect=decision) as compare):
+        response = await view.post(_make_admin_request(body=json.dumps({
+            "token_id": token.id, "sentence": "light up my desk", "decision": True, "targets": targets,
+        }).encode()))
+    compare.assert_awaited_once()
+    body = json.loads(response.text)
+    assert body["reason"] == "authority_changed"
+    assert "decision_shadow" not in body and body["proposal"] is None
+    assert "light.private" not in response.text

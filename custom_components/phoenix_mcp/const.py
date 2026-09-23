@@ -1674,3 +1674,12 @@ DECISION_ROUTE_CHOICES = {
 }
 
 DECISION_PROVIDERS = frozenset({"typesafe", "systemone", "classifier"})
+DECISION_TARGET_INTENTS = {
+    "light_on": "HassTurnOn", "light_off": "HassTurnOff",
+    "light_brightness": "HassLightSet", "state_query": "HassGetState",
+}
+# Leave one of the common classifier format's 50 choices for declining.
+DECISION_MAX_TARGETS = 49
+DECISION_MAX_TARGET_BYTES = 16384
+DECISION_MAX_TARGET_TEXT = 256
+DECISION_MAX_TARGET_ALIASES = 8

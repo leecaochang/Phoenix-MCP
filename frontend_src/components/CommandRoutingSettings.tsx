@@ -17,6 +17,7 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
   const [budget, setBudget] = useState(String(settings.command_routing_timeout_ms ?? 500));
   const [result, setResult] = useState<CommandRoutePreview | null>(null);
   const [compare, setCompare] = useState(false);
+  const [targets, setTargets] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const generation = useRef(0);
@@ -34,7 +35,7 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
     setBusy(false);
   }, [settings]);
 
-  useEffect(() => { setCompare(false); }, [settings.decision_provider_id]);
+  useEffect(() => { setCompare(false); setTargets(false); }, [settings.decision_provider_id]);
 
   function invalidate() {
     generation.current++;
@@ -49,7 +50,7 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
     setError("");
     setResult(null);
     try {
-      const next = await api.previewCommandRoute(tokenId, sentence, compare);
+      const next = await api.previewCommandRoute(tokenId, sentence, compare, compare && targets);
       if (generation.current === current) setResult(next);
     } catch {
       if (generation.current === current) setError(t("routing.failed"));
@@ -100,8 +101,17 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
       <div className="toggle-row">
         <label htmlFor="routing-compare">{t("routing.compareDecision")}</label>
         <input id="routing-compare" type="checkbox" checked={compare} disabled={!settings.decision_provider_id || saving}
-          onChange={e => { invalidate(); setCompare(e.target.checked); }} />
+          onChange={e => { invalidate(); setCompare(e.target.checked); setTargets(false); }} />
       </div>
+      {compare && <>
+        <div className="toggle-row">
+          <label htmlFor="routing-targets">{t("routing.compareTargets")}</label>
+          <input id="routing-targets" type="checkbox" checked={targets} disabled={saving}
+            aria-describedby="routing-targets-hint"
+            onChange={e => { invalidate(); setTargets(e.target.checked); }} />
+        </div>
+        <p id="routing-targets-hint" className="agentcli-settings-hint">{t("routing.targetsPrivacy")}</p>
+      </>}
       <div className="toggle-row">
         <button className="btn btn-primary" type="submit" disabled={busy || !tokenId || !sentence.trim() || saving}>
           {busy ? t("common.loading") : t("routing.test")}
@@ -120,6 +130,12 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
       {result.decision_shadow && <>
         <p>{t("routing.decisionResultHint")}</p>
         <p>{t("routing.decisionElapsed", { ms: localeNumber(result.decision_shadow.elapsed_ms) })}</p>
+        {result.decision_shadow.target_selection && <>
+          <p>{t("routing.targetResultHint")}</p>
+          {result.decision_shadow.target_selection.entity_id
+            ? <p>{t("routing.selectedTarget")} <code>{result.decision_shadow.target_selection.entity_id}</code></p>
+            : <p>{t("routing.noSelectedTarget")}</p>}
+        </>}
       </>}
       {result.decision_observations && <p>{t("routing.decisionObservations", { count: localeNumber(result.decision_observations.observations) })}</p>}
       <details><summary>{t("routing.details")}</summary><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{JSON.stringify({ reason: result.reason, proposal: result.proposal, decision: result.decision_shadow, decision_observations: result.decision_observations }, null, 2)}</pre></details>

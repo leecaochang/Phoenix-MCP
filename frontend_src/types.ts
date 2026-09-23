@@ -773,6 +773,12 @@ export interface DecisionObservation {
   executed: false;
   elapsed_ms: number;
   decision: { choice: string; confidence: number; probabilities: Record<string, number>; model: string } | null;
+  target_selection?: {
+    reason: string;
+    entity_id: string | null;
+    decision: DecisionObservation["decision"];
+    elapsed_ms: number;
+  };
 }
 export interface DecisionSummary {
   observations: number;

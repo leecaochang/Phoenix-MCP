@@ -2341,11 +2341,12 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
             return body
         sentence = body.get("sentence")
         token_id = body.get("token_id")
-        if (set(body) - {"token_id", "sentence", "language", "decision"}
+        if (set(body) - {"token_id", "sentence", "language", "decision", "targets"}
                 or not isinstance(sentence, str) or not sentence.strip()
                 or len(sentence) > MAX_SEARCH_QUERY_LEN
                 or not isinstance(token_id, str)
-                or body.get("language", "en") != "en" or type(body.get("decision", False)) is not bool):
+                or body.get("language", "en") != "en" or type(body.get("decision", False)) is not bool
+                or type(body.get("targets", False)) is not bool or (body.get("targets") and not body.get("decision"))):
             return _err("invalid_request", "Invalid command preview request.", 400, rid,
                         key="routingPreviewInvalid")
         token = data.store.get_token_by_id(token_id)
@@ -2357,7 +2358,8 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
         result = await async_evaluate_command(self.hass, data, token, sentence, "en")
         if body.get("decision"):
             from .decision_shadow import async_preview_decision
-            result["decision_shadow"] = await async_preview_decision(self.hass, data, token, sentence, "en", result)
+            result["decision_shadow"] = await async_preview_decision(
+                self.hass, data, token, sentence, "en", result, targets=body.get("targets", False))
         if authority.current(self.hass) is None:
             result = {"route": "provider", "reason": "authority_changed", "proposal": None,
                       "executed": False, "elapsed_ms": result["elapsed_ms"]}
