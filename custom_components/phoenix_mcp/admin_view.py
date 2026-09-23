@@ -2229,7 +2229,7 @@ async def _validated_settings_patch(
         if provider_store.resolve(patchable["decision_provider_id"], purpose="decision") is None:
             return {}, _err("invalid_request", "Choose a decision provider account.", 400, rid,
                             key="configuredProviderRequired", params={"field": "decision_provider_id"})
-    if patchable.get("decision_shadow_enabled"):
+    if patchable.get("decision_shadow_enabled") or patchable.get("voice_agent_routing_mode") == "hybrid":
         account = patchable.get("decision_provider_id", data.store.get_settings().decision_provider_id)
         from .agentcli import _get_secret_store
         provider_store = await _get_secret_store(hass)
@@ -2238,6 +2238,8 @@ async def _validated_settings_patch(
                             key="configuredProviderRequired", params={"field": "decision_provider_id"})
     if "decision_provider_id" in patchable and patchable["decision_provider_id"] is None:
         patchable["decision_shadow_enabled"] = False
+        if data.store.get_settings().voice_agent_routing_mode == "hybrid":
+            patchable.setdefault("voice_agent_routing_mode", "off")
     return patchable, None
 
 

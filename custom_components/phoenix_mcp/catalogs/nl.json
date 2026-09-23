@@ -2004,7 +2004,6 @@
     },
     "routing": {
       "title": "Experiment met opdrachtroutering",
-      "hint": "Alleen Engelse opdrachten. Test herkenning zonder opdrachten uit te voeren of een AI-provider te benaderen.",
       "observe": "Opdrachten van de spraakagent observeren",
       "budget": "Tijdslimiet voor herkenning (ms)",
       "token": "Tokenbereik",

@@ -11,7 +11,7 @@ from typing import Any
 from .agent_recovery import RecoveryRequired, dispatch_agent_tool, recovery_turn
 from .audit import generate_request_id
 from .command_routing import RoutingAuthority
-from .const import COMMAND_ROUTING_PLAN_KEY, VOICE_AGENT_CLIENT_IP
+from .const import COMMAND_ROUTING_PLAN_KEY, VOICE_AGENT_CLIENT_IP, DECISION_TARGET_INTENTS
 from .device_semantics import device_registry_snapshot
 from .helpers import voice_text
 from .policy_engine import Permission, resolve
@@ -54,6 +54,7 @@ def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str) -> s
         "registry_id": entry.id, "unique_id": entry.unique_id, "platform": entry.platform,
         "config_entry_id": entry.config_entry_id, "device_id": entry.device_id,
         "area_id": entry.area_id, "aliases": sorted(entry.aliases, key=str),
+        "resolved_aliases": er.async_get_entity_aliases(hass, entry),
         "name": entry.name, "original_name": entry.original_name,
         "device_area": devices.effective_area_id(entry.device_id),
         "device_parent": devices.parent_id(entry.device_id),
@@ -81,17 +82,33 @@ def _capture_plan(hass: Any, data: Any, token: Any, proposal: dict) -> dict | No
             "token_version": token.settings_version, "settings": _digest(data.store.get_settings().to_dict())}
 
 
+def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
+    if "decision_category" not in plan:
+        return True
+    from .agentcli import decision_account_fingerprint
+    from .decision_targets import capture_targets
+
+    settings = data.store.get_settings()
+    category = plan["decision_category"]
+    return bool(settings.voice_agent_routing_mode == "hybrid" and settings.decision_provider_id
+                and DECISION_TARGET_INTENTS.get(category) == plan["proposal"]["intent"]
+                and plan.get("decision_account") is not None
+                and decision_account_fingerprint(hass, settings.decision_provider_id) == plan["decision_account"]
+                and capture_targets(hass, token, category).digest() == plan.get("decision_catalog"))
+
+
 def plan_is_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
     """Recheck identity, scope, availability, capabilities and configuration."""
     try:
         settings = data.store.get_settings()
         proposal = plan["proposal"]
         return bool(
-            settings.voice_agent_enabled and settings.voice_agent_routing_mode == "local"
+            settings.voice_agent_enabled and settings.voice_agent_routing_mode in ("local", "hybrid")
             and settings.voice_agent_token_id == token.id
             and token.is_valid() and token.id == plan["token_id"]
             and token.settings_version == plan["token_version"]
             and _digest(settings.to_dict()) == plan["settings"]
+            and _decision_plan_current(plan, hass, data, token)
             and proposal["entity_ids"] and set(proposal["entity_ids"]) == set(plan["fingerprints"])
             and all(plan["fingerprints"][eid] is not None and
                     _target_fingerprint(hass, token, eid, proposal["intent"]) == plan["fingerprints"][eid]
@@ -217,6 +234,13 @@ async def async_execute_local_command(hass: Any, data: Any, token: Any, proposal
         return None
     if plan is None:
         return None
+    return await async_execute_command_plan(hass, data, token, plan, authority, base_url, include_review_links)
+
+
+async def async_execute_command_plan(hass: Any, data: Any, token: Any, plan: dict,
+                                      authority: RoutingAuthority, base_url: str,
+                                      include_review_links: bool = False) -> str:
+    """Consume the exact frozen plan; never replan or fall back after this boundary."""
     try:
         reply = await _run_local_command(hass, data, token, plan, authority, base_url, include_review_links)
         return reply.text

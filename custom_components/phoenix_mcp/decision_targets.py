@@ -1,4 +1,4 @@
-"""Build bounded, scoped target snapshots for inert decision-provider previews."""
+"""Build bounded, scoped decision catalogs for previews and guarded Voice plans."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -7,7 +7,7 @@ from typing import Any
 
 from homeassistant.helpers import area_registry as ar, entity_registry as er
 
-from .command_execution import _target_fingerprint
+from .command_execution import _target_fingerprint, _digest
 from .const import (
     DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES, DECISION_MAX_TARGET_TEXT,
     DECISION_MAX_TARGET_ALIASES, DECISION_TARGET_INTENTS,
@@ -23,6 +23,10 @@ class TargetSnapshot:
 
     targets: dict[str, dict]
     fingerprints: dict[str, str]
+
+    def digest(self) -> str:
+        """Only this irreversible catalog fingerprint may survive in an approval."""
+        return _digest({"targets": self.targets, "fingerprints": self.fingerprints})
 
 
 def capture_targets(hass: Any, token: Any, category: str) -> TargetSnapshot:

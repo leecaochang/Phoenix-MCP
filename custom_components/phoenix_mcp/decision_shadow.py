@@ -9,8 +9,8 @@ from typing import Any
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .command_routing import RoutingAuthority
-from .const import MAX_SEARCH_QUERY_LEN
-from .decision_provider import DecisionError, DecisionProvider
+from .const import MAX_SEARCH_QUERY_LEN, DECISION_TARGET_INTENTS
+from .decision_provider import DecisionError, DecisionProvider, confident_choice
 
 
 @dataclass
@@ -34,12 +34,13 @@ class DecisionShadow:
             self.task.cancel()
 
     def start(self, hass: Any, data: Any, token: Any, sentence: object,
-              language: object, *, observe: bool = False, targets: bool = False) -> asyncio.Task | None:
+              language: object, *, observe: bool = False, targets: bool = False,
+              prepare: bool = False) -> asyncio.Task | None:
         if self.task is not None:
             return None
         authority = RoutingAuthority.capture(data, token)
         task = hass.async_create_background_task(
-            self._evaluate(hass, data, authority, sentence, language, targets), "phoenix_decision_shadow")
+            self._evaluate(hass, data, authority, sentence, language, targets, prepare), "phoenix_decision_shadow")
         self.task = task
 
         def done(completed: asyncio.Task) -> None:
@@ -61,8 +62,8 @@ class DecisionShadow:
         return task
 
     async def _evaluate(self, hass: Any, data: Any, authority: RoutingAuthority,
-                        sentence: object, language: object, targets: bool = False) -> dict:
-        from .agentcli import _get_secret_store, PROVIDER_DEFINITIONS
+                        sentence: object, language: object, targets: bool = False, prepare: bool = False) -> dict:
+        from .agentcli import _get_secret_store, PROVIDER_DEFINITIONS, decision_account_fingerprint
 
         started = monotonic()
         def result(reason: str, decision: dict | None = None) -> dict:
@@ -78,6 +79,9 @@ class DecisionShadow:
         try:
             store = await _get_secret_store(hass)
             settings = data.store.get_settings()
+            if prepare and (not targets or settings.voice_agent_routing_mode != "hybrid"
+                            or not settings.voice_agent_enabled or settings.voice_agent_token_id != authority.token_id):
+                return result("not_enabled")
             account = settings.decision_provider_id
             cfg = store.resolve(account, purpose="decision") if account else None
             if cfg is None or not cfg.model:
@@ -94,10 +98,18 @@ class DecisionShadow:
                 if not targets:
                     return result("observed", answer)
                 selection = await self._select_target(hass, authority, provider, session, sentence.strip(),
-                                                      answer, settings.decision_timeout_ms)
+                                                      answer, settings.decision_timeout_ms, prepare=prepare)
                 if (authority.current(hass) is None or store.resolve(account, purpose="decision") != cfg):
                     return result("authority_changed")
-                return {**result("observed", answer), "target_selection": selection}
+                plan = selection.pop("_plan", None)
+                observation = {**result("observed", answer), "target_selection": selection}
+                if plan is not None:
+                    fingerprint = decision_account_fingerprint(hass, account)
+                    if fingerprint is None:
+                        return result("authority_changed")
+                    plan["decision_account"] = fingerprint
+                    observation["_plan"] = plan
+                return observation
         except DecisionError as error:
             return result(str(error))
         except TimeoutError:
@@ -107,7 +119,8 @@ class DecisionShadow:
             return result("unavailable")
 
     async def _select_target(self, hass: Any, authority: RoutingAuthority, provider: DecisionProvider,
-                             session: Any, sentence: str, category: dict, timeout_ms: int) -> dict:
+                             session: Any, sentence: str, category: dict, timeout_ms: int,
+                             *, prepare: bool = False) -> dict:
         from .decision_targets import capture_targets
 
         started = monotonic()
@@ -117,6 +130,8 @@ class DecisionShadow:
 
         if category["choice"] == "provider":
             return result("provider_fallback")
+        if not confident_choice(category):
+            return result("low_probability")
         token = authority.current(hass)
         if token is None:
             return result("authority_changed")
@@ -139,18 +154,36 @@ class DecisionShadow:
                 return result("target_declined", decision=answer)
             if sum(value == answer["probabilities"][selected] for value in answer["probabilities"].values()) != 1:
                 return result("ambiguous_target", decision=answer)
-            return result("target_selected", snapshot.targets[selected]["entity_id"], answer)
+            if not confident_choice(answer):
+                return result("low_probability", decision=answer)
+            entity_id = snapshot.targets[selected]["entity_id"]
+            proposal: dict[str, Any] = {"intent": DECISION_TARGET_INTENTS[category["choice"]], "entity_ids": [entity_id]}
+            if category["choice"] == "light_brightness":
+                percent = answer.get("brightness_pct")
+                if type(percent) is not int or not 0 <= percent <= 100:
+                    return result("brightness_declined", decision=answer)
+                proposal["brightness_pct"] = percent
+            selection = {**result("target_selected", entity_id, answer), "proposal": proposal}
+            if prepare:
+                from .command_execution import _capture_plan
+                plan = _capture_plan(hass, authority.data, token, proposal)
+                if plan is None:
+                    return result("targets_changed")
+                plan.update(decision_category=category["choice"], decision_catalog=snapshot.digest())
+                selection["_plan"] = plan
+            return selection
         except DecisionError as error:
             return result(str(error))
 
 
 async def async_preview_decision(hass: Any, data: Any, token: Any, sentence: str,
-                                 language: str, local: dict, *, targets: bool = False) -> dict:
-    """Manual previews share local-first gating and cannot dispatch an action."""
+                                 language: object, local: dict, *, targets: bool = False,
+                                 prepare: bool = False) -> dict:
+    """Evaluate local misses; only internal Voice callers can request a frozen plan."""
     if local["reason"] not in ("no_match", "unsupported", "no_target"):
         return {"reason": "local_match" if local["proposal"] else "local_unavailable",
                 "decision": None, "executed": False, "elapsed_ms": 0}
-    task = data.decision_shadow.start(hass, data, token, sentence, language, targets=targets)
+    task = data.decision_shadow.start(hass, data, token, sentence, language, targets=targets, prepare=prepare)
     if task is None:
         return {"reason": "busy", "decision": None, "executed": False, "elapsed_ms": 0}
     try:

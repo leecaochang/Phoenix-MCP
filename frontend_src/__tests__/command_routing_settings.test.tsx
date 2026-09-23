@@ -146,3 +146,34 @@ it("discards target results if metadata sharing is disabled during a request", a
   fireEvent.click(screen.getByLabelText(/Also compare local misses/));
   expect(screen.getByLabelText(/Also preview a single target/)).not.toBeChecked();
 });
+
+it("requires an account for hybrid mode without enabling it automatically", async () => {
+  const onChange = vi.fn();
+  const view = render(<CommandRoutingSettings settings={settings} onChange={onChange} saving={false} />);
+  await screen.findByText("Voice");
+  expect(screen.getByRole("option", { name: "Run locally, then use the decision provider" })).toBeDisabled();
+  view.rerender(<CommandRoutingSettings settings={{ ...settings, decision_provider_id: "decision" }} onChange={onChange} saving={false} />);
+  expect(screen.getByRole("option", { name: "Run locally, then use the decision provider" })).not.toBeDisabled();
+  expect(onChange).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText("Voice command routing"), { target: { value: "hybrid" } });
+  expect(onChange).toHaveBeenCalledWith("voice_agent_routing_mode", "hybrid");
+  expect(preview).not.toHaveBeenCalled();
+});
+
+it("shows a zero brightness proposal without implying execution or no remote usage", async () => {
+  preview.mockResolvedValue({ ...candidate, route: "provider", proposal: null, reason: "no_match",
+    decision_shadow: { reason: "observed", elapsed_ms: 600, executed: false,
+      target_selection: { reason: "target_selected", entity_id: "light.desk", elapsed_ms: 300,
+        proposal: { intent: "HassLightSet", entity_ids: ["light.desk"], brightness_pct: 0 } } },
+  });
+  render(<CommandRoutingSettings settings={{ ...settings, decision_provider_id: "decision", voice_agent_routing_mode: "hybrid" }} onChange={vi.fn()} saving={false} />);
+  await screen.findByText("Voice");
+  fireEvent.click(screen.getByLabelText(/Also compare local misses/));
+  fireEvent.click(screen.getByLabelText(/Also preview a single target/));
+  fireEvent.change(screen.getByLabelText("Command in English"), { target: { value: "zero brightness" } });
+  fireEvent.click(screen.getByText("Test command"));
+  await screen.findByText("Suggested brightness: 0%");
+  expect(screen.queryByText(/Nothing was executed or sent to a provider/)).toBeNull();
+  expect(screen.getByText(/Nothing was executed or queued for approval/)).toBeTruthy();
+  expect(preview).toHaveBeenCalledWith("t", "zero brightness", true, true);
+});

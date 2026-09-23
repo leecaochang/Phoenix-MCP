@@ -1985,7 +1985,6 @@
     },
     "routing": {
       "title": "Experimentelle Befehlsweiterleitung",
-      "hint": "Nur englische Befehle. Erkennung testen, ohne Befehle auszuführen oder einen KI-Anbieter zu kontaktieren.",
       "observe": "Befehle des Sprachassistenten beobachten",
       "budget": "Zeitbudget für die Erkennung (ms)",
       "token": "Token-Berechtigungsbereich",

@@ -61,7 +61,7 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
 
   return <section className="card" aria-labelledby="command-routing-title">
     <h3 className="card-header" id="command-routing-title">{t("routing.title")}</h3>
-    <p className="agentcli-settings-hint">{t("routing.hint")}</p>
+    <p className="agentcli-settings-hint">{t("routing.experimentHint")}</p>
     <div className="toggle-row toggle-row-stacked-control">
       <label htmlFor="routing-mode">{t("routing.mode")}</label>
       <select id="routing-mode" className="input input-auto" disabled={saving}
@@ -70,9 +70,11 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
         <option value="off">{t("routing.offMode")}</option>
         <option value="local_shadow">{t("routing.observe")}</option>
         <option value="local">{t("routing.localMode")}</option>
+        <option value="hybrid" disabled={!settings.decision_provider_id}>{t("routing.hybridMode")}</option>
       </select>
     </div>
     <p className="agentcli-settings-hint">{t("routing.localHint")}</p>
+    <p className="agentcli-settings-hint">{t("routing.hybridHint")}</p>
     <div className="toggle-row toggle-row-stacked-control">
       <label htmlFor="routing-budget">{t("routing.budget")}</label>
       <input id="routing-budget" className="input input-auto" type="number" min={50} max={5000} step={1}
@@ -123,7 +125,8 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
       <p><strong>{t(result.route === "local_candidate" ? "routing.candidate" : "routing.fallback")}</strong></p>
       <p className="agentcli-settings-hint">{t(result.route === "local_candidate"
         ? "routing.resultHint"
-        : result.reason === "no_match" ? "routing.noMatchHint" : "routing.fallbackHint")}</p>
+        : result.decision_shadow ? "routing.remotePreviewHint"
+          : result.reason === "no_match" ? "routing.noMatchHint" : "routing.fallbackHint")}</p>
       <p>{t("routing.elapsed", { ms: localeNumber(result.elapsed_ms) })}</p>
       {result.proposal && <ul>{result.proposal.entity_ids.map(id => <li key={id}><code>{id}</code></li>)}</ul>}
       <p>{t("routing.observations", { total: localeNumber(result.voice_observations.observations), candidates: localeNumber(result.voice_observations.candidates) })}</p>
@@ -135,6 +138,8 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
           {result.decision_shadow.target_selection.entity_id
             ? <p>{t("routing.selectedTarget")} <code>{result.decision_shadow.target_selection.entity_id}</code></p>
             : <p>{t("routing.noSelectedTarget")}</p>}
+          {result.decision_shadow.target_selection.proposal?.brightness_pct !== undefined &&
+            <p>{t("routing.selectedBrightness", { value: localeNumber(result.decision_shadow.target_selection.proposal.brightness_pct) })}</p>}
         </>}
       </>}
       {result.decision_observations && <p>{t("routing.decisionObservations", { count: localeNumber(result.decision_observations.observations) })}</p>}

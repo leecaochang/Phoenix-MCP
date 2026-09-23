@@ -295,7 +295,8 @@ async def test_routing_settings_persist_and_active_modes_fail_closed(token_store
     assert restored.voice_agent_routing_mode == "local_shadow"
     assert restored.command_routing_timeout_ms == 1700
     assert GlobalSettings.from_dict({}).voice_agent_routing_mode == "off"
-    assert GlobalSettings.from_dict({"voice_agent_routing_mode": "hybrid"}).voice_agent_routing_mode == "off"
+    assert GlobalSettings.from_dict({"voice_agent_routing_mode": "hybrid"}).voice_agent_routing_mode == "hybrid"
+    assert GlobalSettings.from_dict({"voice_agent_routing_mode": "future"}).voice_agent_routing_mode == "off"
 
 
 @pytest.mark.parametrize("exposed,sentence,expected", [

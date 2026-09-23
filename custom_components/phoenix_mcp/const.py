@@ -1650,7 +1650,7 @@ VOICE_TEMPLATES: dict[str, str] = {
 }
 
 # English-only Voice routing; local execution remains opt-in.
-COMMAND_ROUTING_MODES = frozenset({"off", "local_shadow", "local"})
+COMMAND_ROUTING_MODES = frozenset({"off", "local_shadow", "local", "hybrid"})
 COMMAND_ROUTING_PLAN_KEY = "_phoenix_command_route"
 COMMAND_ROUTING_TIMEOUT_DEFAULT_MS = 500
 COMMAND_ROUTING_TIMEOUT_MIN_MS = 50
@@ -1683,3 +1683,11 @@ DECISION_MAX_TARGETS = 49
 DECISION_MAX_TARGET_BYTES = 16384
 DECISION_MAX_TARGET_TEXT = 256
 DECISION_MAX_TARGET_ALIASES = 8
+# Experimental admission heuristic, not a calibrated accuracy claim.
+DECISION_MIN_CHOICE_PROBABILITY = 0.90
+DECISION_BRIGHTNESS_CHOICES = {
+    "brightness_tens": {**{str(value): f"The whole requested percentage divided by ten, rounded down, is {value}."
+                            for value in range(11)}, "none": "No explicit whole percentage from 0 to 100."},
+    "brightness_units": {**{str(value): f"The units digit of the whole requested percentage is {value}."
+                             for value in range(10)}, "none": "No explicit whole percentage from 0 to 100."},
+}

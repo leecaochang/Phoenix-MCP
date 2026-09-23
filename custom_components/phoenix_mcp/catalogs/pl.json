@@ -2024,7 +2024,6 @@
     },
     "routing": {
       "title": "Eksperymentalne kierowanie poleceń",
-      "hint": "Tylko polecenia po angielsku. Testuj rozpoznawanie bez wykonywania poleceń ani kontaktowania się z dostawcą AI.",
       "observe": "Obserwuj polecenia agenta głosowego",
       "budget": "Limit czasu rozpoznawania (ms)",
       "token": "Zakres tokenu",

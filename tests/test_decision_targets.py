@@ -296,3 +296,64 @@ async def test_default_computed_alias_uses_home_assistant_name_resolution(hass, 
     target = next(item for item in updated.targets.values() if item["entity_id"] == entry.entity_id)
     assert target["aliases"] == ["Renamed lamp"]
     assert updated != snapshot
+
+
+@pytest.mark.parametrize("protocol", ["systemone", "classifier"])
+@pytest.mark.parametrize("percent", [0, 5, 50, 99, 100])
+async def test_brightness_multi_question_http_contract(protocol, percent, socket_enabled):
+    requests = []
+    async def handler(request):
+        payload = await request.json()
+        requests.append(payload)
+        selected = {"target": "t0", "brightness_tens": str(percent // 10), "brightness_units": str(percent % 10)}
+        return web.json_response({"model": "test-model", "answers": {
+            question: {"type": "choice", **choice(selected[question], spec["criteria"])}
+            for question, spec in payload["questions"].items()}})
+    app = web.Application()
+    app.router.add_post("/" + protocol, handler)
+    async with TestServer(app) as server, ClientSession() as session:
+        cfg = agentcli.ProviderConfig("systemone", "test-model", str(server.make_url("")).rstrip("/"))
+        answer = await DecisionProvider(cfg, protocol).select_target(
+            session, "set the desk lamp to fifty percent", "light_brightness", {"t0": {"name": "Desk lamp"}}, 1000)
+    assert answer["brightness_pct"] == percent
+    assert len(requests) == 1
+    assert set(requests[0]["questions"]) == {"target", "brightness_tens", "brightness_units"}
+    assert all(len(question["criteria"]) <= 50 for question in requests[0]["questions"].values())
+
+
+@pytest.mark.parametrize("change", ["missing", "extra", "fractional", "out_of_range", "none", "low_probability", "bool"])
+async def test_brightness_answers_are_closed_and_bounded(change):
+    cfg = agentcli.ProviderConfig("typesafe", "test-model", "http://example.invalid")
+    async def request(session, method, path, timeout, payload):
+        selected = {"target": "t0", "brightness_tens": "5", "brightness_units": "0"}
+        if change == "fractional": selected["brightness_units"] = "0.5"
+        if change == "out_of_range": selected.update(brightness_tens="10", brightness_units="1")
+        if change == "none": selected["brightness_units"] = "none"
+        if change == "bool": selected["brightness_units"] = True
+        answers = {question: {"type": "choice", **choice(selected[question], spec["criteria"])}
+                   for question, spec in payload["questions"].items()}
+        if change == "missing": answers.pop("brightness_units")
+        if change == "extra": answers["instructions"] = answers["target"]
+        if change == "low_probability": answers["brightness_units"]["probabilities"].update({"0": 0.8, "none": 0.2})
+        return {"model": "test-model", "answers": answers}
+    with patch.object(DecisionProvider, "_request", AsyncMock(side_effect=request)):
+        provider = DecisionProvider(cfg, "systemone")
+        if change in ("none", "low_probability"):
+            answer = await provider.select_target(None, "brightness", "light_brightness", {"t0": {}}, 1000)
+            assert answer["brightness_pct"] is None
+        else:
+            with pytest.raises(DecisionError, match="malformed"):
+                await provider.select_target(None, "brightness", "light_brightness", {"t0": {}}, 1000)
+
+
+async def test_manual_brightness_preview_exposes_proposal_but_never_execution_plan(hass, target_home):
+    first, _ = mocks("light_brightness")
+    answer = {**choice("t0", ["t0", "none"]), "brightness_pct": 0}
+    with (first, patch.object(DecisionProvider, "select_target", AsyncMock(return_value=answer)),
+          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp") as dispatch):
+        result = await preview(hass, target_home)
+    assert result["target_selection"]["proposal"] == {
+        "intent": "HassLightSet", "entity_ids": [target_home[-1]], "brightness_pct": 0}
+    assert "_plan" not in json.dumps(result)
+    dispatch.assert_not_called()
+    assert not target_home[0].store.get_pending_approvals()

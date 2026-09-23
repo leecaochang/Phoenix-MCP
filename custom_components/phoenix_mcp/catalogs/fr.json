@@ -1985,7 +1985,6 @@
     },
     "routing": {
       "title": "Expérimentation du routage des commandes",
-      "hint": "Commandes en anglais uniquement. Testez la reconnaissance sans exécuter de commande ni contacter un fournisseur d’IA.",
       "observe": "Observer les commandes de l’agent vocal",
       "budget": "Délai maximal de reconnaissance (ms)",
       "token": "Périmètre du jeton",

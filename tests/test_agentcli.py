@@ -4259,7 +4259,8 @@ async def test_tencent_replays_reasoning_without_inventing_provider_specific_fla
 
 
 @pytest.mark.asyncio
-async def test_decision_account_admin_catalog_isolated_and_delete_clears_binding(hass, token_store):
+@pytest.mark.parametrize("mode", ["local_shadow", "hybrid"])
+async def test_decision_account_admin_catalog_isolated_and_delete_clears_binding(hass, token_store, mode):
     from custom_components.phoenix_mcp.const import DOMAIN
     from custom_components.phoenix_mcp.data import PhoenixData
     data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
@@ -4267,7 +4268,8 @@ async def test_decision_account_admin_catalog_isolated_and_delete_clears_binding
     store = agentcli.AgentCliStore(AsyncMock())
     account = await store.add('typesafe', {'api_key':'decision-private-key','model':'jev-latest'})
     chat = await store.add('deepseek', {'api_key':'chat-private-key','model':'chat'})
-    await token_store.async_patch_settings(decision_provider_id=account,decision_shadow_enabled=True)
+    await token_store.async_patch_settings(decision_provider_id=account,decision_shadow_enabled=True,
+                                          voice_agent_routing_mode=mode)
     view = agentcli.PhoenixAgentCliProvidersView(); view.hass = hass
     with patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)):
         for purpose, expected in [('conversation',[chat]), ('decision',[account])]:
@@ -4279,4 +4281,5 @@ async def test_decision_account_admin_catalog_isolated_and_delete_clears_binding
         assert (await delete.delete(_admin_request(), instance_id=account)).status == 200
     assert not token_store.get_settings().decision_shadow_enabled
     assert token_store.get_settings().decision_provider_id is None
+    assert token_store.get_settings().voice_agent_routing_mode == ("off" if mode == "hybrid" else mode)
     assert store.resolve(chat).model == 'chat'

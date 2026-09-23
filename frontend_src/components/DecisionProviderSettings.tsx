@@ -108,10 +108,11 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
     <div className="toggle-row">
       <label htmlFor="decision-shadow">{t("routing.decisionEnable")}</label>
       <input id="decision-shadow" type="checkbox" checked={settings.decision_shadow_enabled ?? false}
-        disabled={!settings.decision_provider_id || saving || busy}
+        disabled={!settings.decision_provider_id || saving || busy || settings.voice_agent_routing_mode === "hybrid"}
         onChange={e => onChange("decision_shadow_enabled", e.target.checked)} />
     </div>
     <p className="agentcli-settings-hint">{t("routing.decisionPrivacy")}</p>
+    {settings.voice_agent_routing_mode === "hybrid" && <p className="agentcli-settings-hint">{t("routing.hybridShadowHint")}</p>}
     <div className="toggle-row toggle-row-stacked-control">
       <label htmlFor="decision-budget">{t("routing.decisionBudget")}</label>
       <input id="decision-budget" className="input input-auto" type="number" min={250} max={30000} step={1}

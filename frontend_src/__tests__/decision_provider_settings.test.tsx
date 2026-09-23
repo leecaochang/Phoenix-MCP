@@ -67,3 +67,14 @@ it("does not publish an account selection after unmount", async () => {
   await act(async () => done({ instance: { id: "late" } }));
   expect(change).not.toHaveBeenCalled();
 });
+
+it("pauses background observation in hybrid mode without overwriting its preference", async () => {
+  const change = vi.fn();
+  render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "decision",
+    voice_agent_routing_mode: "hybrid", decision_shadow_enabled: true }} onChange={change} saving={false} />);
+  await screen.findByText("TypeSafe / JEV");
+  expect(screen.getByLabelText("Observe unmatched English Voice requests")).toBeDisabled();
+  expect(screen.getByLabelText("Observe unmatched English Voice requests")).toBeChecked();
+  expect(screen.getByText(/Background observation is paused/)).toBeTruthy();
+  expect(change).not.toHaveBeenCalled();
+});

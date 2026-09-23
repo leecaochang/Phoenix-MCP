@@ -2947,6 +2947,7 @@ async def test_command_preview_requires_admin(authenticated, admin, status):
 
 @pytest.mark.parametrize("body", [
     {}, {"token_id": "t", "sentence": "x", "execute": True},
+    {"token_id": "t", "sentence": "x", "decision": True, "targets": True, "prepare": True},
     {"token_id": [], "sentence": "x"}, {"token_id": "t", "sentence": " "},
     {"token_id": "t", "sentence": "x" * 513},
     {"token_id": "t", "sentence": "x", "language": "fr"},

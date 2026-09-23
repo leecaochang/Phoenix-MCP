@@ -154,7 +154,7 @@ export interface GlobalSettings {
   assist_api_supported?: boolean;
   // Phoenix MCP voice agent: Phoenix MCP registered as HA's own conversation agent, running its
   // own model on the chosen token's scope. Independent of the Assist bridge above.
-  voice_agent_routing_mode?: "off" | "local_shadow" | "local";
+  voice_agent_routing_mode?: "off" | "local_shadow" | "local" | "hybrid";
   command_routing_timeout_ms?: number;
   decision_provider_id?: string | null;
   decision_shadow_enabled?: boolean;
@@ -774,6 +774,7 @@ export interface DecisionObservation {
   elapsed_ms: number;
   decision: { choice: string; confidence: number; probabilities: Record<string, number>; model: string } | null;
   target_selection?: {
+    proposal?: CommandRoutePreview["proposal"];
     reason: string;
     entity_id: string | null;
     decision: DecisionObservation["decision"];

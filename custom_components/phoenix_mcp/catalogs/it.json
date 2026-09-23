@@ -1985,7 +1985,6 @@
     },
     "routing": {
       "title": "Esperimento di instradamento dei comandi",
-      "hint": "Solo comandi in inglese. Prova il riconoscimento senza eseguire comandi né contattare un fornitore di IA.",
       "observe": "Osserva i comandi dell’agente vocale",
       "budget": "Tempo massimo di riconoscimento (ms)",
       "token": "Ambito del token",

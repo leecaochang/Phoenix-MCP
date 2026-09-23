@@ -1985,7 +1985,6 @@
     },
     "routing": {
       "title": "Experimento de enrutamiento de órdenes",
-      "hint": "Solo órdenes en inglés. Prueba el reconocimiento sin ejecutar órdenes ni contactar con un proveedor de IA.",
       "observe": "Observar órdenes del agente de voz",
       "budget": "Tiempo máximo de reconocimiento (ms)",
       "token": "Ámbito del token",

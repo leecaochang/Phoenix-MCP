@@ -23,6 +23,7 @@ import dataclasses
 import codecs
 from contextlib import aclosing, suppress
 import functools
+import hashlib
 from datetime import datetime, timedelta, tzinfo
 import ipaddress
 import json
@@ -758,6 +759,13 @@ async def _get_secret_store(hass: HomeAssistant) -> AgentCliStore:
             inst = await AgentCliStore.async_create(hass)
             hass.data[key] = inst
         return inst
+
+
+def decision_account_fingerprint(hass: HomeAssistant, instance_id: str) -> str | None:
+    """Read an already-loaded decision account without exposing credentials in a plan."""
+    store = hass.data.get("_phoenix_agentcli_store")
+    cfg = store.resolve(instance_id, purpose="decision") if isinstance(store, AgentCliStore) else None
+    return hashlib.sha256(json.dumps(dataclasses.asdict(cfg), sort_keys=True).encode()).hexdigest() if cfg else None
 
 
 async def async_wipe_agentcli_secrets(hass: HomeAssistant) -> None:
@@ -4676,6 +4684,8 @@ class PhoenixAgentCliProviderView(PhoenixView):
                 if settings.decision_provider_id == instance_id:
                     data.decision_shadow.cancel()
                     patchable.update(decision_provider_id=None, decision_shadow_enabled=False)
+                    if settings.voice_agent_routing_mode == "hybrid":
+                        patchable["voice_agent_routing_mode"] = "off"
                 if voice_removed:
                     patchable.update(
                         voice_agent_provider_id=None,
