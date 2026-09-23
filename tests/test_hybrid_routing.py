@@ -55,10 +55,10 @@ def wire_answer(payload, category="light_on", target="t0", percent=50):
 
 
 async def run_voice(hass, home, *, category="light_on", sentence="Please illuminate my desk lamp",
-                    language="en", request=None):
+                    language="en", request=None, percent=50):
     data, *_ = home
     async def respond(session, method, path, timeout, payload):
-        return wire_answer(payload, category)
+        return wire_answer(payload, category, percent=percent)
     with (patch.object(DecisionProvider, "_request", AsyncMock(side_effect=request or respond)) as remote,
           patch.object(agentcli, "async_run_voice_turn", AsyncMock(return_value="Provider answer")) as provider):
         answer = await voice_agent.async_voice_answer(hass, data, sentence, language=language)
@@ -67,14 +67,16 @@ async def run_voice(hass, home, *, category="light_on", sentence="Please illumin
 
 @pytest.mark.parametrize("category,service,extra", [
     ("light_on", "turn_on", {}), ("light_off", "turn_off", {}),
+    ("light_brightness", "turn_on", {"brightness_pct": 0}),
     ("light_brightness", "turn_on", {"brightness_pct": 50}),
+    ("light_brightness", "turn_on", {"brightness_pct": 100}),
 ])
 async def test_two_requests_dispatch_once_and_do_not_duplicate_shadow(hass, hybrid_home, category, service, extra):
     data, token, _, _, entity_id = hybrid_home
     await data.store.async_patch_settings(decision_shadow_enabled=True)
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
-        answer, remote, provider = await run_voice(hass, hybrid_home, category=category)
+        answer, remote, provider = await run_voice(hass, hybrid_home, category=category, percent=extra.get("brightness_pct", 50))
     assert answer == "Command sent."
     assert remote.await_count == 2
     assert len(remote.await_args.args[4]["questions"]) == (3 if category == "light_brightness" else 1)
@@ -110,6 +112,7 @@ async def test_exact_local_match_spends_no_decision_request(hass, hybrid_home):
 @pytest.mark.parametrize("case,expected_calls,reason", [
     ("provider", 1, "provider_fallback"), ("decline", 2, "target_declined"),
     ("low_category", 1, "category_low_probability"), ("low_target", 2, "target_low_probability"),
+    ("low_zero_category", 1, "category_low_probability"),
     ("malformed", 1, "malformed"), ("timeout", 1, "timeout"), ("unavailable", 1, "unavailable"),
     ("non_english", 0, "unsupported_language"), ("local_timeout", 0, "local_unavailable"),
     ("trigger", 0, "local_unavailable"), ("no_scope", 1, "no_target"), ("busy", 0, "busy"),
@@ -123,10 +126,10 @@ async def test_pre_dispatch_declines_keep_regular_provider(hass, hybrid_home, ca
         if case == "malformed":
             return {"model": "test-model", "answers": {}}
         answer = wire_answer(payload, "provider" if case == "provider" else
-                             "light_brightness" if case == "brightness_declined" else "light_on",
-                             "none" if case == "decline" else "t0")
-        question = "route" if case == "low_category" else "target" if case == "low_target" else "brightness_tens"
-        if case in ("low_category", "low_target", "brightness_declined") and question in answer["answers"]:
+                             "light_brightness" if case in ("brightness_declined", "low_zero_category") else "light_on",
+                             "none" if case == "decline" else "t0", percent=0 if case == "low_zero_category" else 50)
+        question = "route" if case in ("low_category", "low_zero_category") else "target" if case == "low_target" else "brightness_tens"
+        if case in ("low_category", "low_zero_category", "low_target", "brightness_declined") and question in answer["answers"]:
             value = answer["answers"][question]
             value["probabilities"] = {key: 0.0 for key in value["probabilities"]}
             value["probabilities"][value["choice"]] = 0.8
@@ -139,6 +142,7 @@ async def test_pre_dispatch_declines_keep_regular_provider(hass, hybrid_home, ca
     with (patch("custom_components.phoenix_mcp.command_routing.async_evaluate_command", AsyncMock(return_value=local)),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, hybrid_home, request=respond,
+                                                 sentence="Set the desk lamp to 0 percent brightness" if case == "low_zero_category" else "Please illuminate my desk lamp",
                                                  language="fr" if case == "non_english" else "en")
     assert answer == "Provider answer"
     assert remote.await_count == expected_calls
@@ -199,20 +203,22 @@ async def mutate(hass, home, change):
 
 
 @pytest.mark.parametrize("change", ["none", "account", "deleted", "settings", "revoked", "scope", "name", "new_candidate", "mesa"])
-async def test_saved_decision_approval_revalidates_account_and_full_catalog(hass, hybrid_home, change):
+@pytest.mark.parametrize("percent", [0, 50, 100])
+async def test_saved_decision_approval_revalidates_account_and_full_catalog(hass, hybrid_home, change, percent):
     data, token, _, _, entity_id = hybrid_home
     await set_mesa(hass, hybrid_home, "confirm")
     with patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])):
-        answer, _, _ = await run_voice(hass, hybrid_home, category="light_brightness")
+        answer, _, _ = await run_voice(hass, hybrid_home, category="light_brightness", percent=percent)
     assert "needs approval" in answer
     record = data.store.get_pending_approvals()[0]
+    assert record["args"]["service_data"] == {"brightness_pct": percent}
     await mutate(hass, hybrid_home, change)
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], record["args"], token, hass, data)
     if change == "none":
         assert outcome == "allowed"
-        call.assert_awaited_once_with("light", "turn_on", {"entity_id": [entity_id], "brightness_pct": 50},
+        call.assert_awaited_once_with("light", "turn_on", {"entity_id": [entity_id], "brightness_pct": percent},
                                     blocking=True, return_response=False)
     else:
         assert outcome == "denied"

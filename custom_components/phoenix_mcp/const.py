@@ -1666,9 +1666,9 @@ DECISION_TIMEOUT_MIN_MS = 250
 DECISION_TIMEOUT_MAX_MS = 30000
 DECISION_MAX_RESPONSE_BYTES = 65536
 DECISION_ROUTE_CHOICES = {
-    "light_on": "One immediate, explicit request to turn on a light.",
-    "light_off": "One immediate, explicit request to turn off a light.",
-    "light_brightness": "One immediate, explicit request for an absolute light brightness.",
+    "light_on": "One immediate, explicit request to turn on one light, without a brightness setting or adjustment.",
+    "light_off": "One immediate, explicit request to turn off one light, without a brightness setting or adjustment.",
+    "light_brightness": "One immediate, explicit request to set one light to an absolute whole brightness percentage from 0 through 100, inclusive. Not a relative adjustment.",
     "state_query": "A question about the current primary state of one named entity.",
     "provider": "Anything else, including ambiguity, negation, quoted commands, deferred or conditional actions, multiple actions, comparisons, counts and general conversation.",
 }
