@@ -249,7 +249,9 @@ async def test_chat_read_uses_dispatch_and_followup_uses_provider(hass, executin
 
 
 @pytest.mark.parametrize('case', ['history', 'non_english', 'missing_language', 'blocks', 'extra_fields'])
-async def test_execution_exclusions_preserve_provider(hass, executing_chat, case):
+@pytest.mark.parametrize('mode', ['local', 'hybrid'])
+async def test_execution_exclusions_preserve_provider(hass, executing_chat, case, mode):
+    await executing_chat[0].store.async_patch_settings(agentcli_routing_mode=mode)
     messages = [{'role': 'user', 'content': 'turn on the desk lamp'}]
     language = 'en'
     if case == 'history': messages.insert(0, {'role': 'assistant', 'content': 'Earlier context'})
@@ -371,7 +373,7 @@ async def test_execution_mode_is_closed_and_default_off(hass, chat_home):
     data, _ = chat_home
     assert GlobalSettings().agentcli_routing_mode == 'off'
     assert GlobalSettings.from_dict({'agentcli_routing_mode': 'local'}).agentcli_routing_mode == 'local'
-    for invalid in ('hybrid', 'local_shadow', True, [], None):
+    for invalid in ('unknown', 'local_shadow', True, [], None):
         assert GlobalSettings.from_dict({'agentcli_routing_mode': invalid}).agentcli_routing_mode == 'off'
         _, error = await _validated_settings_patch({'agentcli_routing_mode': invalid}, data, hass, 'test')
         assert error.status == 400
@@ -414,3 +416,233 @@ async def test_cancellation_during_command_reconcile_prevents_dispatch(hass, exe
     provider.stream_turn.assert_not_called()
     dispatch.assert_not_called()
     assert events[0][1]['code'] == 'cancelled'
+
+
+@pytest.fixture
+async def hybrid_chat(executing_chat):
+    data, _ = executing_chat
+    await data.store.async_patch_settings(agentcli_routing_mode='hybrid')
+    return executing_chat
+
+
+def chat_decision_wire(payload, category='light_on', target='t0', percent=50):
+    choices = {'route': category, 'target': target,
+               'brightness_tens': str(percent // 10), 'brightness_units': str(percent % 10)}
+    return {'model': 'test-model', 'answers': {
+        question: {'type': 'choice', 'choice': choices[question], 'confidence': 0.1,
+                   'probabilities': {key: float(key == choices[question]) for key in spec['criteria']}}
+        for question, spec in payload['questions'].items()}}
+
+
+async def decision_chat_turn(hass, home, *, category='light_on', percent=50, request=None,
+                             sentence='Please illuminate the desk lamp', cancel=None):
+    async def respond(session, method, path, timeout, payload):
+        return chat_decision_wire(payload, category, percent=percent)
+    with patch.object(DecisionProvider, '_request', AsyncMock(side_effect=request or respond)) as remote:
+        provider, events, messages = await chat_turn(hass, home,
+            [{'role': 'user', 'content': sentence}], cancel=cancel)
+    return provider, events, messages, remote
+
+
+@pytest.mark.parametrize('category,percent,service', [
+    ('light_on', 50, 'turn_on'), ('light_off', 50, 'turn_off'),
+    ('light_brightness', 0, 'turn_on'), ('light_brightness', 50, 'turn_on'),
+    ('light_brightness', 100, 'turn_on'), ('state_query', 50, None),
+])
+async def test_chat_hybrid_uses_real_decision_validation_and_one_dispatch(hass, hybrid_chat, category, percent, service):
+    from custom_components.phoenix_mcp import mcp_view
+    data, token = hybrid_chat
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        provider, events, messages, remote = await decision_chat_turn(hass, hybrid_chat, category=category, percent=percent)
+    assert remote.await_count == 2
+    provider.stream_turn.assert_not_called()
+    if service:
+        extra = {'brightness_pct': percent} if category == 'light_brightness' else {}
+        call.assert_awaited_once_with('light', service, {'entity_id': ['light.test_desk'], **extra}, blocking=True, return_response=False)
+    else:
+        call.assert_not_called()
+    assert messages[-1]['content'] == ('Command sent.' if service else 'The state is off.')
+    assert events[-1] == ('done', {'stop_reason': 'end_turn'})
+    assert data.agent_recovery.records(token.id) == []
+    assert data.decision_shadow.summary()['chat_hybrid'] == {'evaluations': 1, 'reasons': {'plan_ready': 1}}
+    assert data.decision_shadow.summary()['hybrid']['evaluations'] == 0
+    assert data.decision_shadow.summary()['agent_chat']['observations'] == 0
+    assert not data.store.get_settings().voice_agent_enabled
+
+
+async def test_chat_hybrid_local_match_spends_no_decision_call(hass, hybrid_chat):
+    provider, _, messages, remote = await decision_chat_turn(hass, hybrid_chat, sentence='what is the state of the desk lamp')
+    assert messages[-1]['content'] == 'The state is off.'
+    provider.stream_turn.assert_not_called()
+    remote.assert_not_called()
+    assert hybrid_chat[0].decision_shadow.summary()['chat_hybrid']['evaluations'] == 0
+
+
+@pytest.mark.parametrize('case,calls,reason', [
+    ('provider', 1, 'provider_fallback'), ('decline', 2, 'target_declined'),
+    ('low_category', 1, 'category_low_probability'), ('low_target', 2, 'target_low_probability'),
+    ('brightness_declined', 2, 'brightness_declined'), ('malformed', 1, 'malformed'),
+    ('timeout', 1, 'timeout'), ('unavailable', 1, 'unavailable'), ('no_scope', 1, 'no_target'),
+    ('local_timeout', 0, 'local_unavailable'), ('trigger', 0, 'local_unavailable'), ('busy', 0, 'busy'),
+])
+async def test_chat_hybrid_falls_back_only_before_dispatch(hass, hybrid_chat, case, calls, reason):
+    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp.decision_provider import DecisionError
+    data, token = hybrid_chat
+    async def respond(session, method, path, timeout, payload):
+        if case in ('timeout', 'unavailable'): raise DecisionError(case)
+        if case == 'malformed': return {'model': 'test-model', 'answers': {}}
+        answer = chat_decision_wire(payload, 'provider' if case == 'provider' else
+            'light_brightness' if case == 'brightness_declined' else 'light_on',
+            'none' if case == 'decline' else 't0')
+        question = {'low_category': 'route', 'low_target': 'target', 'brightness_declined': 'brightness_tens'}.get(case)
+        if question in answer['answers']:
+            value = answer['answers'][question]
+            value['probabilities'] = {k: 0.0 for k in value['probabilities']}
+            value['probabilities'][value['choice']] = 0.8
+            value['probabilities']['provider' if question == 'route' else 'none'] = 0.2
+        return answer
+    if case == 'no_scope': token.permissions = PermissionTree()
+    busy = None
+    if case == 'busy':
+        busy = asyncio.create_task(asyncio.Event().wait())
+        data.decision_shadow.task = busy
+    local = {'route': 'provider', 'proposal': None, 'elapsed_ms': 1,
+             'reason': 'timeout' if case == 'local_timeout' else 'sentence_trigger' if case == 'trigger' else 'no_match'}
+    with (patch.object(chat_routing, 'async_evaluate_command', AsyncMock(return_value=local)),
+          patch.object(mcp_view, '_dispatch_mcp') as dispatch):
+        provider, _, _, remote = await decision_chat_turn(hass, hybrid_chat, request=respond)
+    provider.stream_turn.assert_called_once()
+    dispatch.assert_not_called()
+    assert remote.await_count == calls
+    assert data.decision_shadow.summary()['chat_hybrid'] == {'evaluations': 1, 'reasons': {reason: 1}}
+    assert not data.store.get_pending_approvals()
+    if busy: assert not busy.done() and data.decision_shadow.task is busy
+
+
+@pytest.mark.parametrize('change', ['account', 'token', 'mode', 'catalog'])
+async def test_chat_hybrid_rechecks_after_network_wait(hass, hybrid_chat, change):
+    from custom_components.phoenix_mcp import mcp_view
+    data, token = hybrid_chat
+    async def respond(session, method, path, timeout, payload):
+        if change == 'account':
+            store = await agentcli._get_secret_store(hass)
+            await store.set_model(data.store.get_settings().decision_provider_id, 'changed')
+        if change == 'token': token.revoked = True
+        if change == 'mode': await data.store.async_patch_settings(agentcli_routing_mode='off')
+        if change == 'catalog' and 'target' in payload['questions']:
+            er.async_get(hass).async_update_entity('light.test_desk', name='Changed')
+        return chat_decision_wire(payload)
+    with patch.object(mcp_view, '_dispatch_mcp') as dispatch:
+        provider, events, _, _ = await decision_chat_turn(hass, hybrid_chat, request=respond)
+    dispatch.assert_not_called()
+    if change == 'catalog':
+        provider.stream_turn.assert_called_once()
+        assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'targets_changed': 1}
+    else:
+        provider.stream_turn.assert_not_called()
+        assert events[0][0] == 'error'
+        assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'authority_changed': 1}
+
+
+@pytest.mark.parametrize('kind', ['event', 'task', 'owner'])
+async def test_chat_hybrid_cancellation_closes_owned_job_and_never_dispatches(hass, hybrid_chat, kind):
+    from custom_components.phoenix_mcp import mcp_view
+    data, _ = hybrid_chat
+    entered, closed, cancel = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    async def request(*args):
+        entered.set()
+        try: await asyncio.Event().wait()
+        finally: closed.set()
+    with patch.object(mcp_view, '_dispatch_mcp') as dispatch:
+        task = asyncio.create_task(decision_chat_turn(hass, hybrid_chat, request=request, cancel=cancel))
+        await entered.wait()
+        if kind == 'event': cancel.set()
+        if kind == 'task': task.cancel()
+        if kind == 'owner': data.decision_shadow.cancel()
+        if kind == 'task':
+            with pytest.raises(asyncio.CancelledError): await task
+        else:
+            async with asyncio.timeout(1): provider, events, _, _ = await task
+            provider.stream_turn.assert_not_called()
+            assert events[0][0] == 'error'
+            assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'cancelled': 1}
+    dispatch.assert_not_called()
+    assert closed.is_set() and data.decision_shadow.task is None
+
+
+@pytest.mark.parametrize('change', ['none', 'account', 'deleted', 'mode', 'new_candidate', 'alias'])
+async def test_chat_hybrid_saved_approval_revalidates_decision_constraints(hass, hybrid_chat, change):
+    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp.const import COMMAND_ROUTING_PLAN_KEY
+    from custom_components.phoenix_mcp.mesa import async_setup_mesa
+    from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
+    data, token = hybrid_chat
+    await data.store.async_patch_settings(mesa_mode='enforced')
+    data.mesa = await async_setup_mesa(hass, 'enforced')
+    data.mesa.store.set('light.test_desk', SemanticProfile.from_dict('light.test_desk',
+        {'semantic_profile': {'operational_boundaries': {'control_mode': 'confirm'}}}, default_origin=MetadataOrigin.USER))
+    with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
+        provider, events, _, _ = await decision_chat_turn(hass, hybrid_chat, category='light_brightness', percent=0)
+    provider.stream_turn.assert_not_called()
+    assert any(name == 'approval_required' for name, _ in events)
+    record = data.store.get_pending_approvals()[0]
+    plan = record['args'][COMMAND_ROUTING_PLAN_KEY]
+    assert plan['ingress'] == 'chat' and plan['decision_category'] == 'light_brightness'
+    assert record['args']['service_data'] == {'brightness_pct': 0}
+    assert 'secret' not in json.dumps(plan)
+    store = await agentcli._get_secret_store(hass)
+    account = data.store.get_settings().decision_provider_id
+    if change == 'account': await store.set_model(account, 'changed')
+    if change == 'deleted': await store.delete(account)
+    if change == 'mode': await data.store.async_patch_settings(agentcli_routing_mode='local')
+    if change == 'alias': er.async_get(hass).async_update_entity('light.test_desk', aliases={'New alias'})
+    if change == 'new_candidate':
+        entry = er.async_get(hass).async_get_or_create('light', 'test', 'another', original_name='Other lamp')
+        hass.states.async_set(entry.entity_id, 'off', {'supported_color_modes': ['brightness']})
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+    assert outcome == ('allowed' if change == 'none' else 'denied')
+    assert call.await_count == (1 if change == 'none' else 0)
+
+
+async def test_chat_hybrid_requires_decision_account_and_clear_disables_mode(hass, hybrid_chat):
+    data, _ = hybrid_chat
+    changes, error = await _validated_settings_patch({'agentcli_routing_mode': 'hybrid'}, data, hass, 'test')
+    assert error is None and changes == {'agentcli_routing_mode': 'hybrid'}
+    _, error = await _validated_settings_patch({'agentcli_routing_mode': 'hybrid', 'decision_provider_id': None}, data, hass, 'test')
+    assert error.status == 400
+    changes, error = await _validated_settings_patch({'decision_provider_id': None}, data, hass, 'test')
+    assert error is None and changes['agentcli_routing_mode'] == 'off'
+
+
+@pytest.mark.parametrize('failure', ['timeout', 'delivery', 'cancel_delivery'])
+async def test_chat_hybrid_recovery_covers_effect_and_response_delivery(hass, hybrid_chat, failure):
+    from custom_components.phoenix_mcp import mcp_view
+    data, token = hybrid_chat
+    cancel = asyncio.Event()
+    provider = MagicMock()
+    async def emit(name, payload):
+        if name == 'assistant_delta':
+            if failure == 'delivery': raise ConnectionResetError()
+            if failure == 'cancel_delivery': cancel.set()
+    async def respond(session, method, path, timeout, payload):
+        return chat_decision_wire(payload)
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(DecisionProvider, '_request', AsyncMock(side_effect=respond)),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        if failure == 'timeout': call.side_effect = TimeoutError()
+        kwargs = dict(hass=hass, data=data, token=token, provider=provider, session=None,
+            messages=[{'role': 'user', 'content': 'Please illuminate the desk lamp'}], options={},
+            client_ip='agentcli', base_url='http://test', emit=emit, cancel=cancel, routing_language='en')
+        if failure == 'delivery':
+            with pytest.raises(ConnectionResetError): await agentcli.async_run_agent_turn(**kwargs)
+        else:
+            await agentcli.async_run_agent_turn(**kwargs)
+        assert data.agent_recovery.blocks(token.id)
+        await agentcli.async_run_agent_turn(**{**kwargs, 'cancel': asyncio.Event()})
+    call.assert_awaited_once()
+    provider.stream_turn.assert_not_called()
+    assert len(data.agent_recovery.records(token.id)) == 1

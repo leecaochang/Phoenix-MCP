@@ -16,21 +16,23 @@ from custom_components.phoenix_mcp.decision_provider import DecisionError, Decis
 from custom_components.phoenix_mcp.decision_shadow import DecisionShadow, async_preview_decision
 
 
-def test_hybrid_counters_keep_only_allowlisted_reasons_and_reset_with_runtime():
+@pytest.mark.parametrize("chat", [False, True])
+def test_hybrid_counters_keep_only_allowlisted_reasons_and_reset_with_runtime(chat):
+    key = "chat_hybrid" if chat else "hybrid"
     shadow = DecisionShadow()
     private = {'entity_id': 'light.private', 'utterance': 'private command', 'api_key': 'private-key'}
     for index in range(100):
-        shadow.observe_hybrid({'reason': f'private-key-{index}', 'decision': private})
-    shadow.observe_hybrid({'reason': 'observed', '_plan': private})
-    shadow.observe_hybrid({'reason': 'observed', '_plan': private}, authority_changed=True)
+        shadow.observe_hybrid({'reason': f'private-key-{index}', 'decision': private}, chat=chat)
+    shadow.observe_hybrid({'reason': 'observed', '_plan': private}, chat=chat)
+    shadow.observe_hybrid({'reason': 'observed', '_plan': private}, authority_changed=True, chat=chat)
     summary = shadow.summary()
-    assert summary['hybrid'] == {'evaluations': 102, 'reasons': {
+    assert summary[key] == {'evaluations': 102, 'reasons': {
         'unavailable': 100, 'plan_ready': 1, 'authority_changed': 1,
     }}
     assert 'private' not in repr(shadow)
-    summary['hybrid']['reasons']['injected'] = 1
-    assert 'injected' not in shadow.summary()['hybrid']['reasons']
-    assert DecisionShadow().summary()['hybrid'] == {'evaluations': 0, 'reasons': {}}
+    summary[key]['reasons']['injected'] = 1
+    assert 'injected' not in shadow.summary()[key]['reasons']
+    assert DecisionShadow().summary()[key] == {'evaluations': 0, 'reasons': {}}
 
 
 def response():

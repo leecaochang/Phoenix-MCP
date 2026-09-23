@@ -25,6 +25,7 @@ class DecisionShadow:
     hybrid_reasons: dict[str, int] = field(default_factory=dict)
     chat_reasons: dict[str, int] = field(default_factory=dict)
     chat_choices: dict[str, int] = field(default_factory=dict)
+    chat_hybrid_reasons: dict[str, int] = field(default_factory=dict)
 
     def summary(self) -> dict:
         return {"observations": self.observations, "reasons": dict(self.reasons),
@@ -32,11 +33,12 @@ class DecisionShadow:
                 "mean_elapsed_ms": round(self.total_elapsed_ms / self.observations, 2)
                 if self.observations else None,
                 "hybrid": {"evaluations": sum(self.hybrid_reasons.values()), "reasons": dict(self.hybrid_reasons)},
+                "chat_hybrid": {"evaluations": sum(self.chat_hybrid_reasons.values()), "reasons": dict(self.chat_hybrid_reasons)},
                 "agent_chat": {"observations": sum(self.chat_reasons.values()),
                                "reasons": dict(self.chat_reasons), "choices": dict(self.chat_choices)}}
 
-    def observe_hybrid(self, result: dict, *, authority_changed: bool = False) -> None:
-        """Count Voice evaluations, never retain decision payloads or claim execution."""
+    def observe_hybrid(self, result: dict, *, authority_changed: bool = False, chat: bool = False) -> None:
+        """Count each ingress separately without decision payloads or execution claims."""
         reason = result["reason"]
         if authority_changed:
             reason = "authority_changed"
@@ -50,7 +52,8 @@ class DecisionShadow:
         # Only fixed internal codes may become keys; provider text is never retained.
         if not isinstance(reason, str) or reason not in DECISION_HYBRID_REASONS:
             reason = "unavailable"
-        self.hybrid_reasons[reason] = self.hybrid_reasons.get(reason, 0) + 1
+        reasons = self.chat_hybrid_reasons if chat else self.hybrid_reasons
+        reasons[reason] = reasons.get(reason, 0) + 1
 
     def cancel(self) -> None:
         if self.task is not None:
@@ -58,12 +61,12 @@ class DecisionShadow:
 
     def start(self, hass: Any, data: Any, token: Any, sentence: object,
               language: object, *, observe: bool = False, targets: bool = False,
-              prepare: bool = False, observe_chat: bool = False) -> asyncio.Task | None:
+              prepare: bool = False, observe_chat: bool = False, ingress: str = "voice") -> asyncio.Task | None:
         if self.task is not None:
             return None
         authority = RoutingAuthority.capture(data, token)
         task = hass.async_create_background_task(
-            self._evaluate(hass, data, authority, sentence, language, targets, prepare), "phoenix_decision_shadow")
+            self._evaluate(hass, data, authority, sentence, language, targets, prepare, ingress), "phoenix_decision_shadow")
         self.task = task
 
         def done(completed: asyncio.Task) -> None:
@@ -92,7 +95,7 @@ class DecisionShadow:
         return task
 
     async def _evaluate(self, hass: Any, data: Any, authority: RoutingAuthority,
-                        sentence: object, language: object, targets: bool = False, prepare: bool = False) -> dict:
+                        sentence: object, language: object, targets: bool = False, prepare: bool = False, ingress: str = "voice") -> dict:
         from .agentcli import _get_secret_store, PROVIDER_DEFINITIONS, decision_account_fingerprint
 
         started = monotonic()
@@ -109,9 +112,16 @@ class DecisionShadow:
         try:
             store = await _get_secret_store(hass)
             settings = data.store.get_settings()
-            if prepare and (not targets or settings.voice_agent_routing_mode != "hybrid"
-                            or not settings.voice_agent_enabled or settings.voice_agent_token_id != authority.token_id):
-                return result("not_enabled")
+            if prepare:
+                if ingress == "chat":
+                    enabled = settings.agentcli_routing_mode == "hybrid"
+                elif ingress == "voice":
+                    enabled = (settings.voice_agent_routing_mode == "hybrid" and settings.voice_agent_enabled
+                               and settings.voice_agent_token_id == authority.token_id)
+                else:
+                    enabled = False
+                if not targets or not enabled:
+                    return result("not_enabled")
             account = settings.decision_provider_id
             cfg = store.resolve(account, purpose="decision") if account else None
             if cfg is None or not cfg.model:
@@ -128,7 +138,7 @@ class DecisionShadow:
                 if not targets:
                     return result("observed", answer)
                 selection = await self._select_target(hass, authority, provider, session, sentence.strip(),
-                                                      answer, settings.decision_timeout_ms, prepare=prepare)
+                                                      answer, settings.decision_timeout_ms, prepare=prepare, ingress=ingress)
                 if (authority.current(hass) is None or store.resolve(account, purpose="decision") != cfg):
                     return result("authority_changed")
                 plan = selection.pop("_plan", None)
@@ -150,7 +160,7 @@ class DecisionShadow:
 
     async def _select_target(self, hass: Any, authority: RoutingAuthority, provider: DecisionProvider,
                              session: Any, sentence: str, category: dict, timeout_ms: int,
-                             *, prepare: bool = False) -> dict:
+                             *, prepare: bool = False, ingress: str = "voice") -> dict:
         from .decision_targets import capture_targets
 
         started = monotonic()
@@ -196,7 +206,7 @@ class DecisionShadow:
             selection = {**result("target_selected", entity_id, answer), "proposal": proposal}
             if prepare:
                 from .command_execution import _capture_plan
-                plan = _capture_plan(hass, authority.data, token, proposal)
+                plan = _capture_plan(hass, authority.data, token, proposal, ingress=ingress)
                 if plan is None:
                     return result("targets_changed")
                 plan.update(decision_category=category["choice"], decision_catalog=snapshot.digest())
@@ -208,19 +218,33 @@ class DecisionShadow:
 
 async def async_preview_decision(hass: Any, data: Any, token: Any, sentence: str,
                                  language: object, local: dict, *, targets: bool = False,
-                                 prepare: bool = False) -> dict:
-    """Evaluate local misses; only internal Voice callers can request a frozen plan."""
+                                 prepare: bool = False, ingress: str = "voice",
+                                 cancel: asyncio.Event | None = None) -> dict:
+    """Evaluate local misses; only internal command callers can request a frozen plan."""
     if local["reason"] not in ("no_match", "unsupported", "no_target"):
         return {"reason": "local_match" if local["proposal"] else "local_unavailable",
                 "decision": None, "executed": False, "elapsed_ms": 0}
-    task = data.decision_shadow.start(hass, data, token, sentence, language, targets=targets, prepare=prepare)
+    task = data.decision_shadow.start(hass, data, token, sentence, language, targets=targets, prepare=prepare, ingress=ingress)
     if task is None:
         return {"reason": "busy", "decision": None, "executed": False, "elapsed_ms": 0}
+    cancelled = {"reason": "cancelled", "decision": None, "executed": False, "elapsed_ms": 0}
+    waiter = asyncio.create_task(cancel.wait()) if cancel is not None else None
     try:
+        if waiter is not None:
+            await asyncio.wait({task, waiter}, return_when=asyncio.FIRST_COMPLETED)
+            if cancel is not None and cancel.is_set():
+                return cancelled
         return await task
     except asyncio.CancelledError:
         # Settings changes cancel the owned request as well as unload/caller cancellation.
         current = asyncio.current_task()
         if current is not None and current.cancelling():
             raise
-        return {"reason": "cancelled", "decision": None, "executed": False, "elapsed_ms": 0}
+        return cancelled
+    finally:
+        # Cancel only this caller's admitted job, never another ingress's busy slot.
+        if not task.done():
+            task.cancel()
+        if waiter is not None:
+            waiter.cancel()
+        await asyncio.gather(task, *([waiter] if waiter is not None else []), return_exceptions=True)

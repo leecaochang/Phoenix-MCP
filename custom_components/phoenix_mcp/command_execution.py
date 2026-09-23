@@ -91,7 +91,8 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
 
     settings = data.store.get_settings()
     category = plan["decision_category"]
-    return bool(settings.voice_agent_routing_mode == "hybrid" and settings.decision_provider_id
+    mode = settings.agentcli_routing_mode if plan.get("ingress") == "chat" else settings.voice_agent_routing_mode
+    return bool(mode == "hybrid" and settings.decision_provider_id
                 and DECISION_TARGET_INTENTS.get(category) == plan["proposal"]["intent"]
                 and plan.get("decision_account") is not None
                 and decision_account_fingerprint(hass, settings.decision_provider_id) == plan["decision_account"]
@@ -105,7 +106,7 @@ def plan_is_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
         proposal = plan["proposal"]
         ingress = plan.get("ingress", "voice")
         if ingress == "chat":
-            enabled = settings.agentcli_routing_mode == "local" and "decision_category" not in plan
+            enabled = settings.agentcli_routing_mode in ("local", "hybrid")
         elif ingress == "voice":
             enabled = (settings.voice_agent_enabled and settings.voice_agent_routing_mode in ("local", "hybrid")
                        and settings.voice_agent_token_id == token.id)
@@ -257,6 +258,15 @@ async def async_execute_chat_command(hass: Any, data: Any, token: Any, proposal:
         return None
     if plan is None:
         return None
+    return await async_execute_chat_plan(hass, data, token, plan, authority, base_url, client_ip, cancel)
+
+
+async def async_execute_chat_plan(hass: Any, data: Any, token: Any, plan: dict,
+                                  authority: RoutingAuthority, base_url: str,
+                                  client_ip: str, cancel: asyncio.Event) -> LocalCommandReply:
+    """Consume the frozen Chat plan within its outer recovery turn, without replay."""
+    if plan.get("ingress") != "chat":
+        return LocalCommandReply(voice_text("en", "token_unavailable"), "unauthorized")
     try:
         return await _dispatch_command(hass, data, token, plan, authority, base_url, True,
                                        client_ip=client_ip, cancel=cancel)

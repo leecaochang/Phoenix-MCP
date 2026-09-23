@@ -4691,8 +4691,9 @@ class PhoenixAgentCliProviderView(PhoenixView):
                 if settings.decision_provider_id == instance_id:
                     data.decision_shadow.cancel()
                     patchable.update(decision_provider_id=None, decision_shadow_enabled=False)
-                    if settings.voice_agent_routing_mode == "hybrid":
-                        patchable["voice_agent_routing_mode"] = "off"
+                    for key in ("voice_agent_routing_mode", "agentcli_routing_mode"):
+                        if getattr(settings, key) == "hybrid":
+                            patchable[key] = "off"
                 if voice_removed:
                     patchable.update(
                         voice_agent_provider_id=None,

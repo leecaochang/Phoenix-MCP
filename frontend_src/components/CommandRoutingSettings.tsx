@@ -91,20 +91,22 @@ export function CommandRoutingSettings({ settings, onChange, saving }: {
     <div className="toggle-row toggle-row-stacked-control">
       <label htmlFor="routing-chat-mode">{t("routing.chatMode")}</label>
       <select id="routing-chat-mode" className="input input-auto" disabled={saving}
-        value={settings.agentcli_routing_mode ?? "off"} aria-describedby="routing-chat-execution-hint"
+        value={settings.agentcli_routing_mode ?? "off"} aria-describedby="routing-chat-execution-hint routing-chat-hybrid-hint"
         onChange={e => { invalidate(); onChange("agentcli_routing_mode", e.target.value); }}>
         <option value="off">{t("routing.offMode")}</option>
         <option value="local">{t("routing.localMode")}</option>
+        <option value="hybrid" disabled={!settings.decision_provider_id}>{t("routing.hybridMode")}</option>
       </select>
     </div>
     <p id="routing-chat-execution-hint" className="agentcli-settings-hint">{t("routing.chatExecutionHint")}</p>
+    <p id="routing-chat-hybrid-hint" className="agentcli-settings-hint">{t("routing.chatHybridHint")}</p>
     <div className="toggle-row">
       <label htmlFor="routing-chat-shadow">{t("routing.chatObserve")}</label>
-      <input id="routing-chat-shadow" type="checkbox" disabled={saving || settings.agentcli_routing_mode === "local"}
+      <input id="routing-chat-shadow" type="checkbox" disabled={saving || (settings.agentcli_routing_mode ?? "off") !== "off"}
         checked={settings.agentcli_routing_shadow_enabled ?? false} aria-describedby="routing-chat-hint"
         onChange={e => onChange("agentcli_routing_shadow_enabled", e.target.checked)} />
     </div>
-    {settings.agentcli_routing_mode === "local" && <p className="agentcli-settings-hint">{t("routing.chatObservationPaused")}</p>}
+    {(settings.agentcli_routing_mode ?? "off") !== "off" && <p className="agentcli-settings-hint">{t("routing.chatObservationPaused")}</p>}
     <p id="routing-chat-hint" className="agentcli-settings-hint">{t("routing.chatObserveHint")}</p>
     <form onSubmit={e => { e.preventDefault(); void preview(); }}>
       <div className="toggle-row toggle-row-stacked-control">

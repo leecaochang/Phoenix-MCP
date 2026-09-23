@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { GlobalSettings } from "../types";
 
@@ -166,9 +166,9 @@ it("requires an account for hybrid mode without enabling it automatically", asyn
   const onChange = vi.fn();
   const view = render(<CommandRoutingSettings settings={settings} onChange={onChange} saving={false} />);
   await screen.findByText("Voice");
-  expect(screen.getByRole("option", { name: "Run locally, then use the decision provider" })).toBeDisabled();
+  expect(within(screen.getByLabelText("Voice command routing")).getByRole("option", { name: "Run locally, then use the decision provider" })).toBeDisabled();
   view.rerender(<CommandRoutingSettings settings={{ ...settings, decision_provider_id: "decision" }} onChange={onChange} saving={false} />);
-  expect(screen.getByRole("option", { name: "Run locally, then use the decision provider" })).not.toBeDisabled();
+  expect(within(screen.getByLabelText("Voice command routing")).getByRole("option", { name: "Run locally, then use the decision provider" })).not.toBeDisabled();
   expect(onChange).not.toHaveBeenCalled();
   fireEvent.change(screen.getByLabelText("Voice command routing"), { target: { value: "hybrid" } });
   expect(onChange).toHaveBeenCalledWith("voice_agent_routing_mode", "hybrid");
@@ -211,4 +211,24 @@ it("keeps Chat execution opt-in and pauses observation without clearing its pref
   expect(preview).not.toHaveBeenCalled();
   view.rerender(<CommandRoutingSettings settings={settings} onChange={onChange} saving />);
   expect(mode).toBeDisabled();
+});
+
+
+it("requires a decision account for Chat hybrid mode and explains shared metadata", async () => {
+  const onChange = vi.fn();
+  const view = render(<CommandRoutingSettings settings={settings} onChange={onChange} saving={false} />);
+  await screen.findByText("Voice");
+  const mode = screen.getByLabelText("Agent Chat execution");
+  const hybrid = within(mode).getByRole("option", { name: "Run locally, then use the decision provider" });
+  expect(hybrid).toBeDisabled();
+  view.rerender(<CommandRoutingSettings settings={{ ...settings, decision_provider_id: "decision" }} onChange={onChange} saving={false} />);
+  expect(hybrid).not.toBeDisabled();
+  expect(mode).toHaveValue("off");
+  expect(screen.getByText(/It sends no state values or conversation history/)).toBeTruthy();
+  fireEvent.change(mode, { target: { value: "hybrid" } });
+  expect(onChange).toHaveBeenCalledExactlyOnceWith("agentcli_routing_mode", "hybrid");
+  view.rerender(<CommandRoutingSettings settings={{ ...settings, decision_provider_id: "decision", agentcli_routing_mode: "hybrid", agentcli_routing_shadow_enabled: true }} onChange={onChange} saving={false} />);
+  expect(screen.getByLabelText("Observe command routing in Agent Chat")).toBeDisabled();
+  expect(screen.getByLabelText("Observe command routing in Agent Chat")).toBeChecked();
+  expect(preview).not.toHaveBeenCalled();
 });
