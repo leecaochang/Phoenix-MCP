@@ -1,3 +1,4 @@
+import { CommandRoutingToggle } from "./CommandRoutingToggle";
 import { useEffect, useState } from "react";
 import type { GlobalSettings, TokenRecord, AgentCliInstance } from "../types";
 import { api } from "../api";
@@ -169,6 +170,9 @@ export function VoiceAgentSettings({
           ))}
         </select>
       </div>
+
+      <CommandRoutingToggle surface="voice" mode={settings.voice_agent_routing_mode}
+        onChange={value => onChange("voice_agent_routing_mode", value)} saving={saving} />
 
       <ConversationBehaviorControls
         surface={t("settings.voiceCard")}

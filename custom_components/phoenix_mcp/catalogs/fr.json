@@ -1987,13 +1987,10 @@
     },
     "routing": {
       "providerOptions": "Les fournisseurs de décisions utilisent des choix de routage fixes, sans options de Chat telles que les niveaux de raisonnement. Actualiser les modèles vérifie leur disponibilité sans exécuter de commande et ne teste pas la précision du routage.",
-      "title": "Routage des commandes",
-      "intro": "Traite les commandes simples localement avant de solliciter votre fournisseur IA habituel. Les autorisations et approbations Phoenix restent applicables.",
-      "enableVoice": "Activer pour la voix",
-      "enableChat": "Activer pour le chat",
-      "languageHint": "Utilise la langue de la voix ou de Phoenix. Dans le chat, le routage concerne le premier message d’une nouvelle conversation.",
+      "enableVoice": "Traiter directement les commandes vocales",
+      "enableChat": "Traiter directement les commandes du chat",
       "providerSection": "Fournisseur de décisions",
-      "providerHint": "Facultatif. Sélectionner un compte autorise le routage activé à lui envoyer les commandes non reconnues et les détails des entités autorisées. Des frais d’API peuvent s’appliquer.",
+      "providerHint": "Facultatif pour traiter directement les commandes dans {voice} et {chat}. Reçoit au besoin les commandes non reconnues, les détails des entités admissibles et l’historique de conversation. Des frais d’API peuvent s’appliquer.",
       "decisionAccount": "Compte de décisions",
       "localOnly": "Local uniquement (sans fournisseur de décisions)",
       "removeAccount": "Supprimer {name}",
@@ -2002,7 +1999,8 @@
       "timeoutHint": "Accordez plus de temps aux connexions lentes. Sans décision à temps, votre fournisseur habituel traite la demande.",
       "failed": "Impossible d’enregistrer ou de charger les paramètres de routage.",
       "accountModel": "Modèle pour {name}",
-      "connectionHint": "L’URL de base est l’adresse du serveur. Ajoutez une clé API uniquement si ce serveur exige une authentification."
+      "connectionHint": "L’URL de base est l’adresse du serveur. Ajoutez une clé API uniquement si ce serveur exige une authentification.",
+      "commandHelp": "Essaie d’abord les intentions locales, puis le fournisseur de décisions facultatif. Les autres demandes passent par votre fournisseur d’IA habituel. Les autorisations et approbations restent applicables."
     }
   },
   "notification": {

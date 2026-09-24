@@ -2015,13 +2015,10 @@
     },
     "routing": {
       "providerOptions": "Beslissingsproviders gebruiken vaste routeringskeuzes, zonder Chat-opties zoals denkniveaus. Modellen vernieuwen controleert de beschikbaarheid zonder een opdracht uit te voeren; het test niet de nauwkeurigheid van de routering.",
-      "title": "Opdrachtroutering",
-      "intro": "Verwerk eenvoudige opdrachten lokaal voordat je gebruikelijke AI-provider wordt ingeschakeld. Machtigingen en goedkeuringen van Phoenix blijven gelden.",
-      "enableVoice": "Inschakelen voor spraak",
-      "enableChat": "Inschakelen voor chat",
-      "languageHint": "Gebruikt je spraak- of Phoenix-taal. Chatroutering geldt voor het eerste bericht van een nieuw gesprek.",
+      "enableVoice": "Spraakopdrachten direct afhandelen",
+      "enableChat": "Chatopdrachten direct afhandelen",
       "providerSection": "Beslissingsprovider",
-      "providerHint": "Optioneel. Door een account te selecteren, mag ingeschakelde routering niet-herkende opdrachten en toegestane entiteitsgegevens ernaartoe sturen. Er kunnen API-kosten gelden.",
+      "providerHint": "Optioneel voor directe opdrachtafhandeling in {voice} en {chat}. Ontvangt zo nodig niet-herkende opdrachten, gegevens van geschikte entiteiten en gespreksgeschiedenis. Er kunnen API-kosten gelden.",
       "decisionAccount": "Beslissingsaccount",
       "localOnly": "Alleen lokaal (geen beslissingsprovider)",
       "removeAccount": "{name} verwijderen",
@@ -2030,7 +2027,8 @@
       "timeoutHint": "Geef tragere verbindingen meer tijd. Als er niet op tijd een beslissing is, verwerkt je gebruikelijke provider het verzoek.",
       "failed": "Routeringsinstellingen konden niet worden opgeslagen of geladen.",
       "accountModel": "Model voor {name}",
-      "connectionHint": "De basis-URL is het serveradres. Voeg alleen een API-sleutel toe als die server verificatie vereist."
+      "connectionHint": "De basis-URL is het serveradres. Voeg alleen een API-sleutel toe als die server verificatie vereist.",
+      "commandHelp": "Probeer eerst lokale intents en daarna de optionele beslissingsprovider. Andere verzoeken gaan naar je gebruikelijke AI-provider. Machtigingen en goedkeuringen blijven gelden."
     }
   }
 }

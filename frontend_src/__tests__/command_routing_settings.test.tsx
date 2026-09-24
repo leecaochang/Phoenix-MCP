@@ -3,33 +3,35 @@ import { expect, it, vi } from "vitest";
 import type { GlobalSettings } from "../types";
 vi.mock("../components/DecisionProviderSettings", () => ({ DecisionProviderSettings: () => <div>Accounts</div> }));
 import { CommandRoutingSettings } from "../components/CommandRoutingSettings";
+import { CommandRoutingToggle } from "../components/CommandRoutingToggle";
 
-it("shows two independent switches without experiment or diagnostic controls", () => {
+it("keeps the Decision Provider card limited to account settings", () => {
   const change = vi.fn();
   render(<CommandRoutingSettings settings={{} as GlobalSettings} onChange={change} saving={false} />);
-  expect(screen.getByRole("heading", { name: "Command routing" })).toBeVisible();
-  expect(screen.getAllByRole("checkbox")).toHaveLength(2);
-  expect(screen.queryByRole("combobox")).toBeNull();
+  expect(screen.getByRole("heading", { name: "Decision Provider" })).toBeVisible();
+  expect(screen.getByText("Accounts")).toBeVisible();
+  expect(screen.queryByRole("checkbox")).toBeNull();
   expect(screen.queryByText("Test a command")).toBeNull();
   expect(screen.queryByText("Automatic routing languages")).toBeNull();
-  expect(screen.getByLabelText("Enable for Voice")).not.toBeChecked();
-  expect(screen.getByLabelText("Enable for Chat")).not.toBeChecked();
   expect(change).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByLabelText("Enable for Voice"));
-  expect(change).toHaveBeenCalledExactlyOnceWith("voice_agent_routing_mode", "auto");
-  fireEvent.click(screen.getByLabelText("Enable for Chat"));
-  expect(change).toHaveBeenLastCalledWith("agentcli_routing_mode", "auto");
 });
 
-it("turns routing off and locks controls during a save", () => {
+it.each(["voice", "chat"] as const)("offers independent %s routing without requiring a provider", surface => {
   const change = vi.fn();
-  const settings = { voice_agent_routing_mode: "auto", agentcli_routing_mode: "auto" } as GlobalSettings;
-  const view = render(<CommandRoutingSettings settings={settings} onChange={change} saving={false} />);
-  fireEvent.click(screen.getByLabelText("Enable for Chat"));
-  expect(change).toHaveBeenCalledExactlyOnceWith("agentcli_routing_mode", "off");
-  view.rerender(<CommandRoutingSettings settings={settings} onChange={change} saving />);
-  for (const toggle of screen.getAllByRole("checkbox")) {
-    expect(toggle).toBeChecked();
-    expect(toggle).toBeDisabled();
-  }
+  const view = render(<CommandRoutingToggle surface={surface} mode="off" onChange={change} saving={false} />);
+  const toggle = screen.getByRole("checkbox", { name: `Handle ${surface} commands directly` });
+  expect(toggle).not.toBeChecked();
+  expect(toggle).toHaveAccessibleDescription(/local intents first/);
+  fireEvent.click(toggle);
+  expect(change).toHaveBeenCalledExactlyOnceWith("auto");
+  view.rerender(<CommandRoutingToggle surface={surface} mode="auto" onChange={change} saving={false} />);
+  fireEvent.click(toggle);
+  expect(change).toHaveBeenLastCalledWith("off");
+});
+
+it.each(["auto", "local", "hybrid"])("preserves enabled %s routing and locks it during saves", mode => {
+  render(<CommandRoutingToggle surface="chat" mode={mode} onChange={vi.fn()} saving />);
+  const toggle = screen.getByRole("checkbox");
+  expect(toggle).toBeChecked();
+  expect(toggle).toBeDisabled();
 });

@@ -1,3 +1,4 @@
+import { CommandRoutingToggle } from "./CommandRoutingToggle";
 import { IconButton, EditIcon, RefreshIcon, ProbeIcon, TrashIcon } from "./ProviderAccountControls";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
@@ -125,6 +126,8 @@ function notifyChanged() {
 }
 
 interface Props {
+  routingMode: string | undefined;
+  onRoutingChange: (mode: "auto" | "off") => void;
   scrollback: number;
   onScrollbackChange: (n: number) => void;
   maxIterations: number;
@@ -141,7 +144,7 @@ interface Props {
 }
 
 export function AgentCliSettings({
-  scrollback, onScrollbackChange, maxIterations, onMaxIterationsChange,
+  routingMode, onRoutingChange, scrollback, onScrollbackChange, maxIterations, onMaxIterationsChange,
   globalVisible, onGlobalChange, conversationStyle, onConversationStyleChange,
   detailLevel, onDetailLevelChange, homeFocused, onHomeFocusedChange, saving,
 }: Props) {
@@ -409,6 +412,8 @@ export function AgentCliSettings({
       <p className="settings-info-note" style={{ marginTop: 0 }}>
         {t("settings.agentcliIntro")}
       </p>
+
+      <CommandRoutingToggle surface="chat" mode={routingMode} onChange={onRoutingChange} saving={saving} />
 
       <ProviderAddForm
         providerTypes={providerTypes}

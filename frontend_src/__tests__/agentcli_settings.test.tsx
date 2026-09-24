@@ -83,6 +83,8 @@ async function beginAdd(kind = "claude") {
 function renderCard() {
   return render(
     <AgentCliSettings
+      routingMode="off"
+      onRoutingChange={() => {}}
       scrollback={100}
       onScrollbackChange={() => {}}
       maxIterations={20}
@@ -283,6 +285,8 @@ describe("AgentCliSettings", () => {
     const onGlobal = vi.fn();
     render(
       <AgentCliSettings
+      routingMode="off"
+      onRoutingChange={() => {}}
         scrollback={100}
         onScrollbackChange={() => {}}
         maxIterations={20}
@@ -309,6 +313,8 @@ describe("AgentCliSettings", () => {
     const onFocus = vi.fn();
     render(
       <AgentCliSettings
+      routingMode="off"
+      onRoutingChange={() => {}}
         scrollback={100} onScrollbackChange={() => {}}
         maxIterations={20} onMaxIterationsChange={() => {}}
         globalVisible={false} onGlobalChange={() => {}}
@@ -337,6 +343,8 @@ describe("AgentCliSettings", () => {
       const onScroll = vi.fn();
       render(
         <AgentCliSettings
+      routingMode="off"
+      onRoutingChange={() => {}}
           scrollback={500}
           onScrollbackChange={onScroll}
           maxIterations={20}

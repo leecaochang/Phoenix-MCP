@@ -100,8 +100,7 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
   }
 
   return <div className="routing-provider-section">
-    <h4>{t("routing.providerSection")}</h4>
-    <p className="agentcli-settings-hint" id="routing-provider-hint">{t("routing.providerHint")}</p>
+    <p className="agentcli-settings-hint" id="routing-provider-hint">{t("routing.providerHint", { voice: t("settings.voiceCard"), chat: t("settings.agentcliCard") })}</p>
     <div className="agentcli-settings-providers" role="radiogroup" aria-label={t("routing.decisionAccount")}
       aria-describedby="routing-provider-hint">
       <label className="routing-account-choice">

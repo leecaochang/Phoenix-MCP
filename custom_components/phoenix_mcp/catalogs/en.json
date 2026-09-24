@@ -1991,13 +1991,10 @@
     },
     "routing": {
       "providerOptions": "Decision providers use fixed routing choices, without Chat options such as thinking levels. Refresh models checks availability without running a command; it does not test routing accuracy.",
-      "title": "Command routing",
-      "intro": "Handle simple commands locally before using your usual AI provider. Phoenix permissions and approvals still apply.",
-      "enableVoice": "Enable for Voice",
-      "enableChat": "Enable for Chat",
-      "languageHint": "Uses your Voice or Phoenix language. Chat routing applies to the first message of a new conversation.",
-      "providerSection": "Decision provider",
-      "providerHint": "Optional. Selecting an account lets enabled routing send unmatched commands and eligible entity details to it. API charges may apply.",
+      "enableVoice": "Handle voice commands directly",
+      "enableChat": "Handle chat commands directly",
+      "providerSection": "Decision Provider",
+      "providerHint": "Optional for direct command handling in {voice} and {chat}. Receives unmatched commands, eligible entity details and conversation history when needed. API charges may apply.",
       "decisionAccount": "Decision account",
       "localOnly": "Local only (no decision provider)",
       "removeAccount": "Delete {name}",
@@ -2006,7 +2003,8 @@
       "timeoutHint": "Allow more time for slower connections. If no decision is ready in time, your usual provider handles the request.",
       "failed": "Could not save or load command routing settings.",
       "accountModel": "Model for {name}",
-      "connectionHint": "Base URL is the server address. Add an API key only if that server requires authentication."
+      "connectionHint": "Base URL is the server address. Add an API key only if that server requires authentication.",
+      "commandHelp": "Try local intents first, then the optional Decision Provider. Other requests go to your usual AI provider. Permissions and approvals still apply."
     }
   },
   "notification": {

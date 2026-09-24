@@ -1992,13 +1992,10 @@
     },
     "routing": {
       "providerOptions": "決策供應商使用固定的路由選項，不使用思考層級等聊天選項。「重新整理模型」會檢查模型是否可用，不會執行命令，也不會測試路由準確性。",
-      "title": "命令路由",
-      "intro": "先在本機處理簡單命令，再使用一般 AI 提供者。Phoenix 權限和核准仍然適用。",
-      "enableVoice": "為語音啟用",
-      "enableChat": "為聊天啟用",
-      "languageHint": "使用語音或 Phoenix 的語言設定。聊天路由僅適用於新對話的第一則訊息。",
+      "enableVoice": "直接處理語音命令",
+      "enableChat": "直接處理聊天命令",
       "providerSection": "決策提供者",
-      "providerHint": "選用。選取帳戶後，已啟用的路由可向其傳送未辨識的命令及授權範圍內的實體詳情，可能產生 API 費用。",
+      "providerHint": "選用，用於在 {voice} 和 {chat} 中直接處理命令。必要時接收未匹配的命令、符合條件的實體詳細資料及對話歷程。可能產生 API 費用。",
       "decisionAccount": "決策帳戶",
       "localOnly": "僅本機（不使用決策提供者）",
       "removeAccount": "刪除 {name}",
@@ -2007,7 +2004,8 @@
       "timeoutHint": "網路較慢時可延長等待時間。若未及時收到決策，將由一般提供者處理請求。",
       "failed": "無法儲存或載入命令路由設定。",
       "accountModel": "{name} 的模型",
-      "connectionHint": "基礎 URL 是伺服器位址。僅當該伺服器要求驗證身分時才需要填寫 API 金鑰。"
+      "connectionHint": "基礎 URL 是伺服器位址。僅當該伺服器要求驗證身分時才需要填寫 API 金鑰。",
+      "commandHelp": "先嘗試本機意圖，再使用選用的決策供應商。其他請求交給慣用的 AI 供應商。權限與核准要求仍然適用。"
     }
   },
   "voice": {

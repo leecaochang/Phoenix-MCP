@@ -1987,13 +1987,10 @@
     },
     "routing": {
       "providerOptions": "Entscheidungsanbieter verwenden feste Routing-Optionen ohne Chat-Optionen wie Denkstufen. Das Aktualisieren der Modelle prüft die Verfügbarkeit, ohne einen Befehl auszuführen; die Routing-Genauigkeit wird dabei nicht getestet.",
-      "title": "Befehlsweiterleitung",
-      "intro": "Einfache Befehle werden lokal verarbeitet, bevor Ihr üblicher KI-Anbieter zum Einsatz kommt. Phoenix-Berechtigungen und Genehmigungen gelten weiterhin.",
-      "enableVoice": "Für Sprache aktivieren",
-      "enableChat": "Für Chat aktivieren",
-      "languageHint": "Verwendet Ihre Sprach- oder Phoenix-Sprache. Im Chat gilt dies für die erste Nachricht einer neuen Unterhaltung.",
+      "enableVoice": "Sprachbefehle direkt verarbeiten",
+      "enableChat": "Chatbefehle direkt verarbeiten",
       "providerSection": "Entscheidungsanbieter",
-      "providerHint": "Optional. Mit der Auswahl eines Kontos darf die aktivierte Weiterleitung nicht erkannte Befehle und zulässige Entitätsdetails dorthin senden. Es können API-Kosten entstehen.",
+      "providerHint": "Optional für die direkte Befehlsverarbeitung in {voice} und {chat}. Erhält bei Bedarf nicht erkannte Befehle, Angaben zu geeigneten Entitäten und den Gesprächsverlauf. API-Kosten können anfallen.",
       "decisionAccount": "Entscheidungskonto",
       "localOnly": "Nur lokal (kein Entscheidungsanbieter)",
       "removeAccount": "{name} löschen",
@@ -2002,7 +1999,8 @@
       "timeoutHint": "Geben Sie langsameren Verbindungen mehr Zeit. Liegt nicht rechtzeitig eine Entscheidung vor, übernimmt Ihr üblicher Anbieter die Anfrage.",
       "failed": "Einstellungen zur Befehlsweiterleitung konnten nicht gespeichert oder geladen werden.",
       "accountModel": "Modell für {name}",
-      "connectionHint": "Die Basis-URL ist die Serveradresse. Fügen Sie nur dann einen API-Schlüssel hinzu, wenn der Server eine Anmeldung erfordert."
+      "connectionHint": "Die Basis-URL ist die Serveradresse. Fügen Sie nur dann einen API-Schlüssel hinzu, wenn der Server eine Anmeldung erfordert.",
+      "commandHelp": "Zuerst werden lokale Intents genutzt, danach der optionale Entscheidungsanbieter. Andere Anfragen gehen an deinen üblichen KI-Anbieter. Berechtigungen und Genehmigungen gelten weiterhin."
     }
   },
   "notification": {

@@ -1987,13 +1987,10 @@
     },
     "routing": {
       "providerOptions": "Los proveedores de decisiones usan opciones de enrutamiento fijas, sin opciones de Chat como los niveles de razonamiento. Actualizar modelos comprueba la disponibilidad sin ejecutar comandos; no evalúa la precisión del enrutamiento.",
-      "title": "Enrutamiento de comandos",
-      "intro": "Procesa los comandos sencillos localmente antes de usar tu proveedor de IA habitual. Los permisos y las aprobaciones de Phoenix siguen vigentes.",
-      "enableVoice": "Activar para voz",
-      "enableChat": "Activar para chat",
-      "languageHint": "Usa el idioma de voz o de Phoenix. En el chat se aplica al primer mensaje de una conversación nueva.",
+      "enableVoice": "Gestionar órdenes de voz directamente",
+      "enableChat": "Gestionar órdenes de chat directamente",
       "providerSection": "Proveedor de decisiones",
-      "providerHint": "Opcional. Al seleccionar una cuenta, el enrutamiento activo puede enviarle comandos no reconocidos y detalles de entidades permitidas. Pueden aplicarse cargos de API.",
+      "providerHint": "Opcional para gestionar órdenes directamente en {voice} y {chat}. Recibe órdenes no reconocidas, datos de entidades aptas e historial de conversación cuando es necesario. Pueden aplicarse cargos de API.",
       "decisionAccount": "Cuenta de decisiones",
       "localOnly": "Solo local (sin proveedor de decisiones)",
       "removeAccount": "Eliminar {name}",
@@ -2002,7 +1999,8 @@
       "timeoutHint": "Permite más tiempo para conexiones lentas. Si no llega una decisión a tiempo, tu proveedor habitual atenderá la solicitud.",
       "failed": "No se pudieron guardar o cargar los ajustes de enrutamiento.",
       "accountModel": "Modelo de {name}",
-      "connectionHint": "La URL base es la dirección del servidor. Añade una clave API solo si el servidor requiere autenticación."
+      "connectionHint": "La URL base es la dirección del servidor. Añade una clave API solo si el servidor requiere autenticación.",
+      "commandHelp": "Prueba primero los intents locales y después el proveedor de decisiones opcional. Las demás solicitudes se envían a tu proveedor de IA habitual. Se mantienen los permisos y las aprobaciones."
     }
   },
   "notification": {

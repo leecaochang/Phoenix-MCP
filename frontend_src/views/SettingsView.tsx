@@ -128,6 +128,8 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
         {/* Left column: Agent Chat, Voice Agent, AI Task, Assist Bridge */}
         <div>
           <AgentCliSettings
+            routingMode={settings.agentcli_routing_mode}
+            onRoutingChange={value => patchSetting("agentcli_routing_mode", value)}
             scrollback={settings.agentcli_scrollback_lines}
             onScrollbackChange={(n) => patchSetting("agentcli_scrollback_lines", n)}
             maxIterations={settings.agentcli_max_iterations}

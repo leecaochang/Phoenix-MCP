@@ -1987,13 +1987,10 @@
     },
     "routing": {
       "providerOptions": "I fornitori di decisioni usano opzioni di instradamento fisse, senza opzioni di Chat come i livelli di ragionamento. Aggiornare i modelli ne verifica la disponibilità senza eseguire comandi; non verifica la precisione dell’instradamento.",
-      "title": "Instradamento dei comandi",
-      "intro": "Gestisce i comandi semplici localmente prima di usare il consueto fornitore IA. Le autorizzazioni e le approvazioni di Phoenix restano valide.",
-      "enableVoice": "Abilita per la voce",
-      "enableChat": "Abilita per la chat",
-      "languageHint": "Usa la lingua della voce o di Phoenix. Nella chat si applica al primo messaggio di una nuova conversazione.",
+      "enableVoice": "Gestisci direttamente i comandi vocali",
+      "enableChat": "Gestisci direttamente i comandi della chat",
       "providerSection": "Fornitore di decisioni",
-      "providerHint": "Facoltativo. Selezionando un account, l’instradamento attivo può inviargli comandi non riconosciuti e dettagli delle entità consentite. Potrebbero essere applicati costi API.",
+      "providerHint": "Facoltativo per gestire direttamente i comandi in {voice} e {chat}. Riceve, se necessario, comandi non riconosciuti, dettagli delle entità idonee e cronologia della conversazione. Potrebbero essere applicati costi API.",
       "decisionAccount": "Account per le decisioni",
       "localOnly": "Solo locale (nessun fornitore di decisioni)",
       "removeAccount": "Elimina {name}",
@@ -2002,7 +1999,8 @@
       "timeoutHint": "Concedi più tempo alle connessioni lente. Se la decisione non arriva in tempo, il fornitore abituale gestisce la richiesta.",
       "failed": "Impossibile salvare o caricare le impostazioni di instradamento.",
       "accountModel": "Modello per {name}",
-      "connectionHint": "L’URL di base è l’indirizzo del server. Aggiungi una chiave API solo se il server richiede l’autenticazione."
+      "connectionHint": "L’URL di base è l’indirizzo del server. Aggiungi una chiave API solo se il server richiede l’autenticazione.",
+      "commandHelp": "Prova prima gli intenti locali, poi il fornitore di decisioni facoltativo. Le altre richieste passano al consueto fornitore IA. Permessi e approvazioni restano validi."
     }
   },
   "notification": {

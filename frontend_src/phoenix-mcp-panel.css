@@ -628,7 +628,7 @@ select.input {
 }
 .toggle-row:last-child { border-bottom: none; }
 .toggle-label { display: flex; flex-direction: column; gap: 3px; flex: 1; min-width: 0; }
-.toggle-label span { font-size: 14px; font-weight: 500; }
+.toggle-label span, .toggle-label > label { font-size: 14px; font-weight: 500; }
 .toggle-label small { font-size: 12px; color: var(--phx-text-2); line-height: 1.4; }
 .toggle-label-master { font-weight: 700; }
 .toggle-row-plain { border: none; padding: 0; }
@@ -2777,8 +2777,6 @@ hui-card { display: block; min-width: 0; }
 
 /* Routing keeps switches and accounts visible; connection timing expands in place. */
 .command-routing-settings .agentcli-settings-hint { line-height: 1.5; }
-.routing-provider-section { margin-top: 24px; }
-.routing-provider-section h4 { font-size: 14px; margin: 0 0 8px; }
 .routing-account-choice { display: flex; align-items: center; gap: 12px; min-width: 0; cursor: pointer; }
 .routing-account-choice > input { flex: 0 0 auto; accent-color: var(--phx-accent); }
 .routing-account-choice > span { min-width: 0; overflow-wrap: anywhere; }

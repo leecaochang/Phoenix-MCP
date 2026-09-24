@@ -1987,13 +1987,10 @@
     },
     "routing": {
       "providerOptions": "决策提供商使用固定的路由选项，不使用思考级别等聊天选项。“刷新模型”会检查模型是否可用，不会执行命令，也不会测试路由准确性。",
-      "title": "命令路由",
-      "intro": "先在本地处理简单命令，再使用常规 AI 提供商。Phoenix 权限和审批仍然适用。",
-      "enableVoice": "为语音启用",
-      "enableChat": "为聊天启用",
-      "languageHint": "使用语音或 Phoenix 的语言设置。聊天路由仅适用于新对话的第一条消息。",
+      "enableVoice": "直接处理语音命令",
+      "enableChat": "直接处理聊天命令",
       "providerSection": "决策提供商",
-      "providerHint": "可选。选择账户后，已启用的路由可向其发送未识别的命令及授权范围内的实体详情，可能产生 API 费用。",
+      "providerHint": "可选，用于在 {voice} 和 {chat} 中直接处理命令。必要时接收未匹配的命令、符合条件的实体详情及对话历史。可能产生 API 费用。",
       "decisionAccount": "决策账户",
       "localOnly": "仅本地（不使用决策提供商）",
       "removeAccount": "删除 {name}",
@@ -2002,7 +1999,8 @@
       "timeoutHint": "网络较慢时可延长等待时间。若未及时收到决策，将由常规提供商处理请求。",
       "failed": "无法保存或加载命令路由设置。",
       "accountModel": "{name} 的模型",
-      "connectionHint": "基础 URL 是服务器地址。仅当该服务器要求身份验证时才需要填写 API 密钥。"
+      "connectionHint": "基础 URL 是服务器地址。仅当该服务器要求身份验证时才需要填写 API 密钥。",
+      "commandHelp": "先尝试本地意图，再使用可选的决策提供商。其他请求交给常用的 AI 提供商。权限和审批要求仍然适用。"
     }
   },
   "notification": {
