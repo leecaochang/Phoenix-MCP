@@ -1686,6 +1686,12 @@ DECISION_TIMEOUT_DEFAULT_MS = 5000
 DECISION_TIMEOUT_MIN_MS = 250
 DECISION_TIMEOUT_MAX_MS = 30000
 DECISION_MAX_RESPONSE_BYTES = 65536
+DECISION_CONTEXT_MAX_MESSAGES = 32
+DECISION_CONTEXT_MAX_BYTES = 16384
+DECISION_CONTEXT_CHOICES = {
+    "compatible": "The latest user message requests this exact immediate action or state query, and the complete preceding conversation contains no unresolved condition, restriction, simulation or ambiguity that changes that interpretation.",
+    "provider": "The conversational provider must interpret this request, including any uncertainty, earlier restriction, unresolved condition, hypothetical example, quotation, simulation or context-dependent meaning.",
+}
 DECISION_ROUTE_CHOICES = {
     "light_on": "One immediate, explicit request to turn on one light, without a brightness setting or adjustment.",
     "light_off": "One immediate, explicit request to turn off one light, without a brightness setting or adjustment.",

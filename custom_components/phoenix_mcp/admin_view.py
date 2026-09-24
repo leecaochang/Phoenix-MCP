@@ -2345,6 +2345,7 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
     @require_admin
     async def post(self, request: web.Request) -> web.Response:
         from .command_routing import async_evaluate_command, routing_language
+        from .decision_context import context_history, async_preview_context
 
         rid = request["phoenix_mcp_rid"]
         data: PhoenixData = self.hass.data[DOMAIN]
@@ -2353,13 +2354,15 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
             return body
         sentence = body.get("sentence")
         token_id = body.get("token_id")
-        if (set(body) - {"token_id", "sentence", "language", "decision", "targets"}
+        if (set(body) - {"token_id", "sentence", "language", "decision", "targets", "messages"}
                 or not isinstance(sentence, str) or not sentence.strip()
                 or len(sentence) > MAX_SEARCH_QUERY_LEN
                 or not isinstance(token_id, str)
                 or routing_language(body.get("language", "en"), preview=True) is None
                 or type(body.get("decision", False)) is not bool
-                or type(body.get("targets", False)) is not bool or (body.get("targets") and not body.get("decision"))):
+                or type(body.get("targets", False)) is not bool or (body.get("targets") and not body.get("decision"))
+                or ("messages" in body and (not body.get("decision") or body.get("targets")
+                                            or context_history(body["messages"]) is None))):
             return _err("invalid_request", "Invalid command preview request.", 400, rid,
                         key="routingPreviewInvalid")
         token = data.store.get_token_by_id(token_id)
@@ -2370,7 +2373,12 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
         authority = RoutingAuthority.capture(data, token)
         language = body.get("language", "en")
         result = await async_evaluate_command(self.hass, data, token, sentence, language, preview=True)
-        if body.get("decision"):
+        if "messages" in body:
+            result["context_review"] = await async_preview_context(
+                self.hass, data, token, sentence, language, body["messages"], result)
+            if result["context_review"]["reason"] in ("context_changed", "authority_changed"):
+                result.update(route="provider", reason=result["context_review"]["reason"], proposal=None)
+        elif body.get("decision"):
             from .decision_shadow import async_preview_decision
             result["decision_shadow"] = await async_preview_decision(
                 self.hass, data, token, sentence, language, result, targets=body.get("targets", False), ingress="preview")

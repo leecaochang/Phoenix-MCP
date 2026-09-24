@@ -2957,6 +2957,13 @@ async def test_command_preview_requires_admin(authenticated, admin, status):
     {"token_id": "t", "sentence": "x", "language": "fr"},
     {"token_id": "t", "sentence": "x", "targets": True},
     {"token_id": "t", "sentence": "x", "decision": True, "targets": "true"},
+    {"token_id": "t", "sentence": "x", "messages": []},
+    {"token_id": "t", "sentence": "x", "decision": True, "messages": None},
+    {"token_id": "t", "sentence": "x", "decision": True, "messages": [{"role": "user", "content": "x"}]},
+    {"token_id": "t", "sentence": "x", "decision": True, "targets": True,
+     "messages": [{"role": "user", "content": "x"}, {"role": "assistant", "content": "y"}]},
+    {"token_id": "t", "sentence": "x",
+     "messages": [{"role": "user", "content": "x"}, {"role": "assistant", "content": "y"}]},
 ])
 async def test_command_preview_rejects_bad_shapes(body):
     view = PhoenixAdminCommandPreviewView()
@@ -2986,6 +2993,45 @@ async def test_command_preview_is_scoped_inert_and_does_not_record_voice_observa
     assert json.loads(summary.text)["decision_shadow"]["hybrid"] == {
         "evaluations": 1, "reasons": {"timeout": 1},
     }
+
+
+@pytest.mark.parametrize("change", [None, "context_changed", "authority_changed"])
+async def test_command_preview_context_opt_in_and_stale_disclosure(hass, token_store, change):
+    token, _ = await token_store.async_create_token("preview_context", "admin")
+    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+    hass.data[DOMAIN] = data
+    view = PhoenixAdminCommandPreviewView()
+    view.hass = hass
+    history = [{"role": "user", "content": "private-history"}, {"role": "assistant", "content": "reply"}]
+    local = {"reason": "supported", "proposal": {"intent": "HassTurnOn", "entity_ids": ["light.test"]},
+             "executed": False, "elapsed_ms": 1}
+
+    async def context(*args):
+        assert args[5] == history and args[6] == local
+        if change == "authority_changed":
+            token.revoked = True
+        return {"reason": change or "compatible", "decision": None, "executed": False}
+
+    with (patch("custom_components.phoenix_mcp.command_routing.async_evaluate_command", AsyncMock(return_value=local)),
+          patch("custom_components.phoenix_mcp.decision_context.async_preview_context", side_effect=context) as review,
+          patch("custom_components.phoenix_mcp.decision_shadow.async_preview_decision") as old_review):
+        response = await view.post(_make_admin_request(body=json.dumps({
+            "token_id": token.id, "sentence": "turn on Desk lamp", "decision": True, "messages": history,
+        }).encode()))
+    assert response.status == 200
+    review.assert_awaited_once()
+    old_review.assert_not_called()
+    body = json.loads(response.text)
+    assert "private-history" not in response.text and body["executed"] is False
+    assert body["voice_observations"]["observations"] == 0
+    assert body["decision_observations"]["hybrid"]["evaluations"] == 0
+    assert not token_store.get_pending_approvals()
+    if change:
+        assert body["reason"] == change and body["proposal"] is None
+    if change == "authority_changed":
+        assert "context_review" not in body and "light.test" not in response.text
+    else:
+        assert body["context_review"]["reason"] == (change or "compatible")
 
 
 @pytest.mark.parametrize("patch_body,accepted", [
