@@ -49,6 +49,13 @@ def _strict_env(**token_kwargs):
     return token, raw, data, hass
 
 
+def _delete_request(raw_token: str, session_id: str | None = None):
+    headers = {"Mcp-Session-Id": session_id} if session_id is not None else None
+    request = _make_request({}, "application/json", raw_token, headers)
+    request.method = "DELETE"
+    return request
+
+
 def _modern_body(method: str, *, msg_id=1, params: dict | None = None) -> dict:
     modern_params = dict(params or {})
     modern_params["_meta"] = {
@@ -534,6 +541,78 @@ class TestLegacyProtocolEra:
             {"Mcp-Session-Id": session_id},
         ))
         assert resp.status == 404
+
+    async def test_delete_releases_session_and_reclaims_per_token_quota(self):
+        _token, raw, data, hass = _strict_env()
+        session_ids = []
+        for _ in range(mcp_view._MCP_LEGACY_SESSION_TOKEN_LIMIT):
+            init = await _view(hass).post(_make_request(
+                self._initialize_body(), "application/json", raw))
+            assert init.status == 200
+            session_ids.append(init.headers["Mcp-Session-Id"])
+
+        exhausted = await _view(hass).post(_make_request(
+            self._initialize_body(), "application/json", raw))
+        assert exhausted.status == 429
+
+        closed = await _view(hass).delete(_delete_request(raw, session_ids[0]))
+        assert closed.status == 204
+        assert session_ids[0] not in data.mcp_sessions
+
+        retried = await _view(hass).post(_make_request(
+            self._initialize_body(), "application/json", raw))
+        assert retried.status == 200
+        assert retried.headers["Mcp-Session-Id"] not in session_ids
+        assert len(data.mcp_sessions) == mcp_view._MCP_LEGACY_SESSION_TOKEN_LIMIT
+
+    async def test_delete_releases_global_legacy_session_slot(self):
+        token, raw, data, hass = _strict_env()
+        session_id = "owned-session"
+        now = mcp_view.time.monotonic()
+        data.mcp_sessions[session_id] = {"token_id": token.id, "last_seen": now}
+        for index in range(mcp_view._MCP_LEGACY_SESSION_LIMIT - 1):
+            data.mcp_sessions[f"other-{index}"] = {
+                "token_id": f"other-token-{index}",
+                "last_seen": now,
+            }
+
+        exhausted = await _view(hass).post(_make_request(
+            self._initialize_body(), "application/json", raw))
+        assert exhausted.status == 429
+
+        closed = await _view(hass).delete(_delete_request(raw, session_id))
+        assert closed.status == 204
+        assert session_id not in data.mcp_sessions
+
+        retried = await _view(hass).post(_make_request(
+            self._initialize_body(), "application/json", raw))
+        assert retried.status == 200
+        assert len(data.mcp_sessions) == mcp_view._MCP_LEGACY_SESSION_LIMIT
+
+    async def test_delete_requires_auth_and_preserves_another_tokens_session(self):
+        _token, raw, data, hass = _strict_env()
+        session_id = "foreign-session"
+        data.mcp_sessions[session_id] = {
+            "token_id": "another-token",
+            "last_seen": mcp_view.time.monotonic(),
+        }
+
+        data.store.get_token_by_hash.return_value = None
+        unauthorized = await _view(hass).delete(_delete_request(raw, session_id))
+        assert unauthorized.status == 401
+        assert session_id in data.mcp_sessions
+
+        data.store.get_token_by_hash.return_value = _token
+        foreign = await _view(hass).delete(_delete_request(raw, session_id))
+        assert foreign.status == 404
+        assert json.loads(foreign.text)["error"] == "not_found"
+        assert session_id in data.mcp_sessions
+
+    async def test_delete_requires_a_session_id(self):
+        _token, raw, _data, hass = _strict_env()
+        response = await _view(hass).delete(_delete_request(raw))
+        assert response.status == 400
+        assert json.loads(response.text)["error"] == "invalid_request"
 
     async def test_initialize_must_not_be_batched(self):
         _token, raw, _data, hass = _strict_env()

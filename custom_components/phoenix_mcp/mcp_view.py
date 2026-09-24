@@ -8552,7 +8552,7 @@ def _legacy_session_error_response(
 
 
 class PhoenixMcpView(PhoenixView):
-    """POST /api/phoenix-mcp - MCP Streamable HTTP transport.
+    """POST/DELETE /api/phoenix-mcp - MCP Streamable HTTP transport.
 
     The revisions implemented are const.MCP_PROTOCOL_VERSIONS; read the comment
     there before adding one, since the list is a compliance claim.
@@ -8575,6 +8575,97 @@ class PhoenixMcpView(PhoenixView):
             return await self._post(request)
         finally:
             request_authority.reset(context)
+
+    async def delete(self, request: web.Request) -> web.Response:
+        """Terminate an authenticated legacy Streamable HTTP session."""
+        context = request_authority.set(None)
+        try:
+            return await self._delete(request)
+        finally:
+            request_authority.reset(context)
+
+    async def _delete(self, request: web.Request) -> web.Response:
+        """Release a session created by ``initialize`` for this token."""
+        hass = self.hass
+        request_id = generate_request_id()
+        data = hass.data.get(DOMAIN)
+        if data is None or not data.ready or data.shutting_down:
+            return _error(
+                "service_unavailable", "Service unavailable.", 503, request_id
+            )
+        client_ip = _get_client_ip(request)
+
+        rejected = _origin_rejected(hass, request, request_id)
+        if rejected is not None:
+            return rejected
+
+        result = await _async_get_authenticated_token(
+            hass, request, data, request_id, "/api/phoenix-mcp"
+        )
+        if isinstance(result, web.Response):
+            return result
+        token, _rl_result = result
+        authority = RequestAuthority(hass, data, token.id, token.token_hash)
+        request_authority.set(authority)
+        try:
+            token = authority.current_token()
+        except AuthorityChangedError:
+            unavailable = (
+                not data.ready
+                or data.shutting_down
+                or data.store.get_settings().kill_switch
+                or hass.data.get(DOMAIN) is not data
+            )
+            return _error(
+                "service_unavailable" if unavailable else "unauthorized",
+                "Service unavailable." if unavailable else "Unauthorized.",
+                503 if unavailable else 401,
+                request_id,
+            )
+
+        session_id = request.headers.get("Mcp-Session-Id")
+        if not session_id:
+            _log(
+                data,
+                token,
+                request_id=request_id,
+                method="DELETE",
+                resource="mcp:session",
+                outcome="invalid_request",
+                client_ip=client_ip,
+            )
+            return _error(
+                "invalid_request",
+                "Mcp-Session-Id header is required.",
+                400,
+                request_id,
+            )
+
+        _prune_legacy_sessions(data)
+        session = data.mcp_sessions.get(session_id)
+        if session is None or session.get("token_id") != token.id:
+            _log(
+                data,
+                token,
+                request_id=request_id,
+                method="DELETE",
+                resource="mcp:session",
+                outcome="not_found",
+                client_ip=client_ip,
+            )
+            return _error("not_found", "MCP session not found.", 404, request_id)
+
+        data.mcp_sessions.pop(session_id, None)
+        _log(
+            data,
+            token,
+            request_id=request_id,
+            method="DELETE",
+            resource="mcp:session",
+            outcome="allowed",
+            client_ip=client_ip,
+        )
+        return web.Response(status=204, headers={"X-Phoenix-Request-ID": request_id})
 
     async def _post(self, request: web.Request) -> web.Response:
         """Authenticate, read, and dispatch one Streamable HTTP request."""
