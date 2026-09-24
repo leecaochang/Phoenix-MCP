@@ -16,12 +16,15 @@ from .const import (
     DECISION_CONTEXT_REQUIRED_CHOICES, DECISION_CONTEXT_EXECUTION_MODELS,
     DECISION_CONTEXT_EXECUTION_LANGUAGES, MAX_SEARCH_QUERY_LEN,
 )
+from .decision_history import history_texts, structured_context_history
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 from .helpers import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
 
 
-def context_history(messages: Any) -> list[dict[str, str]] | None:
-    """Accept complete plain-text turn pairs; never truncate or summarize a history."""
+def context_history(messages: Any, *, structured: bool = False) -> list[dict] | None:
+    """Execution retains plain-text pairs; richer previews preserve complete exchanges."""
+    if structured:
+        return structured_context_history(messages)
     if (not isinstance(messages, list) or not messages or len(messages) % 2
             or len(messages) > DECISION_CONTEXT_MAX_MESSAGES):
         return None
@@ -45,7 +48,7 @@ def context_history(messages: Any) -> list[dict[str, str]] | None:
 
 
 def _state(hass: Any, token: Any, sentence: str, language: str,
-           history: list[dict[str, str]], proposal: Any) -> tuple[dict, str] | None:
+           history: list[dict], proposal: Any) -> tuple[dict, str] | None:
     """Keep exact context or decline; redaction must not erase a prior restriction."""
     if (not isinstance(proposal, dict) or not isinstance(proposal.get("intent"), str)
             or proposal["intent"] not in COMMAND_ROUTING_INTENTS):
@@ -63,13 +66,19 @@ def _state(hass: Any, token: Any, sentence: str, language: str,
     fingerprint = _target_fingerprint(hass, token, ids[0], intent)
     if fingerprint is None:
         return None
-    for text in [sentence, *[message["content"] for message in history]]:
+    try:
+        texts = history_texts([sentence, history], check_sensitive=True)
+    except (ValueError, RecursionError):
+        return None
+    for text in texts:
         if redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(text) or "", token, hass) != text:
             return None
     candidate = {"intent": intent, "entity_ids": list(ids)}
     if operation:
         candidate[operation.proposal_field] = proposal[operation.proposal_field]
     state = {"utterance": sentence, "language": language, "history": history, "candidate": candidate}
+    if context_history(history) is None:
+        state["history_format"] = "provider_messages"
     if service is not None:
         state["service"] = service
     if len(json.dumps(state, ensure_ascii=False).encode()) > DECISION_CONTEXT_MAX_BYTES:
@@ -111,7 +120,7 @@ async def _async_review_context(hass: Any, data: Any, token: Any, sentence: str,
         return {"reason": reason, "decision": decision, "executed": False,
                 "elapsed_ms": round((monotonic() - started) * 1000, 2)}
 
-    history = context_history(messages)
+    history = context_history(messages, structured=not prepare)
     lang = routing_language(language, preview=True)
     if (history is None or lang is None or not isinstance(sentence, str)
             or not sentence.strip() or len(sentence) > MAX_SEARCH_QUERY_LEN):
@@ -154,7 +163,7 @@ async def _async_review_context(hass: Any, data: Any, token: Any, sentence: str,
             if _state(hass, current, sentence, lang, history, proposal) != snapshot:
                 return result("context_changed")
             # Exact configured credentials are never sent back inside conversation text.
-            if cfg.api_key and cfg.api_key in json.dumps(state, ensure_ascii=False):
+            if cfg.api_key and any(cfg.api_key in text for text in history_texts(state)):
                 return result("context_unavailable")
             provider = DecisionProvider(cfg, PROVIDER_DEFINITIONS[cfg.kind].adapter)
             async with asyncio.timeout(authority.settings.decision_timeout_ms / 1000):

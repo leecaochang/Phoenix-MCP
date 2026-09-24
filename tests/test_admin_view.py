@@ -3100,3 +3100,26 @@ async def test_command_preview_passes_explicit_language_without_plan_authority(h
     assert decision.call_args.kwargs == {"targets": True, "ingress": "preview"}
     assert json.loads(response.text)["executed"] is False
     assert token_store.get_pending_approvals() == []
+
+
+async def test_command_preview_accepts_complete_provider_history_only_with_opt_in(hass, token_store, provider_context_history):
+    token, _ = await token_store.async_create_token('rich_preview', 'admin')
+    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+    hass.data[DOMAIN] = data
+    view = PhoenixAdminCommandPreviewView(); view.hass = hass
+    body = {'token_id': token.id, 'sentence': 'turn on Desk lamp', 'messages': provider_context_history}
+    local = {'reason': 'supported', 'proposal': {'intent': 'HassTurnOn', 'entity_ids': ['light.test']},
+             'executed': False, 'elapsed_ms': 1}
+    with (patch('custom_components.phoenix_mcp.command_routing.async_evaluate_command', AsyncMock(return_value=local)),
+          patch('custom_components.phoenix_mcp.decision_context.async_preview_context',
+                AsyncMock(return_value={'reason': 'compatible', 'executed': False, 'decision': None})) as review):
+        refused = await view.post(_make_admin_request(body=json.dumps(body).encode()))
+        assert refused.status == 400
+        review.assert_not_called()
+        response = await view.post(_make_admin_request(body=json.dumps({**body, 'decision': True}).encode()))
+        assert response.status == 200 and json.loads(response.text)['executed'] is False
+        assert review.await_args.args[5] == provider_context_history
+        refused = await view.post(_make_admin_request(body=json.dumps({**body, 'decision': True,
+            'messages': provider_context_history[:-1]}).encode()))
+        assert refused.status == 400 and review.await_count == 1
+    assert not token_store.get_pending_approvals()

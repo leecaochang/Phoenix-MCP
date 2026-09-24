@@ -1688,6 +1688,7 @@ DECISION_TIMEOUT_MAX_MS = 30000
 DECISION_MAX_RESPONSE_BYTES = 65536
 DECISION_CONTEXT_MAX_MESSAGES = 32
 DECISION_CONTEXT_MAX_BYTES = 16384
+DECISION_CONTEXT_MAX_DEPTH = 16
 DECISION_CONTEXT_CHECKS = {
     "request": {
         "immediate": "In this conversation, the latest user message is a real request to carry out the fixed candidate now or read its current state. Its meaning does not depend on unresolved references.",

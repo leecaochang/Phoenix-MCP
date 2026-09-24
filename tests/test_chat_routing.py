@@ -1,5 +1,6 @@
 """Agent Chat routing preserves conversation context, dispatch and recovery."""
 import asyncio
+from copy import deepcopy
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -1210,3 +1211,13 @@ async def test_context_account_change_during_local_recognition_stops_before_hist
     dispatch.assert_not_called()
     provider.stream_turn.assert_not_called()
     assert any(name == 'error' for name, _ in events)
+
+
+async def test_rich_history_remains_on_full_provider_path_until_evaluated(hass, context_chat, provider_context_history):
+    messages = [*deepcopy(provider_context_history), {'role': 'user', 'content': 'set the desk lamp brightness to 37 percent'}]
+    with (patch.object(DecisionProvider, 'review_context') as review,
+          patch('custom_components.phoenix_mcp.chat_routing.async_evaluate_command') as recognize):
+        provider, _, history = await chat_turn(hass, context_chat, messages)
+    assert provider.stream_turn.called and history[:len(messages)] == messages
+    review.assert_not_called()
+    recognize.assert_not_called()

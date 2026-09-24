@@ -98,3 +98,35 @@ async def token_store(hass, mock_store):
     ):
         instance = await TokenStore.async_create(hass)
     return instance
+
+
+@pytest.fixture(params=['openai', 'reasoning', 'anthropic', 'text_blocks'])
+def provider_context_history(request):
+    """Use the actual adapters to retain representative completed tool exchanges."""
+    import json
+    from custom_components.phoenix_mcp.agentcli import ClaudeProvider, OpenAICompatProvider, ProviderConfig
+
+    style = request.param
+    history = [{'role': 'user', 'content': 'List the available lights; do not change anything.'}]
+    if style == 'text_blocks':
+        history.append({'role': 'assistant', 'content': [{'type': 'text', 'text': 'I can list lights.'}]})
+        return history
+    provider = (ClaudeProvider(ProviderConfig('claude', 'test', '')) if style == 'anthropic'
+                else OpenAICompatProvider(ProviderConfig('chatgpt', 'test', '')))
+    calls = [('call_a', 'list_entities', {'domain': 'light'}), ('call_b', 'get_datetime', {})]
+    if style == 'anthropic':
+        assistant = {'role': 'assistant', 'content': [{'type': 'text', 'text': 'Checking the available information.'},
+            *[{'type': 'tool_use', 'id': ident, 'name': name, 'input': args} for ident, name, args in calls]]}
+    else:
+        assistant = {'role': 'assistant', 'content': '', 'tool_calls': [
+            {'id': ident, 'type': 'function', 'function': {'name': name, 'arguments': json.dumps(args)}}
+            for ident, name, args in calls]}
+        if style == 'reasoning': assistant['reasoning_content'] = 'Only inspect state; do not change devices.'
+    provider.append_assistant(history, assistant)
+    provider.append_tool_results(history, [
+        {'tool_use_id': ident, 'tool_name': name, 'result_text': '{"status":"ok"}', 'is_error': False}
+        for ident, name, _ in calls])
+    provider.append_assistant(history, {'role': 'assistant', 'content': (
+        [{'type': 'text', 'text': 'The read-only checks are complete.'}] if style == 'anthropic'
+        else 'The read-only checks are complete.')})
+    return history

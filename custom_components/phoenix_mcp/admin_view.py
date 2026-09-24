@@ -2362,7 +2362,7 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
                 or type(body.get("decision", False)) is not bool
                 or type(body.get("targets", False)) is not bool or (body.get("targets") and not body.get("decision"))
                 or ("messages" in body and (not body.get("decision") or body.get("targets")
-                                            or context_history(body["messages"]) is None))):
+                                            or context_history(body["messages"], structured=True) is None))):
             return _err("invalid_request", "Invalid command preview request.", 400, rid,
                         key="routingPreviewInvalid")
         token = data.store.get_token_by_id(token_id)

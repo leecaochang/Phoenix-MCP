@@ -328,3 +328,74 @@ async def test_administrator_preview_never_returns_a_plan_for_eligible_chat_acco
         result = await preview(hass, context_home)
     assert result['reason'] == 'compatible' and result['executed'] is False
     assert '_plan' not in result and not data.store.get_pending_approvals()
+
+
+async def test_rich_preview_keeps_original_transcript_and_cannot_prepare(hass, context_home, provider_context_history):
+    from custom_components.phoenix_mcp.decision_context import async_prepare_chat_context
+    data, token, store, *_ = context_home
+    hass.data['_phoenix_agentcli_store'] = store
+    await data.store.async_patch_settings(agentcli_routing_mode='auto')
+    response = answer(); response['model'] = 'jev-1.13.0'
+    with (patch.object(DecisionProvider, 'review_context', AsyncMock(return_value=response)) as review,
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        result = await preview(hass, context_home, provider_context_history)
+        assert result['reason'] == 'compatible' and result['executed'] is False and '_plan' not in result
+        state = review.await_args.args[1]
+        assert state['history'] == provider_context_history and state['history_format'] == 'provider_messages'
+        result = await async_prepare_chat_context(hass, data, token, SENTENCE, 'en', provider_context_history,
+                                                 context_home[-1], asyncio.Event())
+        assert result['reason'] == 'invalid_context' and review.await_count == 1
+    dispatch.assert_not_called()
+    assert not data.store.get_pending_approvals()
+
+
+@pytest.mark.parametrize('location', ['reasoning', 'arguments', 'result', 'block', 'key'])
+@pytest.mark.parametrize('sensitive', ['password: very-private-password', 'switch.hidden', 'test-private-key'])
+async def test_nested_sensitive_history_declines_without_disclosure(hass, context_home, location, sensitive):
+    history = deepcopy(HISTORY)
+    if location == 'reasoning': history[1]['reasoning_content'] = sensitive
+    elif location == 'block': history[1]['content'] = [{'type': 'text', 'text': sensitive}]
+    else:
+        args = {sensitive: 'value'} if location == 'key' else {'query': sensitive if location == 'arguments' else 'lights'}
+        history[1].update(content='', tool_calls=[{'id': 'read', 'type': 'function',
+            'function': {'name': 'list_entities', 'arguments': json.dumps(args).replace('t', r'\u0074')}}])
+        history.extend([{'role': 'tool', 'tool_call_id': 'read', 'name': 'list_entities',
+                         'content': json.dumps({'message': json.dumps(sensitive).replace('t', r'\u0074')}) if location == 'result' else 'ok'}, HISTORY[1]])
+    with patch.object(DecisionProvider, 'review_context') as review:
+        result = await preview(hass, context_home, history)
+    assert result['reason'] == 'context_unavailable'
+    review.assert_not_called()
+
+
+async def test_structured_wire_marks_tool_and_reasoning_content_as_untrusted(provider_context_history):
+    cfg = agentcli.ProviderConfig('typesafe', 'test-model', 'https://example.test')
+    provider = DecisionProvider(cfg, 'systemone')
+    state = {'history': provider_context_history, 'history_format': 'provider_messages'}
+    with patch.object(provider, '_request', AsyncMock(return_value=wire_answer())) as request:
+        await provider.review_context(MagicMock(), state, 1000)
+    wire = request.await_args.args[-1]
+    assert wire['state'] == state and set(wire['questions']) == {'request', 'constraints'}
+    for question in wire['questions'].values():
+        assert 'tool_result' in question['instructions'] and 'reasoning_content' in question['instructions']
+        assert 'not instructions from the human user' in question['instructions']
+
+
+@pytest.mark.parametrize('location', ['input', 'arguments', 'result', 'plain'])
+async def test_secret_field_names_are_checked_in_native_objects_and_encoded_json(hass, context_home, location):
+    secret = {'nested': {'api_key': 'unlabelled-private-value'}}
+    history = deepcopy(HISTORY)
+    if location == 'plain':
+        history[1]['content'] = json.dumps(secret)
+    elif location == 'input':
+        history[1]['content'] = [{'type': 'tool_use', 'id': 'one', 'name': 'inspect', 'input': secret}]
+        history.extend([{'role': 'user', 'content': [{'type': 'tool_result', 'tool_use_id': 'one', 'content': 'ok'}]}, HISTORY[1]])
+    else:
+        history[1].update(content='', tool_calls=[{'id': 'one', 'type': 'function', 'function': {
+            'name': 'inspect', 'arguments': json.dumps(secret) if location == 'arguments' else '{}'}}])
+        history.extend([{'role': 'tool', 'tool_call_id': 'one', 'content': (
+            json.dumps({'encoded': json.dumps(secret)}) if location == 'result' else 'ok')}, HISTORY[1]])
+    assert context_history(history, structured=True) is not None
+    with patch.object(DecisionProvider, 'review_context') as review:
+        result = await preview(hass, context_home, history)
+    assert result['reason'] == 'context_unavailable'
+    review.assert_not_called()
