@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 const getSettings = vi.fn();
 const patchSettings = vi.fn();
@@ -20,6 +20,7 @@ vi.mock("../api", () => ({
 
 import { SettingsView } from "../views/SettingsView";
 import type { GlobalSettings } from "../types";
+import { blockInjectSession, startInjectSession } from "../inject/compatibility";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -28,6 +29,9 @@ function deferred<T>() {
 }
 
 describe("SettingsView request ordering", () => {
+  afterEach(() => {
+    delete (window as unknown as Record<string, unknown>).__phxMesaInjectCompatibility;
+  });
   beforeEach(() => {
     vi.clearAllMocks();
     getSettings.mockReset();
@@ -37,7 +41,7 @@ describe("SettingsView request ordering", () => {
   function renderSettings(onSettingsChange = vi.fn()) {
     render(
       <SettingsView
-        settings={{ kill_switch: false } as GlobalSettings}
+        settings={{ kill_switch: false, mesa_inject_enabled: true } as GlobalSettings}
         onSettingsChange={onSettingsChange}
         theme="auto"
         onThemeChange={vi.fn()}
@@ -50,6 +54,32 @@ describe("SettingsView request ordering", () => {
       onSettingsChange,
     };
   }
+
+  it("shows the session-disabled toggle off without changing the saved setting", async () => {
+    startInjectSession("1.0.1");
+    const { onSettingsChange, killSwitch } = renderSettings();
+    const toggle = screen.getByRole("checkbox", { name: "In-context profile buttons" });
+    expect(toggle).toBeChecked();
+    act(() => blockInjectSession("1.0.1"));
+    expect(toggle).not.toBeChecked();
+    expect(toggle).toBeDisabled();
+    expect(killSwitch).not.toBeDisabled();
+    fireEvent.click(toggle);
+    expect(patchSettings).not.toHaveBeenCalled();
+    expect(onSettingsChange).not.toHaveBeenCalled();
+    act(() => startInjectSession("1.0.2"));
+    expect(toggle).toBeChecked();
+    expect(toggle).not.toBeDisabled();
+  });
+
+  it("reads a failure detected before Settings was opened", () => {
+    startInjectSession("1.0.1");
+    blockInjectSession("1.0.1");
+    renderSettings();
+    const toggle = screen.getByRole("checkbox", { name: "In-context profile buttons" });
+    expect(toggle).toBeDisabled();
+    expect(toggle).not.toBeChecked();
+  });
 
   it("discards an older refresh response that finishes last", async () => {
     const stale = deferred<GlobalSettings>();

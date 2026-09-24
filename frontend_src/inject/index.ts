@@ -9,8 +9,8 @@
  *
  *  - Entity scope: one control per ROW of the data-table config pages listed in
  *    `ENTITY_PAGE_PREFIXES` (./dom), covering Entities, Automations, Scripts,
- *    Scenes, Helpers and People. Entities is the broad one, since every entity is
- *    listed there; the per-domain pages exist for in-context convenience.
+ *    Scenes and Helpers, plus People list items. Entities is the broad one,
+ *    since every entity is listed there; the per-domain pages provide convenience.
  *  - Device, area and integration scope: one control in a detail page's HEADER,
  *    keyed from the URL rather than from a DOM id, which makes these three far
  *    less fragile than the row adapter. They share one scanner, including its
@@ -24,24 +24,24 @@
  *
  * Design rules:
  *  - Admin only: does nothing unless `hass.user.is_admin`.
- *  - Fully sandboxed: every entry point is wrapped so a thrown error logs and
- *    no-ops; it must never break the HA frontend.
+ *  - Fully sandboxed: caught startup/scan errors log and disable this browser
+ *    session's injector and Settings toggle; they must never break HA.
  *  - Single current-HA path with feature-detection: if the data-table DOM does
  *    not match, nothing is injected (the feature self-disables). This is the
  *    intended behaviour on older HA or after a breaking HA frontend release.
  *  - The heavy modal (React + ProfileEditor) is lazy-imported on first click.
  *
- * THE ONE FRAGILE SPOT is `extractEntityId()` in ./dom: it reads each row's id
- * from HA's ha-data-table. If a future HA release changes that, update only that
- * function (and bump MESA_INJECT_MIN_HA in const.py if needed).
+ * HA-specific identities and insertion anchors live in ./dom. People uses a
+ * separate list adapter; the other entity pages use ha-data-table rows.
  */
 
 import { api, setHass } from "../api";
 import { JS_BUILD } from "../version";
 import { syncCardCatalog } from "../utils/card_harvest";
 import { loadTranslations, resolveLanguage, syncTranslations, t } from "../i18n";
-import { BTN_CLASS, deepQueryAll, extractEntityId, isSelfMutation, nameInsertionPoint, onEntityPage, SUBPAGE_SURFACES, WIDEN_STYLE_ID } from "./dom";
+import { BTN_CLASS, deepQueryAll, extractEntityId, isSelfMutation, nameInsertionPoint, onEntityPage, personEntityId, SUBPAGE_SURFACES, WIDEN_STYLE_ID } from "./dom";
 import { claimInjectController, type InjectController } from "./ownership";
+import { blockInjectSession, injectSessionBlocked, startInjectSession } from "./compatibility";
 import type { QuickAddScope } from "./QuickAdd";
 
 const LOG = "[Phoenix MCP inject]";
@@ -209,6 +209,11 @@ function applyButtonState(btn: HTMLButtonElement, scope: Scope, key: string): vo
 
 function decorateRow(row: HTMLElement): void {
   const entityId = extractEntityId(row);
+  // Virtualized tables can reuse a row for another entity. Its click closure
+  // must be replaced along with the visible profile state.
+  for (const button of row.querySelectorAll<HTMLButtonElement>(`.${BTN_CLASS}`)) {
+    if (button.dataset.phxKey !== entityId) button.remove();
+  }
   if (!entityId) return;
   const buttons = row.querySelectorAll<HTMLButtonElement>(`.${BTN_CLASS}`);
   if (buttons.length) {
@@ -250,6 +255,8 @@ function ensureColumnWidth(sr: ShadowRoot): void {
 function scan(): void {
   if (onEntityPage()) {
     scanDataTables();
+    if (disposed) return;
+    if (/^\/config\/person(?:\/|$)/.test(window.location.pathname)) scanPeople();
     return;
   }
   for (const { scope, keyFromPath } of SUBPAGE_SURFACES) {
@@ -257,6 +264,44 @@ function scan(): void {
     if (key) {
       scanSubpage(scope, key);
       return;
+    }
+  }
+}
+
+/** Undo only the list-item slot switch this injector enabled. */
+function restorePeopleMeta(row: Element): void {
+  if (!row.hasAttribute("data-phx-meta")) return;
+  row.removeAttribute("hasmeta");
+  row.removeAttribute("data-phx-meta");
+}
+
+/** HA's People page renders list items rather than entity data-table rows. */
+function scanPeople(): void {
+  for (const page of deepQueryAll("ha-config-person")) {
+    const sr = page.shadowRoot;
+    if (!sr) continue;
+    observeRoot(sr);
+    for (const row of sr.querySelectorAll<HTMLElement>("ha-list-item")) {
+      const entityId = personEntityId(row, getHass()?.states ?? {});
+      const existing = row.querySelector<HTMLButtonElement>(`.${BTN_CLASS}`);
+      if (existing && existing.dataset.phxKey !== entityId) existing.remove();
+      if (!entityId) {
+        restorePeopleMeta(row);
+        continue;
+      }
+      // MWC list items omit the meta slot entirely unless hasMeta is enabled.
+      // Track only our own change so disposal preserves HA's existing setting.
+      if (!(row as HTMLElement & { hasMeta?: boolean }).hasMeta && !row.hasAttribute("hasmeta")) {
+        row.setAttribute("data-phx-meta", "");
+        row.setAttribute("hasmeta", "");
+      }
+      if (existing?.isConnected) {
+        applyButtonState(existing, "entity", entityId);
+        continue;
+      }
+      const button = buildButton("entity", entityId);
+      button.slot = "meta";
+      row.appendChild(button);
     }
   }
 }
@@ -274,6 +319,8 @@ function scanDataTables(): void {
         decorateRow(row);
       } catch (e) {
         log("row decorate failed", e);
+        disableForSession();
+        return;
       }
     }
   }
@@ -436,7 +483,9 @@ async function refreshScoped(scope: Exclude<Scope, "entity">): Promise<void> {
 }
 
 async function openModal(scope: Scope, key: string): Promise<void> {
+  if (disposed) return;
   await import("./QuickAdd"); // defines <phx-mesa-quick-add>
+  if (disposed) return;
   const el = document.createElement("phx-mesa-quick-add");
   el.setAttribute("scope", scope);
   el.setAttribute("key", key);
@@ -452,12 +501,18 @@ async function openModal(scope: Scope, key: string): Promise<void> {
   document.body.appendChild(el);
 }
 
+function disableForSession(): void {
+  blockInjectSession(JS_BUILD);
+  controller.dispose();
+}
+
 function safe(fn: () => void): void {
   if (disposed) return;
   try {
     fn();
   } catch (e) {
     log("error", e);
+    disableForSession();
   }
 }
 
@@ -552,12 +607,15 @@ controller = {
     for (const element of deepQueryAll("[data-phx-widen]")) {
       element.removeAttribute("data-phx-widen");
     }
+    for (const element of deepQueryAll("[data-phx-meta]")) restorePeopleMeta(element);
     if (controllerHost[ACTIVE_FLAG] === controller) delete controllerHost[ACTIVE_FLAG];
   },
 };
 
 if (claimInjectController(controllerHost, ACTIVE_FLAG, controller)) {
-  safe(start);
+  startInjectSession(JS_BUILD);
+  if (injectSessionBlocked()) controller.dispose();
+  else safe(start);
 } else {
   disposed = true;
   log("an equal or newer injector build is already active; standing down");

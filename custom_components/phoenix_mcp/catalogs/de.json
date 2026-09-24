@@ -1052,6 +1052,7 @@
       "infoVersionLabel": "Phoenix-MCP-Version:",
       "injectHelp": "Fügt den Automationen-, Skript-, Helfer-, Personen- und Integrationsseiten von Home Assistant MESA-Profil-Schaltflächen hinzu. Diese Schaltflächen benötigen nach einer Änderung der Home-Assistant-Oberfläche möglicherweise ein Phoenix-MCP-Update. Laden Sie Home Assistant nach dieser Änderung neu. Nur für Administratoren.",
       "injectLabel": "Kontextbezogene Profil-Schaltflächen",
+      "injectUnavailable": "Vorübergehend deaktiviert, da diese Home-Assistant-Version nicht mit den Profilschaltflächen kompatibel ist. Ein zukünftiges Phoenix-MCP-Update kann diese Funktion möglicherweise wiederherstellen.",
       "killSwitchActiveAria": "Not-Aus-Schalter aktiv. Alle Phoenix-MCP-Endpunkte sind deaktiviert",
       "killSwitchActiveHelp": "Alle Phoenix-MCP-Clientanfragen werden jetzt abgelehnt. Beim erneuten Aktivieren werden alle Phoenix-MCP-Routen sofort neu registriert, ohne einen HA-Neustart.",
       "killSwitchActiveLabel": "Not-Aus-Schalter AKTIV - Alle Phoenix-MCP-Endpunkte sind deaktiviert",

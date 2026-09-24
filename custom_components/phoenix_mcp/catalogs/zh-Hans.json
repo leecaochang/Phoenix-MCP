@@ -1344,6 +1344,7 @@
       "infoVersionLabel": "Phoenix MCP 版本：",
       "injectHelp": "在 Home Assistant 的自动化、脚本、辅助元素、人员和集成页面上添加 MESA 策略按钮。Home Assistant 前端更新后，这些按钮可能需要 Phoenix MCP 一并更新。更改此项后请重新加载 Home Assistant。仅限管理员。",
       "injectLabel": "页面内策略按钮",
+      "injectUnavailable": "由于当前 Home Assistant 版本与配置档案按钮不兼容，此功能已暂时禁用。未来的 Phoenix MCP 更新可能会恢复此功能。",
       "killSwitchActiveAria": "紧急停止开关已启用。所有 Phoenix MCP 端点均已禁用",
       "killSwitchActiveHelp": "所有 Phoenix MCP 客户端请求现已被拒绝。重新启用后会立即重新注册所有 Phoenix MCP 路由，无需重启 HA。",
       "killSwitchActiveLabel": "紧急停止开关已启用 - 所有 Phoenix MCP 端点均已禁用",

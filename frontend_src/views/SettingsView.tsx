@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { GlobalSettings } from "../types";
 import { api } from "../api";
 import { LoggingSettings } from "../components/LoggingSettings";
@@ -16,6 +16,7 @@ import { JS_BUILD } from "../version";
 import { LANGUAGES, LANGUAGE_AUTO, t } from "../i18n";
 import { tRich } from "../i18n/rich";
 import { useLatestRequest } from "../utils/latest_request";
+import { injectSessionBlocked, subscribeInjectCompatibility } from "../inject/compatibility";
 
 type Theme = "light" | "dark" | "auto";
 
@@ -37,6 +38,7 @@ interface Props {
 }
 
 export function SettingsView({ settings, onSettingsChange, theme, onThemeChange, language, onLanguageChange }: Props) {
+  const injectBlocked = useSyncExternalStore(subscribeInjectCompatibility, injectSessionBlocked);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showWipe, setShowWipe] = useState(false);
@@ -88,6 +90,7 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
   }, [refreshSettings]);
 
   async function patchSetting(key: keyof GlobalSettings, value: boolean | number | string | string[]) {
+    if (key === "mesa_inject_enabled" && injectSessionBlocked()) return;
     const isLatest = beginMutation();
     // Invalidate a refresh that began before this mutation. Its snapshot can no
     // longer be authoritative once the write starts.
@@ -237,16 +240,17 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
             <div className="toggle-row toggle-row-plain" style={{ marginTop: 14 }}>
               <div className="toggle-label">
                 <span>{t("settings.injectLabel")}</span>
-                <small>
-                  {t("settings.injectHelp")}
+                <small id="phx-inject-help">
+                  {t(injectBlocked ? "settings.injectUnavailable" : "settings.injectHelp")}
                 </small>
               </div>
-              <label className={`toggle-switch${saving ? " disabled" : ""}`}>
+              <label className={`toggle-switch${saving || injectBlocked ? " disabled" : ""}`}>
                 <input
                   type="checkbox"
                   aria-label={t("settings.injectLabel")}
-                  checked={settings.mesa_inject_enabled}
-                  disabled={saving}
+                  aria-describedby="phx-inject-help"
+                  checked={settings.mesa_inject_enabled && !injectBlocked}
+                  disabled={saving || injectBlocked}
                   onChange={(e) => patchSetting("mesa_inject_enabled", e.target.checked)}
                 />
                 <span className="toggle-switch-track" />

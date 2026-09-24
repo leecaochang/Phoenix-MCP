@@ -1635,6 +1635,7 @@
       "infoVersionLabel": "Wersja Phoenix MCP:",
       "injectHelp": "Dodaj przyciski profili MESA do stron Automatyzacje, Skrypty, Pomocnicy, Osoby i integracje w Home Assistant. Te przyciski mogą wymagać aktualizacji Phoenix MCP po zmianie frontendu Home Assistant. Przeładuj Home Assistant po zmianie tego ustawienia. Tylko administratorzy.",
       "injectLabel": "Przyciski profili w kontekście",
+      "injectUnavailable": "Tymczasowo wyłączono, ponieważ ta wersja Home Assistant nie jest zgodna z przyciskami profilu. Przyszła aktualizacja Phoenix MCP może przywrócić tę funkcję.",
       "killSwitchActiveAria": "Wyłącznik awaryjny aktywny. Wszystkie punkty końcowe Phoenix MCP są wyłączone",
       "killSwitchActiveHelp": "Wszystkie żądania klientów Phoenix MCP są teraz odrzucane. Ponowne włączenie natychmiast zarejestruje ponownie wszystkie trasy Phoenix MCP, bez ponownego uruchamiania HA.",
       "killSwitchActiveLabel": "Wyłącznik awaryjny AKTYWNY - wszystkie punkty końcowe Phoenix MCP są wyłączone",

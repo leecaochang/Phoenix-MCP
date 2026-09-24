@@ -1324,6 +1324,7 @@
       "infoVersionLabel": "Versione di Phoenix MCP:",
       "injectHelp": "Aggiungi i pulsanti dei profili MESA alle pagine Automazioni, Script, Aiutanti, Persone e Integrazioni di Home Assistant. Questi pulsanti possono richiedere un aggiornamento di Phoenix MCP dopo una modifica al frontend di Home Assistant. Ricarica Home Assistant dopo aver cambiato questa opzione. Solo amministratori.",
       "injectLabel": "Pulsanti dei profili nel contesto",
+      "injectUnavailable": "Temporaneamente disattivato perché questa versione di Home Assistant non è compatibile con i pulsanti del profilo. Un futuro aggiornamento di Phoenix MCP potrebbe ripristinare questa funzione.",
       "killSwitchActiveAria": "Kill switch attivo. Tutti gli endpoint di Phoenix MCP sono disabilitati",
       "killSwitchActiveHelp": "Tutte le richieste dei client a Phoenix MCP vengono ora rifiutate. Riabilitandolo, tutte le route di Phoenix MCP verranno registrate di nuovo immediatamente, senza riavviare HA.",
       "killSwitchActiveLabel": "Kill switch ATTIVO - Tutti gli endpoint di Phoenix MCP sono disabilitati",

@@ -137,7 +137,11 @@
 
         <div class="callout warn">
           <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><circle cx="12" cy="17" r="0.4" fill="currentColor"/></svg>
-          <div class="callout-body"><p class="callout-title">It patches the Home Assistant frontend</p><p>These buttons are injected into pages Phoenix MCP does not own, so a Home Assistant update that reworks those pages can make them stop appearing until Phoenix MCP is updated with a fix. If that happens the feature self-disables on the layout it no longer recognises rather than breaking anything, so the failure is cosmetic, it's perfectly safe, and it never affects Home Assistant itself.</p></div>
+          <div class="callout-body">
+            <p class="callout-title">Home Assistant compatibility</p>
+            <p>These buttons are added to Home Assistant pages, so newer versions of Home Assistant can possibly affect compatibility. When the injector detects incompatibility, it disables the <strong>In-context profile buttons</strong> toggle under <strong>Settings &middot; Experimental</strong>. A future Phoenix MCP update should restore this feature.</p>
+            <p>Your saved settings are unchanged and you can still continue managing profiles in the MESA tab.</p>
+          </div>
         </div>
 
         <details class="advanced">

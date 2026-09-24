@@ -1195,6 +1195,7 @@
       "infoVersionLabel": "Phoenix MCP Version:",
       "injectHelp": "Add MESA profile buttons to Home Assistant's Automations, Scripts, Helpers, People, and integration pages. These buttons may need a Phoenix MCP update after a Home Assistant frontend change. Reload Home Assistant after changing this. Admins only.",
       "injectLabel": "In-context profile buttons",
+      "injectUnavailable": "Temporarily disabled because this Home Assistant version is not compatible with the profile buttons. A future Phoenix MCP update may restore this feature.",
       "killSwitchActiveAria": "Kill switch active. All Phoenix MCP endpoints are disabled",
       "killSwitchActiveHelp": "All Phoenix MCP client requests are now refused. Re-enabling will re-register all Phoenix MCP routes immediately, without an HA restart.",
       "killSwitchActiveLabel": "Kill switch ACTIVE - All Phoenix MCP endpoints are disabled",

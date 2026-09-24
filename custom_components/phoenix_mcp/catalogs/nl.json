@@ -1615,6 +1615,7 @@
       "infoVersionLabel": "Phoenix MCP-versie:",
       "injectHelp": "MESA-profielknoppen toevoegen aan de pagina's Automatiseringen, Scripts, Helpers, Personen en integraties van Home Assistant. Deze knoppen hebben mogelijk een Phoenix MCP-update nodig na een wijziging aan de Home Assistant-frontend. Herlaad Home Assistant nadat je dit hebt gewijzigd. Alleen beheerders.",
       "injectLabel": "Profielknoppen in context",
+      "injectUnavailable": "Tijdelijk uitgeschakeld omdat deze versie van Home Assistant niet compatibel is met de profielknoppen. Een toekomstige update van Phoenix MCP kan deze functie mogelijk herstellen.",
       "killSwitchActiveAria": "Noodstop actief. Alle Phoenix MCP-eindpunten zijn uitgeschakeld",
       "killSwitchActiveHelp": "Alle Phoenix MCP-clientverzoeken worden nu geweigerd. Opnieuw inschakelen registreert alle Phoenix MCP-routes direct opnieuw, zonder HA-herstart.",
       "killSwitchActiveLabel": "Noodstop ACTIEF - alle Phoenix MCP-eindpunten zijn uitgeschakeld",

@@ -3,9 +3,8 @@
  * Pure DOM helpers for the injector, separated so they can be unit-tested without
  * the entry module's load-time side effects.
  *
- * THE ONE FRAGILE, HA-VERSION-SPECIFIC FUNCTION is `extractEntityId`. If a future
- * HA release changes how ha-data-table exposes a row's id, update only this file
- * (and bump MESA_INJECT_MIN_HA in const.py if appropriate).
+ * HA-version-specific row identities and insertion anchors live here. Verify
+ * these adapters against upstream templates when HA changes its config pages.
  */
 
 export const ENTITY_ID_RE = /^[a-z_]+\.[a-z0-9_]+$/;
@@ -76,7 +75,7 @@ export const SUBPAGE_SURFACES: {
 
 /**
  * Where to insert the control: in the same cell as the entity icon
- * (ha-state-icon), right after it. The icon is the one anchor that is reliably in
+ * (including ha-entity-id-icon), right after it. The icon is the anchor in
  * the leftmost entity/name column on every HA config table, so co-locating with
  * it keeps the control in the right column regardless of how the name renders.
  *
@@ -86,12 +85,30 @@ export const SUBPAGE_SURFACES: {
  * left/right "swap"). Refusing here makes a later scan retry once the icon is in.
  */
 export function nameInsertionPoint(row: HTMLElement): { parent: HTMLElement; before: Node | null } | null {
-  const icon = row.querySelector<HTMLElement>("ha-state-icon, ha-icon");
+  const icon = row.querySelector<HTMLElement>("ha-state-icon, ha-icon, ha-entity-id-icon, ha-svg-icon");
   const iconCell = icon ? icon.closest<HTMLElement>('[role="cell"]') : null;
   if (icon && iconCell) {
-    return { parent: iconCell, before: icon.nextSibling };
+    // Automation icons have a wrapper containing state badges. insertBefore
+    // requires a direct child of the cell, not a sibling inside that wrapper.
+    let anchor = icon;
+    while (anchor.parentElement && anchor.parentElement !== iconCell) anchor = anchor.parentElement;
+    return { parent: iconCell, before: anchor.nextSibling };
   }
   return null;
+}
+
+/** Resolve People list entries by HA's stable person id, never their name. */
+export function personEntityId(
+  row: HTMLElement,
+  states: Record<string, { attributes?: { id?: unknown } }>,
+): string | null {
+  const badge = row.querySelector("ha-person-badge") as (HTMLElement & { person?: { id?: unknown } }) | null;
+  const id = badge?.person?.id;
+  if (typeof id !== "string" || !id) return null;
+  const matches = Object.entries(states).filter(([key, state]) =>
+    key.startsWith("person.") && ENTITY_ID_RE.test(key) && state.attributes?.id === id,
+  );
+  return matches.length === 1 ? matches[0][0] : null;
 }
 
 /** Is this node one we injected (our +/MESA button or our column-width style)? */

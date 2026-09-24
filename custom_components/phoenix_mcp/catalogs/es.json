@@ -1503,6 +1503,7 @@
       "infoVersionLabel": "Versión de Phoenix MCP:",
       "injectHelp": "Añadir botones de perfil de MESA a las páginas de Automatizaciones, Scripts, Ayudantes, Personas e integraciones de Home Assistant. Estos botones pueden necesitar una actualización de Phoenix MCP después de un cambio en el frontend de Home Assistant. Recargue Home Assistant después de cambiar esto. Solo administradores.",
       "injectLabel": "Botones de perfil en contexto",
+      "injectUnavailable": "Desactivado temporalmente porque esta versión de Home Assistant no es compatible con los botones de perfil. Una futura actualización de Phoenix MCP podría restaurar esta función.",
       "killSwitchActiveAria": "Interruptor de emergencia activo. Todos los puntos de conexión de Phoenix MCP están deshabilitados",
       "killSwitchActiveHelp": "Todas las solicitudes de clientes de Phoenix MCP se rechazan ahora. Volver a habilitarlo volverá a registrar todas las rutas de Phoenix MCP de inmediato, sin reiniciar HA.",
       "killSwitchActiveLabel": "Interruptor de emergencia ACTIVO: todos los puntos de conexión de Phoenix MCP están deshabilitados",

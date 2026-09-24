@@ -1356,6 +1356,7 @@
       "infoVersionLabel": "Phoenix MCP バージョン:",
       "injectHelp": "Home Assistant のオートメーション、スクリプト、ヘルパー、人物、インテグレーションの各ページに MESA プロファイルボタンを追加します。Home Assistant のフロントエンド変更後に Phoenix MCP の更新が必要になる場合があります。変更後は Home Assistant を再読み込みしてください。管理者専用です。",
       "injectLabel": "コンテキスト内のプロファイルボタン",
+      "injectUnavailable": "この Home Assistant バージョンはプロファイルボタンと互換性がないため、一時的に無効になっています。今後の Phoenix MCP の更新で、この機能が復元される可能性があります。",
       "killSwitchActiveAria": "キルスイッチ作動中。すべての Phoenix MCP エンドポイントが無効です",
       "killSwitchActiveHelp": "Phoenix MCP クライアントのすべてのリクエストが拒否されます。再度有効にすると、HA を再起動せずにすべての Phoenix MCP ルートがすぐ再登録されます。",
       "killSwitchActiveLabel": "キルスイッチ作動中 - すべての Phoenix MCP エンドポイントは無効です",

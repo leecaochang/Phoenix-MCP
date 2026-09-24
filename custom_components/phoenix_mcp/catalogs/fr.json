@@ -1192,6 +1192,7 @@
       "infoVersionLabel": "Version de Phoenix MCP :",
       "injectHelp": "Ajoutez des boutons de profil MESA aux pages Automatisations, Scripts, Entrées, Personnes et intégrations de Home Assistant. Ces boutons peuvent nécessiter une mise à jour de Phoenix MCP après un changement du frontend Home Assistant. Rechargez Home Assistant après avoir modifié ceci. Administrateurs uniquement.",
       "injectLabel": "Boutons de profil contextuels",
+      "injectUnavailable": "Temporairement désactivé, car cette version de Home Assistant n’est pas compatible avec les boutons de profil. Une future mise à jour de Phoenix MCP pourrait rétablir cette fonctionnalité.",
       "killSwitchActiveAria": "Coupe-circuit actif. Tous les points de terminaison Phoenix MCP sont désactivés",
       "killSwitchActiveHelp": "Toutes les requêtes client Phoenix MCP sont désormais refusées. La réactivation réenregistrera immédiatement toutes les routes Phoenix MCP, sans redémarrage de HA.",
       "killSwitchActiveLabel": "Coupe-circuit ACTIF - Tous les points de terminaison Phoenix MCP sont désactivés",

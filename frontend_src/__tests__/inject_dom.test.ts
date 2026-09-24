@@ -9,6 +9,7 @@ import {
   isSelfMutation,
   nameInsertionPoint,
   onEntityPage,
+  personEntityId,
   SUBPAGE_SURFACES,
   WIDEN_STYLE_ID,
 } from "../inject/dom";
@@ -174,6 +175,40 @@ describe("nameInsertionPoint", () => {
     const row = document.createElement("div");
     row.append(a, b);
     expect(nameInsertionPoint(row)).toBeNull();
+  });
+});
+
+describe("HA 20260826.7 insertion anchors", () => {
+  it.each(["ha-entity-id-icon", "ha-svg-icon"])("accepts %s", (tag) => {
+    const row = document.createElement("div");
+    row.innerHTML = `<div role="cell"><${tag}></${tag}></div>`;
+    expect(nameInsertionPoint(row)?.parent).toBe(row.firstElementChild);
+  });
+
+  it("inserts outside the automation icon's badge wrapper", () => {
+    const row = document.createElement("div");
+    row.innerHTML = '<div role="cell"><div><ha-state-icon></ha-state-icon><ha-svg-icon></ha-svg-icon></div></div>';
+    const point = nameInsertionPoint(row)!;
+    const button = document.createElement("button");
+    expect(() => point.parent.insertBefore(button, point.before)).not.toThrow();
+    expect(point.parent.lastElementChild).toBe(button);
+    expect(button.previousElementSibling?.tagName).toBe("DIV");
+  });
+});
+
+describe("personEntityId", () => {
+  it("does not guess from names or accept ambiguous or non-person identities", () => {
+    const row = document.createElement("ha-list-item");
+    expect(personEntityId(row, {})).toBeNull();
+    const badge = document.createElement("ha-person-badge");
+    row.appendChild(badge);
+    Object.assign(badge, { person: { name: "Example" } });
+    expect(personEntityId(row, { "person.example": { attributes: {} } })).toBeNull();
+    Object.assign(badge, { person: { id: "stable-id" } });
+    const state = { attributes: { id: "stable-id" } };
+    expect(personEntityId(row, { "sensor.example": state })).toBeNull();
+    expect(personEntityId(row, { "person.a": state, "person.b": state })).toBeNull();
+    expect(personEntityId(row, { "person.renamed": state })).toBe("person.renamed");
   });
 });
 

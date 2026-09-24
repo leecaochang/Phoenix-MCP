@@ -1200,6 +1200,7 @@
       "infoVersionLabel": "Phoenix MCP 버전:",
       "injectHelp": "Home Assistant의 자동화, 스크립트, 도우미, 사람 및 통합 구성 요소 페이지에 MESA 프로필 버튼을 추가합니다. Home Assistant 프론트엔드 변경 후에는 이러한 버튼에 Phoenix MCP 업데이트가 필요할 수 있습니다. 이 설정을 변경한 후 Home Assistant를 다시 로드하세요. 관리자 전용입니다.",
       "injectLabel": "문맥 내 프로필 버튼",
+      "injectUnavailable": "현재 Home Assistant 버전이 프로필 버튼과 호환되지 않아 일시적으로 비활성화되었습니다. 향후 Phoenix MCP 업데이트에서 이 기능이 복원될 수 있습니다.",
       "killSwitchActiveAria": "킬 스위치가 활성화되어 있습니다. 모든 Phoenix MCP 엔드포인트가 비활성화되었습니다",
       "killSwitchActiveHelp": "이제 모든 Phoenix MCP 클라이언트 요청이 거부됩니다. 다시 활성화하면 HA를 재시작하지 않고도 모든 Phoenix MCP 경로가 즉시 다시 등록됩니다.",
       "killSwitchActiveLabel": "킬 스위치 작동 중 - 모든 Phoenix MCP 엔드포인트가 비활성화되었습니다",
