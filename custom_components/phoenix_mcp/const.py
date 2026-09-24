@@ -1756,12 +1756,12 @@ DECISION_TARGET_INTENTS = {
 }
 # Leave one of the common classifier format's 50 choices for declining.
 DECISION_MAX_TARGETS = 49
-# The extended TypeSafe preview leaves one of its 255 choices for declining.
-DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS = 254
+# Qualified TypeSafe joint requests leave one of 255 choices for declining.
+DECISION_BATCH_MAX_TARGETS = 254
 DECISION_MAX_TARGET_BYTES = 16384
-# Six-operation inert previews need room for the union and per-target eligibility.
+# Joint catalogs need room for the complete union and per-target eligibility.
 # Individual operation catalogs retain DECISION_MAX_TARGET_BYTES.
-DECISION_PERCENTAGE_PREVIEW_MAX_TARGET_BYTES = 32768
+DECISION_BATCH_MAX_TARGET_BYTES = 32768
 DECISION_MAX_TARGET_TEXT = 256
 DECISION_MAX_TARGET_ALIASES = 8
 # Experimental admission heuristic, not a calibrated accuracy claim.

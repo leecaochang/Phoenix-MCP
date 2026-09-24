@@ -14,9 +14,9 @@ from .command_operations import numeric_operation
 from .const import (
     DECISION_BATCH_EXECUTION_LANGUAGES, DECISION_BATCH_EXECUTION_MODELS,
     DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES,
-    DECISION_PERCENTAGE_PREVIEW_MAX_TARGET_BYTES,
+    DECISION_BATCH_MAX_TARGET_BYTES,
     DECISION_PERCENTAGE_EXECUTION_MODELS, DECISION_PERCENTAGE_EVIDENCE_LANGUAGES,
-    DECISION_TARGET_INTENTS, DECISION_NUMERIC_CATEGORIES, DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS, MAX_SEARCH_QUERY_LEN,
+    DECISION_TARGET_INTENTS, DECISION_NUMERIC_CATEGORIES, DECISION_BATCH_MAX_TARGETS, MAX_SEARCH_QUERY_LEN,
 )
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 from .decision_targets import capture_targets, CatalogLimitError, TargetSnapshot
@@ -25,14 +25,15 @@ from .helpers import redact_secrets_in_text, redact_inaccessible_entity_ids_in_t
 from .numeric_evidence import read_explicit_percentage, compare_percentage, has_percentage_unit
 
 
-def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = False
+def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = False, extended: bool = False
                           ) -> tuple[dict[str, dict], dict[str, TargetSnapshot]]:
     """Union complete scoped catalogs; keep eligibility per operation and all competitors."""
     devices = device_registry_snapshot(hass)
     categories = DECISION_EXECUTION_CATEGORIES | DECISION_NUMERIC_CATEGORIES if numeric_preview else DECISION_EXECUTION_CATEGORIES
-    max_targets = DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS if numeric_preview else DECISION_MAX_TARGETS
+    extended = numeric_preview or extended
+    max_targets = DECISION_BATCH_MAX_TARGETS if extended else DECISION_MAX_TARGETS
     snapshots = {category: capture_targets(hass, token, category, devices=devices, max_targets=max_targets,
-                                          compact=numeric_preview)
+                                          compact=extended)
                  for category in sorted(categories)}
     entities: dict[str, dict] = {}
     for category, snapshot in snapshots.items():
@@ -43,7 +44,7 @@ def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = Fals
         raise CatalogLimitError("combined", "target_count", len(entities), max_targets)
     targets = {f"t{index}": entities[entity_id] for index, entity_id in enumerate(sorted(entities))}
     size = len(json.dumps(targets, ensure_ascii=False).encode())
-    max_bytes = DECISION_PERCENTAGE_PREVIEW_MAX_TARGET_BYTES if numeric_preview else DECISION_MAX_TARGET_BYTES
+    max_bytes = DECISION_BATCH_MAX_TARGET_BYTES if extended else DECISION_MAX_TARGET_BYTES
     if size > max_bytes:
         raise CatalogLimitError("combined", "metadata_bytes", size, max_bytes)
     return targets, snapshots
@@ -93,7 +94,7 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
         if source_value is None:
             return None, {"reason": "numeric_unverified", "decision": None, "executed": False}
     try:
-        snapshot = capture_batch_targets(hass, current, numeric_preview=numeric)
+        snapshot = capture_batch_targets(hass, current, numeric_preview=numeric, extended=True)
     except DecisionError as error:
         if str(error) in ("too_many_targets", "target_metadata_too_large"):
             return None
@@ -110,7 +111,7 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
     if current is None:
         raise DecisionError("authority_changed")
     try:
-        changed = capture_batch_targets(hass, current, numeric_preview=numeric) != snapshot
+        changed = capture_batch_targets(hass, current, numeric_preview=numeric, extended=True) != snapshot
     except DecisionError:
         changed = True
     if changed:
@@ -192,7 +193,8 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
                                         metrics=runtime.metrics, metric_scope="preview")
             if numeric_preview and not provider.supports_exact_percentages():
                 return result("unsupported_category")
-            snapshot = capture_batch_targets(hass, current, numeric_preview=numeric_preview)
+            extended = batch_execution_eligible(cfg, lang)
+            snapshot = capture_batch_targets(hass, current, numeric_preview=numeric_preview, extended=extended)
             targets, _ = snapshot
             if not targets:
                 return result("no_target")
@@ -208,7 +210,7 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
             if current is None or store.resolve(account, purpose="decision") != cfg:
                 return result("authority_changed")
             try:
-                if not safe_text(current) or capture_batch_targets(hass, current, numeric_preview=numeric_preview) != snapshot:
+                if not safe_text(current) or capture_batch_targets(hass, current, numeric_preview=numeric_preview, extended=extended) != snapshot:
                     return result("targets_changed")
             except DecisionError:
                 return result("targets_changed")

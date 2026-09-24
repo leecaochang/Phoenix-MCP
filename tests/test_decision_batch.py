@@ -13,8 +13,8 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.phoenix_mcp import agentcli, device_semantics
 from custom_components.phoenix_mcp.const import (
-    DOMAIN, DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS, DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS,
-    DECISION_MAX_TARGET_BYTES, DECISION_PERCENTAGE_PREVIEW_MAX_TARGET_BYTES,
+    DOMAIN, DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS, DECISION_BATCH_MAX_TARGETS,
+    DECISION_MAX_TARGET_BYTES, DECISION_BATCH_MAX_TARGET_BYTES,
 )
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.decision_batch import async_preview_batch, capture_batch_targets
@@ -117,7 +117,7 @@ async def test_no_request_when_catalog_or_local_recognition_is_ineligible(hass, 
     if case == 'unexposed': async_expose_entity(hass, 'conversation', entity_id, False)
     if case == 'unavailable': hass.states.async_set(entity_id, 'unavailable')
     if case == 'oversized':
-        for index in range(DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS if numeric else DECISION_MAX_TARGETS):
+        for index in range(DECISION_BATCH_MAX_TARGETS):
             entry = er.async_get(hass).async_get_or_create('light', 'test', str(index))
             hass.states.async_set(entry.entity_id, 'off')
     if case in ('trigger', 'timeout'): local = {'reason': 'sentence_trigger' if case == 'trigger' else 'timeout', 'proposal': None}
@@ -419,7 +419,7 @@ async def test_larger_union_budget_is_preview_only_and_rechecks_competitors(hass
     assert caught.value.details['limit'] == DECISION_MAX_TARGET_BYTES
     targets, snapshots = capture_batch_targets(hass, token, numeric_preview=True)
     size = len(json.dumps(targets, ensure_ascii=False).encode())
-    assert DECISION_MAX_TARGET_BYTES < size <= DECISION_PERCENTAGE_PREVIEW_MAX_TARGET_BYTES
+    assert DECISION_MAX_TARGET_BYTES < size <= DECISION_BATCH_MAX_TARGET_BYTES
     assert all(len(json.dumps(snapshot.targets, ensure_ascii=False).encode()) <= DECISION_MAX_TARGET_BYTES
                for snapshot in snapshots.values())
     async def response(*args):
@@ -442,21 +442,21 @@ async def test_larger_union_budget_is_preview_only_and_rechecks_competitors(hass
 async def test_extended_union_over_budget_declines_before_provider_request(hass, batch_home):
     _, token, _, _, original = batch_home
     hass.states.async_set(original, 'off', {'supported_color_modes': ['brightness']})
-    for index in range(DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS - 1):
+    for index in range(DECISION_BATCH_MAX_TARGETS - 1):
         entry = er.async_get(hass).async_get_or_create('light', 'test', f'l{index}',
                                                       suggested_object_id=f'l{index}', original_name='Lamp')
         hass.states.async_set(entry.entity_id, 'off', {'friendly_name': 'Lamp', 'supported_color_modes': ['brightness']})
     # Each individual operation fits, but the combined eligibility data exceeds its own budget.
     for category in ('light_on', 'light_off', 'light_brightness', 'state_query'):
-        snapshot = capture_targets(hass, token, category, max_targets=DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS, compact=True)
-        assert len(snapshot.targets) == DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS
+        snapshot = capture_targets(hass, token, category, max_targets=DECISION_BATCH_MAX_TARGETS, compact=True)
+        assert len(snapshot.targets) == DECISION_BATCH_MAX_TARGETS
     with patch.object(DecisionProvider, '_request') as request:
         result = await percentage_preview(hass, batch_home)
     request.assert_not_called()
     assert result['reason'] == 'target_metadata_too_large' and result['executed'] is False
     assert result['catalog_limit']['category'] == 'combined'
-    assert result['catalog_limit']['limit'] == DECISION_PERCENTAGE_PREVIEW_MAX_TARGET_BYTES
-    assert result['catalog_limit']['observed'] > DECISION_PERCENTAGE_PREVIEW_MAX_TARGET_BYTES
+    assert result['catalog_limit']['limit'] == DECISION_BATCH_MAX_TARGET_BYTES
+    assert result['catalog_limit']['observed'] > DECISION_BATCH_MAX_TARGET_BYTES
 
 
 async def test_compact_batch_fits_duplicate_heavy_catalog_without_dropping_candidates(hass, batch_home):
@@ -471,7 +471,7 @@ async def test_compact_batch_fits_duplicate_heavy_catalog_without_dropping_candi
         hass.states.async_set(entry.entity_id, 'off', {'friendly_name': name, 'supported_color_modes': ['brightness']})
         expected_entities.add(entry.entity_id)
     with pytest.raises(CatalogLimitError) as caught:
-        capture_targets(hass, token, 'state_query', max_targets=DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS)
+        capture_targets(hass, token, 'state_query', max_targets=DECISION_BATCH_MAX_TARGETS)
     assert caught.value.details['bound'] == 'metadata_bytes'
     targets, _ = capture_batch_targets(hass, token, numeric_preview=True)
     assert {item['entity_id'] for item in targets.values()} == expected_entities
@@ -532,3 +532,36 @@ async def test_preview_limit_diagnostic_contains_only_scoped_counts(hass, batch_
     assert diagnostic['bound'] == bound and diagnostic['observed'] > diagnostic['limit']
     assert entity_id not in json.dumps(result) and 'private alias' not in json.dumps(result)
     assert result['executed'] is False and 'proposal' not in result
+
+
+@pytest.mark.parametrize('qualified', [False, True])
+@pytest.mark.parametrize('count', [49, 50, 254, 255])
+async def test_categorical_catalog_bounds_follow_qualified_account(hass, batch_home, qualified, count):
+    data, token, store, account, _ = batch_home
+    token.permissions = PermissionTree(domains={'sensor': PermissionNode(state='YELLOW')})
+    if not qualified:
+        await store.set_model(account, 'unreviewed-model')
+    expected = set()
+    for index in range(count):
+        entry = er.async_get(hass).async_get_or_create('sensor', 'test', f's{index}',
+                                                      suggested_object_id=f's{index}', original_name='Reading')
+        hass.states.async_set(entry.entity_id, '20')
+        async_expose_entity(hass, 'conversation', entry.entity_id, True)
+        expected.add(entry.entity_id)
+    async def response(*args):
+        payload = args[4]
+        assert set(payload['questions']) == {'route', 'target'}
+        assert len(payload['questions']['target']['criteria']) == count + 1
+        assert {item['entity_id'] for item in payload['state']['targets'].values()} == expected
+        return wire_response(payload, 'state_query', 't0')
+    with (patch.object(DecisionProvider, '_request', side_effect=response) as request,
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        result = await preview(hass, batch_home)
+    admitted = count <= (DECISION_BATCH_MAX_TARGETS if qualified else DECISION_MAX_TARGETS)
+    assert result['reason'] == ('target_selected' if admitted else 'too_many_targets')
+    assert request.await_count == int(admitted)
+    if not admitted:
+        assert result['catalog_limit']['limit'] == (DECISION_BATCH_MAX_TARGETS if qualified else DECISION_MAX_TARGETS)
+    assert result['executed'] is False and '_plan' not in result
+    assert not data.store.get_pending_approvals()
+    dispatch.assert_not_called()

@@ -626,7 +626,7 @@ async def test_jev_joint_declines_without_sequential_retry(hass, jev_hybrid_home
     assert data.decision_shadow.summary()["hybrid"]["reasons"] == {reason: 1}
 
 
-async def test_jev_large_union_keeps_full_sequential_catalog(hass, jev_hybrid_home):
+async def test_jev_large_union_keeps_all_candidates_in_one_joint_request(hass, jev_hybrid_home):
     from custom_components.phoenix_mcp.const import DECISION_MAX_TARGETS
     _, token, *_ = jev_hybrid_home
     token.permissions.domains["sensor"] = PermissionNode(state="YELLOW")
@@ -637,8 +637,8 @@ async def test_jev_large_union_keeps_full_sequential_catalog(hass, jev_hybrid_ho
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, jev_hybrid_home, request=jev_response)
-    assert [set(item.args[4]["questions"]) for item in remote.await_args_list] == [{"route"}, {"target"}]
-    assert len(remote.await_args.args[4]["state"]["targets"]) == 1
+    assert [set(item.args[4]["questions"]) for item in remote.await_args_list] == [{"route", "target"}]
+    assert len(remote.await_args.args[4]["state"]["targets"]) == DECISION_MAX_TARGETS + 1
     call.assert_awaited_once()
     provider.assert_not_called()
 
@@ -667,6 +667,10 @@ async def test_jev_joint_preserves_mesa(hass, jev_hybrid_home, restriction):
 async def test_jev_joint_approval_binds_full_union_and_model(hass, jev_hybrid_home, change):
     data, token, _, _, entity_id = jev_hybrid_home
     token.permissions.domains["sensor"] = PermissionNode(state="YELLOW")
+    for index in range(60):
+        entry = er.async_get(hass).async_get_or_create("sensor", "test", f"catalog_{index}")
+        hass.states.async_set(entry.entity_id, "20")
+        async_expose_entity(hass, "conversation", entry.entity_id, True)
     await set_mesa(hass, jev_hybrid_home, "confirm")
     with patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])):
         answer, _, _ = await run_voice(hass, jev_hybrid_home, request=jev_response)

@@ -115,7 +115,7 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
                     or plan["proposal"][operation.proposal_field] != review["percentage"]
                     or _digest(plan["proposal"]) != review["proposal"]):
                 return False
-        snapshot = capture_batch_targets(hass, token, numeric_preview=numeric)
+        snapshot = capture_batch_targets(hass, token, numeric_preview=numeric, extended=True)
         if batch_catalog_digest(snapshot) != review["catalog"] or category not in snapshot[1]:
             return False
         catalog_digest = snapshot[1][category].digest()

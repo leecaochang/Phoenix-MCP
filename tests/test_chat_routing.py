@@ -1394,13 +1394,13 @@ async def test_decision_followup_preserves_history_and_both_execution_proofs(has
     ('unknown_source_revision', 1), ('unknown_context_revision', 2), ('secret', 0), ('hidden_id', 0),
     ('catalog', 0)])
 async def test_decision_followup_declines_without_effects(hass, context_chat, case, calls):
-    from custom_components.phoenix_mcp.const import DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS
+    from custom_components.phoenix_mcp.const import DECISION_BATCH_MAX_TARGETS
     data, _ = context_chat
     messages = context_messages('I would like Desk lamp at 37 percent now.')
     if case == 'secret': messages[0]['content'] = 'password: never-share-this'
     if case == 'hidden_id': messages[0]['content'] = 'Do not change lock.private_door'
     if case == 'catalog':
-        for index in range(DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS):
+        for index in range(DECISION_BATCH_MAX_TARGETS):
             entry = er.async_get(hass).async_get_or_create('light', 'test', f'extra_{index}')
             hass.states.async_set(entry.entity_id, 'off')
     async def response(*args):
@@ -1549,3 +1549,32 @@ async def test_traditional_chinese_followup_stays_with_provider_until_separately
             context_messages('請把 Desk lamp 的亮度設為百分之三十七。'), language='zh-Hant')
     remote.assert_not_called()
     provider.stream_turn.assert_called_once()
+
+
+async def test_categorical_followup_routes_with_more_than_common_catalog_limit(hass, context_chat):
+    from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
+    data, token = context_chat
+    token.permissions.domains['sensor'] = PermissionNode(state='YELLOW')
+    for index in range(60):
+        entry = er.async_get(hass).async_get_or_create('sensor', 'test', f'catalog_{index}')
+        hass.states.async_set(entry.entity_id, '20')
+        async_expose_entity(hass, 'conversation', entry.entity_id, True)
+    seen = []
+    async def response(*args):
+        payload = args[4]; seen.append(payload)
+        if 'route' not in payload['questions']:
+            return context_response()
+        return {**chat_decision_wire(payload, 'state_query'), 'model': 'jev-1.13.0'}
+    local = {'reason': 'no_match', 'proposal': None, 'elapsed_ms': 1, 'route': 'provider'}
+    with (patch.object(chat_routing, 'async_evaluate_command', AsyncMock(return_value=local)),
+          patch.object(DecisionProvider, '_request', side_effect=response) as remote):
+        provider, _, history = await chat_turn(hass, context_chat,
+            context_messages('Please report the current status of Desk lamp.'))
+    assert len(seen[0]['state']['targets']) == 61
+    assert set(seen[0]['questions']) == {'route', 'target'}
+    assert remote.await_count == 2, data.decision_shadow.summary()
+    assert not provider.stream_turn.called, data.decision_shadow.summary()
+    assert seen[1]['state']['history'] == CONTEXT_HISTORY
+    assert history[:2] == CONTEXT_HISTORY
+    assert history[-1]['content'] == 'The state is off.'
+    assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'plan_ready': 1}
