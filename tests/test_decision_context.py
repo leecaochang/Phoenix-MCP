@@ -118,7 +118,7 @@ async def test_review_is_inert_and_keeps_fixed_numeric_candidate(hass, context_h
     dispatch.assert_not_called()
 
 
-@pytest.mark.parametrize('reason', ['no_match', 'no_target', 'timeout', 'sentence_trigger', 'unsupported'])
+@pytest.mark.parametrize('reason', ['timeout', 'sentence_trigger', 'busy'])
 async def test_no_eligible_local_command_skips_provider(hass, context_home, reason):
     with patch.object(DecisionProvider, 'review_context') as review:
         result = await preview(hass, context_home, local={'reason': reason, 'proposal': None})
@@ -400,3 +400,30 @@ async def test_secret_field_names_are_checked_in_native_objects_and_encoded_json
         result = await preview(hass, context_home, history)
     assert result['reason'] == 'context_unavailable'
     review.assert_not_called()
+
+
+@pytest.mark.parametrize('decline', [False, True])
+async def test_preview_of_decision_candidate_reviews_full_history_without_plan(hass, context_home, decline):
+    data, token, _, _, entity, _ = context_home
+    sentence = 'I would like Desk lamp at 37 percent now.'
+    seen = []
+    async def response(*args):
+        payload = args[4]; seen.append(payload)
+        if 'route' not in payload['questions']:
+            return wire_answer(answer('provider' if decline else 'compatible'))
+        target = next(key for key, item in payload['state']['targets'].items() if item['entity_id'] == entity)
+        selected = {'route': 'light_brightness', 'target': target, 'percentage': '37'}
+        return {'model': 'test-model', 'answers': {
+            name: {'type': 'choice', 'choice': selected[name], 'confidence': 1,
+                   'probabilities': {key: float(key == selected[name]) for key in question['criteria']}}
+            for name, question in payload['questions'].items()}}
+    with (patch.object(DecisionProvider, '_request', side_effect=response) as remote,
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        result = await async_preview_context(hass, data, token, sentence, 'en', HISTORY,
+                                            {'reason': 'no_match', 'proposal': None})
+    assert remote.await_count == 2
+    assert result['reason'] == ('provider_fallback' if decline else 'compatible')
+    assert result['candidate_review']['value_check'] == {'status': 'match', 'source_value': 37}
+    assert seen[1]['state']['history'] == HISTORY
+    assert '_plan' not in json.dumps(result) and not data.store.get_pending_approvals()
+    dispatch.assert_not_called()

@@ -1714,6 +1714,11 @@ DECISION_CONTEXT_EXECUTION_MODELS = {
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
 }
 DECISION_CONTEXT_EXECUTION_LANGUAGES = frozenset({"en"})
+# Combining decision-derived candidates with context review is qualified separately.
+DECISION_FOLLOWUP_EXECUTION_MODELS = {
+    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
+    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
+}
 # Joint routing has its own qualification, independent of context and numeric decisions.
 DECISION_BATCH_EXECUTION_MODELS = {
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),

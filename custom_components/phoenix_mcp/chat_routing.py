@@ -42,7 +42,7 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
             if not context_execution_eligible(hass, data, language) or context_history(messages[:-1], structured=True) is None:
                 return True
             contextual = True
-    snapshot = deepcopy(messages) if contextual else None
+    snapshot = deepcopy(messages) if followup else None
     context_account = None
     if contextual:
         from .agentcli import decision_account_fingerprint
@@ -73,7 +73,7 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
         return await stop()
     result = await async_evaluate_command(hass, data, token, sentence, language, ingress="chat")
     current = authority.current(hass)
-    if cancel.is_set() or current is None or (contextual and messages != snapshot):
+    if cancel.is_set() or current is None or (followup and messages != snapshot):
         return await stop()
     if contextual and (context_account is None or
                        decision_account_fingerprint(hass, settings.decision_provider_id) != context_account):
@@ -101,8 +101,19 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
                 return await finish(reply, local=True)
             if cancel.is_set() or authority.current(hass) is None:
                 return await stop()
-        # A later turn must be independently understood by strict HA intents.
-        # Do not ask a history-free classifier to resolve conversational context.
+        if followup and not result["proposal"] and context_execution_eligible(hass, data, language):
+            decision = await async_prepare_chat_context(hass, data, current, sentence, language,
+                                                        messages[:-1], result, cancel)
+            current = authority.current(hass)
+            data.decision_shadow.observe_hybrid(decision, authority_changed=current is None, chat=True)
+            if (current is None or cancel.is_set() or messages != snapshot
+                    or decision["reason"] in ("authority_changed", "context_changed", "cancelled")):
+                return await stop()
+            if decision.get("_plan") is not None:
+                reply = await async_execute_chat_plan(hass, data, current, decision["_plan"], authority,
+                                                      base_url, client_ip, cancel, language=language)
+                return await finish(reply)
+            return True
         if mode == "hybrid" and not followup and not result["proposal"]:
             decision = await async_preview_decision(hass, data, current, sentence, language,
                                                     result, targets=True, prepare=True, ingress="chat", cancel=cancel)

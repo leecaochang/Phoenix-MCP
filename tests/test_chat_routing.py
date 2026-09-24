@@ -1031,7 +1031,7 @@ async def test_context_fallback_keeps_the_full_conversation(hass, context_chat, 
     provider.stream_turn.assert_called_once()
     dispatch.assert_not_called()
     assert history[:-1] == original and history[-1]['content'] == 'Normal provider reply'
-    if case in ('local_miss', 'secret', 'tool_history', 'oversized', 'language', 'account', 'endpoint', 'configured_revision', 'local_mode'):
+    if case in ('secret', 'tool_history', 'oversized', 'language', 'account', 'endpoint', 'configured_revision', 'local_mode'):
         remote.assert_not_called()
     else:
         remote.assert_awaited_once()
@@ -1343,3 +1343,166 @@ async def test_qualified_jev_chat_uses_one_joint_request(hass, hybrid_chat, cate
         assert messages[-1]['content'] == 'The state is off.'
     assert events[-1] == ('done', {'stop_reason': 'end_turn'})
     assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'plan_ready': 1}
+
+
+def followup_response(payload, *, value='37', decline=False):
+    """Return independent protocol answers for candidate selection and history review."""
+    if 'route' not in payload['questions']:
+        return context_response(decline=decline)
+    target = next(key for key, item in payload['state']['targets'].items()
+                  if item['entity_id'] == 'light.test_desk')
+    selected = {'route': 'light_brightness', 'target': target, 'percentage': value}
+    return {'model': 'jev-1.13.0', 'answers': {
+        name: {'type': 'choice', 'choice': selected[name], 'confidence': 1,
+               'probabilities': {key: float(key == selected[name]) for key in question['criteria']}}
+        for name, question in payload['questions'].items()}}
+
+
+@pytest.mark.parametrize('local_chain', [False, True])
+async def test_decision_followup_preserves_history_and_both_execution_proofs(hass, context_chat, local_chain):
+    from custom_components.phoenix_mcp import mcp_view
+    data, _ = context_chat
+    messages = context_messages('I would like Desk lamp at thirty-seven percent now.')
+    captured = []
+    async def response(*args):
+        payload = args[4]; captured.append(payload)
+        return followup_response(payload)
+    with (patch.object(DecisionProvider, '_request', side_effect=response) as remote,
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        if local_chain:
+            _, _, messages = await chat_turn(hass, context_chat, [{'role': 'user', 'content': 'turn on the desk lamp'}])
+            messages.append({'role': 'user', 'content': 'I would like Desk lamp at thirty-seven percent now.'})
+            call.reset_mock()
+        original = json.loads(json.dumps(messages))
+        provider, _, history = await chat_turn(hass, context_chat, messages)
+    assert remote.await_count == 2
+    assert set(captured[0]['questions']) == {'route', 'target', 'percentage'}
+    assert 'history' not in captured[0]['state']
+    assert captured[1]['state']['history'] == original[:-1]
+    assert captured[1]['state']['candidate']['brightness_pct'] == 37
+    assert captured[1]['state']['candidate_source'] == 'decision'
+    assert 'model-selected hypothesis' in captured[1]['questions']['request']['instructions']
+    provider.stream_turn.assert_not_called()
+    call.assert_awaited_once_with('light', 'turn_on', {'entity_id': ['light.test_desk'], 'brightness_pct': 37},
+                                blocking=True, return_response=False)
+    assert history[:-1] == original
+    assert not data.command_routing.chat_history._entries
+
+
+@pytest.mark.parametrize('case,calls', [('value_mismatch', 1), ('restriction', 2), ('uncertain', 2),
+    ('unknown_source_revision', 1), ('unknown_context_revision', 2), ('secret', 0), ('hidden_id', 0),
+    ('catalog', 0)])
+async def test_decision_followup_declines_without_effects(hass, context_chat, case, calls):
+    from custom_components.phoenix_mcp.const import DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS
+    data, _ = context_chat
+    messages = context_messages('I would like Desk lamp at 37 percent now.')
+    if case == 'secret': messages[0]['content'] = 'password: never-share-this'
+    if case == 'hidden_id': messages[0]['content'] = 'Do not change lock.private_door'
+    if case == 'catalog':
+        for index in range(DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS):
+            entry = er.async_get(hass).async_get_or_create('light', 'test', f'extra_{index}')
+            hass.states.async_set(entry.entity_id, 'off')
+    async def response(*args):
+        payload = args[4]
+        body = followup_response(payload, value='38' if case == 'value_mismatch' else '37', decline=case == 'restriction')
+        if case == 'unknown_source_revision' and 'route' in payload['questions']: body['model'] = 'unknown'
+        if 'route' not in payload['questions']:
+            if case == 'unknown_context_revision': body['model'] = 'unknown'
+            if case == 'uncertain': body = context_response(probability=.89)
+        return body
+    original = json.loads(json.dumps(messages))
+    with (patch.object(DecisionProvider, '_request', side_effect=response) as remote,
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        provider, _, history = await chat_turn(hass, context_chat, messages)
+    assert remote.await_count == calls
+    dispatch.assert_not_called()
+    provider.stream_turn.assert_called_once()
+    assert history[:-1] == original
+    assert data.decision_shadow.task is None
+
+
+@pytest.mark.parametrize('change', ['none', 'account', 'competitor', 'value', 'context_proof', 'source_proof', 'context_removed'])
+async def test_decision_followup_approval_revalidates_combined_plan(hass, context_chat, change):
+    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp.const import COMMAND_ROUTING_PLAN_KEY
+    data, token = context_chat
+    from custom_components.phoenix_mcp.mesa import async_setup_mesa
+    from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
+    await data.store.async_patch_settings(mesa_mode='enforced')
+    data.mesa = await async_setup_mesa(hass, 'enforced')
+    data.mesa.store.set('light.test_desk', SemanticProfile.from_dict('light.test_desk',
+        {'semantic_profile': {'operational_boundaries': {'control_mode': 'confirm'}}}, default_origin=MetadataOrigin.USER))
+    async def response(*args): return followup_response(args[4])
+    with (patch.object(DecisionProvider, '_request', side_effect=response),
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[]))):
+        provider, _, _ = await chat_turn(hass, context_chat, context_messages('I would like Desk lamp at 37 percent now.'))
+    provider.stream_turn.assert_not_called()
+    record = data.store.get_pending_approvals()[0]
+    plan = record['args'][COMMAND_ROUTING_PLAN_KEY]
+    assert 'context_review' in plan and 'decision_batch' in plan
+    assert plan['context_review']['proposal'] and plan['decision_batch']['percentage'] == 37
+    if change == 'account':
+        store = await agentcli._get_secret_store(hass)
+        await store.set_model(data.store.get_settings().decision_provider_id, 'changed')
+    if change == 'competitor':
+        entry = er.async_get(hass).async_get_or_create('light', 'test', 'competitor', original_name='Another lamp')
+        hass.states.async_set(entry.entity_id, 'off')
+    if change == 'value': plan['proposal']['brightness_pct'] = 88
+    if change == 'context_proof': del plan['context_review']['proposal']
+    if change == 'source_proof': del plan['decision_batch']
+    if change == 'context_removed': del plan['context_review']
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+    assert outcome == ('allowed' if change == 'none' else 'denied')
+    assert call.await_count == (1 if change == 'none' else 0)
+
+
+async def test_decision_followup_uses_one_deadline_for_both_requests(hass, context_chat):
+    data, _ = context_chat
+    await data.store.async_patch_settings(decision_timeout_ms=250)
+    async def response(*args):
+        await asyncio.sleep(.18)
+        return followup_response(args[4])
+    with (patch.object(DecisionProvider, '_request', side_effect=response) as remote,
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        provider, _, _ = await chat_turn(hass, context_chat, context_messages('I would like Desk lamp at 37 percent now.'))
+    assert remote.await_count == 2
+    dispatch.assert_not_called()
+    provider.stream_turn.assert_called_once()
+    assert data.decision_shadow.task is None
+
+
+@pytest.mark.parametrize('change', ['cancel', 'history', 'account', 'competitor'])
+async def test_decision_followup_wait_preserves_current_authority(hass, context_chat, change):
+    data, _ = context_chat
+    messages = context_messages('I would like Desk lamp at 37 percent now.')
+    entered, release, cancel = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    async def response(*args):
+        if 'route' not in args[4]['questions']:
+            entered.set()
+            await release.wait()
+        return followup_response(args[4])
+    with (patch.object(DecisionProvider, '_request', side_effect=response),
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        task = asyncio.create_task(chat_turn(hass, context_chat, messages, cancel=cancel))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            if change == 'cancel': cancel.set()
+            if change == 'history': messages[0]['content'] = 'Never change the lamp.'
+            if change == 'account':
+                store = await agentcli._get_secret_store(hass)
+                await store.set_model(data.store.get_settings().decision_provider_id, 'changed')
+            if change == 'competitor':
+                entry = er.async_get(hass).async_get_or_create('light', 'test', 'new_competitor')
+                hass.states.async_set(entry.entity_id, 'off')
+            release.set()
+            provider, _, _ = await asyncio.wait_for(task, 5)
+        finally:
+            release.set()
+            if not task.done(): task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+    dispatch.assert_not_called()
+    provider.stream_turn.assert_not_called()
+    assert data.decision_shadow.task is None

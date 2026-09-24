@@ -15,7 +15,7 @@ from .command_operations import service_arguments, supports_command, numeric_ope
 from .command_routing import RoutingAuthority, effective_routing_mode
 from .const import (
     COMMAND_ROUTING_PLAN_KEY, VOICE_AGENT_CLIENT_IP, DECISION_TARGET_INTENTS, DECISION_EXECUTION_CATEGORIES,
-    DECISION_CONTEXT_EXECUTION_MODELS, DECISION_CONTEXT_EXECUTION_LANGUAGES,
+    DECISION_CONTEXT_EXECUTION_MODELS, DECISION_CONTEXT_EXECUTION_LANGUAGES, DECISION_FOLLOWUP_EXECUTION_MODELS,
     DECISION_BATCH_EXECUTION_MODELS,
     DECISION_NUMERIC_CATEGORIES, DECISION_PERCENTAGE_EXECUTION_MODELS,
 )
@@ -97,11 +97,15 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
         account = settings.decision_provider_id
         cfg = loaded_decision_account(hass, account) if account else None
         keys = {"model", "language", "catalog"} | ({"percentage", "proposal"} if numeric else set())
+        if "context_review" in plan:
+            keys.add("context")
         qualified = DECISION_PERCENTAGE_EXECUTION_MODELS if numeric else DECISION_BATCH_EXECUTION_MODELS
         if (not isinstance(review, dict) or set(review) != keys
                 or not all(isinstance(review[key], str) for key in keys - {"percentage"})
                 or cfg is None or not batch_execution_eligible(cfg, review["language"])
                 or review["model"] not in qualified.get((cfg.kind, cfg.base_url, cfg.model), ())):
+            return False
+        if "context_review" in plan and review["context"] != _digest(plan["context_review"]):
             return False
         if numeric:
             operation = numeric_operation(plan["proposal"]["intent"])
@@ -130,14 +134,19 @@ def _context_plan_current(plan: dict, hass: Any, data: Any) -> bool:
     review = plan["context_review"]
     account = data.store.get_settings().decision_provider_id
     cfg = loaded_decision_account(hass, account) if account else None
+    decision = "decision_category" in plan
+    keys = {"account", "kind", "model", "language"} | ({"proposal"} if decision else set())
+    qualified = DECISION_FOLLOWUP_EXECUTION_MODELS if decision else DECISION_CONTEXT_EXECUTION_MODELS
     return bool(
-        plan.get("ingress") == "chat" and "decision_category" not in plan
+        plan.get("ingress") == "chat"
         and effective_routing_mode(data.store.get_settings(), "chat") == "hybrid"
-        and isinstance(review, dict) and set(review) == {"account", "kind", "model", "language"}
+        and isinstance(review, dict) and set(review) == keys
         and all(isinstance(value, str) for value in review.values())
         and review["language"] in DECISION_CONTEXT_EXECUTION_LANGUAGES
         and cfg and account and cfg.kind == review["kind"]
-        and review["model"] in DECISION_CONTEXT_EXECUTION_MODELS.get((cfg.kind, cfg.base_url, cfg.model), ())
+        and review["model"] in qualified.get((cfg.kind, cfg.base_url, cfg.model), ())
+        and (not decision or (isinstance(plan.get("decision_batch"), dict) and plan["decision_batch"].get("model") == review["model"]
+                              and review["proposal"] == _digest(plan["proposal"])))
         and review["account"] == decision_account_fingerprint(hass, account)
     )
 

@@ -65,12 +65,13 @@ class DecisionShadow:
 
     def start(self, hass: Any, data: Any, token: Any, sentence: object,
               language: object, *, observe: bool = False, targets: bool = False,
-              prepare: bool = False, observe_chat: bool = False, ingress: str = "voice") -> asyncio.Task | None:
+              prepare: bool = False, observe_chat: bool = False, ingress: str = "voice",
+              joint_only: bool = False) -> asyncio.Task | None:
         if self.task is not None:
             return None
         authority = RoutingAuthority.capture(data, token)
         task = hass.async_create_background_task(
-            self._evaluate(hass, data, authority, sentence, language, targets, prepare, ingress), "phoenix_decision_shadow")
+            self._evaluate(hass, data, authority, sentence, language, targets, prepare, ingress, joint_only), "phoenix_decision_shadow")
         self.task = task
 
         def done(completed: asyncio.Task) -> None:
@@ -99,7 +100,8 @@ class DecisionShadow:
         return task
 
     async def _evaluate(self, hass: Any, data: Any, authority: RoutingAuthority,
-                        sentence: object, language: object, targets: bool = False, prepare: bool = False, ingress: str = "voice") -> dict:
+                        sentence: object, language: object, targets: bool = False, prepare: bool = False, ingress: str = "voice",
+                        joint_only: bool = False) -> dict:
         from .agentcli import _get_secret_store, PROVIDER_DEFINITIONS, decision_account_fingerprint
         from .decision_batch import async_prepare_batch, batch_execution_eligible
 
@@ -147,6 +149,8 @@ class DecisionShadow:
                                                       decision_language, ingress)
                 if joint is not None:
                     answer, selection = joint
+                elif joint_only:
+                    return result("context_unverified")
                 else:
                     options = {"numeric_preview": True} if targets and not prepare and provider.supports_exact_percentages() else {}
                     answer = await provider.classify(session, sentence.strip(), settings.decision_timeout_ms, decision_language, **options)
@@ -247,12 +251,12 @@ class DecisionShadow:
 async def async_preview_decision(hass: Any, data: Any, token: Any, sentence: str,
                                  language: object, local: dict, *, targets: bool = False,
                                  prepare: bool = False, ingress: str = "voice",
-                                 cancel: asyncio.Event | None = None) -> dict:
+                                 cancel: asyncio.Event | None = None, joint_only: bool = False) -> dict:
     """Evaluate local misses; only internal command callers can request a frozen plan."""
     if local["reason"] not in ("no_match", "unsupported", "no_target"):
         return {"reason": "local_match" if local["proposal"] else "local_unavailable",
                 "decision": None, "executed": False, "elapsed_ms": 0}
-    task = data.decision_shadow.start(hass, data, token, sentence, language, targets=targets, prepare=prepare, ingress=ingress)
+    task = data.decision_shadow.start(hass, data, token, sentence, language, targets=targets, prepare=prepare, ingress=ingress, joint_only=joint_only)
     if task is None:
         return {"reason": "busy", "decision": None, "executed": False, "elapsed_ms": 0}
     cancelled = {"reason": "cancelled", "decision": None, "executed": False, "elapsed_ms": 0}

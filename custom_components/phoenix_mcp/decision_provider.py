@@ -196,6 +196,8 @@ class DecisionProvider:
             "Assess each question separately against the entire transcript. Neither answer replaces the other. "
             "This assessment never executes an action. "
         )
+        if state.get("candidate_source") == "decision":
+            instructions = instructions.replace("a fixed local parser hypothesis", "a fixed model-selected hypothesis")
         if state.get("history_format") == "provider_messages":
             instructions += (
                 "History preserves provider-native text and complete tool exchanges. A user-role message "
