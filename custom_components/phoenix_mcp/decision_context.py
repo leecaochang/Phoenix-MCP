@@ -12,7 +12,7 @@ from .command_execution import _target_fingerprint, plan_is_current, _digest
 from .command_operations import numeric_operation, service_arguments
 from .command_routing import RoutingAuthority, effective_routing_mode, routing_language
 from .const import (
-    COMMAND_ROUTING_INTENTS, DECISION_CONTEXT_MAX_BYTES, DECISION_CONTEXT_MAX_MESSAGES,
+    COMMAND_ROUTING_INTENTS, COMMAND_ROUTING_LANGUAGES, DECISION_CONTEXT_MAX_BYTES, DECISION_CONTEXT_MAX_MESSAGES,
     DECISION_CONTEXT_REQUIRED_CHOICES, DECISION_CONTEXT_EXECUTION_MODELS,
     DECISION_CONTEXT_EXECUTION_LANGUAGES, DECISION_FOLLOWUP_EXECUTION_MODELS, MAX_SEARCH_QUERY_LEN,
 )
@@ -93,7 +93,7 @@ def context_execution_eligible(hass: Any, data: Any, language: object) -> bool:
     account = settings.decision_provider_id
     cfg = loaded_decision_account(hass, account) if account else None
     return bool(effective_routing_mode(settings, "chat") == "hybrid"
-                and routing_language(language) in DECISION_CONTEXT_EXECUTION_LANGUAGES
+                and routing_language(language, enabled=tuple(COMMAND_ROUTING_LANGUAGES)) in DECISION_CONTEXT_EXECUTION_LANGUAGES
                 and cfg and (cfg.kind, cfg.base_url, cfg.model) in DECISION_CONTEXT_EXECUTION_MODELS)
 
 
@@ -127,7 +127,7 @@ async def _async_review_context(hass: Any, data: Any, token: Any, sentence: str,
                 "elapsed_ms": round((monotonic() - started) * 1000, 2)}
 
     history = context_history(messages, structured=True)
-    lang = routing_language(language, preview=True)
+    lang = routing_language(language, enabled=tuple(COMMAND_ROUTING_LANGUAGES))
     if (history is None or lang is None or not isinstance(sentence, str)
             or not sentence.strip() or len(sentence) > MAX_SEARCH_QUERY_LEN):
         return result("invalid_context")
@@ -277,7 +277,7 @@ async def _async_review_decision_context(hass: Any, data: Any, token: Any, sente
                 "elapsed_ms": round((monotonic() - started) * 1000, 2)}
 
     history = context_history(messages, structured=True)
-    lang = routing_language(language, preview=True)
+    lang = routing_language(language, enabled=tuple(COMMAND_ROUTING_LANGUAGES))
     if (history is None or lang is None or not isinstance(sentence, str) or not sentence.strip()
             or len(sentence) > MAX_SEARCH_QUERY_LEN):
         return result("invalid_context")
@@ -318,7 +318,8 @@ async def _async_review_decision_context(hass: Any, data: Any, token: Any, sente
                 if source_plan and "decision_batch" not in source_plan:
                     return result("context_unverified")
             else:
-                candidate = await async_preview_batch(hass, data, current, sentence, lang, local,
+                candidate = await async_preview_batch(hass, data, current, sentence,
+                                                      "zh-Hans" if lang == "zh-CN" else lang, local,
                                                       numeric_preview=has_percentage_unit(sentence))
                 source_plan = None
                 proposal = candidate.get("proposal")

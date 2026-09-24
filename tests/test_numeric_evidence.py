@@ -79,3 +79,62 @@ def test_diagnostic_distinguishes_disagreement_from_missing_evidence():
     assert compare_percentage(37, 37) == {'status': 'match', 'source_value': 37}
     assert compare_percentage(37, 5) == {'status': 'mismatch', 'source_value': 37}
     assert compare_percentage(None, 37) == {'status': 'unverified'}
+
+
+@pytest.mark.parametrize('language', ['es', 'zh-CN'])
+@pytest.mark.parametrize('value', range(101))
+def test_new_languages_verify_digits_and_ha_spelled_values(language, value):
+    from unicode_rbnf import RbnfEngine
+    engine = RbnfEngine.for_language('es' if language == 'es' else 'zh')
+    spelling = engine.format_number(value).text_by_ruleset[
+        'spellout-numbering' if language == 'es' else 'spellout-cardinal']
+    for number in (str(value), spelling):
+        sentence = f'Pon el brillo al {number} por ciento.' if language == 'es' else f'把亮度设为百分之{number}。'
+        assert read_explicit_percentage(sentence, language) == value
+
+
+@pytest.mark.parametrize('language,sentence,value', [
+    ('es', 'Quiero la lámpara al treinta y siete por ciento ahora.', 37),
+    ('es', 'Pon el brillo al diecise\u0301is por ciento.', 16),
+    ('es', 'Pon el brillo al 37%.', 37),
+    ('zh-CN', '请设为三十七%。', 37),
+    ('zh-CN', '请设为百分之37。', 37),
+    ('zh-CN', '请设为百分之三十七.', 37),
+    ('zh-CN', '请设为37％。', 37),
+    ('es', 'No pongas la lámpara al 37 por ciento.', 37),
+    ('zh-CN', '不要把亮度设为百分之三十七。', 37),
+])
+def test_multilingual_value_evidence_does_not_decide_intent(language, sentence, value):
+    from custom_components.phoenix_mcp.numeric_evidence import has_percentage_unit
+    assert has_percentage_unit(sentence)
+    assert read_explicit_percentage(sentence, language) == value
+
+
+@pytest.mark.parametrize('number', ['-37', '+37', '37,5', '37.5', '37/100', '137', '037',
+    'menos treinta y siete', 'treinta y siete y medio', 'ciento treinta y siete', 'mil treinta y siete',
+    'treinta-siete', 'treinta 7', '３７'])
+def test_spanish_rejects_signs_fractions_mixed_and_suffix_numbers(number):
+    assert read_explicit_percentage(f'Pon el brillo al {number} por ciento.', 'es') is None
+
+
+@pytest.mark.parametrize('number', ['负三十七', '正三十七', '-37', '+37', '37.5', '37,5',
+    '三十七点五', '三十七多', '三十七成', '一百三十七', '千三十七', '三十七分之一', '三十7',
+    '三十七或五十五', '３７', '037', '半', '三十七万'])
+def test_chinese_rejects_signs_fractions_mixed_and_suffix_numbers(number):
+    assert read_explicit_percentage(f'把亮度设为百分之{number}。', 'zh-CN') is None
+
+
+@pytest.mark.parametrize('language,sentence', [
+    ('es', 'Pon lámpara 2 al 37 por ciento.'),
+    ('es', 'Pon el brillo al 37 por ciento, no 73.'),
+    ('es', 'Pon el brillo al 37 por ciento y medio.'),
+    ('es', 'Pon el brillo al 37 o 55 por ciento.'),
+    ('zh-CN', '把二号灯设为百分之三十七。'),
+    ('zh-CN', '把亮度设为百分之三十七而不是七十三。'),
+    ('zh-CN', '把亮度设为百分之三十七或百分之五十五。'),
+    ('zh-CN', '把亮度设为37%多一点。'),
+    ('zh-CN', '八点把亮度设为百分之三十七。'),
+    ('zh-CN', '把亮度设为负百分之三十七。'),
+])
+def test_other_numeric_evidence_is_never_discarded_in_new_languages(language, sentence):
+    assert read_explicit_percentage(sentence, language) is None

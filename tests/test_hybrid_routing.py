@@ -467,16 +467,20 @@ def numeric_reply(payload, home, spec, *, percent=37, category=None, model='jev-
 
 
 @pytest.mark.parametrize('percent', [0, 37, 100])
-async def test_qualified_numeric_voice_uses_one_decision_and_shared_execution(hass, jev_numeric_home, percent):
+@pytest.mark.parametrize('language', ['en', 'es-MX', 'zh-Hans'])
+async def test_qualified_numeric_voice_uses_one_decision_and_shared_execution(hass, jev_numeric_home, percent, language):
     home, spec = jev_numeric_home
     _, domain, _, service, service_field, divisor = spec
+    await home[0].store.async_patch_settings(voice_agent_routing_mode='auto')
     async def respond(session, method, path, timeout, payload):
         assert set(payload['questions']) == {'route', 'target', 'percentage'}
         return numeric_reply(payload, home, spec, percent=percent)
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, home, request=respond,
-            sentence=f'I would like the device at {percent} percent now.')
+            sentence=(f'Quiero el dispositivo al {percent} por ciento ahora.' if language == 'es-MX'
+                      else f'我希望设备现在的亮度是百分之{percent}。' if language == 'zh-Hans'
+                      else f'I would like the device at {percent} percent now.'), language=language)
     remote.assert_awaited_once()
     provider.assert_not_called()
     call.assert_awaited_once_with(domain, service, {'entity_id': [home[-1]], service_field: percent / divisor
@@ -719,9 +723,8 @@ async def test_jev_local_matches_keep_zero_decision_calls(hass, jev_hybrid_home,
     ('classifier', 'Qwen/Qwen3.5-4B', 'http://local.test/v1', 'en'),
     ('systemone', 'jev-latest', 'http://local.test/v1', 'en'),
     ('typesafe', 'jev-latest', 'https://custom.test/v1', 'en'),
-    ('typesafe', 'jev-latest', 'https://api.typesafe.ai/v1', 'es'),
 ])
-async def test_other_models_endpoints_and_languages_keep_sequential_routing(
+async def test_other_models_and_endpoints_keep_sequential_routing(
     hass, hybrid_home, kind, model, base_url, language,
 ):
     data, _, store, *_ = hybrid_home

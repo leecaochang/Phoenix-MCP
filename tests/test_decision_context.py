@@ -403,9 +403,13 @@ async def test_secret_field_names_are_checked_in_native_objects_and_encoded_json
 
 
 @pytest.mark.parametrize('decline', [False, True])
-async def test_preview_of_decision_candidate_reviews_full_history_without_plan(hass, context_home, decline):
+@pytest.mark.parametrize('language,sentence', [
+    ('en', 'I would like Desk lamp at 37 percent now.'),
+    ('es', 'Quiero Desk lamp al treinta y siete por ciento ahora.'),
+    ('zh-Hans', '请把 Desk lamp 的亮度设为百分之三十七。'),
+])
+async def test_preview_of_decision_candidate_reviews_full_history_without_plan(hass, context_home, decline, language, sentence):
     data, token, _, _, entity, _ = context_home
-    sentence = 'I would like Desk lamp at 37 percent now.'
     seen = []
     async def response(*args):
         payload = args[4]; seen.append(payload)
@@ -419,7 +423,7 @@ async def test_preview_of_decision_candidate_reviews_full_history_without_plan(h
             for name, question in payload['questions'].items()}}
     with (patch.object(DecisionProvider, '_request', side_effect=response) as remote,
           patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
-        result = await async_preview_context(hass, data, token, sentence, 'en', HISTORY,
+        result = await async_preview_context(hass, data, token, sentence, language, HISTORY,
                                             {'reason': 'no_match', 'proposal': None})
     assert remote.await_count == 2
     assert result['reason'] == ('provider_fallback' if decline else 'compatible')

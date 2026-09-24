@@ -1009,7 +1009,7 @@ async def test_context_fallback_keeps_the_full_conversation(hass, context_chat, 
     if case == 'secret': messages[0]['content'] = 'password: private-test-value'
     if case == 'tool_history': messages[1]['tool_calls'] = []
     if case == 'oversized': messages[0]['content'] = 'x' * 17000
-    if case == 'language': language = 'es'
+    if case == 'language': language = 'zh-Hant'
     if case == 'account':
         store = await agentcli._get_secret_store(hass)
         account = await store.add('classifier', {'base_url': 'http://example.test/v1', 'model': 'Qwen/Qwen3.5-4B'})
@@ -1143,7 +1143,7 @@ async def test_context_saved_approval_rechecks_provider_and_exact_action(hass, c
     if change == 'scope': token.permissions = PermissionTree()
     if change == 'model_proof': plan['context_review']['model'] = 'unreviewed-model'
     if change == 'kind_proof': plan['context_review']['kind'] = 'classifier'
-    if change == 'language_proof': plan['context_review']['language'] = 'es'
+    if change == 'language_proof': plan['context_review']['language'] = 'zh-Hant'
     if change == 'ingress': plan['ingress'] = 'voice'
     if change == 'value': record['args']['service_data']['brightness_pct'] = 99
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
@@ -1506,3 +1506,46 @@ async def test_decision_followup_wait_preserves_current_authority(hass, context_
     dispatch.assert_not_called()
     provider.stream_turn.assert_not_called()
     assert data.decision_shadow.task is None
+
+
+@pytest.mark.parametrize('language', ['es', 'es-MX', 'zh-Hans', 'zh-CN'])
+@pytest.mark.parametrize('decline', [False, True])
+async def test_multilingual_joint_followup_uses_whole_history_and_numeric_evidence(hass, context_chat, language, decline):
+    from custom_components.phoenix_mcp import mcp_view
+    messages = [
+        {'role': 'user', 'content': 'Solo explica comandos, no operes dispositivos.' if decline else '¿Qué es el brillo?'},
+        {'role': 'assistant', 'content': 'Entendido.'},
+        {'role': 'user', 'content': 'Quiero Desk lamp al treinta y siete por ciento ahora.'},
+    ]
+    if language.startswith('zh'):
+        messages = [
+            {'role': 'user', 'content': '不要操作设备，只解释命令。' if decline else '什么是亮度？'},
+            {'role': 'assistant', 'content': '好的。'},
+            {'role': 'user', 'content': '我希望 Desk lamp 现在的亮度是百分之三十七。'},
+        ]
+    async def response(*args):
+        payload = args[4]
+        assert payload['state']['language'] == ('zh-CN' if language.startswith('zh') else 'es')
+        if 'route' not in payload['questions']:
+            assert payload['state']['history'] == messages[:2]
+            assert payload['state']['candidate']['brightness_pct'] == 37
+        return followup_response(payload, decline=decline)
+    with (patch.object(DecisionProvider, '_request', side_effect=response) as remote,
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        provider, _, history = await chat_turn(hass, context_chat, messages, language=language)
+    assert remote.await_count == 2
+    assert call.await_count == (0 if decline else 1)
+    assert provider.stream_turn.called is decline
+    assert history[:3] == messages[:3]
+    if not decline:
+        call.assert_awaited_once_with('light', 'turn_on', {'entity_id': ['light.test_desk'], 'brightness_pct': 37},
+                                     blocking=True, return_response=False)
+
+
+async def test_traditional_chinese_followup_stays_with_provider_until_separately_qualified(hass, context_chat):
+    with patch.object(DecisionProvider, '_request') as remote:
+        provider, _, _ = await chat_turn(hass, context_chat,
+            context_messages('請把 Desk lamp 的亮度設為百分之三十七。'), language='zh-Hant')
+    remote.assert_not_called()
+    provider.stream_turn.assert_called_once()

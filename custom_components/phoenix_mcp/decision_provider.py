@@ -294,6 +294,13 @@ class DecisionProvider:
                     "quoted, conditional, deferred, ambiguous or multiple settings. Do not calculate, convert units, "
                     "round, infer from current state, or take a percentage belonging to another device or operation."
                 )}
+        for question in payload["questions"].values():
+            question["instructions"] += (
+                " Determine what the user asks you to do with the whole message, not what a mentioned command says. "
+                "Requests to translate, explain, rewrite, quote or discuss a device command are requests about text, "
+                "not device actions, even without quotation marks or when introduced by a colon. "
+                "For these requests choose provider for route, none for target and none for percentage."
+            )
         body = await self._request(session, "POST", self.protocol, timeout_ms, payload)
         if not isinstance(body.get("answers"), dict) or set(body["answers"]) != set(payload["questions"]):
             raise DecisionError("malformed")

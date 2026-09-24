@@ -3,32 +3,49 @@ from __future__ import annotations
 
 from functools import lru_cache
 import re
+import unicodedata
 
 from .const import (
     DECISION_PERCENTAGE_EVIDENCE_LANGUAGES, DECISION_PERCENTAGE_EVIDENCE_MODIFIERS,
-    MAX_SEARCH_QUERY_LEN,
+    DECISION_PERCENTAGE_EVIDENCE_CONNECTORS, DECISION_PERCENTAGE_UNITS, MAX_SEARCH_QUERY_LEN,
 )
 
 _TOKENS = re.compile(r"\w+|[^\w\s]", re.UNICODE)
 
 
+def _tokens(sentence: str) -> list[str]:
+    """Separate Han characters without normalizing signs or non-ASCII digits."""
+    # Han has no word separators. Keep Latin words intact for HA number spellings.
+    spaced = "".join(f" {char} " if '\u3400' <= char <= '\u9fff' else char
+                     for char in unicodedata.normalize('NFC', sentence))
+    return [match.group().lower() for match in _TOKENS.finditer(spaced)]
+
+
+def _units(tokens: list[str]) -> list[tuple[int, int]]:
+    return [(index, index + len(unit)) for index in range(len(tokens))
+            for unit in DECISION_PERCENTAGE_UNITS if tuple(tokens[index:index + len(unit)]) == unit]
+
+
 def has_percentage_unit(sentence: str) -> bool:
     """Detect percentage notation without treating it as an action or valid value."""
-    tokens = [match.group().lower() for match in _TOKENS.finditer(sentence)]
-    return any(token in ("%", "percent") or tokens[index:index + 2] == ["per", "cent"]
-               for index, token in enumerate(tokens))
+    return bool(_units(_tokens(sentence)))
 
 
-@lru_cache(maxsize=1)
-def _number_words() -> tuple[dict[str, int], frozenset[str]]:
+@lru_cache(maxsize=3)
+def _number_words(language: str) -> tuple[dict[str, int], frozenset[str]]:
     """Use the number spelling dependency already used by HA's Hassil recognizer."""
     from unicode_rbnf import RbnfEngine
 
-    engine = RbnfEngine.for_language("en")
+    engine = RbnfEngine.for_language('zh' if language == 'zh-CN' else language)
     values = {str(value): value for value in range(101)}
     for value in range(101):
-        for spelling in engine.format_number(value).text_by_ruleset.values():
-            normalized = " ".join(spelling.lower().replace("-", " ").split())
+        spellings = engine.format_number(value).text_by_ruleset
+        if language == 'zh-CN':
+            # Calendar and financial spellings are outside the spoken-command subset.
+            spellings = {key: text for key, text in spellings.items()
+                         if key in ('spellout-cardinal', 'spellout-cardinal-alternate2')}
+        for spelling in spellings.values():
+            normalized = " ".join(_tokens(spelling.replace('-', ' ')))
             if normalized in values and values[normalized] != value:
                 raise ValueError("Conflicting number spellings")
             values[normalized] = value
@@ -47,36 +64,56 @@ def read_explicit_percentage(sentence: str, language: str) -> int | None:
             or not sentence or len(sentence) > MAX_SEARCH_QUERY_LEN):
         return None
     try:
-        values, words = _number_words()
+        values, words = _number_words(language)
     except (ImportError, LookupError, ValueError):
         return None
-    tokens = [match.group().lower() for match in _TOKENS.finditer(sentence)]
-    units = [index for index, token in enumerate(tokens)
-             if token in ("%", "percent") or (token == "per" and tokens[index:index + 2] == ["per", "cent"])]
+    tokens = _tokens(sentence)
+    units = _units(tokens)
     if len(units) != 1:
         return None
-    end = units[0]
-    start = end
-    numeric_words = words | DECISION_PERCENTAGE_EVIDENCE_MODIFIERS
-    while start and (tokens[start - 1] in numeric_words | {"and", "-", "+", ".", "/", "\u2212"}
-                     or any(char.isnumeric() for char in tokens[start - 1])):
-        start -= 1
+    unit_start, unit_end = units[0]
+    unit = tuple(tokens[unit_start:unit_end])
+    prefix = unit == ('百', '分', '之')
+    if prefix and language != 'zh-CN':
+        return None
+    if unit not in (('%',), ('％',), ('百', '分', '之')) and (
+            (language == 'en' and unit not in (('percent',), ('per', 'cent')))
+            or (language == 'es' and unit != ('por', 'ciento')) or language == 'zh-CN'):
+        return None
+    numeric_words = words | DECISION_PERCENTAGE_EVIDENCE_MODIFIERS[language]
+    separators = DECISION_PERCENTAGE_EVIDENCE_CONNECTORS[language] | {'-', '+', '.', '/', '\u2212'}
+    if language != 'en':
+        separators = separators | {','}
+
+    def number_part(token: str) -> bool:
+        return token in numeric_words | separators or any(char.isnumeric() for char in token)
+
+    if prefix:
+        start = end = unit_end
+        while end < len(tokens) and number_part(tokens[end]):
+            end += 1
+        # A sentence-ending ASCII period is punctuation, unlike a decimal point.
+        if end == len(tokens) and tokens[end - 1:end] == ['.']:
+            end -= 1
+    else:
+        start = end = unit_start
+        while start and number_part(tokens[start - 1]):
+            start -= 1
     number = tokens[start:end]
     if not number:
         return None
-    # Hyphens are spelling separators only between number words, never signs or ranges.
+    # Hyphens are English spelling separators only, never signs or ranges.
     for index, token in enumerate(number):
-        if token == "-" and (index == 0 or index == len(number) - 1
+        if token == '-' and (language != 'en' or index == 0 or index == len(number) - 1
                              or number[index - 1] not in words or number[index + 1] not in words):
             return None
-    normalized = " ".join(token for token in number if token != "-")
-    value = values.get(normalized)
+    value = values.get(' '.join(token for token in number if token != '-'))
     if value is None:
         return None
-    # A second number may be a competing value, a fraction, a conversion or another device.
-    # Do not guess which one matters, even if the model confidently picks this percentage.
+    # Do not guess whether another number is a competing setting, time or device name.
     if any(token in numeric_words or any(char.isnumeric() for char in token)
-           for index, token in enumerate(tokens) if not start <= index < end):
+           for index, token in enumerate(tokens)
+           if not start <= index < end and not unit_start <= index < unit_end):
         return None
     return value
 

@@ -1713,7 +1713,7 @@ DECISION_CONTEXT_EXECUTION_MODELS = {
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
 }
-DECISION_CONTEXT_EXECUTION_LANGUAGES = frozenset({"en"})
+DECISION_CONTEXT_EXECUTION_LANGUAGES = frozenset({"en", "es", "zh-CN"})
 # Combining decision-derived candidates with context review is qualified separately.
 DECISION_FOLLOWUP_EXECUTION_MODELS = {
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
@@ -1724,7 +1724,7 @@ DECISION_BATCH_EXECUTION_MODELS = {
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
 }
-DECISION_BATCH_EXECUTION_LANGUAGES = frozenset({"en"})
+DECISION_BATCH_EXECUTION_LANGUAGES = frozenset({"en", "es", "zh-CN"})
 # Numeric execution is qualified independently from categorical routing.
 DECISION_PERCENTAGE_EXECUTION_MODELS = {
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
@@ -1769,11 +1769,16 @@ DECISION_MIN_CHOICE_PROBABILITY = 0.90
 # Sequential numeric decisions remain preview-only; joint execution needs source evidence.
 DECISION_NUMERIC_CATEGORIES = frozenset({"light_brightness", "media_volume", "cover_position"})
 # Value evidence is independent of model qualification and never grants execution.
-DECISION_PERCENTAGE_EVIDENCE_LANGUAGES = frozenset({"en"})
-DECISION_PERCENTAGE_EVIDENCE_MODIFIERS = frozenset({
-    "negative", "minus", "plus", "point", "dot", "half", "halves", "quarter", "quarters",
-    "hundred", "thousand", "million", "billion", "trillion", "dozen", "dozens",
-})
+DECISION_PERCENTAGE_EVIDENCE_LANGUAGES = frozenset({"en", "es", "zh-CN"})
+DECISION_PERCENTAGE_EVIDENCE_MODIFIERS = {
+    "en": frozenset({"negative", "minus", "plus", "point", "dot", "half", "halves", "quarter", "quarters",
+                     "hundred", "thousand", "million", "billion", "trillion", "dozen", "dozens"}),
+    "es": frozenset({"negativo", "negativa", "menos", "más", "coma", "punto", "medio", "media", "mitad",
+                     "cuarto", "cuartos", "ciento", "cientos", "mil", "millón", "millones"}),
+    "zh-CN": frozenset("负負正点點半几幾多余餘成折分之万萬亿億兆"),
+}
+DECISION_PERCENTAGE_EVIDENCE_CONNECTORS = {"en": frozenset({"and"}), "es": frozenset({"y"}), "zh-CN": frozenset()}
+DECISION_PERCENTAGE_UNITS = (("%",), ("％",), ("percent",), ("per", "cent"), ("por", "ciento"), ("百", "分", "之"))
 # Adding a preview category must not automatically authorize an execution path.
 DECISION_EXECUTION_CATEGORIES = frozenset({"light_on", "light_off", "state_query"})
 DECISION_HYBRID_REASONS = frozenset({
