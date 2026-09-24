@@ -223,14 +223,15 @@ async def test_numeric_commands_keep_mesa_enforcement(hass, numeric_home, mode):
 
 
 @pytest.mark.parametrize("change", ["none", "features", "value", "invalid_value", "domain", "scope", "exposure"])
-async def test_approval_rechecks_exact_numeric_operation(hass, numeric_home, change):
+@pytest.mark.parametrize("literal_id", [False, True])
+async def test_approval_rechecks_exact_numeric_operation(hass, numeric_home, change, literal_id):
     home = numeric_home
     await home.data.store.async_patch_settings(mesa_mode="enforced")
     home.data.mesa = await async_setup_mesa(hass, "enforced")
     home.data.mesa.store.set(home.entity_id, SemanticProfile.from_dict(home.entity_id,
         {"semantic_profile": {"operational_boundaries": {"control_mode": "confirm"}}}, default_origin=MetadataOrigin.USER))
     with patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])):
-        result, _, _, _ = await run_numeric(hass, home, home.sentence.format(value=37))
+        result, _, _, _ = await run_numeric(hass, home, home.sentence.format(value=37).replace(home.name.lower(), home.entity_id) if literal_id else home.sentence.format(value=37))
     assert "needs approval" in result
     record = copy.deepcopy(home.data.store.get_pending_approvals()[0])
     args = record["args"]
@@ -276,3 +277,99 @@ async def test_numeric_values_from_installed_multilingual_templates(hass, numeri
                  "cover": "把窗帘的开合度设置为百分之三十七"})[home.domain]
     result = await async_evaluate_command(hass, home.data, home.token, sentence, language)
     assert result["proposal"] == {"intent": home.intent, "entity_ids": [home.entity_id], home.field: 37}, result
+
+
+@pytest.mark.parametrize('ingress', ['voice', 'chat'])
+async def test_literal_entity_id_numeric_command_uses_existing_guarded_dispatch(hass, numeric_home, ingress):
+    home = numeric_home
+    sentence = (f'set {home.entity_id} to thirty seven percent brightness' if home.domain == 'light' else
+                f'set {home.entity_id} volume to 37 percent' if home.domain == 'media_player' else
+                f'set {home.entity_id} to 37 percent')
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, voice, provider, _ = await run_numeric(hass, home, sentence, ingress)
+    voice.assert_not_called()
+    provider.stream_turn.assert_not_called()
+    call.assert_awaited_once_with(home.domain, home.service,
+        {'entity_id': [home.entity_id], home.service_field: 0.37 if home.domain == 'media_player' else 37},
+        blocking=True, return_response=False)
+
+
+@pytest.mark.parametrize('barrier', ['hidden', 'unexposed', 'scope', 'unavailable', 'features', 'trigger'])
+async def test_literal_id_does_not_bypass_local_target_or_sentence_guards(hass, numeric_home, barrier):
+    from custom_components.phoenix_mcp import command_routing
+    from custom_components.phoenix_mcp.intent_recognition import SentenceTriggerMatch
+    home = numeric_home
+    sentence = (f'set {home.entity_id} to 37 percent brightness' if home.domain == 'light' else
+                f'set {home.entity_id} volume to 37 percent' if home.domain == 'media_player' else
+                f'set {home.entity_id} to 37 percent')
+    if barrier == 'hidden': er.async_get(hass).async_update_entity(home.entity_id, hidden_by=er.RegistryEntryHider.USER)
+    if barrier == 'unexposed':
+        from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
+        async_expose_entity(hass, 'conversation', home.entity_id, False)
+    if barrier == 'scope': home.token.permissions = PermissionTree()
+    if barrier == 'unavailable': hass.states.async_set(home.entity_id, 'unavailable')
+    if barrier == 'features': hass.states.async_set(home.entity_id, 'on', {'friendly_name': home.name})
+    recognize = command_routing.async_recognize
+    if barrier == 'trigger': recognize = AsyncMock(side_effect=SentenceTriggerMatch)
+    with (patch.object(command_routing, 'async_recognize', recognize),
+          patch.object(mcp_view, '_dispatch_mcp') as dispatch):
+        result = await async_evaluate_command(hass, home.data, home.token, sentence, 'en')
+    assert result['proposal'] is None
+    dispatch.assert_not_called()
+
+
+@pytest.mark.parametrize('change', ['token', 'exposure', 'trigger', 'custom'])
+async def test_literal_numeric_rechecks_after_worker_wait(hass, numeric_home, change):
+    from custom_components.phoenix_mcp import command_routing
+    from custom_components.phoenix_mcp.intent_recognition import SentenceTriggerMatch
+    home = numeric_home
+    sentence = home.sentence.format(value=37).replace(home.name.lower(), home.entity_id)
+    recognize = command_routing.async_recognize
+    calls = 0
+    async def after_worker(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            if change == 'token': home.token.revoked = True
+            if change == 'exposure':
+                from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
+                async_expose_entity(hass, 'conversation', home.entity_id, False)
+            if change == 'trigger': raise SentenceTriggerMatch
+            if change == 'custom': return SimpleNamespace(intent_metadata={'hass_custom_sentence': True})
+        return await recognize(*args, **kwargs)
+    with patch.object(command_routing, 'async_recognize', after_worker):
+        result = await async_evaluate_command(hass, home.data, home.token, sentence)
+    assert calls == 2
+    assert result['proposal'] is None
+
+
+async def test_numeric_worker_timeout_keeps_shared_capacity_until_thread_finishes(hass, numeric_home):
+    import threading
+    from custom_components.phoenix_mcp import command_routing
+    home = numeric_home
+    sentence = home.sentence.format(value=37).replace(home.name.lower(), home.entity_id)
+    await command_routing.async_recognize(hass, sentence, 'en', strict=True)
+    await home.data.store.async_patch_settings(command_routing_timeout_ms=50)
+    entered = asyncio.Event()
+    release = threading.Event()
+    original = command_routing.recognize_numeric_ids
+    def blocked(*args):
+        hass.loop.call_soon_threadsafe(entered.set)
+        assert release.wait(5)
+        return original(*args)
+    with patch.object(command_routing, 'recognize_numeric_ids', blocked):
+        try:
+            task = asyncio.create_task(async_evaluate_command(hass, home.data, home.token, sentence))
+            await asyncio.wait_for(entered.wait(), 2)
+            assert (await task)['reason'] == 'timeout'
+            pending = home.data.command_routing.task
+            assert pending is not None and not pending.done()
+            assert (await async_evaluate_command(hass, home.data, home.token, sentence))['reason'] == 'busy'
+        finally:
+            release.set()
+            if home.data.command_routing.task:
+                await home.data.command_routing.task
+        await asyncio.sleep(0)
+    assert home.data.command_routing.task is None
+    assert not home.data.store.get_pending_approvals()

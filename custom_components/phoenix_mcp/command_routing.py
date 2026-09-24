@@ -15,8 +15,9 @@ from .command_operations import command_domain, numeric_operation, supports_comm
 from .const import (
     COMMAND_ROUTING_INTENTS, COMMAND_ROUTING_TARGET_SLOTS, COMMAND_ROUTING_LANGUAGES,
     COMMAND_ROUTING_DEFAULT_LANGUAGES, COMMAND_ROUTING_LANGUAGE_ALIASES,
-    MAX_SEARCH_QUERY_LEN,
+    MAX_SEARCH_QUERY_LEN, COMMAND_ROUTING_NUMERIC_OPERATIONS, COMMAND_ROUTING_NUMERIC_TARGET_LIMIT,
 )
+from .numeric_recognition import NumericIdMatch, recognize_numeric_ids
 from .intent_recognition import RecognitionUnavailable, SentenceTriggerMatch, async_recognize
 from .policy_engine import Permission, resolve, resolve_intent_entities
 from .token_store import GlobalSettings, TokenRecord
@@ -109,6 +110,15 @@ class RoutingAuthority:
 
 def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant) -> tuple[str, dict | None]:
     """Map only supported, complete HA slots against current Phoenix scope."""
+    if isinstance(result, NumericIdMatch):
+        from .command_execution import _target_fingerprint
+
+        operation = numeric_operation(result.intent)
+        if (operation is None or not operation.valid_value(result.value)
+                or _target_fingerprint(hass, token, result.entity_id, result.intent) is None):
+            return "no_target", None
+        return "supported", {"intent": result.intent, "entity_ids": [result.entity_id],
+                             operation.proposal_field: result.value}
     if result is None or getattr(result, "unmatched_entities", None):
         return "no_match", None
     metadata = getattr(result, "intent_metadata", None) or {}
@@ -196,6 +206,36 @@ def routing_language(language: object, *, preview: bool = False,
     return COMMAND_ROUTING_LANGUAGES[canonical] if canonical in enabled and canonical in COMMAND_ROUTING_LANGUAGES else None
 
 
+async def _recognize_command(hass: HomeAssistant, authority: RoutingAuthority,
+                             sentence: str, language: str) -> Any:
+    """Keep both parsers in one bounded job, with HA trigger precedence intact."""
+    result = await async_recognize(hass, sentence, language, strict=True)
+    if result is not None:
+        return result
+    token = authority.current(hass)
+    if token is None:
+        return None
+    from .command_execution import _target_fingerprint
+
+    targets = []
+    for state in hass.states.async_all():
+        if state.entity_id not in sentence:
+            continue
+        if any(_target_fingerprint(hass, token, state.entity_id, intent) is not None
+               for intent in COMMAND_ROUTING_NUMERIC_OPERATIONS):
+            targets.append(state.entity_id)
+        if len(targets) > COMMAND_ROUTING_NUMERIC_TARGET_LIMIT:
+            return None
+    if not targets:
+        return None
+    numeric = await hass.async_add_executor_job(recognize_numeric_ids, sentence, language, tuple(sorted(targets)))
+    if numeric is None or authority.current(hass) is None:
+        return None
+    # Respect triggers and custom sentences added while the independent worker ran.
+    latest = await async_recognize(hass, sentence, language, strict=True)
+    return latest if latest is not None else numeric
+
+
 async def async_evaluate_command(
     hass: HomeAssistant, data: PhoenixData, token: TokenRecord,
     sentence: object, language: object = "en", *, preview: bool = False, ingress: str = "voice",
@@ -227,7 +267,7 @@ async def async_evaluate_command(
         return outcome("busy")
     # Only recognition runs in the background. Projection and disclosure happen
     # synchronously after the authority check, never in a timed-out task.
-    task = asyncio.create_task(async_recognize(hass, sentence.strip(), recognition_language, strict=True))
+    task = asyncio.create_task(_recognize_command(hass, authority, sentence.strip(), recognition_language))
     runtime.task = task
     task.add_done_callback(runtime._finished)
     try:
