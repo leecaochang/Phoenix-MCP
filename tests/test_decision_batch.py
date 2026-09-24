@@ -14,6 +14,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.phoenix_mcp import agentcli, device_semantics
 from custom_components.phoenix_mcp.const import (
     DOMAIN, DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS, DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS,
+    DECISION_MAX_TARGET_BYTES, DECISION_PERCENTAGE_PREVIEW_MAX_TARGET_BYTES,
 )
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.decision_batch import async_preview_batch, capture_batch_targets
@@ -397,6 +398,65 @@ async def test_extended_preview_preserves_metadata_byte_budget(hass, batch_home)
         result = await percentage_preview(hass, batch_home)
     assert result['reason'] == 'target_metadata_too_large'
     request.assert_not_called()
+
+
+@pytest.mark.parametrize('change', [False, True])
+async def test_larger_union_budget_is_preview_only_and_rechecks_competitors(hass, batch_home, change):
+    from custom_components.phoenix_mcp.decision_targets import CatalogLimitError
+    _, token, _, _, original = batch_home
+    registry = er.async_get(hass)
+    hass.states.async_set(original, 'off', {'supported_color_modes': ['brightness']})
+    expected = {original}
+    for index in range(48):
+        entry = registry.async_get_or_create('light', 'test', f'budget_{index}')
+        hass.states.async_set(entry.entity_id, 'off', {
+            'friendly_name': f'Lamp {index} ' + 'x' * 180, 'supported_color_modes': ['brightness'],
+        })
+        expected.add(entry.entity_id)
+    with pytest.raises(CatalogLimitError) as caught:
+        capture_batch_targets(hass, token)
+    assert caught.value.details['category'] == 'combined'
+    assert caught.value.details['limit'] == DECISION_MAX_TARGET_BYTES
+    targets, snapshots = capture_batch_targets(hass, token, numeric_preview=True)
+    size = len(json.dumps(targets, ensure_ascii=False).encode())
+    assert DECISION_MAX_TARGET_BYTES < size <= DECISION_PERCENTAGE_PREVIEW_MAX_TARGET_BYTES
+    assert all(len(json.dumps(snapshot.targets, ensure_ascii=False).encode()) <= DECISION_MAX_TARGET_BYTES
+               for snapshot in snapshots.values())
+    async def response(*args):
+        payload = args[4]
+        assert {item['entity_id'] for item in payload['state']['targets'].values()} == expected
+        if change:
+            registry.async_update_entity(entry.entity_id, aliases={'Another lamp'})
+        return percentage_response(payload, 'light_brightness', original, '37')
+    with patch.object(DecisionProvider, '_request', side_effect=response) as request:
+        result = await percentage_preview(hass, batch_home)
+    request.assert_awaited_once()
+    assert result['executed'] is False
+    assert result['reason'] == ('targets_changed' if change else 'target_selected')
+    if change:
+        assert 'proposal' not in result and 'decision' not in result
+    else:
+        assert result['proposal']['entity_ids'] == [original] and result['proposal']['brightness_pct'] == 37
+
+
+async def test_extended_union_over_budget_declines_before_provider_request(hass, batch_home):
+    _, token, _, _, original = batch_home
+    hass.states.async_set(original, 'off', {'supported_color_modes': ['brightness']})
+    for index in range(DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS - 1):
+        entry = er.async_get(hass).async_get_or_create('light', 'test', f'l{index}',
+                                                      suggested_object_id=f'l{index}', original_name='Lamp')
+        hass.states.async_set(entry.entity_id, 'off', {'friendly_name': 'Lamp', 'supported_color_modes': ['brightness']})
+    # Each individual operation fits, but the combined eligibility data exceeds its own budget.
+    for category in ('light_on', 'light_off', 'light_brightness', 'state_query'):
+        snapshot = capture_targets(hass, token, category, max_targets=DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS, compact=True)
+        assert len(snapshot.targets) == DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS
+    with patch.object(DecisionProvider, '_request') as request:
+        result = await percentage_preview(hass, batch_home)
+    request.assert_not_called()
+    assert result['reason'] == 'target_metadata_too_large' and result['executed'] is False
+    assert result['catalog_limit']['category'] == 'combined'
+    assert result['catalog_limit']['limit'] == DECISION_PERCENTAGE_PREVIEW_MAX_TARGET_BYTES
+    assert result['catalog_limit']['observed'] > DECISION_PERCENTAGE_PREVIEW_MAX_TARGET_BYTES
 
 
 async def test_compact_batch_fits_duplicate_heavy_catalog_without_dropping_candidates(hass, batch_home):

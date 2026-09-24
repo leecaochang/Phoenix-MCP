@@ -14,6 +14,7 @@ from .command_operations import numeric_operation
 from .const import (
     DECISION_BATCH_EXECUTION_LANGUAGES, DECISION_BATCH_EXECUTION_MODELS,
     DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES,
+    DECISION_PERCENTAGE_PREVIEW_MAX_TARGET_BYTES,
     DECISION_TARGET_INTENTS, DECISION_NUMERIC_CATEGORIES, DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS, MAX_SEARCH_QUERY_LEN,
 )
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
@@ -40,8 +41,9 @@ def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = Fals
         raise CatalogLimitError("combined", "target_count", len(entities), max_targets)
     targets = {f"t{index}": entities[entity_id] for index, entity_id in enumerate(sorted(entities))}
     size = len(json.dumps(targets, ensure_ascii=False).encode())
-    if size > DECISION_MAX_TARGET_BYTES:
-        raise CatalogLimitError("combined", "metadata_bytes", size, DECISION_MAX_TARGET_BYTES)
+    max_bytes = DECISION_PERCENTAGE_PREVIEW_MAX_TARGET_BYTES if numeric_preview else DECISION_MAX_TARGET_BYTES
+    if size > max_bytes:
+        raise CatalogLimitError("combined", "metadata_bytes", size, max_bytes)
     return targets, snapshots
 
 
