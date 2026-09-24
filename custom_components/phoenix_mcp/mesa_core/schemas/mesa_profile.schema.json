@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://mesa-spec.org/schemas/mesa_profile.schema.json",
   "title": "MESA profile document",
-  "description": "Canonical machine-readable schema for MESA profiles (MESA Specification v1.1, profile schema_version 1.1). Root document form: semantic_profile with privacy_classification as a sibling key. A document without a semantic_profile key is read as a bare semantic_profile body, the same way mesa-core's parser reads it, so the two agree on what is malformed.",
+  "description": "Canonical machine-readable schema for MESA profiles (MESA Specification v1.1, profile schema_version 1.1). Root document form: semantic_profile with privacy_classification as a sibling key. A document without a semantic_profile key is read as a bare semantic_profile body, the same way mesa-core's parser reads it, so structural checks agree with the runtime validator. Full validation also requires the semantic checks described in $comment.",
   "type": "object",
   "properties": {
     "semantic_profile": {
@@ -235,6 +235,23 @@
         },
         "person_traits": {
           "$ref": "#/$defs/personTraits"
+        },
+        "semantic_routing": {
+          "type": "object",
+          "properties": {
+            "intent_tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "enhances_domains": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
         }
       },
       "$comment": "privacy_classification is validated at the document root, not here: its canonical location is the sibling of semantic_profile, and a nested copy is read only when the sibling is absent (see the root-level allOf; Spec 7)."
@@ -367,6 +384,9 @@
             ]
           }
         }
+      ],
+      "required": [
+        "source"
       ]
     },
     "operationalBoundaries": {
@@ -608,7 +628,107 @@
               "contains"
             ]
           }
-        }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "operator": {
+                  "enum": [
+                    "eq",
+                    "neq"
+                  ]
+                }
+              },
+              "required": [
+                "operator"
+              ]
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "operator": {
+                  "enum": [
+                    "gt",
+                    "gte",
+                    "lt",
+                    "lte"
+                  ]
+                }
+              },
+              "required": [
+                "operator"
+              ]
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "operator": {
+                  "enum": [
+                    "in"
+                  ]
+                }
+              },
+              "required": [
+                "operator"
+              ]
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "type": "array",
+                  "items": {
+                    "type": [
+                      "string",
+                      "number"
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "operator": {
+                  "enum": [
+                    "contains"
+                  ]
+                }
+              },
+              "required": [
+                "operator"
+              ]
+            },
+            "then": {
+              "properties": {
+                "value": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ]
       }
     },
     "declaredLimit": {
@@ -946,5 +1066,6 @@
   },
   "else": {
     "$ref": "#/$defs/semanticProfile"
-  }
+  },
+  "$comment": "Structural validation only: also run semantic validation to reject duplicate IDs within each declared_limits or temporal_constraints array. Cross-layer overrides remain valid."
 }

@@ -2,7 +2,9 @@
 
 The JSON Schema file is the canonical machine-readable artifact for third parties;
 this module is the zero-dependency implementation mesa-core uses internally. The
-test suite asserts both reject the same documents (tests/test_validation_schema_agreement.py).
+test suite asserts structural agreement (tests/test_validation_schema_agreement.py).
+Semantic validation additionally rejects duplicate safety IDs within a declaration,
+which standard JSON Schema cannot express as property-based uniqueness.
 """
 
 from __future__ import annotations
@@ -161,6 +163,29 @@ def _check_string_array(
         report.errors.append(f"{where}: must be an array of strings (got {value!r})")
 
 
+def predicate_operand_valid(operator: str, value: Any) -> bool:
+    """Canonical operand types shared by validation and defensive evaluation."""
+
+    def number(item: Any) -> bool:
+        return (
+            isinstance(item, int | float)
+            and not isinstance(item, bool)
+            and (not isinstance(item, float) or math.isfinite(item))
+        )
+
+    if operator in ("eq", "neq"):
+        return isinstance(value, str | bool) or number(value)
+    if operator in ("gt", "gte", "lt", "lte"):
+        return number(value)
+    if operator == "contains":
+        return isinstance(value, str)
+    if operator == "in":
+        return isinstance(value, list) and all(
+            isinstance(item, str) or number(item) for item in value
+        )
+    return False
+
+
 def _check_predicate(pred: Any, where: str, report: ValidationReport) -> None:
     if not isinstance(pred, dict):
         report.errors.append(f"{where}: predicate must be an object")
@@ -182,6 +207,8 @@ def _check_predicate(pred: Any, where: str, report: ValidationReport) -> None:
         _check_string(pred, "entity", f"{where}.entity", report)
     if "value" not in pred:
         report.errors.append(f"{where}: predicate requires 'value'")
+    elif isinstance(op, str) and not predicate_operand_valid(op, pred["value"]):
+        report.errors.append(f"{where}: value has incompatible type for operator {op!r}")
 
 
 def _object_at(
@@ -214,6 +241,8 @@ def _check_metadata_origin(sp: dict[str, Any], report: ValidationReport) -> None
     for key in ("generated_at", "last_updated"):
         _check_string(mo, key, f"metadata_origin.{key}", report)
     _check_number(mo, "staleness_window_days", "metadata_origin.staleness_window_days", report)
+    if "source" not in mo:
+        report.errors.append("metadata_origin requires source (Spec 5.3)")
     source = mo.get("source")
     _check_enum(mo, "source", VALID_ORIGINS, "metadata_origin.source", report)
     _check_string_array(mo, "confirmed_fields", "metadata_origin.confirmed_fields", report)
@@ -221,9 +250,7 @@ def _check_metadata_origin(sp: dict[str, Any], report: ValidationReport) -> None
         # REQUIRED for hybrid (Spec 5.3), the same way confidence and
         # generated_at are required for inferred_ai: a profile claiming partial
         # human confirmation must say what was confirmed.
-        report.errors.append(
-            "hybrid profile is malformed: missing 'confirmed_fields' (Spec 5.3)"
-        )
+        report.errors.append("hybrid profile is malformed: missing 'confirmed_fields' (Spec 5.3)")
     if source != "hybrid" and mo.get("confirmed_fields"):
         # Confirming a field promotes it to hybrid (Spec 5.4 Rule 6), so
         # confirmed_fields on any other origin is self-contradictory. Rejected
@@ -246,8 +273,7 @@ def _check_metadata_origin(sp: dict[str, Any], report: ValidationReport) -> None
         or not 0.0 <= confidence <= 1.0
     ):
         report.errors.append(
-            f"metadata_origin.confidence must be a number between 0.0 and 1.0 "
-            f"(got {confidence!r})"
+            f"metadata_origin.confidence must be a number between 0.0 and 1.0 (got {confidence!r})"
         )
     if source == "inferred_ai":
         # Inferred Rule 1 (Spec 5.4): missing either field makes the profile malformed.
@@ -307,6 +333,17 @@ def _check_boundaries(sp: dict[str, Any], report: ValidationReport) -> None:
     for key in ("declared_limits", "temporal_constraints"):
         if key in ob and not isinstance(ob[key], list):
             report.errors.append(f"{key} must be an array (got {ob[key]!r})")
+
+    for key in ("declared_limits", "temporal_constraints"):
+        seen: set[str] = set()
+        for i, entry in enumerate(_array_at(ob, key)):
+            identifier = entry.get("id") if isinstance(entry, dict) else None
+            if isinstance(identifier, str):
+                if identifier in seen:
+                    report.errors.append(
+                        f"{key}[{i}]: duplicate id {identifier!r} within declaration"
+                    )
+                seen.add(identifier)
 
     for i, limit in enumerate(_array_at(ob, "declared_limits")):
         where = f"declared_limits[{i}]"
@@ -413,9 +450,7 @@ def _check_temporal_constraint(tc: Any, where: str, report: ValidationReport) ->
     # or it silently constrains nothing (Spec 6.5).
     bounds = [key for key in ("max_value", "min_value", "permitted_values") if key in effect]
     if bounds and "service" not in effect:
-        report.errors.append(
-            f"{where}.effect: {bounds[0]!r} requires 'service' (Spec 6.5)"
-        )
+        report.errors.append(f"{where}.effect: {bounds[0]!r} requires 'service' (Spec 6.5)")
     if "service" in effect and "parameter" not in effect:
         report.errors.append(f"{where}.effect: 'service' requires 'parameter' (Spec 6.5)")
     if "control_mode" not in effect and not bounds:
@@ -429,9 +464,7 @@ def _check_person_traits(sp: dict[str, Any], report: ValidationReport) -> None:
     pt = _object_at(sp, "person_traits", "person_traits", report)
     if pt is None:
         return
-    _check_enum(
-        pt, "household_role", VALID_HOUSEHOLD_ROLES, "person_traits.household_role", report
-    )
+    _check_enum(pt, "household_role", VALID_HOUSEHOLD_ROLES, "person_traits.household_role", report)
     if "is_minor" in pt and not isinstance(pt["is_minor"], bool):
         # A non-boolean is_minor would silently fail the mandatory restricted
         # check (Spec 17 Rule 2): reject loudly rather than fail open.
@@ -481,6 +514,10 @@ def validate_document(data: dict[str, Any], entity_id: str = "") -> ValidationRe
     _check_metadata_origin(sp, report)
     _check_boundaries(sp, report)
     _check_person_traits(sp, report)
+    routing = _object_at(sp, "semantic_routing", "semantic_routing", report)
+    if routing is not None:
+        for key in ("intent_tags", "enhances_domains"):
+            _check_string_array(routing, key, f"semantic_routing.{key}", report)
 
     if "semantic_tags" in sp:
         tags = sp["semantic_tags"]

@@ -45,12 +45,14 @@ def import_from_integration(integration_path: str | Path) -> SemanticProfile | N
     if not sidecar.exists():
         return None
     try:
-        data = json.loads(sidecar.read_text())
-    except json.JSONDecodeError as err:
+        data = json.loads(sidecar.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, UnicodeError) as err:
         # A truncated or typo'd sidecar is malformed content like any other, and
         # hosts run this across every installed integration catching the
         # documented error.
-        raise MesaValidationError(f"{sidecar}: sidecar is not valid JSON: {err}") from err
+        raise MesaValidationError(
+            f"{sidecar}: sidecar is not valid JSON (UTF-8 required): {err}"
+        ) from err
     profile = SemanticProfile.from_dict(
         path.name, data, default_origin=MetadataOrigin.DEVELOPER
     )

@@ -407,19 +407,23 @@ class SemanticProfile:
 
         A key present with a null value is not a declaration. ``privacy_
         classification`` is read at the canonical sibling location and the
-        nested fallback location (Spec 7).
+        nested fallback location only when the sibling is absent (Spec 7).
         """
         sp = _sub(root, "semantic_profile")
         paths: set[str] = set()
-        for container in ("operational_boundaries", "person_traits"):
+        for key in ("semantic_tags", "inheritance_scope"):
+            if key in sp:
+                paths.add(key)
+        for container in ("operational_boundaries", "person_traits", "metadata_origin"):
             for key, value in _sub(sp, container).items():
                 if value is not None:
                     paths.add(f"{container}.{key}")
-        for source in (root.get("privacy_classification"), sp.get("privacy_classification")):
-            if isinstance(source, dict):
-                for key, value in source.items():
-                    if value is not None:
-                        paths.add(f"privacy_classification.{key}")
+        # Match parsing: a canonical sibling makes the nested copy inert.
+        source = root.get("privacy_classification", sp.get("privacy_classification"))
+        if isinstance(source, dict):
+            for key, value in source.items():
+                if value is not None:
+                    paths.add(f"privacy_classification.{key}")
         return paths
 
     def effective_confidence(self) -> float:
@@ -486,9 +490,7 @@ class SemanticProfile:
             now,
         )
 
-    def _staleness_from(
-        self, findings: list[tuple[bool, str]], now: datetime | None
-    ) -> str:
+    def _staleness_from(self, findings: list[tuple[bool, str]], now: datetime | None) -> str:
         if not self.is_inferred():
             return "current"
         if any(fired for fired, _ in findings):
@@ -649,7 +651,7 @@ class SemanticProfile:
         everywhere except integration sidecar imports, which pass DEVELOPER
         (Spec 5.3 location-based provenance defaults).
         """
-        validation.validate_or_raise(data, entity_id)
+        report = validation.validate_or_raise(data, entity_id)
 
         if "semantic_profile" in data:
             root = copy.deepcopy(data)
@@ -680,9 +682,7 @@ class SemanticProfile:
         ob_raw = sp.get("operational_boundaries") or {}
         boundaries = OperationalBoundaries(
             control_mode=ControlMode(ob_raw.get("control_mode", "confirm")),
-            triggers_automations=TriggersAutomations(
-                ob_raw.get("triggers_automations", "unknown")
-            ),
+            triggers_automations=TriggersAutomations(ob_raw.get("triggers_automations", "unknown")),
             reversible=ob_raw.get("reversible"),
             reversibility_cost=ob_raw.get("reversibility_cost"),
             reversibility_note=ob_raw.get("reversibility_note"),
@@ -743,6 +743,7 @@ class SemanticProfile:
             diagnostic_profile=root.get("diagnostic_profile"),
             raw=root,
             declared_paths=cls._declared_paths_of(root),
+            parse_warnings=list(report.warnings),
         )
 
     # -- serialisation ------------------------------------------------------
@@ -792,23 +793,46 @@ class SemanticProfile:
                 ob_dict[key] = value
         if self._emit("operational_boundaries.enforcement_mode", ob.enforcement_mode, "advisory"):
             ob_dict["enforcement_mode"] = ob.enforcement_mode
-        if ob.declared_limits:
+        if self._emit("operational_boundaries.declared_limits", ob.declared_limits, []):
             ob_dict["declared_limits"] = copy.deepcopy(ob.declared_limits)
-        if ob.temporal_constraints:
+        if self._emit("operational_boundaries.temporal_constraints", ob.temporal_constraints, []):
             ob_dict["temporal_constraints"] = copy.deepcopy(ob.temporal_constraints)
-        if ob.override_triggers_automations:
-            ob_dict["override_triggers_automations"] = True
-        if ob.override_control_mode:
-            ob_dict["override_control_mode"] = True
+        if self._emit(
+            "operational_boundaries.override_triggers_automations",
+            ob.override_triggers_automations,
+            False,
+        ):
+            ob_dict["override_triggers_automations"] = ob.override_triggers_automations
+        if self._emit(
+            "operational_boundaries.override_control_mode", ob.override_control_mode, False
+        ):
+            ob_dict["override_control_mode"] = ob.override_control_mode
 
-        mo_dict: dict[str, Any] = {"source": self.metadata.source.value}
+        mo_dict = _unmodelled(
+            sp_raw.get("metadata_origin"),
+            frozenset(
+                {
+                    "source",
+                    "confidence",
+                    "generated_at",
+                    "staleness_window_days",
+                    "confirmed_fields",
+                }
+            ),
+        )
+        mo_dict["source"] = self.metadata.source.value
         if self.metadata.confidence is not None:
             mo_dict["confidence"] = self.metadata.confidence
         if self.metadata.generated_at is not None:
             mo_dict["generated_at"] = self.metadata.generated_at
-        if self.metadata.staleness_window_days != 60:
+        if self._emit(
+            "metadata_origin.staleness_window_days", self.metadata.staleness_window_days, 60
+        ):
             mo_dict["staleness_window_days"] = self.metadata.staleness_window_days
-        if self.metadata.confirmed_fields or self.metadata.source == MetadataOrigin.HYBRID:
+        if (
+            self._emit("metadata_origin.confirmed_fields", self.metadata.confirmed_fields, [])
+            or self.metadata.source == MetadataOrigin.HYBRID
+        ):
             # REQUIRED for hybrid (Spec 5.3), so it survives a round-trip even
             # when empty; dropping it as falsy would make a stored hybrid
             # profile fail to reload.
@@ -821,13 +845,13 @@ class SemanticProfile:
             sp_dict["operational_boundaries"] = ob_dict
         if self.metadata.profile_version is not None:
             sp_dict["profile_version"] = self.metadata.profile_version
-        if self.semantic_tags:
+        if self._emit("semantic_tags", self.semantic_tags, []):
             sp_dict["semantic_tags"] = list(self.semantic_tags)
         if self.metadata.last_updated is not None:
             sp_dict["last_updated"] = self.metadata.last_updated
         if self.metadata.profile_valid_for is not None:
             sp_dict["profile_valid_for"] = copy.deepcopy(self.metadata.profile_valid_for)
-        if self.inheritance_scope != "entity":
+        if self._emit("inheritance_scope", self.inheritance_scope, "entity"):
             sp_dict["inheritance_scope"] = self.inheritance_scope
 
         pc = self.privacy_classification
@@ -839,15 +863,15 @@ class SemanticProfile:
             "contains_biometric_data",
             "contains_behavioural_data",
         ):
-            if getattr(pc, key):
-                pc_dict[key] = True
+            if self._emit(f"privacy_classification.{key}", getattr(pc, key), False):
+                pc_dict[key] = getattr(pc, key)
         for key in ("data_retention_local", "access_logging_recommended", "privacy_note"):
             value = getattr(pc, key)
             if value is not None:
                 pc_dict[key] = value
         if pc.access_roles is not None:
             pc_dict["access_roles"] = copy.deepcopy(pc.access_roles)
-        if pc.deny_response_mode != "omit":
+        if self._emit("privacy_classification.deny_response_mode", pc.deny_response_mode, "omit"):
             pc_dict["deny_response_mode"] = pc.deny_response_mode
         if self._emit("privacy_classification.level", pc.level, PrivacyLevel.NORMAL) or pc_dict:
             # level is REQUIRED whenever the object is present (Spec 7.1), so a
@@ -862,7 +886,7 @@ class SemanticProfile:
                 pt_dict[key] = value
         for key in ("associated_zones", "associated_automations"):
             values = getattr(pt, key)
-            if values:
+            if self._emit(f"person_traits.{key}", values, []):
                 pt_dict[key] = list(values)
         if pt_dict:
             sp_dict["person_traits"] = pt_dict

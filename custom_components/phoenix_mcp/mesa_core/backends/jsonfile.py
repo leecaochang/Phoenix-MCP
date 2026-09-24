@@ -7,6 +7,8 @@ mapping reversible, so ``list_keys`` can reconstruct keys exactly.
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote, unquote
@@ -27,11 +29,24 @@ class JsonFileBackend(backends.StorageBackend):
         path = self._path(key)
         if not path.exists():
             return None
-        data: dict[str, Any] = json.loads(path.read_text())
+        data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
         return data
 
     def write(self, key: str, data: dict[str, Any]) -> None:
-        self._path(key).write_text(json.dumps(data, indent=2) + "\n")
+        payload = json.dumps(data, indent=2) + "\n"
+        temporary: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", dir=self.base_path, suffix=".tmp", delete=False
+            ) as stream:
+                temporary = Path(stream.name)
+                stream.write(payload)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temporary, self._path(key))
+        finally:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
 
     def delete(self, key: str) -> None:
         self._path(key).unlink(missing_ok=True)

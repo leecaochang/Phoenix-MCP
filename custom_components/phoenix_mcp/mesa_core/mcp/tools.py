@@ -12,6 +12,7 @@ Errors are returned as the Spec 9.6 envelope:
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import logging
 from collections.abc import Callable, Collection
@@ -369,7 +370,8 @@ class MesaToolHandlers:
         """
         try:
             _validate_params("mesa_query_profiles", params)
-            result = self.store.query(
+            result = await asyncio.to_thread(
+                self.store.query,
                 domains=params.get("domains"),
                 tags=params.get("tags"),
                 tags_match=params.get("tags_match", "any"),
@@ -397,7 +399,7 @@ class MesaToolHandlers:
                 # One evaluation per entity, against that entity's own context.
                 # Spec 5.5: a host SHOULD surface a warning when an
                 # invalidation trigger fires, for profiles of any origin.
-                freshness = self._freshness(row.entity_id, effective)
+                freshness = await asyncio.to_thread(self._freshness, row.entity_id, effective)
                 validity_warnings.extend(freshness.warnings)
                 results.append(
                     self._result_object(row.entity_id, effective, include_fields, freshness)
@@ -434,11 +436,11 @@ class MesaToolHandlers:
             if not entity_id:
                 return _error("invalid_query", "entity_id is required")
             include_diagnostic = params.get("include_diagnostic", True)
-            if not self.resolver.has_profile(entity_id):
+            if not await asyncio.to_thread(self.resolver.has_profile, entity_id):
                 return _error(
                     "not_found", f"entity {entity_id!r} has no MESA profile at any level"
                 )
-            effective = self.resolver.resolve(entity_id)
+            effective = await asyncio.to_thread(self.resolver.resolve, entity_id)
             decision = self._access(entity_id, effective)
             if not decision.allowed:
                 denied = self._denied_response(entity_id, decision)
@@ -458,7 +460,7 @@ class MesaToolHandlers:
             }
             if include_diagnostic and effective.diagnostic_profile is not None:
                 out["diagnostic_profile"] = effective.diagnostic_profile
-            freshness = self._freshness(entity_id, effective)
+            freshness = await asyncio.to_thread(self._freshness, entity_id, effective)
             # Spec 9.3: staleness_status accompanies an inferred_ai origin,
             # including one inherited from a scoped layer the entity does not
             # store itself. Spec 5.5's warnings apply to every origin.
@@ -467,7 +469,7 @@ class MesaToolHandlers:
             if freshness.warnings:
                 out["warnings"] = freshness.warnings
             if params.get("include_semantic_moments", False):
-                moments = self._semantic_moments(entity_id)
+                moments = await asyncio.to_thread(self._semantic_moments, entity_id)
                 if moments is not None:
                     out["semantic_moments"] = moments
             return out
@@ -484,7 +486,7 @@ class MesaToolHandlers:
             if not entity_id:
                 return _error("invalid_query", "entity_id is required")
             show_conflicts = params.get("show_conflicts", True)
-            explanation = self.resolver.explain(entity_id)
+            explanation = await asyncio.to_thread(self.resolver.explain, entity_id)
             decision = self._access(entity_id, explanation.effective_profile)
             if not decision.allowed:
                 denied = self._denied_response(entity_id, decision)

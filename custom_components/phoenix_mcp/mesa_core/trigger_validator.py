@@ -48,11 +48,44 @@ class ValidationIssue:
     recommendation: str
 
 
+def _ensure_acyclic(config: dict[str, Any]) -> None:
+    """Reject cycles while allowing shared YAML aliases; avoid recursive descent."""
+    active: set[int] = set()
+    complete: set[int] = set()
+    stack: list[tuple[Any, bool]] = [(config, False)]
+    while stack:
+        node, leaving = stack.pop()
+        if not isinstance(node, dict | list):
+            continue
+        identity = id(node)
+        if leaving:
+            active.remove(identity)
+            complete.add(identity)
+            continue
+        if identity in active:
+            raise MesaValidationError("cyclic automation configuration")
+        if identity in complete:
+            continue
+        active.add(identity)
+        stack.append((node, True))
+        values = node.values() if isinstance(node, dict) else node
+        stack.extend((value, False) for value in values)
+
+
 def _collect_references(
     node: Any, entities: set[str], targets: set[tuple[str, str]]
 ) -> None:
-    if isinstance(node, dict):
-        for key, value in node.items():
+    pending = [node]
+    visited: set[int] = set()
+    while pending:
+        current = pending.pop()
+        if not isinstance(current, dict | list) or id(current) in visited:
+            continue
+        visited.add(id(current))
+        if isinstance(current, list):
+            pending.extend(current)
+            continue
+        for key, value in current.items():
             if key == "entity_id":
                 if isinstance(value, str):
                     entities.add(value)
@@ -64,10 +97,7 @@ def _collect_references(
                 elif isinstance(value, list):
                     targets.update((key, v) for v in value if isinstance(v, str))
             else:
-                _collect_references(value, entities, targets)
-    elif isinstance(node, list):
-        for item in node:
-            _collect_references(item, entities, targets)
+                pending.append(value)
 
 
 def entities_by_role(
@@ -88,6 +118,7 @@ def entities_by_role(
     entity IDs that selector covers in the deployment. Without the callback,
     indirectly referenced entities are invisible to the walk.
     """
+    _ensure_acyclic(config)
     result: dict[str, set[str]] = {}
     for role, keys in _SECTION_KEYS.items():
         entities: set[str] = set()

@@ -36,6 +36,7 @@ from typing import Any
 
 from custom_components.phoenix_mcp.mesa_core.audit import MesaAuditEvent, emit_audit_event
 from custom_components.phoenix_mcp.mesa_core.exceptions import LeaseNotFoundError, MesaValidationError
+from custom_components.phoenix_mcp.mesa_core.inheritance import InheritanceResolver
 from custom_components.phoenix_mcp.mesa_core.lease.registry import Lease, LeaseRegistry
 from custom_components.phoenix_mcp.mesa_core.store import ProfileStore
 
@@ -115,17 +116,20 @@ class LeaseManager:
         self,
         store: ProfileStore | None = None,
         *,
+        resolver: InheritanceResolver | None = None,
         get_state: Callable[[str], str | None] | None = None,
         on_lease_event: Callable[[dict[str, Any]], None] | None = None,
     ) -> None:
         """``store`` supplies automation profiles for the protected/critical
-        denial check (Spec 21.5); without it no automation profiles exist to
+        denial check (Spec 21.5), resolved using ``resolver`` or the store's
+        configured resolver; without it no automation profiles exist to
         check. ``get_state`` reports automation entity state for the
         protected "while active" test; absent, protected automations are
         treated as active (fail-closed). ``on_lease_event`` receives the
         ``mesa_lease_expired`` payload for every ended lease.
         """
         self.store = store
+        self.resolver = resolver
         self.get_state = get_state
         self.on_lease_event = on_lease_event
         self._registry = LeaseRegistry()
@@ -231,9 +235,20 @@ class LeaseManager:
             if not key.startswith("automation."):
                 continue
             try:
-                profile = self.store.get(key)
+                profile = (
+                    self.resolver.resolve(key)
+                    if self.resolver is not None
+                    else self.store.get_effective(key)
+                )
             except MesaValidationError as err:
-                warnings.append(f"skipped malformed automation profile {key}: {err}")
+                warnings.append(
+                    f"automation policy {key} could not be evaluated: {err}; "
+                    "all requested entities denied (fail-closed)"
+                )
+                for entity in requested:
+                    denials.setdefault(
+                        entity, f"automation policy {key} is unevaluable (Spec 21.5)"
+                    )
                 continue
             if profile is None:
                 continue
@@ -316,8 +331,7 @@ class LeaseManager:
                     for entity in overlap:
                         denials.setdefault(
                             entity,
-                            f"entity is monitored by active protected automation {key} "
-                            "(Spec 21.5)",
+                            f"entity is monitored by active protected automation {key} (Spec 21.5)",
                         )
             else:
                 conflicts.append(
@@ -406,9 +420,7 @@ class LeaseManager:
                 continue
             holder = self._registry.holding(entity, now)
             if holder is not None and holder.session_id != session_id:
-                denial_reasons[entity] = (
-                    "entity is under an active lease held by another session"
-                )
+                denial_reasons[entity] = "entity is under an active lease held by another session"
 
         entities_granted = [e for e in entities if e not in denial_reasons]
         entities_denied = [e for e in entities if e in denial_reasons]
@@ -519,9 +531,7 @@ class LeaseManager:
     async def arequest(
         self, entities: list[str], duration_seconds: float, **kwargs: Any
     ) -> LeaseResponse:
-        return await asyncio.to_thread(
-            lambda: self.request(entities, duration_seconds, **kwargs)
-        )
+        return await asyncio.to_thread(lambda: self.request(entities, duration_seconds, **kwargs))
 
     async def arelease(self, lease_id: str, **kwargs: Any) -> Lease:
         return await asyncio.to_thread(lambda: self.release(lease_id, **kwargs))

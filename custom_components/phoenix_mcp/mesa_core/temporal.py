@@ -15,6 +15,7 @@ relative_to_event are unevaluable in 1.x and therefore fail closed.
 from __future__ import annotations
 
 import copy
+import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
@@ -96,7 +97,8 @@ class TemporalEvaluator:
         if not calendar_id or self.get_calendar_events is None:
             return None
         try:
-            return bool(self.get_calendar_events(str(calendar_id)))
+            events = self.get_calendar_events(str(calendar_id))
+            return bool(events) if isinstance(events, list) else None
         except Exception:
             return None
 
@@ -118,7 +120,11 @@ class TemporalEvaluator:
             elevation = self.get_solar_elevation(at)
         except Exception:
             return None
-        if elevation is None:
+        if (
+            isinstance(elevation, bool)
+            or not isinstance(elevation, int | float)
+            or (isinstance(elevation, float) and not math.isfinite(elevation))
+        ):
             return None
         threshold, above = boundary
         return elevation > threshold if above else elevation < threshold

@@ -52,13 +52,36 @@ class RawSDKRegistry:
         if self._installed:
             return
         try:
-            from mcp import types
+            from mcp import types as sdk_types
+
+            types: Any = sdk_types
         except ImportError as err:
             raise MesaError(
                 "the raw_sdk adapter requires the 'mcp' package (pip install mesa-core[mcp])"
             ) from err
 
         tools = self._tools  # closures observe later registrations
+
+        if callable(getattr(self.server, "add_request_handler", None)):
+            # SDK v2 replaces decorators with method/params/context handlers.
+            async def list_v2(context: Any, params: Any) -> Any:
+                return types.ListToolsResult(
+                    tools=[
+                        types.Tool(name=name, description=description, input_schema=schema)
+                        for name, (_, schema, description) in tools.items()
+                    ]
+                )
+
+            async def call_v2(context: Any, params: Any) -> Any:
+                result = await self.dispatch(params.name, params.arguments)
+                return types.CallToolResult(
+                    content=[types.TextContent(type="text", text=json.dumps(result))]
+                )
+
+            self.server.add_request_handler("tools/list", types.PaginatedRequestParams, list_v2)
+            self.server.add_request_handler("tools/call", types.CallToolRequestParams, call_v2)
+            self._installed = True
+            return
 
         @self.server.list_tools()  # type: ignore[untyped-decorator]
         async def _list_tools() -> list[Any]:

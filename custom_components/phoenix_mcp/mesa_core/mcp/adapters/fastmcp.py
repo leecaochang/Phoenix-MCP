@@ -1,4 +1,4 @@
-"""Adapter for FastMCP-style servers (both fastmcp 2.x and mcp.server.fastmcp).
+"""Adapter for FastMCP-style servers (standalone fastmcp 2.x-4.x and SDK v1 FastMCP).
 
 Registration prefers the ``server.tool(...)`` decorator API, which both FastMCP
 lineages expose, falling back to ``add_tool`` for older versions.

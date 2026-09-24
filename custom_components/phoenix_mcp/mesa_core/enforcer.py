@@ -15,10 +15,12 @@ import asyncio
 import json
 import logging
 import math
+import threading
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from custom_components.phoenix_mcp.mesa_core.audit import MesaAuditEvent, emit_audit_event
@@ -34,6 +36,7 @@ from custom_components.phoenix_mcp.mesa_core.profile import (
 )
 from custom_components.phoenix_mcp.mesa_core.store import ProfileStore
 from custom_components.phoenix_mcp.mesa_core.temporal import TemporalEvaluator
+from custom_components.phoenix_mcp.mesa_core.validation import predicate_operand_valid
 
 __all__ = [
     "DOMAIN_SAFETY_BASELINE",
@@ -117,6 +120,7 @@ class ConfirmationManager:
     """
 
     def __init__(self, ttl_seconds: int = CHALLENGE_TTL_SECONDS) -> None:
+        self._lock = threading.RLock()
         self.ttl_seconds = ttl_seconds
         self._challenges: dict[str, dict[str, Any]] = {}
 
@@ -139,23 +143,24 @@ class ConfirmationManager:
         params: dict[str, Any] | None,
         now: datetime,
     ) -> dict[str, Any]:
-        self._evict_expired(now)
-        challenge_id = uuid.uuid4().hex
-        expires_at = now + timedelta(seconds=self.ttl_seconds)
-        self._challenges[challenge_id] = {
-            "entity_id": entity_id,
-            "service": service,
-            "params": _canonical_params(params),
-            "expires_at": expires_at,
-            "used": False,
-        }
-        return {
-            "challenge_id": challenge_id,
-            "entity_id": entity_id,
-            "service": service,
-            "parameters": dict(params or {}),
-            "expires_at": expires_at.isoformat(),
-        }
+        with self._lock:
+            self._evict_expired(now)
+            challenge_id = uuid.uuid4().hex
+            expires_at = now + timedelta(seconds=self.ttl_seconds)
+            self._challenges[challenge_id] = {
+                "entity_id": entity_id,
+                "service": service,
+                "params": _canonical_params(params),
+                "expires_at": expires_at,
+                "used": False,
+            }
+            return {
+                "challenge_id": challenge_id,
+                "entity_id": entity_id,
+                "service": service,
+                "parameters": dict(params or {}),
+                "expires_at": expires_at.isoformat(),
+            }
 
     def redeem(
         self,
@@ -165,64 +170,70 @@ class ConfirmationManager:
         params: dict[str, Any] | None,
         now: datetime,
     ) -> tuple[bool, str]:
-        challenge_id = token.get("challenge_id")
-        if not isinstance(challenge_id, str):
-            return False, "confirmation token missing challenge_id"
-        # The token records the approval (Spec 6.6 token schema: challenge_id,
-        # approved_by, approved_at). A token without them produces no audit
-        # trail, which is the protocol's stated purpose, so it is rejected rather
-        # than accepted with a warning.
-        if not isinstance(token.get("approved_by"), str) or not token["approved_by"]:
-            return False, "confirmation token missing approved_by (Spec 6.6)"
-        if not isinstance(token.get("approved_at"), str) or not token["approved_at"]:
-            return False, "confirmation token missing approved_at (Spec 6.6)"
-        record = self._challenges.get(challenge_id)
-        if record is None:
-            return False, "unknown or expired confirmation challenge"
-        if record["used"]:
-            return False, "confirmation token already used (single-use)"
-        if now > record["expires_at"]:
-            del self._challenges[challenge_id]
-            return False, "confirmation challenge expired"
-        if (
-            record["entity_id"] != entity_id
-            or record["service"] != service
-            or record["params"] != _canonical_params(params)
-        ):
-            return False, (
-                "confirmation token does not match this request: a token is valid "
-                "only for the exact entity, service, and parameters challenged"
-            )
-        record["used"] = True
-        return True, "confirmed"
+        with self._lock:
+            challenge_id = token.get("challenge_id")
+            if not isinstance(challenge_id, str):
+                return False, "confirmation token missing challenge_id"
+            # The token records the approval (Spec 6.6 token schema: challenge_id,
+            # approved_by, approved_at). A token without them produces no audit
+            # trail, which is the protocol's stated purpose, so it is rejected rather
+            # than accepted with a warning.
+            if not isinstance(token.get("approved_by"), str) or not token["approved_by"]:
+                return False, "confirmation token missing approved_by (Spec 6.6)"
+            if not isinstance(token.get("approved_at"), str) or not token["approved_at"]:
+                return False, "confirmation token missing approved_at (Spec 6.6)"
+            record = self._challenges.get(challenge_id)
+            if record is None:
+                return False, "unknown or expired confirmation challenge"
+            if record["used"]:
+                return False, "confirmation token already used (single-use)"
+            if now > record["expires_at"]:
+                del self._challenges[challenge_id]
+                return False, "confirmation challenge expired"
+            if (
+                record["entity_id"] != entity_id
+                or record["service"] != service
+                or record["params"] != _canonical_params(params)
+            ):
+                return False, (
+                    "confirmation token does not match this request: a token is valid "
+                    "only for the exact entity, service, and parameters challenged"
+                )
+            record["used"] = True
+            return True, "confirmed"
 
 
-def _finite_float(value: Any) -> float | None:
-    """``float(value)`` when it yields a finite number, else None (not comparable).
+def _finite_number(value: Any) -> Decimal | None:
+    """Compare without float rounding, within the existing finite-float range.
 
-    Catches OverflowError so an arbitrarily large JSON integer cannot crash
-    enforcement, and rejects NaN/Infinity so a non-finite bound fails closed:
-    every comparison with NaN is false, which would otherwise silently disable
-    a declared limit.
+    The float check preserves fail-closed handling of overflow and non-finite
+    values. Decimal construction from text preserves integer and state precision;
+    comparisons do not use the decimal arithmetic context's rounding precision.
     """
-    try:
-        result = float(value)
-    except (TypeError, ValueError, OverflowError):
+    if isinstance(value, bool) or not isinstance(value, str | int | float):
         return None
-    return result if math.isfinite(result) else None
+    try:
+        if not math.isfinite(float(value)):
+            return None
+        result = Decimal(str(value))
+    except (TypeError, ValueError, OverflowError, InvalidOperation):
+        return None
+    return result if result.is_finite() else None
 
 
 def _compare(operator: str, state: str, value: Any) -> bool | None:
     """Evaluate a canonical predicate operator. None = unevaluable.
 
-    Numeric operands go through _finite_float: a state of "nan"/"inf" (or an
+    Numeric operands go through _finite_number: a state of "nan"/"inf" (or an
     oversized integer value) is unevaluable, not a clean False. Every comparison
     with NaN is false, which would otherwise read the predicate as inactive and
     silently drop the limit instead of failing closed (Spec 6.5).
     """
+    if not predicate_operand_valid(operator, value):
+        return None
     try:
         if operator in ("gt", "gte", "lt", "lte"):
-            s, v = _finite_float(state), _finite_float(value)
+            s, v = _finite_number(state), _finite_number(value)
             if s is None or v is None:
                 return None
             return {
@@ -236,7 +247,7 @@ def _compare(operator: str, state: str, value: Any) -> bool | None:
                 # HA states are strings; booleans map onto on/off conventions.
                 matched = state.lower() in (("on", "true") if value else ("off", "false"))
             elif isinstance(value, int | float):
-                s, v = _finite_float(state), _finite_float(value)
+                s, v = _finite_number(state), _finite_number(value)
                 if s is None or v is None:
                     return None
                 matched = s == v
@@ -244,7 +255,10 @@ def _compare(operator: str, state: str, value: Any) -> bool | None:
                 matched = state == str(value)
             return matched if operator == "eq" else not matched
         if operator == "in":
-            return any(state == str(item) for item in value)
+            matches = [_compare("eq", state, item) for item in value]
+            if True in matches:
+                return True
+            return None if None in matches else False
         if operator == "contains":
             return str(value) in state
     except (TypeError, ValueError, OverflowError):
@@ -354,27 +368,21 @@ class MesaEnforcer:
         value = service_params[parameter]
         human_reason = limit.get("human_reason") or "declared limit"
         if "max_value" in spec:
-            observed = _finite_float(value)
-            bound = _finite_float(spec["max_value"])
+            observed = _finite_number(value)
+            bound = _finite_number(spec["max_value"])
             if observed is None or bound is None:
                 # Non-numeric, non-finite, or oversized: fail closed. A NaN bound
                 # would make every comparison false and silently disable the limit.
                 return f"{parameter}={value!r} is not comparable to max_value: {human_reason}"
             if observed > bound:
-                return (
-                    f"{parameter}={value} exceeds max_value {spec['max_value']}: "
-                    f"{human_reason}"
-                )
+                return f"{parameter}={value} exceeds max_value {spec['max_value']}: {human_reason}"
         if "min_value" in spec:
-            observed = _finite_float(value)
-            bound = _finite_float(spec["min_value"])
+            observed = _finite_number(value)
+            bound = _finite_number(spec["min_value"])
             if observed is None or bound is None:
                 return f"{parameter}={value!r} is not comparable to min_value: {human_reason}"
             if observed < bound:
-                return (
-                    f"{parameter}={value} is below min_value {spec['min_value']}: "
-                    f"{human_reason}"
-                )
+                return f"{parameter}={value} is below min_value {spec['min_value']}: {human_reason}"
         if "permitted_values" in spec:
             permitted = spec["permitted_values"]
             if not any(str(value) == str(item) for item in permitted):
@@ -566,9 +574,7 @@ class MesaEnforcer:
                     result.confirmation_challenge = challenge
                     return result
             else:
-                warnings.append(
-                    f"confirmation required before acting (advisory): {reason_suffix}"
-                )
+                warnings.append(f"confirmation required before acting (advisory): {reason_suffix}")
 
         # 5. Declared limits (profile limits plus active temporal value constraints).
         all_limits = list(boundaries.declared_limits) + temporal.active_limits

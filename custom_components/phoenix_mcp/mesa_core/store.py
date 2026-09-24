@@ -139,8 +139,8 @@ class DeploymentDefaults:
 class QueryRow:
     """One query match: the stored profile and its resolved effective profile.
 
-    ``effective`` is populated for every returned row; it is None only for
-    intermediate matches that were filtered out before the page was resolved.
+    ``query()`` resolves every match before counting and pagination. The optional
+    default remains for callers constructing QueryRow objects themselves.
     """
 
     entity_id: str
@@ -429,9 +429,9 @@ class ProfileStore:
 
         Tag and intent filters match the effective (resolved) tag set per Spec
         9.2, so resolution is used; the resolver defaults to this store's. Cheap
-        attribute filters (domain, origin, area, device, integration) run first
-        and resolution is deferred to the survivors, or to just the returned
-        page when neither a tag nor an intent filter is present.
+        attribute filters (domain, origin, area, device, integration) run first.
+        Survivors are resolved before pagination so malformed effective profiles
+        are excluded consistently from rows, counts, and cursor offsets.
 
         ``include_inferred=False`` excludes ``inferred_ai`` and ``unknown``
         origins (Spec 5.4 Rule 5) unless an explicit ``origin`` filter asks for
@@ -468,7 +468,6 @@ class ProfileStore:
             raise ValueError("integrations filter requires the get_entity_integration callback")
 
         limit = max(1, min(limit, MAX_PAGE_SIZE))
-        filter_needs_resolution = bool(tags or intents)
         warnings: list[str] = []
         matched: list[QueryRow] = []
         for key in self.entity_keys():
@@ -502,26 +501,28 @@ class ProfileStore:
                 and get_integration(key) not in integrations
             ):
                 continue
-            effective: SemanticProfile | None = None
-            if filter_needs_resolution:
+            try:
                 effective = resolver.resolve(key, entity_profile=stored)
-                effective_tags = set(effective.semantic_tags)
-                if tags:
-                    if tags_match == "all" and not set(tags) <= effective_tags:
-                        continue
-                    if tags_match == "any" and not set(tags) & effective_tags:
-                        continue
-                if intents:
-                    # semantic_routing is an unmodelled field carried onto the
-                    # effective profile, so intent_tags inherited from a domain,
-                    # integration, or area profile are matched too, consistent
-                    # with what get_effective() exposes (Spec 9.2).
-                    routing = (
-                        effective.raw.get("semantic_profile", {}).get("semantic_routing", {}) or {}
-                    )
-                    intent_tags = effective_tags | set(routing.get("intent_tags", []))
-                    if not set(intents) & intent_tags:
-                        continue
+            except MesaValidationError as err:
+                warnings.append(f"skipped malformed effective profile {key}: {err}")
+                continue
+            effective_tags = set(effective.semantic_tags)
+            if tags:
+                if tags_match == "all" and not set(tags) <= effective_tags:
+                    continue
+                if tags_match == "any" and not set(tags) & effective_tags:
+                    continue
+            if intents:
+                # semantic_routing is an unmodelled field carried onto the
+                # effective profile, so intent_tags inherited from a domain,
+                # integration, or area profile are matched too, consistent
+                # with what get_effective() exposes (Spec 9.2).
+                routing = (
+                    effective.raw.get("semantic_profile", {}).get("semantic_routing", {}) or {}
+                )
+                intent_tags = effective_tags | set(routing.get("intent_tags", []))
+                if not set(intents) & intent_tags:
+                    continue
             matched.append(QueryRow(entity_id=key, stored=stored, effective=effective))
 
         matched.sort(key=lambda row: row.entity_id)
@@ -529,11 +530,6 @@ class ProfileStore:
         offset = _decode_cursor(cursor, fingerprint) if cursor else 0
         page = matched[offset : offset + limit]
         has_more = offset + limit < len(matched)
-        # OPT: resolve only the returned page when filtering did not already,
-        # reusing the stored profile each row already holds.
-        for row in page:
-            if row.effective is None:
-                row.effective = resolver.resolve(row.entity_id, entity_profile=row.stored)
         next_cursor = _encode_cursor(offset + limit, fingerprint) if has_more else None
         return ProfileQueryResult(
             rows=page,
