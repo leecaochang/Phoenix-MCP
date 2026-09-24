@@ -17,7 +17,7 @@ from .const import (
     DECISION_TARGET_INTENTS, DECISION_NUMERIC_CATEGORIES, DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS, MAX_SEARCH_QUERY_LEN,
 )
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
-from .decision_targets import capture_targets, TargetSnapshot
+from .decision_targets import capture_targets, CatalogLimitError, TargetSnapshot
 from .device_semantics import device_registry_snapshot
 from .helpers import redact_secrets_in_text, redact_inaccessible_entity_ids_in_text
 
@@ -28,7 +28,8 @@ def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = Fals
     devices = device_registry_snapshot(hass)
     categories = DECISION_EXECUTION_CATEGORIES | DECISION_NUMERIC_CATEGORIES if numeric_preview else DECISION_EXECUTION_CATEGORIES
     max_targets = DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS if numeric_preview else DECISION_MAX_TARGETS
-    snapshots = {category: capture_targets(hass, token, category, devices=devices, max_targets=max_targets)
+    snapshots = {category: capture_targets(hass, token, category, devices=devices, max_targets=max_targets,
+                                          compact=numeric_preview)
                  for category in sorted(categories)}
     entities: dict[str, dict] = {}
     for category, snapshot in snapshots.items():
@@ -36,10 +37,11 @@ def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = Fals
             item = entities.setdefault(descriptor["entity_id"], {**descriptor, "eligible_categories": []})
             item["eligible_categories"].append(category)
     if len(entities) > max_targets:
-        raise DecisionError("too_many_targets")
+        raise CatalogLimitError("combined", "target_count", len(entities), max_targets)
     targets = {f"t{index}": entities[entity_id] for index, entity_id in enumerate(sorted(entities))}
-    if len(json.dumps(targets, ensure_ascii=False).encode()) > DECISION_MAX_TARGET_BYTES:
-        raise DecisionError("target_metadata_too_large")
+    size = len(json.dumps(targets, ensure_ascii=False).encode())
+    if size > DECISION_MAX_TARGET_BYTES:
+        raise CatalogLimitError("combined", "metadata_bytes", size, DECISION_MAX_TARGET_BYTES)
     return targets, snapshots
 
 
@@ -196,6 +198,8 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
                     return result("percentage_mismatch", decision=answer)
             return result("target_selected", decision=answer, proposal=proposal,
                           local_agreement=proposal == local.get("proposal") if local.get("proposal") else None)
+        except CatalogLimitError as error:
+            return result(str(error), catalog_limit=error.details)
         except DecisionError as error:
             return result(str(error))
         except TimeoutError:

@@ -19,7 +19,7 @@ from custom_components.phoenix_mcp.const import (
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.decision_provider import DecisionError, DecisionProvider
 from custom_components.phoenix_mcp.decision_shadow import async_preview_decision
-from custom_components.phoenix_mcp.decision_targets import capture_targets
+from custom_components.phoenix_mcp.decision_targets import capture_targets, CatalogLimitError
 from custom_components.phoenix_mcp.token_store import PermissionTree, PermissionNode
 
 
@@ -97,7 +97,8 @@ async def test_catalog_builds_device_graph_once_without_changing_fingerprints(ha
 
 
 @pytest.mark.parametrize("restriction", ["hidden", "disabled", "unexposed", "denied", "unavailable", "group", "aggregate", "unregistered"])
-async def test_ineligible_entity_identity_never_sent(hass, target_home, restriction):
+@pytest.mark.parametrize("compact", [False, True])
+async def test_ineligible_entity_identity_never_sent(hass, target_home, restriction, compact):
     _, token, _, _, entity_id = target_home
     registry = er.async_get(hass)
     if restriction == "hidden": registry.async_update_entity(entity_id, hidden_by=er.RegistryEntryHider.USER)
@@ -110,6 +111,7 @@ async def test_ineligible_entity_identity_never_sent(hass, target_home, restrict
         registry.async_get_or_create("light", "group", "desk", suggested_object_id=entity_id.split(".")[1])
     if restriction == "aggregate": hass.states.async_set(entity_id, "off", {"entity_id": ["light.hidden"]})
     if restriction == "unregistered": registry.async_remove(entity_id)
+    assert not capture_targets(hass, token, "light_on", compact=compact).targets
     first, second = mocks()
     with first, second as select:
         result = await preview(hass, target_home)
@@ -137,7 +139,8 @@ async def test_names_and_aliases_scrub_secrets_and_hidden_ids(hass, target_home)
 
 
 @pytest.mark.parametrize("case", ["count", "name", "aliases", "bytes"])
-async def test_catalog_limits_refuse_instead_of_truncating(hass, target_home, case):
+@pytest.mark.parametrize("compact", [False, True])
+async def test_catalog_limits_refuse_instead_of_truncating(hass, target_home, case, compact):
     _, token, _, _, entity_id = target_home
     registry = er.async_get(hass)
     if case == "name": hass.states.async_set(entity_id, "off", {"friendly_name": "a" * 257})
@@ -147,8 +150,13 @@ async def test_catalog_limits_refuse_instead_of_truncating(hass, target_home, ca
             entry = registry.async_get_or_create("light", "test", f"extra{index}")
             registry.async_update_entity(entry.entity_id, aliases={str(i) * 200 for i in range(8)} if case == "bytes" else set())
             hass.states.async_set(entry.entity_id, "off")
-    with pytest.raises(DecisionError, match="too_many_targets" if case == "count" else "target_metadata_too_large"):
-        capture_targets(hass, token, "light_on")
+    with pytest.raises(CatalogLimitError, match="too_many_targets" if case == "count" else "target_metadata_too_large") as caught:
+        capture_targets(hass, token, "light_on", compact=compact)
+    assert caught.value.details["category"] == "light_on"
+    assert caught.value.details["bound"] == {"count": "target_count", "name": "text_length",
+                                            "aliases": "alias_count", "bytes": "metadata_bytes"}[case]
+    assert caught.value.details["observed"] > caught.value.details["limit"]
+    assert entity_id not in str(caught.value.details)
 
 
 @pytest.mark.parametrize("change", ["name", "alias", "area", "scope", "availability", "new_candidate", "identity", "account", "settings", "revoked"])
@@ -499,3 +507,25 @@ async def test_numeric_preview_requires_actual_device_support(hass, target_home,
         result = await preview(hass, target_home)
     assert result['target_selection']['reason'] == 'no_target'
     select.assert_not_called()
+
+
+@pytest.mark.parametrize('area_present', [False, True])
+async def test_compact_catalog_keeps_distinct_identity_text_and_full_fingerprints(hass, target_home, area_present):
+    _, token, _, _, entity_id = target_home
+    registry = er.async_get(hass)
+    registry.async_update_entity(entity_id, aliases={er.COMPUTED_NAME, entity_id, 'Desk Lamp', '书桌灯', 'Task light'})
+    if not area_present:
+        registry.async_update_entity(entity_id, area_id=None)
+    raw = capture_targets(hass, token, 'light_brightness')
+    compact = capture_targets(hass, token, 'light_brightness', compact=True)
+    assert raw.fingerprints == compact.fingerprints
+    assert set(raw.targets) == set(compact.targets) == {'t0'}
+    assert compact.targets['t0'] == {
+        'entity_id': entity_id, 'name': 'Desk lamp', 'aliases': ['Desk Lamp', 'Task light', '书桌灯'],
+        **({'area': 'Office'} if area_present else {}),
+    }
+    # Even a removed duplicate is retained in the authority fingerprint.
+    registry.async_update_entity(entity_id, aliases={'Desk Lamp', '书桌灯', 'Task light'})
+    changed = capture_targets(hass, token, 'light_brightness', compact=True)
+    assert changed.targets == compact.targets
+    assert changed.digest() != compact.digest()

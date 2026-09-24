@@ -397,3 +397,44 @@ async def test_extended_preview_preserves_metadata_byte_budget(hass, batch_home)
         result = await percentage_preview(hass, batch_home)
     assert result['reason'] == 'target_metadata_too_large'
     request.assert_not_called()
+
+
+async def test_compact_batch_fits_duplicate_heavy_catalog_without_dropping_candidates(hass, batch_home):
+    from custom_components.phoenix_mcp.decision_targets import CatalogLimitError
+    _, token, _, _, original = batch_home
+    expected_entities = {original}
+    registry = er.async_get(hass)
+    for index in range(60):
+        name = f'Lamp {index} ' + 'x' * 100
+        entry = registry.async_get_or_create('light', 'test', f'compact_{index}', original_name=name)
+        registry.async_update_entity(entry.entity_id, aliases={er.COMPUTED_NAME})
+        hass.states.async_set(entry.entity_id, 'off', {'friendly_name': name, 'supported_color_modes': ['brightness']})
+        expected_entities.add(entry.entity_id)
+    with pytest.raises(CatalogLimitError) as caught:
+        capture_targets(hass, token, 'state_query', max_targets=DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS)
+    assert caught.value.details['bound'] == 'metadata_bytes'
+    targets, _ = capture_batch_targets(hass, token, numeric_preview=True)
+    assert {item['entity_id'] for item in targets.values()} == expected_entities
+    assert all('state_query' in item['eligible_categories'] for item in targets.values())
+
+
+@pytest.mark.parametrize('failure,bound', [('name', 'text_length'), ('aliases', 'alias_count'), ('bytes', 'metadata_bytes')])
+async def test_preview_limit_diagnostic_contains_only_scoped_counts(hass, batch_home, failure, bound):
+    _, _, _, _, entity_id = batch_home
+    registry = er.async_get(hass)
+    if failure == 'name': hass.states.async_set(entity_id, 'off', {'friendly_name': 'x' * 257})
+    if failure == 'aliases': registry.async_update_entity(entity_id, aliases={f'private alias {i}' for i in range(9)})
+    if failure == 'bytes':
+        for index in range(20):
+            entry = registry.async_get_or_create('light', 'test', f'extra{index}')
+            registry.async_update_entity(entry.entity_id, aliases={str(i) * 200 for i in range(8)})
+            hass.states.async_set(entry.entity_id, 'off')
+    with patch.object(DecisionProvider, '_request') as request:
+        result = await percentage_preview(hass, batch_home)
+    request.assert_not_called()
+    assert result['reason'] == 'target_metadata_too_large'
+    diagnostic = result['catalog_limit']
+    assert set(diagnostic) == {'category', 'bound', 'observed', 'limit'}
+    assert diagnostic['bound'] == bound and diagnostic['observed'] > diagnostic['limit']
+    assert entity_id not in json.dumps(result) and 'private alias' not in json.dumps(result)
+    assert result['executed'] is False and 'proposal' not in result
