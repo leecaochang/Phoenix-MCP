@@ -478,6 +478,40 @@ async def test_compact_batch_fits_duplicate_heavy_catalog_without_dropping_candi
     assert all('state_query' in item['eligible_categories'] for item in targets.values())
 
 
+@pytest.mark.parametrize('category', ['light_brightness', 'media_volume', 'cover_position'])
+@pytest.mark.parametrize('model_value,status', [('37', 'match'), ('5', 'mismatch')])
+async def test_numeric_preview_reports_independent_value_evidence_without_execution(
+    hass, percentage_home, category, model_value, status,
+):
+    home, entities = percentage_home
+    async def response(*args):
+        return percentage_response(args[4], category, entities[category], model_value)
+    with (patch.object(DecisionProvider, '_request', side_effect=response),
+          patch('custom_components.phoenix_mcp.decision_batch._capture_plan') as prepare):
+        result = await percentage_preview(hass, home)
+    assert result['value_check'] == {'status': status, 'source_value': 37}
+    assert result['reason'] == 'target_selected' and result['executed'] is False
+    assert '_plan' not in result
+    prepare.assert_not_called()
+
+
+@pytest.mark.parametrize('change', ['scope', 'account'])
+async def test_value_worker_wait_rechecks_authority_before_disclosure(hass, percentage_home, change):
+    home, entities = percentage_home
+    _, token, store, account, _ = home
+    async def response(*args):
+        return percentage_response(args[4], 'light_brightness', entities['light_brightness'], '37')
+    async def worker(*args):
+        if change == 'scope': token.permissions = PermissionTree()
+        else: await store.set_model(account, 'changed')
+        return 37
+    with (patch.object(DecisionProvider, '_request', side_effect=response),
+          patch.object(hass, 'async_add_executor_job', side_effect=worker)):
+        result = await percentage_preview(hass, home)
+    assert result['reason'] in ('authority_changed', 'targets_changed')
+    assert not {'proposal', 'decision', 'value_check', '_plan'} & result.keys()
+
+
 @pytest.mark.parametrize('failure,bound', [('name', 'text_length'), ('aliases', 'alias_count'), ('bytes', 'metadata_bytes')])
 async def test_preview_limit_diagnostic_contains_only_scoped_counts(hass, batch_home, failure, bound):
     _, _, _, _, entity_id = batch_home

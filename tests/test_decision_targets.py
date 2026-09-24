@@ -407,6 +407,40 @@ async def test_manual_brightness_preview_exposes_proposal_but_never_execution_pl
     assert not target_home[0].store.get_pending_approvals()
 
 
+@pytest.mark.parametrize('sentence,model_value,evidence', [
+    ('Set the desk lamp to thirty-seven percent', 37, {'status': 'match', 'source_value': 37}),
+    ('Set the desk lamp to thirty-seven percent', 5, {'status': 'mismatch', 'source_value': 37}),
+    ('Set the desk lamp to 37 percent instead of 73 percent', 37, {'status': 'unverified'}),
+    ('Do not set the desk lamp to 37 percent', 37, {'status': 'match', 'source_value': 37}),
+])
+async def test_sequential_value_evidence_is_diagnostic_only(hass, target_home, sentence, model_value, evidence):
+    data, token, *_ = target_home
+    first, _ = mocks('light_brightness')
+    answer = {**choice('t0', ['t0', 'none']), 'brightness_pct': model_value}
+    with (first, patch.object(DecisionProvider, 'select_target', AsyncMock(return_value=answer)),
+          patch('custom_components.phoenix_mcp.command_execution._capture_plan') as prepare):
+        result = await async_preview_decision(hass, data, token, sentence, 'en',
+                                              {'reason': 'no_match', 'proposal': None}, targets=True)
+    assert result['target_selection']['value_check'] == evidence
+    assert result['executed'] is False and '_plan' not in result
+    prepare.assert_not_called()
+
+
+async def test_target_selector_cannot_prepare_numeric_plan_even_with_matching_value(hass, target_home):
+    from custom_components.phoenix_mcp.command_routing import RoutingAuthority
+    data, token, store, account, _ = target_home
+    provider = DecisionProvider(store.resolve(account, purpose='decision'), 'systemone')
+    with (patch.object(provider, 'select_target') as select,
+          patch('custom_components.phoenix_mcp.command_execution._capture_plan') as prepare):
+        result = await data.decision_shadow._select_target(
+            hass, RoutingAuthority.capture(data, token), provider, None, 'Set the lamp to 37 percent',
+            choice('light_brightness', DECISION_ROUTE_CHOICES), 1000, prepare=True,
+        )
+    assert result['reason'] == 'numeric_unverified'
+    select.assert_not_called()
+    prepare.assert_not_called()
+
+
 @pytest.mark.parametrize("language,wire_language,sentence", [
     ("zh-Hans", "zh-CN", "把台灯亮度设为百分之五十"),
     ("es", "es", "pon la lámpara al cincuenta por ciento"),
@@ -468,6 +502,7 @@ async def test_jev_exact_percentage_preview_is_scoped_and_inert(hass, target_hom
         result = await async_preview_decision(hass, data, token, f'Set the {domain} to {percent} percent', 'en',
                                               {'reason': 'no_match', 'proposal': None}, targets=True, ingress='preview')
     assert result['target_selection']['proposal'] == {'intent': intent, 'entity_ids': [entity_id], field: percent}
+    assert result['target_selection']['value_check'] == {'status': 'match', 'source_value': percent}
     assert result['executed'] is False and '_plan' not in json.dumps(result)
     assert request.await_count == 2 and not data.store.get_pending_approvals()
     dispatch.assert_not_called()

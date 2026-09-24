@@ -396,7 +396,8 @@ async def test_recognized_numeric_voice_uses_ha_value_without_either_provider(ha
 
 @pytest.mark.parametrize("ingress", ["voice", "chat"])
 @pytest.mark.parametrize("percent", [0, 50, 100])
-async def test_preexisting_numeric_decision_approval_cannot_execute(hass, hybrid_home, ingress, percent):
+@pytest.mark.parametrize("value_check", [None, {"status": "match", "source_value": 50}])
+async def test_preexisting_numeric_decision_approval_cannot_execute(hass, hybrid_home, ingress, percent, value_check):
     from custom_components.phoenix_mcp.command_execution import _capture_plan, plan_is_current
     from custom_components.phoenix_mcp.decision_targets import capture_targets
     data, token, _, account, entity_id = hybrid_home
@@ -407,6 +408,8 @@ async def test_preexisting_numeric_decision_approval_cannot_execute(hass, hybrid
     plan.update(decision_category="light_brightness",
                 decision_catalog=capture_targets(hass, token, "light_brightness").digest(),
                 decision_account=agentcli.decision_account_fingerprint(hass, account))
+    if value_check is not None:
+        plan["value_check"] = {**value_check, "source_value": percent}
     args = {"domain": "light", "service": "turn_on", "entity_id": [entity_id],
             "service_data": {"brightness_pct": percent}, COMMAND_ROUTING_PLAN_KEY: plan}
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),

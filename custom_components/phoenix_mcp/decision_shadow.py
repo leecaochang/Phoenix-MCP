@@ -13,6 +13,7 @@ from .command_operations import numeric_operation
 from .const import MAX_SEARCH_QUERY_LEN, DECISION_TARGET_INTENTS, DECISION_HYBRID_REASONS, DECISION_NUMERIC_CATEGORIES, DECISION_EXECUTION_CATEGORIES
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 from .decision_metrics import DecisionMetrics
+from .numeric_evidence import read_explicit_percentage, compare_percentage
 
 
 @dataclass
@@ -198,7 +199,12 @@ class DecisionShadow:
             snapshot = capture_targets(hass, token, category["choice"])
             if not snapshot.targets:
                 return result("no_target")
+            operation = numeric_operation(DECISION_TARGET_INTENTS[category["choice"]])
+            if prepare and operation is not None:
+                return result("numeric_unverified")
             answer = await provider.select_target(session, sentence, category["choice"], snapshot.targets, timeout_ms, language)
+            source_value = (await hass.async_add_executor_job(read_explicit_percentage, sentence, language)
+                            if operation is not None else None)
             token = authority.current(hass)
             if token is None:
                 return result("authority_changed")
@@ -224,6 +230,8 @@ class DecisionShadow:
                     return result("brightness_declined" if category["choice"] == "light_brightness" else "percentage_declined", decision=answer)
                 proposal[operation.proposal_field] = percent
             selection = {**result("target_selected", entity_id, answer), "proposal": proposal}
+            if operation is not None:
+                selection["value_check"] = compare_percentage(source_value, proposal[operation.proposal_field])
             if prepare:
                 from .command_execution import _capture_plan
                 plan = _capture_plan(hass, authority.data, token, proposal, ingress=ingress)

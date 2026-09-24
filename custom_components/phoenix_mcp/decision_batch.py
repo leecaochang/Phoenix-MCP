@@ -21,6 +21,7 @@ from .decision_provider import DecisionError, DecisionProvider, confident_choice
 from .decision_targets import capture_targets, CatalogLimitError, TargetSnapshot
 from .device_semantics import device_registry_snapshot
 from .helpers import redact_secrets_in_text, redact_inaccessible_entity_ids_in_text
+from .numeric_evidence import read_explicit_percentage, compare_percentage
 
 
 def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = False
@@ -170,6 +171,8 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
             async with asyncio.timeout(authority.settings.decision_timeout_ms / 1000):
                 answer = await provider.route_and_target(async_get_clientsession(hass), sentence, targets,
                                                         authority.settings.decision_timeout_ms, lang, **options)
+                source_value = (await hass.async_add_executor_job(read_explicit_percentage, sentence, lang)
+                                if numeric_preview else None)
             current = authority.current(hass)
             if current is None or store.resolve(account, purpose="decision") != cfg:
                 return result("authority_changed")
@@ -187,6 +190,7 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
             if category["choice"] not in descriptor["eligible_categories"]:
                 return result("category_mismatch", decision=answer)
             proposal: dict[str, Any] = {"intent": DECISION_TARGET_INTENTS[category["choice"]], "entity_ids": [descriptor["entity_id"]]}
+            evidence = {}
             if numeric_preview:
                 value = answer["percentage"]
                 if not confident_choice(value):
@@ -196,9 +200,11 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
                     if value["choice"] == "none":
                         return result("percentage_declined", decision=answer)
                     proposal[operation.proposal_field] = int(value["choice"])
+                    evidence["value_check"] = compare_percentage(source_value, proposal[operation.proposal_field])
                 elif value["choice"] != "none":
                     return result("percentage_mismatch", decision=answer)
             return result("target_selected", decision=answer, proposal=proposal,
+                          **evidence,
                           local_agreement=proposal == local.get("proposal") if local.get("proposal") else None)
         except CatalogLimitError as error:
             return result(str(error), catalog_limit=error.details)

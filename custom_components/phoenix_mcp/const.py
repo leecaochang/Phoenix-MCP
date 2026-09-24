@@ -1758,6 +1758,12 @@ DECISION_MAX_TARGET_ALIASES = 8
 DECISION_MIN_CHOICE_PROBABILITY = 0.90
 # Numeric proposals remain available to inert previews, not execution.
 DECISION_NUMERIC_CATEGORIES = frozenset({"light_brightness", "media_volume", "cover_position"})
+# Value evidence is independent of model qualification and never grants execution.
+DECISION_PERCENTAGE_EVIDENCE_LANGUAGES = frozenset({"en"})
+DECISION_PERCENTAGE_EVIDENCE_MODIFIERS = frozenset({
+    "negative", "minus", "plus", "point", "dot", "half", "halves", "quarter", "quarters",
+    "hundred", "thousand", "million", "billion", "trillion", "dozen", "dozens",
+})
 # Adding a preview category must not automatically authorize an execution path.
 DECISION_EXECUTION_CATEGORIES = frozenset({"light_on", "light_off", "state_query"})
 DECISION_HYBRID_REASONS = frozenset({
