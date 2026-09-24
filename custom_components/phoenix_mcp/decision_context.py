@@ -13,7 +13,7 @@ from .command_operations import numeric_operation, service_arguments
 from .command_routing import RoutingAuthority, routing_language
 from .const import (
     COMMAND_ROUTING_INTENTS, DECISION_CONTEXT_MAX_BYTES, DECISION_CONTEXT_MAX_MESSAGES,
-    MAX_SEARCH_QUERY_LEN,
+    DECISION_CONTEXT_REQUIRED_CHOICES, MAX_SEARCH_QUERY_LEN,
 )
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 from .helpers import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
@@ -135,8 +135,11 @@ async def async_preview_context(hass: Any, data: Any, token: Any, sentence: str,
             latest = _state(hass, current, sentence, lang, history, proposal)
             if latest is None or latest[1] != fingerprint or latest != snapshot:
                 return result("context_changed")
-            reason = "provider_fallback" if answer["choice"] != "compatible" else (
-                "compatible" if confident_choice(answer) else "low_probability")
+            checks = answer["checks"]
+            reason = "provider_fallback" if any(
+                checks[question]["choice"] != required
+                for question, required in DECISION_CONTEXT_REQUIRED_CHOICES.items()
+            ) else ("compatible" if all(confident_choice(check) for check in checks.values()) else "low_probability")
             return result(reason, answer)
         except DecisionError as error:
             return result(str(error))
