@@ -769,3 +769,134 @@ async def test_jev_joint_revalidates_after_mesa_wait_without_replay(hass, jev_hy
     remote.assert_awaited_once()
     call.assert_not_called()
     provider.assert_not_called()
+
+
+@pytest.fixture(params=[
+    ('fan_speed', 37), ('valve_position', 37), ('cover_tilt', 37),
+    ('climate_temperature', 21.5), ('humidifier_humidity', 45), ('climate_humidity', 45),
+    ('water_temperature', 55.5), ('number_value', -2.5), ('input_number_value', -2.5),
+    ('light_temperature', 3500),
+])
+async def expanded_numeric_home(hass, jev_hybrid_home, request):
+    from homeassistant.components.climate import ClimateEntityFeature
+    from homeassistant.components.cover import CoverEntityFeature
+    from homeassistant.components.fan import FanEntityFeature
+    from homeassistant.components.valve import ValveEntityFeature
+    from homeassistant.components.water_heater import WaterHeaterEntityFeature
+    from custom_components.phoenix_mcp.command_operations import numeric_operation
+    from custom_components.phoenix_mcp.const import DECISION_TARGET_INTENTS
+    category, value = request.param
+    intent = DECISION_TARGET_INTENTS[category]
+    operation = numeric_operation(intent)
+    data, token, store, account, _ = jev_hybrid_home
+    attrs = {
+        'fan': {'supported_features': FanEntityFeature.SET_SPEED},
+        'valve': {'supported_features': ValveEntityFeature.SET_POSITION},
+        'cover': {'supported_features': CoverEntityFeature.SET_TILT_POSITION},
+        'climate': {'supported_features': ClimateEntityFeature.TARGET_TEMPERATURE | ClimateEntityFeature.TARGET_HUMIDITY,
+                    'min_temp': 5, 'max_temp': 35, 'target_temp_step': 0.5, 'min_humidity': 20, 'max_humidity': 80},
+        'humidifier': {'min_humidity': 20, 'max_humidity': 80},
+        'water_heater': {'supported_features': WaterHeaterEntityFeature.TARGET_TEMPERATURE, 'min_temp': 30, 'max_temp': 65},
+        'number': {'min': -10, 'max': 10, 'step': 0.5, 'unit_of_measurement': 'dB'},
+        'input_number': {'min': -10, 'max': 10, 'step': 0.5},
+        'light': {'supported_color_modes': ['color_temp'], 'min_color_temp_kelvin': 2000, 'max_color_temp_kelvin': 6500},
+    }[operation.domain]
+    token.permissions.domains[operation.domain] = PermissionNode(state='GREEN')
+    entry = er.async_get(hass).async_get_or_create(operation.domain, 'test', 'numeric_extra', original_name='Test control')
+    hass.states.async_set(entry.entity_id, 'on', {'friendly_name': 'Test control', **attrs})
+    async_expose_entity(hass, 'conversation', entry.entity_id, True)
+    home = data, token, store, account, entry.entity_id
+    return home, category, intent, operation, value
+
+
+def scalar_reply(payload, entity_id, category):
+    target = next(key for key, descriptor in payload['state']['targets'].items() if descriptor['entity_id'] == entity_id)
+    choices = {'route': category, 'target': target, 'percentage': 'value'}
+    return {'model': 'jev-1.13.0', 'answers': {
+        question: {'type': 'choice', 'choice': choices[question], 'confidence': 1,
+                   'probabilities': {key: float(key == choices[question]) for key in spec['criteria']}}
+        for question, spec in payload['questions'].items()}}
+
+
+async def test_expanded_native_values_use_guarded_service_once(hass, expanded_numeric_home):
+    home, category, intent, operation, value = expanded_numeric_home
+    async def respond(session, method, path, timeout, payload):
+        assert payload['state']['source_value'] == value
+        return scalar_reply(payload, home[-1], category)
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, remote, provider = await run_voice(hass, home, request=respond,
+                                             sentence=f'I want Test control at {value} now')
+    remote.assert_awaited_once()
+    provider.assert_not_called()
+    call.assert_awaited_once_with(operation.domain, operation.service,
+        {'entity_id': [home[-1]], operation.service_field: value}, blocking=True, return_response=False)
+
+
+@pytest.mark.parametrize('change', ['range', 'unit', 'step', 'value'])
+async def test_native_numeric_approval_rechecks_bounds_units_and_value(hass, jev_hybrid_home, change):
+    home = jev_hybrid_home
+    data, token, store, account, _ = home
+    token.permissions.domains['number'] = PermissionNode(state='GREEN')
+    entry = er.async_get(hass).async_get_or_create('number', 'test', 'level', original_name='Level')
+    attributes = {'min': -10, 'max': 10, 'step': 0.5, 'unit_of_measurement': 'dB'}
+    hass.states.async_set(entry.entity_id, '0', attributes)
+    async_expose_entity(hass, 'conversation', entry.entity_id, True)
+    home = data, token, store, account, entry.entity_id
+    await set_mesa(hass, home, 'confirm')
+    async def respond(session, method, path, timeout, payload):
+        return scalar_reply(payload, entry.entity_id, 'number_value')
+    with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
+        reply, _, _ = await run_voice(hass, home, request=respond, sentence='I want Level at -2.5 dB now')
+    assert 'needs approval' in reply
+    record = data.store.get_pending_approvals()[0]
+    if change == 'value':
+        record['args'][COMMAND_ROUTING_PLAN_KEY]['proposal']['value'] = 1
+        record['args']['service_data']['value'] = 1
+    else:
+        attributes.update({'range': {'min': 0}, 'unit': {'unit_of_measurement': 'W'}, 'step': {'step': 1}}[change])
+        hass.states.async_set(entry.entity_id, '0', attributes)
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+    assert outcome == 'denied'
+    call.assert_not_called()
+
+
+async def test_expanded_builtin_intents_keep_local_route(hass, expanded_numeric_home):
+    from custom_components.phoenix_mcp.command_routing import async_evaluate_command
+    home, category, intent, operation, value = expanded_numeric_home
+    sentences = {
+        'fan_speed': 'set Test control speed to 37 percent',
+        'valve_position': 'set Test control to 37 percent',
+        'climate_temperature': 'set Test control temperature to 21.5 degrees',
+        'light_temperature': 'set Test control color temperature to 3500 kelvin',
+    }
+    if category not in sentences:
+        pytest.skip('No built-in sentence contract for this operation')
+    result = await async_evaluate_command(hass, home[0], home[1], sentences[category], 'en')
+    assert result['proposal'] == {'intent': intent, 'entity_ids': [home[-1]], operation.proposal_field: value}, result
+
+
+async def test_expanded_numeric_out_of_range_cannot_be_authorized_by_model(hass, expanded_numeric_home):
+    home, category, *_ = expanded_numeric_home
+    async def respond(session, method, path, timeout, payload):
+        return scalar_reply(payload, home[-1], category)
+    with patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call:
+        _, remote, provider = await run_voice(hass, home, request=respond, sentence='I want Test control at 999999 now')
+    remote.assert_awaited_once()
+    provider.assert_awaited_once()
+    call.assert_not_called()
+    assert not home[0].store.get_pending_approvals()
+
+
+async def test_explicit_foreign_unit_cannot_be_authorized_by_model(hass, expanded_numeric_home):
+    home, category, _, _, value = expanded_numeric_home
+    async def respond(session, method, path, timeout, payload):
+        return scalar_reply(payload, home[-1], category)
+    with patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call:
+        _, remote, provider = await run_voice(hass, home, request=respond,
+                                             sentence=f'I want Test control at {value} °F now')
+    remote.assert_awaited_once()
+    provider.assert_awaited_once()
+    call.assert_not_called()

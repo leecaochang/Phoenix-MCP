@@ -123,3 +123,56 @@ def compare_percentage(source_value: int | None, proposed_value: int) -> dict:
     if source_value is None:
         return {"status": "unverified"}
     return {"status": "match" if source_value == proposed_value else "mismatch", "source_value": source_value}
+
+
+def read_explicit_scalar(sentence: str, language: str) -> int | float | None:
+    """Extract one literal scalar, never interpret a command, date, time or unit.
+
+    Spelled percentages retain their independent reader. Other spelled numbers
+    can still use strict Assist matching; uncertain notation falls back.
+    """
+    from .command_operations import finite_number
+
+    if not isinstance(sentence, str) or not sentence or len(sentence) > MAX_SEARCH_QUERY_LEN:
+        return None
+    # Preserve signs and non-ASCII digits; reject grouped, scientific and clock/date forms.
+    matches = list(re.finditer(r"[+\-\u2212]?[0-9]+(?:[.,][0-9]+)?", sentence))
+    if len(matches) != 1:
+        return None
+    match = matches[0]
+    rest = sentence[:match.start()] + sentence[match.end():]
+    if any(char.isnumeric() for char in rest):
+        return None
+    before, after = sentence[:match.start()], sentence[match.end():]
+    if before[-1:].isascii() and before[-1:].isalpha():
+        return None
+    if (before[-1:] in ("/", ":", ".", ",", "-", "+", "_")
+            or after[:1] in ("/", ":", ",", "_", "-", "+")
+            or (after[:1] == "." and len(after) > 1)
+            or re.match(r"[eE][+\-]?[0-9]", after)):
+        return None
+    literal = match.group().replace("\u2212", "-")
+    try:
+        if "." in literal or "," in literal:
+            decimal = "," if "," in literal else "."
+            # Three trailing digits may be a thousands group. Do not guess from language.
+            if len(literal.split(decimal)[1]) == 3:
+                return None
+            literal = literal.replace(decimal, ".")
+        value = float(literal) if "." in literal else int(literal)
+    except (ValueError, LookupError):
+        return None
+    return value if finite_number(value) else None
+
+
+def explicit_unit_matches(sentence: str, unit: str | None) -> bool:
+    """Reject contradictory standard unit markers independently of classification.
+
+    Absence of a marker is not unit evidence; the decision still has to verify
+    native units and all other words in the complete request.
+    """
+    markers = re.findall(r"°\s*[CF]|℃|℉|%|％|\b(?:celsius|fahrenheit|kelvin)\b|(?<=[0-9])\s*K\b",
+                         sentence, re.IGNORECASE)
+    known = {"°c": "°C", "℃": "°C", "celsius": "°C", "°f": "°F", "℉": "°F",
+             "fahrenheit": "°F", "kelvin": "K", "k": "K", "%": "%", "％": "%"}
+    return all(known["".join(marker.split()).lower()] == unit for marker in markers)

@@ -49,7 +49,13 @@ def recognize_numeric_ids(sentence: str, language: str, targets: tuple[str, ...]
     )):
         if index >= COMMAND_ROUTING_NUMERIC_MATCH_LIMIT:
             return None
-        operation = numeric_operation(result.intent.name)
+        intent_name = result.intent.name
+        name = result.entities.get("name")
+        if intent_name == "HassLightSet" and "temperature" in result.entities and "brightness" not in result.entities:
+            intent_name = "PhoenixLightTemperature"
+        if intent_name == "HassSetPosition" and name is not None and isinstance(name.value, str) and name.value.startswith("valve."):
+            intent_name = "PhoenixValvePosition"
+        operation = numeric_operation(intent_name)
         if (operation is None or result.unmatched_entities
                 or set(result.entities) - {"name", operation.slot, "domain"}):
             return None
@@ -66,7 +72,7 @@ def recognize_numeric_ids(sentence: str, language: str, targets: tuple[str, ...]
         domain = result.entities.get("domain")
         if domain is not None and domain.value != operation.domain:
             return None
-        candidate = NumericIdMatch(result.intent.name, name.value, number.value)
+        candidate = NumericIdMatch(intent_name, name.value, number.value)
         if matched is not None and candidate != matched:
             return None
         matched = candidate

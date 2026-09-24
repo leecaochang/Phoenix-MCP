@@ -448,3 +448,17 @@ async def test_explicit_candidate_decline_preserves_fallback_in_context_preview(
                                               {'reason': 'no_match', 'proposal': None})
     request.assert_awaited_once()
     assert result['reason'] == 'provider_fallback'
+
+
+@pytest.mark.parametrize('entity_exists', ['no', 'state', 'registry'])
+async def test_decimal_text_is_preserved_but_numeric_entity_ids_keep_scope(hass, context_home, entity_exists):
+    from homeassistant.helpers import entity_registry as er
+    from custom_components.phoenix_mcp.helpers import redact_inaccessible_entity_ids_in_text
+    _, token, *_ = context_home
+    if entity_exists == 'state':
+        hass.states.async_set('21.5', 'private')
+    if entity_exists == 'registry':
+        er.async_get(hass).async_get_or_create('21', 'test', 'numeric_id', suggested_object_id='5')
+    result = redact_inaccessible_entity_ids_in_text('Set to 21.5 degrees', token, hass)
+    assert result == ('Set to 21.5 degrees' if entity_exists == 'no' else 'Set to <redacted-entity> degrees')
+    assert '<redacted-entity>' in redact_inaccessible_entity_ids_in_text('Read sensor.hidden', token, hass)

@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING, Any
 
 from aiohttp import web
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_call_later
 from homeassistant.util.dt import parse_datetime, utcnow
 
@@ -977,7 +978,14 @@ def redact_inaccessible_entity_ids_in_text(
     """Redact inaccessible entity IDs embedded in otherwise free-form text."""
     def _replacement(match: re.Match[str]) -> str:
         try:
-            permission = resolve(match.group(1), token, hass)
+            entity_id = match.group(1)
+            # Decimal literals are not entity references. Keep actual or registered
+            # numeric-looking IDs under the normal scope check, including disabled ones.
+            if (all(part.isdecimal() for part in entity_id.split("."))
+                    and hass.states.get(entity_id) is None
+                    and er.async_get(hass).async_get(entity_id) is None):
+                return entity_id
+            permission = resolve(entity_id, token, hass)
         except Exception:
             return sentinel
         if permission in (Permission.READ, Permission.WRITE):

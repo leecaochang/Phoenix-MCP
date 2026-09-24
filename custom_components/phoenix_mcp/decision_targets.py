@@ -7,6 +7,7 @@ from typing import Any
 
 from homeassistant.helpers import area_registry as ar, entity_registry as er
 
+from .command_operations import numeric_metadata
 from .command_execution import _target_fingerprint, _digest
 from .const import (
     DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES, DECISION_MAX_TARGET_TEXT,
@@ -81,6 +82,12 @@ def capture_targets(hass: Any, token: Any, category: str, *,
             "aliases": sorted(text(alias) for alias in er.async_get_entity_aliases(hass, entry)),
             "area": text(area.name) if area else "",
         }
+        metadata = numeric_metadata(state, intent)
+        if metadata and intent not in ("HassLightSet", "HassSetVolume", "HassSetPosition"):
+            if intent in ("HassClimateSetTemperature", "PhoenixWaterTemperature"):
+                metadata["unit"] = hass.config.units.temperature_unit
+            metadata["unit"] = text(metadata["unit"] or "")
+            descriptor["numeric"] = metadata
         if compact:
             # Remove only identical identity text and empty fields; keep every candidate.
             descriptor["aliases"] = [alias for alias in descriptor["aliases"]

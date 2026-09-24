@@ -152,3 +152,19 @@ async def test_all_targets_must_match_in_the_same_observation(hass, observation_
     assert await verification.async_verify_command_state(hass, data, token, plan) == 'unconfirmed'
     hass.states.async_set(other.entity_id, 'on', dict(hass.states.get(other.entity_id).attributes))
     assert await verification.async_verify_command_state(hass, data, token, plan) == 'matched'
+
+
+@pytest.mark.parametrize('intent,domain,value,attribute,state,matched', [
+    ('PhoenixLightTemperature', 'light', 3500, 'color_temp_kelvin', 'on', True),
+    ('PhoenixLightTemperature', 'light', 3500, 'color_temp_kelvin', 'off', False),
+    ('HassFanSetSpeed', 'fan', 37, 'percentage', 'on', True),
+    ('HassFanSetSpeed', 'fan', 37, 'percentage', 'off', False),
+    ('PhoenixCoverTilt', 'cover', 37, 'current_tilt_position', 'opening', False),
+    ('PhoenixCoverTilt', 'cover', 37, 'current_tilt_position', 'open', True),
+    ('PhoenixNumberValue', 'number', -2.5, None, '-2.5', True),
+])
+def test_native_numeric_verification_checks_requested_property_and_power(intent, domain, value, attribute, state, matched):
+    from custom_components.phoenix_mcp.command_operations import numeric_operation
+    operation = numeric_operation(intent)
+    proposal = {'intent': intent, 'entity_ids': [domain + '.test'], operation.proposal_field: value}
+    assert verification.state_matches(proposal, State(domain + '.test', state, {attribute: value} if attribute else {})) is matched

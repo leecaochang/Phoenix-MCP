@@ -95,7 +95,7 @@ async def test_reference_preview_has_fixed_target_and_no_execution(hass, referen
 async def test_ineligible_reference_never_calls_provider(hass, reference_home, case, reason):
     data, token, _, _, entity_id = reference_home
     kwargs = {}; history = deepcopy(HISTORY)
-    if case == 'language': kwargs['language'] = 'es'
+    if case == 'language': kwargs['language'] = 'xx'
     if case == 'structured': history[0]['content'] = [{'type': 'text', 'text': 'turn on Desk lamp'}]
     if case == 'missing': history = []
     if case == 'local_match': kwargs['local'] = {'reason': 'supported', 'proposal': {'intent': 'HassTurnOn'}}

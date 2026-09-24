@@ -11,7 +11,7 @@ from typing import Any, TYPE_CHECKING
 from homeassistant.core import HomeAssistant
 
 from .chat_routing_history import ChatRoutingHistory
-from .command_operations import command_domain, numeric_operation, supports_command
+from .command_operations import command_domain, numeric_operation, supports_command, valid_target_value
 from .const import (
     COMMAND_ROUTING_INTENTS, COMMAND_ROUTING_TARGET_SLOTS, COMMAND_ROUTING_LANGUAGES,
     COMMAND_ROUTING_DEFAULT_LANGUAGES, COMMAND_ROUTING_LANGUAGE_ALIASES,
@@ -115,6 +115,7 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant) -> tuple[str
 
         operation = numeric_operation(result.intent)
         if (operation is None or not operation.valid_value(result.value)
+                or not valid_target_value(hass.states.get(result.entity_id), result.intent, result.value)
                 or _target_fingerprint(hass, token, result.entity_id, result.intent) is None):
             return "no_target", None
         return "supported", {"intent": result.intent, "entity_ids": [result.entity_id],
@@ -128,6 +129,8 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant) -> tuple[str
     if intent_name not in COMMAND_ROUTING_INTENTS:
         return "unsupported", None
     slots = {name: entity.value for name, entity in result.entities.items()}
+    if intent_name == "HassLightSet" and "temperature" in slots and "brightness" not in slots:
+        intent_name = "PhoenixLightTemperature"
     operation = numeric_operation(intent_name)
     allowed = COMMAND_ROUTING_TARGET_SLOTS | ({operation.slot} if operation else set())
     # State comparisons, counts, relative brightness, floor/global commands,
@@ -160,6 +163,10 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant) -> tuple[str
     )
     if not ids or (name and len(ids) != 1) or (read_only and len(ids) != 1):
         return "no_target", None
+    if intent_name == "HassSetPosition" and all(eid.startswith("valve.") for eid in ids):
+        intent_name = "PhoenixValvePosition"
+        operation = numeric_operation(intent_name)
+        expected_domain = "valve"
     states = [hass.states.get(entity_id) for entity_id in ids]
     if any(state is None or state.state in ("unknown", "unavailable") for state in states):
         return "no_target", None
@@ -175,7 +182,7 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant) -> tuple[str
         value = slots.get(operation.slot)
         if not operation.valid_value(value):
             return "unsupported", None
-        if any(state is None or not supports_command(state, intent_name) for state in states):
+        if any(state is None or not supports_command(state, intent_name) or not valid_target_value(state, intent_name, value) for state in states):
             return "unsupported", None
         proposal[operation.proposal_field] = value
     return "supported", proposal
@@ -198,12 +205,23 @@ def routing_language(language: object, *, preview: bool = False,
     """Admit only selected routing languages, without an unknown-to-English fallback."""
     if not isinstance(language, str):
         return None
-    if preview:
-        return COMMAND_ROUTING_LANGUAGES.get(language)
-    lowered = language.lower()
-    base = lowered.split("-", 1)[0]
-    canonical = base if base in ("en", "es") else COMMAND_ROUTING_LANGUAGE_ALIASES.get(lowered)
-    return COMMAND_ROUTING_LANGUAGES[canonical] if canonical in enabled and canonical in COMMAND_ROUTING_LANGUAGES else None
+    lowered = language.strip().replace("_", "-").lower()
+    parts = lowered.split("-")
+    if any(not part or not part.isascii() or not part.isalnum() for part in parts):
+        return None
+    known = {key.lower(): key for key in COMMAND_ROUTING_LANGUAGES}
+    canonical = COMMAND_ROUTING_LANGUAGE_ALIASES.get(lowered) or known.get(lowered)
+    if canonical is None and lowered.startswith("zh-hans-"):
+        canonical = "zh-Hans"
+    elif canonical is None and lowered.startswith("zh-hant-"):
+        canonical = "zh-Hant"
+    if canonical is None:
+        canonical = known.get(lowered.split("-", 1)[0])
+    if canonical is None:
+        return None
+    value = COMMAND_ROUTING_LANGUAGES[canonical]
+    admitted = {COMMAND_ROUTING_LANGUAGES.get(key) for key in enabled}
+    return value if preview or value in admitted else None
 
 
 async def _recognize_command(hass: HomeAssistant, authority: RoutingAuthority,

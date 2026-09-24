@@ -138,3 +138,29 @@ def test_chinese_rejects_signs_fractions_mixed_and_suffix_numbers(number):
 ])
 def test_other_numeric_evidence_is_never_discarded_in_new_languages(language, sentence):
     assert read_explicit_percentage(sentence, language) is None
+
+
+@pytest.mark.parametrize('sentence,language,expected', [
+    ('set value to -2.5 dB', 'en', -2.5), ('set value to 21.5', 'en', 21.5),
+    ('Wert auf 21,5 setzen', 'de', 21.5), ('设置为37', 'zh-CN', 37),
+    ('set it to 1,000', 'en', None), ('set it to 1.000', 'de', None),
+    ('turn on lamp2', 'en', None), ('set helper2 to 37', 'en', None),
+    ('set time to 12:30', 'en', None), ('set date to 2026-10-01', 'en', None),
+    ('set value to 1e3', 'en', None), ('set value to 1/2', 'en', None),
+    ('set value to 2 or 3', 'en', None), ('set value to １２', 'en', None),
+])
+def test_scalar_evidence_preserves_values_and_rejects_dates_and_ambiguity(sentence, language, expected):
+    from custom_components.phoenix_mcp.numeric_evidence import read_explicit_scalar
+    assert read_explicit_scalar(sentence, language) == expected
+
+
+@pytest.mark.parametrize('sentence,unit,expected', [
+    ('set temperature to 21.5 °F', '°C', False), ('set temperature to 21.5 °C', '°C', True),
+    ('set it to 21.5 percent', '°C', True),  # Words still require the model's semantic review.
+    ('set it to 21.5%', '°C', False), ('set it to 3500K', 'K', True),
+    ('set it to 3500 kelvin', '°C', False), ('set it to 55 percent', '%', True),
+    ('设为21.5℃', '°C', True), ('设为21.5℉', '°C', False),
+])
+def test_explicit_unit_markers_never_convert_values(sentence, unit, expected):
+    from custom_components.phoenix_mcp.numeric_evidence import explicit_unit_matches
+    assert explicit_unit_matches(sentence, unit) is expected

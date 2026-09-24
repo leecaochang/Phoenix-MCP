@@ -11,7 +11,7 @@ from typing import Any
 
 from .agent_recovery import RecoveryRequired, dispatch_agent_tool, recovery_turn
 from .audit import generate_request_id
-from .command_operations import service_arguments, supports_command, numeric_operation
+from .command_operations import service_arguments, supports_command, numeric_operation, valid_target_value, finite_number
 from .command_routing import RoutingAuthority, effective_routing_mode
 from .const import (
     COMMAND_ROUTING_PLAN_KEY, VOICE_AGENT_CLIENT_IP, DECISION_TARGET_INTENTS, DECISION_EXECUTION_CATEGORIES,
@@ -62,14 +62,21 @@ def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str, *,
         "name": entry.name, "original_name": entry.original_name,
         "device_area": devices.effective_area_id(entry.device_id),
         "device_parent": devices.parent_id(entry.device_id),
+        "temperature_unit": hass.config.units.temperature_unit,
         "attributes": {key: state.attributes.get(key) for key in (
             "friendly_name", "supported_color_modes", "supported_features", "device_class",
+            "min", "max", "step", "unit_of_measurement", "min_temp", "max_temp", "target_temp_step",
+            "min_humidity", "max_humidity", "min_color_temp_kelvin", "max_color_temp_kelvin",
         )},
     })
 
 
 def _capture_plan(hass: Any, data: Any, token: Any, proposal: dict, *, ingress: str = "voice") -> dict | None:
     if proposal["intent"] != "HassGetState" and service_arguments(proposal) is None:
+        return None
+    operation = numeric_operation(proposal["intent"])
+    if operation and any(not valid_target_value(hass.states.get(eid), proposal["intent"],
+                                               proposal.get(operation.proposal_field)) for eid in proposal["entity_ids"]):
         return None
     fingerprints = {entity_id: _target_fingerprint(hass, token, entity_id, proposal["intent"])
                     for entity_id in proposal["entity_ids"]}
@@ -116,8 +123,8 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
         if numeric:
             operation = numeric_operation(plan["proposal"]["intent"])
             if (not percentage_execution_eligible(cfg, review["language"]) or operation is None
-                    or type(review["percentage"]) is not int or not 0 <= review["percentage"] <= 100
-                    or type(plan["proposal"].get(operation.proposal_field)) is not int
+                    or not finite_number(review["percentage"])
+                    or not operation.valid_value(plan["proposal"].get(operation.proposal_field))
                     or plan["proposal"][operation.proposal_field] != review["percentage"]
                     or _digest(plan["proposal"]) != review["proposal"]):
                 return False
@@ -191,6 +198,10 @@ def plan_is_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
         settings = data.store.get_settings()
         proposal = plan["proposal"]
         if proposal["intent"] != "HassGetState" and service_arguments(proposal) is None:
+            return False
+        operation = numeric_operation(proposal["intent"])
+        if operation and any(not valid_target_value(hass.states.get(eid), proposal["intent"],
+                                                   proposal.get(operation.proposal_field)) for eid in proposal["entity_ids"]):
             return False
         ingress = plan.get("ingress", "voice")
         if ingress == "chat":

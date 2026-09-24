@@ -8,10 +8,10 @@ from typing import Any, TypeGuard
 
 from homeassistant.core import State
 
-from .command_operations import numeric_operation, service_arguments
+from .command_operations import numeric_operation, service_arguments, finite_number
 from .const import (
     COMMAND_VERIFICATION_POLL_SECONDS, COMMAND_VERIFICATION_WAIT_SECONDS,
-    COMMAND_VERIFICATION_TOLERANCES,
+    COMMAND_VERIFICATION_TOLERANCES, COMMAND_ROUTING_NUMERIC_STATE,
 )
 from .request_authority import RequestAuthority
 
@@ -45,6 +45,21 @@ def state_matches(proposal: dict, state: State | None) -> bool:
         # A moving cover can pass the requested position without stopping there.
         return (state.state == ("closed" if value == 0 else "open")
                 and _number(actual, 100) and abs(actual - value) <= COMMAND_VERIFICATION_TOLERANCES[intent])
+    if intent in COMMAND_ROUTING_NUMERIC_STATE:
+        field = COMMAND_ROUTING_NUMERIC_STATE[intent]
+        actual = state.attributes.get(field) if field else state.state
+        if field is None:
+            try:
+                actual = float(state.state)
+            except (ValueError, TypeError):
+                return False
+        if intent in ("PhoenixValvePosition", "PhoenixCoverTilt") and state.state not in ("open", "closed"):
+            return False
+        if intent == "PhoenixLightTemperature" and state.state != "on":
+            return False
+        if intent == "HassFanSetSpeed" and state.state != ("on" if value else "off"):
+            return False
+        return finite_number(actual) and math.isclose(actual, value, rel_tol=0, abs_tol=1e-6)
     return False
 
 

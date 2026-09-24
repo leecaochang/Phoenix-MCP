@@ -4,6 +4,8 @@ import datetime
 import pathlib
 import re
 
+from home_assistant_intents import get_languages as _assist_languages
+
 # Phoenix's OWN operator-facing string catalogs (panel, notification, voice),
 # deliberately NOT under translations/. hassfest validates translations/en.json
 # against a closed set of Home Assistant categories and errors on any other
@@ -1661,9 +1663,13 @@ CHAT_ROUTING_HISTORY_TTL_SECONDS = 1800
 CHAT_ROUTING_HISTORY_MAX_MESSAGES = 128
 CHAT_ROUTING_HISTORY_MAX_BYTES = 65536
 # Canonical routing tags map to the HA sentence variant; previews use the same set.
-COMMAND_ROUTING_LANGUAGES = {"en": "en", "zh-Hans": "zh-CN", "es": "es"}
+COMMAND_ROUTING_LANGUAGES = {language: language for language in _assist_languages()}
+COMMAND_ROUTING_LANGUAGES.update({"zh-Hans": "zh-CN", "zh-Hant": "zh-TW"})
 COMMAND_ROUTING_DEFAULT_LANGUAGES = ("en",)
-COMMAND_ROUTING_LANGUAGE_ALIASES = {"zh-hans": "zh-Hans", "zh-cn": "zh-Hans"}
+COMMAND_ROUTING_LANGUAGE_ALIASES = {
+    "zh-hans": "zh-Hans", "zh-cn": "zh-Hans", "zh-sg": "zh-Hans", "zh-my": "zh-Hans",
+    "zh-hant": "zh-Hant", "zh-tw": "zh-Hant", "zh-mo": "zh-Hant", "zh": "zh-Hans",
+}
 COMMAND_ROUTING_PLAN_KEY = "_phoenix_command_route"
 COMMAND_ROUTING_NUMERIC_TARGET_LIMIT = 16
 COMMAND_ROUTING_NUMERIC_MATCH_LIMIT = 64
@@ -1679,6 +1685,40 @@ COMMAND_ROUTING_NUMERIC_OPERATIONS = {
     "HassLightSet": ("light", "brightness", "brightness_pct", "turn_on", "brightness_pct", 1, False, ("light",)),
     "HassSetVolume": ("media_player", "volume_level", "volume_pct", "volume_set", "volume_level", 100, True, ("media_player",)),
     "HassSetPosition": ("cover", "position", "position_pct", "set_cover_position", "position", 1, True, ("cover", "valve")),
+}
+# Additional absolute numeric controls. Synthetic intent names are internal only.
+COMMAND_ROUTING_NUMERIC_OPERATIONS.update({
+    "HassFanSetSpeed": ("fan", "percentage", "percentage", "set_percentage", "percentage", 1, True, ("fan",)),
+    "PhoenixValvePosition": ("valve", "position", "position_pct", "set_valve_position", "position", 1, True, ("cover", "valve")),
+    "PhoenixCoverTilt": ("cover", "tilt", "tilt_pct", "set_cover_tilt_position", "tilt_position", 1, True, ("cover",)),
+    "HassClimateSetTemperature": ("climate", "temperature", "temperature", "set_temperature", "temperature", 1, False, ("climate",)),
+    "HassHumidifierSetpoint": ("humidifier", "humidity", "humidity", "set_humidity", "humidity", 1, True, ("humidifier",)),
+    "PhoenixClimateHumidity": ("climate", "humidity", "humidity", "set_humidity", "humidity", 1, True, ("climate",)),
+    "PhoenixWaterTemperature": ("water_heater", "temperature", "temperature", "set_temperature", "temperature", 1, False, ("water_heater",)),
+    "PhoenixNumberValue": ("number", "value", "value", "set_value", "value", 1, False, ("number", "input_number")),
+    "PhoenixInputNumberValue": ("input_number", "value", "value", "set_value", "value", 1, False, ("number", "input_number")),
+    "PhoenixLightTemperature": ("light", "temperature", "temperature", "turn_on", "color_temp_kelvin", 1, True, ("light",)),
+})
+# Native bounds and precision must be present; missing metadata never invents a range.
+COMMAND_ROUTING_NUMERIC_BOUNDS = {
+    "HassClimateSetTemperature": ("min_temp", "max_temp", "target_temp_step"),
+    "PhoenixWaterTemperature": ("min_temp", "max_temp", None),
+    "HassHumidifierSetpoint": ("min_humidity", "max_humidity", None),
+    "PhoenixClimateHumidity": ("min_humidity", "max_humidity", None),
+    "PhoenixNumberValue": ("min", "max", "step"),
+    "PhoenixInputNumberValue": ("min", "max", "step"),
+    "PhoenixLightTemperature": ("min_color_temp_kelvin", "max_color_temp_kelvin", None),
+}
+COMMAND_ROUTING_NATIVE_VALUES = frozenset({
+    "HassClimateSetTemperature", "PhoenixWaterTemperature", "PhoenixNumberValue",
+    "PhoenixInputNumberValue", "PhoenixLightTemperature",
+})
+COMMAND_ROUTING_NUMERIC_STATE = {
+    "HassFanSetSpeed": "percentage", "PhoenixValvePosition": "current_position",
+    "PhoenixCoverTilt": "current_tilt_position", "HassClimateSetTemperature": "temperature",
+    "PhoenixWaterTemperature": "temperature", "HassHumidifierSetpoint": "humidity",
+    "PhoenixClimateHumidity": "humidity", "PhoenixNumberValue": None, "PhoenixInputNumberValue": None,
+    "PhoenixLightTemperature": "color_temp_kelvin",
 }
 COMMAND_ROUTING_SWITCH_SERVICES = {"HassTurnOn": "turn_on", "HassTurnOff": "turn_off"}
 COMMAND_ROUTING_INTENTS = frozenset({*COMMAND_ROUTING_SWITCH_SERVICES, *COMMAND_ROUTING_NUMERIC_OPERATIONS, "HassGetState"})
@@ -1709,7 +1749,7 @@ DECISION_CONTEXT_CHECKS = {
 }
 DECISION_CONTEXT_REQUIRED_CHOICES = {"request": "immediate", "constraints": "clear"}
 # Singular references have separate qualification from self-contained commands.
-DECISION_REFERENCE_LANGUAGES = frozenset({"en"})
+DECISION_REFERENCE_LANGUAGES = frozenset(COMMAND_ROUTING_LANGUAGES.values())
 DECISION_REFERENCE_INTENTS = frozenset({"HassTurnOn", "HassTurnOff", "HassGetState"})
 DECISION_REFERENCE_EXECUTION_MODELS = {
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
@@ -1736,7 +1776,7 @@ DECISION_CONTEXT_EXECUTION_MODELS = {
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
 }
-DECISION_CONTEXT_EXECUTION_LANGUAGES = frozenset({"en", "es", "zh-CN"})
+DECISION_CONTEXT_EXECUTION_LANGUAGES = frozenset(COMMAND_ROUTING_LANGUAGES.values())
 # Combining decision-derived candidates with context review is qualified separately.
 DECISION_FOLLOWUP_EXECUTION_MODELS = {
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
@@ -1747,7 +1787,7 @@ DECISION_BATCH_EXECUTION_MODELS = {
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
 }
-DECISION_BATCH_EXECUTION_LANGUAGES = frozenset({"en", "es", "zh-CN"})
+DECISION_BATCH_EXECUTION_LANGUAGES = frozenset(COMMAND_ROUTING_LANGUAGES.values())
 # Numeric execution is qualified independently from categorical routing.
 DECISION_PERCENTAGE_EXECUTION_MODELS = {
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
@@ -1777,6 +1817,23 @@ DECISION_TARGET_INTENTS = {
     "light_brightness": "HassLightSet", "state_query": "HassGetState",
     "media_volume": "HassSetVolume", "cover_position": "HassSetPosition",
 }
+DECISION_ADDITIONAL_NUMERIC = {
+    "fan_speed": ("HassFanSetSpeed", "fan speed percentage"),
+    "valve_position": ("PhoenixValvePosition", "valve percentage open, never percentage closed"),
+    "cover_tilt": ("PhoenixCoverTilt", "cover tilt percentage, distinct from cover position"),
+    "climate_temperature": ("HassClimateSetTemperature", "thermostat target temperature in its native unit"),
+    "humidifier_humidity": ("HassHumidifierSetpoint", "humidifier target humidity percentage"),
+    "climate_humidity": ("PhoenixClimateHumidity", "climate target humidity percentage"),
+    "water_temperature": ("PhoenixWaterTemperature", "water heater target temperature in its native unit"),
+    "number_value": ("PhoenixNumberValue", "numeric entity value in its native unit"),
+    "input_number_value": ("PhoenixInputNumberValue", "numeric helper value in its native unit"),
+    "light_temperature": ("PhoenixLightTemperature", "light colour temperature in kelvin, not room temperature"),
+}
+DECISION_TARGET_INTENTS.update({category: spec[0] for category, spec in DECISION_ADDITIONAL_NUMERIC.items()})
+DECISION_PERCENTAGE_PREVIEW_CHOICES.update({
+    category: f"One immediate explicit request to set one {spec[1]} to an absolute numeric value."
+    for category, spec in DECISION_ADDITIONAL_NUMERIC.items()
+})
 # Leave one of the common classifier format's 50 choices for declining.
 DECISION_MAX_TARGETS = 49
 # Qualified TypeSafe joint requests leave one of 255 choices for declining.
@@ -1790,7 +1847,7 @@ DECISION_MAX_TARGET_ALIASES = 8
 # Experimental admission heuristic, not a calibrated accuracy claim.
 DECISION_MIN_CHOICE_PROBABILITY = 0.90
 # Sequential numeric decisions remain preview-only; joint execution needs source evidence.
-DECISION_NUMERIC_CATEGORIES = frozenset({"light_brightness", "media_volume", "cover_position"})
+DECISION_NUMERIC_CATEGORIES = frozenset({"light_brightness", "media_volume", "cover_position", *DECISION_ADDITIONAL_NUMERIC})
 # Value evidence is independent of model qualification and never grants execution.
 DECISION_PERCENTAGE_EVIDENCE_LANGUAGES = frozenset({"en", "es", "zh-CN"})
 DECISION_PERCENTAGE_EVIDENCE_MODIFIERS = {

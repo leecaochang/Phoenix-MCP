@@ -387,3 +387,21 @@ async def test_numeric_worker_timeout_keeps_shared_capacity_until_thread_finishe
         await asyncio.sleep(0)
     assert home.data.command_routing.task is None
     assert not home.data.store.get_pending_approvals()
+
+
+@pytest.mark.parametrize('intent,domain,attributes,valid,invalid', [
+    ('PhoenixNumberValue', 'number', {'min': -10, 'max': 10, 'step': 0.5}, -2.5, -2.25),
+    ('PhoenixInputNumberValue', 'input_number', {'min': 0, 'max': 1000, 'step': 1}, 800, 1001),
+    ('HassClimateSetTemperature', 'climate', {'supported_features': 1, 'min_temp': 5, 'max_temp': 30,
+                                             'target_temp_step': 0.5}, 21.5, 31),
+    ('HassHumidifierSetpoint', 'humidifier', {'min_humidity': 30, 'max_humidity': 70}, 55, 20),
+])
+def test_native_operation_bounds_and_steps(intent, domain, attributes, valid, invalid):
+    from homeassistant.core import State
+    from custom_components.phoenix_mcp.command_operations import valid_target_value
+    state = State(domain + '.test', 'on', attributes)
+    assert valid_target_value(state, intent, valid)
+    assert not valid_target_value(state, intent, invalid)
+    assert not valid_target_value(State(domain + '.test', 'on'), intent, valid)
+    for malformed in (True, None, '21', float('inf'), float('nan')):
+        assert not valid_target_value(state, intent, malformed)

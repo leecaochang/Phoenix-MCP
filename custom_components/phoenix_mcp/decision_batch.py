@@ -15,14 +15,14 @@ from .const import (
     DECISION_BATCH_EXECUTION_LANGUAGES, DECISION_BATCH_EXECUTION_MODELS,
     DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES,
     DECISION_BATCH_MAX_TARGET_BYTES,
-    DECISION_PERCENTAGE_EXECUTION_MODELS, DECISION_PERCENTAGE_EVIDENCE_LANGUAGES,
+    DECISION_PERCENTAGE_EXECUTION_MODELS,
     DECISION_TARGET_INTENTS, DECISION_NUMERIC_CATEGORIES, DECISION_BATCH_MAX_TARGETS, MAX_SEARCH_QUERY_LEN,
 )
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 from .decision_targets import capture_targets, CatalogLimitError, TargetSnapshot
 from .device_semantics import device_registry_snapshot
 from .helpers import redact_secrets_in_text, redact_inaccessible_entity_ids_in_text
-from .numeric_evidence import read_explicit_percentage, compare_percentage, has_percentage_unit
+from .numeric_evidence import read_explicit_percentage, compare_percentage, has_percentage_unit, read_explicit_scalar, explicit_unit_matches
 
 
 def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = False, extended: bool = False
@@ -38,8 +38,11 @@ def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = Fals
     entities: dict[str, dict] = {}
     for category, snapshot in snapshots.items():
         for descriptor in snapshot.targets.values():
-            item = entities.setdefault(descriptor["entity_id"], {**descriptor, "eligible_categories": []})
+            identity = {key: value for key, value in descriptor.items() if key != "numeric"}
+            item = entities.setdefault(descriptor["entity_id"], {**identity, "eligible_categories": []})
             item["eligible_categories"].append(category)
+            if "numeric" in descriptor:
+                item.setdefault("numeric_operations", {})[category] = descriptor["numeric"]
     if len(entities) > max_targets:
         raise CatalogLimitError("combined", "target_count", len(entities), max_targets)
     targets = {f"t{index}": entities[entity_id] for index, entity_id in enumerate(sorted(entities))}
@@ -58,7 +61,7 @@ def batch_execution_eligible(cfg: Any, language: str) -> bool:
 
 def percentage_execution_eligible(cfg: Any, language: str) -> bool:
     """Keep numeric qualification independent from future categorical model additions."""
-    return bool(batch_execution_eligible(cfg, language) and language in DECISION_PERCENTAGE_EVIDENCE_LANGUAGES
+    return bool(batch_execution_eligible(cfg, language)
                 and (cfg.kind, cfg.base_url, cfg.model) in DECISION_PERCENTAGE_EXECUTION_MODELS)
 
 
@@ -80,18 +83,23 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
     if (redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(sentence) or "", current, hass) != sentence
             or (provider.cfg.api_key and provider.cfg.api_key in sentence)):
         raise DecisionError("context_unavailable")
-    numeric = percentage_execution_eligible(provider.cfg, language) and has_percentage_unit(sentence)
+    numeric = False
+    scalar = False
     source_value = None
-    if numeric:
+    if percentage_execution_eligible(provider.cfg, language):
         from .agentcli import loaded_decision_account
         source_value = await hass.async_add_executor_job(read_explicit_percentage, sentence, language)
+        if source_value is None:
+            source_value = await hass.async_add_executor_job(read_explicit_scalar, sentence, language)
+            scalar = source_value is not None
+        numeric = source_value is not None
         current = authority.current(hass)
         account = authority.settings.decision_provider_id
         if (current is None or not account or loaded_decision_account(hass, account) != provider.cfg):
             raise DecisionError("authority_changed")
         if redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(sentence) or "", current, hass) != sentence:
             raise DecisionError("context_unavailable")
-        if source_value is None:
+        if not numeric and has_percentage_unit(sentence):
             return None, {"reason": "numeric_unverified", "decision": None, "executed": False}
     try:
         snapshot = capture_batch_targets(hass, current, numeric_preview=numeric, extended=True)
@@ -104,7 +112,9 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
         raise DecisionError("no_target")
     if provider.cfg.api_key and provider.cfg.api_key in json.dumps(targets, ensure_ascii=False):
         raise DecisionError("context_unavailable")
-    options = {"numeric_preview": True} if numeric else {}
+    options: dict[str, Any] = {"numeric_preview": True} if numeric else {}
+    if scalar:
+        options["scalar_value"] = source_value
     answer = await provider.route_and_target(session, sentence, targets,
                                             authority.settings.decision_timeout_ms, language, **options)
     current = authority.current(hass)
@@ -139,7 +149,12 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
         operation = numeric_operation(proposal["intent"])
         percentage = answer["percentage"]
         if (operation is None or percentage["model"] != category["model"]
-                or not confident_choice(percentage) or percentage["choice"] != str(source_value)):
+                or not confident_choice(percentage) or percentage["choice"] != ("value" if scalar else str(source_value))):
+            return category, {**selection, "reason": "numeric_unverified"}
+        unit = descriptor.get("numeric_operations", {}).get(category["choice"], {}).get("unit")
+        if category["choice"] in ("light_brightness", "media_volume", "cover_position"):
+            unit = "%"
+        if (not scalar and unit != "%") or not explicit_unit_matches(sentence, unit):
             return category, {**selection, "reason": "numeric_unverified"}
         proposal[operation.proposal_field] = source_value
     plan = _capture_plan(hass, authority.data, current, proposal, ingress=ingress)
@@ -200,12 +215,19 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
                 return result("no_target")
             if cfg.api_key and cfg.api_key in json.dumps(targets, ensure_ascii=False):
                 return result("context_unavailable")
-            options = {"numeric_preview": True} if numeric_preview else {}
+            options: dict[str, Any] = {"numeric_preview": True} if numeric_preview else {}
+            source_value = None
+            scalar = False
             async with asyncio.timeout(authority.settings.decision_timeout_ms / 1000):
+                if numeric_preview:
+                    source_value = await hass.async_add_executor_job(read_explicit_percentage, sentence, lang)
+                    if source_value is None:
+                        source_value = await hass.async_add_executor_job(read_explicit_scalar, sentence, lang)
+                        scalar = source_value is not None
+                        if scalar:
+                            options["scalar_value"] = source_value
                 answer = await provider.route_and_target(async_get_clientsession(hass), sentence, targets,
                                                         authority.settings.decision_timeout_ms, lang, **options)
-                source_value = (await hass.async_add_executor_job(read_explicit_percentage, sentence, lang)
-                                if numeric_preview else None)
             current = authority.current(hass)
             if current is None or store.resolve(account, purpose="decision") != cfg:
                 return result("authority_changed")
@@ -232,7 +254,7 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
                 if operation is not None:
                     if value["choice"] == "none":
                         return result("percentage_declined", decision=answer)
-                    proposal[operation.proposal_field] = int(value["choice"])
+                    proposal[operation.proposal_field] = source_value if scalar else int(value["choice"])
                     evidence["value_check"] = compare_percentage(source_value, proposal[operation.proposal_field])
                 elif value["choice"] != "none":
                     return result("percentage_mismatch", decision=answer)

@@ -343,7 +343,7 @@ async def test_multilingual_preview_uses_real_ha_intents_without_effects(hass, r
     assert hidden["proposal"] is None and hidden["reason"] == "no_target"
 
 
-@pytest.mark.parametrize("language", ["fr", "zh", "zh-TW", "unknown", "", [], None])
+@pytest.mark.parametrize("language", ["xx", "unknown", "", [], None])
 async def test_preview_rejects_unadmitted_languages_before_recognition(hass, routing, language):
     data, token = routing
     with patch("custom_components.phoenix_mcp.command_routing.async_recognize") as recognize:
@@ -369,7 +369,7 @@ async def test_real_multilingual_preview_declines_negated_and_deferred_commands(
 @pytest.mark.parametrize("tag,expected", [
     ("en-US", "en"), ("es-ES", "es"), ("es-MX", "es"),
     ("zh-Hans", "zh-CN"), ("zh-CN", "zh-CN"),
-    ("zh-Hant", None), ("zh-TW", None), ("zh", None), ("fr", None),
+    ("zh-Hant", None), ("zh-TW", None), ("zh", "zh-CN"), ("fr", None),
     ("unknown", None), (None, None), ([], None),
 ])
 def test_selected_routing_languages_do_not_fall_back_to_english(tag, expected):
@@ -398,7 +398,7 @@ async def test_routing_language_selection_round_trip_and_snapshot(hass, routing,
     recognize.assert_awaited_once_with(hass, "打开台灯", "zh-CN", strict=True)
 
 
-@pytest.mark.parametrize("selection", [None, True, "es", [True], [["en"]], ["en", "en"], ["fr"], ["zh-CN"]])
+@pytest.mark.parametrize("selection", [None, True, "es", [True], [["en"]], ["en", "en"], ["xx"], ["not-a-language"]])
 async def test_invalid_routing_language_selection_fails_closed(hass, routing, selection):
     from custom_components.phoenix_mcp.admin_view import _validated_settings_patch
     from custom_components.phoenix_mcp.token_store import GlobalSettings
@@ -409,7 +409,7 @@ async def test_invalid_routing_language_selection_fails_closed(hass, routing, se
 
 
 @pytest.mark.parametrize("ingress", ["voice", "chat"])
-@pytest.mark.parametrize("language,ha_language", [("es-MX", "es"), ("zh-Hans", "zh-CN"), ("fr", None), ("zh-Hant", None)])
+@pytest.mark.parametrize("language,ha_language", [("es-MX", "es"), ("zh-Hans", "zh-CN"), ("fr", "fr"), ("zh-Hant", "zh-TW")])
 async def test_auto_follows_supported_ingress_language_without_legacy_allowlist(hass, routing, english_home, ingress, language, ha_language):
     data, token = routing
     key = "agentcli_routing_mode" if ingress == "chat" else "voice_agent_routing_mode"
@@ -441,3 +441,16 @@ def test_experimental_settings_migrate_off_but_preserve_accounts_and_new_opt_in(
     assert saved["command_routing_version"] == COMMAND_ROUTING_SETTINGS_VERSION
     saved.update(voice_agent_routing_mode="auto", agentcli_routing_mode="auto")
     assert GlobalSettings.from_dict(saved).to_dict() == saved
+
+
+def test_auto_admits_all_installed_assist_and_ui_languages():
+    from home_assistant_intents import get_languages
+    from custom_components.phoenix_mcp.command_routing import routing_language
+    from custom_components.phoenix_mcp.const import COMMAND_ROUTING_LANGUAGES, CATALOGS_DIR
+    for language in get_languages():
+        assert routing_language(language, preview=True) == language
+    for catalog in CATALOGS_DIR.glob('*.json'):
+        assert routing_language(catalog.stem, enabled=list(COMMAND_ROUTING_LANGUAGES)) is not None
+    for language, expected in [('fr-CA', 'fr'), ('pt-BR', 'pt-BR'), ('sr-Latn', 'sr-Latn'),
+                               ('de-CH', 'de-CH'), ('zh-Hant-HK', 'zh-TW'), ('zh-HK', 'zh-HK')]:
+        assert routing_language(language, preview=True) == expected
