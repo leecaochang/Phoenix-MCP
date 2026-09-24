@@ -52,6 +52,35 @@ def read_temporal_value(sentence: str) -> dict[str, str] | None:
         return None
 
 
+async def async_read_temporal_value(hass: Any, sentence: str, language: str) -> dict[str, str] | None:
+    """Use HA's strict built-in timer intent as duration evidence, never as authority."""
+    source = read_temporal_value(sentence)
+    if source is not None or not hass.states.async_entity_ids("timer"):
+        return source
+    from .intent_recognition import RecognitionUnavailable, SentenceTriggerMatch, async_recognize
+    try:
+        recognized = await async_recognize(hass, sentence, language, strict=True)
+    except RecognitionUnavailable:
+        return None
+    result = getattr(recognized, "intent", None)
+    if result is None or result.name != "HassStartTimer" or getattr(recognized, "unmatched_entities", None):
+        return None
+    if (getattr(recognized, "intent_metadata", None) or {}).get("hass_custom_sentence"):
+        raise SentenceTriggerMatch
+    slots = {key: entity.value for key, entity in recognized.entities.items()}
+    # Assist also uses this intent for delayed commands and unnamed new timers.
+    # Neither provides evidence for an immediate update of an existing helper.
+    if slots.keys() - {"name", "hours", "minutes", "seconds"} or not isinstance(slots.get("name"), str) or not slots["name"].strip():
+        return None
+    parts = [slots.get(key, 0) for key in ("hours", "minutes", "seconds")]
+    if any(type(value) is not int or value < 0 for value in parts):
+        return None
+    total = parts[0] * 3600 + parts[1] * 60 + parts[2]
+    if not 0 < total < 24 * 3600:
+        return None
+    return {"kind": "duration", "value": f"{total // 3600:02d}:{total // 60 % 60:02d}:{total % 60:02d}"}
+
+
 def explicit_timer_duration(sentence: str, source: dict) -> bool:
     """A clock with only two fields is ambiguous as a duration; require all three."""
     if source.get("kind") != "time":

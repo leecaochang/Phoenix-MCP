@@ -320,3 +320,25 @@ async def test_preview_ingress_cannot_prepare_plan_even_with_hybrid_enabled(hass
                                               targets=True, prepare=True, ingress='preview')
     assert result['reason'] == 'not_enabled' and '_plan' not in result
     request.assert_not_called()
+
+
+@pytest.mark.parametrize('change,check', [
+    ('selected', 'selected_choice'), ('keys', 'probability_keys'), ('values', 'probability_values'),
+    ('confidence', 'confidence'), ('total', 'probability_total'), ('highest', 'selected_not_highest'),
+    ('model', 'model_identifier'),
+])
+def test_validation_diagnostics_preserve_strict_checks_without_response_data(change, check):
+    from custom_components.phoenix_mcp.decision_provider import DecisionValidationError
+    body = response()
+    answer = body['answers']['route']
+    if change == 'selected': answer['choice'] = 'private-provider-text'
+    elif change == 'keys': answer['probabilities']['private-provider-text'] = 0
+    elif change == 'values': answer['probabilities']['light_on'] = 'private-provider-text'
+    elif change == 'confidence': answer['confidence'] = 'private-provider-text'
+    elif change == 'total': answer['probabilities']['light_on'] = 0.6
+    elif change == 'highest': answer['choice'] = 'provider'
+    else: body['model'] = 'private provider text'
+    with pytest.raises(DecisionValidationError, match='^malformed$') as error:
+        parse_choice(body, DECISION_ROUTE_CHOICES)
+    assert error.value.check == check
+    assert 'private' not in str(error.value) + repr(vars(error.value))

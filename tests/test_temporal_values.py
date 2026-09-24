@@ -74,3 +74,32 @@ def test_partial_helper_update_checks_combined_dst_value(intent, value, state_va
     state = State('input_datetime.test', state_value, {'has_date': True, 'has_time': True})
     proposal = {'intent': intent, 'entity_ids': [state.entity_id], 'value': value}
     assert temporal_value_current(proposal, state, 'America/New_York') is valid
+
+
+@pytest.mark.parametrize('sentence,expected', [
+    ('Start timer named Test for five minutes', '00:05:00'),
+    ('Start timer named Test for one hour and thirty minutes', '01:30:00'),
+    ('Start timer named Test for thirty seconds', '00:00:30'),
+    ('Start a timer for five minutes', None),
+    ('Turn off Test in five minutes', None),
+    ('Start timer named Test for zero seconds', None),
+    ('Explain how to start timer named Test for five minutes', None),
+    ('Do not start timer named Test for five minutes', None),
+])
+async def test_native_timer_intent_supplies_only_named_immediate_duration(hass, sentence, expected):
+    from custom_components.phoenix_mcp.temporal_values import async_read_temporal_value
+    assert await async_setup_component(hass, 'homeassistant', {})
+    assert await async_setup_component(hass, 'conversation', {})
+    hass.states.async_set('timer.test', 'idle')
+    result = await async_read_temporal_value(hass, sentence, 'en')
+    assert result == ({'kind': 'duration', 'value': expected} if expected else None)
+
+
+async def test_new_sentence_trigger_refuses_timer_evidence(hass):
+    from unittest.mock import AsyncMock, patch
+    from custom_components.phoenix_mcp.intent_recognition import SentenceTriggerMatch
+    from custom_components.phoenix_mcp.temporal_values import async_read_temporal_value
+    hass.states.async_set('timer.test', 'idle')
+    with patch('custom_components.phoenix_mcp.intent_recognition.async_recognize', AsyncMock(side_effect=SentenceTriggerMatch)):
+        with pytest.raises(SentenceTriggerMatch):
+            await async_read_temporal_value(hass, 'Start timer named Test for five minutes', 'en')

@@ -18,7 +18,7 @@ from .const import (
     DECISION_PERCENTAGE_EXECUTION_MODELS, DECISION_TEMPORAL_CATEGORIES,
     COMMAND_ROUTING_VALUE_INTENTS, DECISION_TARGET_INTENTS, DECISION_NUMERIC_CATEGORIES, DECISION_BATCH_MAX_TARGETS, MAX_SEARCH_QUERY_LEN,
 )
-from .decision_provider import DecisionError, DecisionProvider, confident_choice
+from .decision_provider import DecisionError, DecisionValidationError, DecisionProvider, confident_choice
 from .decision_targets import capture_targets, CatalogLimitError, TargetSnapshot
 from .device_semantics import device_registry_snapshot
 from .helpers import redact_secrets_in_text, redact_inaccessible_entity_ids_in_text
@@ -89,8 +89,15 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
     if (redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(sentence) or "", current, hass) != sentence
             or (provider.cfg.api_key and provider.cfg.api_key in sentence)):
         raise DecisionError("context_unavailable")
-    from .temporal_values import read_temporal_value
-    source = read_temporal_value(sentence)
+    from .temporal_values import async_read_temporal_value
+    source = await async_read_temporal_value(hass, sentence, language)
+    from .agentcli import loaded_decision_account
+    current = authority.current(hass)
+    account = authority.settings.decision_provider_id
+    if current is None or not account or loaded_decision_account(hass, account) != provider.cfg:
+        raise DecisionError("authority_changed")
+    if redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(sentence) or "", current, hass) != sentence:
+        raise DecisionError("context_unavailable")
     if source is not None:
         from .decision_temporal import async_prepare_temporal
         return await async_prepare_temporal(hass, authority, provider, session, sentence, language, ingress, source)
@@ -99,7 +106,6 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
     source_value = None
     from .entity_commands import literal_text
     if percentage_execution_eligible(provider.cfg, language) and literal_text(sentence) is None:
-        from .agentcli import loaded_decision_account
         source_value = await hass.async_add_executor_job(read_explicit_percentage, sentence, language)
         if source_value is None:
             source_value = await hass.async_add_executor_job(read_explicit_scalar, sentence, language)
@@ -157,7 +163,8 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
     if category["choice"] not in descriptor["eligible_categories"]:
         raise DecisionError("category_mismatch")
     proposal: dict[str, Any] = {"intent": DECISION_TARGET_INTENTS[category["choice"]], "entity_ids": [descriptor["entity_id"]]}
-    if numeric:
+    selected_numeric = category["choice"] in DECISION_NUMERIC_CATEGORIES
+    if numeric and selected_numeric:
         operation = numeric_operation(proposal["intent"])
         percentage = answer["percentage"]
         if (operation is None or percentage["model"] != category["model"]
@@ -169,6 +176,9 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
         if (not scalar and unit != "%") or not explicit_unit_matches(sentence, unit):
             return category, {**selection, "reason": "numeric_unverified"}
         proposal[operation.proposal_field] = source_value
+    if numeric and not selected_numeric and (answer["percentage"]["choice"] != "none"
+            or answer["percentage"]["model"] != category["model"] or not confident_choice(answer["percentage"])):
+        return category, {**selection, "reason": "numeric_unverified"}
     typed = proposal["intent"] in COMMAND_ROUTING_VALUE_INTENTS
     if typed:
         from .entity_commands import chosen_entity_value
@@ -186,8 +196,10 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
                                 "catalog": batch_catalog_digest(snapshot)})
     if typed:
         plan["decision_batch"].update(value=proposal["value"], proposal=_digest(proposal))
-    if numeric:
+    if numeric and selected_numeric:
         plan["decision_batch"].update(percentage=source_value, proposal=_digest(proposal))
+    elif numeric:
+        plan["decision_batch"]["catalog_numeric"] = True
     return category, {**selection, "reason": "target_selected", "entity_id": descriptor["entity_id"],
                       "proposal": proposal, "_plan": plan}
 
@@ -215,6 +227,7 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
         return redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(sentence) or "", current, hass) == sentence
 
     async def evaluate() -> dict:
+        deadline = asyncio.get_running_loop().time() + authority.settings.decision_timeout_ms / 1000
         from .agentcli import _get_secret_store, PROVIDER_DEFINITIONS
         try:
             store = await _get_secret_store(hass)
@@ -229,8 +242,14 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
                 return result("context_unavailable")
             provider = DecisionProvider(cfg, PROVIDER_DEFINITIONS[cfg.kind].adapter,
                                         metrics=runtime.metrics, metric_scope="preview")
-            from .temporal_values import read_temporal_value
-            temporal = read_temporal_value(sentence)
+            from .temporal_values import async_read_temporal_value
+            async with asyncio.timeout_at(deadline):
+                temporal = await async_read_temporal_value(hass, sentence, lang)
+            current = authority.current(hass)
+            if current is None or store.resolve(account, purpose="decision") != cfg:
+                return result("authority_changed")
+            if not safe_text(current):
+                return result("context_unavailable")
             timezone = hass.config.time_zone
             if numeric_preview and temporal is None and not provider.supports_exact_percentages():
                 return result("unsupported_category")
@@ -244,7 +263,7 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
             options: dict[str, Any] = {"numeric_preview": True} if numeric_preview else {}
             source_value = None
             scalar = False
-            async with asyncio.timeout(authority.settings.decision_timeout_ms / 1000):
+            async with asyncio.timeout_at(deadline):
                 if temporal is not None:
                     answer = await provider.route_temporal(async_get_clientsession(hass), sentence, lang, targets,
                                                            temporal, timezone, authority.settings.decision_timeout_ms)
@@ -305,6 +324,8 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
                           local_agreement=proposal == local.get("proposal") if local.get("proposal") else None)
         except CatalogLimitError as error:
             return result(str(error), catalog_limit=error.details)
+        except DecisionValidationError as error:
+            return result("malformed", validation_check=error.check)
         except DecisionError as error:
             return result(str(error))
         except TimeoutError:

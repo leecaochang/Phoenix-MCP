@@ -26,7 +26,7 @@ def temporal_proposal(answer: dict, targets: dict, source: dict, timezone: str, 
     if not intent or not descriptor or category not in descriptor["eligible_categories"]:
         return "category_mismatch", None
     kind = COMMAND_ROUTING_TEMPORAL_OPERATIONS[intent][3]
-    if kind == "duration":
+    if kind == "duration" and source["kind"] != "duration":
         from .temporal_values import explicit_timer_duration
         if not explicit_timer_duration(sentence, source):
             return "numeric_unverified", None

@@ -1029,7 +1029,7 @@ async def entity_command_home(hass, jev_hybrid_home, request):
 def entity_command_wire(payload, entity_id, category, value=None):
     target = next(key for key, item in payload['state']['targets'].items() if item['entity_id'] == entity_id)
     selected_value = next((key for key, item in payload['state'].get('values', {}).items() if item == value), 'none')
-    selected = {'route': category, 'target': target, 'value': selected_value}
+    selected = {'route': category, 'target': target, 'value': selected_value, 'percentage': 'none'}
     return {'model': 'jev-1.13.0', 'answers': {question: {
         'type': 'choice', 'choice': selected[question], 'confidence': 1,
         'probabilities': {key: float(key == selected[question]) for key in spec['criteria']}}
@@ -1094,7 +1094,7 @@ async def test_entity_value_wait_rechecks_options(hass, entity_command_home):
     assert not home[0].store.get_pending_approvals()
 
 
-@pytest.mark.parametrize('duration,allowed', [('00:05:00', True), ('05:00', False)])
+@pytest.mark.parametrize('duration,allowed', [('00:05:00', True), ('05:00', False), ('five minutes', True), ('one hour and thirty minutes', True)])
 async def test_explicit_timer_duration_uses_existing_named_timer_only(hass, jev_hybrid_home, duration, allowed):
     data, token, store, account, _ = jev_hybrid_home
     token.permissions.domains['timer'] = PermissionNode(state='GREEN')
@@ -1105,11 +1105,11 @@ async def test_explicit_timer_duration_uses_existing_named_timer_only(hass, jev_
     async def respond(*args): return temporal_wire(args[4], entry.entity_id, 'timer_duration')
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, remote, provider = await run_voice(hass, home, request=respond, sentence=f'Start Test timer for {duration}')
+        _, remote, provider = await run_voice(hass, home, request=respond, sentence=f'Start timer named Test timer for {duration}')
     remote.assert_awaited_once()
     assert provider.called is not allowed
     if allowed:
-        call.assert_awaited_once_with('timer', 'start', {'entity_id': [entry.entity_id], 'duration': '00:05:00'},
+        call.assert_awaited_once_with('timer', 'start', {'entity_id': [entry.entity_id], 'duration': '01:30:00' if duration == 'one hour and thirty minutes' else '00:05:00'},
                                      blocking=True, return_response=False)
     else: call.assert_not_called()
 
@@ -1141,3 +1141,82 @@ async def test_entity_on_off_can_use_local_intent_without_decision_provider(hass
     provider.assert_not_called()
     remote.assert_not_called()
     call.assert_awaited_once_with(domain, service, {'entity_id': [home[-1]]}, blocking=True, return_response=False)
+
+
+@pytest.mark.parametrize('entity_command_home', [('input_select_option', '2'), ('select_option', 'HDMI 2')], indirect=True)
+@pytest.mark.parametrize('change', ['none', 'numeric_competitor', 'option', 'conflicting_value'])
+async def test_numbered_options_share_one_decision_and_bind_the_complete_catalog(hass, entity_command_home, change):
+    home, category, value, _, (domain, service, field) = entity_command_home
+    data, token, _, _, entity_id = home
+    hass.states.async_set(entity_id, 'Home', {'friendly_name': 'Test helper', 'options': ['Home', value]})
+    await set_mesa(hass, home, 'confirm')
+    async def respond(*args):
+        payload = args[4]
+        assert 'percentage' in payload['questions'] and 'value' in payload['questions']
+        reply = entity_command_wire(payload, entity_id, category, value)
+        if change == 'conflicting_value':
+            reply['answers']['percentage'].update(choice='value', probabilities={'value': 1, 'none': 0})
+        return reply
+    with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
+        reply, remote, provider = await run_voice(hass, home, request=respond, sentence=f'Set Test helper to {value}')
+    remote.assert_awaited_once()
+    if change == 'conflicting_value':
+        provider.assert_awaited_once()
+        assert not data.store.get_pending_approvals()
+        return
+    assert 'needs approval' in reply
+    provider.assert_not_called()
+    record = data.store.get_pending_approvals()[0]
+    if change == 'numeric_competitor':
+        token.permissions.domains['number'] = PermissionNode(state='GREEN')
+        entry = er.async_get(hass).async_get_or_create('number', 'test', 'competing', original_name='Test helper')
+        hass.states.async_set(entry.entity_id, '2', {'min': 0, 'max': 10, 'step': 1})
+        async_expose_entity(hass, 'conversation', entry.entity_id, True)
+    if change == 'option':
+        hass.states.async_set(entity_id, 'Home', {'friendly_name': 'Test helper', 'options': ['Home']})
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+    assert outcome == ('allowed' if change == 'none' else 'denied')
+    assert call.await_count == (1 if change == 'none' else 0)
+    if change == 'none':
+        call.assert_awaited_once_with(domain, service, {'entity_id': [entity_id], field: value}, blocking=True, return_response=False)
+
+
+@pytest.mark.parametrize('entity_command_home', [('select_option', '2')], indirect=True)
+async def test_numeric_setting_remains_numeric_with_numbered_options_present(hass, entity_command_home):
+    home, *_ = entity_command_home
+    data, token, store, account, option_id = home
+    hass.states.async_set(option_id, '2', {'friendly_name': 'Test helper', 'options': ['2', '37']})
+    light_id = next(state.entity_id for state in hass.states.async_all('light'))
+    async def respond(*args):
+        payload = args[4]
+        reply = entity_command_wire(payload, light_id, 'light_brightness')
+        reply['answers']['percentage'].update(choice='37', probabilities={
+            key: float(key == '37') for key in payload['questions']['percentage']['criteria']})
+        return reply
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, remote, provider = await run_voice(hass, home, request=respond, sentence='I want Desk lamp at 37 percent now')
+    remote.assert_awaited_once()
+    provider.assert_not_called()
+    call.assert_awaited_once_with('light', 'turn_on', {'entity_id': [light_id], 'brightness_pct': 37},
+                                 blocking=True, return_response=False)
+
+
+async def test_timer_recognition_wait_rechecks_account_before_disclosing_to_provider(hass, jev_hybrid_home):
+    from custom_components.phoenix_mcp.temporal_values import async_read_temporal_value
+    home = jev_hybrid_home
+    data, _, store, account, _ = home
+    hass.states.async_set('timer.test', 'idle')
+    async def recognize(*args):
+        value = await async_read_temporal_value(*args)
+        assert value == {'kind': 'duration', 'value': '00:05:00'}
+        await store.update(account, {'api_key': 'replacement-secret'})
+        return value
+    with (patch('custom_components.phoenix_mcp.temporal_values.async_read_temporal_value', side_effect=recognize),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, remote, _ = await run_voice(hass, home, sentence='Start timer named Test for five minutes')
+    remote.assert_not_called()
+    call.assert_not_called()
+    assert not data.store.get_pending_approvals()

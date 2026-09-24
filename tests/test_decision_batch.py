@@ -565,3 +565,19 @@ async def test_categorical_catalog_bounds_follow_qualified_account(hass, batch_h
     assert result['executed'] is False and '_plan' not in result
     assert not data.store.get_pending_approvals()
     dispatch.assert_not_called()
+
+
+async def test_preview_reports_only_validation_label_and_never_executes(hass, batch_home):
+    async def response(*args):
+        body = wire_response(args[4])
+        body['answers']['route']['probabilities']['private-provider-text'] = 0
+        return body
+    with (patch.object(DecisionProvider, '_request', side_effect=response),
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        result = await preview(hass, batch_home)
+    assert result['reason'] == 'malformed'
+    assert result['validation_check'] == 'probability_keys'
+    assert result['executed'] is False and 'proposal' not in result and 'decision' not in result
+    assert 'private-provider-text' not in json.dumps(result)
+    assert not batch_home[0].store.get_pending_approvals()
+    dispatch.assert_not_called()

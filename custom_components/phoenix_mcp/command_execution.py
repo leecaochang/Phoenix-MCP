@@ -127,16 +127,22 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
     mode = effective_routing_mode(settings, plan.get("ingress", "voice"))
     if "decision_batch" in plan:
         review = plan["decision_batch"]
+        if not isinstance(review, dict):
+            return False
         account = settings.decision_provider_id
         cfg = loaded_decision_account(hass, account) if account else None
         keys = {"model", "language", "catalog"} | ({"percentage", "proposal"} if numeric else {"value", "proposal"} if temporal or typed else set())
+        if "catalog_numeric" in review:
+            if numeric or temporal or review["catalog_numeric"] is not True:
+                return False
+            keys.add("catalog_numeric")
         if "context_review" in plan:
             keys.add("context")
         if "reference_review" in plan:
             keys.add("reference")
         qualified = DECISION_PERCENTAGE_EXECUTION_MODELS if numeric else DECISION_BATCH_EXECUTION_MODELS
         if (not isinstance(review, dict) or set(review) != keys
-                or not all(isinstance(review[key], str) for key in keys - {"percentage"})
+                or not all(isinstance(review[key], str) for key in keys - {"percentage", "catalog_numeric"})
                 or cfg is None or not batch_execution_eligible(cfg, review["language"])
                 or review["model"] not in qualified.get((cfg.kind, cfg.base_url, cfg.model), ())):
             return False
@@ -156,7 +162,7 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
         if (temporal or typed) and (review["value"] != plan["proposal"].get("value")
                          or review["proposal"] != _digest(plan["proposal"]) or not _temporal_current(hass, plan["proposal"])):
             return False
-        snapshot = capture_batch_targets(hass, token, numeric_preview=numeric, extended=True, temporal=temporal)
+        snapshot = capture_batch_targets(hass, token, numeric_preview=numeric or review.get("catalog_numeric", False), extended=True, temporal=temporal)
         if batch_catalog_digest(snapshot) != review["catalog"] or category not in snapshot[1]:
             return False
         catalog_digest = snapshot[1][category].digest()
