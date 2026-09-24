@@ -72,6 +72,18 @@ FLOOR = _version(MIN_HA_VERSION)
 # against that tag's source at
 # https://raw.githubusercontent.com/home-assistant/core/<tag>/<path>.
 KNOWN_IMPORTS: dict[str, dict[str, str]] = {
+    # Entity-command feature exports verified in each component's 2024.5.0
+    # __init__.py, before the current 2025.2.0 floor.
+    "homeassistant.components.alarm_control_panel": {"AlarmControlPanelEntityFeature": "0.0.0"},
+    "homeassistant.components.climate": {"ClimateEntityFeature": "0.0.0"},
+    "homeassistant.components.fan": {"FanEntityFeature": "0.0.0"},
+    "homeassistant.components.humidifier": {"HumidifierEntityFeature": "0.0.0"},
+    "homeassistant.components.lawn_mower": {"LawnMowerEntityFeature": "0.0.0"},
+    "homeassistant.components.lock": {"LockEntityFeature": "0.0.0"},
+    "homeassistant.components.siren": {"SirenEntityFeature": "0.0.0"},
+    "homeassistant.components.vacuum": {"VacuumEntityFeature": "0.0.0"},
+    "homeassistant.components.valve": {"ValveEntityFeature": "0.0.0"},
+    "homeassistant.components.water_heater": {"WaterHeaterEntityFeature": "0.0.0"},
     # Verified exported in 2024.5.0, the earliest original claim.
     "homeassistant.components.repairs": {"RepairsFlow": "0.0.0"},
     "homeassistant": {
@@ -100,6 +112,9 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "KEY_HASS_USER": "0.0.0",
     },
     "homeassistant.components.light": {
+        # Both entity-command exports verified in 2024.5.0 light/__init__.py.
+        "LightEntityFeature": "0.0.0",
+        "color_supported": "0.0.0",
         # Both exports verified in the 2025.2.0 light/__init__.py source.
         "ATTR_SUPPORTED_COLOR_MODES": "0.0.0",
         "brightness_supported": "0.0.0",
@@ -209,6 +224,10 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         # Core helper/entity ID generation has used this public utility since
         # well before Phoenix's earliest supported Home Assistant release.
         "slugify": "0.0.0",
+    },
+    "homeassistant.util.color": {
+        # Named-color catalog verified in 2024.5.0 util/color.py.
+        "COLORS": "0.0.0",
     },
     "homeassistant.util.dt": {
         "as_utc": "0.0.0",

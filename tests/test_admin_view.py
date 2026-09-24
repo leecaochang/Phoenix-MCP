@@ -2608,13 +2608,23 @@ async def test_revoke_clears_ai_task_token():
 
 
 @pytest.mark.asyncio
-async def test_ai_task_preferred_get_reports_status():
+async def test_ai_task_preferred_get_reports_status(hass):
+    from homeassistant.helpers import entity_registry as er
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
     data = _make_data([])
+    hass.data[DOMAIN] = data
+    entry = MockConfigEntry(domain=DOMAIN)
+    entry.add_to_hass(hass)
+    entity = er.async_get(hass).async_get_or_create("ai_task", DOMAIN, f"{entry.entry_id}_ai_task")
     view = PhoenixAdminAiTaskPreferredView()
-    view.hass = _make_hass(data)
+    view.hass = hass
     resp = await view.get(_make_admin_request())
     assert resp.status == 200
-    assert "supported" in json.loads(resp.text)
+    status = json.loads(resp.text)
+    assert status["entity_id"] == entity.entity_id
+    assert status["supported"] is False  # No preferences store set up yet.
+    assert status["is_preferred"] is False
 
 
 @pytest.mark.asyncio
@@ -2954,7 +2964,7 @@ async def test_command_preview_requires_admin(authenticated, admin, status):
     {"token_id": "t", "sentence": "x", "decision": True, "targets": True, "prepare": True},
     {"token_id": [], "sentence": "x"}, {"token_id": "t", "sentence": " "},
     {"token_id": "t", "sentence": "x" * 513},
-    {"token_id": "t", "sentence": "x", "language": "fr"},
+    {"token_id": "t", "sentence": "x", "language": "not-a-language"},
     {"token_id": "t", "sentence": "x", "references": True},
     {"token_id": "t", "sentence": "x", "decision": True, "references": True},
     {"token_id": "t", "sentence": "x", "references": 1},
@@ -3126,7 +3136,7 @@ async def test_command_preview_target_opt_in_and_authority_recheck(hass, token_s
     assert "light.private" not in response.text
 
 
-@pytest.mark.parametrize("language,ha_language", [("zh-Hans", "zh-CN"), ("es", "es")])
+@pytest.mark.parametrize("language,ha_language", [("zh-Hans", "zh-CN"), ("es", "es"), ("fr", "fr")])
 async def test_command_preview_passes_explicit_language_without_plan_authority(hass, token_store, language, ha_language):
     token, _ = await token_store.async_create_token("language_preview", "admin")
     data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())

@@ -1,15 +1,13 @@
 """Tests for the Phoenix MCP AI Task entity (ai_task.py + agentcli.async_run_ai_task).
 
-The AITaskEntity base class cannot be imported here, because ai_task's own import
-chain reaches a dependency this environment does not carry, so ai_task_supported()
-is False and PhoenixAITaskEntity is None. That is the point of the feature-detect
-guard: the generation core (async_generate_ai_task_data) is module-level and free
-of that chain, so the real logic is covered without the entity base class. The
-entity wrapper itself is thin (an availability property plus a delegate to the
-core).
+The pinned HA environment provides the real AITaskEntity base. Missing-platform
+coverage explicitly blocks its import in an isolated Phoenix module, so the
+feature-detection guard is tested independently of installed dependencies.
 """
 from __future__ import annotations
 
+import builtins
+import importlib.util
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -20,7 +18,7 @@ import voluptuous as vol
 from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
 from custom_components.phoenix_mcp import ai_task, agentcli
 from custom_components.phoenix_mcp.agentcli import AiTaskError, async_run_ai_task
-from custom_components.phoenix_mcp.const import AGENTCLI_MAX_TURN_OUTPUT_BYTES, AI_TASK_CLIENT_IP
+from custom_components.phoenix_mcp.const import AGENTCLI_MAX_TURN_OUTPUT_BYTES, AI_TASK_CLIENT_IP, DOMAIN
 from custom_components.phoenix_mcp.token_store import GlobalSettings
 from homeassistant.exceptions import HomeAssistantError
 
@@ -85,25 +83,85 @@ _FULL = dict(
 # module-level helpers
 # --------------------------------------------------------------------------- #
 
-def test_supported_is_false_in_test_env():
-    # Confirms the guard: entity base unimportable here, core still available.
-    assert ai_task.ai_task_supported() is False
-    assert ai_task.PhoenixAITaskEntity is None
+@pytest.fixture
+def unsupported_ai_task():
+    """Exercise the real import fallback without reloading the shared module."""
+    original_import = builtins.__import__
+    blocked = []
+
+    def without_ai_task(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "homeassistant.components" and "ai_task" in fromlist:
+            blocked.append(name)
+            raise ImportError("AI Task platform intentionally unavailable")
+        return original_import(name, globals, locals, fromlist, level)
+
+    spec = importlib.util.spec_from_file_location(
+        "custom_components.phoenix_mcp._ai_task_missing_platform_test", ai_task.__file__,
+    )
+    module = importlib.util.module_from_spec(spec)
+    with patch("builtins.__import__", side_effect=without_ai_task):
+        spec.loader.exec_module(module)
+    assert blocked == ["homeassistant.components"]
+    return module
+
+
+def test_supported_with_installed_ha_platform():
+    from homeassistant.components.ai_task import AITaskEntity
+
+    assert ai_task.ai_task_supported() is True
+    assert issubclass(ai_task.PhoenixAITaskEntity, AITaskEntity)
+
+
+def test_supported_is_false_when_platform_import_fails(unsupported_ai_task):
+    assert unsupported_ai_task.ai_task_supported() is False
+    assert unsupported_ai_task.PhoenixAITaskEntity is None
+    assert callable(unsupported_ai_task.async_generate_ai_task_data)
 
 
 # --------------------------------------------------------------------------- #
 # async_sync_ai_task (dynamic entity lifecycle)
 # --------------------------------------------------------------------------- #
 
-def test_sync_noop_when_unsupported():
-    # _AI_TASK_AVAILABLE is False in the test env; the sync must return before touching
-    # the (None) entity class, even when the config would otherwise warrant an entity.
+def test_sync_noop_when_unsupported(unsupported_ai_task):
     data = _make_data(**_FULL)
     data.ai_task_entity = None
     add = MagicMock()
-    ai_task.async_sync_ai_task(MagicMock(), SimpleNamespace(entry_id="e"), data, add)
+    unsupported_ai_task.async_sync_ai_task(MagicMock(), SimpleNamespace(entry_id="e"), data, add)
     add.assert_not_called()
     assert data.ai_task_entity is None
+
+
+@pytest.mark.asyncio
+async def test_setup_noop_when_platform_import_fails(unsupported_ai_task):
+    hass = MagicMock()
+    add = MagicMock()
+    await unsupported_ai_task.async_setup_entry(hass, SimpleNamespace(entry_id="e"), add)
+    add.assert_not_called()
+    hass.data.get.assert_not_called()
+
+
+def test_sync_creates_real_ha_entity_with_runtime_availability(hass):
+    from homeassistant.components.ai_task import AITaskEntity, AITaskEntityFeature
+
+    data = _make_data(**_FULL)
+    data.ready = False
+    data.ai_task_entity = None
+    hass.data[DOMAIN] = data
+    add = MagicMock()
+    ai_task.async_sync_ai_task(hass, SimpleNamespace(entry_id="e"), data, add)
+    entity = data.ai_task_entity
+    assert isinstance(entity, AITaskEntity)
+    assert entity.unique_id == "e_ai_task"
+    assert entity.supported_features == AITaskEntityFeature.GENERATE_DATA
+    add.assert_called_once_with([entity])
+    assert entity.available is False
+    data.ready = True
+    assert entity.available is True
+    data.store.get_settings.return_value = GlobalSettings(**_FULL, kill_switch=True)
+    assert entity.available is False
+    ai_task.async_sync_ai_task(hass, SimpleNamespace(entry_id="e"), data, add)
+    assert data.ai_task_entity is entity
+    add.assert_called_once()
 
 
 def test_sync_adds_entity_when_fully_configured():
@@ -163,8 +221,8 @@ class _FakePrefs:
         self.gen_data_entity_id = gen_data_entity_id
 
 
-def test_preferred_status_unsupported_in_env(hass):
-    # No prefs store in the test env (import needs turbojpeg): supported is False.
+def test_preferred_status_without_preferences(hass):
+    # The platform imports, but HA's preferences store has not been set up.
     status = ai_task.ai_task_preferred_status(hass, SimpleNamespace(entry_id="e"))
     assert status["supported"] is False
     assert status["is_preferred"] is False

@@ -1796,7 +1796,8 @@ async def test_option_command_in_chat_rechecks_complete_history(hass, context_ch
         if 'request' in payload['questions']: return context_response(decline=restricted)
         target = next(key for key, item in payload['state']['targets'].items() if item['entity_id'] == entry.entity_id)
         value = next(key for key, item in payload['state']['values'].items() if item == 'Away')
-        choices = {'route': 'select_option', 'target': target, 'value': value}
+        choices = {'route': 'select_option', 'target': target, 'value': value,
+                   'attribute': 'none', 'color': 'none'}
         return {'model': 'jev-1.13.0', 'answers': {question: {
             'type': 'choice', 'choice': choices[question], 'confidence': 1,
             'probabilities': {key: float(key == choices[question]) for key in spec['criteria']}}
@@ -1806,8 +1807,14 @@ async def test_option_command_in_chat_rechecks_complete_history(hass, context_ch
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         provider, _, returned = await chat_turn(hass, context_chat, context_messages('Set Test mode to Away'))
     assert remote.await_count == 2, data.decision_shadow.summary()
+    assert 'attribute' in seen[0]['questions']
     assert seen[-1]['state']['history'] == CONTEXT_HISTORY
     assert seen[-1]['state']['candidate']['value'] == 'Away'
     assert returned[:len(CONTEXT_HISTORY)] == CONTEXT_HISTORY
     assert provider.stream_turn.called is restricted
-    assert call.await_count == (0 if restricted else 1)
+    if restricted:
+        call.assert_not_called()
+    else:
+        call.assert_awaited_once_with('select', 'select_option',
+                                     {'entity_id': [entry.entity_id], 'option': 'Away'},
+                                     blocking=True, return_response=False)
