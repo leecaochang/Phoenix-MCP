@@ -1578,3 +1578,118 @@ async def test_categorical_followup_routes_with_more_than_common_catalog_limit(h
     assert history[:2] == CONTEXT_HISTORY
     assert history[-1]['content'] == 'The state is off.'
     assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'plan_ready': 1}
+
+
+def reference_chat_wire(payload, category='light_off', *, restrict=False):
+    selected = ({'route': category, 'reference': 'bound', 'constraints': 'restricted' if restrict else 'clear'}
+                if 'reference' in payload['questions'] else {'route': 'provider', 'target': 'none'})
+    return {'model': 'jev-1.13.0', 'answers': {
+        name: {'type': 'choice', 'choice': selected[name], 'confidence': 1,
+               'probabilities': {key: float(key == selected[name]) for key in spec['criteria']}}
+        for name, spec in payload['questions'].items()}}
+
+
+@pytest.mark.parametrize('category,sentence,service', [('light_on', 'turn it on', 'turn_on'),
+    ('light_off', 'turn it off', 'turn_off'), ('state_query', 'is it on?', None)])
+@pytest.mark.parametrize('local_chain', [False, True])
+async def test_chat_reference_uses_full_history_and_guarded_dispatch(hass, context_chat, category, sentence, service, local_chain):
+    from custom_components.phoenix_mcp import mcp_view
+    data, _ = context_chat
+    history = [{'role': 'user', 'content': 'what is the state of Desk lamp'},
+               {'role': 'assistant', 'content': 'The state is off.'}]
+    if local_chain:
+        _, _, history = await chat_turn(hass, context_chat, history[:1])
+        assert data.command_routing.chat_history._entries
+    original = deepcopy(history)
+    seen = []
+    async def response(*args):
+        seen.append(args[4])
+        return reference_chat_wire(args[4], category)
+    with (patch.object(DecisionProvider, '_request', side_effect=response) as request,
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        provider, events, returned = await chat_turn(hass, context_chat, [*history, {'role': 'user', 'content': sentence}])
+    assert not provider.stream_turn.called, data.decision_shadow.summary()
+    assert request.await_count == 2
+    assert seen[1]['state']['history'] == original
+    assert returned[:len(original)] == original and events[-1] == ('done', {'stop_reason': 'end_turn'})
+    assert not data.command_routing.chat_history._entries
+    if service: call.assert_awaited_once_with('light', service, {'entity_id': ['light.test_desk']}, blocking=True, return_response=False)
+    else: call.assert_not_called()
+
+
+@pytest.mark.parametrize('failure', ['restriction', 'malformed', 'uncertain', 'timeout'])
+async def test_reference_not_attempted_after_errors_and_never_overrides_restrictions(hass, context_chat, failure):
+    from custom_components.phoenix_mcp.decision_provider import DecisionError
+    data, _ = context_chat
+    history = [{'role': 'user', 'content': 'what is the state of Desk lamp'}, {'role': 'assistant', 'content': 'The state is off.'}]
+    async def response(*args):
+        payload = args[4]
+        if failure in ('malformed', 'timeout'): raise DecisionError(failure)
+        body = reference_chat_wire(payload, restrict=True)
+        if failure == 'uncertain':
+            check = body['answers']['route']; check['choice'] = 'light_off'
+            check['probabilities'] = {key: .85 if key == 'light_off' else .15 if key == 'provider' else 0
+                                      for key in check['probabilities']}
+        return body
+    with (patch.object(DecisionProvider, '_request', side_effect=response) as request,
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        provider, _, returned = await chat_turn(hass, context_chat, [*history, {'role': 'user', 'content': 'turn it off'}])
+    assert request.await_count == (2 if failure == 'restriction' else 1)
+    provider.stream_turn.assert_called_once()
+    dispatch.assert_not_called()
+    assert returned[:2] == history and not data.store.get_pending_approvals()
+
+
+@pytest.mark.parametrize('change', ['none', 'alias', 'reference_proof', 'proposal'])
+async def test_reference_approval_rechecks_bound_plan(hass, context_chat, change):
+    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp.const import COMMAND_ROUTING_PLAN_KEY
+    from custom_components.phoenix_mcp.command_execution import plan_is_current
+    from custom_components.phoenix_mcp.mesa import async_setup_mesa
+    from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
+    data, token = context_chat
+    await data.store.async_patch_settings(mesa_mode='enforced')
+    data.mesa = await async_setup_mesa(hass, 'enforced')
+    data.mesa.store.set('light.test_desk', SemanticProfile.from_dict('light.test_desk',
+        {'semantic_profile': {'operational_boundaries': {'control_mode': 'confirm'}}}, default_origin=MetadataOrigin.USER))
+    messages = [{'role': 'user', 'content': 'what is the state of Desk lamp'}, {'role': 'assistant', 'content': 'The state is off.'},
+                {'role': 'user', 'content': 'turn it on'}]
+    async def response(*args): return reference_chat_wire(args[4], 'light_on')
+    with (patch.object(DecisionProvider, '_request', side_effect=response),
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        provider, events, _ = await chat_turn(hass, context_chat, messages)
+    assert not provider.stream_turn.called, data.decision_shadow.summary()
+    call.assert_not_called()
+    assert any(name == 'approval_required' for name, _ in events)
+    record = data.store.get_pending_approvals()[0]
+    plan = record['args'][COMMAND_ROUTING_PLAN_KEY]
+    assert plan_is_current(plan, hass, data, token)
+    if change == 'alias': er.async_get(hass).async_update_entity('light.test_desk', aliases={'new alias'})
+    if change == 'reference_proof': plan['reference_review']['proposal'] = 'changed'
+    if change == 'proposal': plan['proposal']['intent'] = 'HassTurnOff'
+    assert plan_is_current(plan, hass, data, token) is (change == 'none')
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+    assert outcome == ('allowed' if change == 'none' else 'denied')
+    assert call.await_count == (1 if change == 'none' else 0)
+
+
+async def test_reference_and_explicit_selection_share_total_deadline(hass, context_chat):
+    data, _ = context_chat
+    await data.store.async_patch_settings(decision_timeout_ms=250)
+    messages = [{'role': 'user', 'content': 'what is the state of Desk lamp'}, {'role': 'assistant', 'content': 'The state is off.'},
+                {'role': 'user', 'content': 'turn it off'}]
+    async def response(*args):
+        await asyncio.sleep(.15)
+        return reference_chat_wire(args[4])
+    with (patch.object(DecisionProvider, '_request', side_effect=response) as request,
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        provider, _, _ = await chat_turn(hass, context_chat, messages)
+    assert request.await_count == 2
+    provider.stream_turn.assert_called_once()
+    dispatch.assert_not_called()
+    assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'timeout': 1}
+    assert data.decision_shadow.task is None

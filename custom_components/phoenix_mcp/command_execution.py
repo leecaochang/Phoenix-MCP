@@ -18,6 +18,7 @@ from .const import (
     DECISION_CONTEXT_EXECUTION_MODELS, DECISION_CONTEXT_EXECUTION_LANGUAGES, DECISION_FOLLOWUP_EXECUTION_MODELS,
     DECISION_BATCH_EXECUTION_MODELS,
     DECISION_NUMERIC_CATEGORIES, DECISION_PERCENTAGE_EXECUTION_MODELS,
+    DECISION_REFERENCE_EXECUTION_MODELS, DECISION_REFERENCE_LANGUAGES, DECISION_REFERENCE_INTENTS,
 )
 from .device_semantics import DeviceRegistrySnapshot, device_registry_snapshot
 from .helpers import voice_text
@@ -99,6 +100,8 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
         keys = {"model", "language", "catalog"} | ({"percentage", "proposal"} if numeric else set())
         if "context_review" in plan:
             keys.add("context")
+        if "reference_review" in plan:
+            keys.add("reference")
         qualified = DECISION_PERCENTAGE_EXECUTION_MODELS if numeric else DECISION_BATCH_EXECUTION_MODELS
         if (not isinstance(review, dict) or set(review) != keys
                 or not all(isinstance(review[key], str) for key in keys - {"percentage"})
@@ -106,6 +109,9 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
                 or review["model"] not in qualified.get((cfg.kind, cfg.base_url, cfg.model), ())):
             return False
         if "context_review" in plan and review["context"] != _digest(plan["context_review"]):
+            return False
+        if "reference_review" in plan and (numeric or "context_review" in plan
+                or review["reference"] != _digest(plan["reference_review"])):
             return False
         if numeric:
             operation = numeric_operation(plan["proposal"]["intent"])
@@ -151,6 +157,34 @@ def _context_plan_current(plan: dict, hass: Any, data: Any) -> bool:
     )
 
 
+def _reference_plan_current(plan: dict, hass: Any, data: Any) -> bool:
+    if "reference_review" not in plan:
+        return True
+    from .agentcli import loaded_decision_account, decision_account_fingerprint
+    review = plan["reference_review"]
+    account = data.store.get_settings().decision_provider_id
+    cfg = loaded_decision_account(hass, account) if account else None
+    proposal = plan["proposal"]
+    ids = proposal.get("entity_ids")
+    batch = plan.get("decision_batch")
+    return bool(
+        plan.get("ingress") == "chat" and "context_review" not in plan
+        and effective_routing_mode(data.store.get_settings(), "chat") == "hybrid"
+        and isinstance(review, dict) and set(review) == {"account", "model", "language", "proposal"}
+        and all(isinstance(value, str) for value in review.values())
+        and review["language"] in DECISION_REFERENCE_LANGUAGES
+        and cfg and account and review["model"] in
+        DECISION_REFERENCE_EXECUTION_MODELS.get((cfg.kind, cfg.base_url, cfg.model), ())
+        and isinstance(batch, dict) and batch.get("model") == review["model"]
+        and batch.get("language") == review["language"]
+        and review["account"] == decision_account_fingerprint(hass, account)
+        and set(proposal) == {"intent", "entity_ids"}
+        and proposal["intent"] in DECISION_REFERENCE_INTENTS
+        and isinstance(ids, list) and len(ids) == 1 and isinstance(ids[0], str) and ids[0].startswith("light.")
+        and review["proposal"] == _digest(proposal)
+    )
+
+
 def plan_is_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
     """Recheck identity, scope, availability, capabilities and configuration."""
     try:
@@ -172,6 +206,7 @@ def plan_is_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
             and _digest(settings.to_dict()) == plan["settings"]
             and _decision_plan_current(plan, hass, data, token)
             and _context_plan_current(plan, hass, data)
+            and _reference_plan_current(plan, hass, data)
             and proposal["entity_ids"] and set(proposal["entity_ids"]) == set(plan["fingerprints"])
             and all(plan["fingerprints"][eid] is not None and
                     _target_fingerprint(hass, token, eid, proposal["intent"]) == plan["fingerprints"][eid]

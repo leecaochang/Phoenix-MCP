@@ -431,3 +431,20 @@ async def test_preview_of_decision_candidate_reviews_full_history_without_plan(h
     assert seen[1]['state']['history'] == HISTORY
     assert '_plan' not in json.dumps(result) and not data.store.get_pending_approvals()
     dispatch.assert_not_called()
+
+
+async def test_explicit_candidate_decline_preserves_fallback_in_context_preview(hass, context_home):
+    data, token, *_ = context_home
+    async def response(*args):
+        payload = args[4]
+        selected = {'route': 'provider', 'target': 'none'}
+        return {'model': 'jev-1.13.0', 'answers': {
+            name: {'type': 'choice', 'choice': selected[name], 'confidence': 1,
+                   'probabilities': {key: float(key == selected[name]) for key in spec['criteria']}}
+            for name, spec in payload['questions'].items()}}
+    history = [{'role': 'user', 'content': 'turn on Desk lamp'}, {'role': 'assistant', 'content': 'Command sent.'}]
+    with patch.object(DecisionProvider, '_request', side_effect=response) as request:
+        result = await async_preview_context(hass, data, token, 'turn it off', 'en', history,
+                                              {'reason': 'no_match', 'proposal': None})
+    request.assert_awaited_once()
+    assert result['reason'] == 'provider_fallback'

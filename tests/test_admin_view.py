@@ -2955,6 +2955,10 @@ async def test_command_preview_requires_admin(authenticated, admin, status):
     {"token_id": [], "sentence": "x"}, {"token_id": "t", "sentence": " "},
     {"token_id": "t", "sentence": "x" * 513},
     {"token_id": "t", "sentence": "x", "language": "fr"},
+    {"token_id": "t", "sentence": "x", "references": True},
+    {"token_id": "t", "sentence": "x", "decision": True, "references": True},
+    {"token_id": "t", "sentence": "x", "references": 1},
+    {"token_id": "t", "sentence": "x", "references": "true"},
     {"token_id": "t", "sentence": "x", "targets": True},
     {"token_id": "t", "sentence": "x", "batch": True},
     {"token_id": "t", "sentence": "x", "decision": True, "targets": True, "numeric": True},
@@ -3004,7 +3008,8 @@ async def test_command_preview_is_scoped_inert_and_does_not_record_voice_observa
 
 
 @pytest.mark.parametrize("change", [None, "context_changed", "authority_changed"])
-async def test_command_preview_context_opt_in_and_stale_disclosure(hass, token_store, change):
+@pytest.mark.parametrize("references", [False, True])
+async def test_command_preview_context_opt_in_and_stale_disclosure(hass, token_store, change, references):
     token, _ = await token_store.async_create_token("preview_context", "admin")
     data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
@@ -3021,10 +3026,11 @@ async def test_command_preview_context_opt_in_and_stale_disclosure(hass, token_s
         return {"reason": change or "compatible", "decision": None, "executed": False}
 
     with (patch("custom_components.phoenix_mcp.command_routing.async_evaluate_command", AsyncMock(return_value=local)),
-          patch("custom_components.phoenix_mcp.decision_context.async_preview_context", side_effect=context) as review,
+          patch("custom_components.phoenix_mcp." + ("decision_reference.async_preview_reference" if references else
+                "decision_context.async_preview_context"), side_effect=context) as review,
           patch("custom_components.phoenix_mcp.decision_shadow.async_preview_decision") as old_review):
         response = await view.post(_make_admin_request(body=json.dumps({
-            "token_id": token.id, "sentence": "turn on Desk lamp", "decision": True, "messages": history,
+            "token_id": token.id, "sentence": "turn on Desk lamp", "decision": True, "messages": history, "references": references,
         }).encode()))
     assert response.status == 200
     review.assert_awaited_once()

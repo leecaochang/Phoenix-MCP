@@ -1693,7 +1693,7 @@ DECISION_TIMEOUT_MAX_MS = 30000
 DECISION_MAX_RESPONSE_BYTES = 65536
 DECISION_METRIC_SAMPLES = 256
 DECISION_METRIC_SCOPES = frozenset({"preview", "voice", "chat", "voice_shadow", "chat_shadow"})
-DECISION_METRIC_OPERATIONS = frozenset({"classify", "target", "context", "batch"})
+DECISION_METRIC_OPERATIONS = frozenset({"classify", "target", "context", "batch", "reference"})
 DECISION_CONTEXT_MAX_MESSAGES = 32
 DECISION_CONTEXT_MAX_BYTES = 16384
 DECISION_CONTEXT_MAX_DEPTH = 16
@@ -1708,6 +1708,29 @@ DECISION_CONTEXT_CHECKS = {
     },
 }
 DECISION_CONTEXT_REQUIRED_CHOICES = {"request": "immediate", "constraints": "clear"}
+# Singular references have separate qualification from self-contained commands.
+DECISION_REFERENCE_LANGUAGES = frozenset({"en"})
+DECISION_REFERENCE_INTENTS = frozenset({"HassTurnOn", "HassTurnOff", "HassGetState"})
+DECISION_REFERENCE_EXECUTION_MODELS = {
+    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
+    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
+}
+DECISION_REFERENCE_CHECKS = {
+    "route": {
+        "light_on": "The latest message requests turning the one referenced light on now.",
+        "light_off": "The latest message requests turning the one referenced light off now.",
+        "state_query": "The latest message requests only the current on/off state of the one referenced light.",
+        "provider": "Anything else, including explanation, translation, negation, delay, conditions, numeric or relative adjustments, multiple requests or uncertainty.",
+    },
+    "reference": {
+        "bound": "The latest singular reference refers to the anchored light, which remains the clear conversational subject. This identifies the device, not whether an earlier action succeeded.",
+        "unresolved": "The latest message names a target explicitly, has no singular reference, refers elsewhere, has competing referents, or its reference is uncertain.",
+    },
+    "constraints": {
+        "clear": "No earlier user restriction prevents the operation requested in the latest message. A read-only restriction permits a state query, even when earlier commands requested changes.",
+        "restricted": "An earlier user restriction prevents the latest requested operation, an applicable condition remains unresolved, or permission under earlier user instructions is uncertain.",
+    },
+}
 # Initial evaluated revisions only; every adapter remains eligible for inert previews.
 DECISION_CONTEXT_EXECUTION_MODELS = {
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),

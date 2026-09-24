@@ -2354,12 +2354,14 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
             return body
         sentence = body.get("sentence")
         token_id = body.get("token_id")
-        if (set(body) - {"token_id", "sentence", "language", "decision", "targets", "messages", "batch", "numeric"}
+        if (set(body) - {"token_id", "sentence", "language", "decision", "targets", "messages", "batch", "numeric", "references"}
                 or not isinstance(sentence, str) or not sentence.strip()
                 or len(sentence) > MAX_SEARCH_QUERY_LEN
                 or not isinstance(token_id, str)
                 or routing_language(body.get("language", "en"), preview=True) is None
                 or type(body.get("decision", False)) is not bool
+                or type(body.get("references", False)) is not bool
+                or (body.get("references") and "messages" not in body)
                 or type(body.get("batch", False)) is not bool
                 or type(body.get("numeric", False)) is not bool or (body.get("numeric") and not body.get("batch"))
                 or (body.get("batch") and (not body.get("decision") or not body.get("targets") or "messages" in body))
@@ -2377,7 +2379,11 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
         language = body.get("language", "en")
         result = await async_evaluate_command(self.hass, data, token, sentence, language, preview=True)
         if "messages" in body:
-            result["context_review"] = await async_preview_context(
+            reviewer = async_preview_context
+            if body.get("references"):
+                from .decision_reference import async_preview_reference
+                reviewer = async_preview_reference
+            result["context_review"] = await reviewer(
                 self.hass, data, token, sentence, language, body["messages"], result)
             if result["context_review"]["reason"] in ("context_changed", "authority_changed"):
                 result.update(route="provider", reason=result["context_review"]["reason"], proposal=None)

@@ -331,7 +331,18 @@ async def _async_review_decision_context(hass: Any, data: Any, token: Any, sente
             if cancel is not None and cancel.is_set():
                 return result("cancelled")
             if not proposal:
-                return result(candidate.get("target_selection", {}).get("reason", candidate["reason"]))
+                reason = candidate.get("target_selection", {}).get("reason", candidate["reason"])
+                if prepare and reason in ("provider_fallback", "target_declined"):
+                    from .decision_reference import async_prepare_chat_reference, reference_execution_eligible
+                    if reference_execution_eligible(hass, data, lang):
+                        assert cancel is not None
+                        # A separate history-based reference check, never a retry after an error or low probability.
+                        review = await async_prepare_chat_reference(hass, data, current, sentence, lang, history, local, cancel)
+                        if review["reason"] in ("local_unavailable", "invalid_context", "unsupported_language"):
+                            return result(reason)
+                        review["elapsed_ms"] = round((monotonic() - started) * 1000, 2)
+                        return review
+                return result(reason)
             review = await _async_review_context(hass, data, current, sentence, lang, history,
                 {"reason": "supported", "proposal": proposal}, prepare=prepare, cancel=cancel,
                 source_plan=source_plan, decision_candidate=True)
