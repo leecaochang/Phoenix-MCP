@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { GlobalSettings } from "../types";
 
@@ -180,8 +180,9 @@ it("repairs an existing unavailable model through the fetched picker", async () 
   mocks.list.mockResolvedValue({ instances: [{ id: "decision", name: "JEV", model: "abcdefg" }], provider_types: types });
   mocks.setModel.mockResolvedValue({ instance: { id: "decision", model: "jev-latest" } });
   render(<DecisionProviderSettings settings={settings} onChange={vi.fn()} saving={false} />);
-  await screen.findByText("abcdefg (no longer available)");
+  await screen.findByText("Default model: abcdefg");
   fireEvent.click(screen.getByRole("button", { name: "Change default model" }));
+  await screen.findByRole("option", { name: "jev-latest" });
   fireEvent.change(screen.getByLabelText("Model for JEV"), { target: { value: "jev-latest" } });
   expect(mocks.setModel).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -202,6 +203,7 @@ it("shows the default model and shared actions, with cancellable edits", async (
     expect(button.querySelector("svg")).not.toBeNull();
   }
   fireEvent.click(screen.getByRole("button", { name: "Change default model" }));
+  await screen.findByRole("option", { name: "jev-1.13.0" });
   fireEvent.change(screen.getByLabelText("Model for JEV"), { target: { value: "jev-1.13.0" } });
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   expect(mocks.setModel).not.toHaveBeenCalled();
@@ -231,10 +233,40 @@ it("preserves the model and draft after a failed save", async () => {
   render(<DecisionProviderSettings settings={settings} onChange={vi.fn()} saving={false} />);
   await screen.findByText("Default model: jev-latest");
   fireEvent.click(screen.getByRole("button", { name: "Change default model" }));
+  await screen.findByRole("option", { name: "jev-1.13.0" });
   fireEvent.change(screen.getByLabelText("Model for JEV"), { target: { value: "jev-1.13.0" } });
   fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await screen.findByRole("alert");
   expect(screen.getByLabelText("Model for JEV")).toHaveValue("jev-1.13.0");
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   expect(screen.getByText("Default model: jev-latest")).toBeVisible();
+});
+
+
+it("opens saved accounts without contacting an offline decision server", async () => {
+  mocks.list.mockResolvedValue({ instances: [
+    { id: "remote", name: "JEV", model: "jev-latest" },
+    { id: "local", name: "Local decision", model: "local-model" },
+  ], provider_types: types });
+  mocks.models.mockRejectedValue(new Error("Connection failed."));
+  const change = vi.fn();
+  render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "remote" }} onChange={change} saving={false} />);
+  await screen.findByText("Default model: local-model");
+  expect(mocks.models).not.toHaveBeenCalled();
+  expect(mocks.refresh).not.toHaveBeenCalled();
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(screen.getByRole("radio", { name: "JEV" })).toBeChecked();
+  const row = screen.getByRole("radio", { name: "Local decision" }).closest(".agentcli-settings-provider") as HTMLElement;
+  fireEvent.click(within(row).getByRole("button", { name: "Change default model" }));
+  await screen.findByText("Connection failed.");
+  expect(mocks.models).toHaveBeenCalledExactlyOnceWith("local");
+  expect(screen.getByLabelText("Model for Local decision")).toHaveValue("local-model");
+  expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(change).not.toHaveBeenCalled();
+  mocks.models.mockResolvedValue({ models: ["local-model", "new-model"] });
+  fireEvent.click(within(row).getByRole("button", { name: "Change default model" }));
+  await screen.findByRole("option", { name: "new-model" });
+  expect(screen.queryByRole("alert")).toBeNull();
 });

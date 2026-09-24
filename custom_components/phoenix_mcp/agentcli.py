@@ -4789,7 +4789,12 @@ class PhoenixAgentCliModelsView(PhoenixView):
                 key="providerNotConfigured",
             )
         session = async_get_clientsession(self.hass)
-        models = await _build_setup_provider(cfg).list_models(session)
+        from .decision_provider import DecisionError
+        try:
+            models = await _build_setup_provider(cfg).list_models(session)
+        except DecisionError:
+            return _err("invalid_request", "Could not connect to the decision provider.", 400, rid,
+                        key="providerConnectionFailedNoDetail")
         return _ok({"models": models}, request_id=rid)
 
 
@@ -4823,8 +4828,13 @@ class PhoenixAgentCliRefreshView(PhoenixView):
             )
         session = async_get_clientsession(self.hass)
         provider = _build_setup_provider(cfg)
-        models = await provider.list_models(session)
-        capabilities = await provider.list_model_capabilities(session, models)
+        from .decision_provider import DecisionError
+        try:
+            models = await provider.list_models(session)
+            capabilities = await provider.list_model_capabilities(session, models)
+        except DecisionError:
+            return _err("invalid_request", "Could not connect to the decision provider.", 400, rid,
+                        key="providerConnectionFailedNoDetail")
         checked_at = utcnow().isoformat()
         if not await store.set_capabilities(instance_id, capabilities, checked_at):
             return _err(

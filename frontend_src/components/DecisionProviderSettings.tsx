@@ -36,11 +36,7 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
       if (!mounted.current || current !== generation.current) return;
       setAccounts(response.instances);
       setTypes(response.provider_types);
-      const catalogs = await Promise.allSettled(response.instances.map(async account =>
-        [account.id, (await api.getAgentCliModels(account.id)).models] as const));
-      if (!mounted.current || current !== generation.current) return;
-      setModels(Object.fromEntries(catalogs.flatMap(result => result.status === "fulfilled" ? [result.value] : [])));
-      if (catalogs.some(result => result.status === "rejected")) setError(t("routing.failed"));
+      setError("");
     } catch {
       if (mounted.current && current === generation.current) setError(t("routing.failed"));
     }
@@ -54,6 +50,25 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
   function selectAccount(id: string) {
     selectionVersion.current++;
     onChange("decision_provider_id", id);
+  }
+
+  async function editModel(account: AgentCliInstance) {
+    setEditing(account.id);
+    setModelDraft(account.model ?? "");
+    setError("");
+    if (models[account.id]) return;
+    setBusy(true);
+    const current = ++generation.current;
+    try {
+      const response = await api.getAgentCliModels(account.id);
+      if (!mounted.current || current !== generation.current) return;
+      setModels(previous => ({ ...previous, [account.id]: response.models }));
+    } catch (cause) {
+      if (mounted.current && current === generation.current)
+        setError(cause instanceof Error ? cause.message : t("settings.agentcliConnectionFailed"));
+    } finally {
+      if (mounted.current && current === generation.current) setBusy(false);
+    }
   }
 
   async function changeModel(id: string, model: string) {
@@ -147,7 +162,7 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
         </div>
         {editing !== account.id && <div className="agentcli-account-actions">
           <IconButton label={t("settings.agentcliChangeModel")} disabled={saving || busy}
-            onClick={() => { setEditing(account.id); setModelDraft(account.model ?? ""); setError(""); }}><EditIcon /></IconButton>
+            onClick={() => void editModel(account)}><EditIcon /></IconButton>
           <IconButton label={t("settings.agentcliRefresh")} busyLabel={t("settings.agentcliRefreshing")}
             busy={refreshing === account.id} disabled={saving || busy} onClick={() => void refresh(account.id)}><RefreshIcon /></IconButton>
           <IconButton label={t("settings.agentcliProbeCaps")} expanded={options === account.id} disabled={saving || busy}

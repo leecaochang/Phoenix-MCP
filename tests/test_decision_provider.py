@@ -342,3 +342,20 @@ def test_validation_diagnostics_preserve_strict_checks_without_response_data(cha
         parse_choice(body, DECISION_ROUTE_CHOICES)
     assert error.value.check == check
     assert 'private' not in str(error.value) + repr(vars(error.value))
+
+
+@pytest.mark.parametrize('view_class,method', [
+    (agentcli.PhoenixAgentCliModelsView, 'get'), (agentcli.PhoenixAgentCliRefreshView, 'post'),
+])
+@pytest.mark.parametrize('reason', ['unavailable', 'timeout', 'authentication'])
+async def test_offline_decision_catalog_is_a_handled_error_without_account_changes(hass, decision_home, view_class, method, reason):
+    _, _, store, account = decision_home
+    before = copy.deepcopy(store.get(account))
+    view = MagicMock(hass=hass)
+    with patch.object(DecisionProvider, 'list_models', side_effect=DecisionError(reason)):
+        response = await getattr(view_class, method).__wrapped__(view, {'phoenix_mcp_rid': 'test'}, account)
+    assert response.status == 400
+    body = json.loads(response.text)
+    assert body['message_key'].endswith('providerConnectionFailedNoDetail')
+    assert 'test-secret' not in response.text
+    assert store.get(account) == before
