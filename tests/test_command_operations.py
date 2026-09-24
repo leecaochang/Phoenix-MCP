@@ -54,7 +54,7 @@ async def numeric_home(hass, token_store, request):
                            sentence=sentence, area=area.id)
 
 
-async def run_numeric(hass, home, sentence, ingress="voice"):
+async def run_numeric(hass, home, sentence, ingress="voice", history=()):
     """Leave recognition, planning, authorization and dispatch real."""
     async def stream(*args, **kwargs):
         yield {"type": agentcli.EV_TEXT, "text": "Normal provider reply"}
@@ -76,7 +76,7 @@ async def run_numeric(hass, home, sentence, ingress="voice"):
         else:
             result = await agentcli.async_run_agent_turn(
                 hass=hass, data=home.data, token=home.token, provider=provider, session=None,
-                messages=[{"role": "user", "content": sentence}], options={}, client_ip="agentcli",
+                messages=[*history, {"role": "user", "content": sentence}], options={}, client_ip="agentcli",
                 base_url="http://test", emit=emit, cancel=asyncio.Event(), routing_language="en")
     decision.assert_not_called()
     return result, voice, provider, events
@@ -100,6 +100,27 @@ async def test_exact_values_reach_existing_service_without_either_model(hass, nu
         assert result[0] == {"role": "user", "content": home.sentence.format(value=value)}
         assert result[-1] == {"role": "assistant", "content": "Command sent."}
     assert not home.data.agent_recovery.records(home.token.id)
+
+
+async def test_numeric_chat_sequence_preserves_values_history_and_fresh_capabilities(hass, numeric_home):
+    home = numeric_home
+    history = []
+    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+        for value in (37, 0, 100):
+            previous = copy.deepcopy(history)
+            history, _, provider, _ = await run_numeric(
+                hass, home, home.sentence.format(value=value), "chat", history)
+            provider.stream_turn.assert_not_called()
+            assert history[:-2] == previous
+            assert history[-1]["content"] == "Command sent."
+            assert call.await_args.args[2][home.service_field] == (value / 100 if home.domain == "media_player" else value)
+        assert call.await_count == 3
+        # A known conversation cannot authorize a target that lost its support.
+        hass.states.async_set(home.entity_id, "on", {"friendly_name": home.name})
+        _, _, provider, _ = await run_numeric(hass, home, home.sentence.format(value=50), "chat", history)
+        provider.stream_turn.assert_called_once()
+        assert call.await_count == 3
 
 
 @pytest.mark.parametrize("value", [True, None, "37", -1, 101, float("inf"), float("nan"), 10 ** 400])

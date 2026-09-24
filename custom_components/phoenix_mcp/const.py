@@ -1655,6 +1655,10 @@ VOICE_TEMPLATES: dict[str, str] = {
 COMMAND_ROUTING_SETTINGS_VERSION = 1
 COMMAND_ROUTING_MODES = frozenset({"off", "auto", "local_shadow", "local", "hybrid"})
 CHAT_COMMAND_ROUTING_MODES = frozenset({"off", "auto", "local", "hybrid"})
+CHAT_ROUTING_HISTORY_LIMIT = 128
+CHAT_ROUTING_HISTORY_TTL_SECONDS = 1800
+CHAT_ROUTING_HISTORY_MAX_MESSAGES = 128
+CHAT_ROUTING_HISTORY_MAX_BYTES = 65536
 # Canonical routing tags map to the HA sentence variant; previews use the same set.
 COMMAND_ROUTING_LANGUAGES = {"en": "en", "zh-Hans": "zh-CN", "es": "es"}
 COMMAND_ROUTING_DEFAULT_LANGUAGES = ("en",)

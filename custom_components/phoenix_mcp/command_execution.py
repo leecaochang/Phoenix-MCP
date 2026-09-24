@@ -151,6 +151,7 @@ class LocalCommandReply:
     text: str
     outcome: str = "ok"
     pending: dict | None = None
+    allows_local_followup: bool = False
 
 
 async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
@@ -223,13 +224,15 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
         if not plan_is_current(plan, hass, data, token):
             return LocalCommandReply(voice_text(language, "token_unavailable"))
         state = payload.get("state")
-        return LocalCommandReply(voice_text(language, "local_state", state=state) if isinstance(state, str) and len(state) <= 255
-                                 else voice_text(language, "local_read_failed"))
+        if isinstance(state, str) and len(state) <= 255:
+            return LocalCommandReply(voice_text(language, "local_state", state=state), allows_local_followup=True)
+        return LocalCommandReply(voice_text(language, "local_read_failed"))
     if payload.get("partial") or payload.get("success") is not True:
         return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
     warnings = payload.get("mesa_advisory", [])
     advisory = " ".join(warning for warning in warnings if isinstance(warning, str)) if isinstance(warnings, list) else ""
-    return LocalCommandReply(voice_text(language, "local_sent") + (f" {advisory}" if advisory else ""))
+    return LocalCommandReply(voice_text(language, "local_sent") + (f" {advisory}" if advisory else ""),
+                             allows_local_followup=not warnings)
 
 
 @recovery_turn

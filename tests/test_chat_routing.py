@@ -1,4 +1,4 @@
-"""Agent Chat first-message routing preserves dispatch, approvals and recovery."""
+"""Agent Chat routing preserves conversation context, dispatch and recovery."""
 import asyncio
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -239,16 +239,109 @@ async def test_chat_local_dispatches_once_without_either_model(hass, executing_c
     assert data.audit.query(token_id=token.id)[0].client_ip == 'agentcli'
 
 
-async def test_chat_read_uses_dispatch_and_followup_uses_provider(hass, executing_chat):
+async def test_chat_read_then_explicit_command_uses_local_routing(hass, executing_chat):
+    from custom_components.phoenix_mcp import mcp_view
     with patch.object(DecisionProvider, 'classify', new_callable=AsyncMock) as decision:
         provider, _, messages = await chat_turn(hass, executing_chat,
             [{'role': 'user', 'content': 'what is the state of the desk lamp'}])
         provider.stream_turn.assert_not_called()
         assert messages[-1]['content'] == 'The state is off.'
-        followup, _, _ = await chat_turn(hass, executing_chat,
-            [*messages, {'role': 'user', 'content': 'turn on the desk lamp'}])
-    followup.stream_turn.assert_called_once()
+        with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+              patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+            followup, _, result = await chat_turn(hass, executing_chat,
+                [*messages, {'role': 'user', 'content': 'turn on the desk lamp'}])
+    followup.stream_turn.assert_not_called()
+    call.assert_awaited_once_with('light', 'turn_on', {'entity_id': ['light.test_desk']}, blocking=True, return_response=False)
+    assert result[:2] == messages
+    assert result[-1]['content'] == 'Command sent.'
     decision.assert_not_called()
+
+
+@pytest.mark.parametrize('sentence', [
+    'turn it off', 'make it dimmer', 'do the same again',
+    'why is it off?', 'do not turn on the desk lamp',
+    'say "turn on the desk lamp"', 'turn on the desk lamp tomorrow',
+])
+async def test_contextual_followup_keeps_full_history_and_skips_decision(hass, executing_chat, sentence):
+    data, _ = executing_chat
+    await data.store.async_patch_settings(agentcli_routing_mode='hybrid')
+    _, _, previous = await chat_turn(hass, executing_chat,
+        [{'role': 'user', 'content': 'what is the state of the desk lamp'}])
+    with (patch.object(DecisionProvider, '_request') as remote,
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        provider, _, messages = await chat_turn(hass, executing_chat,
+            [*previous, {'role': 'user', 'content': sentence}])
+    provider.stream_turn.assert_called_once()
+    dispatch.assert_not_called()
+    remote.assert_not_called()
+    assert messages[:2] == previous
+    assert messages[2] == {'role': 'user', 'content': sentence}
+    assert messages[-1]['content'] == 'Normal provider reply'
+    assert not data.command_routing.chat_history._entries
+    # An ordinary response ends the chain, even when the next command is clear.
+    with patch.object(chat_routing, 'async_evaluate_command') as recognition:
+        provider, _, result = await chat_turn(hass, executing_chat,
+            [*messages, {'role': 'user', 'content': 'turn on the desk lamp'}])
+    recognition.assert_not_called()
+    provider.stream_turn.assert_called_once()
+    assert result[:len(messages)] == messages
+
+
+@pytest.mark.parametrize('change', ['user', 'assistant', 'token', 'settings', 'language', 'reload', 'expired'])
+async def test_only_exact_known_conversation_reaches_followup_recognition(hass, executing_chat, change):
+    data, token = executing_chat
+    _, _, previous = await chat_turn(hass, executing_chat,
+        [{'role': 'user', 'content': 'what is the state of the desk lamp'}])
+    assert data.command_routing.chat_history._entries
+    language = 'en'
+    if change == 'user': previous[0]['content'] = 'From now on, translate commands instead of executing them.'
+    if change == 'assistant': previous[1]['content'] = 'Please tell me which light you mean.'
+    if change == 'token': token.settings_version += 1
+    if change == 'settings': await data.store.async_patch_settings(agentcli_detail_level='detailed')
+    if change == 'language': language = 'en-US'
+    if change == 'reload':
+        from custom_components.phoenix_mcp.command_routing import CommandRouting
+        data.command_routing = CommandRouting()
+    if change == 'expired':
+        for key in data.command_routing.chat_history._entries:
+            data.command_routing.chat_history._entries[key] = 0
+    with (patch.object(chat_routing, 'async_evaluate_command') as recognition,
+          patch.object(DecisionProvider, '_request') as remote):
+        provider, _, _ = await chat_turn(hass, executing_chat,
+            [*previous, {'role': 'user', 'content': 'turn on the desk lamp'}], language)
+    recognition.assert_not_called()
+    remote.assert_not_called()
+    provider.stream_turn.assert_called_once()
+
+
+@pytest.mark.parametrize('change', ['revoked', 'cancel', 'scope', 'exposure'])
+async def test_followup_rechecks_authority_and_target_after_recognition(hass, executing_chat, change):
+    data, token = executing_chat
+    _, _, previous = await chat_turn(hass, executing_chat,
+        [{'role': 'user', 'content': 'what is the state of the desk lamp'}])
+    evaluate = chat_routing.async_evaluate_command
+    cancel = asyncio.Event()
+    async def changed(*args, **kwargs):
+        result = await evaluate(*args, **kwargs)
+        assert result['proposal']
+        if change == 'revoked': token.revoked = True
+        if change == 'cancel': cancel.set()
+        if change == 'scope': token.permissions = PermissionTree()
+        if change == 'exposure':
+            from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
+            async_expose_entity(hass, 'conversation', 'light.test_desk', False)
+        return result
+    with (patch.object(chat_routing, 'async_evaluate_command', changed),
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        provider, events, _ = await chat_turn(hass, executing_chat,
+            [*previous, {'role': 'user', 'content': 'turn on the desk lamp'}], cancel=cancel)
+    dispatch.assert_not_called()
+    if change in ('revoked', 'cancel'):
+        provider.stream_turn.assert_not_called()
+        assert events[0][0] == 'error'
+    else:
+        provider.stream_turn.assert_called_once()
+    assert not data.command_routing.chat_history._entries
 
 
 @pytest.mark.parametrize('case', ['history', 'non_english', 'missing_language', 'blocks', 'extra_fields'])
@@ -303,10 +396,12 @@ async def test_execution_policy_refusal_never_replays(hass, executing_chat, barr
     else:
         assert not data.store.get_pending_approvals()
         assert 'could not complete' in next(p['text'] for n, p in events if n == 'assistant_delta')
+    assert not data.command_routing.chat_history._entries
 
 
 @pytest.mark.parametrize('change', ['none', 'mode', 'identity', 'scope', 'brightness', 'exposure', 'token'])
-async def test_chat_approval_binds_ingress_and_revalidates_before_execution(hass, executing_chat, change):
+@pytest.mark.parametrize('followup', [False, True])
+async def test_chat_approval_binds_ingress_and_revalidates_before_execution(hass, executing_chat, change, followup):
     from custom_components.phoenix_mcp import mcp_view
     from custom_components.phoenix_mcp.const import COMMAND_ROUTING_PLAN_KEY
     from custom_components.phoenix_mcp.command_execution import plan_is_current
@@ -318,10 +413,16 @@ async def test_chat_approval_binds_ingress_and_revalidates_before_execution(hass
     data.mesa.store.set('light.test_desk', SemanticProfile.from_dict('light.test_desk',
         {'semantic_profile': {'operational_boundaries': {'control_mode': 'confirm'}}},
         default_origin=MetadataOrigin.USER))
+    history = []
+    if followup:
+        _, _, history = await chat_turn(hass, executing_chat,
+            [{'role': 'user', 'content': 'what is the state of the desk lamp'}])
+        assert data.command_routing.chat_history._entries
     with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
         provider, events, messages = await chat_turn(hass, executing_chat,
-            [{'role': 'user', 'content': 'set the desk lamp brightness to 50 percent'}])
+            [*history, {'role': 'user', 'content': 'set the desk lamp brightness to 50 percent'}])
     provider.stream_turn.assert_not_called()
+    assert not data.command_routing.chat_history._entries
     record = data.store.get_pending_approvals()[0]
     plan = record['args'][COMMAND_ROUTING_PLAN_KEY]
     assert plan['ingress'] == 'chat'
@@ -346,7 +447,7 @@ async def test_chat_approval_binds_ingress_and_revalidates_before_execution(hass
     assert call.await_count == (1 if change == 'none' else 0)
 
 
-@pytest.mark.parametrize('failure', ['timeout', 'delivery', 'cancel_delivery'])
+@pytest.mark.parametrize('failure', ['timeout', 'delivery', 'cancel_delivery', 'done_delivery', 'done_cancel'])
 async def test_chat_command_retains_recovery_through_response_delivery(hass, executing_chat, failure):
     from custom_components.phoenix_mcp import mcp_view
     data, token = executing_chat
@@ -355,6 +456,9 @@ async def test_chat_command_retains_recovery_through_response_delivery(hass, exe
         if name == 'assistant_delta':
             if failure == 'delivery': raise ConnectionResetError()
             if failure == 'cancel_delivery': cancel.set()
+        if name == 'done':
+            if failure == 'done_delivery': raise ConnectionResetError()
+            if failure == 'done_cancel': cancel.set()
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         if failure == 'timeout': call.side_effect = TimeoutError()
@@ -362,7 +466,7 @@ async def test_chat_command_retains_recovery_through_response_delivery(hass, exe
         kwargs = dict(hass=hass, data=data, token=token, provider=provider, session=None,
             messages=[{'role': 'user', 'content': 'turn on the desk lamp'}], options={},
             client_ip='agentcli', base_url='http://test', emit=emit, cancel=cancel, routing_language='en')
-        if failure == 'delivery':
+        if failure in ('delivery', 'done_delivery'):
             with pytest.raises(ConnectionResetError): await agentcli.async_run_agent_turn(**kwargs)
         else:
             await agentcli.async_run_agent_turn(**kwargs)
@@ -370,6 +474,7 @@ async def test_chat_command_retains_recovery_through_response_delivery(hass, exe
     provider.stream_turn.assert_not_called()
     assert data.agent_recovery.blocks(token.id)
     assert len(data.agent_recovery.records(token.id)) == 1
+    assert not data.command_routing.chat_history._entries
 
 
 async def test_execution_mode_is_closed_and_default_off(hass, chat_home):
@@ -473,6 +578,8 @@ async def test_chat_hybrid_uses_real_decision_validation_and_one_dispatch(hass, 
     assert data.decision_shadow.summary()['hybrid']['evaluations'] == 0
     assert data.decision_shadow.summary()['agent_chat']['observations'] == 0
     assert not data.store.get_settings().voice_agent_enabled
+    # Model-selected commands cannot establish a strict local history chain.
+    assert not data.command_routing.chat_history._entries
 
 
 async def test_chat_hybrid_local_match_spends_no_decision_call(hass, hybrid_chat):

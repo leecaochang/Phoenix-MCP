@@ -10,6 +10,7 @@ from typing import Any, TYPE_CHECKING
 
 from homeassistant.core import HomeAssistant
 
+from .chat_routing_history import ChatRoutingHistory
 from .command_operations import command_domain, numeric_operation, supports_command
 from .const import (
     COMMAND_ROUTING_INTENTS, COMMAND_ROUTING_TARGET_SLOTS, COMMAND_ROUTING_LANGUAGES,
@@ -45,6 +46,7 @@ class CommandRouting:
     total_elapsed_ms: float = 0
     chat_reasons: dict[str, int] = field(default_factory=dict)
     chat_candidates: int = 0
+    chat_history: ChatRoutingHistory = field(default_factory=ChatRoutingHistory, repr=False)
 
     def observe(self, result: dict, *, chat: bool = False) -> None:
         """Retain separate aggregate counts, without utterances or entity IDs."""
