@@ -11,7 +11,7 @@ from homeassistant.core import State
 from .command_operations import numeric_operation, service_arguments, finite_number
 from .const import (
     COMMAND_VERIFICATION_POLL_SECONDS, COMMAND_VERIFICATION_WAIT_SECONDS,
-    COMMAND_VERIFICATION_TOLERANCES, COMMAND_ROUTING_NUMERIC_STATE, COMMAND_ROUTING_TEMPORAL_OPERATIONS,
+    COMMAND_VERIFICATION_TOLERANCES, COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_NUMERIC_STATE, COMMAND_ROUTING_TEMPORAL_OPERATIONS,
 )
 from .request_authority import RequestAuthority
 
@@ -24,6 +24,13 @@ def state_matches(proposal: dict, state: State | None, timezone: str = "UTC") ->
     intent = proposal.get("intent")
     if intent in ("HassTurnOn", "HassTurnOff"):
         return state.state == ("on" if intent == "HassTurnOn" else "off")
+    if intent in COMMAND_ROUTING_ENTITY_INTENTS:
+        spec = COMMAND_ROUTING_ENTITY_INTENTS[intent]
+        if spec[2]:
+            field = None if spec[0] in ("text", "input_text", "select", "input_select") or spec[2] in ("hvac_mode", "operation_mode") else spec[2]
+            return (state.attributes.get(field) if field else state.state) == proposal.get("value")
+        # Momentary actions cannot be confirmed merely from an unchanged state.
+        return bool(spec[5] and state.state == spec[5])
     if intent in COMMAND_ROUTING_TEMPORAL_OPERATIONS:
         from .temporal_values import temporal_state_matches
         return temporal_state_matches(proposal, state, timezone)

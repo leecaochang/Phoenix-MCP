@@ -7,11 +7,11 @@ from typing import Any
 
 from homeassistant.helpers import area_registry as ar, entity_registry as er
 
-from .command_operations import numeric_metadata
+from .command_operations import numeric_metadata, command_domain
 from .command_execution import _target_fingerprint, _digest
 from .const import (
     DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES, DECISION_MAX_TARGET_TEXT,
-    DECISION_MAX_TARGET_ALIASES, DECISION_TARGET_INTENTS, COMMAND_ROUTING_TEMPORAL_OPERATIONS,
+    DECISION_MAX_TARGET_ALIASES, DECISION_TARGET_INTENTS, COMMAND_ROUTING_TEMPORAL_OPERATIONS, COMMAND_ROUTING_ENTITY_INTENTS,
 )
 from .decision_provider import DecisionError
 from .device_semantics import DeviceRegistrySnapshot, device_registry_snapshot
@@ -60,7 +60,7 @@ def capture_targets(hass: Any, token: Any, category: str, *,
             raise CatalogLimitError(category, "text_length", len(value), DECISION_MAX_TARGET_TEXT)
         return redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(value) or "", token, hass)
 
-    for state in sorted(hass.states.async_all(), key=lambda item: item.entity_id):
+    for state in sorted(hass.states.async_all(command_domain(intent)), key=lambda item: item.entity_id):
         entity_id = state.entity_id
         fingerprint = _target_fingerprint(hass, token, entity_id, intent, devices=devices)
         if fingerprint is None:
@@ -82,6 +82,14 @@ def capture_targets(hass: Any, token: Any, category: str, *,
             "aliases": sorted(text(alias) for alias in er.async_get_entity_aliases(hass, entry)),
             "area": text(area.name) if area else "",
         }
+        if intent in COMMAND_ROUTING_ENTITY_INTENTS:
+            from .entity_commands import entity_metadata
+            metadata = entity_metadata(state, intent)
+            # Values are choices, so redacting one would silently change its meaning. Decline instead.
+            if any(text(value) != value for value in metadata.get("options", [])):
+                raise DecisionError("context_unavailable")
+            if metadata:
+                descriptor["entity_command"] = metadata
         temporal = COMMAND_ROUTING_TEMPORAL_OPERATIONS.get(intent)
         if temporal:
             descriptor["value_kind"] = temporal[3]

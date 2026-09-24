@@ -1695,6 +1695,7 @@ COMMAND_ROUTING_NUMERIC_OPERATIONS.update({
     "HassHumidifierSetpoint": ("humidifier", "humidity", "humidity", "set_humidity", "humidity", 1, True, ("humidifier",)),
     "PhoenixClimateHumidity": ("climate", "humidity", "humidity", "set_humidity", "humidity", 1, True, ("climate",)),
     "PhoenixWaterTemperature": ("water_heater", "temperature", "temperature", "set_temperature", "temperature", 1, False, ("water_heater",)),
+    "PhoenixCounterValue": ("counter", "value", "value", "set_value", "value", 1, True, ("counter",)),
     "PhoenixNumberValue": ("number", "value", "value", "set_value", "value", 1, False, ("number", "input_number")),
     "PhoenixInputNumberValue": ("input_number", "value", "value", "set_value", "value", 1, False, ("number", "input_number")),
     "PhoenixLightTemperature": ("light", "temperature", "temperature", "turn_on", "color_temp_kelvin", 1, True, ("light",)),
@@ -1720,12 +1721,97 @@ COMMAND_ROUTING_NUMERIC_STATE = {
     "PhoenixClimateHumidity": "humidity", "PhoenixNumberValue": None, "PhoenixInputNumberValue": None,
     "PhoenixLightTemperature": "color_temp_kelvin",
 }
+COMMAND_ROUTING_NATIVE_VALUES |= {"PhoenixCounterValue"}
+COMMAND_ROUTING_NUMERIC_STATE["PhoenixCounterValue"] = None
 COMMAND_ROUTING_SWITCH_SERVICES = {"HassTurnOn": "turn_on", "HassTurnOff": "turn_off"}
 COMMAND_ROUTING_INTENTS = frozenset({*COMMAND_ROUTING_SWITCH_SERVICES, *COMMAND_ROUTING_NUMERIC_OPERATIONS, "HassGetState"})
 COMMAND_ROUTING_TARGET_SLOTS = frozenset({"name", "area", "domain", "device_class"})
 
+# Fixed entity actions and bounded option/text values. No provider-written service names.
+# Domain, service, value field, options attribute, required feature, observed state.
+COMMAND_ROUTING_ENTITY_COMMANDS = {
+    "switch_on": ('switch', 'turn_on', '', '', '', 'on'),
+    "switch_off": ('switch', 'turn_off', '', '', '', 'off'),
+    "input_boolean_on": ('input_boolean', 'turn_on', '', '', '', 'on'),
+    "input_boolean_off": ('input_boolean', 'turn_off', '', '', '', 'off'),
+    "fan_on": ('fan', 'turn_on', '', '', 'TURN_ON', 'on'),
+    "fan_off": ('fan', 'turn_off', '', '', 'TURN_OFF', 'off'),
+    "humidifier_on": ('humidifier', 'turn_on', '', '', '', 'on'),
+    "humidifier_off": ('humidifier', 'turn_off', '', '', '', 'off'),
+    "climate_on": ('climate', 'turn_on', '', '', 'TURN_ON', ''),
+    "climate_off": ('climate', 'turn_off', '', '', 'TURN_OFF', 'off'),
+    "water_heater_on": ('water_heater', 'turn_on', '', '', 'ON_OFF', ''),
+    "water_heater_off": ('water_heater', 'turn_off', '', '', 'ON_OFF', 'off'),
+    "media_player_on": ('media_player', 'turn_on', '', '', 'TURN_ON', ''),
+    "media_player_off": ('media_player', 'turn_off', '', '', 'TURN_OFF', 'off'),
+    "remote_on": ('remote', 'turn_on', '', '', '', 'on'),
+    "remote_off": ('remote', 'turn_off', '', '', '', 'off'),
+    "siren_on": ('siren', 'turn_on', '', '', 'TURN_ON', 'on'),
+    "siren_off": ('siren', 'turn_off', '', '', 'TURN_OFF', 'off'),
+    "switch_toggle": ('switch', 'toggle', '', '', '', ''),
+    "input_boolean_toggle": ('input_boolean', 'toggle', '', '', '', ''),
+    "counter_increment": ('counter', 'increment', '', '', '', ''),
+    "counter_decrement": ('counter', 'decrement', '', '', '', ''),
+    "counter_reset": ('counter', 'reset', '', '', '', ''),
+    "timer_start": ('timer', 'start', '', '', '', ''),
+    "timer_pause": ('timer', 'pause', '', '', '', 'paused'),
+    "timer_cancel": ('timer', 'cancel', '', '', '', 'idle'),
+    "timer_finish": ('timer', 'finish', '', '', '', ''),
+    "button_press": ('button', 'press', '', '', '', ''),
+    "input_button_press": ('input_button', 'press', '', '', '', ''),
+    "cover_open": ('cover', 'open_cover', '', '', 'OPEN', 'open'),
+    "cover_close": ('cover', 'close_cover', '', '', 'CLOSE', 'closed'),
+    "cover_stop": ('cover', 'stop_cover', '', '', 'STOP', ''),
+    "valve_open": ('valve', 'open_valve', '', '', 'OPEN', 'open'),
+    "valve_close": ('valve', 'close_valve', '', '', 'CLOSE', 'closed'),
+    "valve_stop": ('valve', 'stop_valve', '', '', 'STOP', ''),
+    "media_play": ('media_player', 'media_play', '', '', 'PLAY', 'playing'),
+    "media_pause": ('media_player', 'media_pause', '', '', 'PAUSE', 'paused'),
+    "media_stop": ('media_player', 'media_stop', '', '', 'STOP', 'idle'),
+    "media_next_track": ('media_player', 'media_next_track', '', '', 'NEXT_TRACK', ''),
+    "media_previous_track": ('media_player', 'media_previous_track', '', '', 'PREVIOUS_TRACK', ''),
+    "vacuum_start": ('vacuum', 'start', '', '', 'START', 'cleaning'),
+    "vacuum_pause": ('vacuum', 'pause', '', '', 'PAUSE', 'paused'),
+    "vacuum_stop": ('vacuum', 'stop', '', '', 'STOP', ''),
+    "vacuum_return_to_base": ('vacuum', 'return_to_base', '', '', 'RETURN_HOME', 'returning'),
+    "vacuum_locate": ('vacuum', 'locate', '', '', 'LOCATE', ''),
+    "lawn_mower_start_mowing": ('lawn_mower', 'start_mowing', '', '', 'START_MOWING', 'mowing'),
+    "lawn_mower_dock": ('lawn_mower', 'dock', '', '', 'DOCK', 'returning'),
+    "lawn_mower_pause": ('lawn_mower', 'pause', '', '', 'PAUSE', 'paused'),
+    "lock_lock": ('lock', 'lock', '', '', '', 'locked'),
+    "lock_unlock": ('lock', 'unlock', '', '', '', 'unlocked'),
+    "lock_open": ('lock', 'open', '', '', 'OPEN', ''),
+    "scene_activate": ('scene', 'turn_on', '', '', '', ''),
+    "script_on": ('script', 'turn_on', '', '', '', ''),
+    "script_off": ('script', 'turn_off', '', '', '', 'off'),
+    "select_option": ('select', 'select_option', 'option', 'options', '', ''),
+    "input_select_option": ('input_select', 'select_option', 'option', 'options', '', ''),
+    "text_value": ('text', 'set_value', 'value', '', '', ''),
+    "input_text_value": ('input_text', 'set_value', 'value', '', '', ''),
+    "climate_hvac": ('climate', 'set_hvac_mode', 'hvac_mode', 'hvac_modes', '', ''),
+    "climate_preset": ('climate', 'set_preset_mode', 'preset_mode', 'preset_modes', 'PRESET_MODE', ''),
+    "climate_fan": ('climate', 'set_fan_mode', 'fan_mode', 'fan_modes', 'FAN_MODE', ''),
+    "climate_swing": ('climate', 'set_swing_mode', 'swing_mode', 'swing_modes', 'SWING_MODE', ''),
+    "fan_preset": ('fan', 'set_preset_mode', 'preset_mode', 'preset_modes', 'PRESET_MODE', ''),
+    "humidifier_mode": ('humidifier', 'set_mode', 'mode', 'available_modes', 'MODES', ''),
+    "water_operation": ('water_heater', 'set_operation_mode', 'operation_mode', 'operation_list', 'OPERATION_MODE', ''),
+    "media_source": ('media_player', 'select_source', 'source', 'source_list', 'SELECT_SOURCE', ''),
+    "media_sound": ('media_player', 'select_sound_mode', 'sound_mode', 'sound_mode_list', 'SELECT_SOUND_MODE', ''),
+    "vacuum_speed": ('vacuum', 'set_fan_speed', 'fan_speed', 'fan_speed_list', 'FAN_SPEED', ''),
+}
+COMMAND_ROUTING_ENTITY_INTENTS = {"PhoenixEntity" + "".join(part.title() for part in category.split("_")): spec
+                                  for category, spec in COMMAND_ROUTING_ENTITY_COMMANDS.items()}
+DECISION_ENTITY_CATEGORIES = {category: "PhoenixEntity" + "".join(part.title() for part in category.split("_"))
+                              for category in COMMAND_ROUTING_ENTITY_COMMANDS}
+COMMAND_ROUTING_VALUE_INTENTS = frozenset(intent for intent, spec in COMMAND_ROUTING_ENTITY_INTENTS.items() if spec[2])
+COMMAND_ROUTING_INTENTS |= COMMAND_ROUTING_ENTITY_INTENTS.keys()
+COMMAND_ROUTING_ENTITY_VALUE_LIMIT = 254
+COMMAND_ROUTING_TIMER_OBSERVATION_TOLERANCE_SECONDS = 2
+COMMAND_ROUTING_UNKNOWN_ACTION_DOMAINS = frozenset({"button", "input_button", "scene"})
+
 # Typed helper updates are immediate value writes, never scheduling requests.
 COMMAND_ROUTING_TEMPORAL_OPERATIONS = {
+    "PhoenixTimerDuration": ("timer", "start", "duration", "duration"),
     "PhoenixDateValue": ("date", "set_value", "date", "date"),
     "PhoenixTimeValue": ("time", "set_value", "time", "time"),
     "PhoenixDateTimeValue": ("datetime", "set_value", "datetime", "datetime"),
@@ -1734,6 +1820,7 @@ COMMAND_ROUTING_TEMPORAL_OPERATIONS = {
     "PhoenixInputDateTime": ("input_datetime", "set_datetime", "datetime", "datetime"),
 }
 DECISION_TEMPORAL_CATEGORIES = {
+    "timer_duration": "PhoenixTimerDuration",
     "date_value": "PhoenixDateValue", "time_value": "PhoenixTimeValue", "datetime_value": "PhoenixDateTimeValue",
     "helper_date": "PhoenixInputDate", "helper_time": "PhoenixInputTime", "helper_datetime": "PhoenixInputDateTime",
 }
@@ -1839,10 +1926,15 @@ DECISION_ADDITIONAL_NUMERIC = {
     "humidifier_humidity": ("HassHumidifierSetpoint", "humidifier target humidity percentage"),
     "climate_humidity": ("PhoenixClimateHumidity", "climate target humidity percentage"),
     "water_temperature": ("PhoenixWaterTemperature", "water heater target temperature in its native unit"),
+    "counter_value": ("PhoenixCounterValue", "counter value as an absolute integer"),
     "number_value": ("PhoenixNumberValue", "numeric entity value in its native unit"),
     "input_number_value": ("PhoenixInputNumberValue", "numeric helper value in its native unit"),
     "light_temperature": ("PhoenixLightTemperature", "light colour temperature in kelvin, not room temperature"),
 }
+DECISION_TARGET_INTENTS.update(DECISION_ENTITY_CATEGORIES)
+DECISION_ENTITY_CHOICES = {category: f"One immediate request for {spec[1]} on one named {spec[0]} entity"
+                             + (f" using its {spec[2]} value." if spec[2] else ". No additional setting or duration.")
+                             for category, spec in COMMAND_ROUTING_ENTITY_COMMANDS.items()}
 DECISION_TARGET_INTENTS.update(DECISION_TEMPORAL_CATEGORIES)
 DECISION_TARGET_INTENTS.update({category: spec[0] for category, spec in DECISION_ADDITIONAL_NUMERIC.items()})
 DECISION_PERCENTAGE_PREVIEW_CHOICES.update({
@@ -1875,7 +1967,7 @@ DECISION_PERCENTAGE_EVIDENCE_MODIFIERS = {
 DECISION_PERCENTAGE_EVIDENCE_CONNECTORS = {"en": frozenset({"and"}), "es": frozenset({"y"}), "zh-CN": frozenset()}
 DECISION_PERCENTAGE_UNITS = (("%",), ("％",), ("percent",), ("per", "cent"), ("por", "ciento"), ("百", "分", "之"))
 # Adding a preview category must not automatically authorize an execution path.
-DECISION_EXECUTION_CATEGORIES = frozenset({"light_on", "light_off", "state_query"})
+DECISION_EXECUTION_CATEGORIES = frozenset({"light_on", "light_off", "state_query", *DECISION_ENTITY_CATEGORIES})
 DECISION_HYBRID_REASONS = frozenset({
     "plan_ready", "provider_fallback", "category_low_probability", "target_low_probability",
     "target_declined", "ambiguous_target", "brightness_declined", "no_target", "targets_changed",

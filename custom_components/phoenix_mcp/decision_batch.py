@@ -16,7 +16,7 @@ from .const import (
     DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES,
     DECISION_BATCH_MAX_TARGET_BYTES,
     DECISION_PERCENTAGE_EXECUTION_MODELS, DECISION_TEMPORAL_CATEGORIES,
-    DECISION_TARGET_INTENTS, DECISION_NUMERIC_CATEGORIES, DECISION_BATCH_MAX_TARGETS, MAX_SEARCH_QUERY_LEN,
+    COMMAND_ROUTING_VALUE_INTENTS, DECISION_TARGET_INTENTS, DECISION_NUMERIC_CATEGORIES, DECISION_BATCH_MAX_TARGETS, MAX_SEARCH_QUERY_LEN,
 )
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 from .decision_targets import capture_targets, CatalogLimitError, TargetSnapshot
@@ -40,9 +40,11 @@ def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = Fals
     entities: dict[str, dict] = {}
     for category, snapshot in snapshots.items():
         for descriptor in snapshot.targets.values():
-            identity = {key: value for key, value in descriptor.items() if key not in ("numeric", "value_kind")}
+            identity = {key: value for key, value in descriptor.items() if key not in ("numeric", "value_kind", "entity_command")}
             item = entities.setdefault(descriptor["entity_id"], {**identity, "eligible_categories": []})
             item["eligible_categories"].append(category)
+            if "entity_command" in descriptor:
+                item.setdefault("entity_operations", {})[category] = descriptor["entity_command"]
             if "value_kind" in descriptor:
                 item.setdefault("temporal_operations", {})[category] = descriptor["value_kind"]
             if "numeric" in descriptor:
@@ -95,7 +97,8 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
     numeric = False
     scalar = False
     source_value = None
-    if percentage_execution_eligible(provider.cfg, language):
+    from .entity_commands import literal_text
+    if percentage_execution_eligible(provider.cfg, language) and literal_text(sentence) is None:
         from .agentcli import loaded_decision_account
         source_value = await hass.async_add_executor_job(read_explicit_percentage, sentence, language)
         if source_value is None:
@@ -166,12 +169,23 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
         if (not scalar and unit != "%") or not explicit_unit_matches(sentence, unit):
             return category, {**selection, "reason": "numeric_unverified"}
         proposal[operation.proposal_field] = source_value
+    typed = proposal["intent"] in COMMAND_ROUTING_VALUE_INTENTS
+    if typed:
+        from .entity_commands import chosen_entity_value
+        value = chosen_entity_value(answer, sentence, targets, descriptor, category["choice"])
+        if value is None:
+            return category, {**selection, "reason": "numeric_unverified"}
+        proposal["value"] = value
+    elif answer.get("value", {}).get("choice", "none") != "none":
+        return category, {**selection, "reason": "category_mismatch"}
     plan = _capture_plan(hass, authority.data, current, proposal, ingress=ingress)
     if plan is None:
         raise DecisionError("targets_changed")
     plan.update(decision_category=category["choice"], decision_catalog=catalogs[category["choice"]].digest(),
                 decision_batch={"model": category["model"], "language": language,
                                 "catalog": batch_catalog_digest(snapshot)})
+    if typed:
+        plan["decision_batch"].update(value=proposal["value"], proposal=_digest(proposal))
     if numeric:
         plan["decision_batch"].update(percentage=source_value, proposal=_digest(proposal))
     return category, {**selection, "reason": "target_selected", "entity_id": descriptor["entity_id"],
@@ -254,7 +268,7 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
                 return result("targets_changed")
             if temporal is not None:
                 from .decision_temporal import temporal_proposal
-                reason, temporal_candidate = temporal_proposal(answer, targets, temporal, timezone)
+                reason, temporal_candidate = temporal_proposal(answer, targets, temporal, timezone, sentence)
                 return result(reason, decision=answer, proposal=temporal_candidate)
             category, target = answer["route"], answer["target"]
             if category["choice"] == "provider" or target["choice"] == "none":
@@ -265,6 +279,14 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
             if category["choice"] not in descriptor["eligible_categories"]:
                 return result("category_mismatch", decision=answer)
             proposal: dict[str, Any] = {"intent": DECISION_TARGET_INTENTS[category["choice"]], "entity_ids": [descriptor["entity_id"]]}
+            if proposal["intent"] in COMMAND_ROUTING_VALUE_INTENTS:
+                from .entity_commands import chosen_entity_value
+                chosen_value = chosen_entity_value(answer, sentence, targets, descriptor, category["choice"])
+                if chosen_value is None:
+                    return result("numeric_unverified", decision=answer)
+                proposal["value"] = chosen_value
+            elif answer.get("value", {}).get("choice", "none") != "none":
+                return result("category_mismatch", decision=answer)
             evidence = {}
             if numeric_preview:
                 value = answer["percentage"]

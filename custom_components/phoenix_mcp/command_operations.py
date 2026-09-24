@@ -19,6 +19,7 @@ from homeassistant.core import State
 from .const import (
     COMMAND_ROUTING_NUMERIC_OPERATIONS, COMMAND_ROUTING_SWITCH_SERVICES,
     COMMAND_ROUTING_NATIVE_VALUES, COMMAND_ROUTING_NUMERIC_BOUNDS, COMMAND_ROUTING_TEMPORAL_OPERATIONS,
+    COMMAND_ROUTING_ENTITY_INTENTS,
 )
 
 
@@ -49,6 +50,8 @@ def numeric_operation(intent: str) -> NumericOperation | None:
 
 
 def command_domain(intent: str) -> str | None:
+    if intent in COMMAND_ROUTING_ENTITY_INTENTS:
+        return COMMAND_ROUTING_ENTITY_INTENTS[intent][0]
     temporal = COMMAND_ROUTING_TEMPORAL_OPERATIONS.get(intent)
     if temporal:
         return temporal[0]
@@ -63,6 +66,9 @@ def supports_command(state: State, intent: str) -> bool:
     if intent in COMMAND_ROUTING_TEMPORAL_OPERATIONS:
         from .temporal_values import temporal_supports
         return temporal_supports(state, intent)
+    if intent in COMMAND_ROUTING_ENTITY_INTENTS:
+        from .entity_commands import supports_entity_command
+        return supports_entity_command(state, intent)
     if state.domain != command_domain(intent):
         return False
     operation = numeric_operation(intent)
@@ -100,6 +106,12 @@ def finite_number(value: Any) -> TypeGuard[int | float]:
 
 def numeric_limits(state: State, intent: str) -> tuple[int | float, int | float, int | float | None] | None:
     """Read native entity limits; percentage controls have a fixed unit range."""
+    if intent == "PhoenixCounterValue":
+        low, high = state.attributes.get("minimum"), state.attributes.get("maximum")
+        if any(value is not None and (type(value) is not int or not finite_number(value)) for value in (low, high)):
+            return None
+        lower, upper = low if low is not None else -math.inf, high if high is not None else math.inf
+        return (lower, upper, None) if lower <= upper else None
     bounds = COMMAND_ROUTING_NUMERIC_BOUNDS.get(intent)
     if bounds is None:
         return (0, 100, None)
@@ -142,7 +154,8 @@ def numeric_metadata(state: State, intent: str) -> dict:
     unit = ("K" if intent == "PhoenixLightTemperature" else
             state.attributes.get("unit_of_measurement", "") if operation.native else "%")
     limits = numeric_limits(state, intent)
-    return {"unit": unit, "minimum": limits[0], "maximum": limits[1], "step": limits[2]} if limits else {}
+    return {"unit": unit, "minimum": limits[0] if math.isfinite(limits[0]) else None,
+            "maximum": limits[1] if math.isfinite(limits[1]) else None, "step": limits[2]} if limits else {}
 
 
 def service_arguments(proposal: dict) -> dict | None:
@@ -150,6 +163,9 @@ def service_arguments(proposal: dict) -> dict | None:
     intent = proposal.get("intent")
     if not isinstance(intent, str):
         return None
+    if intent in COMMAND_ROUTING_ENTITY_INTENTS:
+        from .entity_commands import entity_arguments
+        return entity_arguments(proposal)
     if intent in COMMAND_ROUTING_TEMPORAL_OPERATIONS:
         from .temporal_values import temporal_arguments
         return temporal_arguments(proposal)

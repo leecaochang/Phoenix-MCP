@@ -10,7 +10,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .command_routing import RoutingAuthority, routing_language, routing_languages, effective_routing_mode
 from .command_operations import numeric_operation
-from .const import MAX_SEARCH_QUERY_LEN, DECISION_TARGET_INTENTS, DECISION_HYBRID_REASONS, DECISION_NUMERIC_CATEGORIES, DECISION_EXECUTION_CATEGORIES
+from .const import MAX_SEARCH_QUERY_LEN, DECISION_TARGET_INTENTS, DECISION_HYBRID_REASONS, DECISION_NUMERIC_CATEGORIES, DECISION_EXECUTION_CATEGORIES, DECISION_ENTITY_CATEGORIES
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 from .decision_metrics import DecisionMetrics
 from .numeric_evidence import read_explicit_percentage, compare_percentage
@@ -158,7 +158,8 @@ class DecisionShadow:
                         return result("authority_changed")
                     if not targets:
                         return result("observed", answer)
-                    if prepare and answer["choice"] not in DECISION_EXECUTION_CATEGORIES and answer["choice"] != "provider":
+                    if prepare and ((answer["choice"] not in DECISION_EXECUTION_CATEGORIES and answer["choice"] != "provider")
+                                    or answer["choice"] in DECISION_ENTITY_CATEGORIES):
                         return result("numeric_unverified" if answer["choice"] in DECISION_NUMERIC_CATEGORIES
                                       else "unsupported_category", answer)
                     selection = await self._select_target(hass, authority, provider, session, sentence.strip(),

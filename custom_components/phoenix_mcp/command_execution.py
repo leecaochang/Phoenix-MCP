@@ -14,7 +14,7 @@ from .audit import generate_request_id
 from .command_operations import service_arguments, supports_command, numeric_operation, valid_target_value, finite_number
 from .command_routing import RoutingAuthority, effective_routing_mode
 from .const import (
-    COMMAND_ROUTING_PLAN_KEY, COMMAND_ROUTING_TEMPORAL_OPERATIONS, DECISION_TEMPORAL_CATEGORIES, VOICE_AGENT_CLIENT_IP, DECISION_TARGET_INTENTS, DECISION_EXECUTION_CATEGORIES,
+    COMMAND_ROUTING_PLAN_KEY, COMMAND_ROUTING_UNKNOWN_ACTION_DOMAINS, COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_VALUE_INTENTS, COMMAND_ROUTING_TEMPORAL_OPERATIONS, DECISION_TEMPORAL_CATEGORIES, VOICE_AGENT_CLIENT_IP, DECISION_TARGET_INTENTS, DECISION_EXECUTION_CATEGORIES,
     DECISION_CONTEXT_EXECUTION_MODELS, DECISION_CONTEXT_EXECUTION_LANGUAGES, DECISION_FOLLOWUP_EXECUTION_MODELS,
     DECISION_BATCH_EXECUTION_MODELS,
     DECISION_NUMERIC_CATEGORIES, DECISION_PERCENTAGE_EXECUTION_MODELS,
@@ -42,10 +42,15 @@ def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str, *,
     entry = er.async_get(hass).async_get(entity_id)
     readable = intent == "HassGetState"
     permissions = (Permission.READ, Permission.WRITE) if readable else (Permission.WRITE,)
-    if (state is None or state.state in ("unknown", "unavailable") or entry is None
+    unknown_action = bool(state and state.domain in COMMAND_ROUTING_UNKNOWN_ACTION_DOMAINS
+                          and intent in COMMAND_ROUTING_ENTITY_INTENTS)
+    if (state is None or state.state == "unavailable" or (state.state == "unknown" and not unknown_action) or entry is None
             or entry.disabled_by or entry.hidden_by or entry.platform == "group"
             or "entity_id" in state.attributes or resolve(entity_id, token, hass) not in permissions
             or not async_should_expose(hass, "conversation", entity_id)):
+        return None
+    entity_command = COMMAND_ROUTING_ENTITY_INTENTS.get(intent)
+    if entity_command and not hass.services.has_service(entity_command[0], entity_command[1]):
         return None
     if not supports_command(state, intent):
         return None
@@ -64,15 +69,21 @@ def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str, *,
         "device_parent": devices.parent_id(entry.device_id),
         "temperature_unit": hass.config.units.temperature_unit,
         "timezone": hass.config.time_zone,
+        "entity_command_attributes": {key: state.attributes.get(key) for key in
+            ({spec[3] for spec in COMMAND_ROUTING_ENTITY_INTENTS.values() if spec[3]} | {"mode", "pattern", "code_format"})},
         "attributes": {key: state.attributes.get(key) for key in (
             "friendly_name", "supported_color_modes", "supported_features", "device_class",
-            "min", "max", "step", "unit_of_measurement", "min_temp", "max_temp", "target_temp_step",
+            "min", "max", "minimum", "maximum", "initial", "step", "unit_of_measurement", "min_temp", "max_temp", "target_temp_step",
             "min_humidity", "max_humidity", "min_color_temp_kelvin", "max_color_temp_kelvin", "has_date", "has_time",
         )},
     })
 
 
 def _temporal_current(hass: Any, proposal: dict) -> bool:
+    if proposal.get("intent") in COMMAND_ROUTING_VALUE_INTENTS:
+        from .entity_commands import valid_entity_value
+        return all(valid_entity_value(hass.states.get(eid), proposal["intent"], proposal.get("value"))
+                   for eid in proposal.get("entity_ids", []))
     spec = COMMAND_ROUTING_TEMPORAL_OPERATIONS.get(proposal.get("intent", ""))
     if spec is None:
         return True
@@ -109,7 +120,8 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
     category = plan["decision_category"]
     numeric = category in DECISION_NUMERIC_CATEGORIES
     temporal = category in DECISION_TEMPORAL_CATEGORIES
-    if (numeric or temporal) and "decision_batch" not in plan:
+    typed = plan["proposal"].get("intent") in COMMAND_ROUTING_VALUE_INTENTS
+    if (numeric or temporal or plan["proposal"].get("intent") in COMMAND_ROUTING_ENTITY_INTENTS) and "decision_batch" not in plan:
         return False
     catalog_digest = None
     mode = effective_routing_mode(settings, plan.get("ingress", "voice"))
@@ -117,7 +129,7 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
         review = plan["decision_batch"]
         account = settings.decision_provider_id
         cfg = loaded_decision_account(hass, account) if account else None
-        keys = {"model", "language", "catalog"} | ({"percentage", "proposal"} if numeric else {"value", "proposal"} if temporal else set())
+        keys = {"model", "language", "catalog"} | ({"percentage", "proposal"} if numeric else {"value", "proposal"} if temporal or typed else set())
         if "context_review" in plan:
             keys.add("context")
         if "reference_review" in plan:
@@ -130,7 +142,7 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
             return False
         if "context_review" in plan and review["context"] != _digest(plan["context_review"]):
             return False
-        if "reference_review" in plan and (numeric or temporal or "context_review" in plan
+        if "reference_review" in plan and (numeric or temporal or typed or "context_review" in plan
                 or review["reference"] != _digest(plan["reference_review"])):
             return False
         if numeric:
@@ -141,7 +153,7 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
                     or plan["proposal"][operation.proposal_field] != review["percentage"]
                     or _digest(plan["proposal"]) != review["proposal"]):
                 return False
-        if temporal and (review["value"] != plan["proposal"].get("value")
+        if (temporal or typed) and (review["value"] != plan["proposal"].get("value")
                          or review["proposal"] != _digest(plan["proposal"]) or not _temporal_current(hass, plan["proposal"])):
             return False
         snapshot = capture_batch_targets(hass, token, numeric_preview=numeric, extended=True, temporal=temporal)

@@ -10,7 +10,7 @@ from .decision_provider import DecisionError, confident_choice
 from .temporal_values import valid_temporal_value
 
 
-def temporal_proposal(answer: dict, targets: dict, source: dict, timezone: str) -> tuple[str, dict | None]:
+def temporal_proposal(answer: dict, targets: dict, source: dict, timezone: str, sentence: str = "") -> tuple[str, dict | None]:
     """Validate independent operation, target and exact source-value choices."""
     from .const import DECISION_TEMPORAL_CATEGORIES
     route, target, value = answer["route"], answer["target"], answer["value"]
@@ -26,7 +26,11 @@ def temporal_proposal(answer: dict, targets: dict, source: dict, timezone: str) 
     if not intent or not descriptor or category not in descriptor["eligible_categories"]:
         return "category_mismatch", None
     kind = COMMAND_ROUTING_TEMPORAL_OPERATIONS[intent][3]
-    if source["kind"] != kind or not valid_temporal_value(kind, source["value"], timezone):
+    if kind == "duration":
+        from .temporal_values import explicit_timer_duration
+        if not explicit_timer_duration(sentence, source):
+            return "numeric_unverified", None
+    if (source["kind"] != kind and not (kind == "duration" and source["kind"] == "time")) or not valid_temporal_value(kind, source["value"], timezone):
         return "numeric_unverified", None
     return "target_selected", {"intent": intent, "entity_ids": [descriptor["entity_id"]], "value": source["value"]}
 
@@ -57,7 +61,7 @@ async def async_prepare_temporal(hass: Any, authority: RoutingAuthority, provide
     if category["model"] not in DECISION_BATCH_EXECUTION_MODELS.get(
             (provider.cfg.kind, provider.cfg.base_url, provider.cfg.model), ()):
         raise DecisionError("model_unverified")
-    reason, proposal = temporal_proposal(answer, targets, source, timezone)
+    reason, proposal = temporal_proposal(answer, targets, source, timezone, sentence)
     selection: dict = {"reason": reason, "decision": answer["target"], "executed": False}
     if proposal is None:
         return category, selection

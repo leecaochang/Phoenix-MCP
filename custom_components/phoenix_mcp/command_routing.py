@@ -167,9 +167,18 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant) -> tuple[str
         intent_name = "PhoenixValvePosition"
         operation = numeric_operation(intent_name)
         expected_domain = "valve"
+    if intent_name in ("HassTurnOn", "HassTurnOff") and len(ids) == 1:
+        from .const import DECISION_ENTITY_CATEGORIES
+        domain = next(iter(ids)).split(".", 1)[0]
+        category = domain + ("_on" if intent_name == "HassTurnOn" else "_off")
+        if category in DECISION_ENTITY_CATEGORIES:
+            intent_name = DECISION_ENTITY_CATEGORIES[category]
+            expected_domain = domain
     states = [hass.states.get(entity_id) for entity_id in ids]
     if any(state is None or state.state in ("unknown", "unavailable") for state in states):
         return "no_target", None
+    if not read_only and any(state is None or not supports_command(state, intent_name) for state in states):
+        return "unsupported", None
     if not read_only and any(
         not entity_id.startswith(f"{expected_domain}.") or resolve(entity_id, token, hass) != Permission.WRITE
         for entity_id in ids

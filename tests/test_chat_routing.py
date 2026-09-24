@@ -1766,3 +1766,36 @@ async def test_temporal_chat_command_preserves_full_history_review(hass, context
     else:
         call.assert_awaited_once_with('time', 'set_value', {'entity_id': [entry.entity_id], 'time': '18:30:00'},
                                      blocking=True, return_response=False)
+
+
+@pytest.mark.parametrize('restricted', [False, True])
+async def test_option_command_in_chat_rechecks_complete_history(hass, context_chat, restricted):
+    from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
+    from custom_components.phoenix_mcp import mcp_view
+    data, token = context_chat
+    token.permissions.domains['select'] = PermissionNode(state='GREEN')
+    hass.services.async_register('select', 'select_option', AsyncMock())
+    entry = er.async_get(hass).async_get_or_create('select', 'test', 'mode', original_name='Test mode')
+    hass.states.async_set(entry.entity_id, 'Home', {'friendly_name': 'Test mode', 'options': ['Home', 'Away']})
+    async_expose_entity(hass, 'conversation', entry.entity_id, True)
+    seen = []
+    async def respond(*args):
+        payload = args[4]; seen.append(payload)
+        if 'request' in payload['questions']: return context_response(decline=restricted)
+        target = next(key for key, item in payload['state']['targets'].items() if item['entity_id'] == entry.entity_id)
+        value = next(key for key, item in payload['state']['values'].items() if item == 'Away')
+        choices = {'route': 'select_option', 'target': target, 'value': value}
+        return {'model': 'jev-1.13.0', 'answers': {question: {
+            'type': 'choice', 'choice': choices[question], 'confidence': 1,
+            'probabilities': {key: float(key == choices[question]) for key in spec['criteria']}}
+            for question, spec in payload['questions'].items()}}
+    with (patch.object(DecisionProvider, '_request', side_effect=respond) as remote,
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        provider, _, returned = await chat_turn(hass, context_chat, context_messages('Set Test mode to Away'))
+    assert remote.await_count == 2, data.decision_shadow.summary()
+    assert seen[-1]['state']['history'] == CONTEXT_HISTORY
+    assert seen[-1]['state']['candidate']['value'] == 'Away'
+    assert returned[:len(CONTEXT_HISTORY)] == CONTEXT_HISTORY
+    assert provider.stream_turn.called is restricted
+    assert call.await_count == (0 if restricted else 1)

@@ -12,7 +12,7 @@ from .command_execution import _target_fingerprint, plan_is_current, _digest
 from .command_operations import numeric_operation, service_arguments
 from .command_routing import RoutingAuthority, effective_routing_mode, routing_language
 from .const import (
-    COMMAND_ROUTING_INTENTS, COMMAND_ROUTING_TEMPORAL_OPERATIONS, COMMAND_ROUTING_LANGUAGES, DECISION_CONTEXT_MAX_BYTES, DECISION_CONTEXT_MAX_MESSAGES,
+    COMMAND_ROUTING_INTENTS, COMMAND_ROUTING_VALUE_INTENTS, COMMAND_ROUTING_TEMPORAL_OPERATIONS, COMMAND_ROUTING_LANGUAGES, DECISION_CONTEXT_MAX_BYTES, DECISION_CONTEXT_MAX_MESSAGES,
     DECISION_CONTEXT_REQUIRED_CHOICES, DECISION_CONTEXT_EXECUTION_MODELS,
     DECISION_CONTEXT_EXECUTION_LANGUAGES, DECISION_FOLLOWUP_EXECUTION_MODELS, MAX_SEARCH_QUERY_LEN,
 )
@@ -55,7 +55,7 @@ def _state(hass: Any, token: Any, sentence: str, language: str,
         return None
     intent = proposal["intent"]
     operation = numeric_operation(intent)
-    value_field = operation.proposal_field if operation else "value" if intent in COMMAND_ROUTING_TEMPORAL_OPERATIONS else None
+    value_field = operation.proposal_field if operation else "value" if intent in COMMAND_ROUTING_TEMPORAL_OPERATIONS or intent in COMMAND_ROUTING_VALUE_INTENTS else None
     fields = {"intent", "entity_ids"} | ({value_field} if value_field else set())
     ids = proposal.get("entity_ids")
     if (set(proposal) != fields or not isinstance(ids, list) or len(ids) != 1

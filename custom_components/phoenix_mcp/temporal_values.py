@@ -6,7 +6,7 @@ import re
 from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .const import COMMAND_ROUTING_TEMPORAL_OPERATIONS, MAX_SEARCH_QUERY_LEN
+from .const import COMMAND_ROUTING_TEMPORAL_OPERATIONS, COMMAND_ROUTING_TIMER_OBSERVATION_TOLERANCE_SECONDS, MAX_SEARCH_QUERY_LEN
 
 # These patterns read literal value notation, not intents or target names.
 _VALUE = re.compile(r"(?<![0-9a-z_:/.-])(?:[0-9]{4}-[0-9]{2}-[0-9]{2}(?:[ T][0-9]{1,2}:[0-9]{2}(?::[0-9]{2})?(?:\s*[ap]m)?)?|[0-9]{1,2}:[0-9]{2}(?::[0-9]{2})?(?:\s*[ap]m)?)(?![0-9a-z_:/-]|\.[0-9])", re.IGNORECASE)
@@ -52,6 +52,14 @@ def read_temporal_value(sentence: str) -> dict[str, str] | None:
         return None
 
 
+def explicit_timer_duration(sentence: str, source: dict) -> bool:
+    """A clock with only two fields is ambiguous as a duration; require all three."""
+    if source.get("kind") != "time":
+        return False
+    matches = list(_VALUE.finditer(sentence))
+    return len(matches) == 1 and re.fullmatch(r"[0-9]{1,2}:[0-9]{2}:[0-9]{2}", matches[0].group()) is not None
+
+
 def valid_temporal_value(kind: str, value: Any, timezone: str | None = None) -> bool:
     """Require canonical values and refuse nonexistent or ambiguous local datetimes."""
     if not isinstance(value, str):
@@ -59,7 +67,7 @@ def valid_temporal_value(kind: str, value: Any, timezone: str | None = None) -> 
     try:
         if kind == "date":
             return date.fromisoformat(value).isoformat() == value
-        if kind == "time":
+        if kind in ("time", "duration"):
             parsed_time = time.fromisoformat(value)
             return parsed_time.tzinfo is None and parsed_time.isoformat(timespec="seconds") == value
         if kind != "datetime":
@@ -129,6 +137,17 @@ def temporal_state_matches(proposal: dict, state: Any, timezone: str) -> bool:
     kind = spec[3]
     expected = proposal["value"]
     try:
+        if state.domain == "timer":
+            def seconds(value: str) -> int:
+                parts = [int(part) for part in value.split(":")]
+                if len(parts) != 3:
+                    raise ValueError("Invalid timer duration")
+                return parts[0] * 3600 + parts[1] * 60 + parts[2]
+            duration = seconds(expected)
+            end = datetime.fromisoformat(state.attributes.get("finishes_at", ""))
+            remaining = (end - datetime.now(UTC)).total_seconds()
+            return (state.state == "active" and seconds(state.attributes.get("duration", "")) == duration
+                    and abs(remaining - duration) <= COMMAND_ROUTING_TIMER_OBSERVATION_TOLERANCE_SECONDS)
         if state.domain == "input_datetime":
             if kind == "date":
                 actual = date(state.attributes["year"], state.attributes["month"], state.attributes["day"]).isoformat()
