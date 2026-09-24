@@ -2022,13 +2022,14 @@
     "token_unavailable": "Il token dell'agente vocale di Phoenix MCP non è più disponibile.",
     "unavailable": "L'agente vocale di Phoenix MCP al momento non è disponibile.",
     "outcome_unknown": "Le azioni potrebbero essere state eseguite. Controlla Home Assistant e le approvazioni prima di riprovare. Risolvi le azioni incerte in Impostazioni > Sistema > Riparazioni.",
-    "local_sent": "Comando inviato.",
     "local_pending": "Questo comando richiede l’approvazione nel pannello di Phoenix MCP.",
     "local_review": "Esamina comando",
     "local_failed": "Phoenix MCP non ha potuto completare questo comando.",
     "local_state": "Lo stato è {state}.",
     "local_read_failed": "Phoenix MCP non ha potuto leggere lo stato.",
     "local_cancelled": "Annullato.",
-    "local_unauthorized": "Questo token non è più autorizzato."
+    "local_unauthorized": "Questo token non è più autorizzato.",
+    "local_state_matched": "Home Assistant segnala lo stato richiesto.",
+    "local_state_unconfirmed": "Comando inviato. Home Assistant non ha ancora confermato lo stato richiesto."
   }
 }

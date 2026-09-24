@@ -21,7 +21,7 @@ from custom_components.phoenix_mcp.token_store import PermissionTree, Permission
 
 
 @pytest.fixture
-async def local_home(hass, token_store):
+async def local_home(hass, token_store, immediate_command_observation):
     token, _ = await token_store.async_create_token("local", "test", rate_limit_requests=0)
     token.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
     token.cap_physical_control = "allow"
@@ -60,7 +60,8 @@ async def test_local_voice_dispatches_exactly_once_without_model(hass, local_hom
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, build, provider = await run_voice(hass, data, sentence, language="en")
-    assert answer == "Command sent."
+    assert answer == ("Home Assistant reports the requested state." if service == "turn_off" else
+                      "Command sent. Home Assistant has not yet confirmed the requested state.")
     call.assert_awaited_once_with("light", service, {"entity_id": [entity_id], **extra}, blocking=True, return_response=False)
     build.assert_not_called()
     provider.assert_not_called()
@@ -287,9 +288,9 @@ async def test_approval_rechecks_current_mesa_restrictions(hass, local_home):
 
 
 @pytest.mark.parametrize("language,selection,alias,sentence,reply", [
-    ("zh-Hans", "zh-Hans", "台灯", "打开台灯", "指令已发送。"),
-    ("zh-CN", "zh-Hans", "台灯", "打开台灯", "指令已发送。"),
-    ("es-ES", "es", "Lámpara", "enciende la lámpara", "Orden enviada."),
+    ("zh-Hans", "zh-Hans", "台灯", "打开台灯", "命令已发送。Home Assistant 尚未确认请求的状态。"),
+    ("zh-CN", "zh-Hans", "台灯", "打开台灯", "命令已发送。Home Assistant 尚未确认请求的状态。"),
+    ("es-ES", "es", "Lámpara", "enciende la lámpara", "Comando enviado. Home Assistant aún no ha confirmado el estado solicitado."),
 ])
 async def test_enabled_language_runs_real_local_voice_once(hass, local_home, language, selection, alias, sentence, reply):
     data, _, entity_id = local_home
@@ -353,3 +354,72 @@ async def test_multilingual_local_command_keeps_mesa_denial(hass, local_home, la
     call.assert_not_called()
     build.assert_not_called()
     provider.assert_not_called()
+
+
+@pytest.mark.parametrize('delayed', [False, True])
+async def test_success_reply_observes_actual_report_without_resending(hass, local_home, delayed, monkeypatch):
+    from custom_components.phoenix_mcp import command_verification
+    data, token, eid = local_home
+    monkeypatch.setattr(command_verification, 'COMMAND_VERIFICATION_WAIT_SECONDS', .06)
+    monkeypatch.setattr(command_verification, 'COMMAND_VERIFICATION_POLL_SECONDS', .005)
+    handles = []
+    async def dispatched(*args, **kwargs):
+        def reported():
+            hass.states.async_set(eid, 'on', {**hass.states.get(eid).attributes, 'brightness': 94})
+        if delayed:
+            handles.append(asyncio.get_running_loop().call_later(.01, reported))
+        else:
+            reported()
+    try:
+        with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+              patch.object(type(hass.services), 'async_call', AsyncMock(side_effect=dispatched)) as call):
+            answer, _, provider = await run_voice(hass, data, 'set the desk lamp brightness to 37 percent', language='en')
+        assert answer == 'Home Assistant reports the requested state.'
+        call.assert_awaited_once()
+        provider.assert_not_called()
+        assert data.agent_recovery.records(token.id) == []
+    finally:
+        for handle in handles:
+            handle.cancel()
+
+
+@pytest.mark.parametrize('report_matches', [False, True])
+async def test_approved_routed_action_has_the_same_state_observation(hass, local_home, report_matches):
+    import json
+    data, token, eid = local_home
+    await enable_mesa(hass, data, eid, 'confirm')
+    with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
+        answer, _, _ = await run_voice(hass, data, 'turn on the desk lamp', language='en')
+    assert 'needs approval' in answer
+    record = data.store.get_pending_approvals()[0]
+    async def dispatched(*args, **kwargs):
+        if report_matches:
+            hass.states.async_set(eid, 'on', dict(hass.states.get(eid).attributes))
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', AsyncMock(side_effect=dispatched)) as call):
+        result, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+    payload = json.loads(result['content'][0]['text'])
+    assert outcome == 'allowed' and payload['success'] is True
+    assert payload['state_verification'] == ('matched' if report_matches else 'unconfirmed')
+    call.assert_awaited_once()
+
+
+async def test_cancel_after_dispatch_during_observation_keeps_recovery_barrier(hass, local_home, monkeypatch):
+    from custom_components.phoenix_mcp import command_verification
+    data, token, _ = local_home
+    monkeypatch.setattr(command_verification, 'COMMAND_VERIFICATION_WAIT_SECONDS', 10)
+    entered = asyncio.Event()
+    original = command_verification.async_verify_command_state
+    async def observing(*args):
+        entered.set()
+        return await original(*args)
+    with (patch.object(command_verification, 'async_verify_command_state', observing),
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        task = asyncio.create_task(run_voice(hass, data, 'turn on the desk lamp', language='en'))
+        await asyncio.wait_for(entered.wait(), 2)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    call.assert_awaited_once()
+    assert data.agent_recovery.blocks(token.id)

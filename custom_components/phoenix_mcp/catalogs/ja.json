@@ -2022,13 +2022,14 @@
     "token_unavailable": "Phoenix MCP 音声エージェントのトークンは利用できなくなりました。",
     "unavailable": "Phoenix MCP 音声エージェントは現在利用できません。",
     "outcome_unknown": "操作が実行された可能性があります。再試行前に Home Assistant と承認結果を確認してください。不明な操作は設定 > システム > 修復で確認してください。",
-    "local_sent": "コマンドを送信しました。",
     "local_pending": "このコマンドには Phoenix MCP パネルでの承認が必要です。",
     "local_review": "コマンドを確認",
     "local_failed": "Phoenix MCP はこのコマンドを完了できませんでした。",
     "local_state": "状態は {state} です。",
     "local_read_failed": "Phoenix MCP は状態を読み取れませんでした。",
     "local_cancelled": "キャンセルしました。",
-    "local_unauthorized": "このトークンは認可されていません。"
+    "local_unauthorized": "このトークンは認可されていません。",
+    "local_state_matched": "Home Assistant は要求された状態を報告しています。",
+    "local_state_unconfirmed": "コマンドを送信しました。Home Assistant は要求された状態をまだ確認していません。"
   }
 }

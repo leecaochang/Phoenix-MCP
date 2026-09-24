@@ -254,8 +254,10 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
         return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
     warnings = payload.get("mesa_advisory", [])
     advisory = " ".join(warning for warning in warnings if isinstance(warning, str)) if isinstance(warnings, list) else ""
-    return LocalCommandReply(voice_text(language, "local_sent") + (f" {advisory}" if advisory else ""),
-                             allows_local_followup=not warnings)
+    matched = payload.get("state_verification") == "matched"
+    text = voice_text(language, "local_state_matched" if matched else "local_state_unconfirmed")
+    return LocalCommandReply(text + (f" {advisory}" if advisory else ""),
+                             allows_local_followup=matched and not warnings)
 
 
 @recovery_turn

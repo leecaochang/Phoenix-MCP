@@ -1618,7 +1618,8 @@ NOTIFICATION_TEMPLATES: dict[str, str] = {
 VOICE_TEMPLATES: dict[str, str] = {
     "local_cancelled": "Cancelled.",
     "local_unauthorized": "This token is no longer authorized.",
-    "local_sent": "Command sent.",
+    "local_state_matched": "Home Assistant reports the requested state.",
+    "local_state_unconfirmed": "Command sent. Home Assistant has not yet confirmed the requested state.",
     "local_pending": "This command needs approval in the Phoenix MCP panel.",
     "local_review": "Review command",
     "local_failed": "Phoenix MCP could not complete this command.",
@@ -1669,6 +1670,10 @@ COMMAND_ROUTING_NUMERIC_MATCH_LIMIT = 64
 COMMAND_ROUTING_TIMEOUT_DEFAULT_MS = 500
 COMMAND_ROUTING_TIMEOUT_MIN_MS = 50
 COMMAND_ROUTING_TIMEOUT_MAX_MS = 5000
+# A short observation window, not a device completion deadline or retry budget.
+COMMAND_VERIFICATION_WAIT_SECONDS = 1.0
+COMMAND_VERIFICATION_POLL_SECONDS = 0.1
+COMMAND_VERIFICATION_TOLERANCES = {"HassLightSet": 1, "HassSetVolume": 0.005, "HassSetPosition": 0.5}
 # Domain, HA slot, proposal field, service, service field, divisor, whole percent, HA matching domains.
 COMMAND_ROUTING_NUMERIC_OPERATIONS = {
     "HassLightSet": ("light", "brightness", "brightness_pct", "turn_on", "brightness_pct", 1, False, ("light",)),

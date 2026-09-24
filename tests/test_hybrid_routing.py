@@ -21,7 +21,7 @@ from custom_components.phoenix_mcp.token_store import PermissionNode, Permission
 
 
 @pytest.fixture
-async def hybrid_home(hass, token_store):
+async def hybrid_home(hass, token_store, immediate_command_observation):
     token, _ = await token_store.async_create_token("hybrid", "test", rate_limit_requests=0)
     token.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
     token.cap_physical_control = "allow"
@@ -76,7 +76,8 @@ async def test_two_requests_dispatch_once_and_do_not_duplicate_shadow(hass, hybr
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, hybrid_home, category=category, percent=extra.get("brightness_pct", 50))
-    assert answer == "Command sent."
+    assert answer == ("Home Assistant reports the requested state." if service == "turn_off" else
+                      "Command sent. Home Assistant has not yet confirmed the requested state.")
     assert remote.await_count == 2
     assert len(remote.await_args.args[4]["questions"]) == (3 if category == "light_brightness" else 1)
     call.assert_awaited_once_with("light", service, {"entity_id": [entity_id], **extra}, blocking=True, return_response=False)
@@ -101,7 +102,7 @@ async def test_exact_local_match_spends_no_decision_request(hass, hybrid_home):
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, hybrid_home, sentence="turn on the desk lamp")
-    assert answer == "Command sent."
+    assert answer == "Command sent. Home Assistant has not yet confirmed the requested state."
     call.assert_awaited_once()
     remote.assert_not_called()
     provider.assert_not_called()
@@ -327,8 +328,8 @@ async def test_hybrid_settings_require_account_and_clearing_disables_mode(hass, 
 
 
 @pytest.mark.parametrize("language,sentence,reply", [
-    ("zh-Hans", "请打开台灯", "指令已发送。"),
-    ("es", "enciende la lámpara", "Orden enviada."),
+    ("zh-Hans", "请打开台灯", "命令已发送。Home Assistant 尚未确认请求的状态。"),
+    ("es", "enciende la lámpara", "Comando enviado. Home Assistant aún no ha confirmado el estado solicitado."),
 ])
 @pytest.mark.parametrize("routing_mode", ["hybrid", "auto"])
 async def test_enabled_language_hybrid_voice_carries_language_through_dispatch(hass, hybrid_home, language, sentence, reply, routing_mode):
@@ -378,7 +379,8 @@ async def test_recognized_numeric_voice_uses_ha_value_without_either_provider(ha
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, hybrid_home,
             sentence=f"set the desk lamp brightness to {percent} percent")
-    assert answer == "Command sent."
+    assert answer == ("Home Assistant reports the requested state." if percent == 0 else
+                      "Command sent. Home Assistant has not yet confirmed the requested state.")
     call.assert_awaited_once_with("light", "turn_on", {"entity_id": [entity_id], "brightness_pct": percent},
                                 blocking=True, return_response=False)
     remote.assert_not_called()

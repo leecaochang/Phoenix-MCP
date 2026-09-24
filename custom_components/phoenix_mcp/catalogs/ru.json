@@ -17,14 +17,15 @@
     "token_unavailable": "Токен голосового агента Phoenix MCP больше недоступен.",
     "unavailable": "Голосовой агент Phoenix MCP сейчас недоступен.",
     "outcome_unknown": "Действия могли быть выполнены. Перед повторной попыткой проверьте Home Assistant и результаты одобрения. Проверьте неопределённые действия в Настройки > Система > Исправления.",
-    "local_sent": "Команда отправлена.",
     "local_pending": "Для этой команды требуется одобрение в панели Phoenix MCP.",
     "local_review": "Проверить команду",
     "local_failed": "Phoenix MCP не удалось выполнить эту команду.",
     "local_state": "Состояние: {state}.",
     "local_read_failed": "Phoenix MCP не удалось прочитать состояние.",
     "local_cancelled": "Отменено.",
-    "local_unauthorized": "Этот токен больше не авторизован."
+    "local_unauthorized": "Этот токен больше не авторизован.",
+    "local_state_matched": "Home Assistant сообщает о запрошенном состоянии.",
+    "local_state_unconfirmed": "Команда отправлена. Home Assistant ещё не подтвердил запрошенное состояние."
   },
   "panel": {
     "adminError": {

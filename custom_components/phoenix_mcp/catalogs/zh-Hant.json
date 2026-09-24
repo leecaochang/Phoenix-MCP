@@ -2022,13 +2022,14 @@
     "token_unavailable": "Phoenix MCP 語音智慧體的權杖已不可用。",
     "unavailable": "Phoenix MCP 語音智慧體目前不可用。",
     "outcome_unknown": "操作可能已經執行。重試前請檢查 Home Assistant 和審批結果。請在設定 > 系統 > 修復中核實結果未知的操作。",
-    "local_sent": "指令已傳送。",
     "local_pending": "此指令需要在 Phoenix MCP 面板中核准。",
     "local_review": "檢視指令",
     "local_failed": "Phoenix MCP 未能完成此指令。",
     "local_state": "狀態為 {state}。",
     "local_read_failed": "Phoenix MCP 未能讀取狀態。",
     "local_cancelled": "已取消。",
-    "local_unauthorized": "此權杖已失去授權。"
+    "local_unauthorized": "此權杖已失去授權。",
+    "local_state_matched": "Home Assistant 回報已達到要求的狀態。",
+    "local_state_unconfirmed": "命令已傳送。Home Assistant 尚未確認要求的狀態。"
   }
 }

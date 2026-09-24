@@ -17,14 +17,15 @@
     "token_unavailable": "Het token van de Phoenix MCP-spraakagent is niet meer beschikbaar.",
     "unavailable": "De Phoenix MCP-spraakagent is momenteel niet beschikbaar.",
     "outcome_unknown": "Acties kunnen zijn uitgevoerd. Controleer Home Assistant en de goedkeuringen voordat u het opnieuw probeert. Controleer onzekere acties via Instellingen > Systeem > Reparaties.",
-    "local_sent": "Opdracht verzonden.",
     "local_pending": "Deze opdracht vereist goedkeuring in het Phoenix MCP-paneel.",
     "local_review": "Opdracht beoordelen",
     "local_failed": "Phoenix MCP kon deze opdracht niet voltooien.",
     "local_state": "De status is {state}.",
     "local_read_failed": "Phoenix MCP kon de status niet lezen.",
     "local_cancelled": "Geannuleerd.",
-    "local_unauthorized": "Dit token is niet langer geautoriseerd."
+    "local_unauthorized": "Dit token is niet langer geautoriseerd.",
+    "local_state_matched": "Home Assistant meldt de gevraagde status.",
+    "local_state_unconfirmed": "Opdracht verzonden. Home Assistant heeft de gevraagde status nog niet bevestigd."
   },
   "panel": {
     "shell": {

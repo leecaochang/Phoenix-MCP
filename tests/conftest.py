@@ -9,6 +9,14 @@ import pytest
 pytest_plugins = "pytest_homeassistant_custom_component"
 
 
+@pytest.fixture
+def immediate_command_observation(monkeypatch):
+    """Observe real state without wall-clock waits in dispatch contract tests."""
+    from custom_components.phoenix_mcp import command_verification
+
+    monkeypatch.setattr(command_verification, "COMMAND_VERIFICATION_WAIT_SECONDS", 0)
+
+
 @pytest.fixture(autouse=True)
 def isolated_config_dir(hass, tmp_path):
     """Keep any device-YAML writes out of the shared testing config dir."""

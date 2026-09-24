@@ -32,7 +32,7 @@ from custom_components.phoenix_mcp.token_store import PermissionNode, Permission
     ("cover", "Desk blind", "HassSetPosition", "position_pct", "set_cover_position", "position",
      {"supported_features": CoverEntityFeature.SET_POSITION, "device_class": "blind"}, "set the desk blind to {value} percent"),
 ])
-async def numeric_home(hass, token_store, request):
+async def numeric_home(hass, token_store, request, immediate_command_observation):
     domain, name, intent, field, service, service_field, attributes, sentence = request.param
     token, _ = await token_store.async_create_token("numeric", "test", rate_limit_requests=0)
     token.permissions = PermissionTree(domains={domain: PermissionNode(state="GREEN")})
@@ -95,25 +95,39 @@ async def test_exact_values_reach_existing_service_without_either_model(hass, nu
     voice.assert_not_called()
     provider.stream_turn.assert_not_called()
     if ingress == "voice":
-        assert result == "Command sent."
+        assert result == "Command sent. Home Assistant has not yet confirmed the requested state."
     else:
         assert result[0] == {"role": "user", "content": home.sentence.format(value=value)}
-        assert result[-1] == {"role": "assistant", "content": "Command sent."}
+        assert result[-1] == {"role": "assistant", "content":
+                             "Command sent. Home Assistant has not yet confirmed the requested state."}
     assert not home.data.agent_recovery.records(home.token.id)
 
 
 async def test_numeric_chat_sequence_preserves_values_history_and_fresh_capabilities(hass, numeric_home):
     home = numeric_home
     history = []
+    async def report_state(domain, service, values, **kwargs):
+        value = values[home.service_field]
+        attrs = dict(hass.states.get(home.entity_id).attributes)
+        if domain == 'light':
+            attrs['brightness'] = round(255 * value / 100)
+            state = 'on' if attrs['brightness'] else 'off'
+        elif domain == 'media_player':
+            attrs['volume_level'] = value
+            state = 'playing'
+        else:
+            attrs['current_position'] = value
+            state = 'open' if value else 'closed'
+        hass.states.async_set(home.entity_id, state, attrs)
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
-          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+          patch.object(type(hass.services), "async_call", AsyncMock(side_effect=report_state)) as call):
         for value in (37, 0, 100):
             previous = copy.deepcopy(history)
             history, _, provider, _ = await run_numeric(
                 hass, home, home.sentence.format(value=value), "chat", history)
             provider.stream_turn.assert_not_called()
             assert history[:-2] == previous
-            assert history[-1]["content"] == "Command sent."
+            assert history[-1]["content"] == "Home Assistant reports the requested state."
             assert call.await_args.args[2][home.service_field] == (value / 100 if home.domain == "media_player" else value)
         assert call.await_count == 3
         # A known conversation cannot authorize a target that lost its support.

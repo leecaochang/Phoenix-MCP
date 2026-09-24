@@ -1511,9 +1511,16 @@ async def _execute_call_service(
     except HomeAssistantError:
         return _tool_error("Forbidden."), "denied", resource
 
-    filtered_response = filter_service_response(svc_response, token, hass) if svc_response is not None else None
-
     body: dict[str, Any] = {"success": True}
+    if local_plan:
+        from .command_verification import async_verify_command_state
+
+        body["state_verification"] = await async_verify_command_state(
+            hass, data, token, args[COMMAND_ROUTING_PLAN_KEY],
+        )
+        check_request_authority()
+        token = RequestAuthority(hass, data, token.id, token.token_hash).current_token()
+    filtered_response = filter_service_response(svc_response, token, hass) if svc_response is not None else None
     if filtered_response is not None:
         body["service_response"] = filtered_response
     if mesa_outcome.warnings:

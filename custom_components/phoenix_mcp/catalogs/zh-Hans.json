@@ -2022,13 +2022,14 @@
     "focus_answer_anyway": "如要继续，请重复完整请求，并明确说明仍然回答。",
     "focus_declined": "此对话处于居家专注模式，因此我只能协助处理与您的住宅和 Home Assistant 有关的请求。",
     "outcome_unknown": "操作可能已经执行。重试前请检查 Home Assistant 和审批结果。请在设置 > 系统 > 修复中核实结果未知的操作。",
-    "local_sent": "指令已发送。",
     "local_pending": "此指令需要在 Phoenix MCP 面板中审批。",
     "local_review": "查看指令",
     "local_failed": "Phoenix MCP 未能完成此指令。",
     "local_state": "状态为 {state}。",
     "local_read_failed": "Phoenix MCP 未能读取状态。",
     "local_cancelled": "已取消。",
-    "local_unauthorized": "此令牌已失去授权。"
+    "local_unauthorized": "此令牌已失去授权。",
+    "local_state_matched": "Home Assistant 报告已达到请求的状态。",
+    "local_state_unconfirmed": "命令已发送。Home Assistant 尚未确认请求的状态。"
   }
 }
