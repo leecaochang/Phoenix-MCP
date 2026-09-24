@@ -90,3 +90,43 @@ def test_timer_duration_observation_does_not_confuse_an_old_countdown_with_a_res
     state = State('timer.test', 'active', {'duration': '0:05:00',
         'finishes_at': (datetime.now(UTC) + timedelta(seconds=remaining)).isoformat()})
     assert state_matches(proposal, state) is matched
+
+
+@pytest.mark.parametrize('category,expected', [
+    ('media_mute', {'is_volume_muted': True}), ('media_unmute', {'is_volume_muted': False}),
+    ('media_shuffle_off', {'shuffle': False}), ('media_repeat_all', {'repeat': 'all'}),
+    ('media_repeat_off', {'repeat': 'off'}), ('fan_oscillate_on', {'oscillating': True}),
+    ('fan_direction_forward', {'direction': 'forward'}), ('automation_off', {'stop_actions': True}),
+])
+async def test_fixed_arguments_match_native_schema_and_reject_injected_values(hass, category, expected):
+    domain, service, *_ = COMMAND_ROUTING_ENTITY_COMMANDS[category]
+    assert await async_setup_component(hass, domain, {domain: {}})
+    proposal = {'intent': DECISION_ENTITY_CATEGORIES[category], 'entity_ids': [domain + '.test']}
+    args = service_arguments(proposal)
+    assert args['service_data'] == expected
+    native = hass.services.async_services()[domain][service].schema
+    validated = native({'entity_id': args['entity_id'], **args['service_data']})
+    # HA renames mute for the entity method and coerces repeat strings to its native enum.
+    for key, value in expected.items():
+        actual = validated['mute' if key == 'is_volume_muted' else key]
+        assert isinstance(actual, type(value)) and actual == value
+    assert service_arguments({**proposal, 'value': 'model-written'}) is None
+
+
+@pytest.mark.parametrize('category,field,value', [
+    ('media_mute', 'is_volume_muted', True), ('media_shuffle_off', 'shuffle', False),
+    ('media_repeat_one', 'repeat', 'one'), ('fan_direction_reverse', 'direction', 'reverse'),
+    ('fan_oscillate_on', 'oscillating', True),
+])
+def test_fixed_action_observation_needs_reported_property(category, field, value):
+    from custom_components.phoenix_mcp.command_verification import state_matches
+    domain = COMMAND_ROUTING_ENTITY_COMMANDS[category][0]
+    proposal = {'intent': DECISION_ENTITY_CATEGORIES[category], 'entity_ids': [domain + '.test']}
+    assert not state_matches(proposal, State(domain + '.test', 'on'))
+    assert state_matches(proposal, State(domain + '.test', 'on', {field: value}))
+    if type(value) is bool:
+        assert not state_matches(proposal, State(domain + '.test', 'on', {field: str(value)}))
+        assert not state_matches(proposal, State(domain + '.test', 'on', {field: int(value)}))
+    if field == 'repeat':
+        from homeassistant.components.media_player import RepeatMode
+        assert state_matches(proposal, State(domain + '.test', 'on', {field: RepeatMode(value)}))

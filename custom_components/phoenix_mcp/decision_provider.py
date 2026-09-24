@@ -346,6 +346,8 @@ class DecisionProvider:
             "uses the timer's configured or remaining duration; any explicitly requested duration must fall back. "
             "Never confuse cancelling a timer with finishing it, which fires its finished event. "
             "Counter increment and decrement use its configured step; requests for another amount fall back. "
+            "Automation off disables future triggers and stops running actions; requests only to stop a current run "
+            "belong to provider. Fan direction uses forward/reverse, never infer clockwise/counterclockwise. "
             "Do not equate device on/off with toggle, button press, activation or a mode selection. "
         )
         for question in payload["questions"].values():

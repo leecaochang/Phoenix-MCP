@@ -1220,3 +1220,52 @@ async def test_timer_recognition_wait_rechecks_account_before_disclosing_to_prov
     remote.assert_not_called()
     call.assert_not_called()
     assert not data.store.get_pending_approvals()
+
+
+@pytest.mark.parametrize('entity_command_home,expected', [
+    (('media_mute', None), {'is_volume_muted': True}),
+    (('media_unmute', None), {'is_volume_muted': False}),
+    (('media_shuffle_on', None), {'shuffle': True}),
+    (('media_repeat_one', None), {'repeat': 'one'}),
+    (('fan_oscillate_off', None), {'oscillating': False}),
+    (('fan_direction_reverse', None), {'direction': 'reverse'}),
+    (('automation_off', None), {'stop_actions': True}),
+    (('cover_open_tilt', None), {}),
+    (('climate_swing_horizontal', 'Away'), {'swing_horizontal_mode': 'Away'}),
+], indirect=['entity_command_home'])
+async def test_fixed_controls_dispatch_exact_native_fields(hass, entity_command_home, expected):
+    home, category, value, _, (domain, service, _) = entity_command_home
+    async def respond(*args): return entity_command_wire(args[4], home[-1], category, value)
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, remote, provider = await run_voice(hass, home, request=respond,
+                                             sentence=f'Please perform {category} for Test helper')
+    remote.assert_awaited_once()
+    provider.assert_not_called()
+    call.assert_awaited_once_with(domain, service, {'entity_id': [home[-1]], **expected},
+                                 blocking=True, return_response=False)
+
+
+@pytest.mark.parametrize('entity_command_home', [('media_mute', None), ('fan_direction_reverse', None)], indirect=True)
+@pytest.mark.parametrize('change', ['none', 'feature', 'arguments', 'permission'])
+async def test_fixed_control_approval_rechecks_features_and_arguments(hass, entity_command_home, change):
+    home, category, value, _, _ = entity_command_home
+    data, token, _, _, entity_id = home
+    await set_mesa(hass, home, 'confirm')
+    async def respond(*args): return entity_command_wire(args[4], entity_id, category, value)
+    with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
+        reply, _, provider = await run_voice(hass, home, request=respond, sentence=f'Please perform {category} for Test helper')
+    assert 'needs approval' in reply
+    provider.assert_not_called()
+    record = data.store.get_pending_approvals()[0]
+    if change == 'feature':
+        hass.states.async_set(entity_id, 'off', {'friendly_name': 'Test helper', 'supported_features': 0})
+    elif change == 'arguments':
+        record['args']['service_data'] = {'is_volume_muted': False} if category == 'media_mute' else {'direction': 'forward'}
+    elif change == 'permission':
+        token.permissions.domains[entity_id.split('.')[0]] = PermissionNode(state='RED')
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+    assert outcome == ('allowed' if change == 'none' else 'denied')
+    assert call.await_count == (1 if change == 'none' else 0)

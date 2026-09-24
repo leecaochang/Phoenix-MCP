@@ -10,7 +10,7 @@ from homeassistant.core import State
 
 from .command_operations import numeric_operation, service_arguments, finite_number
 from .const import (
-    COMMAND_VERIFICATION_POLL_SECONDS, COMMAND_VERIFICATION_WAIT_SECONDS,
+    COMMAND_VERIFICATION_POLL_SECONDS, COMMAND_VERIFICATION_WAIT_SECONDS, COMMAND_ROUTING_FIXED_OBSERVATIONS,
     COMMAND_VERIFICATION_TOLERANCES, COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_NUMERIC_STATE, COMMAND_ROUTING_TEMPORAL_OPERATIONS,
 )
 from .request_authority import RequestAuthority
@@ -26,6 +26,10 @@ def state_matches(proposal: dict, state: State | None, timezone: str = "UTC") ->
         return state.state == ("on" if intent == "HassTurnOn" else "off")
     if intent in COMMAND_ROUTING_ENTITY_INTENTS:
         spec = COMMAND_ROUTING_ENTITY_INTENTS[intent]
+        if intent in COMMAND_ROUTING_FIXED_OBSERVATIONS:
+            return all((state.attributes.get(key) is value) if type(value) is bool else
+                       isinstance(state.attributes.get(key), str) and state.attributes[key] == value
+                       for key, value in COMMAND_ROUTING_FIXED_OBSERVATIONS[intent].items())
         if spec[2]:
             field = None if spec[0] in ("text", "input_text", "select", "input_select") or spec[2] in ("hvac_mode", "operation_mode") else spec[2]
             return (state.attributes.get(field) if field else state.state) == proposal.get("value")

@@ -16,7 +16,7 @@ from homeassistant.components.vacuum import VacuumEntityFeature
 from homeassistant.components.valve import ValveEntityFeature
 from homeassistant.components.water_heater import WaterHeaterEntityFeature
 
-from .const import COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_ENTITY_VALUE_LIMIT
+from .const import COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_ENTITY_VALUE_LIMIT, COMMAND_ROUTING_FIXED_INTENT_DATA
 
 _FEATURES = {'climate': ClimateEntityFeature, 'cover': CoverEntityFeature, 'fan': FanEntityFeature,
              'humidifier': HumidifierEntityFeature, 'lawn_mower': LawnMowerEntityFeature, 'lock': LockEntityFeature,
@@ -82,7 +82,7 @@ def entity_arguments(proposal: dict) -> dict | None:
             or (spec[2] and (not isinstance(proposal['value'], str) or len(proposal['value']) > 255))):
         return None
     return {'domain': spec[0], 'service': spec[1], 'entity_id': list(ids),
-            'service_data': {spec[2]: proposal['value']} if spec[2] else {}}
+            'service_data': {spec[2]: proposal['value']} if spec[2] else dict(COMMAND_ROUTING_FIXED_INTENT_DATA.get(proposal['intent'], {}))}
 
 
 def literal_text(sentence: str) -> str | None:

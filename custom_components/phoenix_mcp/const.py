@@ -1799,10 +1799,43 @@ COMMAND_ROUTING_ENTITY_COMMANDS = {
     "media_sound": ('media_player', 'select_sound_mode', 'sound_mode', 'sound_mode_list', 'SELECT_SOUND_MODE', ''),
     "vacuum_speed": ('vacuum', 'set_fan_speed', 'fan_speed', 'fan_speed_list', 'FAN_SPEED', ''),
 }
+COMMAND_ROUTING_ENTITY_COMMANDS.update({
+    "automation_on": ('automation', 'turn_on', '', '', '', 'on'),
+    "automation_off": ('automation', 'turn_off', '', '', '', 'off'),
+    "media_mute": ('media_player', 'volume_mute', '', '', 'VOLUME_MUTE', ''),
+    "media_unmute": ('media_player', 'volume_mute', '', '', 'VOLUME_MUTE', ''),
+    "media_shuffle_on": ('media_player', 'shuffle_set', '', '', 'SHUFFLE_SET', ''),
+    "media_shuffle_off": ('media_player', 'shuffle_set', '', '', 'SHUFFLE_SET', ''),
+    "media_repeat_all": ('media_player', 'repeat_set', '', '', 'REPEAT_SET', ''),
+    "media_repeat_one": ('media_player', 'repeat_set', '', '', 'REPEAT_SET', ''),
+    "media_repeat_off": ('media_player', 'repeat_set', '', '', 'REPEAT_SET', ''),
+    "media_clear_playlist": ('media_player', 'clear_playlist', '', '', 'CLEAR_PLAYLIST', ''),
+    "fan_oscillate_on": ('fan', 'oscillate', '', '', 'OSCILLATE', ''),
+    "fan_oscillate_off": ('fan', 'oscillate', '', '', 'OSCILLATE', ''),
+    "fan_direction_forward": ('fan', 'set_direction', '', '', 'DIRECTION', ''),
+    "fan_direction_reverse": ('fan', 'set_direction', '', '', 'DIRECTION', ''),
+    "cover_open_tilt": ('cover', 'open_cover_tilt', '', '', 'OPEN_TILT', ''),
+    "cover_close_tilt": ('cover', 'close_cover_tilt', '', '', 'CLOSE_TILT', ''),
+    "cover_stop_tilt": ('cover', 'stop_cover_tilt', '', '', 'STOP_TILT', ''),
+    "climate_swing_horizontal": ('climate', 'set_swing_horizontal_mode', 'swing_horizontal_mode', 'swing_horizontal_modes', 'SWING_HORIZONTAL_MODE', ''),
+})
+# Exact service data is owned by Phoenix; a model selects only the category.
+COMMAND_ROUTING_ENTITY_FIXED_DATA: dict[str, dict[str, bool | str]] = {
+    "automation_off": {"stop_actions": True},
+    "media_mute": {"is_volume_muted": True}, "media_unmute": {"is_volume_muted": False},
+    "media_shuffle_on": {"shuffle": True}, "media_shuffle_off": {"shuffle": False},
+    "media_repeat_all": {"repeat": "all"}, "media_repeat_one": {"repeat": "one"}, "media_repeat_off": {"repeat": "off"},
+    "fan_oscillate_on": {"oscillating": True}, "fan_oscillate_off": {"oscillating": False},
+    "fan_direction_forward": {"direction": "forward"}, "fan_direction_reverse": {"direction": "reverse"},
+}
 COMMAND_ROUTING_ENTITY_INTENTS = {"PhoenixEntity" + "".join(part.title() for part in category.split("_")): spec
                                   for category, spec in COMMAND_ROUTING_ENTITY_COMMANDS.items()}
 DECISION_ENTITY_CATEGORIES = {category: "PhoenixEntity" + "".join(part.title() for part in category.split("_"))
                               for category in COMMAND_ROUTING_ENTITY_COMMANDS}
+COMMAND_ROUTING_FIXED_INTENT_DATA = {DECISION_ENTITY_CATEGORIES[category]: values
+                                     for category, values in COMMAND_ROUTING_ENTITY_FIXED_DATA.items()}
+COMMAND_ROUTING_FIXED_OBSERVATIONS = {intent: values for intent, values in COMMAND_ROUTING_FIXED_INTENT_DATA.items()
+                                     if intent != DECISION_ENTITY_CATEGORIES["automation_off"]}
 COMMAND_ROUTING_VALUE_INTENTS = frozenset(intent for intent, spec in COMMAND_ROUTING_ENTITY_INTENTS.items() if spec[2])
 COMMAND_ROUTING_INTENTS |= COMMAND_ROUTING_ENTITY_INTENTS.keys()
 COMMAND_ROUTING_ENTITY_VALUE_LIMIT = 254
@@ -1935,6 +1968,9 @@ DECISION_TARGET_INTENTS.update(DECISION_ENTITY_CATEGORIES)
 DECISION_ENTITY_CHOICES = {category: f"One immediate request for {spec[1]} on one named {spec[0]} entity"
                              + (f" using its {spec[2]} value." if spec[2] else ". No additional setting or duration.")
                              for category, spec in COMMAND_ROUTING_ENTITY_COMMANDS.items()}
+for _category, _values in COMMAND_ROUTING_ENTITY_FIXED_DATA.items():
+    DECISION_ENTITY_CHOICES[_category] += f" Use exactly these fixed service fields: {_values}."
+DECISION_ENTITY_CHOICES["automation_off"] += " Disable future triggers and stop running automation actions, matching Home Assistant turn_off."
 DECISION_TARGET_INTENTS.update(DECISION_TEMPORAL_CATEGORIES)
 DECISION_TARGET_INTENTS.update({category: spec[0] for category, spec in DECISION_ADDITIONAL_NUMERIC.items()})
 DECISION_PERCENTAGE_PREVIEW_CHOICES.update({
