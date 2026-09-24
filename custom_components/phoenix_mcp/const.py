@@ -1699,6 +1699,12 @@ DECISION_CONTEXT_CHECKS = {
     },
 }
 DECISION_CONTEXT_REQUIRED_CHOICES = {"request": "immediate", "constraints": "clear"}
+# Initial evaluated revisions only; every adapter remains eligible for inert previews.
+DECISION_CONTEXT_EXECUTION_MODELS = {
+    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
+    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
+}
+DECISION_CONTEXT_EXECUTION_LANGUAGES = frozenset({"en"})
 DECISION_ROUTE_CHOICES = {
     "light_on": "One immediate, explicit request to turn on one light, without a brightness setting or adjustment.",
     "light_off": "One immediate, explicit request to turn off one light, without a brightness setting or adjustment.",
@@ -1730,6 +1736,7 @@ DECISION_HYBRID_REASONS = frozenset({
     "invalid_input", "authority_changed", "not_enabled", "not_configured", "local_match", "numeric_unverified",
     "local_unavailable", "busy", "cancelled", "authentication", "rate_limited", "http_error",
     "response_too_large", "malformed", "timeout", "unavailable",
+    "context_unverified", "context_unavailable", "context_changed", "low_probability", "invalid_context",
 })
 DECISION_BRIGHTNESS_CHOICES = {
     # Enumerate whole values so classification does not require digit arithmetic.

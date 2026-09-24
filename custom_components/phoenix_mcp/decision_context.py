@@ -1,4 +1,4 @@
-"""Explicit administrator previews of conversation context, without execution plans."""
+"""Bounded context reviews; only the internal Chat path can prepare execution plans."""
 from __future__ import annotations
 
 import asyncio
@@ -10,10 +10,11 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .command_execution import _target_fingerprint
 from .command_operations import numeric_operation, service_arguments
-from .command_routing import RoutingAuthority, routing_language
+from .command_routing import RoutingAuthority, effective_routing_mode, routing_language
 from .const import (
     COMMAND_ROUTING_INTENTS, DECISION_CONTEXT_MAX_BYTES, DECISION_CONTEXT_MAX_MESSAGES,
-    DECISION_CONTEXT_REQUIRED_CHOICES, MAX_SEARCH_QUERY_LEN,
+    DECISION_CONTEXT_REQUIRED_CHOICES, DECISION_CONTEXT_EXECUTION_MODELS,
+    DECISION_CONTEXT_EXECUTION_LANGUAGES, MAX_SEARCH_QUERY_LEN,
 )
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 from .helpers import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
@@ -76,9 +77,35 @@ def _state(hass: Any, token: Any, sentence: str, language: str,
     return state, fingerprint
 
 
+def context_execution_eligible(hass: Any, data: Any, language: object) -> bool:
+    """Skip history sharing for providers or languages outside the evaluated rollout."""
+    from .agentcli import loaded_decision_account
+    settings = data.store.get_settings()
+    account = settings.decision_provider_id
+    cfg = loaded_decision_account(hass, account) if account else None
+    return bool(effective_routing_mode(settings, "chat") == "hybrid"
+                and routing_language(language) in DECISION_CONTEXT_EXECUTION_LANGUAGES
+                and cfg and (cfg.kind, cfg.base_url, cfg.model) in DECISION_CONTEXT_EXECUTION_MODELS)
+
+
 async def async_preview_context(hass: Any, data: Any, token: Any, sentence: str,
                                 language: str, messages: Any, local: dict) -> dict:
-    """Use the shared decision slot/budget, without admitting any automatic route."""
+    """Administrator previews cannot request execution plans."""
+    return await _async_review_context(hass, data, token, sentence, language, messages, local)
+
+
+async def async_prepare_chat_context(hass: Any, data: Any, token: Any, sentence: str,
+                                     language: str, messages: Any, local: dict,
+                                     cancel: asyncio.Event) -> dict:
+    """Internal Chat admission preserves the shared execution and approval boundaries."""
+    return await _async_review_context(hass, data, token, sentence, language, messages, local,
+                                       prepare=True, cancel=cancel)
+
+
+async def _async_review_context(hass: Any, data: Any, token: Any, sentence: str,
+                                language: str, messages: Any, local: dict, *, prepare: bool = False,
+                                cancel: asyncio.Event | None = None) -> dict:
+    """Own one cancellable request under the shared decision slot and time budget."""
     started = monotonic()
     def result(reason: str, decision: dict | None = None) -> dict:
         return {"reason": reason, "decision": decision, "executed": False,
@@ -91,6 +118,10 @@ async def async_preview_context(hass: Any, data: Any, token: Any, sentence: str,
         return result("invalid_context")
     if local.get("reason") != "supported" or not local.get("proposal"):
         return result("local_unavailable")
+    if cancel is not None and cancel.is_set():
+        return result("cancelled")
+    if prepare and not context_execution_eligible(hass, data, lang):
+        return result("context_unverified")
     authority = RoutingAuthority.capture(data, token)
     if authority.current(hass) is None:
         return result("authority_changed")
@@ -140,7 +171,21 @@ async def async_preview_context(hass: Any, data: Any, token: Any, sentence: str,
                 checks[question]["choice"] != required
                 for question, required in DECISION_CONTEXT_REQUIRED_CHOICES.items()
             ) else ("compatible" if all(confident_choice(check) for check in checks.values()) else "low_probability")
-            return result(reason, answer)
+            reviewed = result(reason, answer)
+            if prepare and reason == "compatible":
+                from .agentcli import decision_account_fingerprint
+                from .command_execution import _capture_plan
+                if (not context_execution_eligible(hass, data, lang)
+                        or answer["model"] not in DECISION_CONTEXT_EXECUTION_MODELS.get((cfg.kind, cfg.base_url, cfg.model), ())):
+                    return result("context_unverified", answer)
+                plan = _capture_plan(hass, data, current, proposal, ingress="chat")
+                account_digest = decision_account_fingerprint(hass, account)
+                if plan is None or account_digest is None:
+                    return result("context_changed")
+                plan["context_review"] = {"account": account_digest, "kind": cfg.kind,
+                                          "model": answer["model"], "language": lang}
+                reviewed.update(reason="plan_ready", _plan=plan)
+            return reviewed
         except DecisionError as error:
             return result(str(error))
         except TimeoutError:
@@ -156,7 +201,12 @@ async def async_preview_context(hass: Any, data: Any, token: Any, sentence: str,
         if not completed.cancelled():
             completed.exception()
     task.add_done_callback(finished)
+    waiter = asyncio.create_task(cancel.wait()) if cancel is not None else None
     try:
+        if waiter is not None:
+            await asyncio.wait({task, waiter}, return_when=asyncio.FIRST_COMPLETED)
+            if cancel is not None and cancel.is_set():
+                return result("cancelled")
         return await task
     except asyncio.CancelledError:
         current_task = asyncio.current_task()
@@ -164,5 +214,9 @@ async def async_preview_context(hass: Any, data: Any, token: Any, sentence: str,
             raise
         return result("cancelled")
     finally:
-        if task.done():
-            finished(task)
+        if not task.done():
+            task.cancel()
+        if waiter is not None:
+            waiter.cancel()
+        await asyncio.gather(task, *([waiter] if waiter is not None else []), return_exceptions=True)
+        finished(task)

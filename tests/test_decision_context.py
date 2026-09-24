@@ -314,3 +314,17 @@ async def test_each_context_check_must_pass_individually(hass, context_home, que
     assert result['reason'] == reason and result['executed'] is False
     assert result['decision'] == response
     assert 'confidence' not in result['decision'] and 'probabilities' not in result['decision']
+
+
+async def test_administrator_preview_never_returns_a_plan_for_eligible_chat_account(hass, context_home):
+    from custom_components.phoenix_mcp.decision_context import context_execution_eligible
+    data, _, store, *_ = context_home
+    hass.data['_phoenix_agentcli_store'] = store
+    await data.store.async_patch_settings(agentcli_routing_mode='auto')
+    assert context_execution_eligible(hass, data, 'en')
+    response = answer()
+    response['model'] = 'jev-1.13.0'
+    with patch.object(DecisionProvider, 'review_context', AsyncMock(return_value=response)):
+        result = await preview(hass, context_home)
+    assert result['reason'] == 'compatible' and result['executed'] is False
+    assert '_plan' not in result and not data.store.get_pending_approvals()

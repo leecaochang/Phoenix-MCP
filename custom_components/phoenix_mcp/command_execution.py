@@ -13,7 +13,10 @@ from .agent_recovery import RecoveryRequired, dispatch_agent_tool, recovery_turn
 from .audit import generate_request_id
 from .command_operations import service_arguments, supports_command
 from .command_routing import RoutingAuthority, effective_routing_mode
-from .const import COMMAND_ROUTING_PLAN_KEY, VOICE_AGENT_CLIENT_IP, DECISION_TARGET_INTENTS, DECISION_EXECUTION_CATEGORIES
+from .const import (
+    COMMAND_ROUTING_PLAN_KEY, VOICE_AGENT_CLIENT_IP, DECISION_TARGET_INTENTS, DECISION_EXECUTION_CATEGORIES,
+    DECISION_CONTEXT_EXECUTION_MODELS, DECISION_CONTEXT_EXECUTION_LANGUAGES,
+)
 from .device_semantics import device_registry_snapshot
 from .helpers import voice_text
 from .policy_engine import Permission, resolve
@@ -87,6 +90,25 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
                 and capture_targets(hass, token, category).digest() == plan.get("decision_catalog"))
 
 
+def _context_plan_current(plan: dict, hass: Any, data: Any) -> bool:
+    if "context_review" not in plan:
+        return True
+    from .agentcli import loaded_decision_account, decision_account_fingerprint
+    review = plan["context_review"]
+    account = data.store.get_settings().decision_provider_id
+    cfg = loaded_decision_account(hass, account) if account else None
+    return bool(
+        plan.get("ingress") == "chat" and "decision_category" not in plan
+        and effective_routing_mode(data.store.get_settings(), "chat") == "hybrid"
+        and isinstance(review, dict) and set(review) == {"account", "kind", "model", "language"}
+        and all(isinstance(value, str) for value in review.values())
+        and review["language"] in DECISION_CONTEXT_EXECUTION_LANGUAGES
+        and cfg and account and cfg.kind == review["kind"]
+        and review["model"] in DECISION_CONTEXT_EXECUTION_MODELS.get((cfg.kind, cfg.base_url, cfg.model), ())
+        and review["account"] == decision_account_fingerprint(hass, account)
+    )
+
+
 def plan_is_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
     """Recheck identity, scope, availability, capabilities and configuration."""
     try:
@@ -107,6 +129,7 @@ def plan_is_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
             and token.settings_version == plan["token_version"]
             and _digest(settings.to_dict()) == plan["settings"]
             and _decision_plan_current(plan, hass, data, token)
+            and _context_plan_current(plan, hass, data)
             and proposal["entity_ids"] and set(proposal["entity_ids"]) == set(plan["fingerprints"])
             and all(plan["fingerprints"][eid] is not None and
                     _target_fingerprint(hass, token, eid, proposal["intent"]) == plan["fingerprints"][eid]

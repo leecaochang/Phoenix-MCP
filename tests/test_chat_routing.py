@@ -4,6 +4,8 @@ import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from homeassistant.components.cover import CoverEntityFeature
+from homeassistant.components.media_player import MediaPlayerEntityFeature
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 
@@ -871,3 +873,340 @@ async def test_numeric_chat_automatically_falls_back_before_target_request(hass,
     assert not any(name == 'approval_required' for name, _ in events)
     assert messages[-1]['content'] == 'Normal provider reply'
     assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'numeric_unverified': 1}
+
+
+CONTEXT_HISTORY = [
+    {'role': 'user', 'content': 'How does brightness work?'},
+    {'role': 'assistant', 'content': 'Brightness is expressed as a percentage.'},
+]
+
+
+def context_response(*, model='jev-1.13.0', decline=False, probability=1):
+    def choice(selected, other):
+        return {'type': 'choice', 'choice': selected, 'confidence': probability,
+                'probabilities': {selected: probability, other: 1-probability}}
+    return {'model': model, 'answers': {
+        'request': choice('immediate', 'contextual'),
+        'constraints': choice('restricted', 'clear') if decline else choice('clear', 'restricted'),
+    }}
+
+
+@pytest.fixture
+async def context_chat(hass, executing_chat):
+    data, _ = executing_chat
+    # These exercise execution gates, not executor scheduling under a short budget.
+    await data.store.async_patch_settings(agentcli_routing_mode='auto', command_routing_timeout_ms=5000)
+    store = await agentcli._get_secret_store(hass)
+    await store.set_model(data.store.get_settings().decision_provider_id, 'jev-latest')
+    return executing_chat
+
+
+def context_messages(sentence='set the desk lamp brightness to 37 percent'):
+    return [dict(message) for message in CONTEXT_HISTORY] + [{'role': 'user', 'content': sentence}]
+
+
+async def test_mixed_chat_routes_fixed_numeric_command_and_preserves_history(hass, context_chat):
+    from custom_components.phoenix_mcp import mcp_view
+    data, token = context_chat
+    messages = context_messages()
+    with (patch.object(DecisionProvider, '_request', AsyncMock(return_value=context_response())) as remote,
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        provider, events, result = await chat_turn(hass, context_chat, messages)
+    provider.stream_turn.assert_not_called()
+    remote.assert_awaited_once()
+    state = remote.await_args.args[4]['state']
+    assert state['history'] == CONTEXT_HISTORY
+    assert state['candidate']['brightness_pct'] == 37
+    call.assert_awaited_once_with('light', 'turn_on', {'entity_id': ['light.test_desk'], 'brightness_pct': 37},
+                                 blocking=True, return_response=False)
+    assert result[:2] == CONTEXT_HISTORY and result[-1]['content'] == 'Command sent.'
+    assert events[-1] == ('done', {'stop_reason': 'end_turn'})
+    assert not data.command_routing.chat_history._entries
+    assert not data.agent_recovery.records(token.id)
+    assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'plan_ready': 1}
+
+
+async def test_mixed_history_requires_review_again_after_success(hass, context_chat):
+    data, _ = context_chat
+    with patch.object(DecisionProvider, '_request', AsyncMock(return_value=context_response())) as remote:
+        provider, _, history = await chat_turn(hass, context_chat, context_messages('what is the state of the desk lamp'))
+        provider.stream_turn.assert_not_called()
+        assert not data.command_routing.chat_history._entries
+        provider, _, history = await chat_turn(hass, context_chat,
+            [*history, {'role': 'user', 'content': 'what is the state of the desk lamp'}])
+    provider.stream_turn.assert_not_called()
+    assert remote.await_count == 2
+    assert remote.await_args.args[4]['state']['history'] == history[:-2]
+    assert history[:2] == CONTEXT_HISTORY and not data.command_routing.chat_history._entries
+
+
+async def test_verified_local_chain_still_skips_context_provider(hass, context_chat):
+    with patch.object(DecisionProvider, '_request') as remote:
+        _, _, history = await chat_turn(hass, context_chat,
+            [{'role': 'user', 'content': 'what is the state of the desk lamp'}])
+        provider, _, _ = await chat_turn(hass, context_chat,
+            [*history, {'role': 'user', 'content': 'what is the state of the desk lamp'}])
+    provider.stream_turn.assert_not_called()
+    remote.assert_not_called()
+
+
+@pytest.mark.parametrize('case', ['decline', 'uncertain', 'unknown_revision', 'malformed', 'timeout',
+    'local_miss', 'secret', 'tool_history', 'oversized', 'language', 'account', 'endpoint', 'configured_revision', 'local_mode'])
+async def test_context_fallback_keeps_the_full_conversation(hass, context_chat, case):
+    from custom_components.phoenix_mcp.decision_provider import DecisionError
+    data, _ = context_chat
+    messages = context_messages()
+    response = context_response()
+    language = 'en'
+    if case == 'decline': response = context_response(decline=True)
+    if case == 'uncertain': response = context_response(probability=.89)
+    if case == 'unknown_revision': response = context_response(model='jev-unreviewed')
+    if case == 'malformed': del response['answers']['constraints']
+    if case == 'local_miss': messages[-1]['content'] = 'make it dimmer'
+    if case == 'secret': messages[0]['content'] = 'password: private-test-value'
+    if case == 'tool_history': messages[1]['tool_calls'] = []
+    if case == 'oversized': messages[0]['content'] = 'x' * 17000
+    if case == 'language': language = 'es'
+    if case == 'account':
+        store = await agentcli._get_secret_store(hass)
+        account = await store.add('classifier', {'base_url': 'http://example.test/v1', 'model': 'Qwen/Qwen3.5-4B'})
+        await data.store.async_patch_settings(decision_provider_id=account)
+    if case == 'endpoint':
+        store = await agentcli._get_secret_store(hass)
+        account = await store.add('typesafe', {'base_url': 'https://unreviewed.example/v1',
+                                              'api_key': 'other-secret', 'model': 'jev-latest'})
+        await data.store.async_patch_settings(decision_provider_id=account)
+    if case == 'configured_revision':
+        store = await agentcli._get_secret_store(hass)
+        await store.set_model(data.store.get_settings().decision_provider_id, 'unreviewed-model')
+    if case == 'local_mode': await data.store.async_patch_settings(agentcli_routing_mode='local')
+    original = json.loads(json.dumps(messages))
+    with (patch.object(DecisionProvider, '_request', AsyncMock(return_value=response,
+                side_effect=DecisionError('timeout') if case == 'timeout' else None)) as remote,
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        provider, _, history = await chat_turn(hass, context_chat, messages, language)
+    provider.stream_turn.assert_called_once()
+    dispatch.assert_not_called()
+    assert history[:-1] == original and history[-1]['content'] == 'Normal provider reply'
+    if case in ('local_miss', 'secret', 'tool_history', 'oversized', 'language', 'account', 'endpoint', 'configured_revision', 'local_mode'):
+        remote.assert_not_called()
+    else:
+        remote.assert_awaited_once()
+    assert not data.command_routing.chat_history._entries
+
+
+@pytest.mark.parametrize('change', ['token', 'settings', 'account', 'account_back', 'target', 'history', 'scope'])
+async def test_context_wait_changes_stop_without_dispatch_or_provider_replay(hass, context_chat, change):
+    data, token = context_chat
+    messages = context_messages()
+    async def response(*args):
+        if change == 'token': token.revoked = True
+        if change == 'settings': await data.store.async_patch_settings(kill_switch=True)
+        if change in ('account', 'account_back'):
+            store = await agentcli._get_secret_store(hass)
+            account = data.store.get_settings().decision_provider_id
+            await store.set_model(account, 'changed')
+            if change == 'account_back': await store.set_model(account, 'jev-latest')
+        if change == 'target': er.async_get(hass).async_update_entity('light.test_desk', name='Replacement')
+        if change == 'history': messages[0]['content'] = 'Do not operate devices.'
+        if change == 'scope': token.permissions = PermissionTree()
+        return context_response()
+    with (patch.object(DecisionProvider, '_request', side_effect=response),
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        provider, events, _ = await chat_turn(hass, context_chat, messages)
+    dispatch.assert_not_called()
+    provider.stream_turn.assert_not_called()
+    assert any(name == 'error' for name, _ in events)
+
+
+@pytest.mark.parametrize('kind', ['event', 'task', 'owner'])
+async def test_context_chat_cancellation_closes_its_request(hass, context_chat, kind):
+    data, _ = context_chat
+    entered, closed, cancel = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    async def wait(*args):
+        entered.set()
+        try: await asyncio.Event().wait()
+        finally: closed.set()
+    with (patch.object(DecisionProvider, '_request', side_effect=wait),
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        pending = asyncio.create_task(chat_turn(hass, context_chat, context_messages(), cancel=cancel))
+        await entered.wait()
+        if kind == 'event': cancel.set()
+        if kind == 'task': pending.cancel()
+        if kind == 'owner': data.decision_shadow.cancel()
+        if kind == 'task':
+            with pytest.raises(asyncio.CancelledError): await pending
+        else:
+            async with asyncio.timeout(1): provider, events, _ = await pending
+            provider.stream_turn.assert_not_called()
+            assert any(name == 'error' for name, _ in events)
+    assert closed.is_set() and data.decision_shadow.task is None
+    dispatch.assert_not_called()
+
+
+@pytest.mark.parametrize('barrier', ['prohibited', 'read_only', 'confirm'])
+@pytest.mark.parametrize('pass_through', [False, True])
+async def test_context_chat_keeps_mesa_and_pass_through_gates(hass, context_chat, barrier, pass_through):
+    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp.mesa import async_setup_mesa
+    from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
+    data, token = context_chat
+    token.pass_through = pass_through
+    await data.store.async_patch_settings(mesa_mode='enforced')
+    data.mesa = await async_setup_mesa(hass, 'enforced')
+    data.mesa.store.set('light.test_desk', SemanticProfile.from_dict('light.test_desk',
+        {'semantic_profile': {'operational_boundaries': {'control_mode': barrier}}}, default_origin=MetadataOrigin.USER))
+    with (patch.object(DecisionProvider, '_request', AsyncMock(return_value=context_response())),
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        provider, events, _ = await chat_turn(hass, context_chat, context_messages())
+    provider.stream_turn.assert_not_called()
+    call.assert_not_called()
+    assert any(name == 'approval_required' for name, _ in events) == (barrier == 'confirm')
+    assert not data.command_routing.chat_history._entries
+
+
+@pytest.mark.parametrize('change', ['none', 'account', 'account_back', 'deleted', 'mode', 'target', 'scope',
+    'model_proof', 'kind_proof', 'language_proof', 'ingress', 'value'])
+async def test_context_saved_approval_rechecks_provider_and_exact_action(hass, context_chat, change):
+    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp.const import COMMAND_ROUTING_PLAN_KEY
+    from custom_components.phoenix_mcp.mesa import async_setup_mesa
+    from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
+    data, token = context_chat
+    await data.store.async_patch_settings(mesa_mode='enforced')
+    data.mesa = await async_setup_mesa(hass, 'enforced')
+    data.mesa.store.set('light.test_desk', SemanticProfile.from_dict('light.test_desk',
+        {'semantic_profile': {'operational_boundaries': {'control_mode': 'confirm'}}}, default_origin=MetadataOrigin.USER))
+    with (patch.object(DecisionProvider, '_request', AsyncMock(return_value=context_response())),
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[]))):
+        provider, events, _ = await chat_turn(hass, context_chat, context_messages())
+    provider.stream_turn.assert_not_called()
+    record = data.store.get_pending_approvals()[0]
+    plan = record['args'][COMMAND_ROUTING_PLAN_KEY]
+    assert plan['context_review']['model'] == 'jev-1.13.0'
+    assert plan['proposal']['brightness_pct'] == 37
+    assert 'decision_category' not in plan
+    assert 'secret' not in json.dumps(plan) and CONTEXT_HISTORY[0]['content'] not in json.dumps(plan)
+    assert COMMAND_ROUTING_PLAN_KEY not in json.dumps(events)
+    store = await agentcli._get_secret_store(hass)
+    account = data.store.get_settings().decision_provider_id
+    if change in ('account', 'account_back'):
+        await store.set_model(account, 'changed')
+        if change == 'account_back': await store.set_model(account, 'jev-latest')
+    if change == 'deleted': await store.delete(account)
+    if change == 'mode': await data.store.async_patch_settings(agentcli_routing_mode='local')
+    if change == 'target': er.async_get(hass).async_update_entity('light.test_desk', name='Replacement')
+    if change == 'scope': token.permissions = PermissionTree()
+    if change == 'model_proof': plan['context_review']['model'] = 'unreviewed-model'
+    if change == 'kind_proof': plan['context_review']['kind'] = 'classifier'
+    if change == 'language_proof': plan['context_review']['language'] = 'es'
+    if change == 'ingress': plan['ingress'] = 'voice'
+    if change == 'value': record['args']['service_data']['brightness_pct'] = 99
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+    assert outcome == ('allowed' if change == 'none' else 'denied')
+    assert call.await_count == (1 if change == 'none' else 0)
+
+
+@pytest.mark.parametrize('capability', ['deny', 'confirm'])
+async def test_context_keeps_physical_capability_gate(hass, context_chat, capability):
+    from custom_components.phoenix_mcp import mcp_view
+    data, token = context_chat
+    token.cap_physical_control = capability
+    token.permissions = PermissionTree(domains={'cover': PermissionNode(state='GREEN')})
+    entry = er.async_get(hass).async_get_or_create('cover', 'test', 'blind', original_name='Blind')
+    hass.states.async_set(entry.entity_id, 'open', {'friendly_name': 'Blind',
+        'supported_features': CoverEntityFeature.SET_POSITION})
+    with (patch.object(DecisionProvider, '_request', AsyncMock(return_value=context_response())),
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        provider, events, _ = await chat_turn(hass, context_chat,
+            context_messages(f'set {entry.entity_id} to 37 percent'))
+    call.assert_not_called()
+    provider.stream_turn.assert_not_called()
+    assert any(name == 'approval_required' for name, _ in events) == (capability == 'confirm')
+    assert bool(data.store.get_pending_approvals()) == (capability == 'confirm')
+
+
+@pytest.mark.parametrize('domain,name,features,sentence,service,field,value', [
+    ('media_player', 'Speaker', MediaPlayerEntityFeature.VOLUME_SET, 'set media_player.test_speaker volume to 37 percent', 'volume_set', 'volume_level', .37),
+    ('cover', 'Blind', CoverEntityFeature.SET_POSITION, 'set cover.test_blind to 37 percent', 'set_cover_position', 'position', 37),
+])
+async def test_context_keeps_local_numeric_projection_for_other_devices(
+        hass, context_chat, domain, name, features, sentence, service, field, value):
+    from custom_components.phoenix_mcp import mcp_view
+    data, token = context_chat
+    token.permissions = PermissionTree(domains={domain: PermissionNode(state='GREEN')})
+    entry = er.async_get(hass).async_get_or_create(domain, 'test', name.lower(), original_name=name)
+    assert entry.entity_id in sentence
+    hass.states.async_set(entry.entity_id, 'on' if domain == 'media_player' else 'open',
+                          {'friendly_name': name, 'supported_features': features})
+    with (patch.object(DecisionProvider, '_request', AsyncMock(return_value=context_response())) as remote,
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        provider, _, _ = await chat_turn(hass, context_chat, context_messages(sentence))
+    provider.stream_turn.assert_not_called()
+    assert remote.await_args.args[4]['state']['service']['service_data'] == {field: value}
+    call.assert_awaited_once_with(domain, service, {'entity_id': [entry.entity_id], field: value},
+                                 blocking=True, return_response=False)
+    assert not data.command_routing.chat_history._entries
+
+
+async def test_context_busy_slot_preserves_other_ingress_job(hass, context_chat):
+    data, _ = context_chat
+    other = asyncio.create_task(asyncio.Event().wait())
+    data.decision_shadow.task = other
+    try:
+        with (patch.object(DecisionProvider, '_request') as remote,
+              patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+            provider, _, history = await chat_turn(hass, context_chat, context_messages())
+        provider.stream_turn.assert_called_once()
+        assert history[:2] == CONTEXT_HISTORY
+        assert data.decision_shadow.task is other and not other.done()
+        remote.assert_not_called()
+        dispatch.assert_not_called()
+    finally:
+        other.cancel()
+        await asyncio.gather(other, return_exceptions=True)
+        data.decision_shadow.task = None
+
+
+async def test_context_interrupted_delivery_retains_write_recovery(hass, context_chat):
+    from custom_components.phoenix_mcp import mcp_view
+    data, token = context_chat
+    async def emit(name, payload):
+        if name == 'assistant_delta':
+            raise ConnectionResetError('delivery interrupted')
+    with (patch.object(DecisionProvider, '_request', AsyncMock(return_value=context_response())),
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        with pytest.raises(ConnectionResetError):
+            await agentcli.async_run_agent_turn(
+                hass=hass, data=data, token=token, provider=MagicMock(), session=None,
+                messages=context_messages(), options={}, client_ip='agentcli', base_url='http://test',
+                emit=emit, cancel=asyncio.Event(), routing_language='en')
+    call.assert_awaited_once()
+    assert data.agent_recovery.blocks(token.id)
+    assert not data.command_routing.chat_history._entries
+
+
+async def test_context_account_change_during_local_recognition_stops_before_history_sharing(hass, context_chat):
+    data, _ = context_chat
+    evaluate = chat_routing.async_evaluate_command
+    async def changed(*args, **kwargs):
+        result = await evaluate(*args, **kwargs)
+        assert result['proposal']
+        store = await agentcli._get_secret_store(hass)
+        await store.set_model(data.store.get_settings().decision_provider_id, 'jev-1.13.0')
+        return result
+    with (patch.object(chat_routing, 'async_evaluate_command', side_effect=changed),
+          patch.object(DecisionProvider, '_request') as remote,
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        provider, events, _ = await chat_turn(hass, context_chat, context_messages())
+    remote.assert_not_called()
+    dispatch.assert_not_called()
+    provider.stream_turn.assert_not_called()
+    assert any(name == 'error' for name, _ in events)

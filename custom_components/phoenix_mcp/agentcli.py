@@ -765,10 +765,15 @@ async def _get_secret_store(hass: HomeAssistant) -> AgentCliStore:
         return inst
 
 
+def loaded_decision_account(hass: HomeAssistant, instance_id: str) -> ProviderConfig | None:
+    """Resolve the current loaded account without loading storage or awaiting."""
+    store = hass.data.get("_phoenix_agentcli_store")
+    return store.resolve(instance_id, purpose="decision") if isinstance(store, AgentCliStore) else None
+
+
 def decision_account_fingerprint(hass: HomeAssistant, instance_id: str) -> str | None:
     """Read an already-loaded decision account without exposing credentials in a plan."""
-    store = hass.data.get("_phoenix_agentcli_store")
-    cfg = store.resolve(instance_id, purpose="decision") if isinstance(store, AgentCliStore) else None
+    cfg = loaded_decision_account(hass, instance_id)
     return hashlib.sha256(json.dumps(dataclasses.asdict(cfg), sort_keys=True).encode()).hexdigest() if cfg else None
 
 
