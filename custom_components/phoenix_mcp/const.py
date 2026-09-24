@@ -1746,6 +1746,8 @@ DECISION_TARGET_INTENTS = {
 }
 # Leave one of the common classifier format's 50 choices for declining.
 DECISION_MAX_TARGETS = 49
+# The extended TypeSafe preview leaves one of its 255 choices for declining.
+DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS = 254
 DECISION_MAX_TARGET_BYTES = 16384
 DECISION_MAX_TARGET_TEXT = 256
 DECISION_MAX_TARGET_ALIASES = 8

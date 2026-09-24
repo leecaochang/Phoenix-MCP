@@ -30,7 +30,8 @@ class TargetSnapshot:
 
 
 def capture_targets(hass: Any, token: Any, category: str, *,
-                    devices: DeviceRegistrySnapshot | None = None) -> TargetSnapshot:
+                    devices: DeviceRegistrySnapshot | None = None,
+                    max_targets: int = DECISION_MAX_TARGETS) -> TargetSnapshot:
     """Reuse local execution eligibility; send identity metadata only, never states."""
     intent = DECISION_TARGET_INTENTS.get(category)
     if intent is None:
@@ -53,7 +54,7 @@ def capture_targets(hass: Any, token: Any, category: str, *,
         fingerprint = _target_fingerprint(hass, token, entity_id, intent, devices=devices)
         if fingerprint is None:
             continue
-        if len(targets) >= DECISION_MAX_TARGETS:
+        if len(targets) >= max_targets:
             # Never hide competing candidates by taking an arbitrary first page.
             raise DecisionError("too_many_targets")
         entry = registry.async_get(entity_id)

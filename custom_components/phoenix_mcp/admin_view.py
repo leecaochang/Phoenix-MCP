@@ -2354,13 +2354,14 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
             return body
         sentence = body.get("sentence")
         token_id = body.get("token_id")
-        if (set(body) - {"token_id", "sentence", "language", "decision", "targets", "messages", "batch"}
+        if (set(body) - {"token_id", "sentence", "language", "decision", "targets", "messages", "batch", "numeric"}
                 or not isinstance(sentence, str) or not sentence.strip()
                 or len(sentence) > MAX_SEARCH_QUERY_LEN
                 or not isinstance(token_id, str)
                 or routing_language(body.get("language", "en"), preview=True) is None
                 or type(body.get("decision", False)) is not bool
                 or type(body.get("batch", False)) is not bool
+                or type(body.get("numeric", False)) is not bool or (body.get("numeric") and not body.get("batch"))
                 or (body.get("batch") and (not body.get("decision") or not body.get("targets") or "messages" in body))
                 or type(body.get("targets", False)) is not bool or (body.get("targets") and not body.get("decision"))
                 or ("messages" in body and (not body.get("decision") or body.get("targets")
@@ -2382,7 +2383,8 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
                 result.update(route="provider", reason=result["context_review"]["reason"], proposal=None)
         elif body.get("batch"):
             from .decision_batch import async_preview_batch
-            result["batch_review"] = await async_preview_batch(self.hass, data, token, sentence, language, result)
+            result["batch_review"] = await async_preview_batch(self.hass, data, token, sentence, language, result,
+                                                             numeric_preview=body.get("numeric", False))
             if result["batch_review"]["reason"] in ("targets_changed", "authority_changed"):
                 result.update(route="provider", reason=result["batch_review"]["reason"], proposal=None)
         elif body.get("decision"):

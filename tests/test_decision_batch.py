@@ -12,7 +12,9 @@ from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.phoenix_mcp import agentcli, device_semantics
-from custom_components.phoenix_mcp.const import DOMAIN, DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS
+from custom_components.phoenix_mcp.const import (
+    DOMAIN, DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS, DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS,
+)
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.decision_batch import async_preview_batch, capture_batch_targets
 from custom_components.phoenix_mcp.decision_provider import DecisionProvider, DecisionError
@@ -47,10 +49,10 @@ def wire_response(payload, category='light_on', target='t0'):
         for question, selected in (('route', category), ('target', target))}}
 
 
-async def preview(hass, home, local=None):
+async def preview(hass, home, local=None, *, numeric_preview=False):
     data, token, *_ = home
     return await async_preview_batch(hass, data, token, 'Switch on the desk lamp', 'en',
-                                      local or {'reason': 'no_match', 'proposal': None})
+                                      local or {'reason': 'no_match', 'proposal': None}, numeric_preview=numeric_preview)
 
 
 @pytest.mark.parametrize('protocol', ['systemone', 'classifier'])
@@ -64,7 +66,7 @@ async def test_one_real_request_with_two_independent_closed_choices(protocol, so
         provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'm', str(server.make_url('')).rstrip('/')), protocol)
         result = await provider.route_and_target(session, 'switch it on', {'t0': {'eligible_categories': ['light_on']}}, 1000)
     assert len(seen) == 1 and set(seen[0]['questions']) == {'route', 'target'}
-    assert 'light_brightness' not in seen[0]['questions']['route']['criteria']
+    assert not {'light_brightness', 'media_volume', 'cover_position'} & set(seen[0]['questions']['route']['criteria'])
     assert result['route']['choice'] == 'light_on' and result['target']['choice'] == 't0'
 
 
@@ -106,19 +108,20 @@ async def test_joint_preview_compares_local_match_without_execution(hass, batch_
 
 
 @pytest.mark.parametrize('case', ['denied', 'unexposed', 'unavailable', 'oversized', 'trigger', 'timeout'])
-async def test_no_request_when_catalog_or_local_recognition_is_ineligible(hass, batch_home, case):
+@pytest.mark.parametrize('numeric', [False, True])
+async def test_no_request_when_catalog_or_local_recognition_is_ineligible(hass, batch_home, case, numeric):
     _, token, _, _, entity_id = batch_home
     local = None
     if case == 'denied': token.permissions = PermissionTree()
     if case == 'unexposed': async_expose_entity(hass, 'conversation', entity_id, False)
     if case == 'unavailable': hass.states.async_set(entity_id, 'unavailable')
     if case == 'oversized':
-        for index in range(DECISION_MAX_TARGETS):
+        for index in range(DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS if numeric else DECISION_MAX_TARGETS):
             entry = er.async_get(hass).async_get_or_create('light', 'test', str(index))
             hass.states.async_set(entry.entity_id, 'off')
     if case in ('trigger', 'timeout'): local = {'reason': 'sentence_trigger' if case == 'trigger' else 'timeout', 'proposal': None}
     with patch.object(DecisionProvider, '_request') as request:
-        result = await preview(hass, batch_home, local)
+        result = await preview(hass, batch_home, local, numeric_preview=numeric)
     request.assert_not_called()
     assert result['reason'] in ('no_target', 'too_many_targets', 'local_unavailable')
 
@@ -195,7 +198,8 @@ async def test_batch_recaptures_device_graph_after_model_wait(hass, batch_home, 
         assert 'proposal' not in result and 'decision' not in result
 
 
-async def test_batch_cancellation_releases_only_owned_slot(hass, batch_home):
+@pytest.mark.parametrize('numeric', [False, True])
+async def test_batch_cancellation_releases_only_owned_slot(hass, batch_home, numeric):
     data, *_ = batch_home
     entered, closed = asyncio.Event(), asyncio.Event()
     async def response(*args):
@@ -203,9 +207,9 @@ async def test_batch_cancellation_releases_only_owned_slot(hass, batch_home):
         try: await asyncio.Event().wait()
         finally: closed.set()
     with patch.object(DecisionProvider, '_request', side_effect=response) as request:
-        pending = asyncio.create_task(preview(hass, batch_home))
+        pending = asyncio.create_task(preview(hass, batch_home, numeric_preview=numeric))
         await entered.wait()
-        assert (await preview(hass, batch_home))['reason'] == 'busy'
+        assert (await preview(hass, batch_home, numeric_preview=numeric))['reason'] == 'busy'
         data.decision_shadow.cancel()
         assert (await pending)['reason'] == 'cancelled'
     assert closed.is_set() and data.decision_shadow.task is None and request.await_count == 1
@@ -229,3 +233,167 @@ async def test_union_catalog_retains_read_only_entities_without_write_eligibilit
     targets, _ = capture_batch_targets(hass, token)
     assert len(targets) == 2
     assert targets['t1']['eligible_categories'] == ['state_query']
+
+
+@pytest.fixture
+async def percentage_home(hass, batch_home):
+    from homeassistant.components.cover import CoverEntityFeature
+    from homeassistant.components.media_player import MediaPlayerEntityFeature
+    _, token, _, _, light = batch_home
+    token.permissions.domains.update({domain: PermissionNode(state='GREEN') for domain in ('media_player', 'cover')})
+    hass.states.async_set(light, 'off', {'supported_color_modes': ['brightness']})
+    entities = {'light_brightness': light}
+    for category, domain, feature in (
+        ('media_volume', 'media_player', MediaPlayerEntityFeature.VOLUME_SET),
+        ('cover_position', 'cover', CoverEntityFeature.SET_POSITION),
+    ):
+        entry = er.async_get(hass).async_get_or_create(domain, 'test', category)
+        hass.states.async_set(entry.entity_id, 'idle' if domain == 'media_player' else 'open',
+                              {'supported_features': feature, 'private': 'private-state'})
+        async_expose_entity(hass, 'conversation', entry.entity_id, True)
+        entities[category] = entry.entity_id
+    return batch_home, entities
+
+
+def percentage_response(payload, category, entity_id, percentage):
+    target = next(key for key, value in payload['state']['targets'].items() if value['entity_id'] == entity_id)
+    body = wire_response(payload, category, target)
+    body['answers']['percentage'] = {
+        'type': 'choice', 'choice': percentage, 'confidence': 1,
+        'probabilities': {key: float(key == percentage) for key in payload['questions']['percentage']['criteria']},
+    }
+    return body
+
+
+async def percentage_preview(hass, home):
+    data, token, *_ = home
+    return await async_preview_batch(hass, data, token, 'Set a device to thirty-seven percent', 'en',
+                                      {'reason': 'no_match', 'proposal': None}, numeric_preview=True)
+
+
+@pytest.mark.parametrize('category,intent,field', [
+    ('light_brightness', 'HassLightSet', 'brightness_pct'),
+    ('media_volume', 'HassSetVolume', 'volume_pct'),
+    ('cover_position', 'HassSetPosition', 'position_pct'),
+])
+@pytest.mark.parametrize('percent', [0, 1, 10, 37, 55, 99, 100])
+async def test_joint_percentage_preview_uses_one_request_and_never_prepares_execution(
+    hass, percentage_home, category, intent, field, percent,
+):
+    home, entities = percentage_home
+    entity_id = entities[category]
+    async def response(*args):
+        payload = args[4]
+        assert set(payload['questions']) == {'route', 'target', 'percentage'}
+        assert len(payload['questions']['percentage']['criteria']) == 102
+        assert len(payload['state']['targets']) == 3
+        assert 'private-state' not in json.dumps(payload)
+        for descriptor in payload['state']['targets'].values():
+            expected = next(key for key, entity in entities.items() if descriptor['entity_id'] == entity)
+            assert expected in descriptor['eligible_categories']
+        return percentage_response(payload, category, entity_id, str(percent))
+    with (patch.object(DecisionProvider, '_request', side_effect=response) as request,
+          patch('custom_components.phoenix_mcp.decision_batch._capture_plan') as plan,
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        result = await percentage_preview(hass, home)
+    request.assert_awaited_once(); plan.assert_not_called(); dispatch.assert_not_called()
+    assert result['proposal'] == {'intent': intent, 'entity_ids': [entity_id], field: percent}
+    assert result['executed'] is False and '_plan' not in result and not home[0].store.get_pending_approvals()
+
+
+@pytest.mark.parametrize('damage,reason', [
+    ('missing', 'malformed'), ('extra', 'malformed'), ('fractional', 'malformed'), ('outside', 'malformed'),
+    ('bool', 'malformed'), ('incomplete', 'malformed'), ('nonfinite', 'malformed'),
+    ('low', 'low_probability'), ('none', 'percentage_declined'), ('wrong_operation', 'category_mismatch'),
+    ('unrequested_number', 'percentage_mismatch'), ('nonnumeric', 'target_selected'), ('fallback', 'provider_fallback'),
+])
+async def test_joint_percentage_requires_complete_consistent_high_probability_answers(hass, percentage_home, damage, reason):
+    home, entities = percentage_home
+    async def response(*args):
+        category = {'wrong_operation': 'media_volume', 'unrequested_number': 'light_on',
+                    'nonnumeric': 'light_on', 'fallback': 'provider'}.get(damage, 'light_brightness')
+        percent = {'fractional': '37.5', 'outside': '101', 'bool': True,
+                   'none': 'none', 'nonnumeric': 'none'}.get(damage, '37')
+        body = percentage_response(args[4], category, entities['light_brightness'], percent)
+        value = body['answers']['percentage']
+        if damage == 'missing': del body['answers']['percentage']
+        if damage == 'extra': body['answers']['execute'] = {}
+        if damage == 'incomplete': del value['probabilities']['0']
+        if damage == 'nonfinite': value['confidence'] = float('nan')
+        if damage == 'low': value['probabilities'].update({'37': 0.8, 'none': 0.2})
+        return body
+    with patch.object(DecisionProvider, '_request', side_effect=response) as request:
+        result = await percentage_preview(hass, home)
+    request.assert_awaited_once()
+    assert result['reason'] == reason and result['executed'] is False
+    if damage != 'nonnumeric': assert 'proposal' not in result
+    else: assert result['proposal'] == {'intent': 'HassTurnOn', 'entity_ids': [entities['light_brightness']]}
+
+
+@pytest.mark.parametrize('change', ['scope', 'feature', 'unexposed', 'competing_entity', 'account', 'settings'])
+async def test_joint_percentage_discards_changed_catalog_or_authority(hass, percentage_home, change):
+    from homeassistant.components.cover import CoverEntityFeature
+    home, entities = percentage_home
+    data, token, store, account, _ = home
+    async def response(*args):
+        entity_id = entities['media_volume']
+        if change == 'scope': token.permissions.domains['media_player'].state = 'YELLOW'
+        if change == 'feature': hass.states.async_set(entity_id, 'idle', {'supported_features': 0})
+        if change == 'unexposed': async_expose_entity(hass, 'conversation', entity_id, False)
+        if change == 'competing_entity':
+            entry = er.async_get(hass).async_get_or_create('cover', 'test', 'competitor')
+            hass.states.async_set(entry.entity_id, 'open', {'supported_features': CoverEntityFeature.SET_POSITION})
+            async_expose_entity(hass, 'conversation', entry.entity_id, True)
+        if change == 'account': await store.set_model(account, 'changed')
+        if change == 'settings': await data.store.async_patch_settings(kill_switch=True)
+        return percentage_response(args[4], 'media_volume', entity_id, '37')
+    with patch.object(DecisionProvider, '_request', side_effect=response):
+        result = await percentage_preview(hass, home)
+    assert result['reason'] in ('targets_changed', 'authority_changed')
+    assert 'decision' not in result and 'proposal' not in result
+
+
+@pytest.mark.parametrize('kind,protocol', [('typesafe', 'systemone'), ('systemone', 'systemone'), ('classifier', 'classifier')])
+async def test_unqualified_endpoint_cannot_receive_extended_numeric_choices(kind, protocol):
+    provider = DecisionProvider(agentcli.ProviderConfig(kind, 'm', 'http://local.test/v1'), protocol)
+    with patch.object(provider, '_request') as request, pytest.raises(DecisionError, match='unsupported_category'):
+        await provider.route_and_target(None, 'request', {'t0': {}}, 1000, numeric_preview=True)
+    request.assert_not_called()
+
+
+@pytest.mark.parametrize('change', [False, True])
+async def test_extended_preview_keeps_all_competitors_above_common_limit(hass, batch_home, change):
+    _, token, _, _, original = batch_home
+    hass.states.async_set(original, 'off', {'supported_color_modes': ['brightness']})
+    for index in range(DECISION_MAX_TARGETS):
+        entry = er.async_get(hass).async_get_or_create('light', 'test', f'extra{index}')
+        hass.states.async_set(entry.entity_id, 'off', {'supported_color_modes': ['brightness']})
+    with pytest.raises(DecisionError, match='too_many_targets'):
+        capture_batch_targets(hass, token)
+    async def response(*args):
+        payload = args[4]
+        assert len(payload['state']['targets']) == DECISION_MAX_TARGETS + 1
+        assert len(payload['questions']['target']['criteria']) == DECISION_MAX_TARGETS + 2
+        assert all('light_brightness' in item['eligible_categories'] for item in payload['state']['targets'].values())
+        body = percentage_response(payload, 'light_brightness', original, '37')
+        if change:
+            er.async_get(hass).async_update_entity(entry.entity_id, aliases={'Desk lamp'})
+        return body
+    with patch.object(DecisionProvider, '_request', side_effect=response) as request:
+        result = await percentage_preview(hass, batch_home)
+    request.assert_awaited_once()
+    assert result['reason'] == ('targets_changed' if change else 'target_selected')
+    if change: assert 'decision' not in result and 'proposal' not in result
+    else: assert result['proposal']['brightness_pct'] == 37
+
+
+async def test_extended_preview_preserves_metadata_byte_budget(hass, batch_home):
+    registry = er.async_get(hass)
+    for index in range(20):
+        entry = registry.async_get_or_create('light', 'test', f'extra{index}')
+        registry.async_update_entity(entry.entity_id, aliases={str(i) * 200 for i in range(8)})
+        hass.states.async_set(entry.entity_id, 'off')
+    with patch.object(DecisionProvider, '_request') as request:
+        result = await percentage_preview(hass, batch_home)
+    assert result['reason'] == 'target_metadata_too_large'
+    request.assert_not_called()

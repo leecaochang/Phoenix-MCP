@@ -2957,6 +2957,9 @@ async def test_command_preview_requires_admin(authenticated, admin, status):
     {"token_id": "t", "sentence": "x", "language": "fr"},
     {"token_id": "t", "sentence": "x", "targets": True},
     {"token_id": "t", "sentence": "x", "batch": True},
+    {"token_id": "t", "sentence": "x", "decision": True, "targets": True, "numeric": True},
+    {"token_id": "t", "sentence": "x", "decision": True, "targets": True, "batch": True, "numeric": 1},
+    {"token_id": "t", "sentence": "x", "decision": True, "targets": True, "batch": True, "numeric": "true"},
     {"token_id": "t", "sentence": "x", "decision": True, "batch": True},
     {"token_id": "t", "sentence": "x", "decision": True, "targets": True, "batch": "true"},
     {"token_id": "t", "sentence": "x", "decision": True, "targets": True, "batch": True,
@@ -3040,15 +3043,17 @@ async def test_command_preview_context_opt_in_and_stale_disclosure(hass, token_s
 
 
 @pytest.mark.parametrize("change", [None, "targets_changed", "authority_changed"])
-async def test_command_preview_batch_is_explicit_inert_and_discards_stale_local_result(hass, token_store, change):
+@pytest.mark.parametrize("numeric", [False, True])
+async def test_command_preview_batch_is_explicit_inert_and_discards_stale_local_result(hass, token_store, change, numeric):
     token, _ = await token_store.async_create_token("preview_batch", "admin")
     data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
     view = PhoenixAdminCommandPreviewView(); view.hass = hass
     local = {"reason": "supported", "proposal": {"intent": "HassTurnOn", "entity_ids": ["light.test"]},
              "executed": False, "elapsed_ms": 1}
-    async def batch(*args):
+    async def batch(*args, numeric_preview=False):
         assert args[-1] == local
+        assert numeric_preview is numeric
         if change == "authority_changed": token.revoked = True
         return {"reason": change or "target_selected", "executed": False}
     with (patch("custom_components.phoenix_mcp.command_routing.async_evaluate_command", AsyncMock(return_value=local)),
@@ -3057,6 +3062,7 @@ async def test_command_preview_batch_is_explicit_inert_and_discards_stale_local_
           patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp") as dispatch):
         response = await view.post(_make_admin_request(body=json.dumps({
             "token_id": token.id, "sentence": "turn on Desk lamp", "decision": True, "targets": True, "batch": True,
+            **({"numeric": True} if numeric else {}),
         }).encode()))
     assert response.status == 200
     review.assert_awaited_once(); old_review.assert_not_called(); dispatch.assert_not_called()

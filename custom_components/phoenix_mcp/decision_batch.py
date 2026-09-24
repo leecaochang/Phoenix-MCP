@@ -10,10 +10,11 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .command_routing import RoutingAuthority, routing_language
 from .command_execution import _capture_plan, _digest
+from .command_operations import numeric_operation
 from .const import (
     DECISION_BATCH_EXECUTION_LANGUAGES, DECISION_BATCH_EXECUTION_MODELS,
     DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES,
-    DECISION_TARGET_INTENTS, MAX_SEARCH_QUERY_LEN,
+    DECISION_TARGET_INTENTS, DECISION_NUMERIC_CATEGORIES, DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS, MAX_SEARCH_QUERY_LEN,
 )
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 from .decision_targets import capture_targets, TargetSnapshot
@@ -21,17 +22,20 @@ from .device_semantics import device_registry_snapshot
 from .helpers import redact_secrets_in_text, redact_inaccessible_entity_ids_in_text
 
 
-def capture_batch_targets(hass: Any, token: Any) -> tuple[dict[str, dict], dict[str, TargetSnapshot]]:
+def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = False
+                          ) -> tuple[dict[str, dict], dict[str, TargetSnapshot]]:
     """Union complete scoped catalogs; keep eligibility per operation and all competitors."""
     devices = device_registry_snapshot(hass)
-    snapshots = {category: capture_targets(hass, token, category, devices=devices)
-                 for category in sorted(DECISION_EXECUTION_CATEGORIES)}
+    categories = DECISION_EXECUTION_CATEGORIES | DECISION_NUMERIC_CATEGORIES if numeric_preview else DECISION_EXECUTION_CATEGORIES
+    max_targets = DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS if numeric_preview else DECISION_MAX_TARGETS
+    snapshots = {category: capture_targets(hass, token, category, devices=devices, max_targets=max_targets)
+                 for category in sorted(categories)}
     entities: dict[str, dict] = {}
     for category, snapshot in snapshots.items():
         for descriptor in snapshot.targets.values():
             item = entities.setdefault(descriptor["entity_id"], {**descriptor, "eligible_categories": []})
             item["eligible_categories"].append(category)
-    if len(entities) > DECISION_MAX_TARGETS:
+    if len(entities) > max_targets:
         raise DecisionError("too_many_targets")
     targets = {f"t{index}": entities[entity_id] for index, entity_id in enumerate(sorted(entities))}
     if len(json.dumps(targets, ensure_ascii=False).encode()) > DECISION_MAX_TARGET_BYTES:
@@ -114,7 +118,7 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
 
 
 async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
-                              language: str, local: dict) -> dict:
+                              language: str, local: dict, *, numeric_preview: bool = False) -> dict:
     """Use the shared slot without preparing plans, dispatching or changing local results."""
     started = monotonic()
     def result(reason: str, **extra: Any) -> dict:
@@ -148,22 +152,25 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
                 return result("not_configured")
             if not safe_text(current) or (cfg.api_key and cfg.api_key in sentence):
                 return result("context_unavailable")
-            snapshot = capture_batch_targets(hass, current)
+            provider = DecisionProvider(cfg, PROVIDER_DEFINITIONS[cfg.kind].adapter,
+                                        metrics=runtime.metrics, metric_scope="preview")
+            if numeric_preview and not provider.supports_exact_percentages():
+                return result("unsupported_category")
+            snapshot = capture_batch_targets(hass, current, numeric_preview=numeric_preview)
             targets, _ = snapshot
             if not targets:
                 return result("no_target")
             if cfg.api_key and cfg.api_key in json.dumps(targets, ensure_ascii=False):
                 return result("context_unavailable")
-            provider = DecisionProvider(cfg, PROVIDER_DEFINITIONS[cfg.kind].adapter,
-                                        metrics=runtime.metrics, metric_scope="preview")
+            options = {"numeric_preview": True} if numeric_preview else {}
             async with asyncio.timeout(authority.settings.decision_timeout_ms / 1000):
                 answer = await provider.route_and_target(async_get_clientsession(hass), sentence, targets,
-                                                        authority.settings.decision_timeout_ms, lang)
+                                                        authority.settings.decision_timeout_ms, lang, **options)
             current = authority.current(hass)
             if current is None or store.resolve(account, purpose="decision") != cfg:
                 return result("authority_changed")
             try:
-                if not safe_text(current) or capture_batch_targets(hass, current) != snapshot:
+                if not safe_text(current) or capture_batch_targets(hass, current, numeric_preview=numeric_preview) != snapshot:
                     return result("targets_changed")
             except DecisionError:
                 return result("targets_changed")
@@ -175,7 +182,18 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
             descriptor = targets[target["choice"]]
             if category["choice"] not in descriptor["eligible_categories"]:
                 return result("category_mismatch", decision=answer)
-            proposal = {"intent": DECISION_TARGET_INTENTS[category["choice"]], "entity_ids": [descriptor["entity_id"]]}
+            proposal: dict[str, Any] = {"intent": DECISION_TARGET_INTENTS[category["choice"]], "entity_ids": [descriptor["entity_id"]]}
+            if numeric_preview:
+                value = answer["percentage"]
+                if not confident_choice(value):
+                    return result("low_probability", decision=answer)
+                operation = numeric_operation(proposal["intent"])
+                if operation is not None:
+                    if value["choice"] == "none":
+                        return result("percentage_declined", decision=answer)
+                    proposal[operation.proposal_field] = int(value["choice"])
+                elif value["choice"] != "none":
+                    return result("percentage_mismatch", decision=answer)
             return result("target_selected", decision=answer, proposal=proposal,
                           local_agreement=proposal == local.get("proposal") if local.get("proposal") else None)
         except DecisionError as error:
