@@ -1284,3 +1284,26 @@ async def test_only_observed_write_result_can_extend_local_history(hass, executi
             [*messages, {'role': 'user', 'content': 'what is the state of the desk lamp'}])
     assert followup.stream_turn.called is not report_matches
     assert call.await_count == 1
+
+
+@pytest.mark.parametrize('category,service', [('light_on', 'turn_on'), ('state_query', None)])
+async def test_qualified_jev_chat_uses_one_joint_request(hass, hybrid_chat, category, service):
+    from custom_components.phoenix_mcp import mcp_view
+    data, _ = hybrid_chat
+    store = await agentcli._get_secret_store(hass)
+    await store.set_model(data.store.get_settings().decision_provider_id, 'jev-latest')
+    async def response(session, method, path, timeout, payload):
+        assert set(payload['questions']) == {'route', 'target'}
+        return {**chat_decision_wire(payload, category), 'model': 'jev-1.13.0'}
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        provider, events, messages, remote = await decision_chat_turn(hass, hybrid_chat, request=response)
+    remote.assert_awaited_once()
+    provider.stream_turn.assert_not_called()
+    if service:
+        call.assert_awaited_once_with('light', service, {'entity_id': ['light.test_desk']}, blocking=True, return_response=False)
+    else:
+        call.assert_not_called()
+        assert messages[-1]['content'] == 'The state is off.'
+    assert events[-1] == ('done', {'stop_reason': 'end_turn'})
+    assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'plan_ready': 1}

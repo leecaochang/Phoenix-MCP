@@ -5,6 +5,7 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
 from homeassistant.helpers import entity_registry as er
 from homeassistant.setup import async_setup_component
 
@@ -29,7 +30,8 @@ async def hybrid_home(hass, token_store, immediate_command_observation):
     hass.data[DOMAIN] = data
     store = agentcli.AgentCliStore(AsyncMock())
     hass.data["_phoenix_agentcli_store"] = store
-    decision = await store.add("typesafe", {"api_key": "decision-secret", "model": "jev-latest"})
+    # Generic sequential protocol coverage; qualified JEV is exercised separately below.
+    decision = await store.add("typesafe", {"api_key": "decision-secret", "model": "test-model"})
     chat = await store.add("deepseek", {"api_key": "chat-secret", "model": "chat"})
     await token_store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=token.id,
         voice_agent_provider_id=chat, voice_agent_model="chat", voice_agent_routing_mode="hybrid",
@@ -45,10 +47,10 @@ async def hybrid_home(hass, token_store, immediate_command_observation):
         await asyncio.gather(data.decision_shadow.task, return_exceptions=True)
 
 
-def wire_answer(payload, category="light_on", target="t0", percent=50):
+def wire_answer(payload, category="light_on", target="t0", percent=50, model="test-model"):
     choices = {"route": category, "target": target,
                "brightness_tens": str(percent // 10), "brightness_units": str(percent % 10)}
-    return {"model": "test-model", "answers": {
+    return {"model": model, "answers": {
         question: {"type": "choice", "choice": choices[question], "confidence": 0.1,
                    "probabilities": {key: float(key == choices[question]) for key in spec["criteria"]}}
         for question, spec in payload["questions"].items()}}
@@ -192,8 +194,9 @@ async def mutate(hass, home, change):
     registry = er.async_get(hass)
     if change == "account": await store.set_model(account, "new-model")
     elif change == "model_restored":
+        original = store.resolve(account, purpose="decision").model
         await store.set_model(account, "other-model")
-        await store.set_model(account, "jev-latest")
+        await store.set_model(account, original)
     elif change == "deleted": await store.delete(account)
     elif change == "settings": await data.store.async_patch_settings(voice_agent_routing_mode="local")
     elif change == "revoked": token.revoked = True
@@ -276,7 +279,7 @@ async def test_uncertain_effect_blocks_replay_and_next_write(hass, hybrid_home):
     fallback.assert_not_called()
 
 
-async def test_cancelled_decision_never_dispatches_or_falls_back(hass, hybrid_home):
+async def assert_cancelled_decision_never_dispatches_or_falls_back(hass, hybrid_home):
     entered, closed = asyncio.Event(), asyncio.Event()
     async def request(*args):
         entered.set()
@@ -296,6 +299,10 @@ async def test_cancelled_decision_never_dispatches_or_falls_back(hass, hybrid_ho
     assert hybrid_home[0].decision_shadow.summary()["hybrid"]["evaluations"] == 0
     provider.assert_not_called()
     call.assert_not_called()
+
+
+async def test_cancelled_decision_never_dispatches_or_falls_back(hass, hybrid_home):
+    await assert_cancelled_decision_never_dispatches_or_falls_back(hass, hybrid_home)
 
 
 async def test_owned_decision_cancellation_is_counted_without_fallback(hass, hybrid_home):
@@ -415,3 +422,212 @@ async def test_preexisting_numeric_decision_approval_cannot_execute(hass, hybrid
         _, outcome, _ = await mcp_view.async_execute_approved_tool("call_service", args, token, hass, data)
     assert outcome == "allowed"
     control.assert_awaited_once()
+
+
+@pytest.fixture
+async def jev_hybrid_home(hybrid_home):
+    """Enable only the independently qualified joint configuration."""
+    _, _, store, account, _ = hybrid_home
+    await store.set_model(account, "jev-latest")
+    return hybrid_home
+
+
+async def jev_response(session, method, path, timeout, payload):
+    return wire_answer(payload, model="jev-1.13.0")
+
+
+@pytest.mark.parametrize("category,service", [("light_on", "turn_on"), ("light_off", "turn_off"), ("state_query", None)])
+async def test_jev_joint_routes_one_request_through_existing_executor(hass, jev_hybrid_home, category, service):
+    async def respond(session, method, path, timeout, payload):
+        assert set(payload["questions"]) == {"route", "target"}
+        return wire_answer(payload, category, model="jev-1.13.0")
+    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+        answer, remote, provider = await run_voice(hass, jev_hybrid_home, request=respond)
+    remote.assert_awaited_once()
+    provider.assert_not_called()
+    if service:
+        call.assert_awaited_once_with("light", service, {"entity_id": [jev_hybrid_home[-1]]},
+                                     blocking=True, return_response=False)
+        assert "requested state" in answer
+    else:
+        call.assert_not_called()
+        assert answer == "The state is off."
+    assert jev_hybrid_home[0].decision_shadow.summary()["hybrid"]["reasons"] == {"plan_ready": 1}
+
+
+@pytest.mark.parametrize("case,reason", [
+    ("provider", "provider_fallback"), ("none", "target_declined"),
+    ("low_route", "category_low_probability"), ("low_target", "target_low_probability"),
+    ("revision", "model_unverified"), ("malformed", "malformed"),
+    ("timeout", "timeout"), ("rate_limited", "rate_limited"), ("category_scope", "category_mismatch"),
+])
+async def test_jev_joint_declines_without_sequential_retry(hass, jev_hybrid_home, case, reason):
+    data, token, *_ = jev_hybrid_home
+    if case == "category_scope":
+        token.permissions = PermissionTree(domains={"light": PermissionNode(state="YELLOW")})
+    async def respond(session, method, path, timeout, payload):
+        assert set(payload["questions"]) == {"route", "target"}
+        if case in ("timeout", "rate_limited"):
+            raise DecisionError(case)
+        answer = wire_answer(payload, "provider" if case == "provider" else "light_on",
+                             "none" if case == "none" else "t0",
+                             model="unqualified-revision" if case == "revision" else "jev-1.13.0")
+        if case == "malformed":
+            del answer["answers"]["target"]
+        if case in ("low_route", "low_target"):
+            key = "route" if case == "low_route" else "target"
+            value = answer["answers"][key]
+            value["probabilities"][value["choice"]] = 0.8
+            value["probabilities"]["provider" if key == "route" else "none"] = 0.2
+        return answer
+    with patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call:
+        answer, remote, provider = await run_voice(hass, jev_hybrid_home, request=respond)
+    assert answer == "Provider answer"
+    remote.assert_awaited_once()
+    provider.assert_awaited_once()
+    call.assert_not_called()
+    assert not data.store.get_pending_approvals()
+    assert data.decision_shadow.summary()["hybrid"]["reasons"] == {reason: 1}
+
+
+async def test_jev_large_union_keeps_full_sequential_catalog(hass, jev_hybrid_home):
+    from custom_components.phoenix_mcp.const import DECISION_MAX_TARGETS
+    _, token, *_ = jev_hybrid_home
+    token.permissions.domains["sensor"] = PermissionNode(state="YELLOW")
+    for index in range(DECISION_MAX_TARGETS):
+        entry = er.async_get(hass).async_get_or_create("sensor", "test", f"reading_{index}")
+        hass.states.async_set(entry.entity_id, "20")
+        async_expose_entity(hass, "conversation", entry.entity_id, True)
+    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+        _, remote, provider = await run_voice(hass, jev_hybrid_home, request=jev_response)
+    assert [set(item.args[4]["questions"]) for item in remote.await_args_list] == [{"route"}, {"target"}]
+    assert len(remote.await_args.args[4]["state"]["targets"]) == 1
+    call.assert_awaited_once()
+    provider.assert_not_called()
+
+
+@pytest.mark.parametrize("restriction", ["prohibited", "read_only", "confirm", "pass_through"])
+async def test_jev_joint_preserves_mesa(hass, jev_hybrid_home, restriction):
+    data, token, *_ = jev_hybrid_home
+    await set_mesa(hass, jev_hybrid_home, "prohibited" if restriction == "pass_through" else restriction)
+    if restriction == "pass_through":
+        token.pass_through = True
+    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+        answer, remote, provider = await run_voice(hass, jev_hybrid_home, request=jev_response)
+    remote.assert_awaited_once()
+    call.assert_not_called()
+    provider.assert_not_called()
+    assert ("needs approval" in answer) if restriction == "confirm" else ("could not complete" in answer)
+    if restriction == "confirm":
+        plan = data.store.get_pending_approvals()[0]["args"][COMMAND_ROUTING_PLAN_KEY]
+        assert set(plan["decision_batch"]) == {"model", "language", "catalog"}
+        assert plan["decision_batch"]["model"] == "jev-1.13.0"
+        assert "decision-secret" not in json.dumps(plan) and "Desk lamp" not in json.dumps(plan)
+
+
+@pytest.mark.parametrize("change", ["none", "account", "model_restored", "scope", "name", "new_candidate", "read_competitor", "mesa"])
+async def test_jev_joint_approval_binds_full_union_and_model(hass, jev_hybrid_home, change):
+    data, token, _, _, entity_id = jev_hybrid_home
+    token.permissions.domains["sensor"] = PermissionNode(state="YELLOW")
+    await set_mesa(hass, jev_hybrid_home, "confirm")
+    with patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])):
+        answer, _, _ = await run_voice(hass, jev_hybrid_home, request=jev_response)
+    assert "needs approval" in answer
+    record = data.store.get_pending_approvals()[0]
+    if change == "read_competitor":
+        # This candidate is absent from the light-on catalog but was in scope for the joint choice.
+        entry = er.async_get(hass).async_get_or_create("sensor", "test", "competing", original_name="Desk lamp")
+        hass.states.async_set(entry.entity_id, "20")
+        async_expose_entity(hass, "conversation", entry.entity_id, True)
+    else:
+        await mutate(hass, jev_hybrid_home, change)
+    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], record["args"], token, hass, data)
+    if change == "none":
+        assert outcome == "allowed"
+        call.assert_awaited_once_with("light", "turn_on", {"entity_id": [entity_id]}, blocking=True, return_response=False)
+    else:
+        assert outcome == "denied"
+        call.assert_not_called()
+
+
+@pytest.mark.parametrize("change", ["account", "settings", "revoked", "new_candidate"])
+async def test_jev_joint_rechecks_changes_during_model_wait(hass, jev_hybrid_home, change):
+    async def respond(session, method, path, timeout, payload):
+        await mutate(hass, jev_hybrid_home, change)
+        return wire_answer(payload, model="jev-1.13.0")
+    with patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call:
+        _, remote, provider = await run_voice(hass, jev_hybrid_home, request=respond)
+    remote.assert_awaited_once()
+    call.assert_not_called()
+    if change != "new_candidate":
+        provider.assert_not_called()
+    await asyncio.sleep(0)
+    assert jev_hybrid_home[0].decision_shadow.task is None
+
+
+async def test_jev_joint_caller_cancellation_releases_owned_slot(hass, jev_hybrid_home):
+    await assert_cancelled_decision_never_dispatches_or_falls_back(hass, jev_hybrid_home)
+
+
+@pytest.mark.parametrize("sentence", ["turn on the desk lamp", "set the desk lamp to 37 percent brightness"])
+async def test_jev_local_matches_keep_zero_decision_calls(hass, jev_hybrid_home, sentence):
+    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+          patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
+        _, remote, provider = await run_voice(hass, jev_hybrid_home, sentence=sentence, request=jev_response)
+    call.assert_awaited_once()
+    remote.assert_not_called()
+    provider.assert_not_called()
+
+
+@pytest.mark.parametrize('kind,model,base_url,language', [
+    ('classifier', 'Qwen/Qwen3.5-4B', 'http://local.test/v1', 'en'),
+    ('systemone', 'jev-latest', 'http://local.test/v1', 'en'),
+    ('typesafe', 'jev-latest', 'https://custom.test/v1', 'en'),
+    ('typesafe', 'jev-latest', 'https://api.typesafe.ai/v1', 'es'),
+])
+async def test_other_models_endpoints_and_languages_keep_sequential_routing(
+    hass, hybrid_home, kind, model, base_url, language,
+):
+    data, _, store, *_ = hybrid_home
+    account = await store.add(kind, {'api_key': 'test-secret', 'model': model, 'base_url': base_url})
+    await data.store.async_patch_settings(decision_provider_id=account, command_routing_languages=[language])
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, remote, provider = await run_voice(hass, hybrid_home, language=language, request=jev_response)
+    assert [set(item.args[4]['questions']) for item in remote.await_args_list] == [{'route'}, {'target'}]
+    call.assert_awaited_once()
+    provider.assert_not_called()
+
+
+@pytest.mark.parametrize('sentence', ['decision-secret', 'password: private-value', 'turn on light.hidden'])
+async def test_jev_joint_keeps_sensitive_inputs_out_of_decision_request(hass, jev_hybrid_home, sentence):
+    local = {'reason': 'no_match', 'proposal': None, 'elapsed_ms': 1, 'route': 'provider'}
+    with (patch('custom_components.phoenix_mcp.command_routing.async_evaluate_command', AsyncMock(return_value=local)),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, remote, provider = await run_voice(hass, jev_hybrid_home, sentence=sentence, request=jev_response)
+    remote.assert_not_called()
+    call.assert_not_called()
+    provider.assert_awaited_once()
+    assert jev_hybrid_home[0].decision_shadow.summary()['hybrid']['reasons'] == {'context_unavailable': 1}
+
+
+@pytest.mark.parametrize('change', ['account', 'new_candidate'])
+async def test_jev_joint_revalidates_after_mesa_wait_without_replay(hass, jev_hybrid_home, change):
+    apply = mcp_view.async_apply_mesa_to_call
+    async def changed(*args, **kwargs):
+        result = await apply(*args, **kwargs)
+        await mutate(hass, jev_hybrid_home, change)
+        return result
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(mcp_view, 'async_apply_mesa_to_call', changed),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        answer, remote, provider = await run_voice(hass, jev_hybrid_home, request=jev_response)
+    assert 'could not complete' in answer
+    remote.assert_awaited_once()
+    call.assert_not_called()
+    provider.assert_not_called()

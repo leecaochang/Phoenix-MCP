@@ -11,7 +11,8 @@ from homeassistant.components.homeassistant.exposed_entities import async_expose
 from homeassistant.helpers import area_registry as ar, entity_registry as er
 from homeassistant.setup import async_setup_component
 
-from custom_components.phoenix_mcp import agentcli
+from custom_components.phoenix_mcp import agentcli, device_semantics
+from custom_components.phoenix_mcp.command_execution import _target_fingerprint
 from custom_components.phoenix_mcp.const import (
     DOMAIN, DECISION_BRIGHTNESS_CHOICES, DECISION_MAX_TARGETS, DECISION_ROUTE_CHOICES,
 )
@@ -77,6 +78,22 @@ async def test_scoped_metadata_only_and_inert_preview(hass, target_home):
     assert data.store.get_pending_approvals() == []
     assert data.decision_shadow.observations == 0
     assert "Desk lamp" not in repr(data.decision_shadow)
+
+
+async def test_catalog_builds_device_graph_once_without_changing_fingerprints(hass, target_home):
+    _, token, *_ = target_home
+    for index in range(3):
+        entry = er.async_get(hass).async_get_or_create("light", "test", f"extra_{index}")
+        hass.states.async_set(entry.entity_id, "off")
+    with patch.object(device_semantics, "device_registry_snapshot_from_registry",
+                      wraps=device_semantics.device_registry_snapshot_from_registry) as build:
+        snapshot = capture_targets(hass, token, "light_on")
+    build.assert_called_once()
+    assert len(snapshot.targets) == 4
+    assert snapshot.fingerprints == {
+        item["entity_id"]: _target_fingerprint(hass, token, item["entity_id"], "HassTurnOn")
+        for item in snapshot.targets.values()
+    }
 
 
 @pytest.mark.parametrize("restriction", ["hidden", "disabled", "unexposed", "denied", "unavailable", "group", "aggregate", "unregistered"])

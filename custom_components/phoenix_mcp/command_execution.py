@@ -16,8 +16,9 @@ from .command_routing import RoutingAuthority, effective_routing_mode
 from .const import (
     COMMAND_ROUTING_PLAN_KEY, VOICE_AGENT_CLIENT_IP, DECISION_TARGET_INTENTS, DECISION_EXECUTION_CATEGORIES,
     DECISION_CONTEXT_EXECUTION_MODELS, DECISION_CONTEXT_EXECUTION_LANGUAGES,
+    DECISION_BATCH_EXECUTION_MODELS,
 )
-from .device_semantics import device_registry_snapshot
+from .device_semantics import DeviceRegistrySnapshot, device_registry_snapshot
 from .helpers import voice_text
 from .policy_engine import Permission, resolve
 
@@ -29,7 +30,9 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
 
 
-def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str) -> str | None:
+def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str, *,
+                        devices: DeviceRegistrySnapshot | None = None) -> str | None:
+    """Check current eligibility, sharing device metadata only within one synchronous capture."""
     from homeassistant.components.homeassistant.exposed_entities import async_should_expose
     from homeassistant.helpers import entity_registry as er
 
@@ -44,7 +47,8 @@ def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str) -> s
         return None
     if not supports_command(state, intent):
         return None
-    devices = device_registry_snapshot(hass)
+    if devices is None:
+        devices = device_registry_snapshot(hass)
     if entry.device_id and (devices.get(entry.device_id) is None
                             or entry.device_id in devices.invalid_ancestry_ids):
         return None
@@ -75,13 +79,24 @@ def _capture_plan(hass: Any, data: Any, token: Any, proposal: dict, *, ingress: 
 
 def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
     if "decision_category" not in plan:
-        return True
-    from .agentcli import decision_account_fingerprint
+        return "decision_batch" not in plan
+    from .agentcli import decision_account_fingerprint, loaded_decision_account
+    from .decision_batch import batch_catalog_digest, batch_execution_eligible, capture_batch_targets
     from .decision_targets import capture_targets
 
     settings = data.store.get_settings()
     category = plan["decision_category"]
     mode = effective_routing_mode(settings, plan.get("ingress", "voice"))
+    if "decision_batch" in plan:
+        review = plan["decision_batch"]
+        account = settings.decision_provider_id
+        cfg = loaded_decision_account(hass, account) if account else None
+        if (not isinstance(review, dict) or set(review) != {"model", "language", "catalog"}
+                or not all(isinstance(value, str) for value in review.values())
+                or cfg is None or not batch_execution_eligible(cfg, review["language"])
+                or review["model"] not in DECISION_BATCH_EXECUTION_MODELS[(cfg.kind, cfg.base_url, cfg.model)]
+                or batch_catalog_digest(capture_batch_targets(hass, token)) != review["catalog"]):
+            return False
     return bool(category in DECISION_EXECUTION_CATEGORIES
                 and mode == "hybrid" and settings.decision_provider_id
                 and DECISION_TARGET_INTENTS.get(category) == plan["proposal"]["intent"]

@@ -99,6 +99,7 @@ class DecisionShadow:
     async def _evaluate(self, hass: Any, data: Any, authority: RoutingAuthority,
                         sentence: object, language: object, targets: bool = False, prepare: bool = False, ingress: str = "voice") -> dict:
         from .agentcli import _get_secret_store, PROVIDER_DEFINITIONS, decision_account_fingerprint
+        from .decision_batch import async_prepare_batch, batch_execution_eligible
 
         started = monotonic()
         def result(reason: str, decision: dict | None = None) -> dict:
@@ -136,18 +137,25 @@ class DecisionShadow:
             provider = DecisionProvider(cfg, PROVIDER_DEFINITIONS[cfg.kind].adapter,
                                         metrics=self.metrics, metric_scope=scope)
             session = async_get_clientsession(hass)
-            # Category and optional target selection share one wall-clock budget.
+            # Joint and sequential choices share the existing slot and wall-clock budget.
             async with asyncio.timeout(settings.decision_timeout_ms / 1000):
-                answer = await provider.classify(session, sentence.strip(), settings.decision_timeout_ms, decision_language)
-                if (authority.current(hass) is None or store.resolve(account, purpose="decision") != cfg):
-                    return result("authority_changed")
-                if not targets:
-                    return result("observed", answer)
-                if prepare and answer["choice"] not in DECISION_EXECUTION_CATEGORIES and answer["choice"] != "provider":
-                    return result("numeric_unverified" if answer["choice"] in DECISION_NUMERIC_CATEGORIES
-                                  else "unsupported_category", answer)
-                selection = await self._select_target(hass, authority, provider, session, sentence.strip(),
-                                                      answer, settings.decision_timeout_ms, prepare=prepare, ingress=ingress, language=decision_language)
+                joint = None
+                if prepare and batch_execution_eligible(cfg, decision_language):
+                    joint = await async_prepare_batch(hass, authority, provider, session, sentence.strip(),
+                                                      decision_language, ingress)
+                if joint is not None:
+                    answer, selection = joint
+                else:
+                    answer = await provider.classify(session, sentence.strip(), settings.decision_timeout_ms, decision_language)
+                    if (authority.current(hass) is None or store.resolve(account, purpose="decision") != cfg):
+                        return result("authority_changed")
+                    if not targets:
+                        return result("observed", answer)
+                    if prepare and answer["choice"] not in DECISION_EXECUTION_CATEGORIES and answer["choice"] != "provider":
+                        return result("numeric_unverified" if answer["choice"] in DECISION_NUMERIC_CATEGORIES
+                                      else "unsupported_category", answer)
+                    selection = await self._select_target(hass, authority, provider, session, sentence.strip(),
+                                                          answer, settings.decision_timeout_ms, prepare=prepare, ingress=ingress, language=decision_language)
                 if (authority.current(hass) is None or store.resolve(account, purpose="decision") != cfg):
                     return result("authority_changed")
                 plan = selection.pop("_plan", None)

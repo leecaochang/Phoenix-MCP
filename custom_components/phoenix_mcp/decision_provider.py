@@ -217,7 +217,7 @@ class DecisionProvider:
 
     async def route_and_target(self, session: ClientSession, sentence: str, targets: dict[str, dict],
                                timeout_ms: int, language: str = "en") -> dict:
-        """Experimental joint selection, for inert comparisons only."""
+        """Select closed category and target choices; callers own execution qualification."""
         choices = {key: f"The single entity described by state.targets.{key}." for key in targets}
         choices["none"] = "No single unambiguous eligible listed entity matches the complete request."
         instructions = (

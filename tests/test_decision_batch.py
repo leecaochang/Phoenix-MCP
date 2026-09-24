@@ -7,14 +7,16 @@ import pytest
 from aiohttp import ClientSession, web
 from aiohttp.test_utils import TestServer
 from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
-from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
 from homeassistant.setup import async_setup_component
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.phoenix_mcp import agentcli
-from custom_components.phoenix_mcp.const import DOMAIN, DECISION_MAX_TARGETS
+from custom_components.phoenix_mcp import agentcli, device_semantics
+from custom_components.phoenix_mcp.const import DOMAIN, DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.decision_batch import async_preview_batch, capture_batch_targets
 from custom_components.phoenix_mcp.decision_provider import DecisionProvider, DecisionError
+from custom_components.phoenix_mcp.decision_targets import capture_targets
 from custom_components.phoenix_mcp.token_store import PermissionTree, PermissionNode
 
 
@@ -145,6 +147,52 @@ async def test_wait_rechecks_full_catalog_and_authority(hass, batch_home, change
     with patch.object(DecisionProvider, '_request', side_effect=response):
         result = await preview(hass, batch_home)
     assert result['reason'] in ('targets_changed', 'authority_changed') and 'decision' not in result
+
+
+async def test_batch_shares_one_graph_without_changing_complete_category_catalogs(hass, batch_home):
+    _, token, *_ = batch_home
+    for index in range(3):
+        entry = er.async_get(hass).async_get_or_create('light', 'test', f'extra_{index}')
+        hass.states.async_set(entry.entity_id, 'off')
+    expected = {category: capture_targets(hass, token, category) for category in DECISION_EXECUTION_CATEGORIES}
+    with patch.object(device_semantics, 'device_registry_snapshot_from_registry',
+                      wraps=device_semantics.device_registry_snapshot_from_registry) as build:
+        targets, snapshots = capture_batch_targets(hass, token)
+    build.assert_called_once()
+    assert len(targets) == 4 and snapshots == expected
+
+
+@pytest.mark.parametrize('change', ['unchanged', 'area'])
+async def test_batch_recaptures_device_graph_after_model_wait(hass, batch_home, change):
+    _, _, _, _, entity_id = batch_home
+    config = MockConfigEntry(domain='test')
+    config.add_to_hass(hass)
+    registry = dr.async_get(hass)
+    area = ar.async_get(hass).async_create('Office')
+    parent = registry.async_get_or_create(config_entry_id=config.entry_id,
+                                         identifiers={('test', 'parent')})
+    registry.async_update_device(parent.id, area_id=area.id)
+    child = registry.async_get_or_create_child(config_entry_id=config.entry_id,
+                                               identifiers={('test', 'child')},
+                                               parent_device_id=parent.id)
+    er.async_get(hass).async_update_entity(entity_id, device_id=child.id)
+
+    async def response(*args):
+        assert args[4]['state']['targets']['t0']['area'] == 'Office'
+        if change == 'area':
+            updated_area = ar.async_get(hass).async_create('Study')
+            registry.async_update_device(parent.id, area_id=updated_area.id)
+        return wire_response(args[4])
+
+    with (patch.object(DecisionProvider, '_request', side_effect=response) as request,
+          patch.object(device_semantics, 'device_registry_snapshot_from_registry',
+                       wraps=device_semantics.device_registry_snapshot_from_registry) as build):
+        result = await preview(hass, batch_home)
+    request.assert_awaited_once()
+    assert build.call_count == 2
+    assert result['reason'] == ('target_selected' if change == 'unchanged' else 'targets_changed')
+    if change != 'unchanged':
+        assert 'proposal' not in result and 'decision' not in result
 
 
 async def test_batch_cancellation_releases_only_owned_slot(hass, batch_home):

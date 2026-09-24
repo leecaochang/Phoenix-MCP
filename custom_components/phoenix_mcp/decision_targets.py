@@ -13,7 +13,7 @@ from .const import (
     DECISION_MAX_TARGET_ALIASES, DECISION_TARGET_INTENTS,
 )
 from .decision_provider import DecisionError
-from .device_semantics import device_registry_snapshot
+from .device_semantics import DeviceRegistrySnapshot, device_registry_snapshot
 from .helpers import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
 
 
@@ -29,14 +29,17 @@ class TargetSnapshot:
         return _digest({"targets": self.targets, "fingerprints": self.fingerprints})
 
 
-def capture_targets(hass: Any, token: Any, category: str) -> TargetSnapshot:
+def capture_targets(hass: Any, token: Any, category: str, *,
+                    devices: DeviceRegistrySnapshot | None = None) -> TargetSnapshot:
     """Reuse local execution eligibility; send identity metadata only, never states."""
     intent = DECISION_TARGET_INTENTS.get(category)
     if intent is None:
         raise DecisionError("unsupported_category")
     registry = er.async_get(hass)
     areas = ar.async_get(hass)
-    devices = device_registry_snapshot(hass)
+    # A batch may share this synchronous view; callers must recapture after any wait.
+    if devices is None:
+        devices = device_registry_snapshot(hass)
     targets: dict[str, dict] = {}
     fingerprints: dict[str, str] = {}
 
@@ -47,7 +50,7 @@ def capture_targets(hass: Any, token: Any, category: str) -> TargetSnapshot:
 
     for state in sorted(hass.states.async_all(), key=lambda item: item.entity_id):
         entity_id = state.entity_id
-        fingerprint = _target_fingerprint(hass, token, entity_id, intent)
+        fingerprint = _target_fingerprint(hass, token, entity_id, intent, devices=devices)
         if fingerprint is None:
             continue
         if len(targets) >= DECISION_MAX_TARGETS:

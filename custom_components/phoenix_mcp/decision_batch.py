@@ -1,4 +1,4 @@
-"""Inert joint-decision comparisons, including locally recognized standalone commands."""
+"""Joint-decision previews and qualified plans through the existing command executor."""
 from __future__ import annotations
 
 import asyncio
@@ -9,15 +9,23 @@ from typing import Any
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .command_routing import RoutingAuthority, routing_language
-from .const import DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES, DECISION_TARGET_INTENTS, MAX_SEARCH_QUERY_LEN
+from .command_execution import _capture_plan, _digest
+from .const import (
+    DECISION_BATCH_EXECUTION_LANGUAGES, DECISION_BATCH_EXECUTION_MODELS,
+    DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES,
+    DECISION_TARGET_INTENTS, MAX_SEARCH_QUERY_LEN,
+)
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 from .decision_targets import capture_targets, TargetSnapshot
+from .device_semantics import device_registry_snapshot
 from .helpers import redact_secrets_in_text, redact_inaccessible_entity_ids_in_text
 
 
 def capture_batch_targets(hass: Any, token: Any) -> tuple[dict[str, dict], dict[str, TargetSnapshot]]:
     """Union complete scoped catalogs; keep eligibility per operation and all competitors."""
-    snapshots = {category: capture_targets(hass, token, category) for category in sorted(DECISION_EXECUTION_CATEGORIES)}
+    devices = device_registry_snapshot(hass)
+    snapshots = {category: capture_targets(hass, token, category, devices=devices)
+                 for category in sorted(DECISION_EXECUTION_CATEGORIES)}
     entities: dict[str, dict] = {}
     for category, snapshot in snapshots.items():
         for descriptor in snapshot.targets.values():
@@ -29,6 +37,80 @@ def capture_batch_targets(hass: Any, token: Any) -> tuple[dict[str, dict], dict[
     if len(json.dumps(targets, ensure_ascii=False).encode()) > DECISION_MAX_TARGET_BYTES:
         raise DecisionError("target_metadata_too_large")
     return targets, snapshots
+
+
+def batch_execution_eligible(cfg: Any, language: str) -> bool:
+    """Qualify each endpoint, configured model and language independently."""
+    return bool(language in DECISION_BATCH_EXECUTION_LANGUAGES
+                and (cfg.kind, cfg.base_url, cfg.model) in DECISION_BATCH_EXECUTION_MODELS)
+
+
+def batch_catalog_digest(snapshot: tuple[dict[str, dict], dict[str, TargetSnapshot]]) -> str:
+    """Bind all categories and competitors without retaining their metadata."""
+    targets, catalogs = snapshot
+    return _digest({"targets": targets, "catalogs": {category: catalog.digest()
+                                                    for category, catalog in catalogs.items()}})
+
+
+async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: DecisionProvider,
+                              session: Any, sentence: str, language: str, ingress: str) -> tuple[dict | None, dict] | None:
+    """Use the caller's slot and deadline; None permits sequential routing before any request."""
+    current = authority.current(hass)
+    if current is None:
+        raise DecisionError("authority_changed")
+    if not batch_execution_eligible(provider.cfg, language):
+        return None
+    if (redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(sentence) or "", current, hass) != sentence
+            or (provider.cfg.api_key and provider.cfg.api_key in sentence)):
+        raise DecisionError("context_unavailable")
+    try:
+        snapshot = capture_batch_targets(hass, current)
+    except DecisionError as error:
+        if str(error) in ("too_many_targets", "target_metadata_too_large"):
+            return None
+        raise
+    targets, catalogs = snapshot
+    if not targets:
+        raise DecisionError("no_target")
+    if provider.cfg.api_key and provider.cfg.api_key in json.dumps(targets, ensure_ascii=False):
+        raise DecisionError("context_unavailable")
+    answer = await provider.route_and_target(session, sentence, targets,
+                                            authority.settings.decision_timeout_ms, language)
+    current = authority.current(hass)
+    if current is None:
+        raise DecisionError("authority_changed")
+    try:
+        changed = capture_batch_targets(hass, current) != snapshot
+    except DecisionError:
+        changed = True
+    if changed:
+        raise DecisionError("targets_changed")
+    category, target = answer["route"], answer["target"]
+    models = DECISION_BATCH_EXECUTION_MODELS[(provider.cfg.kind, provider.cfg.base_url, provider.cfg.model)]
+    if category["model"] not in models or target["model"] != category["model"]:
+        raise DecisionError("model_unverified")
+    selection: dict = {"reason": "provider_fallback", "decision": None, "executed": False}
+    if category["choice"] == "provider":
+        return category, selection
+    if not confident_choice(category):
+        return category, {**selection, "reason": "low_probability"}
+    selection["decision"] = target
+    if target["choice"] == "none":
+        return category, {**selection, "reason": "target_declined"}
+    if not confident_choice(target):
+        return category, {**selection, "reason": "low_probability"}
+    descriptor = targets[target["choice"]]
+    if category["choice"] not in descriptor["eligible_categories"]:
+        raise DecisionError("category_mismatch")
+    proposal = {"intent": DECISION_TARGET_INTENTS[category["choice"]], "entity_ids": [descriptor["entity_id"]]}
+    plan = _capture_plan(hass, authority.data, current, proposal, ingress=ingress)
+    if plan is None:
+        raise DecisionError("targets_changed")
+    plan.update(decision_category=category["choice"], decision_catalog=catalogs[category["choice"]].digest(),
+                decision_batch={"model": category["model"], "language": language,
+                                "catalog": batch_catalog_digest(snapshot)})
+    return category, {**selection, "reason": "target_selected", "entity_id": descriptor["entity_id"],
+                      "proposal": proposal, "_plan": plan}
 
 
 async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
