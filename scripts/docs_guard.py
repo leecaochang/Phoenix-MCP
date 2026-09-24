@@ -38,7 +38,11 @@ _NO_DOCS = re.compile(r"\[no-docs\]\s+[A-Za-z0-9]")
 def _classify(path: str) -> str:
     if path.startswith("docs/") or re.fullmatch(r"README(?:\.[A-Za-z-]+)?\.md", path):
         return "docs"
-    if path in ("SPEC.md", "CLAUDE.md"):
+    if path in ("SPEC.md", "AGENTS.md", "CLAUDE.md"):
+        return "docs"
+    if path.startswith((
+        "docs-internal/agents/", "docs-internal/spec/", "docs-internal/architecture/",
+    )) and path.endswith(".md"):
         return "docs"
     if path == "custom_components/phoenix_mcp/CLAUDE.md":
         return "docs"
@@ -86,10 +90,11 @@ def main() -> None:
                     "Docs guard: this commit stages source changes ("
                     + ", ".join(srcs[:5])
                     + (" and more" if len(srcs) > 5 else "")
-                    + ") but no documentation file (docs/, README*.md, SPEC.md,"
-                    " CLAUDE.md, translations). Per the strict docs rule, update"
-                    " the docs in the SAME commit and run the /docs-verify pass,"
-                    " or, if this change genuinely needs no docs, add"
+                    + ") but no documentation file (docs/, README*.md, translations)."
+                    " Update affected public docs in the SAME commit and run the"
+                    " /docs-verify pass. Maintain local knowledge through AGENTS.md"
+                    " and SPEC.md; do not force-add ignored internal files."
+                    " If this change genuinely needs no docs, add"
                     " '[no-docs] <reason>' to the commit message."
                 ),
             }
