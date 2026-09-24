@@ -1,6 +1,8 @@
 """Build bounded, scoped decision catalogs for previews and guarded Voice plans."""
 from __future__ import annotations
 
+from collections import Counter
+from copy import deepcopy
 from dataclasses import dataclass
 import json
 from typing import Any
@@ -10,7 +12,7 @@ from homeassistant.helpers import area_registry as ar, entity_registry as er
 from .command_operations import numeric_metadata, command_domain
 from .command_execution import _target_fingerprint, _digest
 from .const import (
-    DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES, DECISION_MAX_TARGET_TEXT,
+    DECISION_CATALOG_PACK_THRESHOLD, DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES, DECISION_MAX_TARGET_TEXT,
     DECISION_MAX_TARGET_ALIASES, DECISION_TARGET_INTENTS, COMMAND_ROUTING_TEMPORAL_OPERATIONS, COMMAND_ROUTING_ENTITY_INTENTS,
 )
 from .decision_provider import DecisionError
@@ -109,7 +111,43 @@ def capture_targets(hass: Any, token: Any, category: str, *,
                 del descriptor["area"]
         targets[f"t{len(targets)}"] = descriptor
         fingerprints[entity_id] = fingerprint
-    size = len(json.dumps(targets, ensure_ascii=False).encode())
+    size = len(json.dumps(catalog_state(targets) if compact else targets, ensure_ascii=False).encode())
     if size > DECISION_MAX_TARGET_BYTES:
         raise CatalogLimitError(category, "metadata_bytes", size, DECISION_MAX_TARGET_BYTES)
     return TargetSnapshot(targets, fingerprints)
+
+
+def catalog_state(targets: dict[str, dict]) -> dict:
+    """Pack large wire catalogs without changing logical snapshots or dropping choices."""
+    def size(value: dict) -> int:
+        return len(json.dumps(value, ensure_ascii=False).encode())
+
+    plain: dict = {"targets": targets}
+    if size(plain) <= DECISION_CATALOG_PACK_THRESHOLD:
+        return plain
+    copied = deepcopy(targets)
+    occurrences: Counter[str] = Counter()
+    for target in copied.values():
+        for group in ('entity_operations', 'numeric_operations'):
+            for metadata in target.get(group, {}).values():
+                occurrences[json.dumps(metadata, sort_keys=True, ensure_ascii=False)] += 1
+    shared = {encoded: f"m{index}" for index, encoded in enumerate(sorted(
+        encoded for encoded, count in occurrences.items() if count > 1 and len(encoded.encode()) > 48))}
+    for target in copied.values():
+        for group in ('entity_operations', 'numeric_operations'):
+            for category, metadata in target.get(group, {}).items():
+                reference = shared.get(json.dumps(metadata, sort_keys=True, ensure_ascii=False))
+                if reference is not None:
+                    target[group][category] = {"ref": reference}
+    pooled: dict = {"targets": copied}
+    if shared:
+        pooled["target_metadata"] = {key: json.loads(encoded) for encoded, key in shared.items()}
+    candidates: list[dict] = [plain, pooled]
+    # Validated descriptors never contain top-level nulls, so absent optional columns
+    # can be represented by null without conflating a supplied value with absence.
+    if all(value is not None for target in targets.values() for value in target.values()):
+        fields = sorted({field for target in targets.values() for field in target})
+        for representation in (plain, pooled):
+            candidates.append({**representation, "target_fields": fields, "targets": {
+                key: [target.get(field) for field in fields] for key, target in representation['targets'].items()}})
+    return min(candidates, key=size)

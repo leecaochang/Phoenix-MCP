@@ -423,3 +423,32 @@ async def test_cancel_after_dispatch_during_observation_keeps_recovery_barrier(h
             await task
     call.assert_awaited_once()
     assert data.agent_recovery.blocks(token.id)
+
+
+async def test_attribute_read_uses_existing_scrubbed_read_dispatch_and_no_write_authority(hass, local_home):
+    from custom_components.phoenix_mcp.const import DECISION_ENTITY_CATEGORIES
+    data, token, entity_id = local_home
+    token.permissions.domains['light'].state = 'YELLOW'
+    token.cap_physical_control = 'deny'
+    hass.states.async_set(entity_id, 'on', {'brightness': 94, 'access_token': 'not-public'})
+    proposal = {'intent': DECISION_ENTITY_CATEGORIES['attribute_read'], 'entity_ids': [entity_id], 'value': 'brightness'}
+    authority = RoutingAuthority.capture(data, token)
+    with patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call:
+        answer = await async_execute_local_command(hass, data, token, proposal, authority, '', language='en')
+    assert answer == 'The state is 36.9%.'
+    call.assert_not_called()
+    assert await async_execute_local_command(hass, data, token, {**proposal, 'value': 'access_token'}, authority, '') is None
+    token.permissions.domains['light'].state = 'RED'
+    assert await async_execute_local_command(hass, data, token, proposal, authority, '') is None
+
+
+async def test_attribute_read_plan_rejects_removed_attribute_before_dispatch(hass, local_home):
+    from custom_components.phoenix_mcp.command_execution import _capture_plan, plan_is_current
+    from custom_components.phoenix_mcp.const import DECISION_ENTITY_CATEGORIES
+    data, token, entity_id = local_home
+    hass.states.async_set(entity_id, 'on', {'brightness': 94})
+    proposal = {'intent': DECISION_ENTITY_CATEGORIES['attribute_read'], 'entity_ids': [entity_id], 'value': 'brightness'}
+    plan = _capture_plan(hass, data, token, proposal)
+    assert plan is not None and plan_is_current(plan, hass, data, token)
+    hass.states.async_set(entity_id, 'on', {})
+    assert not plan_is_current(plan, hass, data, token)

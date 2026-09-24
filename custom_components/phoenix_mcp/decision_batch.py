@@ -12,14 +12,14 @@ from .command_routing import RoutingAuthority, routing_language
 from .command_execution import _capture_plan, _digest
 from .command_operations import numeric_operation
 from .const import (
-    DECISION_BATCH_EXECUTION_LANGUAGES, DECISION_BATCH_EXECUTION_MODELS,
+    DECISION_ENTITY_VALUE_QUESTIONS, DECISION_BATCH_EXECUTION_LANGUAGES, DECISION_BATCH_EXECUTION_MODELS,
     DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES,
     DECISION_BATCH_MAX_TARGET_BYTES,
     DECISION_PERCENTAGE_EXECUTION_MODELS, DECISION_TEMPORAL_CATEGORIES,
     COMMAND_ROUTING_VALUE_INTENTS, DECISION_TARGET_INTENTS, DECISION_NUMERIC_CATEGORIES, DECISION_BATCH_MAX_TARGETS, MAX_SEARCH_QUERY_LEN,
 )
 from .decision_provider import DecisionError, DecisionValidationError, DecisionProvider, confident_choice
-from .decision_targets import capture_targets, CatalogLimitError, TargetSnapshot
+from .decision_targets import catalog_state, capture_targets, CatalogLimitError, TargetSnapshot
 from .device_semantics import device_registry_snapshot
 from .helpers import redact_secrets_in_text, redact_inaccessible_entity_ids_in_text
 from .numeric_evidence import read_explicit_percentage, compare_percentage, has_percentage_unit, read_explicit_scalar, explicit_unit_matches
@@ -52,7 +52,7 @@ def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = Fals
     if len(entities) > max_targets:
         raise CatalogLimitError("combined", "target_count", len(entities), max_targets)
     targets = {f"t{index}": entities[entity_id] for index, entity_id in enumerate(sorted(entities))}
-    size = len(json.dumps(targets, ensure_ascii=False).encode())
+    size = len(json.dumps(catalog_state(targets) if extended else targets, ensure_ascii=False).encode())
     max_bytes = DECISION_BATCH_MAX_TARGET_BYTES if extended else DECISION_MAX_TARGET_BYTES
     if size > max_bytes:
         raise CatalogLimitError("combined", "metadata_bytes", size, max_bytes)
@@ -186,7 +186,7 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
         if value is None:
             return category, {**selection, "reason": "numeric_unverified"}
         proposal["value"] = value
-    elif answer.get("value", {}).get("choice", "none") != "none":
+    elif any(answer.get(question, {}).get("choice", "none") != "none" for question in DECISION_ENTITY_VALUE_QUESTIONS):
         return category, {**selection, "reason": "category_mismatch"}
     plan = _capture_plan(hass, authority.data, current, proposal, ingress=ingress)
     if plan is None:
@@ -304,7 +304,7 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
                 if chosen_value is None:
                     return result("numeric_unverified", decision=answer)
                 proposal["value"] = chosen_value
-            elif answer.get("value", {}).get("choice", "none") != "none":
+            elif any(answer.get(question, {}).get("choice", "none") != "none" for question in DECISION_ENTITY_VALUE_QUESTIONS):
                 return result("category_mismatch", decision=answer)
             evidence = {}
             if numeric_preview:

@@ -13,7 +13,7 @@ from .const import (DECISION_MAX_RESPONSE_BYTES, DECISION_ROUTE_CHOICES, DECISIO
                     DECISION_BRIGHTNESS_CHOICES, DECISION_MIN_CHOICE_PROBABILITY, DECISION_CONTEXT_CHECKS,
                     DECISION_EXECUTION_CATEGORIES, DECISION_EXACT_PERCENTAGE_ENDPOINTS,
                     DECISION_PERCENTAGE_CHOICES, DECISION_PERCENTAGE_PREVIEW_CHOICES, DECISION_TARGET_INTENTS,
-                    DECISION_REFERENCE_CHECKS)
+                    DECISION_REFERENCE_CHECKS, DECISION_CATALOG_FORMAT_INSTRUCTIONS)
 from .command_operations import numeric_operation
 from .decision_metrics import DecisionMetrics
 
@@ -312,7 +312,8 @@ class DecisionProvider:
             "multiple actions, counts, comparisons, relative settings and conversational references belong to provider. "
             "Do not infer hidden or missing targets, or pick the closest available entity. Group, area and all-entity "
             "requests belong to provider. Each target lists eligible_categories; never select a category absent from "
-            "that target's list. Numeric commands including brightness belong to provider in this experiment. "
+            "that target's list. Numeric setting requests belong to provider in this mode; reading a current "
+            "attribute such as brightness is an eligible attribute_read request. "
             "Make both decisions from the entire utterance; neither answer grants permission or executes anything. "
         )
         categories = {key: value for key, value in {**DECISION_ROUTE_CHOICES, **DECISION_ENTITY_CHOICES}.items()
@@ -336,16 +337,33 @@ class DecisionProvider:
             }, "instructions": (
                 instructions + " Select only a current option of the requested target and operation, or the "
                 "one explicitly quoted literal for a text helper. Never generate, translate, reformat or infer text. "
-                "For actions without values select none. Options for another entity are not eligible."
+                "For actions without option/text values select none. Options for another entity are not eligible."
+            )}
+        # Each independent Choice stays within its native limit; color and read fields
+        # must not consume the slots needed for the complete device-option catalog.
+        for question_name in ('attribute', 'color'):
+            candidates = value_choices(sentence, targets, question_name)
+            if not candidates:
+                continue
+            payload['state'][question_name + '_values'] = candidates
+            payload['questions'][question_name] = {"type": "choice", "criteria": {
+                **{key: f"Use the exact {question_name} in state.{question_name}_values.{key}." for key in candidates},
+                "none": f"No {question_name} operation is requested or its value is uncertain.",
+            }, "instructions": instructions + (
+                (" Select a field ONLY for an eligible attribute-read operation on the chosen target. "
+                 "The field must occur in that target's current attribute options. " if question_name == 'attribute' else
+                 " Select a color ONLY for an eligible named-light-color operation on the chosen target. "
+                 "Color words may be translated into the corresponding HA color name. ")
+                + "For every other operation select none. Never substitute a different property or invent a value."
             )}
         extra = (
             " Entity operations include fixed service actions and option/text settings described by "
-            "eligible_categories and entity_operations. Select options only from that operation's current list. "
+            "eligible_categories and entity_operations. Select options only from that operation's current list. Attribute reads select a field name, never a desired new value. "
             "A quoted text value is allowed ONLY when the whole utterance requests setting that helper's text; "
             "a quoted, translated or explained command is not an action. A start action without a duration "
             "uses the timer's configured or remaining duration; any explicitly requested duration must fall back. "
             "Never confuse cancelling a timer with finishing it, which fires its finished event. "
-            "Counter increment and decrement use its configured step; requests for another amount fall back. "
+            "Counter and numeric-helper increment/decrement use their configured step; media volume up/down use the device step. Requests for another amount fall back. "
             "Automation off disables future triggers and stops running actions; requests only to stop a current run "
             "belong to provider. Fan direction uses forward/reverse, never infer clockwise/counterclockwise. "
             "Do not equate device on/off with toggle, button press, activation or a mode selection. "
@@ -429,8 +447,13 @@ class DecisionProvider:
                 " Determine what the user asks you to do with the whole message, not what a mentioned command says. "
                 "Requests to translate, explain, rewrite, quote or discuss a device command are requests about text, "
                 "not device actions, even without quotation marks or when introduced by a colon. "
-                "For these requests choose provider for route, none for target and none for percentage."
+                "For these requests choose provider for route, none for target and none for all value questions."
             )
+        from .decision_targets import catalog_state
+        payload["state"].update(catalog_state(targets))
+        if "target_fields" in payload["state"] or "target_metadata" in payload["state"]:
+            for question in payload["questions"].values():
+                question["instructions"] += DECISION_CATALOG_FORMAT_INSTRUCTIONS
         body = await self._request(session, "POST", self.protocol, timeout_ms, payload)
         if not isinstance(body.get("answers"), dict) or set(body["answers"]) != set(payload["questions"]):
             raise DecisionValidationError("question_set")
@@ -481,6 +504,11 @@ class DecisionProvider:
                    }}
         if self.cfg.api_key and self.cfg.api_key in json.dumps(payload, ensure_ascii=False):
             raise DecisionError("context_unavailable")
+        from .decision_targets import catalog_state
+        payload["state"].update(catalog_state(targets))
+        if "target_fields" in payload["state"] or "target_metadata" in payload["state"]:
+            for question in payload["questions"].values():
+                question["instructions"] += DECISION_CATALOG_FORMAT_INSTRUCTIONS
         body = await self._request(session, "POST", self.protocol, timeout_ms, payload)
         if not isinstance(body.get("answers"), dict) or set(body["answers"]) != set(payload["questions"]):
             raise DecisionValidationError("question_set")

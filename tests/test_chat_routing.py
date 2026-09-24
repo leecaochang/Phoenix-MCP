@@ -144,7 +144,7 @@ async def test_decision_does_not_delay_or_replace_provider_and_keeps_only_counts
     assert 'desk lamp' not in repr(data.decision_shadow) and 'secret' not in repr(data.decision_shadow)
 
 
-@pytest.mark.parametrize('case', ['off', 'history', 'non_english', 'missing_language', 'blocks', 'extra_fields'])
+@pytest.mark.parametrize('case', ['off', 'history', 'unsupported_language', 'missing_language', 'blocks', 'extra_fields'])
 async def test_excluded_messages_skip_all_observation(hass, chat_home, case):
     data, _ = chat_home
     messages = [{'role': 'user', 'content': 'command'}]
@@ -1543,12 +1543,24 @@ async def test_multilingual_joint_followup_uses_whole_history_and_numeric_eviden
                                      blocking=True, return_response=False)
 
 
-async def test_traditional_chinese_followup_stays_with_provider_until_separately_qualified(hass, context_chat):
-    with patch.object(DecisionProvider, '_request') as remote:
-        provider, _, _ = await chat_turn(hass, context_chat,
-            context_messages('請把 Desk lamp 的亮度設為百分之三十七。'), language='zh-Hant')
-    remote.assert_not_called()
-    provider.stream_turn.assert_called_once()
+async def test_traditional_chinese_followup_checks_history_and_source_value(hass, context_chat):
+    from custom_components.phoenix_mcp import mcp_view
+    messages = context_messages('請把 Desk lamp 的亮度設為百分之三十七。')
+    async def respond(*args):
+        payload = args[4]
+        assert payload['state']['language'] == 'zh-TW'
+        if 'route' not in payload['questions']:
+            assert payload['state']['history'] == messages[:-1]
+            assert payload['state']['candidate']['brightness_pct'] == 37
+        return followup_response(payload)
+    with (patch.object(DecisionProvider, '_request', side_effect=respond) as remote,
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        provider, _, _ = await chat_turn(hass, context_chat, messages, language='zh-Hant')
+    assert remote.await_count == 2
+    provider.stream_turn.assert_not_called()
+    call.assert_awaited_once_with('light', 'turn_on', {'entity_id': ['light.test_desk'], 'brightness_pct': 37},
+                                 blocking=True, return_response=False)
 
 
 async def test_categorical_followup_routes_with_more_than_common_catalog_limit(hass, context_chat):

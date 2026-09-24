@@ -19,7 +19,7 @@ from homeassistant.core import State
 from .const import (
     COMMAND_ROUTING_NUMERIC_OPERATIONS, COMMAND_ROUTING_SWITCH_SERVICES,
     COMMAND_ROUTING_NATIVE_VALUES, COMMAND_ROUTING_NUMERIC_BOUNDS, COMMAND_ROUTING_TEMPORAL_OPERATIONS,
-    COMMAND_ROUTING_ENTITY_INTENTS,
+    COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_READ_INTENTS,
 )
 
 
@@ -50,6 +50,8 @@ def numeric_operation(intent: str) -> NumericOperation | None:
 
 
 def command_domain(intent: str) -> str | None:
+    if intent in COMMAND_ROUTING_READ_INTENTS:
+        return None
     if intent in COMMAND_ROUTING_ENTITY_INTENTS:
         return COMMAND_ROUTING_ENTITY_INTENTS[intent][0]
     temporal = COMMAND_ROUTING_TEMPORAL_OPERATIONS.get(intent)

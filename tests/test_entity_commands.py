@@ -8,22 +8,32 @@ from custom_components.phoenix_mcp.const import COMMAND_ROUTING_ENTITY_COMMANDS,
 from custom_components.phoenix_mcp.entity_commands import _FEATURES, valid_entity_value, value_choices, literal_text
 
 
-@pytest.mark.parametrize('category', list(COMMAND_ROUTING_ENTITY_COMMANDS))
+@pytest.mark.parametrize('category', [key for key in COMMAND_ROUTING_ENTITY_COMMANDS if key != 'attribute_read'])
 async def test_fixed_entity_projection_matches_native_schema(hass, category):
     spec = COMMAND_ROUTING_ENTITY_COMMANDS[category]
     domain, service, field, options, feature, _ = spec
     assert await async_setup_component(hass, domain, {domain: [] if domain == 'scene' else {}})
     intent = DECISION_ENTITY_CATEGORIES[category]
-    value = 'heat' if category == 'climate_hvac' else 'Test option'
+    value = 'heat' if category == 'climate_hvac' else 'red' if category == 'light_color' else 'Test option'
     proposal = {'intent': intent, 'entity_ids': [domain + '.test']}
     if field: proposal['value'] = value
     projected = service_arguments(proposal)
     native = hass.services.async_services()[domain][service].schema
     validated = native({'entity_id': projected['entity_id'], **projected['service_data']})
     assert validated['entity_id'] == projected['entity_id']
-    if field: assert validated[field] == value
+    if category == 'light_color':
+        assert validated['params']['rgb_color'] == (255, 0, 0)
+    elif field: assert validated.get('params', validated)[field] == value
     attrs = {options: [value]} if options else {}
-    if feature: attrs['supported_features'] = int(getattr(_FEATURES[domain], feature))
+    feature_type = _FEATURES.get(domain)
+    if domain == 'camera':
+        from homeassistant.components.camera import CameraEntityFeature
+        feature_type = CameraEntityFeature
+        attrs['motion_detection'] = True
+    if feature: attrs['supported_features'] = int(getattr(feature_type, feature))
+    if service in ('toggle', 'toggle_cover_tilt') and feature_type:
+        attrs['supported_features'] = sum(int(flag) for flag in feature_type)
+    if category == 'light_color': attrs['supported_color_modes'] = ['rgb']
     state = State(domain + '.test', 'on', attrs)
     assert supports_command(state, intent)
     if field:
@@ -130,3 +140,62 @@ def test_fixed_action_observation_needs_reported_property(category, field, value
     if field == 'repeat':
         from homeassistant.components.media_player import RepeatMode
         assert state_matches(proposal, State(domain + '.test', 'on', {field: RepeatMode(value)}))
+
+
+def test_shared_color_choices_are_not_repeated_in_every_target():
+    from custom_components.phoenix_mcp.entity_commands import entity_metadata
+    intent = DECISION_ENTITY_CATEGORIES['light_color']
+    state = State('light.test', 'on', {'supported_color_modes': ['rgb']})
+    metadata = entity_metadata(state, intent)
+    assert metadata == {'kind': 'color'}
+    assert valid_entity_value(state, intent, 'red')
+    assert not valid_entity_value(state, intent, 'made-up-color')
+    assert not supports_command(State('light.test', 'on', {'supported_color_modes': ['brightness']}), intent)
+    values = value_choices('Make the light red', {'t0': {'entity_operations': {'light_color': metadata}}}, 'color')
+    assert 'red' in values.values()
+
+
+@pytest.mark.parametrize('category', ['alarm_disarm', 'alarm_home', 'alarm_trigger'])
+def test_code_protected_alarm_never_becomes_a_code_free_candidate(category):
+    intent = DECISION_ENTITY_CATEGORIES[category]
+    feature = COMMAND_ROUTING_ENTITY_COMMANDS[category][4]
+    attrs = {'supported_features': int(getattr(_FEATURES['alarm_control_panel'], feature)) if feature else 0}
+    assert supports_command(State('alarm_control_panel.test', 'disarmed', attrs), intent)
+    for protection in ({'code_format': 'number'}, {'code_arm_required': True}):
+        assert not supports_command(State('alarm_control_panel.test', 'disarmed', {**attrs, **protection}), intent)
+
+
+@pytest.mark.parametrize('domain,field,value,unit,expected', [
+    ('light', 'brightness', 94, None, '36.9%'),
+    ('sensor', 'brightness', 94, None, '94'),
+    ('media_player', 'volume_level', 0.37, None, '37%'),
+    ('cover', 'current_position', 37, None, '37%'),
+    ('weather', 'temperature', 72, '°F', '72 °F'),
+    ('sensor', 'temperature', 72, None, '72'),
+    ('light', 'brightness', 300, None, None),
+])
+def test_attribute_display_uses_only_known_domain_units(domain, field, value, unit, expected):
+    from custom_components.phoenix_mcp.entity_commands import attribute_display
+    assert attribute_display(field, value, unit, domain) == expected
+
+
+def test_colors_attributes_and_device_options_have_independent_complete_choice_budgets():
+    targets = {'t0': {'entity_operations': {
+        'select_option': {'kind': 'option', 'options': [f'Option {i}' for i in range(250)]},
+        'light_color': {'kind': 'color'},
+        'attribute_read': {'kind': 'attribute', 'options': ['brightness', 'temperature']},
+    }}}
+    assert len(value_choices('command', targets)) == 250
+    assert set(value_choices('command', targets, 'attribute').values()) == {'brightness', 'temperature'}
+    assert 'red' in value_choices('command', targets, 'color').values()
+
+
+def test_value_selection_cannot_mix_color_and_attribute_decisions():
+    from custom_components.phoenix_mcp.entity_commands import chosen_entity_value
+    targets = {'t0': {'entity_operations': {'attribute_read': {'kind': 'attribute', 'options': ['brightness']}}}}
+    def choice(value):
+        return {'choice': value, 'model': 'jev-1.13.0', 'probabilities': {value: 1.0}}
+    answer = {'route': choice('attribute_read'), 'attribute': choice('v0'), 'color': choice('none')}
+    assert chosen_entity_value(answer, 'request', targets, targets['t0'], 'attribute_read') == 'brightness'
+    answer['color'] = choice('v0')
+    assert chosen_entity_value(answer, 'request', targets, targets['t0'], 'attribute_read') is None

@@ -564,3 +564,44 @@ async def test_compact_catalog_keeps_distinct_identity_text_and_full_fingerprint
     changed = capture_targets(hass, token, 'light_brightness', compact=True)
     assert changed.targets == compact.targets
     assert changed.digest() != compact.digest()
+
+
+def unpack_catalog(state):
+    """Independently decode the public wire layout to compare every original value."""
+    from copy import deepcopy
+    targets = deepcopy(state['targets'])
+    if 'target_fields' in state:
+        targets = {key: {field: value for field, value in zip(state['target_fields'], row, strict=True) if value is not None}
+                   for key, row in targets.items()}
+    for target in targets.values():
+        for group in ('entity_operations', 'numeric_operations'):
+            for category, value in target.get(group, {}).items():
+                if set(value) == {'ref'}:
+                    target[group][category] = deepcopy(state['target_metadata'][value['ref']])
+    return targets
+
+
+def test_large_catalog_packing_preserves_all_entities_aliases_options_and_native_bounds():
+    from copy import deepcopy
+    from custom_components.phoenix_mcp.decision_targets import catalog_state
+    targets = {f't{i}': {'entity_id': f'light.room_{i}', 'name': f'Room light {i}',
+        'aliases': [f'Lampe {i}', f'ランプ {i}'], 'area': 'Shared room',
+        'eligible_categories': ['light_brightness', 'light_color', 'attribute_read'],
+        'entity_operations': {'attribute_read': {'kind': 'attribute', 'options': ['brightness', 'rgb_color', 'effect']},
+                              'light_color': {'kind': 'color'}},
+        'numeric_operations': {'temperature': {'minimum': 2000, 'maximum': 6500, 'step': None, 'unit': 'K'}}}
+        for i in range(100)}
+    original = deepcopy(targets)
+    packed = catalog_state(targets)
+    assert unpack_catalog(packed) == original == targets
+    assert len(json.dumps(packed).encode()) < len(json.dumps({'targets': targets}).encode()) * 0.75
+    assert len(packed['targets']) == 100
+    assert catalog_state(targets) == packed
+
+
+def test_catalog_packing_retains_supplied_null_and_does_not_mutate_source():
+    from custom_components.phoenix_mcp.decision_targets import catalog_state
+    targets = {f't{i}': {'entity_id': f'sensor.test_{i}', 'name': 'x' * 100, 'optional': None} for i in range(100)}
+    packed = catalog_state(targets)
+    assert 'target_fields' not in packed
+    assert unpack_catalog(packed) == targets

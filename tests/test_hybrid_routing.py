@@ -48,7 +48,7 @@ async def hybrid_home(hass, token_store, immediate_command_observation):
 
 
 def wire_answer(payload, category="light_on", target="t0", percent=50, model="test-model"):
-    choices = {"route": category, "target": target,
+    choices = {"route": category, "target": target, "value": "none", "attribute": "none", "color": "none",
                "percentage": str(percent),
                "brightness_tens": str(percent // 10), "brightness_units": str(percent % 10)}
     return {"model": model, "answers": {
@@ -811,7 +811,7 @@ async def expanded_numeric_home(hass, jev_hybrid_home, request):
 
 def scalar_reply(payload, entity_id, category):
     target = next(key for key, descriptor in payload['state']['targets'].items() if descriptor['entity_id'] == entity_id)
-    choices = {'route': category, 'target': target, 'percentage': 'value'}
+    choices = {'route': category, 'target': target, 'percentage': 'value', 'value': 'none', 'attribute': 'none', 'color': 'none'}
     return {'model': 'jev-1.13.0', 'answers': {
         question: {'type': 'choice', 'choice': choices[question], 'confidence': 1,
                    'probabilities': {key: float(key == choices[question]) for key in spec['criteria']}}
@@ -1029,7 +1029,9 @@ async def entity_command_home(hass, jev_hybrid_home, request):
 def entity_command_wire(payload, entity_id, category, value=None):
     target = next(key for key, item in payload['state']['targets'].items() if item['entity_id'] == entity_id)
     selected_value = next((key for key, item in payload['state'].get('values', {}).items() if item == value), 'none')
-    selected = {'route': category, 'target': target, 'value': selected_value, 'percentage': 'none'}
+    selected = {'route': category, 'target': target, 'value': selected_value, 'percentage': 'none', 'attribute': 'none', 'color': 'none'}
+    for question in ('attribute', 'color'):
+        selected[question] = next((key for key, item in payload['state'].get(question + '_values', {}).items() if item == value), 'none')
     return {'model': 'jev-1.13.0', 'answers': {question: {
         'type': 'choice', 'choice': selected[question], 'confidence': 1,
         'probabilities': {key: float(key == selected[question]) for key in spec['criteria']}}
@@ -1269,3 +1271,49 @@ async def test_fixed_control_approval_rechecks_features_and_arguments(hass, enti
         _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
     assert outcome == ('allowed' if change == 'none' else 'denied')
     assert call.await_count == (1 if change == 'none' else 0)
+
+
+@pytest.mark.parametrize('change', ['none', 'scope', 'exposure', 'attribute'])
+async def test_joint_attribute_read_reaches_scoped_read_tool_and_rechecks_changes(hass, jev_hybrid_home, change):
+    home = jev_hybrid_home
+    _, token, _, _, entity_id = home
+    token.permissions.domains['light'].state = 'YELLOW'
+    token.cap_physical_control = 'deny'
+    hass.states.async_set(entity_id, 'on', {'friendly_name': 'Desk lamp', 'brightness': 94})
+    async def respond(*args):
+        payload = args[4]
+        assert '94' not in json.dumps(payload['state']['targets'])
+        if change == 'scope': token.permissions.domains['light'].state = 'RED'
+        if change == 'exposure': async_expose_entity(hass, 'conversation', entity_id, False)
+        if change == 'attribute': hass.states.async_set(entity_id, 'on', {'friendly_name': 'Desk lamp'})
+        return entity_command_wire(payload, entity_id, 'attribute_read', 'brightness')
+    with patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call:
+        answer, remote, provider = await run_voice(hass, home, request=respond, sentence='Tell me the brightness of Desk lamp')
+    remote.assert_awaited_once()
+    call.assert_not_called()
+    if change == 'none':
+        assert answer == 'The state is 36.9%.'
+        provider.assert_not_called()
+    else:
+        assert '36.9' not in answer
+
+
+@pytest.mark.parametrize('sentence', [
+    'Show the temperature history for yesterday.',
+    'What is the weather forecast for the weekend?',
+    'Add a dentist appointment to my calendar next Tuesday at 10.',
+    'Add milk and bread to my shopping list.',
+    'Play the news podcast on the kitchen speaker and group it with the lounge.',
+    'Send the custom remote sequence with three repeats.',
+    'Record the camera for thirty seconds to the requested file.',
+    'Set the thermostat range to 18 through 23 degrees.',
+])
+async def test_structured_requests_keep_original_text_and_normal_provider(hass, jev_hybrid_home, sentence):
+    async def respond(*args):
+        return wire_answer(args[4], 'provider', 'none', model='jev-1.13.0')
+    with patch.object(mcp_view, '_dispatch_mcp', new_callable=AsyncMock) as dispatch:
+        answer, _, provider = await run_voice(hass, jev_hybrid_home, sentence=sentence, request=respond)
+    assert answer == 'Provider answer'
+    provider.assert_awaited_once()
+    assert provider.await_args.args[6] == sentence
+    dispatch.assert_not_called()

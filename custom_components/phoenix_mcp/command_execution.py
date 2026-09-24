@@ -14,7 +14,7 @@ from .audit import generate_request_id
 from .command_operations import service_arguments, supports_command, numeric_operation, valid_target_value, finite_number
 from .command_routing import RoutingAuthority, effective_routing_mode
 from .const import (
-    COMMAND_ROUTING_PLAN_KEY, COMMAND_ROUTING_UNKNOWN_ACTION_DOMAINS, COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_VALUE_INTENTS, COMMAND_ROUTING_TEMPORAL_OPERATIONS, DECISION_TEMPORAL_CATEGORIES, VOICE_AGENT_CLIENT_IP, DECISION_TARGET_INTENTS, DECISION_EXECUTION_CATEGORIES,
+    COMMAND_ROUTING_READ_INTENTS, COMMAND_ROUTING_PLAN_KEY, COMMAND_ROUTING_UNKNOWN_ACTION_DOMAINS, COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_VALUE_INTENTS, COMMAND_ROUTING_TEMPORAL_OPERATIONS, DECISION_TEMPORAL_CATEGORIES, VOICE_AGENT_CLIENT_IP, DECISION_TARGET_INTENTS, DECISION_EXECUTION_CATEGORIES,
     DECISION_CONTEXT_EXECUTION_MODELS, DECISION_CONTEXT_EXECUTION_LANGUAGES, DECISION_FOLLOWUP_EXECUTION_MODELS,
     DECISION_BATCH_EXECUTION_MODELS,
     DECISION_NUMERIC_CATEGORIES, DECISION_PERCENTAGE_EXECUTION_MODELS,
@@ -40,7 +40,7 @@ def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str, *,
 
     state = hass.states.get(entity_id)
     entry = er.async_get(hass).async_get(entity_id)
-    readable = intent == "HassGetState"
+    readable = intent in COMMAND_ROUTING_READ_INTENTS
     permissions = (Permission.READ, Permission.WRITE) if readable else (Permission.WRITE,)
     unknown_action = bool(state and state.domain in COMMAND_ROUTING_UNKNOWN_ACTION_DOMAINS
                           and intent in COMMAND_ROUTING_ENTITY_INTENTS)
@@ -50,7 +50,7 @@ def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str, *,
             or not async_should_expose(hass, "conversation", entity_id)):
         return None
     entity_command = COMMAND_ROUTING_ENTITY_INTENTS.get(intent)
-    if entity_command and not hass.services.has_service(entity_command[0], entity_command[1]):
+    if entity_command and not readable and not hass.services.has_service(entity_command[0], entity_command[1]):
         return None
     if not supports_command(state, intent):
         return None
@@ -70,7 +70,7 @@ def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str, *,
         "temperature_unit": hass.config.units.temperature_unit,
         "timezone": hass.config.time_zone,
         "entity_command_attributes": {key: state.attributes.get(key) for key in
-            ({spec[3] for spec in COMMAND_ROUTING_ENTITY_INTENTS.values() if spec[3]} | {"mode", "pattern", "code_format"})},
+            ({spec[3] for spec in COMMAND_ROUTING_ENTITY_INTENTS.values() if spec[3]} | {"mode", "pattern", "code_format", "code_arm_required", "motion_detection"})},
         "attributes": {key: state.attributes.get(key) for key in (
             "friendly_name", "supported_color_modes", "supported_features", "device_class",
             "min", "max", "minimum", "maximum", "initial", "step", "unit_of_measurement", "min_temp", "max_temp", "target_temp_step",
@@ -93,7 +93,7 @@ def _temporal_current(hass: Any, proposal: dict) -> bool:
 
 
 def _capture_plan(hass: Any, data: Any, token: Any, proposal: dict, *, ingress: str = "voice") -> dict | None:
-    if proposal["intent"] != "HassGetState" and service_arguments(proposal) is None:
+    if proposal["intent"] not in COMMAND_ROUTING_READ_INTENTS and service_arguments(proposal) is None:
         return None
     operation = numeric_operation(proposal["intent"])
     if operation and any(not valid_target_value(hass.states.get(eid), proposal["intent"],
@@ -231,7 +231,7 @@ def plan_is_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
     try:
         settings = data.store.get_settings()
         proposal = plan["proposal"]
-        if proposal["intent"] != "HassGetState" and service_arguments(proposal) is None:
+        if proposal["intent"] not in COMMAND_ROUTING_READ_INTENTS and service_arguments(proposal) is None:
             return False
         operation = numeric_operation(proposal["intent"])
         if operation and any(not valid_target_value(hass.states.get(eid), proposal["intent"],
@@ -317,12 +317,14 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
         return LocalCommandReply(voice_text(language, "token_unavailable"))
     token = replace(current, confirm_inline_wait_seconds=0)
     proposal = plan["proposal"]
-    read = proposal["intent"] == "HassGetState"
+    read = proposal["intent"] in COMMAND_ROUTING_READ_INTENTS
     if not read and data.agent_recovery.blocks(token.id):
         return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
     if read:
         name = "get_state"
-        arguments = {"entity_id": proposal["entity_ids"][0], "projection": {"kind": "fields", "fields": ["state"]}}
+        field = "state" if proposal["intent"] == "HassGetState" else "attr." + proposal["value"]
+        arguments = {"entity_id": proposal["entity_ids"][0], "projection": {
+            "kind": "fields", "fields": [field, "attr.unit_of_measurement", "attr.temperature_unit"]}}
     else:
         name = "call_service"
         service_args = service_arguments(proposal)
@@ -370,8 +372,20 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
     if read:
         if not plan_is_current(plan, hass, data, token):
             return LocalCommandReply(voice_text(language, "token_unavailable"))
-        state = payload.get("state")
-        if isinstance(state, str) and len(state) <= 255:
+        attributes = payload.get("attributes", {})
+        if not isinstance(attributes, dict):
+            return LocalCommandReply(voice_text(language, "local_read_failed"))
+        state = payload.get("state") if proposal["intent"] == "HassGetState" else attributes.get(proposal["value"])
+        if proposal["intent"] != "HassGetState":
+            from .entity_commands import attribute_display
+            domain = proposal["entity_ids"][0].split(".", 1)[0]
+            temperature_unit = (hass.config.units.temperature_unit if domain in ("climate", "water_heater")
+                                else attributes.get("temperature_unit") if domain == "weather" else None)
+            state = attribute_display(proposal["value"], state, temperature_unit if isinstance(temperature_unit, str) else None, domain)
+        # Units describe primary sensor states, not arbitrary attributes like battery or device class.
+        if proposal["intent"] == "HassGetState" and isinstance(state, str) and isinstance(attributes.get("unit_of_measurement"), str):
+            state += " " + attributes["unit_of_measurement"]
+        if isinstance(state, str) and len(state) <= 1024:
             return LocalCommandReply(voice_text(language, "local_state", state=state), allows_local_followup=True)
         return LocalCommandReply(voice_text(language, "local_read_failed"))
     if payload.get("partial") or payload.get("success") is not True:

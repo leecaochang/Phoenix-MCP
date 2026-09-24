@@ -164,3 +164,71 @@ def test_scalar_evidence_preserves_values_and_rejects_dates_and_ambiguity(senten
 def test_explicit_unit_markers_never_convert_values(sentence, unit, expected):
     from custom_components.phoenix_mcp.numeric_evidence import explicit_unit_matches
     assert explicit_unit_matches(sentence, unit) is expected
+
+
+@pytest.mark.parametrize('language,sentence', [
+    ('de', 'Stelle die Lampe auf siebenunddreißig Prozent.'),
+    ('fr', 'Mets la lampe à trente-sept pour cent.'),
+    ('it', 'Imposta la lampada al trentasette per cento.'),
+    ('ja', '明るさを三十七パーセントにして。'),
+    ('ko', '밝기를 삼십칠 퍼센트로 설정해 줘.'),
+    ('nl', 'Zet de lamp op zevenendertig procent.'),
+    ('pl', 'Ustaw lampę na trzydzieści siedem procent.'),
+    ('ru', 'Установи яркость на тридцать семь процентов.'),
+    ('zh-TW', '請設為百分之三十七。'),
+])
+def test_remaining_ui_languages_read_native_number_words(language, sentence):
+    assert read_explicit_percentage(sentence, language) == 37
+
+
+@pytest.mark.parametrize('language,number,unit', [
+    ('de', 'minus siebenunddreißig', 'Prozent'), ('de', 'hundert siebenunddreißig', 'Prozent'),
+    ('fr', 'moins trente-sept', 'pour cent'), ('fr', 'trente-sept et demi', 'pour cent'),
+    ('it', 'meno trentasette', 'per cento'), ('nl', 'min zevenendertig', 'procent'),
+    ('pl', 'minus trzydzieści siedem', 'procent'), ('ru', 'минус тридцать семь', 'процентов'),
+    ('ja', '三十七点五', 'パーセント'), ('ko', '마이너스 삼십칠', '퍼센트'),
+])
+def test_added_language_signs_and_fractions_never_become_positive_integers(language, number, unit):
+    assert read_explicit_percentage(f'{number} {unit}', language) is None
+
+
+def test_all_assist_languages_can_read_literal_percent_symbols():
+    from custom_components.phoenix_mcp.const import COMMAND_ROUTING_LANGUAGES
+    for language in set(COMMAND_ROUTING_LANGUAGES.values()):
+        assert read_explicit_percentage('37%', language) == 37, language
+        assert read_explicit_percentage('137%', language) is None, language
+        assert read_explicit_percentage('-37%', language) is None, language
+        assert read_explicit_percentage('37% 55%', language) is None, language
+
+
+def test_phoenix_ui_languages_require_routing_and_number_evidence_support():
+    import re
+    from pathlib import Path
+    from custom_components.phoenix_mcp.command_routing import routing_language
+    from custom_components.phoenix_mcp.const import DECISION_PERCENTAGE_EVIDENCE_LANGUAGES, DECISION_PERCENTAGE_LANGUAGE_UNITS
+    from custom_components.phoenix_mcp.numeric_evidence import _number_words
+    source = (Path(__file__).parents[1] / 'frontend_src/i18n/index.ts').read_text()
+    languages = re.findall(r'\{ code: "([^"]+)", endonym:', source)
+    assert languages
+    for code in languages:
+        language = routing_language(code, preview=True)
+        assert language in DECISION_PERCENTAGE_EVIDENCE_LANGUAGES, code
+        assert language in DECISION_PERCENTAGE_LANGUAGE_UNITS, code
+        values, _ = _number_words(language)
+        assert any(value == 37 and not spelling.isdigit()
+                   for spelling, value in values.items()), code
+
+
+@pytest.mark.parametrize('language,sentence', [
+    ('en', 'set it to minus 37 percent'), ('en', 'set it to 37 percent and a half'),
+    ('en', 'set it to 37 or fifty percent'), ('es', 'ponlo al menos 37 por ciento'),
+    ('de', 'auf minus 37 Prozent'), ('ru', 'минус 37 процентов'),
+    ('fr', 'moins 37 pour cent'), ('it', 'meno 37 per cento'),
+    ('nl', 'min 37 procent'), ('pl', 'minus 37 procent'),
+    ('zh-CN', '负百分之37'), ('zh-TW', '負百分之37'),
+    ('ja', 'マイナス37パーセント'), ('ko', '마이너스 37 퍼센트'),
+    ('en', 'set it to - 37%'),
+])
+def test_scalar_fallback_never_discards_refused_spelled_numeric_evidence(language, sentence):
+    from custom_components.phoenix_mcp.numeric_evidence import read_explicit_scalar
+    assert read_explicit_scalar(sentence, language) is None

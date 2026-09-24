@@ -1819,9 +1819,68 @@ COMMAND_ROUTING_ENTITY_COMMANDS.update({
     "cover_stop_tilt": ('cover', 'stop_cover_tilt', '', '', 'STOP_TILT', ''),
     "climate_swing_horizontal": ('climate', 'set_swing_horizontal_mode', 'swing_horizontal_mode', 'swing_horizontal_modes', 'SWING_HORIZONTAL_MODE', ''),
 })
+# Native no-payload actions retain the shared permission and approval executor.
+COMMAND_ROUTING_ENTITY_COMMANDS.update({
+    "input_number_increment": ('input_number', 'increment', '', '', '', ''),
+    "input_number_decrement": ('input_number', 'decrement', '', '', '', ''),
+    "water_away_on": ('water_heater', 'set_away_mode', '', '', 'AWAY_MODE', ''),
+    "water_away_off": ('water_heater', 'set_away_mode', '', '', 'AWAY_MODE', ''),
+    "vacuum_clean_spot": ('vacuum', 'clean_spot', '', '', 'CLEAN_SPOT', ''),
+    "media_volume_up": ('media_player', 'volume_up', '', '', 'VOLUME_STEP', ''),
+    "media_volume_down": ('media_player', 'volume_down', '', '', 'VOLUME_STEP', ''),
+    "media_play_pause": ('media_player', 'media_play_pause', '', '', 'PAUSE', ''),
+    "media_unjoin": ('media_player', 'unjoin', '', '', 'GROUPING', ''),
+    "camera_on": ('camera', 'turn_on', '', '', 'ON_OFF', 'idle'),
+    "camera_off": ('camera', 'turn_off', '', '', 'ON_OFF', 'off'),
+    "camera_motion_on": ('camera', 'enable_motion_detection', '', '', '', ''),
+    "camera_motion_off": ('camera', 'disable_motion_detection', '', '', '', ''),
+    "light_effect": ('light', 'turn_on', 'effect', 'effect_list', 'EFFECT', ''),
+    "light_color": ('light', 'turn_on', 'color_name', '__color_names__', '', ''),
+})
+for _domain in ('select', 'input_select'):
+    for _position in ('first', 'last', 'next', 'previous'):
+        COMMAND_ROUTING_ENTITY_COMMANDS[f"{_domain}_{_position}"] = (_domain, f"select_{_position}", '', '', '', '')
+for _domain in ('light', 'fan', 'humidifier', 'climate', 'media_player', 'remote', 'siren', 'automation', 'script'):
+    COMMAND_ROUTING_ENTITY_COMMANDS[f"{_domain}_toggle"] = (_domain, 'toggle', '', '', '', '')
+COMMAND_ROUTING_ENTITY_COMMANDS.update({
+    "cover_toggle": ('cover', 'toggle', '', '', 'OPEN', ''),
+    "cover_tilt_toggle": ('cover', 'toggle_cover_tilt', '', '', 'OPEN_TILT', ''),
+    "valve_toggle": ('valve', 'toggle', '', '', 'OPEN', ''),
+})
+COMMAND_ROUTING_ENTITY_COMMANDS.update({
+    "fan_increase": ('fan', 'increase_speed', '', '', 'SET_SPEED', ''),
+    "fan_decrease": ('fan', 'decrease_speed', '', '', 'SET_SPEED', ''),
+    "light_flash_short": ('light', 'turn_on', '', '', 'FLASH', ''),
+    "light_flash_long": ('light', 'turn_on', '', '', 'FLASH', ''),
+    "alarm_disarm": ('alarm_control_panel', 'alarm_disarm', '', '', '', 'disarmed'),
+    "alarm_home": ('alarm_control_panel', 'alarm_arm_home', '', '', 'ARM_HOME', 'armed_home'),
+    "alarm_away": ('alarm_control_panel', 'alarm_arm_away', '', '', 'ARM_AWAY', 'armed_away'),
+    "alarm_night": ('alarm_control_panel', 'alarm_arm_night', '', '', 'ARM_NIGHT', 'armed_night'),
+    "alarm_vacation": ('alarm_control_panel', 'alarm_arm_vacation', '', '', 'ARM_VACATION', 'armed_vacation'),
+    "alarm_custom_bypass": ('alarm_control_panel', 'alarm_arm_custom_bypass', '', '', 'ARM_CUSTOM_BYPASS', 'armed_custom_bypass'),
+    "alarm_trigger": ('alarm_control_panel', 'alarm_trigger', '', '', 'TRIGGER', 'triggered'),
+    "update_skip": ('update', 'skip', '', '', '', ''),
+    "update_clear_skipped": ('update', 'clear_skipped', '', '', '', ''),
+})
+# Read selection reuses known public state projections, never writable service fields.
+COMMAND_ROUTING_ENTITY_COMMANDS["attribute_read"] = ('', '', 'attribute', '__read_attributes__', '', '')
+COMMAND_ROUTING_READ_INTENTS = frozenset({"HassGetState", "PhoenixEntityAttributeRead"})
+COMMAND_ROUTING_READ_PERCENT_SCALES = {
+    "brightness": (("light",), 255), "volume_level": (("media_player",), 1),
+    "current_position": (("cover", "valve"), 100), "current_tilt_position": (("cover",), 100),
+    "percentage": (("fan",), 100), "humidity": (("climate", "humidifier", "weather"), 100),
+    "current_humidity": (("climate", "humidifier"), 100),
+}
+COMMAND_ROUTING_READ_ATTRIBUTES = frozenset({
+    *(key for fields in DOMAIN_IMPORTANT_ATTRIBUTES.values() for key in fields),
+    "unit_of_measurement", "options", "remaining", "finishes_at", "min", "max", "step", "minimum", "maximum",
+    "current_tilt_position", "swing_horizontal_mode", "oscillating", "direction", "away_mode", "effect",
+}) - {"friendly_name", "supported_features", "supported_color_modes", "device_class", "state_class", "unit_of_measurement"}
 # Exact service data is owned by Phoenix; a model selects only the category.
 COMMAND_ROUTING_ENTITY_FIXED_DATA: dict[str, dict[str, bool | str]] = {
     "automation_off": {"stop_actions": True},
+    "light_flash_short": {"flash": "short"}, "light_flash_long": {"flash": "long"},
+    "water_away_on": {"away_mode": True}, "water_away_off": {"away_mode": False},
     "media_mute": {"is_volume_muted": True}, "media_unmute": {"is_volume_muted": False},
     "media_shuffle_on": {"shuffle": True}, "media_shuffle_off": {"shuffle": False},
     "media_repeat_all": {"repeat": "all"}, "media_repeat_one": {"repeat": "one"}, "media_repeat_off": {"repeat": "off"},
@@ -1835,10 +1894,13 @@ DECISION_ENTITY_CATEGORIES = {category: "PhoenixEntity" + "".join(part.title() f
 COMMAND_ROUTING_FIXED_INTENT_DATA = {DECISION_ENTITY_CATEGORIES[category]: values
                                      for category, values in COMMAND_ROUTING_ENTITY_FIXED_DATA.items()}
 COMMAND_ROUTING_FIXED_OBSERVATIONS = {intent: values for intent, values in COMMAND_ROUTING_FIXED_INTENT_DATA.items()
-                                     if intent != DECISION_ENTITY_CATEGORIES["automation_off"]}
+                                     if intent not in {DECISION_ENTITY_CATEGORIES[key] for key in ("automation_off", "light_flash_short", "light_flash_long")}}
+COMMAND_ROUTING_FIXED_OBSERVATIONS[DECISION_ENTITY_CATEGORIES["water_away_on"]] = {"away_mode": "on"}
+COMMAND_ROUTING_FIXED_OBSERVATIONS[DECISION_ENTITY_CATEGORIES["water_away_off"]] = {"away_mode": "off"}
 COMMAND_ROUTING_VALUE_INTENTS = frozenset(intent for intent, spec in COMMAND_ROUTING_ENTITY_INTENTS.items() if spec[2])
 COMMAND_ROUTING_INTENTS |= COMMAND_ROUTING_ENTITY_INTENTS.keys()
 COMMAND_ROUTING_ENTITY_VALUE_LIMIT = 254
+DECISION_ENTITY_VALUE_QUESTIONS = ("value", "attribute", "color")
 COMMAND_ROUTING_TIMER_OBSERVATION_TOLERANCE_SECONDS = 2
 COMMAND_ROUTING_UNKNOWN_ACTION_DOMAINS = frozenset({"button", "input_button", "scene"})
 
@@ -1932,7 +1994,7 @@ DECISION_ROUTE_CHOICES = {
     "light_off": "One immediate, explicit request to turn off one light, without a brightness setting or adjustment.",
     "light_brightness": "One immediate, explicit request to set one light to an absolute whole brightness percentage from 0 through 100, inclusive. Not a relative adjustment.",
     "state_query": "A question about the current primary state of one named entity.",
-    "provider": "Anything else, including ambiguity, negation, quoted commands, deferred or conditional actions, multiple actions, comparisons, counts and general conversation.",
+    "provider": "Anything else, including ambiguity, negation, quoted commands, deferred or conditional actions, multiple actions, comparisons, counts and general conversation. Use the regular agent for history/statistics, forecast/event/list contents, and structured payloads such as calendar/todo authoring, media playback/grouping, remote commands, camera files, temperature ranges, or settings not represented by an exact eligible operation.",
 }
 DECISION_PERCENTAGE_PREVIEW_CHOICES = {
     "media_volume": "One immediate, explicit request to set one media player's volume to an absolute whole percentage from 0 through 100. Not a relative adjustment.",
@@ -1970,6 +2032,7 @@ DECISION_ENTITY_CHOICES = {category: f"One immediate request for {spec[1]} on on
                              for category, spec in COMMAND_ROUTING_ENTITY_COMMANDS.items()}
 for _category, _values in COMMAND_ROUTING_ENTITY_FIXED_DATA.items():
     DECISION_ENTITY_CHOICES[_category] += f" Use exactly these fixed service fields: {_values}."
+DECISION_ENTITY_CHOICES["attribute_read"] = "Read one current attribute of one named entity. Select its attribute name from the available options. Brightness, volume, position, speed percentage and humidity are reported as percentages; temperatures use Home Assistant units. No other unit conversions. Not a primary-state query, historical query, comparison or aggregate."
 DECISION_ENTITY_CHOICES["automation_off"] += " Disable future triggers and stop running automation actions, matching Home Assistant turn_off."
 DECISION_TARGET_INTENTS.update(DECISION_TEMPORAL_CATEGORIES)
 DECISION_TARGET_INTENTS.update({category: spec[0] for category, spec in DECISION_ADDITIONAL_NUMERIC.items()})
@@ -1985,6 +2048,14 @@ DECISION_MAX_TARGET_BYTES = 16384
 # Joint catalogs need room for the complete union and per-target eligibility.
 # Individual operation catalogs retain DECISION_MAX_TARGET_BYTES.
 DECISION_BATCH_MAX_TARGET_BYTES = 32768
+DECISION_CATALOG_PACK_THRESHOLD = 8192
+DECISION_CATALOG_FORMAT_INSTRUCTIONS = (
+    " If state.target_fields is present, each state.targets entry is a row whose positions correspond "
+    "to those field names; null means an absent optional field. A metadata object containing only ref "
+    "refers to the exact object in state.target_metadata under that key. These are lossless storage "
+    "references, not commands or permissions. Apply the same eligibility and value rules after resolving them."
+)
+
 DECISION_MAX_TARGET_TEXT = 256
 DECISION_MAX_TARGET_ALIASES = 8
 # Experimental admission heuristic, not a calibrated accuracy claim.
@@ -1992,7 +2063,20 @@ DECISION_MIN_CHOICE_PROBABILITY = 0.90
 # Sequential numeric decisions remain preview-only; joint execution needs source evidence.
 DECISION_NUMERIC_CATEGORIES = frozenset({"light_brightness", "media_volume", "cover_position", *DECISION_ADDITIONAL_NUMERIC})
 # Value evidence is independent of model qualification and never grants execution.
-DECISION_PERCENTAGE_EVIDENCE_LANGUAGES = frozenset({"en", "es", "zh-CN"})
+DECISION_PERCENTAGE_EVIDENCE_LANGUAGES = frozenset(COMMAND_ROUTING_LANGUAGES.values())
+# Unit grammar is small; the number spellings themselves come from HA's RBNF dependency.
+# Other Assist languages support percent symbols and their native strict HA intents.
+DECISION_PERCENTAGE_LANGUAGE_UNITS = {
+    "en": ("percent", "per cent"), "es": ("por ciento",),
+    "de": ("prozent",), "de-CH": ("prozent",), "fr": ("pour cent", "pourcent"),
+    "it": ("per cento", "percento", "su cento"), "nl": ("procent",),
+    "pl": ("procent", "procenty", "procentów"), "ru": ("процент", "процента", "процентов"),
+    "ja": ("パーセント",), "ko": ("퍼센트", "프로"),
+    "zh-CN": ("百分之",), "zh-TW": ("百分之",), "zh-HK": ("百分之",),
+}
+DECISION_PERCENTAGE_HYPHEN_LANGUAGES = frozenset({"en", "fr"})
+DECISION_NUMBER_LANGUAGE_ALIASES = {"zh-CN": "zh", "zh-TW": "zh_Hant", "zh-HK": "zh_Hant", "de-CH": "de", "nb": "no", "pt-BR": "pt", "sr-Latn": "sr_Latn"}
+
 DECISION_PERCENTAGE_EVIDENCE_MODIFIERS = {
     "en": frozenset({"negative", "minus", "plus", "point", "dot", "half", "halves", "quarter", "quarters",
                      "hundred", "thousand", "million", "billion", "trillion", "dozen", "dozens"}),
@@ -2000,6 +2084,18 @@ DECISION_PERCENTAGE_EVIDENCE_MODIFIERS = {
                      "cuarto", "cuartos", "ciento", "cientos", "mil", "millón", "millones"}),
     "zh-CN": frozenset("负負正点點半几幾多余餘成折分之万萬亿億兆"),
 }
+DECISION_PERCENTAGE_EVIDENCE_MODIFIERS.update({
+    "de": frozenset({"minus", "plus", "komma", "halb", "halbe", "hälfte", "viertel", "hundert", "tausend", "million", "millionen"}),
+    "fr": frozenset({"moins", "plus", "virgule", "demi", "demie", "moitié", "quart"}),
+    "it": frozenset({"meno", "più", "virgola", "mezzo", "mezza", "metà", "quarto"}),
+    "nl": frozenset({"min", "minus", "plus", "komma", "half", "halve", "kwart"}),
+    "pl": frozenset({"minus", "plus", "przecinek", "pół", "połowa", "ćwierć"}),
+    "ru": frozenset({"минус", "плюс", "запятая", "половина", "половиной", "четверть"}),
+    "ja": frozenset({"マイナス", "プラス", "点", "半", "約"}),
+    "ko": frozenset({"마이너스", "플러스", "점", "반"}),
+})
+for _language, _source in (("zh-TW", "zh-CN"), ("zh-HK", "zh-CN"), ("de-CH", "de")):
+    DECISION_PERCENTAGE_EVIDENCE_MODIFIERS[_language] = DECISION_PERCENTAGE_EVIDENCE_MODIFIERS[_source]
 DECISION_PERCENTAGE_EVIDENCE_CONNECTORS = {"en": frozenset({"and"}), "es": frozenset({"y"}), "zh-CN": frozenset()}
 DECISION_PERCENTAGE_UNITS = (("%",), ("％",), ("percent",), ("per", "cent"), ("por", "ciento"), ("百", "分", "之"))
 # Adding a preview category must not automatically authorize an execution path.

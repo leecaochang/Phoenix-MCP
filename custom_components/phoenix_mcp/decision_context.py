@@ -12,7 +12,7 @@ from .command_execution import _target_fingerprint, plan_is_current, _digest
 from .command_operations import numeric_operation, service_arguments
 from .command_routing import RoutingAuthority, effective_routing_mode, routing_language
 from .const import (
-    COMMAND_ROUTING_INTENTS, COMMAND_ROUTING_VALUE_INTENTS, COMMAND_ROUTING_TEMPORAL_OPERATIONS, COMMAND_ROUTING_LANGUAGES, DECISION_CONTEXT_MAX_BYTES, DECISION_CONTEXT_MAX_MESSAGES,
+    COMMAND_ROUTING_READ_INTENTS, COMMAND_ROUTING_INTENTS, COMMAND_ROUTING_VALUE_INTENTS, COMMAND_ROUTING_TEMPORAL_OPERATIONS, COMMAND_ROUTING_LANGUAGES, DECISION_CONTEXT_MAX_BYTES, DECISION_CONTEXT_MAX_MESSAGES,
     DECISION_CONTEXT_REQUIRED_CHOICES, DECISION_CONTEXT_EXECUTION_MODELS,
     DECISION_CONTEXT_EXECUTION_LANGUAGES, DECISION_FOLLOWUP_EXECUTION_MODELS, MAX_SEARCH_QUERY_LEN,
 )
@@ -61,8 +61,8 @@ def _state(hass: Any, token: Any, sentence: str, language: str,
     if (set(proposal) != fields or not isinstance(ids, list) or len(ids) != 1
             or not isinstance(ids[0], str)):
         return None
-    service = None if intent == "HassGetState" else service_arguments(proposal)
-    if intent != "HassGetState" and service is None:
+    service = None if intent in COMMAND_ROUTING_READ_INTENTS else service_arguments(proposal)
+    if intent not in COMMAND_ROUTING_READ_INTENTS and service is None:
         return None
     fingerprint = _target_fingerprint(hass, token, ids[0], intent)
     if fingerprint is None:

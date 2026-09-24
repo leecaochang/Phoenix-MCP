@@ -19,7 +19,7 @@ from custom_components.phoenix_mcp.const import (
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.decision_batch import async_preview_batch, capture_batch_targets
 from custom_components.phoenix_mcp.decision_provider import DecisionProvider, DecisionError
-from custom_components.phoenix_mcp.decision_targets import capture_targets
+from custom_components.phoenix_mcp.decision_targets import capture_targets, catalog_state
 from custom_components.phoenix_mcp.token_store import PermissionTree, PermissionNode
 
 
@@ -43,11 +43,22 @@ async def batch_home(hass, token_store):
         await asyncio.gather(data.decision_shadow.task, return_exceptions=True)
 
 
+def wire_targets(payload):
+    """Decode the lossless wire rows for independent target assertions."""
+    state = payload['state']
+    if 'target_fields' not in state:
+        return state['targets']
+    return {key: {field: value for field, value in zip(state['target_fields'], row, strict=True)
+                  if value is not None} for key, row in state['targets'].items()}
+
+
 def wire_response(payload, category='light_on', target='t0'):
+    choices = [('route', category), ('target', target)]
+    choices.extend((key, 'none') for key in ('value', 'attribute', 'color') if key in payload['questions'])
     return {'model': 'jev-1.13.0', 'answers': {
         question: {'type': 'choice', 'choice': selected, 'confidence': 1,
                    'probabilities': {key: float(key == selected) for key in payload['questions'][question]['criteria']}}
-        for question, selected in (('route', category), ('target', target))}}
+        for question, selected in choices}}
 
 
 async def preview(hass, home, local=None, *, numeric_preview=False):
@@ -95,7 +106,7 @@ async def test_joint_preview_compares_local_match_without_execution(hass, batch_
     async def response(*args):
         payload = args[4]
         assert 'private-state' not in json.dumps(payload)
-        assert payload['state']['targets']['t0']['eligible_categories'] == ['light_off', 'light_on', 'state_query']
+        assert wire_targets(payload)['t0']['eligible_categories'] == ['light_off', 'light_on', 'state_query']
         return wire_response(payload)
     with (patch.object(DecisionProvider, '_request', side_effect=response) as request,
           patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
@@ -257,7 +268,7 @@ async def percentage_home(hass, batch_home):
 
 
 def percentage_response(payload, category, entity_id, percentage):
-    target = next(key for key, value in payload['state']['targets'].items() if value['entity_id'] == entity_id)
+    target = next(key for key, value in wire_targets(payload).items() if value['entity_id'] == entity_id)
     body = wire_response(payload, category, target)
     body['answers']['percentage'] = {
         'type': 'choice', 'choice': percentage, 'confidence': 1,
@@ -287,9 +298,9 @@ async def test_joint_percentage_preview_uses_one_request_and_never_prepares_exec
         payload = args[4]
         assert set(payload['questions']) == {'route', 'target', 'percentage'}
         assert len(payload['questions']['percentage']['criteria']) == 102
-        assert len(payload['state']['targets']) == 3
+        assert len(wire_targets(payload)) == 3
         assert 'private-state' not in json.dumps(payload)
-        for descriptor in payload['state']['targets'].values():
+        for descriptor in wire_targets(payload).values():
             expected = next(key for key, entity in entities.items() if descriptor['entity_id'] == entity)
             assert expected in descriptor['eligible_categories']
         return percentage_response(payload, category, entity_id, str(percent))
@@ -373,9 +384,9 @@ async def test_extended_preview_keeps_all_competitors_above_common_limit(hass, b
         capture_batch_targets(hass, token)
     async def response(*args):
         payload = args[4]
-        assert len(payload['state']['targets']) == DECISION_MAX_TARGETS + 1
+        assert len(wire_targets(payload)) == DECISION_MAX_TARGETS + 1
         assert len(payload['questions']['target']['criteria']) == DECISION_MAX_TARGETS + 2
-        assert all('light_brightness' in item['eligible_categories'] for item in payload['state']['targets'].values())
+        assert all('light_brightness' in item['eligible_categories'] for item in wire_targets(payload).values())
         body = percentage_response(payload, 'light_brightness', original, '37')
         if change:
             er.async_get(hass).async_update_entity(entry.entity_id, aliases={'Desk lamp'})
@@ -424,7 +435,7 @@ async def test_larger_union_budget_is_preview_only_and_rechecks_competitors(hass
                for snapshot in snapshots.values())
     async def response(*args):
         payload = args[4]
-        assert {item['entity_id'] for item in payload['state']['targets'].values()} == expected
+        assert {item['entity_id'] for item in wire_targets(payload).values()} == expected
         if change:
             registry.async_update_entity(entry.entity_id, aliases={'Another lamp'})
         return percentage_response(payload, 'light_brightness', original, '37')
@@ -439,24 +450,31 @@ async def test_larger_union_budget_is_preview_only_and_rechecks_competitors(hass
         assert result['proposal']['entity_ids'] == [original] and result['proposal']['brightness_pct'] == 37
 
 
-async def test_extended_union_over_budget_declines_before_provider_request(hass, batch_home):
+async def test_packing_admits_full_union_previously_over_byte_budget(hass, batch_home):
     _, token, _, _, original = batch_home
     hass.states.async_set(original, 'off', {'supported_color_modes': ['brightness']})
     for index in range(DECISION_BATCH_MAX_TARGETS - 1):
         entry = er.async_get(hass).async_get_or_create('light', 'test', f'l{index}',
                                                       suggested_object_id=f'l{index}', original_name='Lamp')
         hass.states.async_set(entry.entity_id, 'off', {'friendly_name': 'Lamp', 'supported_color_modes': ['brightness']})
-    # Each individual operation fits, but the combined eligibility data exceeds its own budget.
+    # The full logical catalog exceeds the wire budget; lossless packing keeps every target.
     for category in ('light_on', 'light_off', 'light_brightness', 'state_query'):
         snapshot = capture_targets(hass, token, category, max_targets=DECISION_BATCH_MAX_TARGETS, compact=True)
         assert len(snapshot.targets) == DECISION_BATCH_MAX_TARGETS
-    with patch.object(DecisionProvider, '_request') as request:
+    targets, _ = capture_batch_targets(hass, token, numeric_preview=True)
+    assert len(json.dumps(targets, ensure_ascii=False).encode()) > DECISION_BATCH_MAX_TARGET_BYTES
+    assert len(json.dumps(catalog_state(targets), ensure_ascii=False).encode()) <= DECISION_BATCH_MAX_TARGET_BYTES
+    async def response(*args):
+        payload = args[4]
+        assert len(wire_targets(payload)) == DECISION_BATCH_MAX_TARGETS
+        assert wire_targets(payload) == targets
+        assert all('target_fields' in question['instructions'] for question in payload['questions'].values())
+        return percentage_response(payload, 'light_brightness', original, '37')
+    with patch.object(DecisionProvider, '_request', side_effect=response) as request:
         result = await percentage_preview(hass, batch_home)
-    request.assert_not_called()
-    assert result['reason'] == 'target_metadata_too_large' and result['executed'] is False
-    assert result['catalog_limit']['category'] == 'combined'
-    assert result['catalog_limit']['limit'] == DECISION_BATCH_MAX_TARGET_BYTES
-    assert result['catalog_limit']['observed'] > DECISION_BATCH_MAX_TARGET_BYTES
+    request.assert_awaited_once()
+    assert result['reason'] == 'target_selected' and result['executed'] is False
+    assert result['proposal']['entity_ids'] == [original]
 
 
 async def test_compact_batch_fits_duplicate_heavy_catalog_without_dropping_candidates(hass, batch_home):
@@ -552,7 +570,7 @@ async def test_categorical_catalog_bounds_follow_qualified_account(hass, batch_h
         payload = args[4]
         assert set(payload['questions']) == {'route', 'target'}
         assert len(payload['questions']['target']['criteria']) == count + 1
-        assert {item['entity_id'] for item in payload['state']['targets'].values()} == expected
+        assert {item['entity_id'] for item in wire_targets(payload).values()} == expected
         return wire_response(payload, 'state_query', 't0')
     with (patch.object(DecisionProvider, '_request', side_effect=response) as request,
           patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
@@ -581,3 +599,31 @@ async def test_preview_reports_only_validation_label_and_never_executes(hass, ba
     assert 'private-provider-text' not in json.dumps(result)
     assert not batch_home[0].store.get_pending_approvals()
     dispatch.assert_not_called()
+
+
+async def test_large_operation_snapshot_uses_packed_budget_without_hiding_targets(hass, batch_home):
+    from custom_components.phoenix_mcp.decision_targets import CatalogLimitError
+    _, token, *_ = batch_home
+    token.permissions = PermissionTree(domains={'sensor': PermissionNode(state='YELLOW')})
+    registry = er.async_get(hass)
+    expected = set()
+    for index in range(100):
+        entry = registry.async_get_or_create('sensor', 'test', f'packed_{index}')
+        hass.states.async_set(entry.entity_id, '20', {'friendly_name': f'Reading {index} ' + 'x' * 100})
+        async_expose_entity(hass, 'conversation', entry.entity_id, True)
+        expected.add(entry.entity_id)
+    with pytest.raises(CatalogLimitError):
+        capture_targets(hass, token, 'state_query', max_targets=DECISION_BATCH_MAX_TARGETS)
+    targets, snapshots = capture_batch_targets(hass, token, extended=True)
+    state_targets = snapshots['state_query'].targets
+    assert len(json.dumps(state_targets, ensure_ascii=False).encode()) > DECISION_MAX_TARGET_BYTES
+    assert len(json.dumps(catalog_state(state_targets), ensure_ascii=False).encode()) <= DECISION_MAX_TARGET_BYTES
+    assert {target['entity_id'] for target in targets.values()} == expected
+    async def response(*args):
+        payload = args[4]
+        assert {target['entity_id'] for target in wire_targets(payload).values()} == expected
+        return wire_response(payload, 'state_query', 't0')
+    with patch.object(DecisionProvider, '_request', side_effect=response) as request:
+        result = await preview(hass, batch_home)
+    request.assert_awaited_once()
+    assert result['reason'] == 'target_selected' and result['executed'] is False
