@@ -9,6 +9,7 @@ from typing import Any
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .command_routing import RoutingAuthority, routing_language, routing_languages, effective_routing_mode
+from .command_operations import numeric_operation
 from .const import MAX_SEARCH_QUERY_LEN, DECISION_TARGET_INTENTS, DECISION_HYBRID_REASONS, DECISION_NUMERIC_CATEGORIES, DECISION_EXECUTION_CATEGORIES
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 from .decision_metrics import DecisionMetrics
@@ -146,7 +147,8 @@ class DecisionShadow:
                 if joint is not None:
                     answer, selection = joint
                 else:
-                    answer = await provider.classify(session, sentence.strip(), settings.decision_timeout_ms, decision_language)
+                    options = {"numeric_preview": True} if targets and not prepare and provider.supports_exact_percentages() else {}
+                    answer = await provider.classify(session, sentence.strip(), settings.decision_timeout_ms, decision_language, **options)
                     if (authority.current(hass) is None or store.resolve(account, purpose="decision") != cfg):
                         return result("authority_changed")
                     if not targets:
@@ -215,11 +217,12 @@ class DecisionShadow:
                 return result("low_probability", decision=answer)
             entity_id = snapshot.targets[selected]["entity_id"]
             proposal: dict[str, Any] = {"intent": DECISION_TARGET_INTENTS[category["choice"]], "entity_ids": [entity_id]}
-            if category["choice"] == "light_brightness":
-                percent = answer.get("brightness_pct")
+            operation = numeric_operation(proposal["intent"])
+            if operation is not None:
+                percent = answer.get(operation.proposal_field)
                 if type(percent) is not int or not 0 <= percent <= 100:
-                    return result("brightness_declined", decision=answer)
-                proposal["brightness_pct"] = percent
+                    return result("brightness_declined" if category["choice"] == "light_brightness" else "percentage_declined", decision=answer)
+                proposal[operation.proposal_field] = percent
             selection = {**result("target_selected", entity_id, answer), "proposal": proposal}
             if prepare:
                 from .command_execution import _capture_plan

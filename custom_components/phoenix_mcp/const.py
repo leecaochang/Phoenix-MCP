@@ -1727,11 +1727,22 @@ DECISION_ROUTE_CHOICES = {
     "state_query": "A question about the current primary state of one named entity.",
     "provider": "Anything else, including ambiguity, negation, quoted commands, deferred or conditional actions, multiple actions, comparisons, counts and general conversation.",
 }
+DECISION_PERCENTAGE_PREVIEW_CHOICES = {
+    "media_volume": "One immediate, explicit request to set one media player's volume to an absolute whole percentage from 0 through 100. Not a relative adjustment.",
+    "cover_position": "One immediate, explicit request to set one cover to an absolute whole percentage open from 0 through 100. Zero is fully closed and 100 fully open. Not a relative adjustment.",
+}
+# TypeSafe Choice supports 255 options; exact percentages need 101 plus a refusal.
+DECISION_EXACT_PERCENTAGE_ENDPOINTS = frozenset({("typesafe", DECISION_TYPESAFE_BASE_URL, "systemone")})
+DECISION_PERCENTAGE_CHOICES = {
+    **{str(value): f"The explicitly requested absolute setting is exactly {value} percent." for value in range(101)},
+    "none": "No single explicit absolute whole percentage from 0 through 100 is requested for this operation.",
+}
 
 DECISION_PROVIDERS = frozenset({"typesafe", "systemone", "classifier"})
 DECISION_TARGET_INTENTS = {
     "light_on": "HassTurnOn", "light_off": "HassTurnOff",
     "light_brightness": "HassLightSet", "state_query": "HassGetState",
+    "media_volume": "HassSetVolume", "cover_position": "HassSetPosition",
 }
 # Leave one of the common classifier format's 50 choices for declining.
 DECISION_MAX_TARGETS = 49
@@ -1741,7 +1752,7 @@ DECISION_MAX_TARGET_ALIASES = 8
 # Experimental admission heuristic, not a calibrated accuracy claim.
 DECISION_MIN_CHOICE_PROBABILITY = 0.90
 # Numeric proposals remain available to inert previews, not execution.
-DECISION_NUMERIC_CATEGORIES = frozenset({"light_brightness"})
+DECISION_NUMERIC_CATEGORIES = frozenset({"light_brightness", "media_volume", "cover_position"})
 # Adding a preview category must not automatically authorize an execution path.
 DECISION_EXECUTION_CATEGORIES = frozenset({"light_on", "light_off", "state_query"})
 DECISION_HYBRID_REASONS = frozenset({

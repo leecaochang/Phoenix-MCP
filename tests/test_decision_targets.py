@@ -214,7 +214,7 @@ async def test_one_budget_for_both_requests_and_cancellation(hass, target_home):
     data, *_ = target_home
     await data.store.async_patch_settings(decision_timeout_ms=250)
     closed = asyncio.Event()
-    async def classify(*args):
+    async def classify(*args, **kwargs):
         await asyncio.sleep(0.17)
         return choice("light_on", DECISION_ROUTE_CHOICES)
     async def select(*args):
@@ -408,7 +408,7 @@ async def test_multilingual_target_and_brightness_preview_keeps_language_and_no_
     payloads = []
     async def request(session, method, path, timeout, payload):
         payloads.append(payload)
-        selected = {"route": "light_brightness", "target": "t0", "brightness_tens": "5", "brightness_units": "0"}
+        selected = {"route": "light_brightness", "target": "t0", "percentage": "50"}
         return {"model": "test-model", "answers": {
             question: {"type": "choice", **choice(selected[question], spec["criteria"])}
             for question, spec in payload["questions"].items()}}
@@ -425,3 +425,77 @@ async def test_multilingual_target_and_brightness_preview_keeps_language_and_no_
     assert "_plan" not in json.dumps(result)
     dispatch.assert_not_called()
     assert not data.store.get_pending_approvals()
+
+
+@pytest.mark.parametrize('category,intent,field,domain', [
+    ('light_brightness', 'HassLightSet', 'brightness_pct', 'light'),
+    ('media_volume', 'HassSetVolume', 'volume_pct', 'media_player'),
+    ('cover_position', 'HassSetPosition', 'position_pct', 'cover'),
+])
+@pytest.mark.parametrize('percent', [0, 1, 10, 37, 55, 99, 100])
+async def test_jev_exact_percentage_preview_is_scoped_and_inert(hass, target_home, category, intent, field, domain, percent):
+    from homeassistant.components.cover import CoverEntityFeature
+    from homeassistant.components.media_player import MediaPlayerEntityFeature
+    data, token, *_ = target_home
+    token.permissions = PermissionTree(domains={domain: PermissionNode(state='GREEN')})
+    if domain == 'light':
+        entity_id = target_home[-1]
+    else:
+        entry = er.async_get(hass).async_get_or_create(domain, 'test', 'numeric', original_name='Numeric device')
+        entity_id = entry.entity_id
+        feature = MediaPlayerEntityFeature.VOLUME_SET if domain == 'media_player' else CoverEntityFeature.SET_POSITION
+        hass.states.async_set(entity_id, 'idle' if domain == 'media_player' else 'open', {'supported_features': feature})
+        async_expose_entity(hass, 'conversation', entity_id, True)
+    async def response(session, method, path, timeout, payload):
+        selected = {'route': category, 'target': 't0', 'percentage': str(percent)}
+        if 'target' in payload['questions']:
+            assert set(payload['questions']) == {'target', 'percentage'}
+            assert len(payload['questions']['percentage']['criteria']) == 102
+            assert payload['state']['targets']['t0']['entity_id'] == entity_id
+        return {'model': 'jev-1.13.0', 'answers': {
+            question: {'type': 'choice', **choice(selected[question], spec['criteria'])}
+            for question, spec in payload['questions'].items()}}
+    with (patch.object(DecisionProvider, '_request', AsyncMock(side_effect=response)) as request,
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        result = await async_preview_decision(hass, data, token, f'Set the {domain} to {percent} percent', 'en',
+                                              {'reason': 'no_match', 'proposal': None}, targets=True, ingress='preview')
+    assert result['target_selection']['proposal'] == {'intent': intent, 'entity_ids': [entity_id], field: percent}
+    assert result['executed'] is False and '_plan' not in json.dumps(result)
+    assert request.await_count == 2 and not data.store.get_pending_approvals()
+    dispatch.assert_not_called()
+
+
+@pytest.mark.parametrize('damage', ['missing', 'extra', 'fractional', 'outside', 'bool', 'low', 'none'])
+async def test_jev_exact_percentage_rejects_unsound_values(damage):
+    from custom_components.phoenix_mcp.const import DECISION_TYPESAFE_BASE_URL
+    provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL), 'systemone')
+    async def response(session, method, path, timeout, payload):
+        selected = {'target': 't0', 'percentage': '37'}
+        selected['percentage'] = {'fractional': '37.5', 'outside': '101', 'bool': True, 'none': 'none'}.get(damage, '37')
+        answers = {question: {'type': 'choice', **choice(selected[question], spec['criteria'])}
+                   for question, spec in payload['questions'].items()}
+        if damage == 'missing': del answers['percentage']
+        if damage == 'extra': answers['unrequested'] = answers['target']
+        if damage == 'low': answers['percentage']['probabilities'].update({'37': 0.8, 'none': 0.2})
+        return {'model': 'jev-1.13.0', 'answers': answers}
+    with patch.object(provider, '_request', side_effect=response):
+        if damage in ('low', 'none'):
+            answer = await provider.select_target(None, 'request', 'media_volume', {'t0': {}}, 1000)
+            assert answer['volume_pct'] is None
+        else:
+            with pytest.raises(DecisionError, match='malformed'):
+                await provider.select_target(None, 'request', 'media_volume', {'t0': {}}, 1000)
+
+
+@pytest.mark.parametrize('category,domain', [('media_volume', 'media_player'), ('cover_position', 'cover')])
+async def test_numeric_preview_requires_actual_device_support(hass, target_home, category, domain):
+    _, token, *_ = target_home
+    token.permissions = PermissionTree(domains={domain: PermissionNode(state='GREEN')})
+    entry = er.async_get(hass).async_get_or_create(domain, 'test', 'unsupported')
+    hass.states.async_set(entry.entity_id, 'on', {'supported_features': 0})
+    async_expose_entity(hass, 'conversation', entry.entity_id, True)
+    with (patch.object(DecisionProvider, 'classify', AsyncMock(return_value=choice(category, [category]))),
+          patch.object(DecisionProvider, 'select_target') as select):
+        result = await preview(hass, target_home)
+    assert result['target_selection']['reason'] == 'no_target'
+    select.assert_not_called()
