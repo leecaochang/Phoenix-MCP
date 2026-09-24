@@ -12,6 +12,13 @@ from .const import (
 _TOKENS = re.compile(r"\w+|[^\w\s]", re.UNICODE)
 
 
+def has_percentage_unit(sentence: str) -> bool:
+    """Detect percentage notation without treating it as an action or valid value."""
+    tokens = [match.group().lower() for match in _TOKENS.finditer(sentence)]
+    return any(token in ("%", "percent") or tokens[index:index + 2] == ["per", "cent"]
+               for index, token in enumerate(tokens))
+
+
 @lru_cache(maxsize=1)
 def _number_words() -> tuple[dict[str, int], frozenset[str]]:
     """Use the number spelling dependency already used by HA's Hassil recognizer."""

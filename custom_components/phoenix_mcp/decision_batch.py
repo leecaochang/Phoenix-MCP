@@ -15,13 +15,14 @@ from .const import (
     DECISION_BATCH_EXECUTION_LANGUAGES, DECISION_BATCH_EXECUTION_MODELS,
     DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES,
     DECISION_PERCENTAGE_PREVIEW_MAX_TARGET_BYTES,
+    DECISION_PERCENTAGE_EXECUTION_MODELS, DECISION_PERCENTAGE_EVIDENCE_LANGUAGES,
     DECISION_TARGET_INTENTS, DECISION_NUMERIC_CATEGORIES, DECISION_PERCENTAGE_PREVIEW_MAX_TARGETS, MAX_SEARCH_QUERY_LEN,
 )
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 from .decision_targets import capture_targets, CatalogLimitError, TargetSnapshot
 from .device_semantics import device_registry_snapshot
 from .helpers import redact_secrets_in_text, redact_inaccessible_entity_ids_in_text
-from .numeric_evidence import read_explicit_percentage, compare_percentage
+from .numeric_evidence import read_explicit_percentage, compare_percentage, has_percentage_unit
 
 
 def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = False
@@ -54,6 +55,12 @@ def batch_execution_eligible(cfg: Any, language: str) -> bool:
                 and (cfg.kind, cfg.base_url, cfg.model) in DECISION_BATCH_EXECUTION_MODELS)
 
 
+def percentage_execution_eligible(cfg: Any, language: str) -> bool:
+    """Keep numeric qualification independent from future categorical model additions."""
+    return bool(batch_execution_eligible(cfg, language) and language in DECISION_PERCENTAGE_EVIDENCE_LANGUAGES
+                and (cfg.kind, cfg.base_url, cfg.model) in DECISION_PERCENTAGE_EXECUTION_MODELS)
+
+
 def batch_catalog_digest(snapshot: tuple[dict[str, dict], dict[str, TargetSnapshot]]) -> str:
     """Bind all categories and competitors without retaining their metadata."""
     targets, catalogs = snapshot
@@ -72,8 +79,21 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
     if (redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(sentence) or "", current, hass) != sentence
             or (provider.cfg.api_key and provider.cfg.api_key in sentence)):
         raise DecisionError("context_unavailable")
+    numeric = percentage_execution_eligible(provider.cfg, language) and has_percentage_unit(sentence)
+    source_value = None
+    if numeric:
+        from .agentcli import loaded_decision_account
+        source_value = await hass.async_add_executor_job(read_explicit_percentage, sentence, language)
+        current = authority.current(hass)
+        account = authority.settings.decision_provider_id
+        if (current is None or not account or loaded_decision_account(hass, account) != provider.cfg):
+            raise DecisionError("authority_changed")
+        if redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(sentence) or "", current, hass) != sentence:
+            raise DecisionError("context_unavailable")
+        if source_value is None:
+            return None, {"reason": "numeric_unverified", "decision": None, "executed": False}
     try:
-        snapshot = capture_batch_targets(hass, current)
+        snapshot = capture_batch_targets(hass, current, numeric_preview=numeric)
     except DecisionError as error:
         if str(error) in ("too_many_targets", "target_metadata_too_large"):
             return None
@@ -83,19 +103,21 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
         raise DecisionError("no_target")
     if provider.cfg.api_key and provider.cfg.api_key in json.dumps(targets, ensure_ascii=False):
         raise DecisionError("context_unavailable")
+    options = {"numeric_preview": True} if numeric else {}
     answer = await provider.route_and_target(session, sentence, targets,
-                                            authority.settings.decision_timeout_ms, language)
+                                            authority.settings.decision_timeout_ms, language, **options)
     current = authority.current(hass)
     if current is None:
         raise DecisionError("authority_changed")
     try:
-        changed = capture_batch_targets(hass, current) != snapshot
+        changed = capture_batch_targets(hass, current, numeric_preview=numeric) != snapshot
     except DecisionError:
         changed = True
     if changed:
         raise DecisionError("targets_changed")
     category, target = answer["route"], answer["target"]
-    models = DECISION_BATCH_EXECUTION_MODELS[(provider.cfg.kind, provider.cfg.base_url, provider.cfg.model)]
+    qualified = DECISION_PERCENTAGE_EXECUTION_MODELS if numeric else DECISION_BATCH_EXECUTION_MODELS
+    models = qualified[(provider.cfg.kind, provider.cfg.base_url, provider.cfg.model)]
     if category["model"] not in models or target["model"] != category["model"]:
         raise DecisionError("model_unverified")
     selection: dict = {"reason": "provider_fallback", "decision": None, "executed": False}
@@ -111,13 +133,22 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
     descriptor = targets[target["choice"]]
     if category["choice"] not in descriptor["eligible_categories"]:
         raise DecisionError("category_mismatch")
-    proposal = {"intent": DECISION_TARGET_INTENTS[category["choice"]], "entity_ids": [descriptor["entity_id"]]}
+    proposal: dict[str, Any] = {"intent": DECISION_TARGET_INTENTS[category["choice"]], "entity_ids": [descriptor["entity_id"]]}
+    if numeric:
+        operation = numeric_operation(proposal["intent"])
+        percentage = answer["percentage"]
+        if (operation is None or percentage["model"] != category["model"]
+                or not confident_choice(percentage) or percentage["choice"] != str(source_value)):
+            return category, {**selection, "reason": "numeric_unverified"}
+        proposal[operation.proposal_field] = source_value
     plan = _capture_plan(hass, authority.data, current, proposal, ingress=ingress)
     if plan is None:
         raise DecisionError("targets_changed")
     plan.update(decision_category=category["choice"], decision_catalog=catalogs[category["choice"]].digest(),
                 decision_batch={"model": category["model"], "language": language,
                                 "catalog": batch_catalog_digest(snapshot)})
+    if numeric:
+        plan["decision_batch"].update(percentage=source_value, proposal=_digest(proposal))
     return category, {**selection, "reason": "target_selected", "entity_id": descriptor["entity_id"],
                       "proposal": proposal, "_plan": plan}
 

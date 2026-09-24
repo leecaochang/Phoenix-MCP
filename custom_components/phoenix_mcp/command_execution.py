@@ -11,12 +11,13 @@ from typing import Any
 
 from .agent_recovery import RecoveryRequired, dispatch_agent_tool, recovery_turn
 from .audit import generate_request_id
-from .command_operations import service_arguments, supports_command
+from .command_operations import service_arguments, supports_command, numeric_operation
 from .command_routing import RoutingAuthority, effective_routing_mode
 from .const import (
     COMMAND_ROUTING_PLAN_KEY, VOICE_AGENT_CLIENT_IP, DECISION_TARGET_INTENTS, DECISION_EXECUTION_CATEGORIES,
     DECISION_CONTEXT_EXECUTION_MODELS, DECISION_CONTEXT_EXECUTION_LANGUAGES,
     DECISION_BATCH_EXECUTION_MODELS,
+    DECISION_NUMERIC_CATEGORIES, DECISION_PERCENTAGE_EXECUTION_MODELS,
 )
 from .device_semantics import DeviceRegistrySnapshot, device_registry_snapshot
 from .helpers import voice_text
@@ -81,28 +82,45 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
     if "decision_category" not in plan:
         return "decision_batch" not in plan
     from .agentcli import decision_account_fingerprint, loaded_decision_account
-    from .decision_batch import batch_catalog_digest, batch_execution_eligible, capture_batch_targets
+    from .decision_batch import batch_catalog_digest, batch_execution_eligible, capture_batch_targets, percentage_execution_eligible
     from .decision_targets import capture_targets
 
     settings = data.store.get_settings()
     category = plan["decision_category"]
+    numeric = category in DECISION_NUMERIC_CATEGORIES
+    if numeric and "decision_batch" not in plan:
+        return False
+    catalog_digest = None
     mode = effective_routing_mode(settings, plan.get("ingress", "voice"))
     if "decision_batch" in plan:
         review = plan["decision_batch"]
         account = settings.decision_provider_id
         cfg = loaded_decision_account(hass, account) if account else None
-        if (not isinstance(review, dict) or set(review) != {"model", "language", "catalog"}
-                or not all(isinstance(value, str) for value in review.values())
+        keys = {"model", "language", "catalog"} | ({"percentage", "proposal"} if numeric else set())
+        qualified = DECISION_PERCENTAGE_EXECUTION_MODELS if numeric else DECISION_BATCH_EXECUTION_MODELS
+        if (not isinstance(review, dict) or set(review) != keys
+                or not all(isinstance(review[key], str) for key in keys - {"percentage"})
                 or cfg is None or not batch_execution_eligible(cfg, review["language"])
-                or review["model"] not in DECISION_BATCH_EXECUTION_MODELS[(cfg.kind, cfg.base_url, cfg.model)]
-                or batch_catalog_digest(capture_batch_targets(hass, token)) != review["catalog"]):
+                or review["model"] not in qualified.get((cfg.kind, cfg.base_url, cfg.model), ())):
             return False
-    return bool(category in DECISION_EXECUTION_CATEGORIES
+        if numeric:
+            operation = numeric_operation(plan["proposal"]["intent"])
+            if (not percentage_execution_eligible(cfg, review["language"]) or operation is None
+                    or type(review["percentage"]) is not int or not 0 <= review["percentage"] <= 100
+                    or type(plan["proposal"].get(operation.proposal_field)) is not int
+                    or plan["proposal"][operation.proposal_field] != review["percentage"]
+                    or _digest(plan["proposal"]) != review["proposal"]):
+                return False
+        snapshot = capture_batch_targets(hass, token, numeric_preview=numeric)
+        if batch_catalog_digest(snapshot) != review["catalog"] or category not in snapshot[1]:
+            return False
+        catalog_digest = snapshot[1][category].digest()
+    return bool((category in DECISION_EXECUTION_CATEGORIES or numeric)
                 and mode == "hybrid" and settings.decision_provider_id
                 and DECISION_TARGET_INTENTS.get(category) == plan["proposal"]["intent"]
                 and plan.get("decision_account") is not None
                 and decision_account_fingerprint(hass, settings.decision_provider_id) == plan["decision_account"]
-                and capture_targets(hass, token, category).digest() == plan.get("decision_catalog"))
+                and (catalog_digest or capture_targets(hass, token, category).digest()) == plan.get("decision_catalog"))
 
 
 def _context_plan_current(plan: dict, hass: Any, data: Any) -> bool:

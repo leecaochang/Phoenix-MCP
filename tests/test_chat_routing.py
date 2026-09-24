@@ -78,6 +78,42 @@ async def test_real_local_match_is_observed_without_dispatch_or_decision(hass, c
     assert not data.store.get_pending_approvals()
 
 
+@pytest.mark.parametrize('category,domain,attributes,service,field,value', [
+    ('light_brightness', 'light', {'supported_color_modes': ['brightness']}, 'turn_on', 'brightness_pct', 37),
+    ('media_volume', 'media_player', {'supported_features': MediaPlayerEntityFeature.VOLUME_SET}, 'volume_set', 'volume_level', 0.37),
+    ('cover_position', 'cover', {'supported_features': CoverEntityFeature.SET_POSITION}, 'set_cover_position', 'position', 37),
+])
+async def test_chat_executes_qualified_source_checked_percentages(hass, chat_home, category, domain, attributes, service, field, value):
+    from custom_components.phoenix_mcp import mcp_view
+    from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
+    data, token = chat_home
+    store = hass.data['_phoenix_agentcli_store']
+    await store.set_model(data.store.get_settings().decision_provider_id, 'jev-latest')
+    await data.store.async_patch_settings(agentcli_routing_mode='hybrid', mesa_mode='off')
+    token.cap_physical_control = 'allow'
+    token.permissions.domains[domain] = PermissionNode(state='GREEN')
+    entry = er.async_get(hass).async_get_or_create(domain, 'test', 'numeric_device', original_name='Test device')
+    hass.states.async_set(entry.entity_id, 'off', attributes)
+    async_expose_entity(hass, 'conversation', entry.entity_id, True)
+    async def response(session, method, path, timeout, payload):
+        assert set(payload['questions']) == {'route', 'target', 'percentage'}
+        target = next(key for key, item in payload['state']['targets'].items() if item['entity_id'] == entry.entity_id)
+        selected = {'route': category, 'target': target, 'percentage': '37'}
+        return {'model': 'jev-1.13.0', 'answers': {
+            name: {'type': 'choice', 'choice': selected[name], 'confidence': 1,
+                   'probabilities': {key: float(key == selected[name]) for key in question['criteria']}}
+            for name, question in payload['questions'].items()}}
+    with (patch.object(DecisionProvider, '_request', side_effect=response) as remote,
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        provider, _, _ = await chat_turn(hass, chat_home, [
+            {'role': 'user', 'content': 'I would like Test device at thirty-seven percent now.'}])
+    remote.assert_awaited_once()
+    provider.stream_turn.assert_not_called()
+    call.assert_awaited_once_with(domain, service, {'entity_id': [entry.entity_id], field: value},
+                                blocking=True, return_response=False)
+
+
 async def test_decision_does_not_delay_or_replace_provider_and_keeps_only_counts(hass, chat_home):
     data, _ = chat_home
     entered, release = asyncio.Event(), asyncio.Event()

@@ -1720,6 +1720,11 @@ DECISION_BATCH_EXECUTION_MODELS = {
     ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
 }
 DECISION_BATCH_EXECUTION_LANGUAGES = frozenset({"en"})
+# Numeric execution is qualified independently from categorical routing.
+DECISION_PERCENTAGE_EXECUTION_MODELS = {
+    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-latest"): frozenset({"jev-1.13.0"}),
+    ("typesafe", DECISION_TYPESAFE_BASE_URL, "jev-1.13.0"): frozenset({"jev-1.13.0"}),
+}
 DECISION_ROUTE_CHOICES = {
     "light_on": "One immediate, explicit request to turn on one light, without a brightness setting or adjustment.",
     "light_off": "One immediate, explicit request to turn off one light, without a brightness setting or adjustment.",
@@ -1756,7 +1761,7 @@ DECISION_MAX_TARGET_TEXT = 256
 DECISION_MAX_TARGET_ALIASES = 8
 # Experimental admission heuristic, not a calibrated accuracy claim.
 DECISION_MIN_CHOICE_PROBABILITY = 0.90
-# Numeric proposals remain available to inert previews, not execution.
+# Sequential numeric decisions remain preview-only; joint execution needs source evidence.
 DECISION_NUMERIC_CATEGORIES = frozenset({"light_brightness", "media_volume", "cover_position"})
 # Value evidence is independent of model qualification and never grants execution.
 DECISION_PERCENTAGE_EVIDENCE_LANGUAGES = frozenset({"en"})

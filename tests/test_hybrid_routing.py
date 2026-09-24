@@ -49,6 +49,7 @@ async def hybrid_home(hass, token_store, immediate_command_observation):
 
 def wire_answer(payload, category="light_on", target="t0", percent=50, model="test-model"):
     choices = {"route": category, "target": target,
+               "percentage": str(percent),
                "brightness_tens": str(percent // 10), "brightness_units": str(percent % 10)}
     return {"model": model, "answers": {
         question: {"type": "choice", "choice": choices[question], "confidence": 0.1,
@@ -417,10 +418,11 @@ async def test_preexisting_numeric_decision_approval_cannot_execute(hass, hybrid
         _, outcome, _ = await mcp_view.async_execute_approved_tool("call_service", args, token, hass, data)
     assert outcome == "denied"
     call.assert_not_called()
-    # Prove that the same otherwise-current approval reaches execution when the
-    # numeric category is admitted, so the policy is the refusal boundary.
-    with (patch("custom_components.phoenix_mcp.command_execution.DECISION_EXECUTION_CATEGORIES", {"light_brightness"}),
-          patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
+    # The otherwise identical recognized local plan can execute; legacy decision
+    # plans lack the independently qualified joint review and cannot impersonate it.
+    for key in ("decision_category", "decision_catalog", "decision_account"):
+        del plan[key]
+    with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as control):
         _, outcome, _ = await mcp_view.async_execute_approved_tool("call_service", args, token, hass, data)
     assert outcome == "allowed"
@@ -437,6 +439,132 @@ async def jev_hybrid_home(hybrid_home):
 
 async def jev_response(session, method, path, timeout, payload):
     return wire_answer(payload, model="jev-1.13.0")
+
+
+@pytest.fixture(params=[
+    ('light_brightness', 'light', 'brightness_pct', 'turn_on', 'brightness_pct', 1),
+    ('media_volume', 'media_player', 'volume_pct', 'volume_set', 'volume_level', 100),
+    ('cover_position', 'cover', 'position_pct', 'set_cover_position', 'position', 1),
+])
+async def jev_numeric_home(hass, jev_hybrid_home, request):
+    from homeassistant.components.cover import CoverEntityFeature
+    from homeassistant.components.media_player import MediaPlayerEntityFeature
+    category, domain, field, service, service_field, divisor = request.param
+    data, token, store, account, entity_id = jev_hybrid_home
+    token.permissions.domains[domain] = PermissionNode(state='GREEN')
+    if domain != 'light':
+        entry = er.async_get(hass).async_get_or_create(domain, 'test', 'device', original_name='Test device')
+        entity_id = entry.entity_id
+        feature = CoverEntityFeature.SET_POSITION if domain == 'cover' else MediaPlayerEntityFeature.VOLUME_SET
+        hass.states.async_set(entity_id, 'open' if domain == 'cover' else 'idle', {'supported_features': feature})
+        async_expose_entity(hass, 'conversation', entity_id, True)
+    return (data, token, store, account, entity_id), request.param
+
+
+def numeric_reply(payload, home, spec, *, percent=37, category=None, model='jev-1.13.0'):
+    selected = next(key for key, value in payload['state']['targets'].items() if value['entity_id'] == home[-1])
+    return wire_answer(payload, category or spec[0], selected, percent=percent, model=model)
+
+
+@pytest.mark.parametrize('percent', [0, 37, 100])
+async def test_qualified_numeric_voice_uses_one_decision_and_shared_execution(hass, jev_numeric_home, percent):
+    home, spec = jev_numeric_home
+    _, domain, _, service, service_field, divisor = spec
+    async def respond(session, method, path, timeout, payload):
+        assert set(payload['questions']) == {'route', 'target', 'percentage'}
+        return numeric_reply(payload, home, spec, percent=percent)
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, remote, provider = await run_voice(hass, home, request=respond,
+            sentence=f'I would like the device at {percent} percent now.')
+    remote.assert_awaited_once()
+    provider.assert_not_called()
+    call.assert_awaited_once_with(domain, service, {'entity_id': [home[-1]], service_field: percent / divisor
+                                 if divisor != 1 else percent}, blocking=True, return_response=False)
+
+
+@pytest.mark.parametrize('case', ['wrong_value', 'low_value', 'revision', 'categorical', 'decline', 'multiple'])
+async def test_numeric_disagreement_or_uncertainty_falls_back_without_execution(hass, jev_numeric_home, case):
+    home, spec = jev_numeric_home
+    async def respond(session, method, path, timeout, payload):
+        body = numeric_reply(payload, home, spec, percent=5 if case == 'wrong_value' else 37,
+                             category='provider' if case == 'decline' else 'state_query' if case == 'categorical' else None,
+                             model='new-revision' if case == 'revision' else 'jev-1.13.0')
+        if case == 'low_value': body['answers']['percentage']['probabilities'].update({'37': 0.8, 'none': 0.2})
+        return body
+    sentence = 'I would like the device at 37 percent now.'
+    if case == 'multiple': sentence += ' Not 73 percent.'
+    with patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call:
+        _, remote, provider = await run_voice(hass, home, request=respond, sentence=sentence)
+    assert remote.await_count == (0 if case == 'multiple' else 1)
+    provider.assert_awaited_once()
+    call.assert_not_called()
+    assert not home[0].store.get_pending_approvals()
+
+
+@pytest.mark.parametrize('change', ['none', 'source_value', 'proposal', 'missing_review', 'account', 'model_restored',
+                                    'scope', 'new_candidate', 'mesa'])
+async def test_numeric_approval_binds_evidence_catalog_and_current_authority(hass, jev_numeric_home, change):
+    home, spec = jev_numeric_home
+    data, token, _, _, _ = home
+    await set_mesa(hass, home, 'confirm')
+    async def respond(session, method, path, timeout, payload): return numeric_reply(payload, home, spec)
+    with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
+        reply, remote, provider = await run_voice(hass, home, request=respond,
+                                                sentence='I would like the device at thirty-seven percent now.')
+    assert 'needs approval' in reply
+    remote.assert_awaited_once()
+    provider.assert_not_called()
+    record = data.store.get_pending_approvals()[0]
+    plan = record['args'][COMMAND_ROUTING_PLAN_KEY]
+    assert plan['decision_batch']['percentage'] == 37
+    assert 'thirty-seven' not in json.dumps(plan) and 'decision-secret' not in json.dumps(plan)
+    if change == 'source_value': plan['decision_batch']['percentage'] = 5
+    elif change == 'proposal':
+        plan['proposal'][spec[2]] = 5
+        record['args']['service_data'][spec[4]] = 5 / spec[5]
+    elif change == 'missing_review': del plan['decision_batch']['percentage']
+    else: await mutate(hass, home, change)
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+    assert outcome == ('allowed' if change == 'none' else 'denied')
+    assert call.await_count == (1 if change == 'none' else 0)
+
+
+@pytest.mark.parametrize('restriction', ['capability', 'prohibited', 'pass_through'])
+async def test_numeric_fast_path_preserves_capability_and_mesa(hass, jev_numeric_home, restriction):
+    home, spec = jev_numeric_home
+    if restriction == 'capability': home[1].cap_physical_control = 'deny'
+    else: await set_mesa(hass, home, 'prohibited')
+    if restriction == 'pass_through': home[1].pass_through = True
+    async def respond(session, method, path, timeout, payload): return numeric_reply(payload, home, spec)
+    with patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call:
+        _, remote, provider = await run_voice(hass, home, request=respond,
+                                            sentence='I would like the device at 37 percent now.')
+    remote.assert_awaited_once()
+    provider.assert_not_called()
+    # Existing physical-control policy gates covers, not lighting or media volume.
+    assert call.await_count == (1 if restriction == 'capability' and spec[1] != 'cover' else 0)
+
+
+@pytest.mark.parametrize('change', ['account', 'scope', 'revoked'])
+async def test_numeric_source_worker_rechecks_before_sharing_request(hass, jev_hybrid_home, change):
+    from custom_components.phoenix_mcp.numeric_evidence import read_explicit_percentage
+    original = hass.async_add_executor_job
+    reached = False
+    async def worker(function, *args):
+        nonlocal reached
+        if function is read_explicit_percentage:
+            reached = True
+            await mutate(hass, jev_hybrid_home, change)
+            return 37
+        return await original(function, *args)
+    with patch.object(hass, 'async_add_executor_job', side_effect=worker):
+        _, remote, _ = await run_voice(hass, jev_hybrid_home, request=jev_response,
+            sentence=f'I would like {jev_hybrid_home[-1]} at 37 percent now.')
+    assert reached
+    remote.assert_not_called()
 
 
 @pytest.mark.parametrize("category,service", [("light_on", "turn_on"), ("light_off", "turn_off"), ("state_query", None)])
