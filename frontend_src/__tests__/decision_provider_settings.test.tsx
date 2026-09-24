@@ -2,9 +2,10 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest";
 import type { GlobalSettings } from "../types";
 
-const mocks = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), remove: vi.fn(), probe: vi.fn(), models: vi.fn(), setModel: vi.fn() }));
+const mocks = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), remove: vi.fn(), probe: vi.fn(), models: vi.fn(), setModel: vi.fn(), refresh: vi.fn() }));
 vi.mock("../api", () => ({ api: {
   getDecisionProviders: mocks.list,
+  refreshAgentCliProvider: mocks.refresh,
   probeAgentCliProvider: mocks.probe,
   getAgentCliModels: mocks.models,
   setAgentCliProviderModel: mocks.setModel,
@@ -151,7 +152,9 @@ it("makes account selection explicit and deletion available on each account row"
   expect(screen.queryByLabelText("API key")).toBeNull();
   fireEvent.click(account);
   expect(change).toHaveBeenCalledExactlyOnceWith("decision_provider_id", "decision");
-  fireEvent.click(screen.getByRole("button", { name: "Delete My decision account" }));
+  fireEvent.click(screen.getByRole("button", { name: "Remove My decision account" }));
+  expect(mocks.remove).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Remove" }));
   await waitFor(() => expect(mocks.remove).toHaveBeenCalledWith("decision"));
 });
 
@@ -178,6 +181,60 @@ it("repairs an existing unavailable model through the fetched picker", async () 
   mocks.setModel.mockResolvedValue({ instance: { id: "decision", model: "jev-latest" } });
   render(<DecisionProviderSettings settings={settings} onChange={vi.fn()} saving={false} />);
   await screen.findByText("abcdefg (no longer available)");
+  fireEvent.click(screen.getByRole("button", { name: "Change default model" }));
   fireEvent.change(screen.getByLabelText("Model for JEV"), { target: { value: "jev-latest" } });
+  expect(mocks.setModel).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(mocks.setModel).toHaveBeenCalledWith("decision", "jev-latest"));
+});
+
+
+it("shows the default model and shared actions, with cancellable edits", async () => {
+  mocks.list.mockResolvedValue({ instances: [{ id: "decision", name: "JEV", model: "jev-latest" }], provider_types: types });
+  mocks.models.mockResolvedValue({ models: ["jev-latest", "jev-1.13.0"] });
+  render(<DecisionProviderSettings settings={settings} onChange={vi.fn()} saving={false} />);
+  await screen.findByText("Default model: jev-latest");
+  expect(screen.queryByLabelText("Model for JEV")).toBeNull();
+  for (const name of ["Change default model", "Refresh models", "Check options", "Remove JEV"]) {
+    const button = screen.getByRole("button", { name });
+    expect(button).toHaveClass("agentcli-account-btn");
+    expect(button).toHaveAttribute("title", name);
+    expect(button.querySelector("svg")).not.toBeNull();
+  }
+  fireEvent.click(screen.getByRole("button", { name: "Change default model" }));
+  fireEvent.change(screen.getByLabelText("Model for JEV"), { target: { value: "jev-1.13.0" } });
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(mocks.setModel).not.toHaveBeenCalled();
+  expect(screen.getByText("Default model: jev-latest")).toBeVisible();
+});
+
+it("refreshes the catalog and explains decision options without inference", async () => {
+  mocks.list.mockResolvedValue({ instances: [{ id: "decision", name: "JEV", model: "jev-latest" }], provider_types: types });
+  mocks.refresh.mockResolvedValue({ models: ["jev-latest", "jev-1.13.0"], declared: false });
+  render(<DecisionProviderSettings settings={settings} onChange={vi.fn()} saving={false} />);
+  await screen.findByText("Default model: jev-latest");
+  fireEvent.click(screen.getByRole("button", { name: "Check options" }));
+  expect(screen.getByText(/Decision providers use fixed routing choices/)).toBeVisible();
+  expect(mocks.probe).not.toHaveBeenCalled();
+  expect(mocks.refresh).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "Refresh models" }));
+  await screen.findByText(/Refreshed: 2 models/);
+  expect(mocks.refresh).toHaveBeenCalledExactlyOnceWith("decision");
+  fireEvent.click(screen.getByRole("button", { name: "Change default model" }));
+  expect(screen.getByRole("option", { name: "jev-1.13.0" })).toBeVisible();
+});
+
+it("preserves the model and draft after a failed save", async () => {
+  mocks.list.mockResolvedValue({ instances: [{ id: "decision", name: "JEV", model: "jev-latest" }], provider_types: types });
+  mocks.models.mockResolvedValue({ models: ["jev-latest", "jev-1.13.0"] });
+  mocks.setModel.mockRejectedValue(new Error("Model check failed"));
+  render(<DecisionProviderSettings settings={settings} onChange={vi.fn()} saving={false} />);
+  await screen.findByText("Default model: jev-latest");
+  fireEvent.click(screen.getByRole("button", { name: "Change default model" }));
+  fireEvent.change(screen.getByLabelText("Model for JEV"), { target: { value: "jev-1.13.0" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  await screen.findByRole("alert");
+  expect(screen.getByLabelText("Model for JEV")).toHaveValue("jev-1.13.0");
+  fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.getByText("Default model: jev-latest")).toBeVisible();
 });

@@ -1314,8 +1314,8 @@
       "wipeFailed": "Échec de l'effacement.",
       "wipeMesaHelp": "Tous les profils MESA et les suggestions ignorées. Ceci reste désactivé par défaut pour préserver votre politique de sécurité.",
       "wipeMesaLabel": "Supprimer les données MESA",
-      "wipeProvidersHelp": "Tous les comptes de fournisseur du Chat de l'agent et les clés API stockées. Ceci est distinct de toutes les données Phoenix MCP.",
-      "wipeProvidersLabel": "Supprimer les clés de fournisseur du Chat de l'agent",
+      "wipeProvidersHelp": "Tous les comptes, sélections de modèles et clés API enregistrées des fournisseurs Agent Chat et de décisions. L’option des données Phoenix MCP réinitialise les paramètres de routage.",
+      "wipeProvidersLabel": "Supprimer les comptes et clés des fournisseurs",
       "wipeSubmit": "Effacer les données sélectionnées",
       "wipeTitle": "Effacer les données Phoenix MCP",
       "wipeTypeConfirm": "Tapez WIPE pour confirmer",
@@ -1986,6 +1986,7 @@
       "zigbee_topology.title": "Analyser la topologie Zigbee"
     },
     "routing": {
+      "providerOptions": "Les fournisseurs de décisions utilisent des choix de routage fixes, sans options de Chat telles que les niveaux de raisonnement. Actualiser les modèles vérifie leur disponibilité sans exécuter de commande et ne teste pas la précision du routage.",
       "title": "Routage des commandes",
       "intro": "Traite les commandes simples localement avant de solliciter votre fournisseur IA habituel. Les autorisations et approbations Phoenix restent applicables.",
       "enableVoice": "Activer pour la voix",

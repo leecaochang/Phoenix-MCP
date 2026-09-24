@@ -1440,8 +1440,8 @@
       "wipeFailed": "清除失败。",
       "wipeMesaHelp": "所有 MESA 策略和已忽略的建议。此项默认关闭，以保留您的安全规则。",
       "wipeMesaLabel": "删除 MESA 数据",
-      "wipeProvidersHelp": "所有智能体对话的提供商账户和已保存的 API 密钥。此项独立于“所有 Phoenix MCP 数据”。",
-      "wipeProvidersLabel": "删除智能体对话的提供商密钥",
+      "wipeProvidersHelp": "所有 Agent Chat 和决策提供商账户、模型选择及已存储的 API 密钥。路由设置由 Phoenix MCP 数据选项重置。",
+      "wipeProvidersLabel": "删除提供商账户和密钥",
       "wipeSubmit": "清除选定的数据",
       "wipeTitle": "清除 Phoenix MCP 数据",
       "wipeTypeConfirm": "输入 WIPE 以确认",
@@ -1986,6 +1986,7 @@
       "zigbee_topology.title": "扫描 Zigbee 拓扑"
     },
     "routing": {
+      "providerOptions": "决策提供商使用固定的路由选项，不使用思考级别等聊天选项。“刷新模型”会检查模型是否可用，不会执行命令，也不会测试路由准确性。",
       "title": "命令路由",
       "intro": "先在本地处理简单命令，再使用常规 AI 提供商。Phoenix 权限和审批仍然适用。",
       "enableVoice": "为语音启用",

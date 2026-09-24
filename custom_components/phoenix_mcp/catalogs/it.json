@@ -1446,8 +1446,8 @@
       "wipeFailed": "Cancellazione non riuscita.",
       "wipeMesaHelp": "Tutti i profili MESA e i suggerimenti ignorati. Per impostazione predefinita resta disattivato per preservare i tuoi criteri di sicurezza.",
       "wipeMesaLabel": "Elimina i dati MESA",
-      "wipeProvidersHelp": "Tutti gli account provider di Agent Chat e le chiavi API memorizzate. È separato da tutti i dati di Phoenix MCP.",
-      "wipeProvidersLabel": "Elimina le chiavi dei provider di Agent Chat",
+      "wipeProvidersHelp": "Tutti gli account, le selezioni dei modelli e le chiavi API salvate dei fornitori di Agent Chat e di decisioni. L’opzione dei dati Phoenix MCP reimposta le impostazioni di instradamento.",
+      "wipeProvidersLabel": "Elimina account e chiavi dei fornitori",
       "wipeSubmit": "Cancella i dati selezionati",
       "wipeTitle": "Cancella i dati di Phoenix MCP",
       "wipeTypeConfirm": "Digita WIPE per confermare",
@@ -1986,6 +1986,7 @@
       "yourDevice": "il tuo dispositivo"
     },
     "routing": {
+      "providerOptions": "I fornitori di decisioni usano opzioni di instradamento fisse, senza opzioni di Chat come i livelli di ragionamento. Aggiornare i modelli ne verifica la disponibilità senza eseguire comandi; non verifica la precisione dell’instradamento.",
       "title": "Instradamento dei comandi",
       "intro": "Gestisce i comandi semplici localmente prima di usare il consueto fornitore IA. Le autorizzazioni e le approvazioni di Phoenix restano valide.",
       "enableVoice": "Abilita per la voce",

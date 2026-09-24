@@ -1566,11 +1566,15 @@ async def test_secret_store_wipe_clears_all_accounts(hass):
         store = await agentcli.AgentCliStore.async_create(hass)
     await store.add("claude", {"api_key": "sk-secretwipe", "model": "claude-opus-4-8"})
     await store.add("ollama", {"base_url": "http://192.168.1.44:11434"})
-    assert len(store.list_instances()) == 2
+    decisions = [await store.add(kind, {"api_key": f"wipe-{kind}-key", "model": "decision-model"})
+                 for kind in ("typesafe", "systemone", "classifier")]
+    assert all(store.get(account) is not None for account in decisions)
+    assert len(store.list_instances()) == 5
 
     await store.async_wipe()
 
     assert store.list_instances() == []
+    assert all(store.get(account) is None for account in decisions)
     # The emptied set is persisted, so the on-disk key is gone too.
     assert store._store.saved == {"instances": {}}
 

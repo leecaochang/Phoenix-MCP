@@ -1317,8 +1317,8 @@
       "wipeFailed": "Wipe failed.",
       "wipeMesaHelp": "All MESA profiles and dismissed suggestions. This stays off by default to preserve your safety policy.",
       "wipeMesaLabel": "Delete MESA data",
-      "wipeProvidersHelp": "All Agent Chat provider accounts and stored API keys. This is separate from all Phoenix MCP data.",
-      "wipeProvidersLabel": "Delete Agent Chat provider keys",
+      "wipeProvidersHelp": "All Agent Chat and decision-provider accounts, saved model selections and stored API keys. Routing settings are reset by the Phoenix MCP data option.",
+      "wipeProvidersLabel": "Delete provider accounts and keys",
       "wipeSubmit": "Wipe Selected Data",
       "wipeTitle": "Wipe Phoenix MCP Data",
       "wipeTypeConfirm": "Type WIPE to confirm",
@@ -1990,6 +1990,7 @@
       "zigbee_topology.title": "Scan Zigbee topology"
     },
     "routing": {
+      "providerOptions": "Decision providers use fixed routing choices, without Chat options such as thinking levels. Refresh models checks availability without running a command; it does not test routing accuracy.",
       "title": "Command routing",
       "intro": "Handle simple commands locally before using your usual AI provider. Phoenix permissions and approvals still apply.",
       "enableVoice": "Enable for Voice",

@@ -1625,8 +1625,8 @@
       "wipeFailed": "No se pudo borrar.",
       "wipeMesaHelp": "Todos los perfiles de MESA y las sugerencias descartadas. Esto permanece desactivado de forma predeterminada para preservar su política de seguridad.",
       "wipeMesaLabel": "Eliminar datos de MESA",
-      "wipeProvidersHelp": "Todas las cuentas de proveedor del Chat de agente y las claves de API almacenadas. Esto es independiente de todos los datos de Phoenix MCP.",
-      "wipeProvidersLabel": "Eliminar claves de proveedores del Chat de agente",
+      "wipeProvidersHelp": "Todas las cuentas, selecciones de modelos y claves API guardadas de proveedores de Agent Chat y de decisiones. La opción de datos de Phoenix MCP restablece los ajustes de enrutamiento.",
+      "wipeProvidersLabel": "Eliminar cuentas y claves de proveedores",
       "wipeSubmit": "Borrar los datos seleccionados",
       "wipeTitle": "Borrar datos de Phoenix MCP",
       "wipeTypeConfirm": "Escriba WIPE para confirmar",
@@ -1986,6 +1986,7 @@
       "approvalsTabAria": "Aprobaciones ({count} pendientes)"
     },
     "routing": {
+      "providerOptions": "Los proveedores de decisiones usan opciones de enrutamiento fijas, sin opciones de Chat como los niveles de razonamiento. Actualizar modelos comprueba la disponibilidad sin ejecutar comandos; no evalúa la precisión del enrutamiento.",
       "title": "Enrutamiento de comandos",
       "intro": "Procesa los comandos sencillos localmente antes de usar tu proveedor de IA habitual. Los permisos y las aprobaciones de Phoenix siguen vigentes.",
       "enableVoice": "Activar para voz",

@@ -1639,8 +1639,8 @@
       "wipeFailed": "清除失敗。",
       "wipeMesaHelp": "所有 MESA 策略和已忽略的建議。此項預設關閉，以保留您的安全規則。",
       "wipeMesaLabel": "刪除 MESA 資料",
-      "wipeProvidersHelp": "所有智慧體對話的提供者帳戶和已儲存的 API 金鑰。此項獨立於「所有 Phoenix MCP 資料」。",
-      "wipeProvidersLabel": "刪除智慧體對話的提供者金鑰",
+      "wipeProvidersHelp": "所有 Agent Chat 和決策供應商帳戶、模型選擇及已儲存的 API 金鑰。路由設定由 Phoenix MCP 資料選項重設。",
+      "wipeProvidersLabel": "刪除供應商帳戶和金鑰",
       "wipeSubmit": "清除選定的資料",
       "wipeTitle": "清除 Phoenix MCP 資料",
       "wipeTypeConfirm": "輸入 WIPE 以確認",
@@ -1991,6 +1991,7 @@
       "yourDevice": "您的裝置"
     },
     "routing": {
+      "providerOptions": "決策供應商使用固定的路由選項，不使用思考層級等聊天選項。「重新整理模型」會檢查模型是否可用，不會執行命令，也不會測試路由準確性。",
       "title": "命令路由",
       "intro": "先在本機處理簡單命令，再使用一般 AI 提供者。Phoenix 權限和核准仍然適用。",
       "enableVoice": "為語音啟用",

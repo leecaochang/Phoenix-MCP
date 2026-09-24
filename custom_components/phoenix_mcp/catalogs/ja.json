@@ -1478,8 +1478,8 @@
       "wipeFailed": "消去に失敗しました。",
       "wipeMesaHelp": "すべての MESA プロファイルと非表示の提案。安全ポリシーを維持するため既定ではオフです。",
       "wipeMesaLabel": "MESA データを削除",
-      "wipeProvidersHelp": "すべての Agent Chat プロバイダーアカウントと保存済み API キー。Phoenix MCP のコアデータとは別です。",
-      "wipeProvidersLabel": "Agent Chat プロバイダーキーを削除",
+      "wipeProvidersHelp": "Agent Chatと判断プロバイダーのすべてのアカウント、モデルの選択、保存済みAPIキー。ルーティング設定はPhoenix MCPのデータ削除オプションでリセットされます。",
+      "wipeProvidersLabel": "プロバイダーのアカウントとキーを削除",
       "wipeSubmit": "選択したデータを消去",
       "wipeTitle": "Phoenix MCP データを消去",
       "wipeTypeConfirm": "確認するには WIPE と入力",
@@ -1986,6 +1986,7 @@
       "zigbee_topology.title": "Zigbee トポロジーをスキャン"
     },
     "routing": {
+      "providerOptions": "判断プロバイダーは固定のルーティング選択肢を使い、思考レベルなどのチャット設定は使いません。モデルの更新ではコマンドを実行せずに利用可能か確認します。ルーティングの正確さはテストしません。",
       "title": "コマンドルーティング",
       "intro": "簡単なコマンドは通常のAIプロバイダーを使う前にローカルで処理します。Phoenixの権限と承認は引き続き適用されます。",
       "enableVoice": "音声で有効にする",

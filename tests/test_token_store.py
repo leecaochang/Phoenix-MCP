@@ -1117,6 +1117,14 @@ class TestWipe:
         await token_store.async_create_token("t2", "u")
         await token_store.async_patch_settings(
             kill_switch=True,
+            decision_provider_id="decision-account",
+            decision_timeout_ms=12345,
+            decision_shadow_enabled=True,
+            voice_agent_routing_mode="auto",
+            agentcli_routing_mode="hybrid",
+            command_routing_languages=["es"],
+            command_routing_timeout_ms=750,
+            agentcli_routing_shadow_enabled=True,
             agentcli_conversation_style="lively",
             agentcli_detail_level="detailed",
             agentcli_home_focused=True,
@@ -1138,6 +1146,15 @@ class TestWipe:
         assert (settings.ai_task_conversation_style, settings.ai_task_detail_level) == (
             "direct", "balanced",
         )
+
+        assert settings.decision_provider_id is None
+        assert settings.decision_timeout_ms == GlobalSettings().decision_timeout_ms
+        assert settings.command_routing_timeout_ms == GlobalSettings().command_routing_timeout_ms
+        assert settings.command_routing_languages == GlobalSettings().command_routing_languages
+        assert settings.voice_agent_routing_mode == "off"
+        assert settings.agentcli_routing_mode == "off"
+        assert not settings.decision_shadow_enabled
+        assert not settings.agentcli_routing_shadow_enabled
 
     async def test_wipe_saves_immediately(self, token_store, mock_store):
         mock_store.async_save.reset_mock()

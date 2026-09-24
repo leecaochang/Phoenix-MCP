@@ -1737,8 +1737,8 @@
       "wipeFailed": "Wissen mislukt.",
       "wipeMesaHelp": "Alle MESA-profielen en genegeerde suggesties. Dit blijft standaard uit om je veiligheidsbeleid te behouden.",
       "wipeMesaLabel": "MESA-gegevens verwijderen",
-      "wipeProvidersHelp": "Alle Agent Chat-provideraccounts en opgeslagen API-sleutels. Dit staat los van alle Phoenix MCP-gegevens.",
-      "wipeProvidersLabel": "Agent Chat-providersleutels verwijderen",
+      "wipeProvidersHelp": "Alle accounts, modelkeuzes en opgeslagen API-sleutels van Agent Chat- en beslissingsproviders. De optie voor Phoenix MCP-gegevens herstelt de routeringsinstellingen.",
+      "wipeProvidersLabel": "Provideraccounts en sleutels verwijderen",
       "wipeSubmit": "Geselecteerde gegevens wissen",
       "wipeTitle": "Phoenix MCP-gegevens wissen",
       "wipeTypeConfirm": "Typ WIPE om te bevestigen",
@@ -2014,6 +2014,7 @@
       "zigbee_topology.title": "Zigbee-topologie scannen"
     },
     "routing": {
+      "providerOptions": "Beslissingsproviders gebruiken vaste routeringskeuzes, zonder Chat-opties zoals denkniveaus. Modellen vernieuwen controleert de beschikbaarheid zonder een opdracht uit te voeren; het test niet de nauwkeurigheid van de routering.",
       "title": "Opdrachtroutering",
       "intro": "Verwerk eenvoudige opdrachten lokaal voordat je gebruikelijke AI-provider wordt ingeschakeld. Machtigingen en goedkeuringen van Phoenix blijven gelden.",
       "enableVoice": "Inschakelen voor spraak",

@@ -1174,8 +1174,8 @@
       "wipeFailed": "Löschen fehlgeschlagen.",
       "wipeMesaHelp": "Alle MESA-Profile und verworfenen Vorschläge. Dies bleibt standardmäßig deaktiviert, um Ihre Sicherheitsrichtlinie zu erhalten.",
       "wipeMesaLabel": "MESA-Daten löschen",
-      "wipeProvidersHelp": "Alle Agent-Chat-Anbieterkonten und gespeicherten API-Schlüssel. Dies ist getrennt von allen Phoenix-MCP-Daten.",
-      "wipeProvidersLabel": "Agent-Chat-Anbieterschlüssel löschen",
+      "wipeProvidersHelp": "Alle Agent Chat- und Entscheidungsanbieterkonten, gespeicherten Modellauswahlen und gespeicherten API-Schlüssel. Die Option für Phoenix MCP-Daten setzt die Routing-Einstellungen zurück.",
+      "wipeProvidersLabel": "Anbieterkonten und Schlüssel löschen",
       "wipeSubmit": "Ausgewählte Daten löschen",
       "wipeTitle": "Phoenix-MCP-Daten löschen",
       "wipeTypeConfirm": "WIPE eingeben, um zu bestätigen",
@@ -1986,6 +1986,7 @@
       "shown.more": "{shown} + {extra} weitere"
     },
     "routing": {
+      "providerOptions": "Entscheidungsanbieter verwenden feste Routing-Optionen ohne Chat-Optionen wie Denkstufen. Das Aktualisieren der Modelle prüft die Verfügbarkeit, ohne einen Befehl auszuführen; die Routing-Genauigkeit wird dabei nicht getestet.",
       "title": "Befehlsweiterleitung",
       "intro": "Einfache Befehle werden lokal verarbeitet, bevor Ihr üblicher KI-Anbieter zum Einsatz kommt. Phoenix-Berechtigungen und Genehmigungen gelten weiterhin.",
       "enableVoice": "Für Sprache aktivieren",

@@ -1757,8 +1757,8 @@
       "wipeFailed": "Czyszczenie nie powiodło się.",
       "wipeMesaHelp": "Wszystkie profile MESA i odrzucone sugestie. Pozostaje domyślnie wyłączone, aby zachować Twoją politykę bezpieczeństwa.",
       "wipeMesaLabel": "Usuń dane MESA",
-      "wipeProvidersHelp": "Wszystkie konta dostawców Czatu agenta i zapisane klucze API. Jest to oddzielone od wszystkich danych Phoenix MCP.",
-      "wipeProvidersLabel": "Usuń klucze dostawców Czatu agenta",
+      "wipeProvidersHelp": "Wszystkie konta, wybory modeli i zapisane klucze API dostawców Agent Chat oraz decyzji. Opcja danych Phoenix MCP resetuje ustawienia routingu.",
+      "wipeProvidersLabel": "Usuń konta i klucze dostawców",
       "wipeSubmit": "Wyczyść wybrane dane",
       "wipeTitle": "Wyczyść dane Phoenix MCP",
       "wipeTypeConfirm": "Wpisz WIPE, aby potwierdzić",
@@ -2034,6 +2034,7 @@
       "zigbee_topology.title": "Skanuj topologię Zigbee"
     },
     "routing": {
+      "providerOptions": "Dostawcy decyzji używają stałych opcji routingu, bez opcji czatu takich jak poziomy rozumowania. Odświeżenie modeli sprawdza dostępność bez wykonywania poleceń; nie testuje dokładności routingu.",
       "title": "Kierowanie poleceń",
       "intro": "Obsługuj proste polecenia lokalnie przed użyciem zwykłego dostawcy AI. Uprawnienia i zatwierdzenia Phoenix nadal obowiązują.",
       "enableVoice": "Włącz dla głosu",

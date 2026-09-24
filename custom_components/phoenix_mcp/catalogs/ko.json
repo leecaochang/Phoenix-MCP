@@ -1322,8 +1322,8 @@
       "wipeFailed": "삭제에 실패했습니다.",
       "wipeMesaHelp": "모든 MESA 프로필과 닫은 제안입니다. 안전 정책을 유지하기 위해 기본적으로 꺼져 있습니다.",
       "wipeMesaLabel": "MESA 데이터 삭제",
-      "wipeProvidersHelp": "모든 에이전트 채팅 공급자 계정과 저장된 API 키입니다. 이는 모든 Phoenix MCP 데이터와 별개입니다.",
-      "wipeProvidersLabel": "에이전트 채팅 공급자 키 삭제",
+      "wipeProvidersHelp": "모든 Agent Chat 및 결정 제공업체 계정, 모델 선택, 저장된 API 키를 삭제합니다. 라우팅 설정은 Phoenix MCP 데이터 옵션으로 초기화됩니다.",
+      "wipeProvidersLabel": "제공업체 계정 및 키 삭제",
       "wipeSubmit": "선택한 데이터 삭제",
       "wipeTitle": "Phoenix MCP 데이터 삭제",
       "wipeTypeConfirm": "확인하려면 WIPE를 입력하세요",
@@ -1991,6 +1991,7 @@
       "working": "처리 중..."
     },
     "routing": {
+      "providerOptions": "결정 제공업체는 사고 수준 같은 채팅 옵션 없이 고정된 라우팅 선택지를 사용합니다. 모델 새로 고침은 명령을 실행하지 않고 사용 가능 여부를 확인하며, 라우팅 정확도를 테스트하지는 않습니다.",
       "title": "명령 라우팅",
       "intro": "일반 AI 제공자를 사용하기 전에 간단한 명령을 로컬에서 처리합니다. Phoenix 권한과 승인은 계속 적용됩니다.",
       "enableVoice": "음성에 사용",
