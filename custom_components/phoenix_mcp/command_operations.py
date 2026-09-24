@@ -18,7 +18,7 @@ from homeassistant.core import State
 
 from .const import (
     COMMAND_ROUTING_NUMERIC_OPERATIONS, COMMAND_ROUTING_SWITCH_SERVICES,
-    COMMAND_ROUTING_NATIVE_VALUES, COMMAND_ROUTING_NUMERIC_BOUNDS,
+    COMMAND_ROUTING_NATIVE_VALUES, COMMAND_ROUTING_NUMERIC_BOUNDS, COMMAND_ROUTING_TEMPORAL_OPERATIONS,
 )
 
 
@@ -49,6 +49,9 @@ def numeric_operation(intent: str) -> NumericOperation | None:
 
 
 def command_domain(intent: str) -> str | None:
+    temporal = COMMAND_ROUTING_TEMPORAL_OPERATIONS.get(intent)
+    if temporal:
+        return temporal[0]
     operation = numeric_operation(intent)
     return operation.domain if operation else "light" if intent in COMMAND_ROUTING_SWITCH_SERVICES else None
 
@@ -57,6 +60,9 @@ def supports_command(state: State, intent: str) -> bool:
     """Check domain and current device support before planning or execution."""
     if intent == "HassGetState":
         return True
+    if intent in COMMAND_ROUTING_TEMPORAL_OPERATIONS:
+        from .temporal_values import temporal_supports
+        return temporal_supports(state, intent)
     if state.domain != command_domain(intent):
         return False
     operation = numeric_operation(intent)
@@ -144,6 +150,9 @@ def service_arguments(proposal: dict) -> dict | None:
     intent = proposal.get("intent")
     if not isinstance(intent, str):
         return None
+    if intent in COMMAND_ROUTING_TEMPORAL_OPERATIONS:
+        from .temporal_values import temporal_arguments
+        return temporal_arguments(proposal)
     domain = command_domain(intent)
     ids = proposal.get("entity_ids")
     if (domain is None or not isinstance(ids, list) or not ids

@@ -1724,6 +1724,20 @@ COMMAND_ROUTING_SWITCH_SERVICES = {"HassTurnOn": "turn_on", "HassTurnOff": "turn
 COMMAND_ROUTING_INTENTS = frozenset({*COMMAND_ROUTING_SWITCH_SERVICES, *COMMAND_ROUTING_NUMERIC_OPERATIONS, "HassGetState"})
 COMMAND_ROUTING_TARGET_SLOTS = frozenset({"name", "area", "domain", "device_class"})
 
+# Typed helper updates are immediate value writes, never scheduling requests.
+COMMAND_ROUTING_TEMPORAL_OPERATIONS = {
+    "PhoenixDateValue": ("date", "set_value", "date", "date"),
+    "PhoenixTimeValue": ("time", "set_value", "time", "time"),
+    "PhoenixDateTimeValue": ("datetime", "set_value", "datetime", "datetime"),
+    "PhoenixInputDate": ("input_datetime", "set_datetime", "date", "date"),
+    "PhoenixInputTime": ("input_datetime", "set_datetime", "time", "time"),
+    "PhoenixInputDateTime": ("input_datetime", "set_datetime", "datetime", "datetime"),
+}
+DECISION_TEMPORAL_CATEGORIES = {
+    "date_value": "PhoenixDateValue", "time_value": "PhoenixTimeValue", "datetime_value": "PhoenixDateTimeValue",
+    "helper_date": "PhoenixInputDate", "helper_time": "PhoenixInputTime", "helper_datetime": "PhoenixInputDateTime",
+}
+
 # Decision-only shadow routing: configurable network time, independent of HA recognition.
 DECISION_TYPESAFE_BASE_URL = "https://api.typesafe.ai/v1"
 DECISION_TYPESAFE_MODEL = "jev-latest"
@@ -1829,6 +1843,7 @@ DECISION_ADDITIONAL_NUMERIC = {
     "input_number_value": ("PhoenixInputNumberValue", "numeric helper value in its native unit"),
     "light_temperature": ("PhoenixLightTemperature", "light colour temperature in kelvin, not room temperature"),
 }
+DECISION_TARGET_INTENTS.update(DECISION_TEMPORAL_CATEGORIES)
 DECISION_TARGET_INTENTS.update({category: spec[0] for category, spec in DECISION_ADDITIONAL_NUMERIC.items()})
 DECISION_PERCENTAGE_PREVIEW_CHOICES.update({
     category: f"One immediate explicit request to set one {spec[1]} to an absolute numeric value."

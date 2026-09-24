@@ -15,7 +15,7 @@ from .const import (
     DECISION_BATCH_EXECUTION_LANGUAGES, DECISION_BATCH_EXECUTION_MODELS,
     DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES,
     DECISION_BATCH_MAX_TARGET_BYTES,
-    DECISION_PERCENTAGE_EXECUTION_MODELS,
+    DECISION_PERCENTAGE_EXECUTION_MODELS, DECISION_TEMPORAL_CATEGORIES,
     DECISION_TARGET_INTENTS, DECISION_NUMERIC_CATEGORIES, DECISION_BATCH_MAX_TARGETS, MAX_SEARCH_QUERY_LEN,
 )
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
@@ -25,12 +25,14 @@ from .helpers import redact_secrets_in_text, redact_inaccessible_entity_ids_in_t
 from .numeric_evidence import read_explicit_percentage, compare_percentage, has_percentage_unit, read_explicit_scalar, explicit_unit_matches
 
 
-def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = False, extended: bool = False
+def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = False, extended: bool = False, temporal: bool = False
                           ) -> tuple[dict[str, dict], dict[str, TargetSnapshot]]:
     """Union complete scoped catalogs; keep eligibility per operation and all competitors."""
     devices = device_registry_snapshot(hass)
     categories = DECISION_EXECUTION_CATEGORIES | DECISION_NUMERIC_CATEGORIES if numeric_preview else DECISION_EXECUTION_CATEGORIES
-    extended = numeric_preview or extended
+    if temporal:
+        categories = DECISION_EXECUTION_CATEGORIES | DECISION_TEMPORAL_CATEGORIES.keys()
+    extended = (numeric_preview and not temporal) or extended
     max_targets = DECISION_BATCH_MAX_TARGETS if extended else DECISION_MAX_TARGETS
     snapshots = {category: capture_targets(hass, token, category, devices=devices, max_targets=max_targets,
                                           compact=extended)
@@ -38,9 +40,11 @@ def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = Fals
     entities: dict[str, dict] = {}
     for category, snapshot in snapshots.items():
         for descriptor in snapshot.targets.values():
-            identity = {key: value for key, value in descriptor.items() if key != "numeric"}
+            identity = {key: value for key, value in descriptor.items() if key not in ("numeric", "value_kind")}
             item = entities.setdefault(descriptor["entity_id"], {**identity, "eligible_categories": []})
             item["eligible_categories"].append(category)
+            if "value_kind" in descriptor:
+                item.setdefault("temporal_operations", {})[category] = descriptor["value_kind"]
             if "numeric" in descriptor:
                 item.setdefault("numeric_operations", {})[category] = descriptor["numeric"]
     if len(entities) > max_targets:
@@ -83,6 +87,11 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
     if (redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(sentence) or "", current, hass) != sentence
             or (provider.cfg.api_key and provider.cfg.api_key in sentence)):
         raise DecisionError("context_unavailable")
+    from .temporal_values import read_temporal_value
+    source = read_temporal_value(sentence)
+    if source is not None:
+        from .decision_temporal import async_prepare_temporal
+        return await async_prepare_temporal(hass, authority, provider, session, sentence, language, ingress, source)
     numeric = False
     scalar = False
     source_value = None
@@ -206,10 +215,13 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
                 return result("context_unavailable")
             provider = DecisionProvider(cfg, PROVIDER_DEFINITIONS[cfg.kind].adapter,
                                         metrics=runtime.metrics, metric_scope="preview")
-            if numeric_preview and not provider.supports_exact_percentages():
+            from .temporal_values import read_temporal_value
+            temporal = read_temporal_value(sentence)
+            timezone = hass.config.time_zone
+            if numeric_preview and temporal is None and not provider.supports_exact_percentages():
                 return result("unsupported_category")
             extended = batch_execution_eligible(cfg, lang)
-            snapshot = capture_batch_targets(hass, current, numeric_preview=numeric_preview, extended=extended)
+            snapshot = capture_batch_targets(hass, current, numeric_preview=numeric_preview, extended=extended, temporal=temporal is not None)
             targets, _ = snapshot
             if not targets:
                 return result("no_target")
@@ -219,23 +231,31 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
             source_value = None
             scalar = False
             async with asyncio.timeout(authority.settings.decision_timeout_ms / 1000):
-                if numeric_preview:
+                if temporal is not None:
+                    answer = await provider.route_temporal(async_get_clientsession(hass), sentence, lang, targets,
+                                                           temporal, timezone, authority.settings.decision_timeout_ms)
+                elif numeric_preview:
                     source_value = await hass.async_add_executor_job(read_explicit_percentage, sentence, lang)
                     if source_value is None:
                         source_value = await hass.async_add_executor_job(read_explicit_scalar, sentence, lang)
                         scalar = source_value is not None
                         if scalar:
                             options["scalar_value"] = source_value
-                answer = await provider.route_and_target(async_get_clientsession(hass), sentence, targets,
-                                                        authority.settings.decision_timeout_ms, lang, **options)
+                if temporal is None:
+                    answer = await provider.route_and_target(async_get_clientsession(hass), sentence, targets,
+                                                            authority.settings.decision_timeout_ms, lang, **options)
             current = authority.current(hass)
             if current is None or store.resolve(account, purpose="decision") != cfg:
                 return result("authority_changed")
             try:
-                if not safe_text(current) or capture_batch_targets(hass, current, numeric_preview=numeric_preview, extended=extended) != snapshot:
+                if not safe_text(current) or capture_batch_targets(hass, current, numeric_preview=numeric_preview, extended=extended, temporal=temporal is not None) != snapshot or hass.config.time_zone != timezone:
                     return result("targets_changed")
             except DecisionError:
                 return result("targets_changed")
+            if temporal is not None:
+                from .decision_temporal import temporal_proposal
+                reason, temporal_candidate = temporal_proposal(answer, targets, temporal, timezone)
+                return result(reason, decision=answer, proposal=temporal_candidate)
             category, target = answer["route"], answer["target"]
             if category["choice"] == "provider" or target["choice"] == "none":
                 return result("provider_fallback", decision=answer)

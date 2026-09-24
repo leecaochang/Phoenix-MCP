@@ -14,7 +14,7 @@ from .audit import generate_request_id
 from .command_operations import service_arguments, supports_command, numeric_operation, valid_target_value, finite_number
 from .command_routing import RoutingAuthority, effective_routing_mode
 from .const import (
-    COMMAND_ROUTING_PLAN_KEY, VOICE_AGENT_CLIENT_IP, DECISION_TARGET_INTENTS, DECISION_EXECUTION_CATEGORIES,
+    COMMAND_ROUTING_PLAN_KEY, COMMAND_ROUTING_TEMPORAL_OPERATIONS, DECISION_TEMPORAL_CATEGORIES, VOICE_AGENT_CLIENT_IP, DECISION_TARGET_INTENTS, DECISION_EXECUTION_CATEGORIES,
     DECISION_CONTEXT_EXECUTION_MODELS, DECISION_CONTEXT_EXECUTION_LANGUAGES, DECISION_FOLLOWUP_EXECUTION_MODELS,
     DECISION_BATCH_EXECUTION_MODELS,
     DECISION_NUMERIC_CATEGORIES, DECISION_PERCENTAGE_EXECUTION_MODELS,
@@ -63,12 +63,22 @@ def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str, *,
         "device_area": devices.effective_area_id(entry.device_id),
         "device_parent": devices.parent_id(entry.device_id),
         "temperature_unit": hass.config.units.temperature_unit,
+        "timezone": hass.config.time_zone,
         "attributes": {key: state.attributes.get(key) for key in (
             "friendly_name", "supported_color_modes", "supported_features", "device_class",
             "min", "max", "step", "unit_of_measurement", "min_temp", "max_temp", "target_temp_step",
-            "min_humidity", "max_humidity", "min_color_temp_kelvin", "max_color_temp_kelvin",
+            "min_humidity", "max_humidity", "min_color_temp_kelvin", "max_color_temp_kelvin", "has_date", "has_time",
         )},
     })
+
+
+def _temporal_current(hass: Any, proposal: dict) -> bool:
+    spec = COMMAND_ROUTING_TEMPORAL_OPERATIONS.get(proposal.get("intent", ""))
+    if spec is None:
+        return True
+    from .temporal_values import temporal_value_current
+    return all(temporal_value_current(proposal, hass.states.get(eid), hass.config.time_zone)
+               for eid in proposal.get("entity_ids", []))
 
 
 def _capture_plan(hass: Any, data: Any, token: Any, proposal: dict, *, ingress: str = "voice") -> dict | None:
@@ -77,6 +87,8 @@ def _capture_plan(hass: Any, data: Any, token: Any, proposal: dict, *, ingress: 
     operation = numeric_operation(proposal["intent"])
     if operation and any(not valid_target_value(hass.states.get(eid), proposal["intent"],
                                                proposal.get(operation.proposal_field)) for eid in proposal["entity_ids"]):
+        return None
+    if not _temporal_current(hass, proposal):
         return None
     fingerprints = {entity_id: _target_fingerprint(hass, token, entity_id, proposal["intent"])
                     for entity_id in proposal["entity_ids"]}
@@ -96,7 +108,8 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
     settings = data.store.get_settings()
     category = plan["decision_category"]
     numeric = category in DECISION_NUMERIC_CATEGORIES
-    if numeric and "decision_batch" not in plan:
+    temporal = category in DECISION_TEMPORAL_CATEGORIES
+    if (numeric or temporal) and "decision_batch" not in plan:
         return False
     catalog_digest = None
     mode = effective_routing_mode(settings, plan.get("ingress", "voice"))
@@ -104,7 +117,7 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
         review = plan["decision_batch"]
         account = settings.decision_provider_id
         cfg = loaded_decision_account(hass, account) if account else None
-        keys = {"model", "language", "catalog"} | ({"percentage", "proposal"} if numeric else set())
+        keys = {"model", "language", "catalog"} | ({"percentage", "proposal"} if numeric else {"value", "proposal"} if temporal else set())
         if "context_review" in plan:
             keys.add("context")
         if "reference_review" in plan:
@@ -117,7 +130,7 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
             return False
         if "context_review" in plan and review["context"] != _digest(plan["context_review"]):
             return False
-        if "reference_review" in plan and (numeric or "context_review" in plan
+        if "reference_review" in plan and (numeric or temporal or "context_review" in plan
                 or review["reference"] != _digest(plan["reference_review"])):
             return False
         if numeric:
@@ -128,11 +141,14 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
                     or plan["proposal"][operation.proposal_field] != review["percentage"]
                     or _digest(plan["proposal"]) != review["proposal"]):
                 return False
-        snapshot = capture_batch_targets(hass, token, numeric_preview=numeric, extended=True)
+        if temporal and (review["value"] != plan["proposal"].get("value")
+                         or review["proposal"] != _digest(plan["proposal"]) or not _temporal_current(hass, plan["proposal"])):
+            return False
+        snapshot = capture_batch_targets(hass, token, numeric_preview=numeric, extended=True, temporal=temporal)
         if batch_catalog_digest(snapshot) != review["catalog"] or category not in snapshot[1]:
             return False
         catalog_digest = snapshot[1][category].digest()
-    return bool((category in DECISION_EXECUTION_CATEGORIES or numeric)
+    return bool((category in DECISION_EXECUTION_CATEGORIES or numeric or temporal)
                 and mode == "hybrid" and settings.decision_provider_id
                 and DECISION_TARGET_INTENTS.get(category) == plan["proposal"]["intent"]
                 and plan.get("decision_account") is not None
@@ -202,6 +218,8 @@ def plan_is_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
         operation = numeric_operation(proposal["intent"])
         if operation and any(not valid_target_value(hass.states.get(eid), proposal["intent"],
                                                    proposal.get(operation.proposal_field)) for eid in proposal["entity_ids"]):
+            return False
+        if not _temporal_current(hass, proposal):
             return False
         ingress = plan.get("ingress", "voice")
         if ingress == "chat":

@@ -151,7 +151,7 @@ async def test_excluded_messages_skip_all_observation(hass, chat_home, case):
     language = 'en'
     if case == 'off': await data.store.async_patch_settings(agentcli_routing_shadow_enabled=False)
     if case == 'history': messages = [{'role': 'assistant', 'content': 'context'}, *messages]
-    if case == 'non_english': language = 'fr'
+    if case == 'unsupported_language': language = 'zz'
     if case == 'missing_language': language = None
     if case == 'blocks': messages[0]['content'] = [{'type': 'text', 'text': 'command'}]
     if case == 'extra_fields': messages[0]['attachments'] = []
@@ -385,14 +385,14 @@ async def test_followup_rechecks_authority_and_target_after_recognition(hass, ex
     assert not data.command_routing.chat_history._entries
 
 
-@pytest.mark.parametrize('case', ['history', 'non_english', 'missing_language', 'blocks', 'extra_fields'])
+@pytest.mark.parametrize('case', ['history', 'unsupported_language', 'missing_language', 'blocks', 'extra_fields'])
 @pytest.mark.parametrize('mode', ['local', 'hybrid', 'auto'])
 async def test_execution_exclusions_preserve_provider(hass, executing_chat, case, mode):
     await executing_chat[0].store.async_patch_settings(agentcli_routing_mode=mode)
     messages = [{'role': 'user', 'content': 'turn on the desk lamp'}]
     language = 'en'
     if case == 'history': messages.insert(0, {'role': 'assistant', 'content': 'Earlier context'})
-    if case == 'non_english': language = 'fr'
+    if case == 'unsupported_language': language = 'zz'
     if case == 'missing_language': language = None
     if case == 'blocks': messages[0]['content'] = [{'type': 'text', 'text': 'turn on the desk lamp'}]
     if case == 'extra_fields': messages[0]['attachments'] = []
@@ -1009,7 +1009,7 @@ async def test_context_fallback_keeps_the_full_conversation(hass, context_chat, 
     if case == 'secret': messages[0]['content'] = 'password: private-test-value'
     if case == 'tool_history': messages[1]['tool_calls'] = []
     if case == 'oversized': messages[0]['content'] = 'x' * 17000
-    if case == 'language': language = 'zh-Hant'
+    if case == 'language': language = 'zz'
     if case == 'account':
         store = await agentcli._get_secret_store(hass)
         account = await store.add('classifier', {'base_url': 'http://example.test/v1', 'model': 'Qwen/Qwen3.5-4B'})
@@ -1693,3 +1693,76 @@ async def test_reference_and_explicit_selection_share_total_deadline(hass, conte
     dispatch.assert_not_called()
     assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'timeout': 1}
     assert data.decision_shadow.task is None
+
+
+async def test_repeated_references_use_exact_successful_subject_and_fresh_history_review(hass, context_chat):
+    data, _ = context_chat
+    _, _, history = await chat_turn(hass, context_chat, [{'role': 'user', 'content': 'what is the state of Desk lamp'}])
+    seen = []
+    async def response(*args):
+        seen.append(args[4])
+        return reference_chat_wire(args[4], 'state_query')
+    with patch.object(DecisionProvider, '_request', side_effect=response) as remote:
+        for text in ('is it on?', 'is it off?', 'is it on?'):
+            previous = deepcopy(history)
+            provider, _, history = await chat_turn(hass, context_chat, [*history, {'role': 'user', 'content': text}])
+            assert not provider.stream_turn.called, data.decision_shadow.summary()
+            assert history[:len(previous)] == previous
+            assert seen[-1]['state']['history'] == previous
+            assert seen[-1]['state']['anchor']['source'] == 'verified_reply'
+            assert history[-1]['content'] == 'The state is off.'
+    assert remote.await_count == 6
+    assert not data.command_routing.chat_history._entries
+
+
+@pytest.mark.parametrize('change', ['history', 'account', 'scope', 'failed_reply'])
+async def test_repeated_reference_cannot_reuse_stale_or_unconfirmed_subject(hass, context_chat, change):
+    data, token = context_chat
+    _, _, history = await chat_turn(hass, context_chat, [{'role': 'user', 'content': 'what is the state of Desk lamp'}])
+    async def response(*args): return reference_chat_wire(args[4], 'state_query')
+    with patch.object(DecisionProvider, '_request', side_effect=response):
+        _, _, history = await chat_turn(hass, context_chat, [*history, {'role': 'user', 'content': 'is it on?'}])
+    if change == 'history': history[-1]['content'] = 'Another lamp is the subject now.'
+    elif change == 'account':
+        await hass.data['_phoenix_agentcli_store'].set_model(data.store.get_settings().decision_provider_id, 'changed')
+    elif change == 'scope': token.revoked = True
+    else:
+        history[-1]['content'] = 'The action failed.'
+    with patch.object(DecisionProvider, '_request', side_effect=response) as remote:
+        provider, _, _ = await chat_turn(hass, context_chat, [*history, {'role': 'user', 'content': 'is it off?'}])
+    assert all('reference' not in call.args[4]['questions'] for call in remote.await_args_list)
+
+
+@pytest.mark.parametrize('restricted', [False, True])
+async def test_temporal_chat_command_preserves_full_history_review(hass, context_chat, restricted):
+    from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
+    from custom_components.phoenix_mcp import mcp_view
+    data, token = context_chat
+    token.permissions.domains['time'] = PermissionNode(state='GREEN')
+    entry = er.async_get(hass).async_get_or_create('time', 'test', 'clock', original_name='Test clock')
+    hass.states.async_set(entry.entity_id, '12:00:00', {'friendly_name': 'Test clock'})
+    async_expose_entity(hass, 'conversation', entry.entity_id, True)
+    seen = []
+    async def respond(*args):
+        payload = args[4]; seen.append(payload)
+        if 'request' in payload['questions']:
+            return context_response(decline=restricted)
+        target = next(key for key, item in payload['state']['targets'].items() if item['entity_id'] == entry.entity_id)
+        choices = {'route': 'time_value', 'target': target, 'value': 'value'}
+        return {'model': 'jev-1.13.0', 'answers': {
+            question: {'type': 'choice', 'choice': choices[question], 'confidence': 1,
+                       'probabilities': {key: float(key == choices[question]) for key in spec['criteria']}}
+            for question, spec in payload['questions'].items()}}
+    with (patch.object(DecisionProvider, '_request', side_effect=respond) as remote,
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        provider, _, returned = await chat_turn(hass, context_chat, context_messages('Set Test clock to 18:30'))
+    assert remote.await_count == 2, data.decision_shadow.summary()
+    assert seen[-1]['state']['history'] == CONTEXT_HISTORY
+    assert seen[-1]['state']['candidate']['value'] == '18:30:00'
+    assert returned[:len(CONTEXT_HISTORY)] == CONTEXT_HISTORY
+    assert provider.stream_turn.called is restricted
+    if restricted: call.assert_not_called()
+    else:
+        call.assert_awaited_once_with('time', 'set_value', {'entity_id': [entry.entity_id], 'time': '18:30:00'},
+                                     blocking=True, return_response=False)

@@ -75,7 +75,7 @@ async def _async_review_reference(hass: Any, data: Any, token: Any, sentence: st
         return result("busy")
 
     async def evaluate() -> dict:
-        from .agentcli import _get_secret_store, PROVIDER_DEFINITIONS
+        from .agentcli import _get_secret_store, PROVIDER_DEFINITIONS, decision_account_fingerprint
         try:
             async with asyncio.timeout(authority.settings.decision_timeout_ms / 1000):
                 store = await _get_secret_store(hass)
@@ -92,8 +92,13 @@ async def _async_review_reference(hass: Any, data: Any, token: Any, sentence: st
                     return result("context_unavailable")
                 extended = batch_execution_eligible(cfg, lang)
                 snapshot = capture_batch_targets(hass, current, extended=extended)
-                # Use only the immediately preceding user turn. Never search back for a convenient target.
-                anchor = await async_evaluate_command(hass, data, current, history[-2]["content"], lang, preview=True)
+                # A successful, exact transcript can carry its last subject across pronoun turns.
+                # Never search older messages for a convenient referent.
+                binding = [current.id, current.token_hash, current.settings_version, language, authority.settings_values]
+                remembered = data.command_routing.chat_history.subject(
+                    history, [binding, decision_account_fingerprint(hass, account)]) if prepare else None
+                anchor = ({"reason": "supported", "proposal": remembered} if remembered else
+                          await async_evaluate_command(hass, data, current, history[-2]["content"], lang, preview=True))
                 current = authority.current(hass)
                 if current is None or store.resolve(account, purpose="decision") != cfg:
                     return result("authority_changed")
@@ -109,7 +114,8 @@ async def _async_review_reference(hass: Any, data: Any, token: Any, sentence: st
                 if descriptor is None:
                     return result("context_unavailable")
                 state = {"utterance": sentence, "language": lang, "history": history,
-                         "anchor": {"history_index": len(history) - 2, "previous_request": proposal, "target": descriptor}}
+                         "anchor": {"history_index": len(history) - 2, "previous_request": proposal, "target": descriptor,
+                                    "source": "verified_reply" if remembered else "strict_recognition"}}
                 encoded = json.dumps(state, ensure_ascii=False)
                 if len(encoded.encode()) > DECISION_CONTEXT_MAX_BYTES or (cfg.api_key and cfg.api_key in encoded):
                     return result("context_unavailable")
@@ -134,7 +140,6 @@ async def _async_review_reference(hass: Any, data: Any, token: Any, sentence: st
                 selected = {"intent": DECISION_TARGET_INTENTS[category], "entity_ids": list(ids)}
                 reviewed = result("target_selected", decision=answer, proposal=selected)
                 if prepare:
-                    from .agentcli import decision_account_fingerprint
                     from .command_execution import _capture_plan, _digest
                     if (not reference_execution_eligible(hass, data, lang) or answer["model"] not in
                             DECISION_REFERENCE_EXECUTION_MODELS.get((cfg.kind, cfg.base_url, cfg.model), ())):

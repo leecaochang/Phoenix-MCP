@@ -70,3 +70,21 @@ def test_malformed_or_oversized_history_is_never_retained(messages):
     cache.remember(messages, [])
     assert not cache._entries
     assert not cache.consume(messages, [])
+
+
+def test_reference_subject_is_exact_private_expiring_and_not_local_admission():
+    cache = ChatRoutingHistory()
+    messages = history('is it on?')
+    proposal = {'intent': 'HassGetState', 'entity_ids': ['light.test']}
+    binding = [['token', 'private-hash', 1, 'en', {}], 'account-fingerprint']
+    with patch('custom_components.phoenix_mcp.chat_routing_history.monotonic', return_value=100):
+        cache.remember_subject(messages, binding, proposal)
+        assert cache.subject(messages, binding) == proposal
+        assert not cache.consume(messages, binding)
+        assert cache.subject(messages, [binding, 'changed']) is None
+        assert cache.subject(history('turn it on'), binding) is None
+        assert 'is it on?' not in repr(cache._subjects) and 'private-hash' not in repr(cache._subjects)
+        cache.subject(messages, binding)['entity_ids'].append('light.other')
+        assert cache.subject(messages, binding) == proposal
+    with patch('custom_components.phoenix_mcp.chat_routing_history.monotonic', return_value=100 + CHAT_ROUTING_HISTORY_TTL_SECONDS):
+        assert cache.subject(messages, binding) is None

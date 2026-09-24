@@ -900,3 +900,109 @@ async def test_explicit_foreign_unit_cannot_be_authorized_by_model(hass, expande
     remote.assert_awaited_once()
     provider.assert_awaited_once()
     call.assert_not_called()
+
+
+@pytest.fixture
+async def temporal_home(hass, jev_hybrid_home):
+    data, token, store, account, _ = jev_hybrid_home
+    token.permissions.domains['input_datetime'] = PermissionNode(state='GREEN')
+    entry = er.async_get(hass).async_get_or_create('input_datetime', 'test', 'appointment', original_name='Appointment')
+    hass.states.async_set(entry.entity_id, '2026-12-24 10:00:00', {
+        'friendly_name': 'Appointment', 'has_date': True, 'has_time': True,
+        'year': 2026, 'month': 12, 'day': 24, 'hour': 10, 'minute': 0, 'second': 0})
+    async_expose_entity(hass, 'conversation', entry.entity_id, True)
+    return data, token, store, account, entry.entity_id
+
+
+def temporal_wire(payload, entity_id, category='helper_datetime', value='value'):
+    target = next(key for key, item in payload['state']['targets'].items() if item['entity_id'] == entity_id)
+    choices = {'route': category, 'target': target, 'value': value}
+    return {'model': 'jev-1.13.0', 'answers': {
+        question: {'type': 'choice', 'choice': choices[question], 'confidence': 1,
+                   'probabilities': {key: float(key == choices[question]) for key in spec['criteria']}}
+        for question, spec in payload['questions'].items()}}
+
+
+@pytest.mark.parametrize('category,value,field', [
+    ('helper_date', '2026-12-25', 'date'), ('helper_time', '18:30:00', 'time'),
+    ('helper_datetime', '2026-12-25 18:30:00', 'datetime'),
+])
+async def test_temporal_helpers_dispatch_only_the_exact_requested_field(hass, temporal_home, category, value, field):
+    async def respond(*args):
+        assert args[4]['state']['source'] == {'kind': field, 'value': value}
+        return temporal_wire(args[4], temporal_home[-1], category)
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, remote, provider = await run_voice(hass, temporal_home, request=respond,
+                                              sentence=f'Set Appointment to {value}')
+    remote.assert_awaited_once()
+    provider.assert_not_called()
+    call.assert_awaited_once_with('input_datetime', 'set_datetime',
+        {'entity_id': [temporal_home[-1]], field: value}, blocking=True, return_response=False)
+
+
+@pytest.mark.parametrize('change', ['none', 'value', 'flags', 'timezone', 'competitor', 'permission'])
+async def test_temporal_approval_revalidates_value_catalog_and_authority(hass, temporal_home, change):
+    data, token, _, _, entity_id = temporal_home
+    await set_mesa(hass, temporal_home, 'confirm')
+    async def respond(*args): return temporal_wire(args[4], entity_id)
+    with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
+        reply, _, provider = await run_voice(hass, temporal_home, request=respond,
+                                            sentence='Set Appointment to 2026-12-25 18:30')
+    assert 'needs approval' in reply
+    provider.assert_not_called()
+    record = data.store.get_pending_approvals()[0]
+    if change == 'value':
+        record['args'][COMMAND_ROUTING_PLAN_KEY]['proposal']['value'] = '2026-12-26 18:30:00'
+        record['args']['service_data']['datetime'] = '2026-12-26 18:30:00'
+    elif change == 'flags':
+        state = hass.states.get(entity_id)
+        hass.states.async_set(entity_id, state.state, {**state.attributes, 'has_date': False})
+    elif change == 'timezone': await hass.config.async_set_time_zone('America/New_York')
+    elif change == 'competitor':
+        entry = er.async_get(hass).async_get_or_create('input_datetime', 'test', 'other', original_name='Appointment')
+        hass.states.async_set(entry.entity_id, '2026-12-24', {'has_date': True, 'has_time': False})
+        async_expose_entity(hass, 'conversation', entry.entity_id, True)
+    elif change == 'permission': token.permissions.domains['input_datetime'] = PermissionNode(state='RED')
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+    assert outcome == ('allowed' if change == 'none' else 'denied')
+    assert call.await_count == (1 if change == 'none' else 0)
+
+
+@pytest.mark.parametrize('change', ['timezone', 'account', 'permission', 'flags', 'value_declined', 'wrong_kind', 'malformed'])
+async def test_temporal_model_wait_cannot_authorize_changed_or_invalid_request(hass, temporal_home, change):
+    data, token, store, account, entity_id = temporal_home
+    async def respond(*args):
+        body = temporal_wire(args[4], entity_id, 'helper_time' if change == 'wrong_kind' else 'helper_datetime',
+                             'none' if change == 'value_declined' else 'value')
+        if change == 'timezone': await hass.config.async_set_time_zone('America/New_York')
+        elif change == 'account': await store.set_model(account, 'changed')
+        elif change == 'permission': token.permissions.domains['input_datetime'] = PermissionNode(state='RED')
+        elif change == 'flags':
+            state = hass.states.get(entity_id)
+            hass.states.async_set(entity_id, state.state, {**state.attributes, 'has_time': False})
+        elif change == 'malformed': body['answers']['value']['choice'] = '2026-12-26'
+        return body
+    with patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call:
+        _, remote, _ = await run_voice(hass, temporal_home, request=respond,
+                                      sentence='Set Appointment to 2026-12-25 18:30')
+    remote.assert_awaited_once()
+    call.assert_not_called()
+    assert not data.store.get_pending_approvals()
+
+
+async def test_temporal_preview_is_inert(hass, temporal_home):
+    from custom_components.phoenix_mcp.decision_batch import async_preview_batch
+    data, token, _, _, entity_id = temporal_home
+    async def respond(*args): return temporal_wire(args[4], entity_id)
+    with (patch.object(DecisionProvider, '_request', side_effect=respond),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        result = await async_preview_batch(hass, data, token, 'Set Appointment to 2026-12-25 18:30', 'en',
+                                           {'reason': 'no_match', 'proposal': None})
+    assert result['reason'] == 'target_selected', result
+    assert result['proposal']['value'] == '2026-12-25 18:30:00'
+    assert not result['executed'] and '_plan' not in result
+    assert not data.store.get_pending_approvals()
+    call.assert_not_called()

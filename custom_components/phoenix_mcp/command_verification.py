@@ -11,12 +11,12 @@ from homeassistant.core import State
 from .command_operations import numeric_operation, service_arguments, finite_number
 from .const import (
     COMMAND_VERIFICATION_POLL_SECONDS, COMMAND_VERIFICATION_WAIT_SECONDS,
-    COMMAND_VERIFICATION_TOLERANCES, COMMAND_ROUTING_NUMERIC_STATE,
+    COMMAND_VERIFICATION_TOLERANCES, COMMAND_ROUTING_NUMERIC_STATE, COMMAND_ROUTING_TEMPORAL_OPERATIONS,
 )
 from .request_authority import RequestAuthority
 
 
-def state_matches(proposal: dict, state: State | None) -> bool:
+def state_matches(proposal: dict, state: State | None, timezone: str = "UTC") -> bool:
     """Compare only the requested property, in the operation's native HA units."""
     if (state is None or state.state in ("unknown", "unavailable")
             or state.attributes.get("assumed_state")):
@@ -24,6 +24,9 @@ def state_matches(proposal: dict, state: State | None) -> bool:
     intent = proposal.get("intent")
     if intent in ("HassTurnOn", "HassTurnOff"):
         return state.state == ("on" if intent == "HassTurnOn" else "off")
+    if intent in COMMAND_ROUTING_TEMPORAL_OPERATIONS:
+        from .temporal_values import temporal_state_matches
+        return temporal_state_matches(proposal, state, timezone)
     operation = numeric_operation(intent) if isinstance(intent, str) else None
     if operation is None or not operation.valid_value(proposal.get(operation.proposal_field)):
         return False
@@ -88,7 +91,7 @@ async def async_verify_command_state(hass: Any, data: Any, token: Any, plan: dic
             fingerprint = _target_fingerprint(hass, current, entity_id, "HassGetState")
             if fingerprint is None or fingerprint != plan.get("fingerprints", {}).get(entity_id):
                 return "unconfirmed"
-        if all(state_matches(proposal, hass.states.get(eid)) for eid in proposal["entity_ids"]):
+        if all(state_matches(proposal, hass.states.get(eid), hass.config.time_zone) for eid in proposal["entity_ids"]):
             return "matched"
         remaining = deadline - loop.time()
         if remaining <= 0:

@@ -12,7 +12,7 @@ from .command_execution import _target_fingerprint, plan_is_current, _digest
 from .command_operations import numeric_operation, service_arguments
 from .command_routing import RoutingAuthority, effective_routing_mode, routing_language
 from .const import (
-    COMMAND_ROUTING_INTENTS, COMMAND_ROUTING_LANGUAGES, DECISION_CONTEXT_MAX_BYTES, DECISION_CONTEXT_MAX_MESSAGES,
+    COMMAND_ROUTING_INTENTS, COMMAND_ROUTING_TEMPORAL_OPERATIONS, COMMAND_ROUTING_LANGUAGES, DECISION_CONTEXT_MAX_BYTES, DECISION_CONTEXT_MAX_MESSAGES,
     DECISION_CONTEXT_REQUIRED_CHOICES, DECISION_CONTEXT_EXECUTION_MODELS,
     DECISION_CONTEXT_EXECUTION_LANGUAGES, DECISION_FOLLOWUP_EXECUTION_MODELS, MAX_SEARCH_QUERY_LEN,
 )
@@ -51,11 +51,12 @@ def _state(hass: Any, token: Any, sentence: str, language: str,
            history: list[dict], proposal: Any) -> tuple[dict, str] | None:
     """Keep exact context or decline; redaction must not erase a prior restriction."""
     if (not isinstance(proposal, dict) or not isinstance(proposal.get("intent"), str)
-            or proposal["intent"] not in COMMAND_ROUTING_INTENTS):
+            or proposal["intent"] not in COMMAND_ROUTING_INTENTS | COMMAND_ROUTING_TEMPORAL_OPERATIONS.keys()):
         return None
     intent = proposal["intent"]
     operation = numeric_operation(intent)
-    fields = {"intent", "entity_ids"} | ({operation.proposal_field} if operation else set())
+    value_field = operation.proposal_field if operation else "value" if intent in COMMAND_ROUTING_TEMPORAL_OPERATIONS else None
+    fields = {"intent", "entity_ids"} | ({value_field} if value_field else set())
     ids = proposal.get("entity_ids")
     if (set(proposal) != fields or not isinstance(ids, list) or len(ids) != 1
             or not isinstance(ids[0], str)):
@@ -74,8 +75,8 @@ def _state(hass: Any, token: Any, sentence: str, language: str,
         if redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(text) or "", token, hass) != text:
             return None
     candidate = {"intent": intent, "entity_ids": list(ids)}
-    if operation:
-        candidate[operation.proposal_field] = proposal[operation.proposal_field]
+    if value_field:
+        candidate[value_field] = proposal[value_field]
     state = {"utterance": sentence, "language": language, "history": history, "candidate": candidate}
     if context_history(history) is None:
         state["history_format"] = "provider_messages"

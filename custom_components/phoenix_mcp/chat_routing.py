@@ -49,7 +49,7 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
         context_account = decision_account_fingerprint(hass, settings.decision_provider_id)
     sentence = messages[-1]["content"]
 
-    async def finish(reply: LocalCommandReply, *, local: bool = False) -> bool:
+    async def finish(reply: LocalCommandReply, *, local: bool = False, subject: dict | None = None) -> bool:
         if reply.outcome != "ok":
             await emit("error", {"code": reply.outcome, "message": reply.text, "retryable": False})
         else:
@@ -59,9 +59,13 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
             await emit("assistant_delta", {"text": reply.text})
         await emit("messages", {"messages": messages})
         await emit("done", {"stop_reason": "end_turn" if reply.outcome == "ok" else "error"})
-        if (local and reply.allows_local_followup and reply.outcome == "ok" and not reply.pending
+        if (reply.allows_local_followup and reply.outcome == "ok" and not reply.pending
                 and not cancel.is_set() and authority.current(hass) is not None):
-            data.command_routing.chat_history.remember(messages, binding)
+            if local:
+                data.command_routing.chat_history.remember(messages, binding)
+            from .agentcli import decision_account_fingerprint
+            account = decision_account_fingerprint(hass, settings.decision_provider_id) if settings.decision_provider_id else None
+            data.command_routing.chat_history.remember_subject(messages, [binding, account], subject)
         return False
 
     async def stop() -> bool:
@@ -91,14 +95,14 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
             context_reply = await async_execute_chat_plan(hass, data, current, decision["_plan"], authority,
                                                           base_url, client_ip, cancel, language=language)
             # Mixed history always needs review again; never establish a local-only chain.
-            return await finish(context_reply)
+            return await finish(context_reply, subject=decision["_plan"]["proposal"])
         return True
     if execute:
         if result["proposal"]:
             reply = await async_execute_chat_command(hass, data, current, result["proposal"], authority,
                                                      base_url, client_ip, cancel, language=language)
             if reply is not None:
-                return await finish(reply, local=True)
+                return await finish(reply, local=True, subject=result["proposal"])
             if cancel.is_set() or authority.current(hass) is None:
                 return await stop()
         if followup and not result["proposal"] and context_execution_eligible(hass, data, language):
@@ -112,7 +116,7 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
             if decision.get("_plan") is not None:
                 reply = await async_execute_chat_plan(hass, data, current, decision["_plan"], authority,
                                                       base_url, client_ip, cancel, language=language)
-                return await finish(reply)
+                return await finish(reply, subject=decision["_plan"]["proposal"])
             return True
         if mode == "hybrid" and not followup and not result["proposal"]:
             decision = await async_preview_decision(hass, data, current, sentence, language,
@@ -124,7 +128,7 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
             if decision.get("_plan") is not None:
                 reply = await async_execute_chat_plan(hass, data, current, decision["_plan"], authority,
                                                       base_url, client_ip, cancel, language=language)
-                return await finish(reply)
+                return await finish(reply, subject=decision["_plan"]["proposal"])
     elif (settings.decision_provider_id and result["reason"] in ("no_match", "unsupported", "no_target")):
         # Execution mode pauses observation without changing its stored preference.
         data.decision_shadow.start(hass, data, current, sentence, language,

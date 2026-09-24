@@ -11,7 +11,7 @@ from .command_operations import numeric_metadata
 from .command_execution import _target_fingerprint, _digest
 from .const import (
     DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES, DECISION_MAX_TARGET_TEXT,
-    DECISION_MAX_TARGET_ALIASES, DECISION_TARGET_INTENTS,
+    DECISION_MAX_TARGET_ALIASES, DECISION_TARGET_INTENTS, COMMAND_ROUTING_TEMPORAL_OPERATIONS,
 )
 from .decision_provider import DecisionError
 from .device_semantics import DeviceRegistrySnapshot, device_registry_snapshot
@@ -82,6 +82,9 @@ def capture_targets(hass: Any, token: Any, category: str, *,
             "aliases": sorted(text(alias) for alias in er.async_get_entity_aliases(hass, entry)),
             "area": text(area.name) if area else "",
         }
+        temporal = COMMAND_ROUTING_TEMPORAL_OPERATIONS.get(intent)
+        if temporal:
+            descriptor["value_kind"] = temporal[3]
         metadata = numeric_metadata(state, intent)
         if metadata and intent not in ("HassLightSet", "HassSetVolume", "HassSetPosition"):
             if intent in ("HassClimateSetTemperature", "PhoenixWaterTemperature"):
