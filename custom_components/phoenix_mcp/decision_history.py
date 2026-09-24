@@ -1,4 +1,4 @@
-"""Validate complete provider transcripts for inert context review without rewriting."""
+"""Validate complete provider transcripts for context review without rewriting."""
 from __future__ import annotations
 
 from copy import deepcopy

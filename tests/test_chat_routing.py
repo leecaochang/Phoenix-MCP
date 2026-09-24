@@ -135,7 +135,7 @@ async def test_only_eligible_local_misses_start_background_decision(hass, chat_h
     provider.stream_turn.assert_called_once()
     assert start.call_count == (1 if reason in ('unsupported', 'no_target', 'no_match') else 0)
     if start.called:
-        assert start.call_args.kwargs == {'observe_chat': True}
+        assert start.call_args.kwargs == {'observe_chat': True, 'ingress': 'chat'}
 
 
 @pytest.mark.parametrize('change', ['token', 'settings', 'cancel'])
@@ -1070,7 +1070,7 @@ async def test_context_chat_keeps_mesa_and_pass_through_gates(hass, context_chat
 
 @pytest.mark.parametrize('change', ['none', 'account', 'account_back', 'deleted', 'mode', 'target', 'scope',
     'model_proof', 'kind_proof', 'language_proof', 'ingress', 'value'])
-async def test_context_saved_approval_rechecks_provider_and_exact_action(hass, context_chat, change):
+async def test_context_saved_approval_rechecks_provider_and_exact_action(hass, context_chat, change, provider_context_history):
     from custom_components.phoenix_mcp import mcp_view
     from custom_components.phoenix_mcp.const import COMMAND_ROUTING_PLAN_KEY
     from custom_components.phoenix_mcp.mesa import async_setup_mesa
@@ -1082,14 +1082,14 @@ async def test_context_saved_approval_rechecks_provider_and_exact_action(hass, c
         {'semantic_profile': {'operational_boundaries': {'control_mode': 'confirm'}}}, default_origin=MetadataOrigin.USER))
     with (patch.object(DecisionProvider, '_request', AsyncMock(return_value=context_response())),
           patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[]))):
-        provider, events, _ = await chat_turn(hass, context_chat, context_messages())
+        provider, events, _ = await chat_turn(hass, context_chat, [*deepcopy(provider_context_history), {'role': 'user', 'content': 'set the desk lamp brightness to 37 percent'}])
     provider.stream_turn.assert_not_called()
     record = data.store.get_pending_approvals()[0]
     plan = record['args'][COMMAND_ROUTING_PLAN_KEY]
     assert plan['context_review']['model'] == 'jev-1.13.0'
     assert plan['proposal']['brightness_pct'] == 37
     assert 'decision_category' not in plan
-    assert 'secret' not in json.dumps(plan) and CONTEXT_HISTORY[0]['content'] not in json.dumps(plan)
+    assert 'secret' not in json.dumps(plan) and provider_context_history[0]['content'] not in json.dumps(plan)
     assert COMMAND_ROUTING_PLAN_KEY not in json.dumps(events)
     store = await agentcli._get_secret_store(hass)
     account = data.store.get_settings().decision_provider_id
@@ -1213,11 +1213,50 @@ async def test_context_account_change_during_local_recognition_stops_before_hist
     assert any(name == 'error' for name, _ in events)
 
 
-async def test_rich_history_remains_on_full_provider_path_until_evaluated(hass, context_chat, provider_context_history):
+@pytest.mark.parametrize('decline', [False, True])
+async def test_rich_history_routes_only_after_review_and_preserves_full_fallback(hass, context_chat, provider_context_history, decline):
+    from custom_components.phoenix_mcp import mcp_view
     messages = [*deepcopy(provider_context_history), {'role': 'user', 'content': 'set the desk lamp brightness to 37 percent'}]
-    with (patch.object(DecisionProvider, 'review_context') as review,
-          patch('custom_components.phoenix_mcp.chat_routing.async_evaluate_command') as recognize):
+    original = deepcopy(messages)
+    with (patch.object(DecisionProvider, '_request', AsyncMock(return_value=context_response(decline=decline))) as remote,
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         provider, _, history = await chat_turn(hass, context_chat, messages)
-    assert provider.stream_turn.called and history[:len(messages)] == messages
-    review.assert_not_called()
-    recognize.assert_not_called()
+    remote.assert_awaited_once()
+    state = remote.await_args.args[4]['state']
+    assert state['history'] == original[:-1] and state['history_format'] == 'provider_messages'
+    assert state['candidate']['brightness_pct'] == 37
+    assert provider.stream_turn.called == decline and call.called != decline
+    assert history[:len(original)] == original
+    if not decline:
+        call.assert_awaited_once_with('light', 'turn_on', {'entity_id': ['light.test_desk'], 'brightness_pct': 37},
+                                     blocking=True, return_response=False)
+    assert not context_chat[0].command_routing.chat_history._entries
+
+
+@pytest.mark.parametrize('case', ['unqualified', 'unknown_revision', 'secret', 'changed_history', 'changed_account', 'incomplete'])
+async def test_rich_history_refusals_never_dispatch(hass, context_chat, provider_context_history, case):
+    data, _ = context_chat
+    messages = [*deepcopy(provider_context_history), {'role': 'user', 'content': 'set the desk lamp brightness to 37 percent'}]
+    store = await agentcli._get_secret_store(hass)
+    if case == 'unqualified':
+        await store.set_model(data.store.get_settings().decision_provider_id, 'unqualified')
+    if case == 'secret': messages[0]['content'] = 'password: private-context-secret'
+    if case == 'incomplete': messages.pop(-2)
+    original = deepcopy(messages)
+    async def reply(*args):
+        if case == 'changed_history': messages[0]['content'] = 'Do not change any devices.'
+        if case == 'changed_account': await store.set_model(data.store.get_settings().decision_provider_id, 'other')
+        return context_response(model='unknown-revision' if case == 'unknown_revision' else 'jev-1.13.0')
+    with (patch.object(DecisionProvider, '_request', side_effect=reply) as remote,
+          patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+        provider, events, history = await chat_turn(hass, context_chat, messages)
+    dispatch.assert_not_called()
+    assert not data.store.get_pending_approvals()
+    if case in ('changed_history', 'changed_account'):
+        provider.stream_turn.assert_not_called()
+        assert any(name == 'error' for name, _ in events)
+    else:
+        provider.stream_turn.assert_called_once()
+        assert history[:len(original)] == original
+    if case in ('unqualified', 'secret', 'incomplete'): remote.assert_not_called()

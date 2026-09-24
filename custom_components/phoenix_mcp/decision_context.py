@@ -22,7 +22,7 @@ from .helpers import redact_inaccessible_entity_ids_in_text, redact_secrets_in_t
 
 
 def context_history(messages: Any, *, structured: bool = False) -> list[dict] | None:
-    """Execution retains plain-text pairs; richer previews preserve complete exchanges."""
+    """Validate plain pairs or complete provider exchanges without shortening history."""
     if structured:
         return structured_context_history(messages)
     if (not isinstance(messages, list) or not messages or len(messages) % 2
@@ -120,7 +120,7 @@ async def _async_review_context(hass: Any, data: Any, token: Any, sentence: str,
         return {"reason": reason, "decision": decision, "executed": False,
                 "elapsed_ms": round((monotonic() - started) * 1000, 2)}
 
-    history = context_history(messages, structured=not prepare)
+    history = context_history(messages, structured=True)
     lang = routing_language(language, preview=True)
     if (history is None or lang is None or not isinstance(sentence, str)
             or not sentence.strip() or len(sentence) > MAX_SEARCH_QUERY_LEN):
@@ -165,7 +165,8 @@ async def _async_review_context(hass: Any, data: Any, token: Any, sentence: str,
             # Exact configured credentials are never sent back inside conversation text.
             if cfg.api_key and any(cfg.api_key in text for text in history_texts(state)):
                 return result("context_unavailable")
-            provider = DecisionProvider(cfg, PROVIDER_DEFINITIONS[cfg.kind].adapter)
+            provider = DecisionProvider(cfg, PROVIDER_DEFINITIONS[cfg.kind].adapter,
+                                        metrics=runtime.metrics, metric_scope="chat" if prepare else "preview")
             async with asyncio.timeout(authority.settings.decision_timeout_ms / 1000):
                 answer = await provider.review_context(async_get_clientsession(hass), state,
                                                        authority.settings.decision_timeout_ms)

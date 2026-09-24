@@ -2956,6 +2956,11 @@ async def test_command_preview_requires_admin(authenticated, admin, status):
     {"token_id": "t", "sentence": "x" * 513},
     {"token_id": "t", "sentence": "x", "language": "fr"},
     {"token_id": "t", "sentence": "x", "targets": True},
+    {"token_id": "t", "sentence": "x", "batch": True},
+    {"token_id": "t", "sentence": "x", "decision": True, "batch": True},
+    {"token_id": "t", "sentence": "x", "decision": True, "targets": True, "batch": "true"},
+    {"token_id": "t", "sentence": "x", "decision": True, "targets": True, "batch": True,
+     "messages": [{"role": "user", "content": "x"}, {"role": "assistant", "content": "y"}]},
     {"token_id": "t", "sentence": "x", "decision": True, "targets": "true"},
     {"token_id": "t", "sentence": "x", "messages": []},
     {"token_id": "t", "sentence": "x", "decision": True, "messages": None},
@@ -3032,6 +3037,33 @@ async def test_command_preview_context_opt_in_and_stale_disclosure(hass, token_s
         assert "context_review" not in body and "light.test" not in response.text
     else:
         assert body["context_review"]["reason"] == (change or "compatible")
+
+
+@pytest.mark.parametrize("change", [None, "targets_changed", "authority_changed"])
+async def test_command_preview_batch_is_explicit_inert_and_discards_stale_local_result(hass, token_store, change):
+    token, _ = await token_store.async_create_token("preview_batch", "admin")
+    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+    hass.data[DOMAIN] = data
+    view = PhoenixAdminCommandPreviewView(); view.hass = hass
+    local = {"reason": "supported", "proposal": {"intent": "HassTurnOn", "entity_ids": ["light.test"]},
+             "executed": False, "elapsed_ms": 1}
+    async def batch(*args):
+        assert args[-1] == local
+        if change == "authority_changed": token.revoked = True
+        return {"reason": change or "target_selected", "executed": False}
+    with (patch("custom_components.phoenix_mcp.command_routing.async_evaluate_command", AsyncMock(return_value=local)),
+          patch("custom_components.phoenix_mcp.decision_batch.async_preview_batch", side_effect=batch) as review,
+          patch("custom_components.phoenix_mcp.decision_shadow.async_preview_decision") as old_review,
+          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp") as dispatch):
+        response = await view.post(_make_admin_request(body=json.dumps({
+            "token_id": token.id, "sentence": "turn on Desk lamp", "decision": True, "targets": True, "batch": True,
+        }).encode()))
+    assert response.status == 200
+    review.assert_awaited_once(); old_review.assert_not_called(); dispatch.assert_not_called()
+    body = json.loads(response.text)
+    assert body["executed"] is False and not data.store.get_pending_approvals()
+    if change: assert body["proposal"] is None and body["reason"] == change
+    if change == "authority_changed": assert "batch_review" not in body and "light.test" not in response.text
 
 
 @pytest.mark.parametrize("patch_body,accepted", [

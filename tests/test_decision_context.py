@@ -330,7 +330,7 @@ async def test_administrator_preview_never_returns_a_plan_for_eligible_chat_acco
     assert '_plan' not in result and not data.store.get_pending_approvals()
 
 
-async def test_rich_preview_keeps_original_transcript_and_cannot_prepare(hass, context_home, provider_context_history):
+async def test_rich_preview_is_inert_and_internal_preparation_requires_evaluated_model(hass, context_home, provider_context_history):
     from custom_components.phoenix_mcp.decision_context import async_prepare_chat_context
     data, token, store, *_ = context_home
     hass.data['_phoenix_agentcli_store'] = store
@@ -344,7 +344,8 @@ async def test_rich_preview_keeps_original_transcript_and_cannot_prepare(hass, c
         assert state['history'] == provider_context_history and state['history_format'] == 'provider_messages'
         result = await async_prepare_chat_context(hass, data, token, SENTENCE, 'en', provider_context_history,
                                                  context_home[-1], asyncio.Event())
-        assert result['reason'] == 'invalid_context' and review.await_count == 1
+        assert result['reason'] == 'plan_ready' and review.await_count == 2
+        assert result['_plan']['proposal'] == context_home[-1]['proposal']
     dispatch.assert_not_called()
     assert not data.store.get_pending_approvals()
 

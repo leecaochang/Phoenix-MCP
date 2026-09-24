@@ -11,6 +11,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .command_routing import RoutingAuthority, routing_language, routing_languages, effective_routing_mode
 from .const import MAX_SEARCH_QUERY_LEN, DECISION_TARGET_INTENTS, DECISION_HYBRID_REASONS, DECISION_NUMERIC_CATEGORIES, DECISION_EXECUTION_CATEGORIES
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
+from .decision_metrics import DecisionMetrics
 
 
 @dataclass
@@ -26,10 +27,11 @@ class DecisionShadow:
     chat_reasons: dict[str, int] = field(default_factory=dict)
     chat_choices: dict[str, int] = field(default_factory=dict)
     chat_hybrid_reasons: dict[str, int] = field(default_factory=dict)
+    metrics: DecisionMetrics = field(default_factory=DecisionMetrics)
 
     def summary(self) -> dict:
         return {"observations": self.observations, "reasons": dict(self.reasons),
-                "choices": dict(self.choices), "busy": self.task is not None,
+                "choices": dict(self.choices), "busy": self.task is not None, "requests": self.metrics.summary(),
                 "mean_elapsed_ms": round(self.total_elapsed_ms / self.observations, 2)
                 if self.observations else None,
                 "hybrid": {"evaluations": sum(self.hybrid_reasons.values()), "reasons": dict(self.hybrid_reasons)},
@@ -130,7 +132,9 @@ class DecisionShadow:
                 return result("not_configured")
             if authority.current(hass) is None:
                 return result("authority_changed")
-            provider = DecisionProvider(cfg, PROVIDER_DEFINITIONS[cfg.kind].adapter)
+            scope = ingress if prepare or ingress == "preview" else f"{ingress}_shadow"
+            provider = DecisionProvider(cfg, PROVIDER_DEFINITIONS[cfg.kind].adapter,
+                                        metrics=self.metrics, metric_scope=scope)
             session = async_get_clientsession(hass)
             # Category and optional target selection share one wall-clock budget.
             async with asyncio.timeout(settings.decision_timeout_ms / 1000):

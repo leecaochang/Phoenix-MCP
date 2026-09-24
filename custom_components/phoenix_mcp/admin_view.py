@@ -2354,12 +2354,14 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
             return body
         sentence = body.get("sentence")
         token_id = body.get("token_id")
-        if (set(body) - {"token_id", "sentence", "language", "decision", "targets", "messages"}
+        if (set(body) - {"token_id", "sentence", "language", "decision", "targets", "messages", "batch"}
                 or not isinstance(sentence, str) or not sentence.strip()
                 or len(sentence) > MAX_SEARCH_QUERY_LEN
                 or not isinstance(token_id, str)
                 or routing_language(body.get("language", "en"), preview=True) is None
                 or type(body.get("decision", False)) is not bool
+                or type(body.get("batch", False)) is not bool
+                or (body.get("batch") and (not body.get("decision") or not body.get("targets") or "messages" in body))
                 or type(body.get("targets", False)) is not bool or (body.get("targets") and not body.get("decision"))
                 or ("messages" in body and (not body.get("decision") or body.get("targets")
                                             or context_history(body["messages"], structured=True) is None))):
@@ -2378,6 +2380,11 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
                 self.hass, data, token, sentence, language, body["messages"], result)
             if result["context_review"]["reason"] in ("context_changed", "authority_changed"):
                 result.update(route="provider", reason=result["context_review"]["reason"], proposal=None)
+        elif body.get("batch"):
+            from .decision_batch import async_preview_batch
+            result["batch_review"] = await async_preview_batch(self.hass, data, token, sentence, language, result)
+            if result["batch_review"]["reason"] in ("targets_changed", "authority_changed"):
+                result.update(route="provider", reason=result["batch_review"]["reason"], proposal=None)
         elif body.get("decision"):
             from .decision_shadow import async_preview_decision
             result["decision_shadow"] = await async_preview_decision(

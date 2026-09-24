@@ -39,7 +39,7 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
         if not execute:
             return True
         if not data.command_routing.chat_history.consume(messages[:-1], binding):
-            if not context_execution_eligible(hass, data, language) or context_history(messages[:-1]) is None:
+            if not context_execution_eligible(hass, data, language) or context_history(messages[:-1], structured=True) is None:
                 return True
             contextual = True
     snapshot = deepcopy(messages) if contextual else None
@@ -117,5 +117,5 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
     elif (settings.decision_provider_id and result["reason"] in ("no_match", "unsupported", "no_target")):
         # Execution mode pauses observation without changing its stored preference.
         data.decision_shadow.start(hass, data, current, sentence, language,
-                                   observe_chat=True)
+                                   observe_chat=True, ingress="chat")
     return True
