@@ -49,10 +49,10 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import floor_registry as fr
 from homeassistant.helpers import issue_registry as ir
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 
-from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_SEARCH_QUERY_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, SEARCH_FUZZY_MATCH_CUTOFF
+from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, SEARCH_FUZZY_MATCH_CUTOFF
 from ..data import PhoenixData
 from ..device_semantics import (
     DeviceRegistrySnapshot,
@@ -70,6 +70,7 @@ from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_action
 from ..tool_common import _resolve_area_id, _tool_error, _tool_success
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
 from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_token, filter_service_response, physical_gate_applies, resolve, resolve_device_registry_access, resolve_esphome_user_service, resolve_registry_access, resolve_service_targets, scrub_sensitive_attributes
+from ..request_authority import check_request_authority
 from ..token_store import TokenRecord
 from .. import yaml_includes
 
@@ -1354,12 +1355,47 @@ def _annotate_search_rows(
             row["entity_category"] = entry.entity_category.value
 
 
+def _search_membership(
+    entity_id: str, token: TokenRecord, hass: HomeAssistant,
+    expose: Any, budget: list[int],
+) -> dict[str, Any]:
+    """Project bounded direct membership as advisory, potentially incomplete IDs."""
+    state = hass.states.get(entity_id)
+    if state is None:
+        return {"is_group": None}
+    for key in ("group_entities", "entity_id"):
+        raw = state.attributes.get(key)
+        if not isinstance(raw, (list, tuple, set, frozenset)):
+            continue
+        if len(raw) > MAX_SEARCH_MEMBERS or len(raw) > budget[0]:
+            return {"is_group": None}
+        budget[0] -= len(raw)
+        if any(isinstance(value, str) and len(value) > MAX_SEARCH_MEMBER_ID_LEN for value in raw):
+            return {"is_group": None}
+        if any(not isinstance(value, str) or not valid_entity_id(value) for value in raw):
+            continue
+        members = sorted(set(raw))
+        return {
+            "is_group": True,
+            "member_entity_ids": [
+                member for member in members
+                if resolve_registry_access(member, token, hass) in (Permission.READ, Permission.WRITE)
+                and (expose is None or expose(member))
+            ],
+        }
+    return {"is_group": False}
+
+
 async def _tool_search_entities(
     args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """MCP tool: filter the token's accessible entities by name/domain/area/etc."""
     if effective_cap(token, "cap_search") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "search_entities"
+
+    include_membership = args.get("include_membership", False)
+    if not isinstance(include_membership, bool):
+        return _tool_error("include_membership must be a boolean."), "invalid_request", "search_entities"
 
     f = _parse_search_args(args)
     if f.registry_state not in {"enabled", "disabled", "all"}:
@@ -1446,10 +1482,20 @@ async def _tool_search_entities(
             fuzzy_fallback = bool(ranked)
         matches = ranked
 
+    # Fuzzy ranking yields; recheck authority and parent visibility before disclosure.
+    check_request_authority()
+    expose = assist_expose_check(token, hass)
+    matches = [row for row in matches
+               if resolve_registry_access(row["entity_id"], token, hass) in (Permission.READ, Permission.WRITE)
+               and (expose is None or expose(row["entity_id"]))]
     truncated = len(matches) > f.limit
     results = matches[:f.limit]
 
     _annotate_search_rows(results, registry, data, token)
+    if include_membership:
+        budget = [MAX_SEARCH_MEMBER_CHECKS]
+        for row in results:
+            row.update(_search_membership(row["entity_id"], token, hass, expose, budget))
 
     body = {"count": len(results), "truncated": truncated, "entities": results}
     if fuzzy_fallback:

@@ -1267,3 +1267,186 @@ class TestEntityAliases:
         assert diff["target"] == {
             "type": "entity", "id": eid, "label": own_name,
         }
+
+
+class TestSearchMembership:
+    """Membership is bounded discovery evidence, independently scoped per member."""
+
+    @pytest.mark.parametrize("attrs,expected", [
+        ({"group_entities": ["light.bedroom", "light.kitchen", "light.bedroom"]},
+         {"is_group": True, "member_entity_ids": ["light.bedroom", "light.kitchen"]}),
+        ({"group_entities": [], "entity_id": ["light.kitchen"]},
+         {"is_group": True, "member_entity_ids": []}),
+        ({"group_entities": ["bad", "light.bedroom"], "entity_id": ["light.kitchen"]},
+         {"is_group": True, "member_entity_ids": ["light.kitchen"]}),
+        ({"entity_id": "light.kitchen"}, {"is_group": False}),
+        ({"entity_id": {"light.kitchen": True}}, {"is_group": False}),
+        ({"entity_id": ["light.kitchen", None]}, {"is_group": False}),
+        ({"entity_id": ["LIGHT.KITCHEN"]}, {"is_group": False}),
+        ({"group_members": ["light.kitchen"]}, {"is_group": False}),
+        ({}, {"is_group": False}),
+    ])
+    async def test_evidence(self, hass, reg_env, attrs, expected):
+        hass.states.async_set("light.aggregate", "on", attrs)
+        content, outcome, _ = await _call("search_entities", {
+            "query": "light.aggregate", "include_membership": True,
+        }, _token(), hass)
+        assert outcome == "allowed"
+        row = _result_json(content)["entities"][0]
+        assert {k: row[k] for k in ("is_group", "member_entity_ids") if k in row} == expected
+
+    @pytest.mark.parametrize("collection", [list, tuple, set, frozenset])
+    async def test_collection_types(self, hass, reg_env, collection):
+        hass.states.async_set("light.aggregate", "on", {"entity_id": collection(["light.kitchen"])})
+        content, _, _ = await _call("search_entities", {"query": "aggregate", "include_membership": True}, _token(), hass)
+        assert _result_json(content)["entities"][0]["member_entity_ids"] == ["light.kitchen"]
+
+    @pytest.mark.parametrize("query", ["light.kitchen", "kitchen", "kitchne"])
+    async def test_projection_and_scoping(self, hass, reg_env, query):
+        registry = er.async_get(hass)
+        registry.async_update_entity("light.bedroom", hidden_by=er.RegistryEntryHider.USER)
+        hass.states.async_set("light.kitchen", "on", {"entity_id": [
+            "light.kitchen", "light.bedroom", "sensor.garage", "light.missing",
+        ]})
+        # Nested cycle remains direct membership, never expanded.
+        hass.states.async_set("light.bedroom", "off", {"entity_id": ["light.kitchen", "zone.home"]})
+        content, _, _ = await _call("search_entities", {
+            "query": query, "area": "Kitchen", "state": "on", "domain": "light",
+            "limit": 1, "include_membership": True,
+        }, _token(), hass)
+        row = _result_json(content)["entities"][0]
+        assert row["member_entity_ids"] == ["light.bedroom", "light.kitchen"]
+
+    async def test_default_does_not_compute_metadata(self, hass, reg_env):
+        with patch("custom_components.phoenix_mcp.tools.discovery._search_membership", side_effect=AssertionError):
+            for args in ({}, {"include_membership": False}):
+                content, _, _ = await _call("search_entities", args, _token(), hass)
+                assert all("is_group" not in row and "member_entity_ids" not in row
+                           for row in _result_json(content)["entities"])
+
+    @pytest.mark.parametrize("value", [None, 1, 0, "true", [], {}])
+    async def test_argument_validation_and_capability_precedence(self, hass, reg_env, value):
+        args = {"include_membership": value}
+        assert (await _call("search_entities", args, _token(), hass))[1] == "invalid_request"
+        assert (await _call("search_entities", args, _token(cap_search="deny"), hass))[1] == "denied"
+
+    async def test_registry_only_parent_and_member(self, hass, reg_env):
+        registry = er.async_get(hass)
+        entry = registry.async_get_or_create("light", "test_integration", "membership_disabled",
+                                             suggested_object_id="disabled_member")
+        registry.async_update_entity(entry.entity_id, disabled_by=er.RegistryEntryDisabler.USER)
+        hass.states.async_set("light.kitchen", "on", {"entity_id": [entry.entity_id]})
+        content, _, _ = await _call("search_entities", {"registry_state": "all", "include_membership": True}, _token(), hass)
+        rows = {row["entity_id"]: row for row in _result_json(content)["entities"]}
+        assert rows[entry.entity_id]["is_group"] is None
+        assert "member_entity_ids" not in rows[entry.entity_id]
+        assert rows["light.kitchen"]["member_entity_ids"] == [entry.entity_id]
+        token = _token(permissions=PermissionTree(entities={
+            "light.kitchen": PermissionNode(state="YELLOW"), entry.entity_id: PermissionNode(state="GREEN"),
+        }))
+        content, _, _ = await _call("search_entities", {"include_membership": True}, token, hass)
+        assert _result_json(content)["entities"][0]["member_entity_ids"] == []
+
+    async def test_red_ancestor(self, hass, reg_env):
+        hass.states.async_set("light.kitchen", "on", {"entity_id": ["sensor.garage"]})
+        token = _token(permissions=PermissionTree(
+            domains={"light": PermissionNode(state="GREEN"), "sensor": PermissionNode(state="RED")},
+            entities={"sensor.garage": PermissionNode(state="GREEN")},
+        ))
+        content, _, _ = await _call("search_entities", {"query": "kitchen", "include_membership": True}, token, hass)
+        assert _result_json(content)["entities"][0]["member_entity_ids"] == []
+
+    @pytest.mark.parametrize("exposure", [False, True])
+    async def test_pass_through_exposure(self, hass, reg_env, exposure):
+        hass.states.async_set("light.kitchen", "on", {"entity_id": ["sensor.garage", "light.bedroom"]})
+        with patch("homeassistant.components.homeassistant.exposed_entities.async_should_expose",
+                   side_effect=lambda hass, assistant, eid: eid != "sensor.garage"):
+            content, _, _ = await _call("search_entities", {"query": "kitchen", "include_membership": True},
+                                        _token(pass_through=True, use_assist_exposure=exposure), hass)
+        assert _result_json(content)["entities"][0]["member_entity_ids"] == (
+            ["light.bedroom"] if exposure else ["light.bedroom", "sensor.garage"])
+
+    async def test_bounds_do_not_return_partial_lists(self, hass, reg_env):
+        from custom_components.phoenix_mcp.tools.discovery import _search_membership
+        from custom_components.phoenix_mcp.const import MAX_SEARCH_MEMBERS
+
+        hass.states.async_set("light.aggregate", "on", {"entity_id": ["light.kitchen"] * (MAX_SEARCH_MEMBERS + 1)})
+        assert _search_membership("light.aggregate", _token(), hass, None, [4096]) == {"is_group": None}
+        hass.states.async_set("light.aggregate", "on", {"entity_id": ["light.kitchen", "light.bedroom"]})
+        assert _search_membership("light.aggregate", _token(), hass, None, [1]) == {"is_group": None}
+        budget = [2]
+        assert _search_membership("light.aggregate", _token(), hass, None, budget)["is_group"] is True
+        assert budget == [0]
+        assert _search_membership("light.aggregate", _token(), hass, None, budget) == {"is_group": None}
+
+    async def test_fuzzy_wait_rechecks_parent_and_members(self, hass, reg_env):
+        from custom_components.phoenix_mcp.tools.discovery import _tool_search_entities
+
+        token = _token()
+        hass.states.async_set("light.kitchen", "on", {"entity_id": ["light.bedroom"]})
+
+        async def rank_after_change(func, matches, query):
+            token.permissions.entities["light.bedroom"] = PermissionNode(state="RED")
+            return func(matches, query)
+
+        data = MagicMock(mesa=None)
+        with patch.object(hass, "async_add_executor_job", side_effect=rank_after_change):
+            content, _, _ = await _tool_search_entities({"query": "kitchne", "include_membership": True}, token, hass, data)
+        assert _result_json(content)["entities"][0]["member_entity_ids"] == []
+
+        async def rank_after_removal(func, matches, query):
+            hass.states.async_remove("light.kitchen")
+            er.async_get(hass).async_remove("light.kitchen")
+            return func(matches, query)
+
+        with patch.object(hass, "async_add_executor_job", side_effect=rank_after_removal):
+            content, _, _ = await _tool_search_entities({"query": "kitchne", "include_membership": True}, token, hass, data)
+        assert _result_json(content)["entities"] == []
+
+    @pytest.mark.parametrize("change", ["revoke", "policy", "kill_switch"])
+    async def test_fuzzy_wait_rechecks_request_authority(self, hass, reg_env, change):
+        from custom_components.phoenix_mcp.const import DOMAIN
+        from custom_components.phoenix_mcp.request_authority import (
+            AuthorityChangedError, RequestAuthority, policy_version, request_authority,
+        )
+        from custom_components.phoenix_mcp.tools.discovery import _tool_search_entities
+
+        token = _token()
+        data = MagicMock(mesa=None, ready=True, shutting_down=False)
+        data.store.get_settings.return_value.kill_switch = False
+        data.store.get_token_by_hash.return_value = token
+        hass.data[DOMAIN] = data
+
+        async def rank_after_change(func, matches, query):
+            if change == "revoke":
+                data.store.get_token_by_hash.return_value = None
+            elif change == "policy":
+                token.settings_version += 1
+            else:
+                data.store.get_settings.return_value.kill_switch = True
+            return func(matches, query)
+
+        authority = request_authority.set(RequestAuthority(hass, data, token.id, token.token_hash))
+        version = policy_version.set(token.settings_version)
+        try:
+            with patch.object(hass, "async_add_executor_job", side_effect=rank_after_change):
+                with pytest.raises(AuthorityChangedError):
+                    await _tool_search_entities({"query": "kitchne", "include_membership": True}, token, hass, data)
+        finally:
+            policy_version.reset(version)
+            request_authority.reset(authority)
+
+    async def test_page_budget_and_id_bound(self, hass, reg_env):
+        from custom_components.phoenix_mcp.tools.discovery import _search_membership
+        from custom_components.phoenix_mcp.const import MAX_SEARCH_MEMBER_ID_LEN
+
+        hass.states.async_set("light.kitchen", "on", {"entity_id": ["light.bedroom"]})
+        hass.states.async_set("light.bedroom", "off", {"entity_id": ["light.kitchen"]})
+        with patch("custom_components.phoenix_mcp.tools.discovery.MAX_SEARCH_MEMBER_CHECKS", 1):
+            content, _, _ = await _call("search_entities", {"domain": "light", "include_membership": True}, _token(), hass)
+        rows = _result_json(content)["entities"]
+        assert sum(row["is_group"] is True for row in rows) == 1
+        assert sum(row["is_group"] is None for row in rows) == 1
+        assert all("member_entity_ids" not in row for row in rows if row["is_group"] is None)
+        hass.states.async_set("light.kitchen", "on", {"entity_id": ["light." + "x" * MAX_SEARCH_MEMBER_ID_LEN]})
+        assert _search_membership("light.kitchen", _token(), hass, None, [4096]) == {"is_group": None}

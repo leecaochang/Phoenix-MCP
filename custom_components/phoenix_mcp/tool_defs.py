@@ -1597,6 +1597,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "default": "enabled",
                     "description": "enabled searches live enabled entities; disabled searches explicitly disabled registry entries; all includes both plus enabled registry entries with no live state.",
                 },
+                "include_membership": {
+                    "type": "boolean", "default": False,
+                    "description": "Add is_group and visible direct member_entity_ids. Lists may be incomplete; hidden HA entities remain visible when permitted. is_group false means no valid explicit membership, not proof of a leaf; null means no live state or resource bounds prevented inspection. Discovery only, not execution or approval scope.",
+                },
                 "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100, "description": "Maximum matching entities to return."},
             },
         },

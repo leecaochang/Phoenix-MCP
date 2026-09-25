@@ -1124,6 +1124,10 @@ MAX_COMPARE_VALUE_CHARS = 200
 MAX_APPROVAL_RESULT_CHARS = 500
 
 MAX_SEARCH_QUERY_LEN = 512
+# Bound opt-in membership normalization and disclosure across one search page.
+MAX_SEARCH_MEMBERS = 256
+MAX_SEARCH_MEMBER_CHECKS = 4096
+MAX_SEARCH_MEMBER_ID_LEN = 255
 
 # Hard cap (and default) for the bounded watch_entity tool.
 # It blocks the tool call up to this many seconds waiting for a state change.
