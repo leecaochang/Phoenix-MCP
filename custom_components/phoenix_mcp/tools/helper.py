@@ -390,6 +390,14 @@ def _enforce_helper_mesa_context(
 def _helper_create_mesa_entity(
     helper_type: str, args: dict, hass: HomeAssistant
 ) -> str:
+    if helper_type == "template":
+        from ..const import TEMPLATE_RECOVERY_TYPES
+        steps = args.get("flow_steps")
+        for step in steps if isinstance(steps, list) else []:
+            if (isinstance(step, dict) and isinstance(step.get("step_id"), str)
+                    and step["step_id"] in TEMPLATE_RECOVERY_TYPES):
+                helper_type = step["step_id"]
+                break
     restore_id = args.get(_HELPER_RESTORE_ID)
     if isinstance(restore_id, str) and restore_id.strip():
         return f"{helper_type}.{slugify(restore_id)}"
@@ -520,7 +528,22 @@ def _helper_flow_steps_error(steps: Any) -> str | None:
 
 
 def _flow_step_body(helper_type: str, result: Any) -> dict[str, Any] | None:
-    """Public, serializable projection of one HA config-flow form."""
+    """Project a form or the qualified Template type-selection menu."""
+    if result.get("type") == FlowResultType.MENU:
+        from ..const import TEMPLATE_RECOVERY_TYPES
+        if helper_type != "template" or result.get("step_id") != "user":
+            return None
+        offered = result.get("menu_options")
+        if not isinstance(offered, (list, dict)):
+            return None
+        choices = sorted(choice for choice in TEMPLATE_RECOVERY_TYPES if choice in offered)
+        if not choices:
+            return None
+        return {
+            "status": "needs_input", "helper_type": helper_type,
+            "step": {"step_id": "user", "last_step": False, "menu_options": choices},
+            "note": "Append {step_id: 'user', data: {next_step_id: '<choice>'}} to flow_steps, then call create_helper again. Only the listed Template types are supported.",
+        }
     if result.get("type") != FlowResultType.FORM:
         return None
     schema = _options_schema_json(result)
@@ -542,6 +565,17 @@ def _flow_step_body(helper_type: str, result: Any) -> dict[str, Any] | None:
             "only when the final form is supplied."
         ),
     }
+
+
+def _creation_menu_error(body: dict, supplied: dict) -> str | None:
+    """Reject unlisted menu targets and extra fields before HA dispatch."""
+    if "menu_options" not in body["step"]:
+        return None
+    values = supplied["data"]
+    if (set(values) != {"next_step_id"} or not isinstance(values.get("next_step_id"), str)
+            or values["next_step_id"] not in body["step"]["menu_options"]):
+        return "Choose one listed menu option using only data.next_step_id."
+    return None
 
 
 async def _abort_create_flow(hass: HomeAssistant, flow_id: str | None) -> None:
@@ -585,6 +619,8 @@ async def _prepare_config_flow_helper(
                     f"flow_steps[{index}].step_id must be '{current['step_id']}', "
                     f"not '{supplied['step_id']}'."
                 )
+            if menu_error := _creation_menu_error(body, supplied):
+                return "error", menu_error
             denied = _unwritable_option_entities(supplied["data"], token, hass)
             if denied:
                 return "denied", denied
@@ -1455,6 +1491,11 @@ async def _execute_config_flow_helper(
                     _tool_error("The helper flow changed after approval; nothing was created."),
                     "invalid_request", "create_helper",
                 )
+            if menu_error := _creation_menu_error(body, supplied):
+                return _tool_error(menu_error), "invalid_request", "create_helper"
+            terminal = body["step"]["last_step"]
+            if terminal is not (index == len(steps) - 1):
+                return _tool_error("The helper flow's final boundary changed; nothing was submitted."), "invalid_request", "create_helper"
             denied = _unwritable_option_entities(supplied["data"], token, hass)
             if denied:
                 return (
@@ -1464,6 +1505,14 @@ async def _execute_config_flow_helper(
                     ),
                     "denied", "create_helper",
                 )
+            from ..request_authority import check_request_authority
+            check_request_authority()
+            fresh_mesa = _helper_mesa_context(data, token,
+                [_helper_create_mesa_entity(helper_type, {"flow_steps": steps}, hass)],
+                action="create", service_data={"helper_type": helper_type, "config": None, "flow_steps": steps},
+                session_id="create_helper_execute")
+            if isinstance(fresh_mesa, tuple) or fresh_mesa.fingerprint != create_mesa_context.fingerprint:
+                return _tool_error("Helper safety policy changed before creation; nothing was submitted."), "denied", "create_helper"
             result = await hass.config_entries.flow.async_configure(
                 flow_id, dict(supplied["data"])
             )

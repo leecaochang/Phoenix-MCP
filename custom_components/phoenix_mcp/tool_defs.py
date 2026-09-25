@@ -2379,7 +2379,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "input_select, input_datetime, input_button, counter, timer, schedule, zone, tag, person) use config. A helper "
             "integration that Home Assistant creates through a config flow, such as mold_indicator or "
             "history_stats, uses cumulative flow_steps instead: start with [] to receive its first real "
-            "form schema, then append each {step_id, data} and call again. Incomplete flows are closed "
+            "form or supported menu, then append each {step_id, data} and call again. Template sensor and binary_sensor creation starts with {step_id: 'user', data: {next_step_id: 'sensor'}} (or binary_sensor), followed by the returned final form. Other Template types are not supported. Incomplete flows are closed "
             "without creating anything; the final form is approval-gated. Creating a zone requires "
             "write access to its entire entity domain so the new entity remains manageable. Person creation similarly requires person-domain write plus write access to every proposed device tracker; only name and device_trackers are accepted, never a raw Home Assistant user id or picture. Tag creation "
             "requires tag_id and accepts only name/description metadata; scan history cannot be forged. "
@@ -2396,7 +2396,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                 "flow_steps": {
                     "type": "array",
                     "maxItems": 8,
-                    "description": "Cumulative config-flow forms. Use [] to inspect the first form; resend prior steps plus the next form on each call.",
+                    "description": "Cumulative config-flow steps. Use [] to inspect the first form or supported menu; resend prior steps plus the next step on each call. Menu data contains only next_step_id.",
                     "items": {
                         "type": "object",
                         "properties": {

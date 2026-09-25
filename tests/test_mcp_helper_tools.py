@@ -1732,3 +1732,91 @@ class TestScheduleLifecycle:
             token, hass, data,
         )
         assert outcome == "allowed"
+
+
+@pytest.mark.parametrize("kind,state", [("sensor", "{{ 7 }}"), ("binary_sensor", "{{ true }}")])
+async def test_template_menu_inspection_and_creation(hass, kind, state):
+    """Drive real HA menu/forms without creating during inspection or preflight."""
+    assert await async_setup_component(hass, "homeassistant", {})
+    token = _token(permissions=PermissionTree(domains={kind: PermissionNode(state="GREEN")}))
+    content, outcome, _ = await _call("create_helper", {"helper_type": "template", "flow_steps": []}, token, hass)
+    assert outcome == "allowed", content
+    assert _json(content)["step"]["menu_options"] == ["binary_sensor", "sensor"]
+    steps = [{"step_id": "user", "data": {"next_step_id": kind}}]
+    content, outcome, _ = await _call("create_helper", {"helper_type": "template", "flow_steps": steps}, token, hass)
+    assert outcome == "allowed", content
+    assert _json(content)["step"]["step_id"] == kind
+    assert _json(content)["step"]["last_step"] is True
+    assert not hass.config_entries.async_entries("template")
+    assert not hass.config_entries.flow.async_progress_by_handler("template")
+    steps.append({"step_id": kind, "data": {"name": "Menu Probe", "state": state}})
+    from custom_components.phoenix_mcp.tools.helper import _prepare_config_flow_helper
+    assert (await _prepare_config_flow_helper(hass, "template", steps, token))[0] == "ready"
+    assert not hass.config_entries.async_entries("template")
+    content, outcome, _ = await _call("create_helper", {"helper_type": "template", "flow_steps": steps}, token, hass)
+    assert outcome == "allowed", content
+    body = _json(content)
+    assert body["entity_ids"] == [f"{kind}.menu_probe"]
+    await hass.async_block_till_done()
+    assert hass.states.get(f"{kind}.menu_probe").state == ("7" if kind == "sensor" else "on")
+    assert len(hass.config_entries.async_entries("template")) == 1
+    await hass.config_entries.async_remove(body["config_entry"]["entry_id"])
+
+
+@pytest.mark.parametrize("values", [{"next_step_id": "switch"}, {"next_step_id": "sensor", "extra": True}, {"next_step_id": []}, {}])
+async def test_template_menu_refuses_unqualified_or_malformed_choice(hass, values):
+    content, outcome, _ = await _call("create_helper", {"helper_type": "template", "flow_steps": [
+        {"step_id": "user", "data": values},
+    ]}, _token(), hass)
+    assert outcome == "invalid_request", content
+    assert not hass.config_entries.async_entries("template")
+    assert not hass.config_entries.flow.async_progress_by_handler("template")
+
+
+async def test_template_creation_rechecks_terminal_boundary(hass):
+    from custom_components.phoenix_mcp.tools import helper
+    prepared = False
+    original_prepare = helper._prepare_config_flow_helper
+    original_body = helper._flow_step_body
+
+    async def prepare(*args):
+        nonlocal prepared
+        result = await original_prepare(*args)
+        prepared = True
+        return result
+
+    def changed_body(*args):
+        body = original_body(*args)
+        if prepared and body and body["step"]["step_id"] == "sensor":
+            body["step"]["last_step"] = False
+        return body
+
+    steps = [{"step_id": "user", "data": {"next_step_id": "sensor"}},
+             {"step_id": "sensor", "data": {"name": "Boundary Probe", "state": "{{ 7 }}"}}]
+    with patch.object(helper, "_prepare_config_flow_helper", side_effect=prepare), patch.object(
+        helper, "_flow_step_body", side_effect=changed_body
+    ):
+        content, outcome, _ = await helper._execute_create_helper(
+            {"helper_type": "template", "flow_steps": steps}, _token(), hass,
+            PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock()),
+        )
+    assert outcome == "invalid_request", content
+    assert "final boundary changed" in content["content"][0]["text"]
+    assert not hass.config_entries.async_entries("template")
+    assert not hass.config_entries.flow.async_progress_by_handler("template")
+
+
+async def test_template_creation_authority_loss_before_final_submit(hass):
+    from custom_components.phoenix_mcp.tools import helper
+    steps = [{"step_id": "user", "data": {"next_step_id": "sensor"}},
+             {"step_id": "sensor", "data": {"name": "Authority Probe", "state": "{{ 7 }}"}}]
+    with patch("custom_components.phoenix_mcp.request_authority.check_request_authority",
+               side_effect=[None, RuntimeError("Authority changed")]) as authority:
+        content, outcome, _ = await helper._execute_create_helper(
+            {"helper_type": "template", "flow_steps": steps}, _token(), hass,
+            PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock()),
+        )
+    assert outcome == "invalid_request", content
+    assert authority.call_count == 2
+    assert not hass.config_entries.async_entries("template")
+    assert not hass.config_entries.flow.async_progress_by_handler("template")

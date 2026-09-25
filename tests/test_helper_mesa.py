@@ -374,3 +374,21 @@ async def test_read_only_blocks_config_flow_helper_settings_before_approval(
     assert "read_only" in content["content"][0]["text"]
     gate.assert_not_awaited()
     assert entry.options["hysteresis"] == 0.0
+
+
+@pytest.mark.parametrize("kind", ["sensor", "binary_sensor"])
+async def test_template_menu_uses_selected_entity_domain_for_mesa(hass, kind):
+    data = await _data(hass)
+    data.mesa.store.set_domain_profile(kind, _profile(kind, "read_only"))
+    gate = AsyncMock()
+    with patch("custom_components.phoenix_mcp.tools.helper._gate", gate):
+        content, outcome, _ = await _call_tool("create_helper", {
+            "helper_type": "template", "flow_steps": [
+                {"step_id": "user", "data": {"next_step_id": kind}},
+                {"step_id": kind, "data": {"name": "MESA Template", "state": "{{ 7 }}"}},
+            ],
+        }, _token(kind), hass, data)
+    assert outcome == "denied", content
+    assert "read_only" in content["content"][0]["text"]
+    gate.assert_not_awaited()
+    assert not hass.config_entries.async_entries("template")

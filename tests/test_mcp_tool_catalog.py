@@ -199,15 +199,15 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
         },
         "write_capable": {
             "tool_count": 94,
-            "canonical_bytes": 92953,
-            "claude_bytes": 83260,
-            "openai_bytes": 85986,
+            "canonical_bytes": 93222,
+            "claude_bytes": 83529,
+            "openai_bytes": 86255,
         },
         "announce_all": {
             "tool_count": 154,
-            "canonical_bytes": 154126,
-            "claude_bytes": 138232,
-            "openai_bytes": 142698,
+            "canonical_bytes": 154460,
+            "claude_bytes": 138566,
+            "openai_bytes": 143032,
         },
     }
     assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 154
