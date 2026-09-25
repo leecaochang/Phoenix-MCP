@@ -12,6 +12,7 @@ from homeassistant.util.dt import utcnow
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.helpers import content_hash
+from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery
 from custom_components.phoenix_mcp.mcp_view import (
     _EXECUTOR_REGISTRY,
     _call_tool,
@@ -58,7 +59,13 @@ async def _call(name, args, token, hass, data=None):
         if "content" in args:
             change["content"] = args.pop("content")
         args.update({"address": address, "change": change})
-    return await _call_tool(name, args, token, hass, data or MagicMock())
+    return await _call_tool(name, args, token, hass, data or _data())
+
+
+def _data():
+    value = MagicMock()
+    value.config_recovery = ConfigurationRecovery()
+    return value
 
 
 class TestExecutorRegistration:
@@ -85,6 +92,7 @@ class TestYamlConfig:
 
         content, outcome, _ = await _call("set_yaml_config", {"content": "default_config:\nfrontend:\n"}, _token(), hass)
         assert outcome == "allowed"
+        assert isinstance(_json(content).get("recovery_id"), str)
         with open(path, encoding="utf-8") as f:
             assert f.read() == "default_config:\nfrontend:\n"
 
@@ -423,7 +431,7 @@ class TestYamlProtectedSubtrees:
     async def test_confirm_mode_refuses_before_creating_an_approval(self, hass):
         """A doomed write must not become a pending approval."""
         self._write(hass, "default_config:\n")
-        data = MagicMock()
+        data = _data()
         data.store.get_pending_approvals.return_value = []
         _, outcome, _ = await _call_tool(
             "set_yaml_config",
@@ -451,7 +459,7 @@ class TestYamlProtectedSubtrees:
         # The admin approves a write that was clean when it was queued...
         self._write(hass, "http:\n  trusted_proxies:\n    - 10.0.0.1\n")
         _, outcome, _ = await _execute_set_yaml_config(
-            {"content": "default_config:\n"}, _token(), hass, MagicMock())
+            {"content": "default_config:\n"}, _token(), hass, _data())
         assert outcome == "invalid_request"
         assert "trusted_proxies" in self._read(hass)
 
@@ -571,7 +579,7 @@ class TestYamlTopLevelKeyRemoval:
         self._write(hass, "default_config:\n")
         self._write(hass, "default_config:\nrecorder:\n")
         _, outcome, _ = await _execute_set_yaml_config(
-            {"content": "default_config:\n"}, _token(), hass, MagicMock())
+            {"content": "default_config:\n"}, _token(), hass, _data())
         assert outcome == "invalid_request"
         assert "recorder" in self._read(hass)
 
@@ -609,7 +617,7 @@ class TestYamlTopLevelKeyRemoval:
         ctx = _restore_ctx.set({"user_id": "admin-1"})
         try:
             _, outcome, _ = await _execute_set_yaml_config(
-                {"content": "default_config:\n"}, _token(), hass, MagicMock())
+                {"content": "default_config:\n"}, _token(), hass, _data())
         finally:
             _restore_ctx.reset(ctx)
         assert outcome == "allowed"
@@ -684,7 +692,7 @@ class TestYamlConfigContentHash:
             f.write("current:\n")
         _, outcome, _ = await _execute_set_yaml_config(
             {"content": "new:\n", "expected_hash": content_hash("stale content")},
-            _token(), hass, MagicMock())
+            _token(), hass, _data())
         assert outcome == "invalid_request"
         with open(path, encoding="utf-8") as f:
             assert f.read() == "current:\n"
@@ -803,7 +811,7 @@ class TestIntegrations:
         entry.add_to_hass(hass)
         token = _token()
         token.pass_through = True
-        data = MagicMock()
+        data = _data()
         data.mesa = None
         data.store.get_settings.return_value.mesa_mode = "off"
         with patch_set_disabled(hass) as mock:
@@ -822,7 +830,7 @@ class TestIntegrations:
         entry.add_to_hass(hass)
         token = _token()
         token.pass_through = True
-        data = MagicMock()
+        data = _data()
         data.mesa = None
         data.store.get_settings.return_value.mesa_mode = "off"
         with patch_set_disabled(hass) as mock:
@@ -872,7 +880,7 @@ class TestConfigYamlSerialization:
         await lock.acquire()
         task = asyncio.create_task(
             _execute_set_yaml_config(
-                {"content": "default_config:\nfrontend:\n"}, _token(), hass, MagicMock(),
+                {"content": "default_config:\nfrontend:\n"}, _token(), hass, _data(),
             )
         )
         try:
@@ -909,21 +917,21 @@ class TestConfigYamlSerialization:
             f.write("a: 0\n")
 
         seen: list[bool] = []
-        real_write = config_files._write_utf8_file_atomic
+        real_write = config_files._write_text_atomic
 
         def _checking_write(target, content):
             seen.append(config_files._get_yaml_file_lock(hass, "configuration.yaml").locked())
             return real_write(target, content)
 
-        monkeypatch.setattr(config_files, "_write_utf8_file_atomic", _checking_write)
+        monkeypatch.setattr(config_files, "_write_text_atomic", _checking_write)
 
         # Both writers keep the same top-level key set and differ only in its
         # value: whichever runs second would otherwise be dropping the other's
         # key and be refused by the removal guard, which is a real refusal but
         # not what this test is about.
         await asyncio.gather(
-            _execute_set_yaml_config({"content": "a: 1\n"}, _token(), hass, MagicMock()),
-            _execute_set_yaml_config({"content": "a: 2\n"}, _token(), hass, MagicMock()),
+            _execute_set_yaml_config({"content": "a: 1\n"}, _token(), hass, _data()),
+            _execute_set_yaml_config({"content": "a: 2\n"}, _token(), hass, _data()),
         )
 
         assert seen == [True, True]
@@ -1074,7 +1082,7 @@ class TestSetYamlConfigTargetsIncludeFiles:
         self._seed(tmp_path, "http: !include templates.yaml\n")
         content, outcome, _ = await _execute_set_yaml_config(
             {"file": "templates.yaml", "content": "trusted_proxies: []\n"},
-            _token(), hass, MagicMock())
+            _token(), hass, _data())
         assert outcome == "invalid_request"
         assert "under http" in content["content"][0]["text"]
         assert (tmp_path / "templates.yaml").read_text(encoding="utf-8") == "[]\n"
@@ -1082,7 +1090,7 @@ class TestSetYamlConfigTargetsIncludeFiles:
     async def test_version_record_names_the_file(self, hass, tmp_path):
         self._seed(tmp_path)
         (tmp_path / "templates.yaml").write_text("[]\n", encoding="utf-8")
-        data = MagicMock()
+        data = _data()
         data.versions.record = AsyncMock()
         _, outcome, _ = await _execute_set_yaml_config(
             {"file": "templates.yaml", "content": "- a\n"}, _token(), hass, data)
@@ -1154,7 +1162,7 @@ class TestPatchYamlConfigTargetsIncludeFiles:
             "http: !include templates.yaml\n", encoding="utf-8")
         content, outcome, _ = await _execute_patch_yaml_config(
             {"file": "templates.yaml", "key": "a", "content": "2"},
-            _token(), hass, MagicMock())
+            _token(), hass, _data())
         assert outcome == "invalid_request"
         assert "under http" in content["content"][0]["text"]
         assert (tmp_path / "templates.yaml").read_text(encoding="utf-8") == "a: 1\n"
@@ -1163,7 +1171,7 @@ class TestPatchYamlConfigTargetsIncludeFiles:
         (tmp_path / "configuration.yaml").write_text(
             "template: !include templates.yaml\n", encoding="utf-8")
         (tmp_path / "templates.yaml").write_text("- a: 1\n", encoding="utf-8")
-        data = MagicMock()
+        data = _data()
         data.versions.record = AsyncMock()
         _, outcome, _ = await _execute_patch_yaml_config(
             {"file": "templates.yaml", "path": [0, "a"], "content": "2"},
@@ -1299,7 +1307,7 @@ class TestListEntryRemovalGuard:
         marker = _restore_ctx.set({"user_id": "admin"})
         try:
             _, outcome, _ = await _execute_set_yaml_config(
-                {"file": "templates.yaml", "content": "- a: 1\n"}, token, hass, MagicMock())
+                {"file": "templates.yaml", "content": "- a: 1\n"}, token, hass, _data())
         finally:
             _restore_ctx.reset(marker)
         assert outcome == "allowed"

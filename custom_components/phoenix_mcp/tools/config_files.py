@@ -50,6 +50,7 @@ come from ..tool_common.
 from __future__ import annotations
 
 from ..request_authority import check_request_authority
+from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
 
 from collections.abc import Sequence
 from typing import Any
@@ -58,7 +59,6 @@ import json
 import logging
 import os
 
-from homeassistant.util.file import write_utf8_file_atomic as _write_utf8_file_atomic
 from homeassistant.core import HomeAssistant
 
 from ..const import CAP_DENY, DOMAIN, FILESYSTEM_ALLOWED_DIRS, MAX_FILE_BYTES, REDACTION_SENTINEL, YAML_PROTECTED_SUBTREES
@@ -74,6 +74,113 @@ _LOGGER = logging.getLogger(__name__)
 
 _CONFIG_YAML = "configuration.yaml"
 _YAML_LOCKS_KEY = f"{DOMAIN}_yaml_file_locks"
+
+
+def _authored_file_snapshot(rel: str, existed: bool, content: str | None,
+                            snapshot_type: str = "authored_file") -> dict:
+    """Serialize one authored file without persisting secret-shaped source text."""
+    if existed != (content is not None):
+        raise ConfigurationRecoveryError("A complete file recovery snapshot is unavailable; nothing was dispatched.")
+    if content is not None and _redact_secrets_in_text(content) != content:
+        raise ConfigurationRecoveryError("The file contains secret-shaped content and cannot be snapshotted safely.")
+    return safe_snapshot({
+        "snapshot_type": snapshot_type, "schema": 1,
+        "resource_id": rel, "exists": existed, "content": content,
+    }) or {}
+
+
+async def _recoverable_file_write(
+    *, path: str, rel: str, before_exists: bool, before_content: str | None,
+    content: str, token: TokenRecord, data: PhoenixData, operation: str,
+    display_path: str, hass: HomeAssistant, snapshot_type: str = "authored_file",
+    return_result: bool = False, recovery_id_out: dict[str, str] | None = None,
+) -> tuple[dict, str, str] | None:
+    """Persist the file-family before image, dispatch once, and verify readback."""
+    recovery = data.config_recovery
+    resource = f"authored_file:{rel}"
+    try:
+        before = _authored_file_snapshot(rel, before_exists, before_content, snapshot_type)
+        async with recovery.resource(resource):
+            rid = await recovery.begin(resource, operation, token.id, before)
+            if recovery_id_out is not None:
+                recovery_id_out["recovery_id"] = rid
+            try:
+                await recovery.mark(rid, "dispatching")
+                current_exists = await hass.async_add_executor_job(os.path.isfile, path)
+                current_content = None
+                if current_exists:
+                    try:
+                        current_content = await hass.async_add_executor_job(_read_text_capped, path)
+                    except (OSError, ValueError):
+                        current_content = None
+                if current_exists != before_exists or current_content != before_content:
+                    await recovery.mark(rid, "not_applied")
+                    return _tool_error("The file changed while preparing its recovery snapshot; nothing was dispatched."), "invalid_request", operation
+                check_request_authority()
+                await hass.async_add_executor_job(_write_text_atomic, path, content)
+                observed = await hass.async_add_executor_job(_read_text_capped, path)
+                if observed != content:
+                    await recovery.mark(rid, "partial", observed_hash=content_hash(observed))
+                    return _tool_success(json.dumps({
+                        "status": "partial", "recovery_id": rid,
+                        "message": "The file write landed but readback differs; do not retry automatically.",
+                    })), "allowed", f"file:{display_path}"
+                await recovery.mark(rid, "verified", observed_hash=content_hash(observed))
+                await recovery.set_source(rid, _authored_file_snapshot(rel, True, observed, snapshot_type))
+                if return_result:
+                    return _tool_success(json.dumps({
+                        "status": "verified", "recovery_id": rid,
+                        "path": rel, "content_hash": content_hash(observed),
+                    })), "allowed", f"file:{display_path}"
+            finally:
+                recovery.leave(rid)
+    except ConfigurationRecoveryError as err:
+        return _tool_error(str(err)), "invalid_request", operation
+    except OSError:
+        _LOGGER.exception("%s recovery write failed for %s", operation, rel)
+        return _tool_error("The file write or its recovery readback failed; inspect configuration recovery before retrying."), "invalid_request", operation
+    return None
+
+
+async def _recoverable_file_delete(
+    *, path: str, rel: str, before_content: str, token: TokenRecord,
+    data: PhoenixData, operation: str, hass: HomeAssistant,
+) -> tuple[dict, str, str]:
+    """Delete one scoped authored file only after persisting and rechecking it."""
+    recovery = data.config_recovery
+    resource = f"authored_file:{rel}"
+    try:
+        before = _authored_file_snapshot(rel, True, before_content)
+        async with recovery.resource(resource):
+            rid = await recovery.begin(resource, operation, token.id, before)
+            try:
+                await recovery.mark(rid, "dispatching")
+                exists = await hass.async_add_executor_job(os.path.isfile, path)
+                current = await hass.async_add_executor_job(_read_text_capped, path) if exists else None
+                if not exists or current != before_content:
+                    await recovery.mark(rid, "not_applied")
+                    return _tool_error("The file changed while preparing its recovery snapshot; nothing was deleted."), "invalid_request", operation
+                check_request_authority()
+                await hass.async_add_executor_job(os.remove, path)
+                if await hass.async_add_executor_job(os.path.exists, path):
+                    await recovery.mark(rid, "partial")
+                    return _tool_success(json.dumps({
+                        "status": "partial", "recovery_id": rid,
+                        "message": "The file delete landed but the path still exists; do not retry automatically.",
+                    })), "allowed", f"file:{rel}"
+                absent = _authored_file_snapshot(rel, False, None)
+                await recovery.mark(rid, "verified")
+                await recovery.set_source(rid, absent)
+                return _tool_success(json.dumps({
+                    "status": "verified", "recovery_id": rid, "path": rel,
+                })), "allowed", f"file:{rel}"
+            finally:
+                recovery.leave(rid)
+    except ConfigurationRecoveryError as err:
+        return _tool_error(str(err)), "invalid_request", operation
+    except OSError:
+        _LOGGER.exception("%s recovery delete failed for %s", operation, rel)
+        return _tool_error("The file delete or its recovery readback failed; inspect configuration recovery before retrying."), "invalid_request", operation
 
 
 def _get_yaml_file_lock(hass: HomeAssistant, rel: str) -> asyncio.Lock:
@@ -256,18 +363,22 @@ async def _execute_write_file(
     conflict = _cas_conflict(args.get("expected_hash"), before_content or "", "write_file")
     if conflict is not None:
         return conflict
-    try:
-        check_request_authority()
-        await hass.async_add_executor_job(_write_text_atomic, target, content)
-    except OSError:
-        _LOGGER.exception("write_file failed")
-        return _tool_error("Failed to write file."), "invalid_request", "write_file"
     # realpath touches the filesystem, so it goes to the executor like the
     # isfile probe above; relpath is pure string work and stays here.
     config_root = await hass.async_add_executor_job(
         os.path.realpath, hass.config.config_dir,
     )
     rel = os.path.relpath(target, config_root)
+    async with _get_yaml_file_lock(hass, rel):
+        recovery_receipt: dict[str, str] = {}
+        recovery_result = await _recoverable_file_write(
+            path=target, rel=rel, before_exists=existed,
+            before_content=before_content, content=content,
+            token=token, data=data, operation="write_file",
+            display_path=path, hass=hass, recovery_id_out=recovery_receipt,
+        )
+    if recovery_result is not None:
+        return recovery_result
     await _record_version(
         data, token, resource_type="file", resource_id=rel,
         action="edit" if existed else "create",
@@ -275,7 +386,10 @@ async def _execute_write_file(
         after=_version_content_payload(content, path=rel),
         alias=rel,
     )
-    return _tool_success(json.dumps({"path": path, "bytes_written": len(content.encode("utf-8"))})), "allowed", f"file:{path}"
+    return _tool_success(json.dumps({
+        "path": path, "bytes_written": len(content.encode("utf-8")),
+        "recovery_id": recovery_receipt.get("recovery_id"),
+    })), "allowed", f"file:{path}"
 
 
 # ---------------------------------------------------------------------------
@@ -817,12 +931,16 @@ async def _execute_set_yaml_config(
         conflict = _cas_conflict(args.get("expected_hash"), before_content or "", "set_yaml_config")
         if conflict is not None:
             return conflict
-        try:
-            check_request_authority()
-            await hass.async_add_executor_job(_write_utf8_file_atomic, path, content)
-        except OSError:
-            _LOGGER.exception("set_yaml_config failed for %s", rel)
-            return _tool_error(f"Failed to write {rel}."), "invalid_request", "set_yaml_config"
+        recovery_receipt: dict[str, str] = {}
+        recovery_result = await _recoverable_file_write(
+            path=path, rel=rel, before_exists=existed,
+            before_content=before_content, content=content,
+            token=token, data=data, operation="set_yaml_config",
+            display_path=rel, hass=hass, snapshot_type="yaml_file",
+            recovery_id_out=recovery_receipt,
+        )
+        if recovery_result is not None:
+            return recovery_result
         # Inside the lock so the history cannot record two writes out of order.
         await _record_version(
             data, token, resource_type="yaml_config", resource_id=rel,
@@ -835,6 +953,7 @@ async def _execute_set_yaml_config(
         _tool_success(json.dumps({
             "path": rel,
             "bytes_written": len(content.encode("utf-8")),
+            "recovery_id": recovery_receipt.get("recovery_id"),
             "note": "Run check_ha_config and restart Home Assistant to apply.",
         })),
         "allowed", "set_yaml_config",
@@ -1030,12 +1149,16 @@ async def _execute_patch_yaml_config(
         conflict = _cas_conflict(args.get("expected_hash"), before_content or "", tool)
         if conflict is not None:
             return conflict
-        try:
-            check_request_authority()
-            await hass.async_add_executor_job(_write_utf8_file_atomic, path, content)
-        except OSError:
-            _LOGGER.exception("patch_yaml_config failed for %s", rel)
-            return _tool_error(f"Failed to write {rel}."), "invalid_request", tool
+        recovery_receipt: dict[str, str] = {}
+        recovery_result = await _recoverable_file_write(
+            path=path, rel=rel, before_exists=existed,
+            before_content=before_content, content=content,
+            token=token, data=data, operation=tool,
+            display_path=rel, hass=hass, snapshot_type="yaml_file",
+            recovery_id_out=recovery_receipt,
+        )
+        if recovery_result is not None:
+            return recovery_result
         # Inside the lock so the history cannot record two writes out of order.
         # The snapshot is the WHOLE file on both sides, so a restore reproduces
         # configuration.yaml exactly as any other yaml_config version does.
@@ -1053,6 +1176,7 @@ async def _execute_patch_yaml_config(
             "key": addressed,
             "op": op,
             "bytes_written": len(content.encode("utf-8")),
+            "recovery_id": recovery_receipt.get("recovery_id"),
             # Structural like patch_dashboard's card ops rather than a blind
             # replace, so the resulting hash is safe to hand back and further
             # patches can be chained without another read.

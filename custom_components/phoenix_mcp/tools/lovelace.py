@@ -40,6 +40,8 @@ from ..helpers import (
 )
 from ..policy_engine import filter_service_response
 from ..token_store import TokenRecord
+from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
+from ..request_authority import check_request_authority
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
     _cas_conflict,
@@ -58,6 +60,139 @@ from ..ws_dispatch import (
     async_save_lovelace_config,
     async_ws_command,
 )
+
+
+def _dashboard_layout_snapshot(url_path: str | None, config: dict | None) -> dict:
+    """Admit a complete dashboard layout snapshot without redaction loss."""
+    if config is not None and not isinstance(config, dict):
+        raise ConfigurationRecoveryError("A complete dashboard layout snapshot is unavailable.")
+    return safe_snapshot({
+        "snapshot_type": "dashboard_layout", "schema": 1,
+        "resource_id": url_path or "lovelace", "url_path": url_path,
+        "exists": config is not None, "config": config,
+    }) or {}
+
+
+async def _dashboard_registry_snapshot(hass: HomeAssistant, dashboard_id: str) -> dict:
+    """Read one dashboard registry row as a complete, secret-safe snapshot."""
+    dashboards = await async_ws_command(hass, "lovelace/dashboards/list", {})
+    if not isinstance(dashboards, list):
+        raise ConfigurationRecoveryError("A complete dashboard registry snapshot is unavailable.")
+    matches = [row for row in dashboards if isinstance(row, dict)
+               and dashboard_id in (row.get("id"), row.get("url_path"))]
+    if len(matches) > 1:
+        raise ConfigurationRecoveryError("Dashboard registry identity is ambiguous; nothing was dispatched.")
+    row = matches[0] if matches else None
+    return safe_snapshot({
+        "snapshot_type": "dashboard_registry", "schema": 1,
+        "resource_id": dashboard_id, "exists": row is not None, "dashboard": row,
+    }) or {}
+
+
+async def _recoverable_dashboard_registry_write(
+    *, dashboard_id: str, before: dict, operation: str, command: str,
+    payload: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+) -> tuple[dict, str, str]:
+    """Persist, serialize, execute and read back a dashboard registry mutation."""
+    recovery = data.config_recovery
+    resource = f"dashboard_registry:{dashboard_id}"
+    try:
+        async with recovery.resource(resource):
+            rid = await recovery.begin(resource, operation, token.id, before)
+            try:
+                await recovery.mark(rid, "dispatching")
+                if await _dashboard_registry_snapshot(hass, dashboard_id) != before:
+                    await recovery.mark(rid, "not_applied")
+                    return _tool_error("The dashboard registry changed while preparing its recovery snapshot; nothing was dispatched."), "invalid_request", operation
+                check_request_authority()
+                try:
+                    result = await async_ws_command(hass, command, payload)
+                except WsDispatchError as exc:
+                    await recovery.mark(rid, "not_applied", error="command_rejected")
+                    return _tool_error(f"Dashboard registry operation failed: {exc}"), "invalid_request", operation
+                try:
+                    after = await _dashboard_registry_snapshot(hass, dashboard_id)
+                except Exception:  # noqa: BLE001 - dispatch may have landed
+                    await recovery.mark(rid, "unknown")
+                    return _tool_success(json.dumps({
+                        "status": "unknown", "recovery_id": rid,
+                        "message": "Dashboard registry operation outcome is unknown; inspect before retrying.",
+                    })), "allowed", f"dashboard:{dashboard_id}"
+                expected_exists = command != "lovelace/dashboards/delete"
+                if after.get("exists") is not expected_exists or (
+                    expected_exists and after.get("dashboard") is None
+                ):
+                    await recovery.mark(rid, "partial", observed=after)
+                    return _tool_success(json.dumps({
+                        "status": "partial", "recovery_id": rid,
+                        "dashboard": result,
+                        "message": "Dashboard registry readback differs; do not retry automatically.",
+                    }, default=str)), "allowed", f"dashboard:{dashboard_id}"
+                await recovery.mark(rid, "verified", observed_hash=content_hash(after))
+                await recovery.set_source(rid, after)
+                return _tool_success(json.dumps({
+                    "status": "verified", "recovery_id": rid, "dashboard": result,
+                }, default=str)), "allowed", f"dashboard:{dashboard_id}"
+            finally:
+                recovery.leave(rid)
+    except ConfigurationRecoveryError as exc:
+        return _tool_error(str(exc)), "invalid_request", operation
+    except Exception:  # noqa: BLE001 - retain unresolved state on persistence or authority errors
+        return _tool_error("Dashboard registry outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", operation
+
+
+async def _recoverable_dashboard_save(
+    *, url_path: str | None, before: dict | None, after: dict,
+    token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    return_result: bool = False,
+) -> tuple[dict, str, str] | None:
+    """Persist and verify one dashboard-layout write under its resource lock."""
+    resource_id = url_path or "lovelace"
+    resource = f"dashboard_layout:{resource_id}"
+    recovery = data.config_recovery
+    try:
+        before_snapshot = _dashboard_layout_snapshot(url_path, before)
+        async with recovery.resource(resource):
+            rid = await recovery.begin(resource, "dashboard_layout_write", token.id, before_snapshot)
+            try:
+                await recovery.mark(rid, "dispatching")
+                try:
+                    current = await async_get_lovelace_config(hass, url_path)
+                except WsDashboardNotFoundError:
+                    current = None
+                if current != before:
+                    await recovery.mark(rid, "not_applied")
+                    return _tool_error("The dashboard layout changed while preparing its recovery snapshot; nothing was dispatched."), "invalid_request", "dashboard"
+                check_request_authority()
+                try:
+                    await async_save_lovelace_config(hass, url_path, after)
+                except WsDispatchError as exc:
+                    await recovery.mark(rid, "not_applied", error="save_rejected")
+                    return _tool_error(f"Failed to save dashboard config: {exc}"), "invalid_request", "dashboard"
+                try:
+                    observed = await async_get_lovelace_config(hass, url_path)
+                except WsDashboardNotFoundError:
+                    observed = None
+                if observed != after:
+                    await recovery.mark(rid, "partial", observed_hash=content_hash(observed or {}))
+                    return _tool_success(json.dumps({
+                        "status": "partial", "recovery_id": rid,
+                        "message": "Dashboard layout write landed but readback differs; do not retry automatically.",
+                    })), "allowed", f"dashboard:{resource_id}"
+                await recovery.mark(rid, "verified", observed_hash=content_hash(observed))
+                await recovery.set_source(rid, _dashboard_layout_snapshot(url_path, observed))
+                if return_result:
+                    return _tool_success(json.dumps({
+                        "status": "verified", "recovery_id": rid,
+                        "url_path": url_path, "content_hash": content_hash(observed),
+                    })), "allowed", f"dashboard:{resource_id}"
+            finally:
+                recovery.leave(rid)
+    except ConfigurationRecoveryError as exc:
+        return _tool_error(str(exc)), "invalid_request", "dashboard"
+    except Exception:  # noqa: BLE001 - keep uncertain writes in the recovery store
+        return _tool_error("Dashboard layout outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", "dashboard"
+    return None
 
 
 async def _tool_list_dashboards(
@@ -237,11 +372,19 @@ async def _execute_create_dashboard(
     config = args.get("config")
     if not isinstance(config, dict) or not config:
         return _tool_error("config must be a non-empty object (at least url_path and title)."), "invalid_request", "create_dashboard"
+    url_path = str(config.get("url_path") or "").strip()
+    if not url_path:
+        return _tool_error("config.url_path is required for recoverable dashboard creation."), "invalid_request", "create_dashboard"
     try:
-        item = await async_ws_command(hass, "lovelace/dashboards/create", dict(config))
-    except WsDispatchError as exc:
-        return _tool_error(f"Failed to create dashboard: {exc}"), "invalid_request", "create_dashboard"
-    return _tool_success(json.dumps({"dashboard": item}, default=str)), "allowed", "create_dashboard"
+        before = await _dashboard_registry_snapshot(hass, url_path)
+        if before.get("exists"):
+            return _tool_error("A dashboard already uses this url_path."), "invalid_request", "create_dashboard"
+    except (WsDispatchError, ConfigurationRecoveryError) as exc:
+        return _tool_error(f"Could not capture dashboard registry snapshot: {exc}"), "invalid_request", "create_dashboard"
+    return await _recoverable_dashboard_registry_write(
+        dashboard_id=url_path, before=before, operation="dashboard_registry_create",
+        command="lovelace/dashboards/create", payload=dict(config), token=token, hass=hass, data=data,
+    )
 
 
 async def _tool_edit_dashboard(
@@ -274,10 +417,16 @@ async def _execute_edit_dashboard(
     if not isinstance(config, dict):
         return _tool_error("config must be an object."), "invalid_request", "edit_dashboard"
     try:
-        item = await async_ws_command(hass, "lovelace/dashboards/update", {"dashboard_id": dashboard_id, **config})
-    except WsDispatchError as exc:
-        return _tool_error(f"Failed to edit dashboard: {exc}"), "invalid_request", "edit_dashboard"
-    return _tool_success(json.dumps({"dashboard": item}, default=str)), "allowed", f"dashboard:{dashboard_id}"
+        before = await _dashboard_registry_snapshot(hass, dashboard_id)
+        if not before.get("exists"):
+            return _tool_error("No dashboard found with that dashboard_id."), "invalid_request", "edit_dashboard"
+    except (WsDispatchError, ConfigurationRecoveryError) as exc:
+        return _tool_error(f"Could not capture dashboard registry snapshot: {exc}"), "invalid_request", "edit_dashboard"
+    return await _recoverable_dashboard_registry_write(
+        dashboard_id=dashboard_id, before=before, operation="dashboard_registry_edit",
+        command="lovelace/dashboards/update", payload={"dashboard_id": dashboard_id, **config},
+        token=token, hass=hass, data=data,
+    )
 
 
 async def _tool_delete_dashboard(
@@ -307,10 +456,16 @@ async def _execute_delete_dashboard(
     if not dashboard_id:
         return _tool_error("dashboard_id is required."), "invalid_request", "delete_dashboard"
     try:
-        await async_ws_command(hass, "lovelace/dashboards/delete", {"dashboard_id": dashboard_id})
-    except WsDispatchError as exc:
-        return _tool_error(f"Failed to delete dashboard: {exc}"), "invalid_request", "delete_dashboard"
-    return _tool_success(f"Dashboard '{dashboard_id}' deleted successfully."), "allowed", f"dashboard:{dashboard_id}"
+        before = await _dashboard_registry_snapshot(hass, dashboard_id)
+        if not before.get("exists"):
+            return _tool_error("No dashboard found with that dashboard_id."), "invalid_request", "delete_dashboard"
+    except (WsDispatchError, ConfigurationRecoveryError) as exc:
+        return _tool_error(f"Could not capture dashboard registry snapshot: {exc}"), "invalid_request", "delete_dashboard"
+    return await _recoverable_dashboard_registry_write(
+        dashboard_id=dashboard_id, before=before, operation="dashboard_registry_delete",
+        command="lovelace/dashboards/delete", payload={"dashboard_id": dashboard_id},
+        token=token, hass=hass, data=data,
+    )
 
 
 def _no_stored_config_message(url_path: str | None) -> str:
@@ -471,10 +626,11 @@ async def _execute_set_dashboard_config(
     conflict = _cas_conflict(args.get("expected_hash"), before, "set_dashboard_config")
     if conflict is not None:
         return conflict
-    try:
-        await async_save_lovelace_config(hass, url_path, config)
-    except WsDispatchError as exc:
-        return _tool_error(f"Failed to save dashboard config: {exc}"), "denied", "set_dashboard_config"
+    recovery_result = await _recoverable_dashboard_save(
+        url_path=url_path, before=before, after=config, token=token, hass=hass, data=data,
+    )
+    if recovery_result is not None:
+        return recovery_result
     await _record_version(
         data, token, resource_type="dashboard", resource_id=resource_id,
         action="edit" if before is not None else "create",
@@ -723,10 +879,11 @@ async def _execute_dashboard_card(
         return _tool_error(reason or "Invalid card operation."), "invalid_request", tool_name
     url_path = str(args.get("url_path") or "").strip() or None
     resource_id = url_path or "lovelace"
-    try:
-        await async_save_lovelace_config(hass, url_path, new_config)
-    except WsDispatchError as exc:
-        return _tool_error(f"Failed to save dashboard config: {exc}"), "denied", tool_name
+    recovery_result = await _recoverable_dashboard_save(
+        url_path=url_path, before=current, after=new_config, token=token, hass=hass, data=data,
+    )
+    if recovery_result is not None:
+        return recovery_result
     # The version record's full layout snapshot cannot say WHICH card moved, so
     # the summary carries the op context for the Changes list.
     raw_card = args.get("card")
@@ -935,10 +1092,11 @@ async def _execute_patch_dashboard(
         return _tool_error(reason or "Invalid patch operation."), "invalid_request", tool
     url_path = str_arg(args.get("url_path")).strip() or None
     resource_id = url_path or "lovelace"
-    try:
-        await async_save_lovelace_config(hass, url_path, new_config)
-    except WsDispatchError as exc:
-        return _tool_error(f"Failed to save dashboard config: {exc}"), "invalid_request", tool
+    recovery_result = await _recoverable_dashboard_save(
+        url_path=url_path, before=current, after=new_config, token=token, hass=hass, data=data,
+    )
+    if recovery_result is not None:
+        return recovery_result
     op = _patch_op_arg(args)
     path_label = _patch_path_label(args.get("path"))
     await _record_version(

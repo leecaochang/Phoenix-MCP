@@ -38,6 +38,9 @@ from ..const import (
 )
 from ..data import PhoenixData
 from ..helpers import diff_summary_fields as _summary, effective_cap
+from ..helpers import content_hash, redact_secrets_in_text
+from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
+from ..request_authority import check_request_authority
 from ..token_store import TokenRecord
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
@@ -311,6 +314,17 @@ async def _read_blueprint_source(hass: HomeAssistant, target: str) -> str | None
         return None
 
 
+def _blueprint_recovery_snapshot(domain: str, rel: str, content: str | None) -> dict:
+    """Capture exact blueprint source only when textual secret scrubbing is lossless."""
+    if content is not None and redact_secrets_in_text(content) != content:
+        raise ConfigurationRecoveryError("Blueprint source contains secret-shaped content and cannot be snapshotted safely.")
+    return safe_snapshot({
+        "snapshot_type": "blueprint_source", "schema": 1,
+        "domain": domain, "path": rel,
+        "exists": content is not None, "content": content,
+    }) or {}
+
+
 async def _build_diff_blueprint(
     args: dict, hass: HomeAssistant, op: str
 ) -> dict:
@@ -439,13 +453,42 @@ async def _save_blueprint(
             "A blueprint already exists at that path; use edit_blueprint to replace it."
         ), "invalid_request", tool_name
     consumers = await hass.async_add_executor_job(_blueprint_consumers, hass, domain, rel)
+    resource = f"blueprint:{domain}/{rel}"
+    recovery = data.config_recovery
     try:
-        result = await async_ws_command(hass, "blueprint/save", {
-            "domain": domain, "path": rel, "yaml": content,
-            "allow_override": allow_override,
-        })
-    except WsDispatchError as exc:
-        return _tool_error(f"Failed to save blueprint: {exc}"), "invalid_request", tool_name
+        before_snapshot = _blueprint_recovery_snapshot(domain, rel, before)
+        async with recovery.resource(resource):
+            rid = await recovery.begin(resource, tool_name, token.id, before_snapshot)
+            try:
+                await recovery.mark(rid, "dispatching")
+                if await _read_blueprint_source(hass, target) != before:
+                    await recovery.mark(rid, "not_applied")
+                    return _tool_error("The blueprint changed while preparing its recovery snapshot; nothing was dispatched."), "invalid_request", tool_name
+                check_request_authority()
+                try:
+                    result = await async_ws_command(hass, "blueprint/save", {
+                        "domain": domain, "path": rel, "yaml": content,
+                        "allow_override": allow_override,
+                    })
+                except WsDispatchError as exc:
+                    await recovery.mark(rid, "not_applied", error="save_rejected")
+                    return _tool_error(f"Failed to save blueprint: {exc}"), "invalid_request", tool_name
+                observed = await _read_blueprint_source(hass, target)
+                if observed != content:
+                    await recovery.mark(rid, "partial", observed_hash=content_hash(observed or ""))
+                    return _tool_success(json.dumps({
+                        "status": "partial", "recovery_id": rid,
+                        "message": "Blueprint save landed but readback differs; do not retry automatically.",
+                    })), "allowed", resource
+                await recovery.mark(rid, "verified", observed_hash=content_hash(observed or ""))
+                await recovery.set_source(rid, _blueprint_recovery_snapshot(domain, rel, observed))
+            finally:
+                recovery.leave(rid)
+    except ConfigurationRecoveryError as exc:
+        return _tool_error(str(exc)), "invalid_request", tool_name
+    except Exception:  # noqa: BLE001 - retain the dispatch record when readback is incomplete
+        _LOGGER.exception("blueprint recovery transaction failed for %s", resource)
+        return _tool_error("Blueprint save outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", tool_name
     await _record_version(
         data, token, resource_type="blueprint", resource_id=f"{domain}/{rel}",
         action="edit" if before is not None else "create",
@@ -458,6 +501,7 @@ async def _save_blueprint(
         "path": rel,
         "saved": True,
         "overrides_existing": bool((result or {}).get("overrides_existing")) if isinstance(result, dict) else before is not None,
+        "recovery_id": rid,
     }
     if consumers:
         body["reloaded"] = consumers
@@ -496,16 +540,42 @@ async def _execute_delete_blueprint(
     before = await _read_blueprint_source(hass, target)
     if before is None:
         return _tool_error("Blueprint not found."), "not_found", "delete_blueprint"
+    resource = f"blueprint:{domain}/{rel}"
+    recovery = data.config_recovery
     try:
-        await async_ws_command(hass, "blueprint/delete", {"domain": domain, "path": rel})
-    except WsDispatchError as exc:
-        # HA refuses while any automation or script still uses the blueprint
-        # (BlueprintInUse), which is a legitimate outcome, not a Phoenix failure.
-        return _tool_error(f"Failed to delete blueprint: {exc}"), "invalid_request", "delete_blueprint"
+        before_snapshot = _blueprint_recovery_snapshot(domain, rel, before)
+        async with recovery.resource(resource):
+            rid = await recovery.begin(resource, "delete_blueprint", token.id, before_snapshot)
+            try:
+                await recovery.mark(rid, "dispatching")
+                if await _read_blueprint_source(hass, target) != before:
+                    await recovery.mark(rid, "not_applied")
+                    return _tool_error("The blueprint changed while preparing its recovery snapshot; nothing was dispatched."), "invalid_request", "delete_blueprint"
+                check_request_authority()
+                try:
+                    await async_ws_command(hass, "blueprint/delete", {"domain": domain, "path": rel})
+                except WsDispatchError as exc:
+                    await recovery.mark(rid, "not_applied", error="delete_rejected")
+                    return _tool_error(f"Failed to delete blueprint: {exc}"), "invalid_request", "delete_blueprint"
+                if await _read_blueprint_source(hass, target) is not None:
+                    await recovery.mark(rid, "partial", observed="blueprint_still_exists")
+                    return _tool_success(json.dumps({
+                        "status": "partial", "recovery_id": rid,
+                        "message": "Blueprint delete was submitted but the file remains; do not retry automatically.",
+                    })), "allowed", resource
+                await recovery.mark(rid, "verified", observed="blueprint_absent")
+                await recovery.set_source(rid, _blueprint_recovery_snapshot(domain, rel, None))
+            finally:
+                recovery.leave(rid)
+    except ConfigurationRecoveryError as exc:
+        return _tool_error(str(exc)), "invalid_request", "delete_blueprint"
+    except Exception:  # noqa: BLE001 - keep incomplete outcomes recoverable
+        _LOGGER.exception("blueprint deletion recovery failed for %s", resource)
+        return _tool_error("Blueprint delete outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", "delete_blueprint"
     await _record_version(
         data, token, resource_type="blueprint", resource_id=f"{domain}/{rel}",
         action="delete", before=_version_content_payload(before), after=None, alias=rel,
     )
     return _tool_success(json.dumps({
-        "domain": domain, "path": rel, "deleted": True,
+        "domain": domain, "path": rel, "deleted": True, "recovery_id": rid,
     }, default=str)), "allowed", f"blueprint:{domain}/{rel}"

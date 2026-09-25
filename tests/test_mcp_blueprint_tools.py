@@ -94,9 +94,23 @@ def _write_existing(tmp_path, rel="author/existing.yaml", body=VALID):
 
 
 def _patch_ws(side_effect=None, return_value=None):
+    import os
+
+    upstream = AsyncMock(side_effect=side_effect, return_value=return_value)
+
+    async def dispatch(hass, command, payload, **kwargs):
+        result = await upstream(hass, command, payload, **kwargs)
+        target = hass.config.path("blueprints", payload["domain"], payload["path"])
+        if command == "blueprint/save":
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target, "w", encoding="utf-8") as stream:
+                stream.write(payload["yaml"])
+        elif command == "blueprint/delete" and os.path.isfile(target):
+            os.remove(target)
+        return result
+
     return patch.object(
-        blueprint_tools, "async_ws_command",
-        new=AsyncMock(side_effect=side_effect, return_value=return_value))
+        blueprint_tools, "async_ws_command", new=AsyncMock(side_effect=dispatch))
 
 
 def _patch_consumers(entities):
@@ -274,6 +288,7 @@ class TestCreate:
                 _token(), hass, data)
         assert outcome == "allowed"
         assert resource == "blueprint:automation/author/new.yaml"
+        assert isinstance(_json(content).get("recovery_id"), str)
         assert ws.await_args.args[1] == "blueprint/save"
         payload = ws.await_args.args[2]
         assert payload["allow_override"] is False
@@ -319,6 +334,7 @@ class TestEdit:
                 _token(), hass, data)
         assert outcome == "allowed"
         assert ws.await_args.args[2]["allow_override"] is True
+        assert isinstance(_json(_content).get("recovery_id"), str)
         rec = versions.list_recent()[0]
         assert rec.action == "edit"
         assert "Test Blueprint" in rec.before["content"]
@@ -361,6 +377,7 @@ class TestDelete:
         assert outcome == "allowed"
         assert ws.await_args.args[1] == "blueprint/delete"
         assert _json(content)["deleted"] is True
+        assert isinstance(_json(content).get("recovery_id"), str)
         rec = versions.list_recent()[0]
         assert rec.action == "delete"
         assert "Test Blueprint" in rec.before["content"]
@@ -484,7 +501,7 @@ class TestBlueprintRestore:
             await _call("delete_blueprint",
                         {"domain": "automation", "path": "author/existing.yaml"},
                         token, hass, data)
-        os.remove(target)  # the mocked WS command never touched disk; HA would have
+        assert not os.path.isfile(target)  # the mock applies HA's validated delete effect
         del_ver = versions.list_for("blueprint", "automation/author/existing.yaml")[0]
         assert del_ver.action == "delete"
 

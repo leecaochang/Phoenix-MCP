@@ -16,6 +16,7 @@ import pytest
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp import yaml_patch
+from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery
 from custom_components.phoenix_mcp.helpers import content_hash
 from custom_components.phoenix_mcp.mcp_view import _EXECUTOR_REGISTRY, _call_tool
 from custom_components.phoenix_mcp.tools.config_files import (
@@ -83,7 +84,13 @@ async def _call(args, token, hass, data=None):
     if "content" in args:
         change["content"] = args.pop("content")
     args.update({"address": address, "change": change})
-    return await _call_tool("patch_yaml_config", args, token, hass, data or MagicMock())
+    return await _call_tool("patch_yaml_config", args, token, hass, data or _data())
+
+
+def _data():
+    value = MagicMock()
+    value.config_recovery = ConfigurationRecovery()
+    return value
 
 
 def _patch(text, key, op="set", content=None, path=None):
@@ -252,6 +259,7 @@ class TestPatchTool:
         assert outcome == "allowed"
         body = _json(content)
         assert body["key"] == "recorder.purge_keep_days" and body["op"] == "set"
+        assert isinstance(body.get("recovery_id"), str)
         assert _read(hass) == SAMPLE.replace("purge_keep_days: 10", "purge_keep_days: 30")
 
     async def test_append_uses_the_structured_change_contract(self, hass):
@@ -289,7 +297,7 @@ class TestPatchTool:
         """
         _write(hass)
         content, outcome, _ = await _call_tool(
-            "get_yaml_config", {"key": key}, _token(), hass, MagicMock())
+            "get_yaml_config", {"key": key}, _token(), hass, _data())
         assert outcome == "allowed"
         fragment = _json(content)["content"]
         _, outcome, _ = await _call({"key": key, "content": fragment}, _token(), hass)
@@ -322,7 +330,7 @@ class TestPatchTool:
     async def test_a_bad_key_is_refused_before_an_approval_exists(self, hass):
         """Rule 29: a doomed patch must not become a pending approval."""
         _write(hass)
-        data = MagicMock()
+        data = _data()
         data.store.get_pending_approvals.return_value = []
         _, outcome, _ = await _call(
             {"key": "recorder.include.entities", "content": "- sensor.a"},
@@ -371,7 +379,7 @@ class TestPatchTool:
         _write(hass)
         args = {"key": "recorder.include", "content": "entities:\n  - sensor.a\n"}
         _write(hass, "default_config:\n")  # recorder is gone by approval time
-        _, outcome, _ = await _execute_patch_yaml_config(args, _token(), hass, MagicMock())
+        _, outcome, _ = await _execute_patch_yaml_config(args, _token(), hass, _data())
         assert outcome == "invalid_request"
         assert _read(hass) == "default_config:\n"
 

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -11,8 +12,10 @@ from homeassistant.helpers import entity_registry as er
 
 from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery, ConfigurationRecoveryError
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _restore_token
+from custom_components.phoenix_mcp.mcp_view import _restore_token, _call_tool
+from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
 from custom_components.phoenix_mcp.template_recovery import template_snapshot, restore_template
+from homeassistant.util.dt import utcnow
 
 
 def data():
@@ -113,6 +116,232 @@ async def test_real_template_recreation_preserves_identity(hass, kind):
     assert runtime.config_recovery.records()[0]["phase"] == "verified"
 
 
+def _template_agent(domain: str, *, token_id: str | None = None) -> TokenRecord:
+    return TokenRecord(
+        id=token_id or uuid.uuid4().hex, name="template-agent", token_hash="x",
+        created_at=utcnow(), created_by="test",
+        permissions=PermissionTree(domains={domain: PermissionNode(state="GREEN")}),
+        cap_helper_write="allow", cap_registry_read="allow",
+    )
+
+
+async def test_agent_template_restore_is_owner_scoped_and_rechecks_target(hass):
+    from custom_components.phoenix_mcp.tools.helper import _execute_set_config_entry_options
+
+    entry = await create_template(hass)
+    domain = entry.options["template_type"]
+    token = _template_agent(domain)
+    runtime = data()
+    source = template_snapshot(hass, entry)
+    await _execute_set_config_entry_options(
+        {"entry_id": entry.entry_id, "settings": {"state": "{{ 8 }}"}},
+        token, hass, runtime,
+    )
+    recovery_id = await runtime.config_recovery.begin(
+        f"config_entry:{entry.entry_id}", "test_agent_restore", token.id, source,
+    )
+    await runtime.config_recovery.mark(recovery_id, "verified")
+
+    receipt, outcome, _ = await _call_tool(
+        "restore_configuration", {"recovery_id": recovery_id, "side": "before"},
+        token, hass, runtime,
+    )
+    assert outcome == "allowed"
+    body = json.loads(receipt["content"][0]["text"])
+    assert body["status"] == "needs_confirmation"
+    assert body["adapter"]["type"] == "sensor"
+
+    stranger = _template_agent(domain)
+    result, outcome, _ = await _call_tool(
+        "restore_configuration", {"recovery_id": recovery_id, "side": "before"},
+        stranger, hass, runtime,
+    )
+    assert outcome == "not_found"
+
+    stale = dict(body)
+    stale["target_fingerprint"] = "stale"
+    result, outcome, _ = await _call_tool(
+        "restore_configuration", {
+            "recovery_id": recovery_id, "side": "before",
+            "snapshot_digest": stale["snapshot_digest"],
+            "target_fingerprint": stale["target_fingerprint"],
+        }, token, hass, runtime,
+    )
+    assert outcome == "invalid_request"
+    assert "changed" in result["content"][0]["text"]
+
+    result, outcome, _ = await _call_tool(
+        "restore_configuration", {
+            "recovery_id": recovery_id, "side": "before",
+            "snapshot_digest": body["snapshot_digest"],
+            "target_fingerprint": body["target_fingerprint"],
+        }, token, hass, runtime,
+    )
+    assert outcome == "allowed", result
+    assert entry.options["state"] == source["options"]["state"]
+
+
+async def test_agent_authored_file_restore_rechecks_digest_and_target(hass):
+    from custom_components.phoenix_mcp.helpers import content_hash
+    from custom_components.phoenix_mcp.tools.config_files import _authored_file_snapshot
+    from custom_components.phoenix_mcp.tools.recovery import _execute_restore_configuration
+
+    token = TokenRecord(
+        id=uuid.uuid4().hex, name="file-agent", token_hash="x",
+        created_at=utcnow(), created_by="test", permissions=PermissionTree(),
+        cap_filesystem="allow",
+    )
+    path = hass.config.path("www", "recovery-smoke.txt")
+    from pathlib import Path
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path(path).write_text("current", encoding="utf-8")
+    snapshot = _authored_file_snapshot("www/recovery-smoke.txt", True, "before")
+    runtime = data()
+    rid = await runtime.config_recovery.begin(
+        "authored_file:www/recovery-smoke.txt", "write_file", token.id, snapshot,
+    )
+    await runtime.config_recovery.mark(rid, "verified")
+    target = _authored_file_snapshot("www/recovery-smoke.txt", True, "current")
+    bound = {
+        "recovery_id": rid, "side": "before",
+        "snapshot_digest": content_hash(snapshot),
+        "target_fingerprint": content_hash(target),
+    }
+
+    result, outcome, _ = await _execute_restore_configuration(bound, token, hass, runtime)
+
+    body = json.loads(result["content"][0]["text"])
+    assert outcome == "allowed", body
+    assert body["status"] == "verified"
+    assert Path(path).read_text(encoding="utf-8") == "before"
+
+
+async def test_agent_authored_file_restore_removes_created_file(hass):
+    from pathlib import Path
+    from custom_components.phoenix_mcp.helpers import content_hash
+    from custom_components.phoenix_mcp.tools.config_files import _authored_file_snapshot
+    from custom_components.phoenix_mcp.tools.recovery import _execute_restore_configuration
+
+    token = TokenRecord(
+        id=uuid.uuid4().hex, name="file-agent", token_hash="x",
+        created_at=utcnow(), created_by="test", permissions=PermissionTree(),
+        cap_filesystem="allow",
+    )
+    rel = "www/recovery-created.txt"
+    path = Path(hass.config.path(rel))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("created", encoding="utf-8")
+    absent = _authored_file_snapshot(rel, False, None)
+    current = _authored_file_snapshot(rel, True, "created")
+    runtime = data()
+    rid = await runtime.config_recovery.begin(
+        f"authored_file:{rel}", "write_file", token.id, absent, source=current,
+    )
+    await runtime.config_recovery.mark(rid, "verified")
+    result, outcome, _ = await _execute_restore_configuration({
+        "recovery_id": rid, "side": "before",
+        "snapshot_digest": content_hash(absent),
+        "target_fingerprint": content_hash(current),
+    }, token, hass, runtime)
+
+    body = json.loads(result["content"][0]["text"])
+    assert outcome == "allowed", body
+    assert body["status"] == "verified"
+    assert not path.exists()
+    assert runtime.config_recovery.records()[0]["source"] == absent
+
+
+async def test_agent_blueprint_restore_uses_ha_blueprint_command(hass):
+    from pathlib import Path
+    from custom_components.phoenix_mcp.helpers import content_hash
+    from custom_components.phoenix_mcp.tools.blueprint import _blueprint_recovery_snapshot
+    from custom_components.phoenix_mcp.tools.recovery import _execute_restore_configuration
+
+    token = TokenRecord(
+        id=uuid.uuid4().hex, name="blueprint-agent", token_hash="x",
+        created_at=utcnow(), created_by="test", permissions=PermissionTree(),
+        cap_blueprint_write="allow", cap_automation_write="allow",
+    )
+    path = Path(hass.config.path("blueprints", "automation", "author", "restore.yaml"))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("blueprint: current\n", encoding="utf-8")
+    snapshot = _blueprint_recovery_snapshot("automation", "author/restore.yaml", "blueprint: before\n")
+    target = _blueprint_recovery_snapshot("automation", "author/restore.yaml", "blueprint: current\n")
+    runtime = data()
+    rid = await runtime.config_recovery.begin(
+        "blueprint:automation/author/restore.yaml", "edit_blueprint", token.id, snapshot,
+    )
+    await runtime.config_recovery.mark(rid, "verified")
+
+    async def ws(_hass, command, payload):
+        assert command == "blueprint/save"
+        path.write_text(payload["yaml"], encoding="utf-8")
+        return {"overrides_existing": True}
+
+    with patch("custom_components.phoenix_mcp.ws_dispatch.async_ws_command", AsyncMock(side_effect=ws)):
+        result, outcome, _ = await _execute_restore_configuration({
+            "recovery_id": rid, "side": "before",
+            "snapshot_digest": content_hash(snapshot),
+            "target_fingerprint": content_hash(target),
+        }, token, hass, runtime)
+
+    body = json.loads(result["content"][0]["text"])
+    assert outcome == "allowed", body
+    assert body["status"] == "verified"
+    assert path.read_text(encoding="utf-8") == "blueprint: before\n"
+
+
+async def test_agent_dashboard_registry_restore_uses_dashboard_command(hass):
+    from custom_components.phoenix_mcp.helpers import content_hash
+    from custom_components.phoenix_mcp.tools.recovery import _execute_restore_configuration
+
+    token = TokenRecord(
+        id=uuid.uuid4().hex, name="dashboard-agent", token_hash="x",
+        created_at=utcnow(), created_by="test", permissions=PermissionTree(),
+        cap_lovelace_write="allow",
+    )
+    row = {"id": "dash-1", "url_path": "dashboard-one", "title": "Current"}
+    rows = [dict(row)]
+
+    async def ws(_hass, command, payload=None):
+        if command == "lovelace/dashboards/list":
+            return [dict(item) for item in rows]
+        if command == "lovelace/dashboards/update":
+            current = next(item for item in rows if item["id"] == payload["dashboard_id"])
+            current.update({k: v for k, v in payload.items() if k != "dashboard_id"})
+            return dict(current)
+        raise AssertionError(command)
+
+    snapshot = {
+        "snapshot_type": "dashboard_registry", "schema": 1,
+        "resource_id": "dashboard-one", "exists": True,
+        "dashboard": {"id": "dash-1", "url_path": "dashboard-one", "title": "Before"},
+    }
+    runtime = data()
+    rid = await runtime.config_recovery.begin(
+        "dashboard_registry:dashboard-one", "edit_dashboard", token.id, snapshot,
+    )
+    await runtime.config_recovery.mark(rid, "verified")
+    target = {
+        "snapshot_type": "dashboard_registry", "schema": 1,
+        "resource_id": "dashboard-one", "exists": True, "dashboard": row,
+    }
+    with patch("custom_components.phoenix_mcp.tools.lovelace.async_ws_command", AsyncMock(side_effect=ws)), patch(
+        "custom_components.phoenix_mcp.ws_dispatch.async_ws_command", AsyncMock(side_effect=ws),
+    ):
+        result, outcome, _ = await _execute_restore_configuration({
+            "recovery_id": rid, "side": "before",
+            "snapshot_digest": content_hash(snapshot),
+            "target_fingerprint": content_hash(target),
+        }, token, hass, runtime)
+
+    body = json.loads(result["content"][0]["text"])
+    assert outcome == "allowed", body
+    assert body["status"] == "verified"
+    assert rows[0]["title"] == "Before"
+    assert runtime.config_recovery.records()[0]["operation"] == "dashboard_registry_restore"
+
+
 async def test_real_template_collision_never_creates(hass):
     entry = await create_template(hass)
     snapshot = template_snapshot(hass, entry)
@@ -144,6 +373,39 @@ async def test_real_template_settings_and_deleted_restore_from_history(hass):
     assert version.before["snapshot_type"] == "template_helper"
     result, outcome, _ = await async_restore_version(version, "admin", hass, runtime)
     assert outcome == "allowed", result
+
+
+async def test_invalid_template_settings_do_not_create_recovery_barrier(hass):
+    """A field rejected by the real options schema cannot block the next edit."""
+    from custom_components.phoenix_mcp.tools.helper import _execute_set_config_entry_options
+
+    entry = await create_template(hass)
+    runtime = data()
+    token = _restore_token("admin")
+    result, outcome, _ = await _execute_set_config_entry_options(
+        {"entry_id": entry.entry_id, "settings": {"name": "Rejected rename"}},
+        token, hass, runtime,
+    )
+    assert outcome == "invalid_request"
+    assert "rejected" in result["content"][0]["text"]
+    assert runtime.config_recovery.records() == []
+    assert entry.options["state"] == "{{ 7 }}"
+    result, outcome, _ = await _execute_set_config_entry_options(
+        {"entry_id": entry.entry_id, "settings": {"state": "{{ 8 }}"}},
+        token, hass, runtime,
+    )
+    assert outcome == "allowed", result
+    assert entry.options["state"] == "{{ 8 }}"
+
+
+def test_numeric_version_is_not_a_helper_entity_reference():
+    """Update version strings coexist with recursively scoped entity targets."""
+    from custom_components.phoenix_mcp.tools.helper import _entities_in_options
+
+    assert _entities_in_options({
+        "installed_version": "1.0", "latest_version": "2.0",
+        "install": [{"target": {"entity_id": "update.firmware"}}],
+    }) == {"update.firmware"}
 
 
 async def test_template_storage_failure_prevents_removal(hass):
@@ -311,15 +573,20 @@ async def test_admin_recovery_requires_ha_admin_and_keeps_active_records(hass):
     assert runtime.config_recovery.get(rid)["reviewed_by"] == "admin"
 
 
-async def test_template_change_during_form_preparation_never_submits(hass):
+@pytest.mark.parametrize("change_on_call", [1, 2])
+async def test_template_change_during_form_preparation_never_submits(hass, change_on_call):
     from custom_components.phoenix_mcp.tools import helper
     entry = await create_template(hass)
     runtime = data()
     original = helper._init_settings_flow
+    calls = 0
 
     async def changed(*args):
+        nonlocal calls
+        calls += 1
         form = await original(*args)
-        hass.config_entries.async_update_entry(entry, title="Changed externally")
+        if calls == change_on_call:
+            hass.config_entries.async_update_entry(entry, title="Changed externally")
         return form
 
     with patch.object(helper, "_init_settings_flow", side_effect=changed), patch.object(
@@ -332,4 +599,7 @@ async def test_template_change_during_form_preparation_never_submits(hass):
     assert result[0]["isError"]
     submit.assert_not_awaited()
     assert entry.options["state"] == "{{ 7 }}"
-    assert runtime.config_recovery.records()[0]["before"]["title"] == "Recover me"
+    if change_on_call == 1:
+        assert runtime.config_recovery.records() == []
+    else:
+        assert runtime.config_recovery.records()[0]["before"]["title"] == "Recover me"

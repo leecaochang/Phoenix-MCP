@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.helpers import content_hash
+from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery
 from custom_components.phoenix_mcp.mcp_view import (
     _EXECUTOR_REGISTRY,
     _call_tool,
@@ -38,7 +39,13 @@ def _json(content: dict) -> dict:
 
 
 async def _call(name, args, token, hass):
-    return await _call_tool(name, args, token, hass, MagicMock())
+    return await _call_tool(name, args, token, hass, _data())
+
+
+def _data():
+    value = MagicMock()
+    value.config_recovery = ConfigurationRecovery()
+    return value
 
 
 @pytest.fixture
@@ -90,6 +97,7 @@ class TestWriteFile:
         content, outcome, _ = await _call(
             "write_file", {"path": "themes/mytheme.yaml", "content": "a: 1"}, _token(), hass)
         assert outcome == "allowed"
+        assert isinstance(_json(content).get("recovery_id"), str)
         written = os.path.join(hass.config.config_dir, "themes", "mytheme.yaml")
         assert os.path.isfile(written)
         with open(written, encoding="utf-8") as f:
@@ -138,7 +146,7 @@ class TestWriteFile:
     async def test_executor_stale_hash_conflict_at_apply_time(self, hass, fs_env):
         _, outcome, _ = await _execute_write_file(
             {"path": "www/hello.txt", "content": "new", "expected_hash": content_hash("stale")},
-            _token(), hass, MagicMock())
+            _token(), hass, _data())
         assert outcome == "invalid_request"
         with open(os.path.join(hass.config.config_dir, "www", "hello.txt"), encoding="utf-8") as f:
             assert f.read() == "hi there"

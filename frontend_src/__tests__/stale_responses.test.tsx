@@ -141,10 +141,10 @@ describe("ChangesView discards a superseded response", () => {
     await waitFor(() => expect(listVersions).toHaveBeenCalledTimes(2));
 
     fastSecond.resolve({ resource_type: null, resource_id: null, versions: [version("fresh")], total: 1 });
-    await screen.findByText(/fresh/);
+    await screen.findByText("fresh", { selector: ".changes-name" });
     slowFirst.resolve({ resource_type: null, resource_id: null, versions: [version("stale")], total: 1 });
 
-    await waitFor(() => expect(screen.queryByText(/fresh/)).not.toBeNull());
+    await waitFor(() => expect(screen.queryByText("fresh", { selector: ".changes-name" })).not.toBeNull());
     expect(screen.queryByText(/stale/)).toBeNull();
   });
 });

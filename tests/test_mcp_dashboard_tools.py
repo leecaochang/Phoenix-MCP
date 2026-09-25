@@ -303,7 +303,12 @@ class TestDashboardReadFailureIsNotAbsence:
     async def test_executor_still_creates_when_genuinely_absent(self, hass, lovelace_env):
         h, _light = lovelace_env
         data, versions = _data()
-        with self._patch_read(WsDashboardNotFoundError("unknown dashboard")):
+        after = {"views": [{"title": "New"}]}
+        with self._patch_read(WsDashboardNotFoundError("unknown dashboard")) as read, patch.object(
+            lovelace_tools, "async_save_lovelace_config", new=AsyncMock(),
+        ):
+            read.side_effect = [WsDashboardNotFoundError("unknown dashboard"),
+                               WsDashboardNotFoundError("unknown dashboard"), after]
             _, outcome, _ = await _execute_set_dashboard_config(
                 {"config": {"views": [{"title": "New"}]}}, _token(), h, data)
         assert outcome == "allowed"

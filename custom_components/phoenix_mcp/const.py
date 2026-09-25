@@ -104,7 +104,14 @@ VERSION_STORAGE_VERSION = 1
 CONFIG_RECOVERY_STORAGE_KEY = "phoenix_mcp_config_recovery"
 CONFIG_RECOVERY_MAX_RECORDS = 256
 CONFIG_RECOVERY_MAX_BYTES = 1_048_576
-TEMPLATE_RECOVERY_TYPES = frozenset({"sensor", "binary_sensor"})
+# Template's config flow type menu. Keep this in sync with the supported HA
+# Template platforms; _flow_step_body intersects it with the installed flow's
+# actual menu, so a type missing from an older supported HA release is omitted.
+TEMPLATE_RECOVERY_TYPES = frozenset({
+    "alarm_control_panel", "binary_sensor", "button", "cover", "device_tracker",
+    "event", "fan", "image", "light", "lock", "number", "select", "sensor",
+    "switch", "update", "vacuum", "weather",
+})
 # Per-resource FIFO retention: the newest N versions per (resource_type,
 # resource_id) are kept; older ones are evicted on write.
 MAX_VERSIONS_PER_RESOURCE = 20

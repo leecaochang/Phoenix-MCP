@@ -104,6 +104,7 @@ from .tools.helper import (
     _tool_edit_helper,
     _tool_list_helpers,
 )
+from .tools.recovery import _execute_restore_configuration, _tool_restore_configuration
 from .tools.integration_reconfigure import (
     MENU_CHOICE_BUDGET,
     STATUS_APPLY_FAILED as RECONFIGURE_APPLY_FAILED,
@@ -7338,6 +7339,10 @@ async def _execute_remove_integration(
             removed = hass.config_entries.async_get_entry(entry.entry_id) is None
             remaining = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
             await data.config_recovery.mark(rid, "verified" if removed and not remaining else "partial" if removed else "unknown", entry_removed=removed, remaining_entities=len(remaining))
+            if removed and not result[0].get("isError"):
+                body = json.loads(result[0]["content"][0]["text"])
+                body["recovery_id"] = rid
+                result = (_tool_success(json.dumps(body, default=str)), result[1], result[2])
             return result
     except Exception as exc:
         message = str(exc) if isinstance(exc, ConfigurationRecoveryError) else "Configuration recovery failed; inspect Home Assistant before retrying."
@@ -9547,6 +9552,7 @@ _register_executor("delete_scene", _execute_delete_scene)
 _register_executor("create_helper", _execute_create_helper)
 _register_executor("edit_helper", _execute_edit_helper)
 _register_executor("delete_helper", _execute_delete_helper)
+_register_executor("restore_configuration", _execute_restore_configuration)
 _register_executor("write_file", _execute_write_file)
 _register_executor("create_blueprint", _execute_create_blueprint)
 _register_executor("edit_blueprint", _execute_edit_blueprint)
@@ -9739,6 +9745,7 @@ _register_tool("list_helpers", _tool_list_helpers)
 _register_tool("create_helper", _tool_create_helper)
 _register_tool("edit_helper", _tool_edit_helper)
 _register_tool("delete_helper", _tool_delete_helper)
+_register_tool("restore_configuration", _tool_restore_configuration)
 _register_tool("watch_entity", _tool_watch_entity)
 _register_tool("list_files", _tool_list_files)
 _register_tool("read_file", _tool_read_file)

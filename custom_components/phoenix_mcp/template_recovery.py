@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from copy import deepcopy
+from dataclasses import dataclass
 from typing import Any
 
 from homeassistant.const import __version__ as HA_VERSION
@@ -14,9 +15,34 @@ from .const import TEMPLATE_RECOVERY_TYPES
 from .request_authority import check_request_authority
 
 
+@dataclass(frozen=True)
+class TemplateRecoveryAdapter:
+    """One HA Template platform whose config entry can be restored safely."""
+
+    entity_domain: str
+    action_capable: bool
+    snapshot_fields: tuple[str, ...] = ("title", "version", "minor_version", "options", "entities")
+    reference_extraction: str = "recursive_entity_id"
+    identity_fields: tuple[str, ...] = ("entity_id", "unique_id", "platform", "disabled_by", "name")
+    restore_procedure: str = "installed_template_config_and_options_flows"
+    unsupported_states: tuple[str, ...] = ("non_json_or_secret_options", "multiple_or_unmapped_entities")
+
+
+# HA executes these stored actions only after an entity is operated. Restoration
+# only replays the config flow; authoring continues to validate their targets.
+TEMPLATE_RECOVERY_ADAPTERS = {
+    domain: TemplateRecoveryAdapter(domain, domain in {
+        "alarm_control_panel", "button", "cover", "fan", "light", "lock",
+        "number", "select", "switch", "update", "vacuum",
+    })
+    for domain in TEMPLATE_RECOVERY_TYPES
+}
+
+
 def template_snapshot(hass, entry) -> dict:
     """Capture supported configuration and exact entity identity without secrets."""
-    if (entry.domain != "template" or entry.options.get("template_type") not in TEMPLATE_RECOVERY_TYPES
+    adapter = TEMPLATE_RECOVERY_ADAPTERS.get(entry.options.get("template_type"))
+    if (entry.domain != "template" or adapter is None
             or entry.data or getattr(entry, "subentries", {})):
         raise ConfigurationRecoveryError("This Template helper has no qualified recovery adapter; nothing was dispatched.")
     entities: list[dict[str, Any]] = [
@@ -25,10 +51,11 @@ def template_snapshot(hass, entry) -> dict:
         for e in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
     ]
     if (len(entities) != 1 or entities[0]["platform"] != "template"
-            or entities[0]["entity_id"].split(".")[0] != entry.options["template_type"]):
+            or entities[0]["entity_id"].split(".")[0] != adapter.entity_domain):
         raise ConfigurationRecoveryError("Template helper entity mapping is incomplete; nothing was dispatched.")
     result = safe_snapshot({
-        "snapshot_type": "template_helper", "schema": 1, "ha_version": HA_VERSION,
+        "snapshot_type": "template_helper", "schema": 1, "adapter": 1,
+        "ha_version": HA_VERSION,
         "entry_id": entry.entry_id, "domain": entry.domain, "title": entry.title,
         "version": entry.version, "minor_version": entry.minor_version,
         "options": dict(entry.options), "entities": entities,
@@ -41,21 +68,29 @@ def validate_snapshot(snapshot: dict) -> None:
     """Legacy and incompatible snapshots never silently lose identity fields."""
     safe_snapshot(snapshot)
     from homeassistant.components.template.config_flow import TemplateConfigFlowHandler
-    if (snapshot.get("snapshot_type") != "template_helper" or type(snapshot.get("schema")) is not int or snapshot.get("schema") != 1
+    if (snapshot.get("snapshot_type") != "template_helper"
+            or type(snapshot.get("schema")) is not int or snapshot.get("schema") != 1
             or snapshot.get("version") != TemplateConfigFlowHandler.VERSION
             or snapshot.get("minor_version") != TemplateConfigFlowHandler.MINOR_VERSION
             or snapshot.get("domain") != "template"
+            or snapshot.get("adapter", 0) not in (0, 1)
             or snapshot.get("ha_version") != HA_VERSION
             or not isinstance(snapshot.get("entry_id"), str)
             or not isinstance(snapshot.get("title"), str)
             or not isinstance(snapshot.get("options"), dict)
-            or snapshot["options"].get("template_type") not in TEMPLATE_RECOVERY_TYPES
+            or snapshot["options"].get("template_type") not in TEMPLATE_RECOVERY_ADAPTERS
             or not isinstance(snapshot.get("entities"), list)
             or len(snapshot["entities"]) != 1):
         raise ConfigurationRecoveryError("Unsupported or incompatible Template recovery snapshot.")
+    if snapshot.get("adapter", 0) == 0 and snapshot["options"].get("template_type") not in {
+        "sensor", "binary_sensor",
+    }:
+        raise ConfigurationRecoveryError("Legacy Template recovery snapshot has no qualified type adapter.")
     entity = snapshot["entities"][0]
     if (not isinstance(entity, dict) or not isinstance(entity.get("entity_id"), str)
-            or entity["entity_id"].split(".")[0] != snapshot["options"]["template_type"]
+            or entity["entity_id"].split(".")[0] != TEMPLATE_RECOVERY_ADAPTERS[
+                snapshot["options"]["template_type"]
+            ].entity_domain
             or entity.get("platform") != "template"
             or not isinstance(entity.get("unique_id"), str)
             or entity.get("name") is not None and not isinstance(entity["name"], str)

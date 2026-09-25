@@ -18,6 +18,7 @@ from custom_components.phoenix_mcp import mcp_view
 from custom_components.phoenix_mcp.tools import lovelace as lovelace_tools
 from custom_components.phoenix_mcp.mcp_view import _EXECUTOR_REGISTRY, _call_tool
 from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery
 from custom_components.phoenix_mcp.ws_dispatch import WsDispatchError, async_ws_command
 
 
@@ -35,7 +36,9 @@ def _json(content: dict) -> dict:
 
 
 async def _call(name, args, token, hass):
-    return await _call_tool(name, args, token, hass, MagicMock())
+    data = MagicMock()
+    data.config_recovery = ConfigurationRecovery()
+    return await _call_tool(name, args, token, hass, data)
 
 
 def _patch_ws(return_value):
@@ -56,7 +59,29 @@ def _patch_lovelace_ws(return_value):
     binding would apply to a name these handlers never read - and the mock
     would simply go unused rather than failing.
     """
-    return patch.object(lovelace_tools, "async_ws_command", new=AsyncMock(return_value=return_value))
+    rows = [] if isinstance(return_value, dict) and "url_path" in return_value else [
+        {"id": "d1", "url_path": "dashboard-d1", "title": "Old"}
+    ]
+    async def _command(_hass, command, payload=None, **_kw):
+        if command == "lovelace/dashboards/list":
+            return [dict(row) for row in rows]
+        if command == "lovelace/dashboards/create":
+            item = dict(return_value or {})
+            if not item:
+                item = {"id": payload.get("url_path"), **payload}
+            rows.append(item)
+            return item
+        if command == "lovelace/dashboards/update":
+            row = next((row for row in rows if row.get("id") == payload.get("dashboard_id")), None)
+            if row is not None:
+                row.update({k: v for k, v in payload.items() if k != "dashboard_id"})
+                return dict(row)
+            return return_value
+        if command == "lovelace/dashboards/delete":
+            rows[:] = [row for row in rows if row.get("id") != payload.get("dashboard_id")]
+            return return_value
+        return return_value
+    return patch.object(lovelace_tools, "async_ws_command", new=AsyncMock(side_effect=_command))
 
 
 class TestRestoreRemoved:
@@ -199,8 +224,9 @@ class TestDashboard:
             content, outcome, _ = await _call(
                 "create_dashboard", {"config": {"url_path": "lovelace-new", "title": "New"}}, _token(), hass)
         assert outcome == "allowed"
-        assert m.await_args.args[1] == "lovelace/dashboards/create"
-        assert m.await_args.args[2]["url_path"] == "lovelace-new"
+        calls = [call.args for call in m.await_args_list]
+        create = next(call for call in calls if call[1] == "lovelace/dashboards/create")
+        assert create[2]["url_path"] == "lovelace-new"
 
     async def test_create_empty_config(self, hass):
         _, outcome, _ = await _call("create_dashboard", {"config": {}}, _token(), hass)
@@ -211,8 +237,9 @@ class TestDashboard:
             content, outcome, _ = await _call(
                 "edit_dashboard", {"dashboard_id": "d1", "config": {"title": "Renamed"}}, _token(), hass)
         assert outcome == "allowed"
-        assert m.await_args.args[1] == "lovelace/dashboards/update"
-        assert m.await_args.args[2] == {"dashboard_id": "d1", "title": "Renamed"}
+        calls = [call.args for call in m.await_args_list]
+        update = next(call for call in calls if call[1] == "lovelace/dashboards/update")
+        assert update[2] == {"dashboard_id": "d1", "title": "Renamed"}
 
     async def test_edit_existing_hyphenless_dashboard(self, hass, hass_admin_user):
         """An existing single-word dashboard remains updateable."""
@@ -245,8 +272,9 @@ class TestDashboard:
         with _patch_lovelace_ws(None) as m:
             content, outcome, _ = await _call("delete_dashboard", {"dashboard_id": "d1"}, _token(), hass)
         assert outcome == "allowed"
-        assert m.await_args.args[1] == "lovelace/dashboards/delete"
-        assert m.await_args.args[2] == {"dashboard_id": "d1"}
+        calls = [call.args for call in m.await_args_list]
+        delete = next(call for call in calls if call[1] == "lovelace/dashboards/delete")
+        assert delete[2] == {"dashboard_id": "d1"}
 
     async def test_deny(self, hass):
         _, outcome, _ = await _call("create_dashboard", {"config": {"url_path": "x"}}, _token(cap_lovelace_write="deny"), hass)

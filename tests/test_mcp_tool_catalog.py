@@ -193,25 +193,25 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
     assert metrics == {
         "read_only": {
             "tool_count": 50,
-            "canonical_bytes": 42273,
-            "claude_bytes": 37125,
-            "openai_bytes": 38575,
+            "canonical_bytes": 42161,
+            "claude_bytes": 37013,
+            "openai_bytes": 38463,
         },
         "write_capable": {
-            "tool_count": 94,
-            "canonical_bytes": 93222,
-            "claude_bytes": 83529,
-            "openai_bytes": 86255,
+            "tool_count": 95,
+            "canonical_bytes": 94740,
+            "claude_bytes": 84944,
+            "openai_bytes": 87699,
         },
-        "announce_all": {
-            "tool_count": 154,
-            "canonical_bytes": 154460,
-            "claude_bytes": 138566,
-            "openai_bytes": 143032,
-        },
+            "announce_all": {
+                "tool_count": 155,
+                "canonical_bytes": 156371,
+                "claude_bytes": 140374,
+                "openai_bytes": 144869,
+            },
     }
-    assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 154
-    assert mcp_view.tool_catalog_counts()["total"] == 160
+    assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 155
+    assert mcp_view.tool_catalog_counts()["total"] == 161
 
 
 def test_every_public_parameter_has_a_description():
@@ -526,6 +526,11 @@ def _handler_calls_gate(fn) -> bool:
                 "_helper_mesa_approval_gate",
                 "_integration_gate",
                 "_pending_or_inline",
+                "_tool_restore_energy_configuration",
+                "_tool_restore_file_configuration",
+                "_tool_restore_blueprint_configuration",
+                "_tool_restore_dashboard_layout",
+                "_tool_restore_dashboard_registry",
             ):
                 return True
     return False

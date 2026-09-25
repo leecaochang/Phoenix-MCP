@@ -15,6 +15,22 @@ export interface RecoveryRecord {
   source: Record<string, unknown> | null;
 }
 
+const recoveryPhaseKeys: Record<string, string> = {
+  prepared: "recovery.prepared",
+  dispatching: "recovery.dispatching",
+  verified: "recovery.verified",
+  partial: "recovery.partial",
+  unknown: "recovery.unknown",
+  reviewed: "recovery.reviewed",
+  not_applied: "recovery.not_applied",
+};
+
+const confirmationKeys: Record<string, string> = {
+  reviewed: "recovery.confirm_reviewed",
+  restore: "recovery.confirm_restore",
+  delete: "recovery.confirm_delete",
+};
+
 export function ConfigurationRecovery() {
   const [open, setOpen] = useState(false);
   const [records, setRecords] = useState<RecoveryRecord[]>([]);
@@ -74,21 +90,23 @@ export function ConfigurationRecovery() {
     {error && <p className="banner banner-warn" role="alert">{t("recovery.failed")}</p>}
     {!busy && !error && records.length === 0 && <p>{t("recovery.empty")}</p>}
     {records.map(record => <details key={record.id} className="config-recovery-record">
-      <summary><code>{record.resource}</code> <span>{t(`recovery.${record.phase}`)}</span></summary>
+      <summary><code>{record.resource}</code> <span>{t(recoveryPhaseKeys[record.phase] ?? "recovery.unknown")}</span></summary>
       <p className="text-muted">{formatDateTime(record.created_at)}</p>
       {record.before && <><h4>{t("recovery.before")}</h4><YamlView value={toYaml(record.before)} /></>}
       {record.source && <><h4>{t("recovery.source")}</h4><YamlView value={toYaml(record.source)} /></>}
       <div className="config-recovery-actions">
         <button className="btn btn-outline btn-sm" disabled={busy || record.active} onClick={() => void act(record.id, "inspect")}>{t("recovery.inspect")}</button>
         <button className="btn btn-outline btn-sm" disabled={busy || record.active} onClick={() => setConfirm({ id: record.id, action: "reviewed" })}>{t("recovery.review")}</button>
-        {(["before", "source"] as const).map(side => ["template_helper", "storage_helper"].includes(String(record[side]?.snapshot_type)) &&
+        {(["before", "source"] as const).map(side => [
+          "template_helper", "storage_helper", "energy_preferences", "authored_file", "yaml_file", "blueprint_source", "dashboard_registry", "dashboard_layout",
+        ].includes(String(record[side]?.snapshot_type)) &&
           <button key={side} className="btn btn-outline btn-sm" disabled={busy || record.active || !["verified", "reviewed", "not_applied"].includes(record.phase)}
             onClick={() => setConfirm({ id: record.id, action: "restore", side })}>{t(side === "before" ? "recovery.restoreBefore" : "recovery.restoreSource")}</button>)}
         <button className="btn btn-ghost btn-sm" disabled={busy || record.active || !["verified", "reviewed", "not_applied"].includes(record.phase)}
           onClick={() => setConfirm({ id: record.id, action: "delete" })}>{t("recovery.delete")}</button>
       </div>
       {confirm?.id === record.id && <div className="banner banner-warn">
-        <p>{confirm.action === "restore" && <strong>{t(confirm.side === "before" ? "recovery.before" : "recovery.source")}: </strong>}{t(`recovery.confirm_${confirm.action}`)}</p>
+        <p>{confirm.action === "restore" && <strong>{t(confirm.side === "before" ? "recovery.before" : "recovery.source")}: </strong>}{t(confirmationKeys[confirm.action] ?? "recovery.confirm_reviewed")}</p>
         <div className="config-recovery-actions">
           <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => void act(confirm.id, confirm.action, confirm.side)}>{t("recovery.confirm")}</button>
           <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setConfirm(null)}>{t("common.cancel")}</button>

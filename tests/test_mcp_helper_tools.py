@@ -1741,7 +1741,8 @@ async def test_template_menu_inspection_and_creation(hass, kind, state):
     token = _token(permissions=PermissionTree(domains={kind: PermissionNode(state="GREEN")}))
     content, outcome, _ = await _call("create_helper", {"helper_type": "template", "flow_steps": []}, token, hass)
     assert outcome == "allowed", content
-    assert _json(content)["step"]["menu_options"] == ["binary_sensor", "sensor"]
+    from custom_components.phoenix_mcp.const import TEMPLATE_RECOVERY_TYPES
+    assert _json(content)["step"]["menu_options"] == sorted(TEMPLATE_RECOVERY_TYPES)
     steps = [{"step_id": "user", "data": {"next_step_id": kind}}]
     content, outcome, _ = await _call("create_helper", {"helper_type": "template", "flow_steps": steps}, token, hass)
     assert outcome == "allowed", content
@@ -1763,7 +1764,157 @@ async def test_template_menu_inspection_and_creation(hass, kind, state):
     await hass.config_entries.async_remove(body["config_entry"]["entry_id"])
 
 
-@pytest.mark.parametrize("values", [{"next_step_id": "switch"}, {"next_step_id": "sensor", "extra": True}, {"next_step_id": []}, {}])
+from custom_components.phoenix_mcp.const import TEMPLATE_RECOVERY_TYPES
+
+
+@pytest.mark.parametrize("kind", sorted(TEMPLATE_RECOVERY_TYPES))
+async def test_template_create_helper_covers_available_types(hass, kind):
+    """Every supported Template menu type uses HA's actual creation schema."""
+    assert await async_setup_component(hass, "homeassistant", {})
+    from homeassistant.components.template.config_flow import TEMPLATE_TYPES
+    assert kind in {str(item) for item in TEMPLATE_TYPES}
+    token = _token(permissions=PermissionTree(domains={kind: PermissionNode(state="GREEN")}))
+    from homeassistant.config_entries import SOURCE_USER
+    from homeassistant.helpers import entity_registry as er
+    flow = hass.config_entries.flow
+    initial = await flow.async_init("template", context={"source": SOURCE_USER})
+    form = await flow.async_configure(initial["flow_id"], {"next_step_id": kind})
+    assert form.get("step_id") == kind
+    defaults = {
+        "name": f"Phoenix {kind}",
+        "state": "{{ 1 }}",
+        "event_type": "{{ 'probe' }}",
+        "event_types": "{{ ['probe'] }}",
+        "url": "{{ 'https://example.invalid/image' }}",
+        "condition": "{{ 'sunny' }}",
+        "humidity": "{{ 50 }}",
+        "temperature": "{{ 20 }}",
+        "latitude": "{{ 1 }}",
+        "longitude": "{{ 1 }}",
+        "installed_version": "{{ '1.0' }}",
+        "latest_version": "{{ '1.0' }}",
+        "min": 0,
+        "max": 100,
+        "step": 1,
+        "options": "{{ ['one', 'two'] }}",
+        "set_value": [],
+        "on_action": [], "off_action": [],
+        "turn_on": [], "turn_off": [],
+        "lock": [], "unlock": [],
+        "start": [],
+        "open_cover": [], "close_cover": [],
+    }
+    values = {}
+    for marker in form["data_schema"].schema:
+        field = marker.schema
+        if marker.__class__.__name__ == "Required":
+            assert field in defaults, f"Add a real HA fixture value for required Template field {field!r}"
+            values[field] = defaults[field]
+    if kind == "cover":
+        values.update({"open_cover": [], "close_cover": []})
+    elif kind == "device_tracker":
+        values.update({"latitude": "{{ 1 }}", "longitude": "{{ 1 }}"})
+    elif kind == "update":
+        values.update({
+            "installed_version": "{{ '1.0' }}",
+            "latest_version": "{{ '1.1' }}",
+        })
+    flow.async_abort(initial["flow_id"])
+    steps = [
+        {"step_id": "user", "data": {"next_step_id": kind}},
+        {"step_id": kind, "data": values},
+    ]
+    content, outcome, _ = await _call(
+        "create_helper", {"helper_type": "template", "flow_steps": steps}, token, hass,
+    )
+    assert outcome == "allowed", content
+    body = _json(content)
+    assert body["entity_ids"] and all(eid.startswith(f"{kind}.") for eid in body["entity_ids"])
+    entry_id = body["config_entry"]["entry_id"]
+    entry = hass.config_entries.async_get_entry(entry_id)
+    assert entry is not None and entry.options["template_type"] == kind
+    registry_entries = er.async_entries_for_config_entry(er.async_get(hass), entry_id)
+    assert len(registry_entries) == 1
+    from custom_components.phoenix_mcp.template_recovery import template_snapshot, validate_snapshot
+    snapshot = template_snapshot(hass, entry)
+    validate_snapshot(snapshot)
+    await hass.config_entries.async_remove(entry_id)
+    runtime = PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock())
+    from custom_components.phoenix_mcp.template_recovery import restore_template
+    restored, restored_outcome, _ = await restore_template(snapshot, token, hass, runtime)
+    assert restored_outcome == "allowed", (kind, restored)
+    restored_body = _json(restored)
+    restored_entry = hass.config_entries.async_get_entry(restored_body["entry_id"])
+    assert restored_entry is not None
+    assert dict(restored_entry.options) == snapshot["options"]
+    restored_entities = er.async_entries_for_config_entry(er.async_get(hass), restored_entry.entry_id)
+    assert len(restored_entities) == 1 and restored_entities[0].entity_id == snapshot["entities"][0]["entity_id"]
+    await hass.config_entries.async_remove(restored_entry.entry_id)
+
+
+async def test_template_helper_list_edit_delete_and_agent_restore(hass):
+    """Template helpers use the public helper tools and owner-scoped recovery path."""
+    from homeassistant.helpers import entity_registry as er
+    from custom_components.phoenix_mcp.template_recovery import template_snapshot
+
+    assert await async_setup_component(hass, "homeassistant", {})
+    token = _token(
+        cap_integration_write="allow",
+        permissions=PermissionTree(domains={"sensor": PermissionNode(state="GREEN")}),
+    )
+    runtime = PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock())
+    steps = [
+        {"step_id": "user", "data": {"next_step_id": "sensor"}},
+        {"step_id": "sensor", "data": {"name": "CRUD template", "state": "{{ 7 }}"}},
+    ]
+    result, outcome, _ = await _call_tool(
+        "create_helper", {"helper_type": "template", "flow_steps": steps}, token, hass, runtime,
+    )
+    assert outcome == "allowed", result
+    entry_id = _json(result)["config_entry"]["entry_id"]
+    entry = hass.config_entries.async_get_entry(entry_id)
+    assert entry is not None
+    template_snapshot(hass, entry)
+    helper_id = er.async_entries_for_config_entry(er.async_get(hass), entry_id)[0].unique_id
+
+    result, outcome, _ = await _call_tool("list_helpers", {}, token, hass, runtime)
+    assert outcome == "allowed"
+    assert any(row["helper_type"] == "sensor" and row["helper_id"] == helper_id for row in _json(result)["helpers"])
+
+    result, outcome, _ = await _call_tool(
+        "edit_helper", {"helper_type": "sensor", "helper_id": helper_id, "config": {"state": "{{ 8 }}"}},
+        token, hass, runtime,
+    )
+    assert outcome == "allowed", result
+    assert hass.config_entries.async_get_entry(entry_id).options["state"] == "{{ 8 }}"
+    deleted_snapshot = template_snapshot(hass, hass.config_entries.async_get_entry(entry_id))
+
+    result, outcome, _ = await _call_tool(
+        "delete_helper", {"helper_type": "sensor", "helper_id": helper_id}, token, hass, runtime,
+    )
+    assert outcome == "allowed", result
+    recovery_id = json.loads(result["content"][0]["text"])["recovery_id"]
+    assert hass.config_entries.async_get_entry(entry_id) is None
+
+    receipt, outcome, _ = await _call_tool(
+        "restore_configuration", {"recovery_id": recovery_id, "side": "before"}, token, hass, runtime,
+    )
+    assert outcome == "allowed", receipt
+    bound = json.loads(receipt["content"][0]["text"])
+    result, outcome, _ = await _call_tool(
+        "restore_configuration", {
+            "recovery_id": recovery_id, "side": "before",
+            "snapshot_digest": bound["snapshot_digest"],
+            "target_fingerprint": bound["target_fingerprint"],
+        }, token, hass, runtime,
+    )
+    assert outcome == "allowed", result
+    restored_id = json.loads(result["content"][0]["text"])["entry_id"]
+    restored = hass.config_entries.async_get_entry(restored_id)
+    assert restored is not None and dict(restored.options) == deleted_snapshot["options"]
+
+
+@pytest.mark.parametrize("values", [{"next_step_id": "climate"}, {"next_step_id": "sensor", "extra": True}, {"next_step_id": []}, {}])
 async def test_template_menu_refuses_unqualified_or_malformed_choice(hass, values):
     content, outcome, _ = await _call("create_helper", {"helper_type": "template", "flow_steps": [
         {"step_id": "user", "data": values},

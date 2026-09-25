@@ -55,6 +55,7 @@ from ..const import CAP_DENY, REDACTION_SENTINEL
 from ..data import PhoenixData
 from ..tool_contracts import normalize_tool_args
 from ..helpers import (
+    content_hash,
     diff_summary_fields as _summary,
     effective_cap,
     str_arg,
@@ -71,6 +72,8 @@ from ..tool_common import (
     _truncate,
     redaction_sentinel_path,
 )
+from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
+from ..request_authority import check_request_authority
 from ..ws_dispatch import WsDispatchError, async_ws_command
 
 _LOGGER = logging.getLogger(__name__)
@@ -874,6 +877,8 @@ async def _execute_edit_energy_config(
 ) -> tuple[dict, str, str]:
     """Side-effect path for edit_energy_config. Assumes the capability is satisfied."""
     tool = "edit_energy_config"
+    if effective_cap(token, "cap_energy_write") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     try:
         before = await _read_prefs_raw(hass)
         after, summary = _apply_op(before, args, token, hass)
@@ -884,19 +889,54 @@ async def _execute_edit_energy_config(
         _LOGGER.exception("edit_energy_config: could not read the current preferences")
         return _tool_error("Could not read the Energy dashboard configuration."), "invalid_request", tool
 
-    # Send ONLY the top-level keys this operation actually changed. HA's
-    # EnergyManager.async_update copies through any key the update omits, so an
-    # untouched key is never exposed to the full-replace semantics at all.
-    payload = {key: after[key] for key in _PREFS_KEYS if key in after and after.get(key) != before.get(key)}
-    if not payload:
-        return _tool_error("That change would leave the Energy configuration unchanged."), "invalid_request", tool
     try:
-        await async_ws_command(hass, "energy/save_prefs", payload)
-    except WsDispatchError as err:
-        # HA re-validates the payload against its own per-source-type schema, so
-        # this is where a field combination Phoenix allowed but HA rejects lands.
-        _LOGGER.exception("edit_energy_config: energy/save_prefs failed")
-        return _tool_error(f"Home Assistant rejected the Energy configuration: {err}"), "invalid_request", tool
+        recovery = data.config_recovery
+        resource = "energy:preferences"
+        async with recovery.resource(resource):
+            # Persist the exact raw preferences before dispatch. This is an
+            # Energy-owned snapshot, independent of the redacted agent view.
+            before_snapshot = _energy_recovery_snapshot(before)
+            rid = await recovery.begin(resource, tool, token.id, before_snapshot)
+            try:
+                await recovery.mark(rid, "dispatching")
+                check_request_authority()
+                current = await _read_prefs_raw(hass)
+                if current != before:
+                    await recovery.mark(rid, "not_applied")
+                    return _tool_error("Energy preferences changed while preparing the safety copy; nothing was dispatched."), "invalid_request", tool
+                # Send ONLY top-level keys changed by the addressed operation.
+                payload = {key: after[key] for key in _PREFS_KEYS if key in after and after.get(key) != before.get(key)}
+                if not payload:
+                    await recovery.mark(rid, "not_applied")
+                    return _tool_error("That change would leave the Energy configuration unchanged."), "invalid_request", tool
+                try:
+                    await async_ws_command(hass, "energy/save_prefs", payload)
+                except WsDispatchError as err:
+                    _LOGGER.exception("edit_energy_config: energy/save_prefs failed")
+                    await recovery.mark(rid, "not_applied", error="save_rejected")
+                    return _tool_error(f"Home Assistant rejected the Energy configuration: {err}"), "invalid_request", tool
+                try:
+                    observed = await _read_prefs_raw(hass)
+                    if observed == after:
+                        source_snapshot = _energy_recovery_snapshot(observed)
+                        await recovery.mark(rid, "verified", observed_hash=content_hash(observed))
+                        record = recovery.get(rid)
+                        if record is not None:
+                            # The record's source side is persisted by the family
+                            # adapter only after readback confirms the committed value.
+                            await recovery.set_source(rid, source_snapshot)
+                    else:
+                        await recovery.mark(rid, "partial", observed_hash=content_hash(observed))
+                except Exception:  # noqa: BLE001 - a committed write with failed readback is uncertain
+                    await recovery.mark(rid, "unknown", readback="unavailable")
+                    return _tool_error("Energy preferences were submitted, but readback is incomplete; inspect configuration recovery before retrying."), "invalid_request", tool
+            finally:
+                recovery.leave(rid)
+    except ConfigurationRecoveryError as err:
+        return _tool_error(str(err)), "invalid_request", tool
+    except Exception:  # noqa: BLE001 - never claim a saved Energy write without its record
+        _LOGGER.exception("edit_energy_config recovery persistence failed")
+        return _tool_error("Could not verify the Energy configuration change; inspect configuration recovery before retrying."), "invalid_request", tool
 
     await _record_version(
         data, token, resource_type="energy", resource_id="preferences",
@@ -907,8 +947,137 @@ async def _execute_edit_energy_config(
             devices=sum(len(after.get(key) or []) for key in _DEVICE_KEYS),
         ),
     )
-    body = {"saved": True, **{k: v for k, v in summary.items()}, **_scoped_body(after, True, token, hass)}
+    body = {
+        "saved": True, "recovery_id": rid,
+        **{k: v for k, v in summary.items()}, **_scoped_body(after, True, token, hass),
+    }
     return _tool_success(json.dumps(body, default=str)), "allowed", "energy:preferences"
+
+
+def _energy_recovery_snapshot(prefs: dict[str, Any]) -> dict[str, Any]:
+    """Serialize one raw Energy preferences snapshot without redaction loss."""
+    if (not isinstance(prefs, dict)
+            or any(not isinstance(prefs.get(key), list) for key in _PREFS_KEYS[:2])
+            or any(key in prefs and not isinstance(prefs[key], list) for key in _PREFS_KEYS)):
+        raise ConfigurationRecoveryError("A complete Energy recovery snapshot is unavailable; nothing was dispatched.")
+    return safe_snapshot({
+        "snapshot_type": "energy_preferences",
+        "schema": 1,
+        "resource_id": "preferences",
+        "preferences": {key: copy.deepcopy(prefs[key]) for key in _PREFS_KEYS if key in prefs},
+    }) or {}
+
+
+def validate_energy_recovery_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    """Validate the Energy adapter envelope and return its complete preferences."""
+    safe_snapshot(snapshot)
+    prefs = snapshot.get("preferences") if isinstance(snapshot, dict) else None
+    if (snapshot.get("snapshot_type") != "energy_preferences"
+            or snapshot.get("schema") != 1
+            or snapshot.get("resource_id") != "preferences"
+            or not isinstance(prefs, dict)
+            or not set(_PREFS_KEYS[:2]).issubset(prefs)
+            or set(prefs) - set(_PREFS_KEYS)
+            or any(not isinstance(prefs.get(key), list) for key in prefs)):
+        raise ConfigurationRecoveryError("Unsupported or incomplete Energy recovery snapshot.")
+    return prefs
+
+
+def validate_energy_recovery_scope(
+    snapshot: dict[str, Any], token: TokenRecord, hass: HomeAssistant,
+) -> None:
+    """Refuse restores whose entity references exceed the token's current scope."""
+    prefs = validate_energy_recovery_snapshot(snapshot)
+    for entity_id in _referenced_entities(prefs):
+        try:
+            _check_writable_statistic(entity_id, "recovery", token, hass)
+        except _OpError:
+            raise ConfigurationRecoveryError(
+                "The Energy snapshot references an entity outside this token's current scope."
+            ) from None
+
+
+async def energy_recovery_target(hass: HomeAssistant) -> dict[str, Any]:
+    """Capture the live target used by restore receipts and approval binding."""
+    prefs = await _read_prefs_raw(hass)
+    return _energy_recovery_snapshot(prefs)
+
+
+def energy_recovery_diff(before: dict[str, Any], after: dict[str, Any], side: str,
+                         token: TokenRecord, hass: HomeAssistant) -> dict[str, Any]:
+    """Build a scoped, family-specific restore diff for Energy preferences."""
+    old_prefs = before.get("preferences", {}) if isinstance(before, dict) else {}
+    new_prefs = after["preferences"]
+    return {
+        "kind": "config_diff",
+        "summary": "Restore Energy dashboard preferences",
+        "target": {"type": "energy", "id": "preferences", "label": "Energy dashboard"},
+        "before": json.dumps(filter_service_response(old_prefs, token, hass), indent=2, sort_keys=True, default=str),
+        "after": json.dumps(filter_service_response(new_prefs, token, hass), indent=2, sort_keys=True, default=str),
+        "preview": {"side": side, "energy": {
+            "before": _scoped_body(old_prefs, True, token, hass),
+            "after": _scoped_body(new_prefs, True, token, hass),
+        }},
+    }
+
+
+async def restore_energy_configuration(snapshot: dict[str, Any], token: TokenRecord,
+                                       hass: HomeAssistant, data: PhoenixData) -> tuple[dict, str, str]:
+    """Restore one Energy snapshot, recording and verifying the whole transaction."""
+    tool = "restore_configuration"
+    if effective_cap(token, "cap_energy_write") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
+    try:
+        wanted = validate_energy_recovery_snapshot(snapshot)
+        validate_energy_recovery_scope(snapshot, token, hass)
+        recovery = data.config_recovery
+        resource = "energy:preferences"
+        async with recovery.resource(resource):
+            before = await _read_prefs_raw(hass)
+            before_snapshot = _energy_recovery_snapshot(before)
+            rid = await recovery.begin(resource, tool, token.id, before_snapshot, source=snapshot)
+            try:
+                await recovery.mark(rid, "dispatching")
+                check_request_authority()
+                if await _read_prefs_raw(hass) != before:
+                    await recovery.mark(rid, "not_applied")
+                    return _tool_error("Energy preferences changed before restore dispatch; nothing was applied."), "invalid_request", tool
+                await async_ws_command(hass, "energy/save_prefs", wanted)
+                observed = await _read_prefs_raw(hass)
+                if observed != wanted:
+                    await recovery.mark(rid, "partial", observed_hash=content_hash(observed))
+                    return _tool_success(json.dumps({
+                        "status": "partial", "recovery_id": rid,
+                        "message": "Energy restore was submitted but readback differs; do not retry automatically.",
+                    })), "allowed", tool
+                await recovery.mark(rid, "verified", observed_hash=content_hash(observed))
+                await recovery.set_source(rid, _energy_recovery_snapshot(observed))
+                await _record_version(
+                    data, token, resource_type="energy", resource_id="preferences",
+                    action="edit", before=before, after=observed, alias="Energy dashboard",
+                    summary=_version_summary(
+                        "energy.sources", count=len(observed.get("energy_sources") or []),
+                        devices=sum(len(observed.get(key) or []) for key in _DEVICE_KEYS),
+                    ),
+                )
+                return _tool_success(json.dumps({
+                    "status": "verified", "recovery_id": rid,
+                    **_scoped_body(observed, True, token, hass),
+                }, default=str)), "allowed", tool
+            except WsDispatchError as err:
+                await recovery.mark(rid, "unknown", error="save_or_readback_failed")
+                return _tool_success(json.dumps({
+                    "status": "unknown", "recovery_id": rid,
+                    "message": f"Energy restore outcome is unknown ({err}); inspect before any retry.",
+                })), "allowed", tool
+            except BaseException:
+                # Cancellation after dispatch deliberately leaves dispatching as
+                # the durable uncertain state. Never infer that it did not apply.
+                raise
+            finally:
+                recovery.leave(rid)
+    except ConfigurationRecoveryError as err:
+        return _tool_error(str(err)), "invalid_request", tool
 
 
 async def async_restore_energy_prefs(

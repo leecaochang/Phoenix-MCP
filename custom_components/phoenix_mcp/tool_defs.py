@@ -375,7 +375,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "'set_source' updates the grid, solar, battery, gas or water source named by source_type, "
             "creating it if there is none, and sets only the fields you pass: stat_energy_from and "
             "stat_energy_to (grid import/export, battery discharge/charge), number_energy_price and "
-            "number_energy_price_export. Call get_energy_config first to see what is there."
+            "number_energy_price_export. Call get_energy_config first to see what is there. "
+            "A verified write returns a recovery_id for restore_configuration."
         ),
         "cap": "cap_energy_write",
         "inputSchema": {
@@ -880,7 +881,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "(or sequence, for a script blueprint) that reference those inputs with !input. "
             "Fails if the path already exists; use edit_blueprint to replace one. There is "
             "no import-from-URL: if you have a URL, fetch it yourself and pass the YAML here, "
-            "so the operator reviews the actual source. May require admin approval."
+            "so the operator reviews the actual source. May require admin approval. A verified "
+            "write returns a recovery_id for restore_configuration."
         ),
         "cap": "cap_blueprint_write",
         "inputSchema": {
@@ -909,7 +911,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "entities' own configs do not change, so the effect is invisible in their "
             "history. Read the current source with get_blueprint first, and prefer editing "
             "the individual automation when only one of them needs to differ. May require "
-            "admin approval; the approval names the entities that will be reloaded."
+            "admin approval; the approval names the entities that will be reloaded. A verified "
+            "write returns a recovery_id for restore_configuration."
         ),
         "cap": "cap_blueprint_write",
         "inputSchema": {
@@ -934,9 +937,9 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "Permanently delete a blueprint file. Home Assistant refuses while any "
             "automation or script is still built from it, so delete or re-author those "
-            "first; the refusal names the blueprint. Deleting is not undoable through "
-            "Phoenix MCP (the source is captured in change history, but the file is gone). "
-            "May require admin approval."
+            "first; the refusal names the blueprint. The deleted source can be restored with "
+            "restore_configuration using the recovery_id returned by this write. May require "
+            "admin approval."
         ),
         "cap": "cap_blueprint_write",
         "inputSchema": {
@@ -2361,8 +2364,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     {
         "name": "list_helpers",
         "description": (
-            "List Home Assistant helpers this token can access (input_boolean, input_number, "
-            "input_text, input_select, input_datetime, input_button, counter, timer, schedule, zone, tag, person), with each helper's id for editing. Person rows expose only accessible tracker relationships and whether a private user link exists, never the user id."
+            "List Home Assistant storage helpers and accessible Template entities, with each helper's id for editing. Person rows expose only accessible tracker relationships and whether a private user link exists, never the user id."
         ),
         "cap": "cap_registry_read",
         "inputSchema": {
@@ -2379,7 +2381,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "input_select, input_datetime, input_button, counter, timer, schedule, zone, tag, person) use config. A helper "
             "integration that Home Assistant creates through a config flow, such as mold_indicator or "
             "history_stats, uses cumulative flow_steps instead: start with [] to receive its first real "
-            "form or supported menu, then append each {step_id, data} and call again. Template sensor and binary_sensor creation starts with {step_id: 'user', data: {next_step_id: 'sensor'}} (or binary_sensor), followed by the returned final form. Other Template types are not supported. Incomplete flows are closed "
+            "form or supported menu, then append each {step_id, data} and call again. Template creation starts with {step_id: 'user', data: {next_step_id: '<listed type>'}}, followed by the returned final form. Every supported Template type offered by this Home Assistant release is listed. Incomplete flows are closed "
             "without creating anything; the final form is approval-gated. Creating a zone requires "
             "write access to its entire entity domain so the new entity remains manageable. Person creation similarly requires person-domain write plus write access to every proposed device tracker; only name and device_trackers are accepted, never a raw Home Assistant user id or picture. Tag creation "
             "requires tag_id and accepts only name/description metadata; scan history cannot be forged. "
@@ -2412,7 +2414,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     },
     {
         "name": "edit_helper",
-        "description": "Update an existing helper's config by its helper_type and helper_id. Inherited MESA is resolved before approval and fingerprint-rechecked at execution. Zone, tag, and person edits require write access to that storage entity and reject unknown fields. Person edits accept only name/device_trackers, require write access to every current and proposed tracker, and preserve private user/picture bindings. Tags expose only name and description; scan history is read-only.",
+        "description": "Update an existing helper's config by its helper_type and helper_id. For Template helpers, list_helpers reports the entity domain as helper_type; config contains settings-flow values and is checked against the entry's live options schema. Omitted options are preserved by Home Assistant's options flow. The verified result includes a recovery_id. Inherited MESA is resolved before approval and fingerprint-rechecked at execution. Zone, tag, and person edits require write access to that storage entity and reject unknown fields. Person edits accept only name/device_trackers, require write access to every current and proposed tracker, and preserve private user/picture bindings. Tags expose only name and description; scan history is read-only.",
         "cap": "cap_helper_write",
         "inputSchema": {
             "type": "object",
@@ -2426,7 +2428,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     },
     {
         "name": "delete_helper",
-        "description": "Permanently delete a helper by its helper_type and helper_id. Inherited MESA is resolved before approval and fingerprint-rechecked at execution. Zone, tag, and person deletion require write access to that storage-backed entity; person deletion also requires write access to every linked tracker. Scanning a deleted physical tag can make Home Assistant discover it again.",
+        "description": "Permanently delete a helper by its helper_type and helper_id. Template entities route through remove_integration, including its current integration authority and MESA checks; the response includes a recovery_id for the captured pre-delete snapshot. Inherited MESA is resolved before approval and fingerprint-rechecked at execution. Zone, tag, and person deletion require write access to that storage-backed entity; person deletion also requires write access to every linked tracker. Scanning a deleted physical tag can make Home Assistant discover it again.",
         "cap": "cap_helper_write",
         "inputSchema": {
             "type": "object",
@@ -2435,6 +2437,26 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                 "helper_id": {"type": "string", "description": "Helper ID to delete, as returned by list_helpers."},
             },
             "required": ["helper_type", "helper_id"],
+        },
+    },
+    {
+        "name": "restore_configuration",
+        "description": (
+            "Restore a secret-safe Template helper, authored YAML/file, blueprint, Energy, or dashboard registry/layout snapshot created by this token. First send recovery_id and side to get a snapshot digest and current-target fingerprint; resend both values to request normal family-capability approval. The executor rechecks current authority and the target, then uses that family's Home Assistant API and verifies readback. Unsupported families and non-invertible effects are refused."
+        ),
+        "caps_any": [
+            "cap_helper_write", "cap_yaml_edit", "cap_filesystem",
+            "cap_blueprint_write", "cap_energy_write", "cap_lovelace_write",
+        ],
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "recovery_id": {"type": "string", "description": "Recovery record ID returned by an earlier write."},
+                "side": {"type": "string", "enum": ["before", "source"], "description": "Snapshot side to restore."},
+                "snapshot_digest": {"type": "string", "description": "Digest from the restore receipt; required on the approval request."},
+                "target_fingerprint": {"type": "string", "description": "Current-target fingerprint from the restore receipt; required on the approval request."},
+            },
+            "required": ["recovery_id", "side"],
         },
     },
     {
@@ -2494,7 +2516,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "use their dedicated tools. May require admin approval. Paths outside the allowed directories "
             "are refused. Pass expected_hash (the content_hash from a prior read_file) to make the write "
             "conditional: if the file changed since you read it, the write is refused instead of "
-            "overwriting the other change."
+            "overwriting the other change. A verified write returns a recovery_id for "
+            "restore_configuration."
         ),
         "cap": "cap_filesystem",
         "inputSchema": {
@@ -2552,7 +2575,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "packages, http: trusted_proxies / use_x_forwarded_for / cors_allowed_origins / "
             "ip_ban_enabled / login_attempts_threshold, frontend: extra_module_url, lovelace: "
             "resources); copy them through unchanged and the write is accepted. A write that drops a "
-            "top-level key present in the current file is refused unless remove_keys names that key."
+            "top-level key present in the current file is refused unless remove_keys names that key. "
+            "A verified write returns a recovery_id for restore_configuration."
         ),
         "cap": "cap_yaml_edit",
         "inputSchema": {
@@ -2596,7 +2620,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "file changed in between; the result returns the new content_hash so further patches "
             "can be chained. May require admin approval. Run check_ha_config and restart HA "
             "afterwards to apply. The same security keys set_yaml_config refuses cannot be "
-            "changed here either."
+            "changed here either. A verified write returns a recovery_id for restore_configuration."
         ),
         "cap": "cap_yaml_edit",
         "inputSchema": {
@@ -3550,6 +3574,7 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "create_helper": _annot(False, False, False),
     "edit_helper": _annot(False, True, True),
     "delete_helper": _annot(False, True, True),
+    "restore_configuration": _annot(False, True, True),
     "create_dashboard": _annot(False, False, False),
     "edit_dashboard": _annot(False, True, True),
     "delete_dashboard": _annot(False, True, True),

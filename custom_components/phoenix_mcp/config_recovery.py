@@ -162,6 +162,20 @@ class ConfigurationRecovery:
                 self._records[rid] = old
                 raise
 
+    async def set_source(self, rid: str, source: dict) -> None:
+        """Attach a post-write snapshot only after the owning adapter reads it back."""
+        safe_source = safe_snapshot(source)
+        assert safe_source is not None
+        async with self._lock:
+            old = self._records[rid]
+            updated = {**old, "source": safe_source}
+            self._records[rid] = updated
+            try:
+                await self._save()
+            except BaseException:
+                self._records[rid] = old
+                raise
+
     def leave(self, rid: str) -> None:
         """Cancellation and process loss never imply that an operation failed."""
         self._active.discard(rid)

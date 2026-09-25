@@ -37,7 +37,7 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.loader import IntegrationNotFound, async_get_integration
 from homeassistant.util import slugify
 
-from ..const import CAP_DENY
+from ..const import CAP_DENY, TEMPLATE_RECOVERY_TYPES
 from ..data import PhoenixData
 from ..mesa import (
     MesaRuntime,
@@ -394,9 +394,17 @@ def _helper_create_mesa_entity(
         from ..const import TEMPLATE_RECOVERY_TYPES
         steps = args.get("flow_steps")
         for step in steps if isinstance(steps, list) else []:
-            if (isinstance(step, dict) and isinstance(step.get("step_id"), str)
-                    and step["step_id"] in TEMPLATE_RECOVERY_TYPES):
-                helper_type = step["step_id"]
+            if not isinstance(step, dict):
+                continue
+            step_id = step.get("step_id")
+            step_data = step.get("data")
+            selected = (
+                step_data.get("next_step_id")
+                if step_id == "user" and isinstance(step_data, dict)
+                else step_id
+            )
+            if isinstance(selected, str) and selected in TEMPLATE_RECOVERY_TYPES:
+                helper_type = selected
                 break
     restore_id = args.get(_HELPER_RESTORE_ID)
     if isinstance(restore_id, str) and restore_id.strip():
@@ -536,13 +544,16 @@ def _flow_step_body(helper_type: str, result: Any) -> dict[str, Any] | None:
         offered = result.get("menu_options")
         if not isinstance(offered, (list, dict)):
             return None
-        choices = sorted(choice for choice in TEMPLATE_RECOVERY_TYPES if choice in offered)
+        choices = sorted(
+            choice for choice in TEMPLATE_RECOVERY_TYPES
+            if choice in offered and isinstance(choice, str)
+        )
         if not choices:
             return None
         return {
             "status": "needs_input", "helper_type": helper_type,
             "step": {"step_id": "user", "last_step": False, "menu_options": choices},
-            "note": "Append {step_id: 'user', data: {next_step_id: '<choice>'}} to flow_steps, then call create_helper again. Only the listed Template types are supported.",
+            "note": "Append {step_id: 'user', data: {next_step_id: '<choice>'}} to flow_steps, then call create_helper again. The listed Template types are available in this Home Assistant release.",
         }
     if result.get("type") != FlowResultType.FORM:
         return None
@@ -734,14 +745,21 @@ async def _tool_list_helpers(
             row["id"]: row for row in storage_items
             if isinstance(row.get("id"), str)
         }
+    from ..const import TEMPLATE_RECOVERY_TYPES
     helpers: list[dict] = []
     for e in filter_entities_for_token(hass.states.async_all(), token, hass):
         domain = e["entity_id"].split(".")[0]
-        if domain not in HELPER_TYPES:
+        registry_entry = registry.async_get(e["entity_id"])
+        is_template_helper = (
+            domain in TEMPLATE_RECOVERY_TYPES
+            and registry_entry is not None
+            and registry_entry.platform == "template"
+        )
+        if domain not in HELPER_TYPES and not is_template_helper:
             continue
         if type_filter and domain != type_filter:
             continue
-        entry = registry.async_get(e["entity_id"])
+        entry = registry_entry
         stored_item = (
             scoped_storage_items.get(domain, {}).get(entry.unique_id)
             if entry is not None else None
@@ -1573,6 +1591,31 @@ async def _execute_config_flow_helper(
         for registry_entry in registry.entities.values()
         if registry_entry.config_entry_id == entry.entry_id
     )
+    if helper_type == "template":
+        from ..const import TEMPLATE_RECOVERY_TYPES
+        selected_type = next((
+            step.get("data", {}).get("next_step_id")
+            for step in steps
+            if isinstance(step, dict) and step.get("step_id") == "user"
+            and isinstance(step.get("data"), dict)
+        ), None)
+        created_entries = er.async_entries_for_config_entry(registry, entry.entry_id)
+        if (selected_type not in TEMPLATE_RECOVERY_TYPES or len(created_entries) != 1
+                or created_entries[0].platform != "template"
+                or created_entries[0].domain != selected_type
+                or created_entries[0].entity_id not in entity_ids):
+            try:
+                await hass.config_entries.async_remove(entry.entry_id)
+            except Exception:  # noqa: BLE001 - unsafe materialization must be surfaced
+                _LOGGER.exception("Could not clean up malformed Template helper %s", entry.entry_id)
+                return (
+                    _tool_error("Template creation produced an unexpected entity mapping and cleanup failed. Inspect Home Assistant before retrying."),
+                    "invalid_request", "create_helper",
+                )
+            return (
+                _tool_error("Template creation did not produce exactly one entity of the selected type; it was removed."),
+                "invalid_request", "create_helper",
+            )
     post_mesa = _helper_mesa_context(
         data,
         token,
@@ -1653,6 +1696,22 @@ async def _tool_edit_helper(
     """MCP tool: edit a helper (Confirm-gated)."""
     if effective_cap(token, "cap_helper_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "edit_helper"
+    if args.get("helper_type") in TEMPLATE_RECOVERY_TYPES:
+        helper_id = str(args.get("helper_id") or "").strip()
+        helper_type = str(args.get("helper_type"))
+        entity_id = _resolve_helper_entity_id(hass, helper_type, helper_id)
+        registry_entry = er.async_get(hass).async_get(entity_id) if entity_id else None
+        config_entry_id = registry_entry.config_entry_id if registry_entry else None
+        entry = hass.config_entries.async_get_entry(config_entry_id) if config_entry_id else None
+        if (registry_entry is not None and registry_entry.platform == "template"
+                and entry is not None and entry.domain == "template"):
+            settings = args.get("config")
+            if not isinstance(settings, dict) or not settings:
+                return _tool_error("config must be a non-empty object of Template settings."), "invalid_request", "edit_helper"
+            return await _tool_set_config_entry_options(
+                {"entry_id": entry.entry_id, "settings": settings},
+                token, hass, data, request_id=request_id, client_ip=client_ip,
+            )
     pre = _helper_write_precheck(args, "edit_helper", require_id=True)
     if pre is not None:
         return pre
@@ -1852,6 +1911,20 @@ async def _tool_delete_helper(
     """MCP tool: delete a helper (Confirm-gated)."""
     if effective_cap(token, "cap_helper_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_helper"
+    from ..const import TEMPLATE_RECOVERY_TYPES
+    if args.get("helper_type") in TEMPLATE_RECOVERY_TYPES:
+        helper_id = str(args.get("helper_id") or "").strip()
+        helper_type = str(args.get("helper_type"))
+        entity_id = _resolve_helper_entity_id(hass, helper_type, helper_id)
+        registry_entry = er.async_get(hass).async_get(entity_id) if entity_id else None
+        config_entry_id = registry_entry.config_entry_id if registry_entry else None
+        entry = hass.config_entries.async_get_entry(config_entry_id) if config_entry_id else None
+        if registry_entry is not None and registry_entry.platform == "template" and entry is not None and entry.domain == "template":
+            from ..mcp_view import _tool_remove_integration
+            return await _tool_remove_integration(
+                {"entry_id": entry.entry_id}, token, hass, data,
+                request_id=request_id, client_ip=client_ip,
+            )
     pre = _helper_write_precheck(
         {**args, "config": {}}, "delete_helper", require_id=True
     )
@@ -2419,7 +2492,8 @@ def _entities_in_options(options: Any) -> set[str]:
         elif isinstance(node, list):
             for value in node:
                 _walk(value)
-        elif isinstance(node, str) and _ENTITY_ID_RE.match(node):
+        elif (isinstance(node, str) and _ENTITY_ID_RE.fullmatch(node)
+              and not all(part.isdecimal() for part in node.split("."))):
             found.add(node)
 
     _walk(options)
@@ -2496,6 +2570,29 @@ async def _build_diff_set_config_entry_options(
     }
 
 
+async def _preflight_template_settings(hass, entry, settings):
+    """Validate an options form without submitting or creating a recovery barrier."""
+    from ..template_recovery import template_snapshot
+
+    before = template_snapshot(hass, entry)
+    flow_id = None
+    try:
+        result = await _init_settings_flow(hass, entry, _OPTIONS)
+        flow_id = result.get("flow_id")
+        if (hass.config_entries.async_get_entry(entry.entry_id) is not entry
+                or template_snapshot(hass, entry) != before):
+            return _tool_error("Template configuration changed during settings validation; nothing was submitted."), "invalid_request", "set_helper_settings"
+        schema = result.get("data_schema")
+        if result.get("type") != FlowResultType.FORM or not isinstance(schema, vol.Schema):
+            return _tool_error("This Template helper has no supported settings form."), "invalid_request", "set_helper_settings"
+        schema(_settings_form_payload(result, settings))
+    except vol.Invalid as err:
+        return _tool_error(f"The settings were rejected: {err}. Nothing was changed."), "invalid_request", "set_helper_settings"
+    finally:
+        await _abort_flow(hass, _OPTIONS, flow_id)
+    return None
+
+
 async def _tool_set_config_entry_options(
     args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
@@ -2529,6 +2626,10 @@ async def _tool_set_config_entry_options(
         args.get("expected_hash"), _settings_store(entry, mechanism), tool)
     if conflict is not None:
         return conflict
+    if entry.domain == "template":
+        refusal = await _preflight_template_settings(hass, entry, args["settings"])
+        if refusal is not None:
+            return refusal
     entity_ids = _config_entry_helper_mesa_entities(hass, entry, data)
     if isinstance(entity_ids, tuple):
         return entity_ids
@@ -2581,6 +2682,9 @@ async def _execute_set_config_entry_options(
         service_data={"helper_type": entry.domain, "settings": args.get("settings")}, session_id=tool)
     if isinstance(mesa, tuple):
         return mesa
+    refusal = await _preflight_template_settings(hass, entry, args["settings"])
+    if refusal is not None:
+        return refusal
     rid = None
     try:
         async with protect_template(hass, data, token, entry, tool) as rid:

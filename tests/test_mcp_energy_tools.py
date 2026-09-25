@@ -385,11 +385,12 @@ async def test_add_and_remove_device(hass: HomeAssistant) -> None:
     _seed_states(hass, "sensor.dryer_energy")
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
-        _, outcome, _ = await _edit(
+        content, outcome, _ = await _edit(
             hass, _token(cap_energy_write="allow"),
             op="add_device", statistic="sensor.dryer_energy", name="Dryer",
         )
     assert outcome == "allowed"
+    assert isinstance(_json(content).get("recovery_id"), str)
     assert saved[0]["device_consumption"][-1] == {"stat_consumption": "sensor.dryer_energy", "name": "Dryer"}
 
     ws, saved = _writer(LIVE)
@@ -564,6 +565,94 @@ async def test_denied_capability_forbids_and_never_dispatches(hass: HomeAssistan
     assert outcome == "denied"
     assert ws.await_count == 0
     assert saved == []
+
+
+async def test_energy_restore_uses_owned_snapshot_and_verifies_readback(hass: HomeAssistant) -> None:
+    """Energy restore writes the exact chosen snapshot and retains both sides."""
+    from custom_components.phoenix_mcp.tools.energy import (
+        _energy_recovery_snapshot, restore_energy_configuration,
+    )
+
+    token = _token(cap_energy_write="allow")
+    desired = {**PREFS, "device_consumption_water": []}
+    for entity_id in (
+        "sensor.grid_import", "sensor.grid_export", "sensor.solar_production",
+        "sensor.washer_energy",
+    ):
+        hass.states.async_set(entity_id, "1.0")
+    current = {"energy_sources": [], "device_consumption": [], "device_consumption_water": []}
+
+    async def dispatch(_hass, command, payload):
+        nonlocal current
+        if command == "energy/get_prefs":
+            return json.loads(json.dumps(current))
+        assert command == "energy/save_prefs"
+        current = json.loads(json.dumps(payload))
+        return {}
+
+    runtime = _data()
+    snapshot = _energy_recovery_snapshot(desired)
+    with patch(_WS, AsyncMock(side_effect=dispatch)):
+        content, outcome, resource = await restore_energy_configuration(
+            snapshot, token, hass, runtime,
+        )
+
+    body = _json(content)
+    assert outcome == "allowed"
+    assert resource == "restore_configuration"
+    assert body["status"] == "verified"
+    assert current == desired
+    record = runtime.config_recovery.get(body["recovery_id"])
+    assert record["phase"] == "verified"
+    assert record["before"]["preferences"] == {key: [] for key in ("energy_sources", "device_consumption", "device_consumption_water")}
+    assert record["source"] == snapshot
+
+
+async def test_agent_restore_receipt_accepts_energy_owned_record(hass: HomeAssistant) -> None:
+    """The MCP receipt selects the Energy adapter and remains owner scoped."""
+    from custom_components.phoenix_mcp.tools.energy import _energy_recovery_snapshot
+
+    token = _token(cap_energy_write="allow")
+    prefs = json.loads(json.dumps(PREFS))
+    for entity_id in (
+        "sensor.grid_import", "sensor.grid_export", "sensor.solar_production",
+        "sensor.washer_energy",
+    ):
+        hass.states.async_set(entity_id, "1.0")
+    snapshot = _energy_recovery_snapshot(prefs)
+    runtime = _data()
+    rid = await runtime.config_recovery.begin(
+        "energy:preferences", "edit_energy_config", token.id, snapshot,
+    )
+    await runtime.config_recovery.mark(rid, "verified")
+
+    current = {"energy_sources": [], "device_consumption": [], "device_consumption_water": []}
+    with patch(_WS, AsyncMock(return_value=current)):
+        content, outcome, _ = await _call_tool(
+            "restore_configuration", {"recovery_id": rid, "side": "before"},
+            token, hass, runtime, "req-restore", None,
+        )
+
+    body = _json(content)
+    assert outcome == "allowed"
+    assert body["status"] == "needs_confirmation"
+    assert body["recovery_id"] == rid
+    assert body["side"] == "before"
+    assert "target_fingerprint" in body
+    assert json.loads(body["diff"]["before"]) == current
+    assert json.loads(body["diff"]["after"]) == prefs
+
+
+def test_energy_recovery_adapter_preserves_legacy_optional_water_key() -> None:
+    """Older HA preferences without the optional water key remain restorable."""
+    from custom_components.phoenix_mcp.tools.energy import (
+        _energy_recovery_snapshot, validate_energy_recovery_snapshot,
+    )
+
+    snapshot = _energy_recovery_snapshot({"energy_sources": [], "device_consumption": []})
+    assert validate_energy_recovery_snapshot(snapshot) == {
+        "energy_sources": [], "device_consumption": [],
+    }
 
 
 def test_structural_verification_refuses_an_over_broad_change() -> None:
