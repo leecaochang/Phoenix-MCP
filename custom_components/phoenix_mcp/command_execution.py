@@ -400,6 +400,8 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
             return LocalCommandReply(voice_text(language, "local_read_failed"))
         state = payload.get("state") if proposal["intent"] == "HassGetState" else attributes.get(proposal["value"])
         if proposal["intent"] != "HassGetState":
+            if state is None:
+                return LocalCommandReply(voice_text(language, "local_attribute_unavailable"))
             from .entity_commands import attribute_display
             domain = proposal["entity_ids"][0].split(".", 1)[0]
             temperature_unit = (hass.config.units.temperature_unit if domain in ("climate", "water_heater")

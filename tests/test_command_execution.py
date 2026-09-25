@@ -452,3 +452,26 @@ async def test_attribute_read_plan_rejects_removed_attribute_before_dispatch(has
     assert plan is not None and plan_is_current(plan, hass, data, token)
     hass.states.async_set(entity_id, 'on', {})
     assert not plan_is_current(plan, hass, data, token)
+
+
+@pytest.mark.parametrize('value,expected', [
+    (None, 'Home Assistant is not reporting a value for the requested property right now.'),
+    (0, 'The state is 0%.'),
+    ('invalid', 'Phoenix MCP could not read the state.'),
+])
+async def test_attribute_read_distinguishes_absent_value_from_zero_and_invalid(hass, local_home, value, expected):
+    from custom_components.phoenix_mcp.command_execution import _capture_plan, _run_local_command
+    from custom_components.phoenix_mcp.const import DECISION_ENTITY_CATEGORIES
+    data, token, entity_id = local_home
+    token.cap_physical_control = 'deny'
+    hass.states.async_set(entity_id, 'off', {'brightness': value})
+    proposal = {'intent': DECISION_ENTITY_CATEGORIES['attribute_read'], 'entity_ids': [entity_id], 'value': 'brightness'}
+    authority = RoutingAuthority.capture(data, token)
+    plan = _capture_plan(hass, data, token, proposal)
+    assert plan is not None
+    with patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call:
+        answer = await _run_local_command(hass, data, token, plan, authority, '', False, language='en')
+    assert answer.text == expected
+    call.assert_not_called()
+    if value is None:
+        assert not answer.allows_local_followup

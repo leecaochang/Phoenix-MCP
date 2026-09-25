@@ -2034,6 +2034,7 @@
     "local_state_unconfirmed": "명령을 전송했습니다. Home Assistant가 요청한 상태를 아직 확인하지 않았습니다.",
     "local_summary_count": "접근할 수 있고 Assist에 노출된 엔티티 중 {total}개 중 {matched}개의 상태가 {state}입니다. {unknown}개는 상태를 알 수 없거나 사용할 수 없습니다.",
     "local_summary_total": "접근할 수 있고 Assist에 노출된 엔티티는 {total}개입니다. {unknown}개는 상태를 알 수 없거나 사용할 수 없습니다.",
-    "local_summary_breakdown": "접근할 수 있고 Assist에 노출된 엔티티는 {total}개입니다. {summary}."
+    "local_summary_breakdown": "접근할 수 있고 Assist에 노출된 엔티티는 {total}개입니다. {summary}.",
+    "local_attribute_unavailable": "Home Assistant가 현재 요청한 속성의 값을 보고하지 않고 있습니다."
   }
 }

@@ -28,7 +28,8 @@
     "local_state_unconfirmed": "Polecenie wysłane. Home Assistant nie potwierdził jeszcze żądanego stanu.",
     "local_summary_count": "Wśród encji udostępnionych Assist, do których mam dostęp: {matched} z {total} ma stan {state}; stan {unknown} jest nieznany lub niedostępny.",
     "local_summary_total": "Wśród encji udostępnionych Assist, do których mam dostęp: {total} encji; stan {unknown} jest nieznany lub niedostępny.",
-    "local_summary_breakdown": "Wśród encji udostępnionych Assist, do których mam dostęp: {total} encji. {summary}."
+    "local_summary_breakdown": "Wśród encji udostępnionych Assist, do których mam dostęp: {total} encji. {summary}.",
+    "local_attribute_unavailable": "Home Assistant nie podaje obecnie wartości żądanej właściwości."
   },
   "panel": {
     "shell": {

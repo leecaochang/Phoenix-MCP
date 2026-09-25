@@ -28,7 +28,8 @@
     "local_state_unconfirmed": "Opdracht verzonden. Home Assistant heeft de gevraagde status nog niet bevestigd.",
     "local_summary_count": "Van de aan Assist blootgestelde entiteiten waartoe ik toegang heb: {matched} van {total} hebben status {state}; {unknown} hebben een onbekende of niet-beschikbare status.",
     "local_summary_total": "Van de aan Assist blootgestelde entiteiten waartoe ik toegang heb: {total} entiteiten; {unknown} hebben een onbekende of niet-beschikbare status.",
-    "local_summary_breakdown": "Van de aan Assist blootgestelde entiteiten waartoe ik toegang heb: {total} entiteiten. {summary}."
+    "local_summary_breakdown": "Van de aan Assist blootgestelde entiteiten waartoe ik toegang heb: {total} entiteiten. {summary}.",
+    "local_attribute_unavailable": "Home Assistant geeft momenteel geen waarde voor de gevraagde eigenschap door."
   },
   "panel": {
     "shell": {

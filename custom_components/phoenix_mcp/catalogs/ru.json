@@ -28,7 +28,8 @@
     "local_state_unconfirmed": "Команда отправлена. Home Assistant ещё не подтвердил запрошенное состояние.",
     "local_summary_count": "Среди доступных мне сущностей, предоставленных Assist: {matched} из {total} имеют состояние {state}; у {unknown} состояние неизвестно или недоступно.",
     "local_summary_total": "Среди доступных мне сущностей, предоставленных Assist: {total} сущностей; у {unknown} состояние неизвестно или недоступно.",
-    "local_summary_breakdown": "Среди доступных мне сущностей, предоставленных Assist: {total} сущностей. {summary}."
+    "local_summary_breakdown": "Среди доступных мне сущностей, предоставленных Assist: {total} сущностей. {summary}.",
+    "local_attribute_unavailable": "Home Assistant сейчас не сообщает значение запрошенного свойства."
   },
   "panel": {
     "adminError": {

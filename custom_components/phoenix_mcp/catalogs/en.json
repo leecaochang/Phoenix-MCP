@@ -2021,6 +2021,7 @@
     "error": "Sorry, the Phoenix MCP voice agent hit an error.",
     "focus_answer_anyway": "To continue, repeat your complete request and explicitly say to answer anyway.",
     "focus_declined": "This conversation is in Home-focused mode, so I can only help with requests about your home and Home Assistant.",
+    "local_attribute_unavailable": "Home Assistant is not reporting a value for the requested property right now.",
     "local_cancelled": "Cancelled.",
     "local_failed": "Phoenix MCP could not complete this command.",
     "local_pending": "This command needs approval in the Phoenix MCP panel.",

@@ -2034,6 +2034,7 @@
     "local_state_unconfirmed": "Comando inviato. Home Assistant non ha ancora confermato lo stato richiesto.",
     "local_summary_count": "Tra le entità esposte ad Assist a cui posso accedere: {matched} su {total} hanno lo stato {state}; {unknown} hanno uno stato sconosciuto o non disponibile.",
     "local_summary_total": "Tra le entità esposte ad Assist a cui posso accedere: {total} entità; {unknown} hanno uno stato sconosciuto o non disponibile.",
-    "local_summary_breakdown": "Tra le entità esposte ad Assist a cui posso accedere: {total} entità. {summary}."
+    "local_summary_breakdown": "Tra le entità esposte ad Assist a cui posso accedere: {total} entità. {summary}.",
+    "local_attribute_unavailable": "Home Assistant al momento non fornisce un valore per la proprietà richiesta."
   }
 }

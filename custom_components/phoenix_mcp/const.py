@@ -1631,6 +1631,7 @@ VOICE_TEMPLATES: dict[str, str] = {
     'local_summary_breakdown': 'Among entities exposed to Assist that I can access: {total} entities. {summary}.',
 
     "local_read_failed": "Phoenix MCP could not read the state.",
+    "local_attribute_unavailable": "Home Assistant is not reporting a value for the requested property right now.",
     "unavailable": "The Phoenix MCP voice agent is currently unavailable.",
     "not_configured": "The Phoenix MCP voice agent is not fully configured.",
     "token_unavailable": "The Phoenix MCP voice agent's token is no longer available.",
