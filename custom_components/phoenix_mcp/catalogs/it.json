@@ -269,6 +269,7 @@
       "outcomeDenied": "Negato",
       "outcomeInvalidRequest": "Richiesta non valida",
       "outcomeNotFound": "Non trovato",
+      "outcomeSessionAlreadyClosed": "Sessione già chiusa",
       "outcomeNotImplemented": "Non implementato",
       "outcomePendingApproval": "Approvazione in attesa",
       "outcomeRateLimited": "Limite di frequenza raggiunto",

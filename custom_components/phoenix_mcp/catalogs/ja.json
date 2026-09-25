@@ -456,6 +456,7 @@
       "outcomeAllowed": "許可",
       "outcomeDenied": "拒否",
       "outcomeNotFound": "見つかりません",
+      "outcomeSessionAlreadyClosed": "終了済み",
       "outcomeRateLimited": "レート制限",
       "outcomeNotImplemented": "未実装",
       "outcomeInvalidRequest": "無効なリクエスト",

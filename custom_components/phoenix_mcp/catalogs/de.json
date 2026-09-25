@@ -1858,6 +1858,7 @@
       "outcomeAllowed": "Erlaubt",
       "outcomeDenied": "Verweigert",
       "outcomeNotFound": "Nicht gefunden",
+      "outcomeSessionAlreadyClosed": "Sitzung bereits beendet",
       "outcomeRateLimited": "Ratenlimitiert",
       "outcomeNotImplemented": "Nicht implementiert",
       "outcomeInvalidRequest": "Ungültige Anfrage",

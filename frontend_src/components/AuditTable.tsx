@@ -48,10 +48,17 @@ const OUTCOME_LABEL_KEYS: Record<Outcome, string> = {
   pending_approval: "audit.outcomePendingApproval",
 };
 
-/** Outcome label, falling back to the raw backend slug when unmapped. */
-function outcomeLabel(outcome: Outcome): string {
-  const key = OUTCOME_LABEL_KEYS[outcome];
-  return key ? t(key) : outcome;
+/** Outcome label, with context for a session DELETE whose target is already gone. */
+function outcomeLabel(entry: AuditEntry): string {
+  if (
+    entry.method === "DELETE"
+    && entry.outcome === "not_found"
+    && (entry.resource === "mcp:session" || entry.resource === "[redacted]")
+  ) {
+    return t("audit.outcomeSessionAlreadyClosed");
+  }
+  const key = OUTCOME_LABEL_KEYS[entry.outcome];
+  return key ? t(key) : entry.outcome;
 }
 
 const OUTCOME_CLASS: Record<Outcome, string> = {
@@ -112,7 +119,7 @@ function EntryDetailModal({ entry, tokenName, onClose, onNavigatePrevious, onNav
       <DetailRow label={t("audit.rowMode")} value={entry.pass_through ? t("tokens.passThrough") : t("tokens.scoped")} />
       <DetailRow label={t("audit.rowMethod")} value={entry.method} mono />
       <DetailRow label={t("audit.rowResource")} value={friendlyResource(entry.resource)} mono />
-      <DetailRow label={t("audit.rowOutcome")} value={outcomeLabel(entry.outcome)} />
+      <DetailRow label={t("audit.rowOutcome")} value={outcomeLabel(entry)} />
       {entry.mesa_advisory && <DetailRow label={t("audit.rowMesa")} value={t("audit.mesaAdvisory")} />}
       <DetailRow
         label={t("audit.rowIp")}
@@ -222,7 +229,7 @@ export function AuditTable({ entries, loading, tokenNames }: Props) {
             >
               <td>
                 <span className={`outcome-badge ${OUTCOME_CLASS[entry.outcome]}`}>
-                  {outcomeLabel(entry.outcome)}
+                  {outcomeLabel(entry)}
                 </span>
                 {entry.mesa_advisory && (
                   <span className="outcome-badge mesa-advisory-badge" title={t("audit.mesaAdvisory")} aria-label={t("audit.mesaAdvisory")}>MESA</span>
@@ -240,7 +247,7 @@ export function AuditTable({ entries, loading, tokenNames }: Props) {
                   type="button"
                   className="row-open row-link-btn"
                   onClick={(e) => { e.stopPropagation(); setSelected(entry); }}
-                  aria-label={t("audit.openEntryAria", { outcome: outcomeLabel(entry.outcome), name: displayName(entry) })}
+                  aria-label={t("audit.openEntryAria", { outcome: outcomeLabel(entry), name: displayName(entry) })}
                 >
                   {formatTokenNameShort(displayName(entry))}
                 </button>

@@ -662,6 +662,7 @@
       "outcomeDenied": "Запрещено",
       "outcomeInvalidRequest": "Недопустимый запрос",
       "outcomeNotFound": "Не найдено",
+      "outcomeSessionAlreadyClosed": "Сессия уже закрыта",
       "outcomeNotImplemented": "Не реализовано",
       "outcomePendingApproval": "Ожидает одобрения",
       "outcomeRateLimited": "Ограничено частотой",

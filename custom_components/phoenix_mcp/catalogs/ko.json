@@ -296,6 +296,7 @@
       "outcomeDenied": "거부",
       "outcomeInvalidRequest": "잘못된 요청",
       "outcomeNotFound": "찾을 수 없음",
+      "outcomeSessionAlreadyClosed": "이미 종료된 세션",
       "outcomeNotImplemented": "구현되지 않음",
       "outcomePendingApproval": "승인 대기 중",
       "outcomeRateLimited": "속도 제한",

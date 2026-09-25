@@ -647,6 +647,7 @@
       "outcomeAllowed": "Allowed",
       "outcomeDenied": "Denied",
       "outcomeNotFound": "Not Found",
+      "outcomeSessionAlreadyClosed": "Already Closed",
       "outcomeRateLimited": "Rate Limited",
       "outcomeNotImplemented": "Not Implemented",
       "outcomeInvalidRequest": "Invalid Request",

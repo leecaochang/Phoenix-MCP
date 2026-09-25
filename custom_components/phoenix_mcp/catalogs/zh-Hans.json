@@ -652,6 +652,7 @@
       "outcomeDenied": "已拒绝",
       "outcomeInvalidRequest": "无效请求",
       "outcomeNotFound": "未找到",
+      "outcomeSessionAlreadyClosed": "已关闭",
       "outcomeNotImplemented": "未实现",
       "outcomePendingApproval": "待审批",
       "outcomeRateLimited": "速率受限",

@@ -645,6 +645,7 @@
       "outcomeAllowed": "Autorisé",
       "outcomeDenied": "Refusé",
       "outcomeNotFound": "Introuvable",
+      "outcomeSessionAlreadyClosed": "Session déjà fermée",
       "outcomeRateLimited": "Limite de débit atteinte",
       "outcomeNotImplemented": "Non implémenté",
       "outcomeInvalidRequest": "Requête invalide",

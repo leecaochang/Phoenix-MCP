@@ -8806,9 +8806,15 @@ class PhoenixMcpView(PhoenixView):
                     ), body=parsed, resource="mcp:batch")
                 session = _legacy_session(data, request, token)
                 if session is None:
+                    session_outcome: Outcome = (
+                        "not_found"
+                        if request.headers.get("Mcp-Session-Id")
+                        else "invalid_request"
+                    )
                     return audited_transport_response(
                         _legacy_session_error_response(request, None, request_id),
                         body=parsed,
+                        outcome=session_outcome,
                         resource="mcp:batch",
                     )
                 if not session.get("initialized"):
@@ -8948,9 +8954,15 @@ class PhoenixMcpView(PhoenixView):
                 else:
                     session = _legacy_session(data, request, token)
                     if session is None:
+                        message_session_outcome: Outcome = (
+                            "not_found"
+                            if request.headers.get("Mcp-Session-Id")
+                            else "invalid_request"
+                        )
                         return audited_transport_response(
                             _legacy_session_error_response(request, msg_id, request_id),
                             body=body,
+                            outcome=message_session_outcome,
                         )
                     if method in ("notifications/initialized", "initialized"):
                         session["initialized"] = True

@@ -302,6 +302,7 @@
       "outcomeDenied": "Odmówiono",
       "outcomeInvalidRequest": "Nieprawidłowe żądanie",
       "outcomeNotFound": "Nie znaleziono",
+      "outcomeSessionAlreadyClosed": "Sesja już zamknięta",
       "outcomeNotImplemented": "Nie zaimplementowano",
       "outcomePendingApproval": "Oczekuje na zatwierdzenie",
       "outcomeRateLimited": "Limit szybkości",

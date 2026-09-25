@@ -372,6 +372,7 @@
       "outcomeAllowed": "Permitido",
       "outcomeDenied": "Denegado",
       "outcomeNotFound": "No encontrado",
+      "outcomeSessionAlreadyClosed": "Sesión ya cerrada",
       "outcomeRateLimited": "Limitado por velocidad",
       "outcomeNotImplemented": "No implementado",
       "outcomeInvalidRequest": "Solicitud no válida",

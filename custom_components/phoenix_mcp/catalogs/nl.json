@@ -298,6 +298,7 @@
       "outcomeDenied": "Geweigerd",
       "outcomeInvalidRequest": "Ongeldig verzoek",
       "outcomeNotFound": "Niet gevonden",
+      "outcomeSessionAlreadyClosed": "Sessie al afgesloten",
       "outcomeNotImplemented": "Niet geïmplementeerd",
       "outcomePendingApproval": "In afwachting van goedkeuring",
       "outcomeRateLimited": "Snelheidslimiet bereikt",

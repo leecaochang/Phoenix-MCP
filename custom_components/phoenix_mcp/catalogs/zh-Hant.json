@@ -634,6 +634,7 @@
       "outcomeDenied": "已拒絕",
       "outcomeInvalidRequest": "無效請求",
       "outcomeNotFound": "未找到",
+      "outcomeSessionAlreadyClosed": "已關閉",
       "outcomeNotImplemented": "未實現",
       "outcomePendingApproval": "待核准",
       "outcomeRateLimited": "速率受限",
