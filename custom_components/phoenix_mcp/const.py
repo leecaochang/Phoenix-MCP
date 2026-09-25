@@ -2056,9 +2056,14 @@ DECISION_PERCENTAGE_PREVIEW_CHOICES.update({
 DECISION_MAX_TARGETS = 49
 # Qualified TypeSafe joint requests leave one of 255 choices for declining.
 DECISION_BATCH_MAX_TARGETS = 254
+# Qualified joint requests partition complete selections into bounded questions.
+DECISION_MAX_CHOICE_GROUPS = 4
+DECISION_GROUPED_MAX_TARGETS = DECISION_BATCH_MAX_TARGETS * DECISION_MAX_CHOICE_GROUPS
+DECISION_GROUPED_OPERATION_BYTES = 65536
+DECISION_GROUPED_TARGET_BYTES = 131072
 DECISION_MAX_TARGET_BYTES = 16384
 # Joint catalogs need room for the complete union and per-target eligibility.
-# Individual operation catalogs retain DECISION_MAX_TARGET_BYTES.
+# Ungrouped operation catalogs retain DECISION_MAX_TARGET_BYTES.
 DECISION_BATCH_MAX_TARGET_BYTES = 32768
 DECISION_CATALOG_PACK_THRESHOLD = 8192
 DECISION_CATALOG_FORMAT_INSTRUCTIONS = (

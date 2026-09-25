@@ -14,7 +14,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.phoenix_mcp import agentcli, device_semantics
 from custom_components.phoenix_mcp.const import (
     DOMAIN, DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS, DECISION_BATCH_MAX_TARGETS,
-    DECISION_MAX_TARGET_BYTES, DECISION_BATCH_MAX_TARGET_BYTES,
+    DECISION_MAX_TARGET_BYTES, DECISION_BATCH_MAX_TARGET_BYTES, DECISION_GROUPED_MAX_TARGETS,
 )
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.decision_batch import async_preview_batch, capture_batch_targets
@@ -55,6 +55,8 @@ def wire_targets(payload):
 def wire_response(payload, category='light_on', target='t0'):
     choices = [('route', category), ('target', target)]
     choices.extend((key, 'none') for key in ('value', 'attribute', 'color', 'summary', 'summary_scope', 'percentage') if key in payload['questions'])
+    choices.extend((key, 'none') for key in payload['questions']
+                   if key.startswith(('target_', 'summary_scope_')))
     return {'model': 'jev-1.13.0', 'answers': {
         question: {'type': 'choice', 'choice': selected, 'confidence': 1,
                    'probabilities': {key: float(key == selected) for key in payload['questions'][question]['criteria']}}
@@ -133,7 +135,7 @@ async def test_no_request_when_catalog_or_local_recognition_is_ineligible(hass, 
             assert (await preview(hass, batch_home, numeric_preview=numeric))['reason'] == 'provider_fallback'
         return
     if case == 'oversized':
-        for index in range(DECISION_BATCH_MAX_TARGETS):
+        for index in range(DECISION_GROUPED_MAX_TARGETS):
             entry = er.async_get(hass).async_get_or_create('light', 'test', str(index))
             hass.states.async_set(entry.entity_id, 'off')
     if case in ('trigger', 'timeout'): local = {'reason': 'sentence_trigger' if case == 'trigger' else 'timeout', 'proposal': None}
@@ -409,7 +411,7 @@ async def test_extended_preview_keeps_all_competitors_above_common_limit(hass, b
 
 async def test_extended_preview_preserves_metadata_byte_budget(hass, batch_home):
     registry = er.async_get(hass)
-    for index in range(20):
+    for index in range(50):
         entry = registry.async_get_or_create('light', 'test', f'extra{index}')
         registry.async_update_entity(entry.entity_id, aliases={str(i) * 200 for i in range(8)})
         hass.states.async_set(entry.entity_id, 'off')
@@ -545,7 +547,7 @@ async def test_preview_limit_diagnostic_contains_only_scoped_counts(hass, batch_
     if failure == 'name': hass.states.async_set(entity_id, 'off', {'friendly_name': 'x' * 257})
     if failure == 'aliases': registry.async_update_entity(entity_id, aliases={f'private alias {i}' for i in range(9)})
     if failure == 'bytes':
-        for index in range(20):
+        for index in range(50):
             entry = registry.async_get_or_create('light', 'test', f'extra{index}')
             registry.async_update_entity(entry.entity_id, aliases={str(i) * 200 for i in range(8)})
             hass.states.async_set(entry.entity_id, 'off')
@@ -576,18 +578,23 @@ async def test_categorical_catalog_bounds_follow_qualified_account(hass, batch_h
         expected.add(entry.entity_id)
     async def response(*args):
         payload = args[4]
-        assert set(payload['questions']) == ({'route', 'target', 'summary', 'summary_scope'} if qualified else {'route', 'target'})
-        assert len(payload['questions']['target']['criteria']) == count + 1
+        expected_questions = {'route', 'target', 'summary', 'summary_scope'} if qualified else {'route', 'target'}
+        if count > DECISION_BATCH_MAX_TARGETS:
+            expected_questions.add('target_2')
+        assert set(payload['questions']) == expected_questions
+        partitions = [spec['criteria'] for key, spec in payload['questions'].items() if key == 'target' or key.startswith('target_')]
+        assert sum(len(criteria) - 1 for criteria in partitions) == count
+        assert all(len(criteria) <= 255 for criteria in partitions)
         assert {item['entity_id'] for item in wire_targets(payload).values()} == expected
         return wire_response(payload, 'state_query', 't0')
     with (patch.object(DecisionProvider, '_request', side_effect=response) as request,
           patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
         result = await preview(hass, batch_home)
-    admitted = count <= (DECISION_BATCH_MAX_TARGETS if qualified else DECISION_MAX_TARGETS)
+    admitted = count <= (DECISION_GROUPED_MAX_TARGETS if qualified else DECISION_MAX_TARGETS)
     assert result['reason'] == ('target_selected' if admitted else 'too_many_targets')
     assert request.await_count == int(admitted)
     if not admitted:
-        assert result['catalog_limit']['limit'] == (DECISION_BATCH_MAX_TARGETS if qualified else DECISION_MAX_TARGETS)
+        assert result['catalog_limit']['limit'] == (DECISION_GROUPED_MAX_TARGETS if qualified else DECISION_MAX_TARGETS)
     assert result['executed'] is False and '_plan' not in result
     assert not data.store.get_pending_approvals()
     dispatch.assert_not_called()
@@ -644,7 +651,7 @@ async def test_summary_scopes_do_not_compete_with_full_entity_catalog_budget(has
     entity_bytes=len(json.dumps(catalog_state(initial[0]),ensure_ascii=False).encode())
     summary_bytes=len(json.dumps(summary_wire(initial[1]['state_summary'].targets),ensure_ascii=False).encode())
     assert summary_bytes>0
-    with patch('custom_components.phoenix_mcp.decision_batch.DECISION_BATCH_MAX_TARGET_BYTES',entity_bytes):
+    with patch('custom_components.phoenix_mcp.decision_batch.DECISION_GROUPED_TARGET_BYTES',entity_bytes):
         targets,catalogs=capture_batch_targets(hass,token,extended=True)
     assert targets==initial[0]
     assert catalogs['state_summary']==initial[1]['state_summary']
@@ -698,3 +705,44 @@ async def test_joint_option_descriptions_include_exact_values_without_dropping_c
     with patch.object(provider, '_request', side_effect=response):
         result = await provider.route_and_target(None, 'Select HDMI 2', targets, 5000)
     assert result['route']['choice'] == 'provider'
+
+
+@pytest.mark.parametrize('change', [None, 'competitor_alias', 'authority'])
+async def test_grouped_catalog_prepares_plan_only_while_all_competitors_remain_current(hass, batch_home, change):
+    from custom_components.phoenix_mcp.command_routing import RoutingAuthority
+    from custom_components.phoenix_mcp.decision_batch import async_prepare_batch, batch_catalog_digest
+    data, token, store, account, original = batch_home
+    registry = er.async_get(hass)
+    for index in range(254):
+        entry = registry.async_get_or_create('light', 'test', f'grouped_{index}', original_name=f'Lamp {index}')
+        hass.states.async_set(entry.entity_id, 'off')
+    authority = RoutingAuthority.capture(data, token)
+    provider = DecisionProvider(store.resolve(account, purpose='decision'), 'systemone')
+    snapshot = capture_batch_targets(hass, token, extended=True)
+    assert len(snapshot[0]) == 255
+    winner = list(snapshot[0])[-1]
+    async def response(*args):
+        payload = args[4]
+        result = wire_response(payload, 'state_query', 'none')
+        spec = payload['questions']['target_2']
+        result['answers']['target_2'] = {
+            'type': 'choice', 'choice': winner, 'confidence': 1,
+            'probabilities': {key: float(key == winner) for key in spec['criteria']},
+        }
+        if change == 'competitor_alias':
+            competitor = next(item['entity_id'] for key, item in snapshot[0].items() if key != winner)
+            registry.async_update_entity(competitor, aliases={'New competing alias'})
+        if change == 'authority':
+            token.permissions = PermissionTree()
+        return result
+    with patch.object(provider, '_request', side_effect=response) as request:
+        if change:
+            with pytest.raises(DecisionError, match='targets_changed|authority_changed'):
+                await async_prepare_batch(hass, authority, provider, None, 'Read the named lamp', 'en', 'chat')
+        else:
+            _, result = await async_prepare_batch(hass, authority, provider, None, 'Read the named lamp', 'en', 'chat')
+            assert result['reason'] == 'target_selected'
+            assert result['_plan']['decision_batch']['catalog'] == batch_catalog_digest(snapshot)
+            assert result['proposal']['entity_ids'] == [snapshot[0][winner]['entity_id']]
+        request.assert_awaited_once()
+    assert not data.store.get_pending_approvals()

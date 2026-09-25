@@ -12,7 +12,8 @@ from .device_semantics import device_registry_snapshot
 from .helpers import voice_text, redact_secrets_in_text, redact_inaccessible_entity_ids_in_text
 
 
-def summary_catalog(hass: Any, token: Any, *, devices: Any = None) -> Any:
+def summary_catalog(hass: Any, token: Any, *, devices: Any = None,
+                    max_targets: int = DECISION_BATCH_MAX_TARGETS, max_bytes: int = DECISION_MAX_TARGET_BYTES) -> Any:
     """No state values leave Phoenix; unavailable members remain in the denominator."""
     from .command_execution import _target_fingerprint, _digest
     from .decision_targets import TargetSnapshot, CatalogLimitError
@@ -42,10 +43,10 @@ def summary_catalog(hass: Any, token: Any, *, devices: Any = None) -> Any:
                 groups[key] = descriptor
     targets = {f's{index}': groups[key] for index, key in enumerate(sorted(groups))}
     encoded = json.dumps(summary_wire(targets), ensure_ascii=False)
-    if len(targets) > DECISION_BATCH_MAX_TARGETS:
-        raise CatalogLimitError('state_summary', 'target_count', len(targets), DECISION_BATCH_MAX_TARGETS)
-    if len(encoded.encode()) > DECISION_MAX_TARGET_BYTES:
-        raise CatalogLimitError('state_summary', 'metadata_bytes', len(encoded.encode()), DECISION_MAX_TARGET_BYTES)
+    if len(targets) > max_targets:
+        raise CatalogLimitError('state_summary', 'target_count', len(targets), max_targets)
+    if len(encoded.encode()) > max_bytes:
+        raise CatalogLimitError('state_summary', 'metadata_bytes', len(encoded.encode()), max_bytes)
     if redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(encoded) or '', token, hass) != encoded:
         from .decision_provider import DecisionError
         raise DecisionError('context_unavailable')
@@ -152,4 +153,20 @@ def summary_wire(targets: dict[str, dict]) -> dict:
         scope = item['summary_scope']
         rows[key] = [scope['domain'], scope['device_class'], scope['area_id'], item['area'], item['area_aliases']]
         states[scope['domain']] = item['states']
-    return {'summary_scopes': rows, 'summary_scope_fields': fields, 'summary_domain_states': states}
+    packed = {'summary_scopes': rows, 'summary_scope_fields': fields, 'summary_domain_states': states}
+    # Large homes repeat the same area identity across many domains and classes.
+    # Pool exact tuples, not names alone, so aliases and distinct IDs survive.
+    identities: dict[str, str] = {}
+    areas = {}
+    compact_rows = {}
+    for key, row in rows.items():
+        identity = json.dumps(row[2:], ensure_ascii=False)
+        reference = identities.get(identity)
+        if reference is None:
+            reference = f"a{len(identities)}"
+            identities[identity] = reference
+            areas[reference] = dict(zip(fields[2:], row[2:], strict=True))
+        compact_rows[key] = [row[0], row[1], reference]
+    pooled = {'summary_scopes': compact_rows, 'summary_scope_fields': ['domain', 'device_class', 'area_ref'],
+              'summary_areas': areas, 'summary_domain_states': states}
+    return min((packed, pooled), key=lambda value: len(json.dumps(value, ensure_ascii=False).encode()))

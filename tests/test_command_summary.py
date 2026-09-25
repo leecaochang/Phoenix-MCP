@@ -287,17 +287,22 @@ async def test_local_count_does_not_build_unrelated_provider_catalog(hass,summar
         assert _capture_plan(hass,data,token,result['proposal'],ingress='chat') is not None
 
 
-def test_large_summary_wire_preserves_every_scope_and_state_choice():
+@pytest.mark.parametrize('repeats', [1, 4])
+def test_large_summary_wire_preserves_every_scope_and_state_choice(repeats):
     import json
     from custom_components.phoenix_mcp.command_summary import summary_wire
-    targets={f's{index}':{'summary_scope':{'domain':'light','device_class':'','area_id':f'room_{index}'},
-                         'area':f'Room {index}','area_aliases':[f'Alias {index}'],
+    targets={f's{index}':{'summary_scope':{'domain':'light','device_class':f'class_{index % repeats}','area_id':f'room_{index // repeats}'},
+                         'area':f'Room {index // repeats}','area_aliases':[f'Alias {index // repeats}'],
                          'states':['on','off','unknown','unavailable']} for index in range(150)}
     wire=summary_wire(targets)
     assert len(json.dumps(wire).encode()) < 16384
     assert set(wire['summary_scopes'])==set(targets)
+    if repeats > 1:
+        assert 'summary_areas' in wire
     for key,row in wire['summary_scopes'].items():
         decoded=dict(zip(wire['summary_scope_fields'],row,strict=True))
+        if 'area_ref' in decoded:
+            decoded.update(wire['summary_areas'][decoded.pop('area_ref')])
         assert {name:decoded[name] for name in ('domain','device_class','area_id')}==targets[key]['summary_scope']
         assert decoded['area_aliases']==targets[key]['area_aliases']
         assert wire['summary_domain_states'][decoded['domain']]==targets[key]['states']

@@ -42,7 +42,8 @@ class TargetSnapshot:
 
 def capture_targets(hass: Any, token: Any, category: str, *,
                     devices: DeviceRegistrySnapshot | None = None,
-                    max_targets: int = DECISION_MAX_TARGETS, compact: bool = False) -> TargetSnapshot:
+                    max_targets: int = DECISION_MAX_TARGETS, compact: bool = False,
+                    max_bytes: int = DECISION_MAX_TARGET_BYTES) -> TargetSnapshot:
     """Reuse local execution eligibility; send identity metadata only, never states."""
     intent = DECISION_TARGET_INTENTS.get(category)
     if intent is None:
@@ -112,8 +113,8 @@ def capture_targets(hass: Any, token: Any, category: str, *,
         targets[f"t{len(targets)}"] = descriptor
         fingerprints[entity_id] = fingerprint
     size = len(json.dumps(catalog_state(targets) if compact else targets, ensure_ascii=False).encode())
-    if size > DECISION_MAX_TARGET_BYTES:
-        raise CatalogLimitError(category, "metadata_bytes", size, DECISION_MAX_TARGET_BYTES)
+    if size > max_bytes:
+        raise CatalogLimitError(category, "metadata_bytes", size, max_bytes)
     return TargetSnapshot(targets, fingerprints)
 
 

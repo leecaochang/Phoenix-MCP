@@ -444,3 +444,112 @@ def test_typesafe_rounding_bounds_preserve_raw_probabilities_and_threshold(value
         result = provider._parse_choice(body, choices)
         assert result['probabilities'] == probabilities
         assert confident_choice(result) is confident
+
+
+@pytest.mark.parametrize('selection', ['target', 'summary_scope'])
+@pytest.mark.parametrize('case', ['last_group', 'none', 'conflict', 'uncertain_decline', 'missing', 'unknown'])
+async def test_grouped_choices_require_complete_unambiguous_global_selection(selection, case):
+    from custom_components.phoenix_mcp.const import DECISION_TYPESAFE_BASE_URL
+    provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL),
+                                'systemone')
+    targets = {f't{i}': {'entity_id': f'light.test_{i}', 'name': 'Duplicate lamp' if i in (0, 254) else f'Lamp {i}',
+                        'eligible_categories': ['light_on']} for i in range(255)} if selection == 'target' else {}
+    scopes = {f's{i}': {'summary_scope': {'domain': 'light', 'device_class': '', 'area_id': str(i)},
+                       'area': f'Room {i}', 'area_aliases': [], 'states': ['on', 'off']}
+              for i in range(255)} if selection == 'summary_scope' else None
+    async def reply(*args):
+        payload = args[4]
+        first, second = payload['questions'][selection], payload['questions'][selection + '_2']
+        expected = set(targets if selection == 'target' else scopes)
+        assert set(first['criteria']) & set(second['criteria']) == {'none'}
+        assert (set(first['criteria']) | set(second['criteria'])) - {'none'} == expected
+        assert len(first['criteria']) == 255 and len(second['criteria']) == 2
+        assert len(payload['state']['targets'] if selection == 'target' else payload['state']['summary_scopes']) == 255
+        chosen = ('t' if selection == 'target' else 's') + '254'
+        answers = {}
+        for question, spec in payload['questions'].items():
+            key = 'none'
+            if question == 'route':
+                key = 'light_on' if selection == 'target' else 'state_summary'
+            if question == 'summary' and selection == 'summary_scope':
+                key = 'total'
+            if question == selection + '_2' and case != 'none':
+                key = chosen
+            if question == selection and case == 'conflict':
+                key = next(key for key in spec['criteria'] if key != 'none')
+            answers[question] = {'type': 'choice', 'choice': key, 'confidence': 1,
+                                 'probabilities': {k: float(k == key) for k in spec['criteria']}}
+        if case == 'uncertain_decline':
+            p = answers[selection]['probabilities']
+            p['none'] = 0.89
+            p[next(k for k in p if k != 'none')] = 0.11
+        if case == 'missing':
+            del answers[selection + '_2']
+        if case == 'unknown':
+            answers[selection + '_2']['choice'] = 'not_in_catalog'
+        return {'model': 'jev-1.13.0', 'answers': answers}
+    with patch.object(provider, '_request', side_effect=reply) as request:
+        if case in ('last_group', 'none'):
+            result = await provider.route_and_target(None, 'Test request', targets, 5000, summary_scopes=scopes)
+            assert result[selection]['choice'] == ('none' if case == 'none' else ('t' if selection == 'target' else 's') + '254')
+            assert not any(key.endswith('_2') for key in result)
+        else:
+            with pytest.raises(DecisionError):
+                await provider.route_and_target(None, 'Test request', targets, 5000, summary_scopes=scopes)
+        request.assert_awaited_once()
+
+
+async def test_grouped_choice_limit_refuses_before_provider_request():
+    from custom_components.phoenix_mcp.const import DECISION_TYPESAFE_BASE_URL, DECISION_GROUPED_MAX_TARGETS
+    provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL),
+                                'systemone')
+    targets = {f't{i}': {'entity_id': f'light.test_{i}', 'eligible_categories': ['light_on']}
+               for i in range(DECISION_GROUPED_MAX_TARGETS + 1)}
+    with patch.object(provider, '_request') as request:
+        with pytest.raises(DecisionError, match='too_many_targets'):
+            await provider.route_and_target(None, 'Turn on a lamp', targets, 5000)
+    request.assert_not_called()
+
+
+@pytest.mark.parametrize('kind', ['entity', 'collection'])
+@pytest.mark.parametrize('failure', [None, 'authority', 'uncertain', 'declined', 'model_changed'])
+async def test_oversized_catalog_kind_selection_keeps_complete_relevant_catalog(kind, failure):
+    from custom_components.phoenix_mcp.const import DECISION_TYPESAFE_BASE_URL
+    provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL),
+                                'systemone')
+    targets = {f't{i}': {'entity_id': f'light.lamp_{i}', 'eligible_categories': ['light_on']} for i in range(2)}
+    scopes = {f's{i}': {'summary_scope': {'domain': 'light', 'device_class': '', 'area_id': str(i)},
+                       'area': f'Room {i}', 'area_aliases': [], 'states': ['on', 'off']} for i in range(2)}
+    revalidate = MagicMock(side_effect=DecisionError('authority_changed') if failure == 'authority' else None)
+    async def reply(*args):
+        payload = args[4]
+        first = 'catalog' in payload['questions']
+        if not first:
+            assert payload['state']['targets'] == (targets if kind == 'entity' else {})
+            assert payload['state'].get('summary_scopes') == (scopes if kind == 'collection' else None)
+        answers = {}
+        for question, spec in payload['questions'].items():
+            selected = {'catalog': kind, 'route': 'light_on' if kind == 'entity' else 'state_summary',
+                        'target': 't1' if kind == 'entity' else 'none',
+                        'summary_scope': 's1', 'summary': 'on'}.get(question, 'none')
+            if first and failure == 'declined':
+                selected = 'provider'
+            answers[question] = {'type': 'choice', 'choice': selected, 'confidence': 1,
+                                 'probabilities': {key: float(key == selected) for key in spec['criteria']}}
+        if first and failure == 'uncertain':
+            answers['catalog']['probabilities'] = {kind: 0.89, 'provider': 0.11,
+                                                   'collection' if kind == 'entity' else 'entity': 0}
+        return {'model': 'different-model' if not first and failure == 'model_changed' else 'jev-1.13.0',
+                'answers': answers}
+    with (patch('custom_components.phoenix_mcp.decision_provider.DECISION_BATCH_MAX_TARGET_BYTES', 1),
+          patch.object(provider, '_request', side_effect=reply) as request):
+        if failure:
+            with pytest.raises(DecisionError):
+                await provider.route_and_target(None, 'A request', targets, 5000, summary_scopes=scopes,
+                                                revalidate=revalidate)
+        else:
+            result = await provider.route_and_target(None, 'A request', targets, 5000, summary_scopes=scopes,
+                                                     revalidate=revalidate)
+            assert result['route']['choice'] == ('light_on' if kind == 'entity' else 'state_summary')
+        assert request.await_count == (1 if failure in ('authority', 'uncertain', 'declined') else 2)
+        assert revalidate.call_count == (0 if failure in ('uncertain', 'declined') else 1)

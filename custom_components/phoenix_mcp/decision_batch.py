@@ -14,7 +14,7 @@ from .command_operations import numeric_operation
 from .const import (
     DECISION_ENTITY_VALUE_QUESTIONS, DECISION_BATCH_EXECUTION_LANGUAGES, DECISION_BATCH_EXECUTION_MODELS,
     DECISION_EXECUTION_CATEGORIES, DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES,
-    DECISION_BATCH_MAX_TARGET_BYTES,
+    DECISION_BATCH_MAX_TARGET_BYTES, DECISION_GROUPED_MAX_TARGETS, DECISION_GROUPED_OPERATION_BYTES, DECISION_GROUPED_TARGET_BYTES,
     DECISION_PERCENTAGE_EXECUTION_MODELS, DECISION_TEMPORAL_CATEGORIES,
     COMMAND_ROUTING_VALUE_INTENTS, DECISION_TARGET_INTENTS, DECISION_NUMERIC_CATEGORIES, DECISION_BATCH_MAX_TARGETS, MAX_SEARCH_QUERY_LEN,
 )
@@ -33,14 +33,17 @@ def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = Fals
     if temporal:
         categories = DECISION_EXECUTION_CATEGORIES | DECISION_TEMPORAL_CATEGORIES.keys()
     extended = (numeric_preview and not temporal) or extended
-    max_targets = DECISION_BATCH_MAX_TARGETS if extended else DECISION_MAX_TARGETS
+    grouped = extended and not temporal
+    max_targets = DECISION_GROUPED_MAX_TARGETS if grouped else DECISION_BATCH_MAX_TARGETS if extended else DECISION_MAX_TARGETS
+    operation_bytes = DECISION_GROUPED_OPERATION_BYTES if grouped else DECISION_MAX_TARGET_BYTES
     snapshots = {category: capture_targets(hass, token, category, devices=devices, max_targets=max_targets,
-                                          compact=extended)
+                                          compact=extended, max_bytes=operation_bytes)
                  for category in sorted(categories)}
     if extended and not temporal:
         from .command_summary import summary_catalog
         try:
-            snapshots['state_summary'] = summary_catalog(hass, token, devices=devices)
+            snapshots['state_summary'] = summary_catalog(hass, token, devices=devices,
+                                                          max_targets=max_targets, max_bytes=operation_bytes)
         except CatalogLimitError:
             # Disable this complete query catalog rather than truncating it or other routes.
             pass
@@ -62,10 +65,10 @@ def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = Fals
         raise CatalogLimitError("combined", "target_count", len(entities), max_targets)
     targets = {f"t{index}": entities[entity_id] for index, entity_id in enumerate(sorted(entities))}
     size = len(json.dumps(catalog_state(targets) if extended else targets, ensure_ascii=False).encode())
-    max_bytes = DECISION_BATCH_MAX_TARGET_BYTES if extended else DECISION_MAX_TARGET_BYTES
+    max_bytes = DECISION_GROUPED_TARGET_BYTES if grouped else DECISION_BATCH_MAX_TARGET_BYTES if extended else DECISION_MAX_TARGET_BYTES
     if size > max_bytes:
         raise CatalogLimitError("combined", "metadata_bytes", size, max_bytes)
-    # Collection scopes have their own complete 16 KiB/254-choice budget.
+    # Collection scopes have their own bounded complete-catalog budget.
     # Sharing the entity catalog budget silently disables summaries in larger homes.
     return targets, snapshots
 
@@ -147,8 +150,16 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
         options['summary_scopes'] = summaries.targets
     if scalar:
         options["scalar_value"] = source_value
+    def revalidate() -> None:
+        latest = authority.current(hass)
+        if latest is None or loaded_decision_account(hass, account) != provider.cfg:
+            raise DecisionError("authority_changed")
+        if capture_batch_targets(hass, latest, numeric_preview=numeric, extended=True) != snapshot:
+            raise DecisionError("targets_changed")
+
     answer = await provider.route_and_target(session, sentence, targets,
-                                            authority.settings.decision_timeout_ms, language, **options)
+                                            authority.settings.decision_timeout_ms, language,
+                                            revalidate=revalidate, **options)
     current = authority.current(hass)
     if current is None:
         raise DecisionError("authority_changed")
@@ -314,8 +325,16 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
                         if scalar:
                             options["scalar_value"] = source_value
                 if temporal is None:
+                    def revalidate() -> None:
+                        latest = authority.current(hass)
+                        if latest is None or store.resolve(account, purpose="decision") != cfg:
+                            raise DecisionError("authority_changed")
+                        if (not safe_text(latest) or capture_batch_targets(
+                                hass, latest, numeric_preview=numeric_preview, extended=extended) != snapshot):
+                            raise DecisionError("targets_changed")
                     answer = await provider.route_and_target(async_get_clientsession(hass), sentence, targets,
-                                                            authority.settings.decision_timeout_ms, lang, **options)
+                                                            authority.settings.decision_timeout_ms, lang,
+                                                            revalidate=revalidate, **options)
             current = authority.current(hass)
             if current is None or store.resolve(account, purpose="decision") != cfg:
                 return result("authority_changed")
