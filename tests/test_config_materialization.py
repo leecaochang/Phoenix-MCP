@@ -273,9 +273,12 @@ class TestCreateMaterialization:
             token, hass, data,
         ))[0])
 
+        current = _json((await _call_tool(
+            "get_automation", {"automation_id": created["id"]}, token, hass, data,
+        ))[0])
         result, outcome, _res = await _call_tool(
             "edit_automation",
-            {"automation_id": created["id"], "config": {
+            {"automation_id": created["id"], "expected_hash": current["content_hash"], "config": {
                 "alias": "After Rename",
                 "trigger": [{"platform": "state", "entity_id": "input_boolean.x"}],
                 "action": [{"service": "homeassistant.toggle", "entity_id": "input_boolean.x"}],

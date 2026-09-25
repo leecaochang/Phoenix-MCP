@@ -358,6 +358,10 @@ General, for automations, scripts, and scenes:
   write is then refused if the config changed in between (someone edited it in
   the UI, or an approval sat in the queue) instead of overwriting their change;
   on a refusal, re-read and reapply your change to the fresh config.
+- Automation alias additions, removals, and renames require that current hash.
+  Same-alias automation edits may omit it. Creation never replaces an occupied
+  ID: omit `automation_id` for a new generated ID, or supply an unused literal ID.
+  Use `edit_automation` for intentional replacement; stored IDs cannot be changed.
 - A `!secret` or `!include` in a config you read comes back as display text (for
   example `"!secret my_key"`), never the resolved value. Send it back unchanged
   to preserve the reference.

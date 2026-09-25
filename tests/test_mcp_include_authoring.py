@@ -111,7 +111,7 @@ class TestAutomationSplitLayout:
         token = _token(cap_automation_write="allow")
         _, outcome, _ = await _call_tool(
             "edit_automation",
-            {"automation_id": "aaa", "config": dict(AUTOMATION_CFG, alias="A2")},
+            {"automation_id": "aaa", "config": dict(AUTOMATION_CFG, alias="A2"), "expected_hash": content_hash(yi.read_entry(str(env), "automation", "aaa"))},
             token, hass, MagicMock(),
         )
         assert outcome == "allowed"
@@ -317,7 +317,7 @@ class TestLegacyFallbackParity:
         assert (env / "automations.yaml").exists()
 
         _, outcome, _ = await _call_tool(
-            "edit_automation", {"automation_id": aid, "config": dict(AUTOMATION_CFG, alias="X")},
+            "edit_automation", {"automation_id": aid, "config": dict(AUTOMATION_CFG, alias="X"), "expected_hash": content_hash(yi.read_entry(str(env), "automation", aid))},
             token, hass, MagicMock())
         assert outcome == "allowed"
 
@@ -369,7 +369,7 @@ class TestTagHandling:
         data, versions = _data()
         token = _token(cap_automation_write="allow")
         _, outcome, _ = await _call_tool(
-            "edit_automation", {"automation_id": "aaa", "config": dict(AUTOMATION_CFG, alias="A2")},
+            "edit_automation", {"automation_id": "aaa", "config": dict(AUTOMATION_CFG, alias="A2"), "expected_hash": content_hash(yi.read_entry(str(env), "automation", "aaa"))},
             token, hass, data)
         assert outcome == "allowed"
         record = versions.list_for("automation", "aaa")[0]
@@ -414,7 +414,7 @@ class TestTagHandling:
         write(env, "automations.yaml", "- id: aaa\n  alias: A\n  action: !include actions.yaml\n")
         token = _token(cap_automation_write="allow")
         content, outcome, _ = await _call_tool(
-            "edit_automation", {"automation_id": "aaa", "config": AUTOMATION_CFG},
+            "edit_automation", {"automation_id": "aaa", "config": AUTOMATION_CFG, "expected_hash": content_hash(yi.read_entry(str(env), "automation", "aaa"))},
             token, hass, MagicMock())
         assert outcome == "denied"
         assert _text(content) == yi.MSG_INCLUDE_REFUSAL.format(name="automations.yaml")
@@ -427,7 +427,7 @@ class TestApprovalReplay:
         write(env, "automations/one.yaml", "- id: aaa\n  alias: A\n")
         token = _token(cap_automation_write="confirm")
         _, outcome, _ = await _execute_edit_automation(
-            {"automation_id": "aaa", "config": dict(AUTOMATION_CFG, alias="Approved")},
+            {"automation_id": "aaa", "config": dict(AUTOMATION_CFG, alias="Approved"), "expected_hash": content_hash(yi.read_entry(str(env), "automation", "aaa"))},
             token, hass, MagicMock())
         assert outcome == "allowed"
         assert "alias: Approved" in (env / "automations/one.yaml").read_text(encoding="utf-8")

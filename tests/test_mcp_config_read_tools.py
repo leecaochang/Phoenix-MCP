@@ -190,14 +190,14 @@ class TestAutomationCas:
         items = _read_automations_yaml(str(hass.config.config_dir) + "/automations.yaml")
         assert next(a for a in items if a.get("id") == aid)["alias"] == "Renamed"
 
-    async def test_omitted_hash_skips_the_check(self, hass, automation_env):
-        # expected_hash is optional: agents that do not read first still work.
+    async def test_same_alias_edit_without_hash(self, hass, automation_env):
+        # Same-alias edits retain optional hashes.
         data = _data()
         token = _token(cap_automation_write="allow")
         created = _json((await _call_tool("create_automation", {"config": _cfg()}, token, hass, data))[0])
         _r, outcome, _res = await _call_tool(
             "edit_automation",
-            {"automation_id": created["id"], "config": _cfg(alias="NoHash")},
+            {"automation_id": created["id"], "config": _cfg(description="Updated description")},
             token, hass, data,
         )
         assert outcome == "allowed"
@@ -283,11 +283,12 @@ class TestApprovalDiffCompleteness:
 
         # Gate an edit carrying a LARGE config so a real pending approval is
         # created with content that a display cap would have clipped.
+        read = _json((await _call_tool("get_automation", {"automation_id": aid}, token, hass, data))[0])
         edit_cfg = dict(big_cfg, alias="Replaced")
         confirm_token = _token(cap_automation_write="confirm")
         confirm_token.id = token.id
         _r, outcome, _res = await _call_tool(
-            "edit_automation", {"automation_id": aid, "config": edit_cfg},
+            "edit_automation", {"automation_id": aid, "config": edit_cfg, "expected_hash": read["content_hash"]},
             confirm_token, hass, data,
         )
         assert outcome == "pending_approval"

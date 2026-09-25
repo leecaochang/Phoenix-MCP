@@ -488,7 +488,9 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "Create a new Home Assistant automation in the YAML config (split !include layouts are "
             "routed to the correct file automatically). Do not include an 'id' (Phoenix MCP "
-            "assigns and returns it). HA validates before saving; invalid configs are rejected with an "
+            "assigns and returns it unless automation_id is supplied). Creation refuses an occupied ID, "
+            "even with the same alias; use get_automation then edit_automation for replacement. "
+            "HA validates before saving; invalid configs are rejected with an "
             "error. To build from a blueprint instead, pass 'use_blueprint' ({'path': ..., 'input': "
             "{...}}) with no trigger/action; see list_blueprints."
         ),
@@ -496,6 +498,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
+                "automation_id": {"type": "string", "description": "Optional unused stored ID. Omit to generate a unique ID. Values such as new are literal IDs, not placeholders."},
                 "config": {"type": "object", "description": "Full HA automation configuration (alias, trigger, action, condition, mode). Do not include 'id'."},
             },
             "required": ["config"],
@@ -509,6 +512,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "get_automation first and resend every part you want to keep; anything you omit is "
             "destroyed. "
             "The automation_id is preserved - do not include it in 'config'. "
+            "Adding, removing, or changing alias requires the current content_hash as expected_hash. "
+            "Same-alias edits may omit the hash. "
             "Returns the updated configuration. "
             "The config is validated by HA before saving - invalid configs are rejected with an error. "
             "Use list_automations or search_entities with domain 'automation' to find automations; an automation's id is in its 'id' state attribute and is returned by create_automation. "
@@ -520,7 +525,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "properties": {
                 "automation_id": {"type": "string", "description": "ID of the automation to edit, as returned by create_automation or read from the automation's 'id' state attribute."},
                 "config": {"type": "object", "description": "Full replacement automation configuration (alias, trigger, action, condition, mode). Do not include 'id'."},
-                "expected_hash": {"type": "string", "description": "Optional content_hash from get_automation. When given, the edit is refused if the automation changed since that read."},
+                "expected_hash": {"type": "string", "description": "content_hash from get_automation. Required for alias changes, optional for same-alias edits. Any supplied hash must still match at the write boundary."},
             },
             "required": ["automation_id", "config"],
         },

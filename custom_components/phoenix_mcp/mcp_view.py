@@ -5180,7 +5180,13 @@ async def async_restore_version(
     try:
         if resource_type == "automation":
             if exists:
-                return await _execute_edit_automation({"automation_id": resource_id, "config": target}, token, hass, data)
+                current = await hass.async_add_executor_job(
+                    yaml_includes.read_entry, hass.config.config_dir, "automation", resource_id,
+                )
+                return await _execute_edit_automation({
+                    "automation_id": resource_id, "config": target,
+                    "expected_hash": content_hash(current),
+                }, token, hass, data)
             # Recreate in place under the original id so the rollback lands on the
             # same timeline and a second restore just edits it.
             return await _execute_create_automation({"config": target, "automation_id": resource_id}, token, hass, data)

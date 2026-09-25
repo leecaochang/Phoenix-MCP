@@ -945,7 +945,7 @@ def test_create_append_refuses_wrong_shape(tmp_path):
     write(tmp_path, "configuration.yaml", "automation: !include automations.yaml\n")
     write(tmp_path, "automations.yaml", "some: mapping\n")
     res = yi.perform_create(str(tmp_path), "automation", "phoenix_mcp_x", {"id": "phoenix_mcp_x"})
-    assert not res.ok and res.error_kind == "io_error"
+    assert not res.ok and res.error_kind == "refused"
 
 
 # ---------------------------------------------------------------------------

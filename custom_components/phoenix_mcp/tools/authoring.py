@@ -345,6 +345,30 @@ async def _config_validation_error(
     return None
 
 
+def _automation_argument_error(args: dict, *, create: bool) -> str | None:
+    """Reject malformed or conflicting identity inputs on every ingress."""
+    aid = args.get("automation_id")
+    if "automation_id" in args and (not isinstance(aid, str) or not aid.strip()):
+        return "automation_id must be a non-empty stored automation ID."
+    if not create and aid is None:
+        return "automation_id is required."
+    config = args.get("config")
+    if not isinstance(config, dict):
+        return "config must be an object."
+    if "id" in config and (aid is None or config["id"] != aid.strip()):
+        return "config.id must match automation_id; omit config.id when creating a new automation."
+    expected = args.get("expected_hash")
+    if "expected_hash" in args and (not isinstance(expected, str) or not expected):
+        return "expected_hash must be a non-empty content_hash from get_automation."
+    return None
+
+
+def _automation_op_error(op: yaml_includes.OpResult, tool_name: str) -> tuple[dict, str, str]:
+    """Map identity and storage refusals to the existing tool envelope."""
+    outcome = "invalid_request" if op.error_kind in ("conflict", "io_error") else "denied"
+    return _tool_error(op.error_text), outcome, tool_name
+
+
 async def _automation_write_precheck(
     args: dict, hass: HomeAssistant, tool_name: str, *, require_id: bool
 ) -> tuple[dict, str, str] | None:
@@ -354,16 +378,25 @@ async def _automation_write_precheck(
     rejected before a pending approval is created. The executor re-validates at
     apply time.
     """
-    automation_id = str(args.get("automation_id") or "").strip()
-    if require_id and not automation_id:
-        return _tool_error("automation_id is required."), "invalid_request", tool_name
-    config = args.get("config")
-    if not isinstance(config, dict):
-        return _tool_error("config must be an object."), "invalid_request", tool_name
-    return await _config_validation_error(
+    error = _automation_argument_error(args, create=not require_id)
+    if error:
+        return _tool_error(error), "invalid_request", tool_name
+    automation_id = (args.get("automation_id") or "").strip()
+    config = args["config"]
+    invalid = await _config_validation_error(
         _validate_automation_config, hass, automation_id or "phoenix_mcp_validate", config,
         tool_name=tool_name, invalid_message=_AUTOMATION_INVALID_MESSAGE,
     )
+    if invalid is not None:
+        return invalid
+    if automation_id:
+        op = await hass.async_add_executor_job(
+            yaml_includes.automation_write, hass.config.config_dir, automation_id,
+            config, not require_id, args.get("expected_hash"), True,
+        )
+        if not op.ok:
+            return _automation_op_error(op, tool_name)
+    return None
 
 
 async def _tool_create_automation(
@@ -393,6 +426,9 @@ async def _tool_create_automation(
 async def _execute_create_automation(
     args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
+    error = _automation_argument_error(args, create=True)
+    if error:
+        return _tool_error(error), "invalid_request", "create_automation"
     config = args.get("config")
     if not isinstance(config, dict):
         return _tool_error("config must be an object."), "invalid_request", "create_automation"
@@ -415,24 +451,16 @@ async def _execute_create_automation(
     if invalid is not None:
         return invalid
 
-    path = os.path.join(hass.config.config_dir, _AUTOMATION_YAML)
     lock = _get_automation_lock(hass)
     try:
         async with lock:
             check_request_authority()
             op = await hass.async_add_executor_job(
-                yaml_includes.perform_create, hass.config.config_dir, "automation",
-                automation_id, config,
+                yaml_includes.automation_write, hass.config.config_dir, automation_id,
+                config, True, args.get("expected_hash"), False, not bool(args.get("automation_id")),
             )
-            if op.fallback:
-                # configuration.yaml missing or unparseable: legacy hardcoded-file path.
-                if await hass.async_add_executor_job(_yaml_file_has_includes, path):
-                    return _tool_error("automations.yaml uses !include directives. Phoenix MCP cannot safely edit it without destroying the include structure."), "denied", "create_automation"
-                items = await hass.async_add_executor_job(_read_automations_yaml, path)
-                items.append(config)
-                await hass.async_add_executor_job(_write_automations_yaml, path, items)
-            elif not op.ok:
-                return _tool_error(op.error_text), "denied", "create_automation"
+            if not op.ok:
+                return _automation_op_error(op, "create_automation")
         await hass.services.async_call("automation", "reload", blocking=True)
     except AuthorityChangedError:
         raise
@@ -461,11 +489,6 @@ async def _tool_edit_automation(
     pre = await _automation_write_precheck(args, hass, "edit_automation", require_id=True)
     if pre is not None:
         return pre
-    stale = await _entry_cas_conflict(
-        args, hass, "automation", args.get("automation_id", "").strip(), "edit_automation",
-    )
-    if stale is not None:
-        return stale
     blocked = await _gate(
         "cap_automation_write", token, hass, data,
         tool_name="edit_automation", args=args, request_id=request_id,
@@ -479,6 +502,9 @@ async def _tool_edit_automation(
 async def _execute_edit_automation(
     args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
+    error = _automation_argument_error(args, create=False)
+    if error:
+        return _tool_error(error), "invalid_request", "edit_automation"
     # HA async_validate_config_item validates automation IDs.
     automation_id = args.get("automation_id", "").strip()
     if not automation_id:
@@ -487,12 +513,6 @@ async def _execute_edit_automation(
     config = args.get("config")
     if not isinstance(config, dict):
         return _tool_error("config must be an object."), "invalid_request", "edit_automation"
-
-    # Re-checked here (not just pre-gate) so a change made during the approval
-    # window is caught before the write lands.
-    stale = await _entry_cas_conflict(args, hass, "automation", automation_id, "edit_automation")
-    if stale is not None:
-        return stale
 
     config = {k: v for k, v in config.items() if k != "id"}
     config["id"] = automation_id
@@ -504,29 +524,17 @@ async def _execute_edit_automation(
     if invalid is not None:
         return invalid
 
-    path = os.path.join(hass.config.config_dir, _AUTOMATION_YAML)
     lock = _get_automation_lock(hass)
     try:
         async with lock:
             check_request_authority()
             op = await hass.async_add_executor_job(
-                yaml_includes.perform_edit, hass.config.config_dir, "automation",
-                automation_id, config,
+                yaml_includes.automation_write, hass.config.config_dir, automation_id,
+                config, False, args.get("expected_hash"),
             )
-            if op.fallback:
-                if await hass.async_add_executor_job(_yaml_file_has_includes, path):
-                    return _tool_error("automations.yaml uses !include directives. Phoenix MCP cannot safely edit it without destroying the include structure."), "denied", "edit_automation"
-                items = await hass.async_add_executor_job(_read_automations_yaml, path)
-                idx = next((i for i, a in enumerate(items) if a.get("id") == automation_id), None)
-                if idx is None:
-                    return _tool_error(f"No automation found with id '{automation_id}'."), "denied", "edit_automation"
-                before_cfg = items[idx]
-                items[idx] = config
-                await hass.async_add_executor_job(_write_automations_yaml, path, items)
-            elif not op.ok:
-                return _tool_error(op.error_text), "denied", "edit_automation"
-            else:
-                before_cfg = op.before
+            if not op.ok:
+                return _automation_op_error(op, "edit_automation")
+            before_cfg = op.before
         await hass.services.async_call("automation", "reload", blocking=True)
     except AuthorityChangedError:
         raise
@@ -1377,7 +1385,7 @@ def _build_diff_create_automation(args: dict, token: TokenRecord, hass: HomeAssi
     return {
         "kind": "config_diff",
         **_summary("create_automation", alias=config.get("alias", "<no alias>")),
-        "target": {"type": "automation", "id": None, "label": config.get("alias")},
+        "target": {"type": "automation", "id": args.get("automation_id"), "label": config.get("alias")},
         "before": None,
         "after": _truncate(json.dumps(config, indent=2, default=str)),
         "preview": {"alias": config.get("alias"), "mode": config.get("mode")},

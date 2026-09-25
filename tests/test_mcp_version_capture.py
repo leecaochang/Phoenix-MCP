@@ -103,8 +103,9 @@ class TestAutomationCapture:
         created = _text((await _call_tool("create_automation", {"config": cfg}, token, hass, data))[0])
         aid = created["id"]
 
+        current = _text((await _call_tool("get_automation", {"automation_id": aid}, token, hass, data))[0])
         await _call_tool(
-            "edit_automation", {"automation_id": aid, "config": dict(cfg, alias="A2")}, token, hass, data)
+            "edit_automation", {"automation_id": aid, "config": dict(cfg, alias="A2"), "expected_hash": current["content_hash"]}, token, hass, data)
         await _call_tool("delete_automation", {"automation_id": aid}, token, hass, data)
 
         history = versions.list_for("automation", aid)
@@ -195,7 +196,8 @@ class TestAutomationRestore:
         token = _token(cap_automation_write="allow")
         created = _text((await _call_tool("create_automation", {"config": self._cfg("A")}, token, hass, data))[0])
         aid = created["id"]
-        await _call_tool("edit_automation", {"automation_id": aid, "config": self._cfg("B")}, token, hass, data)
+        current = _text((await _call_tool("get_automation", {"automation_id": aid}, token, hass, data))[0])
+        await _call_tool("edit_automation", {"automation_id": aid, "config": self._cfg("B"), "expected_hash": current["content_hash"]}, token, hass, data)
 
         create_ver = versions.list_for("automation", aid)[-1]  # oldest is the create
         _result, outcome, _r = await async_restore_version(create_ver, "admin-1", hass, data)
@@ -216,7 +218,8 @@ class TestAutomationRestore:
         token = _token(cap_automation_write="allow")
         created = _text((await _call_tool("create_automation", {"config": self._cfg("A")}, token, hass, data))[0])
         aid = created["id"]
-        await _call_tool("edit_automation", {"automation_id": aid, "config": self._cfg("B")}, token, hass, data)
+        current = _text((await _call_tool("get_automation", {"automation_id": aid}, token, hass, data))[0])
+        await _call_tool("edit_automation", {"automation_id": aid, "config": self._cfg("B"), "expected_hash": current["content_hash"]}, token, hass, data)
 
         edit_ver = versions.list_for("automation", aid)[0]  # newest is the edit (before A / after B)
         assert edit_ver.before.get("alias") == "A"
@@ -324,7 +327,8 @@ class TestRestoreEndpoint:
         }
         created = _text((await _call_tool("create_automation", {"config": cfg}, token, hass, data))[0])
         aid = created["id"]
-        await _call_tool("edit_automation", {"automation_id": aid, "config": dict(cfg, alias="B")}, token, hass, data)
+        current = _text((await _call_tool("get_automation", {"automation_id": aid}, token, hass, data))[0])
+        await _call_tool("edit_automation", {"automation_id": aid, "config": dict(cfg, alias="B"), "expected_hash": current["content_hash"]}, token, hass, data)
         return data, versions, aid
 
     def _alias(self, hass, aid):

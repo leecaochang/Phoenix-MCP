@@ -36,6 +36,7 @@ the legacy hardcoded-file path unchanged.
 from __future__ import annotations
 
 import fnmatch
+import json
 import os
 import re
 from collections.abc import Callable
@@ -818,11 +819,18 @@ def _scan_list_file(
         if isinstance(doc, TaggedValue) and doc.tag == "!include":
             nested = _resolve_nested_include(doc, path, layout)
             _scan_list_file(layout, entry_id, nested, matches, walk_path + (os.path.realpath(path),))
+            return
+        if layout.domain == "automation" and doc is not None:
+            raise LocateError("parse_error", "Automation include must contain a list of configurations.")
         return
+    if layout.domain == "automation" and not isinstance(scan.node, yaml.nodes.SequenceNode):
+        raise LocateError("parse_error", "Automation include must contain a list of configurations.")
     for value, start, end in scan.sequence_entries():
         if isinstance(value, TaggedValue) and value.tag == "!include":
             nested = _resolve_nested_include(value, path, layout)
             nested_doc = _load_leaf_document(nested, layout, walk_path + (os.path.realpath(path),))
+            if layout.domain == "automation" and not isinstance(nested_doc, dict):
+                raise LocateError("parse_error", "Included automation must be a configuration object.")
             if _entry_matches(layout.domain, nested_doc, entry_id):
                 matches.append(LocatedEntry(
                     ref_file=path, ref_kind="list_item", ref_text=scan.text,
@@ -830,6 +838,8 @@ def _scan_list_file(
                     config=nested_doc, content_file=nested,
                 ))
             continue
+        if layout.domain == "automation" and not isinstance(value, dict):
+            raise LocateError("parse_error", "Automation list entries must be configuration objects.")
         if _entry_matches(layout.domain, value, entry_id):
             matches.append(LocatedEntry(
                 ref_file=path, ref_kind="list_item", ref_text=scan.text,
@@ -933,6 +943,8 @@ def locate_entry(layout: DomainLayout, entry_id: str) -> LocatedEntry:
             for fname in _iter_dir_files(target.path):
                 doc = _load_leaf_document(fname, layout, ())
                 if target.flavor == "!include_dir_list":
+                    if domain == "automation" and not isinstance(doc, dict):
+                        raise LocateError("parse_error", "Included automation must be a configuration object.")
                     if _entry_matches(domain, doc, entry_id):
                         matches.append(LocatedEntry(
                             ref_file=fname, ref_kind="whole_file", ref_text="",
@@ -1141,6 +1153,115 @@ def _write_entry_files(located: LocatedEntry, domain: str, config: dict) -> OpRe
     return OpResult(ok=True, before=encoded_before, file=located.ref_file)
 
 
+def automation_identity_conflict(
+    entry_id: str, config: dict, current: Any, *, create: bool,
+    expected_hash: str | None = None,
+) -> OpResult | None:
+    """Validate identity against one authoritative, tag-encoded snapshot."""
+    if "id" in config and config["id"] != entry_id:
+        return OpResult(ok=False, error_kind="conflict", message="config.id must match automation_id; automation IDs cannot be changed.")
+    if expected_hash is not None and (not isinstance(expected_hash, str) or not expected_hash):
+        return OpResult(ok=False, error_kind="conflict", message="expected_hash must be a non-empty content_hash from get_automation.")
+    if current is None:
+        if create:
+            return None
+        return OpResult(ok=False, error_kind="not_found", message=f"No automation found with id '{entry_id}'. Use the stored automation ID from list_automations, not its entity_id.")
+    # Bound and quote caller-controlled labels; never include other configuration.
+    def alias(value: dict) -> str:
+        label = value.get("alias")
+        return json.dumps(label[:160] if isinstance(label, str) else "<no alias>", ensure_ascii=True)
+    labels = f"Existing alias: {alias(current)}. Proposed alias: {alias(config)}."
+    if create:
+        return OpResult(ok=False, error_kind="already_exists", message=(
+            f"Automation id '{entry_id}' already exists. {labels} "
+            "To create a separate automation, omit automation_id or choose an unused ID. "
+            "To replace it intentionally, call get_automation and then edit_automation with its content_hash as expected_hash."
+        ))
+    if expected_hash is not None and content_hash(current) != expected_hash:
+        return OpResult(ok=False, error_kind="conflict", message=(
+            "This configuration changed since you last read it (expected_hash no longer matches). "
+            "Re-read it and reapply your change."
+        ))
+    if (current.get("alias") != config.get("alias") or ("alias" in current) != ("alias" in config)) and expected_hash is None:
+        return OpResult(ok=False, error_kind="conflict", message=(
+            f"Changing an automation alias requires a current expected_hash. {labels} "
+            "Call get_automation, review the configuration, then pass its content_hash to edit_automation. "
+            "Use create_automation without automation_id for a separate automation."
+        ))
+    return None
+
+
+def automation_write(
+    config_dir: str, entry_id: str, config: dict, create: bool,
+    expected_hash: str | None = None, dry_run: bool = False,
+    generated_id: bool = False,
+) -> OpResult:
+    """Check and write an automation in one worker job under the domain lock.
+
+    External writers do not share that lock. A dry run is advisory only; the
+    committing call always locates and checks again.
+    """
+    try:
+        return _automation_write_checked(config_dir, entry_id, config, create, expected_hash, dry_run, generated_id)
+    except (OSError, UnicodeError, yaml.YAMLError):
+        return OpResult(ok=False, error_kind="io_error", message="Cannot safely read or write the automation configuration. Check the YAML files and filesystem permissions before retrying.")
+
+
+def _automation_write_checked(
+    config_dir: str, entry_id: str, config: dict, create: bool,
+    expected_hash: str | None, dry_run: bool, generated_id: bool,
+) -> OpResult:
+    """Perform the checked operation without exposing parser payloads in errors."""
+    layout = _layout_or_result(config_dir, "automation")
+    if isinstance(layout, OpResult):
+        if not layout.fallback:
+            return layout
+        path = os.path.join(config_dir, DEFAULT_FILES["automation"])
+        if _resolve_include_path(os.path.join(config_dir, CONFIGURATION_YAML), path, config_dir) is None:
+            return OpResult(ok=False, error_kind="refused", message="Automation file is outside the configuration directory.")
+        items = load_tagged(path) if os.path.isfile(path) else []
+        if items is None:
+            items = []
+        if contains_include_tags(items):
+            return OpResult(ok=False, error_kind="refused", message="automations.yaml uses !include directives. Phoenix MCP cannot safely edit it without destroying the include structure.")
+        if not isinstance(items, list) or any(not isinstance(item, dict) for item in items):
+            return OpResult(ok=False, error_kind="refused", message="automations.yaml must be a list without !include directives for fallback editing.")
+        matches = [i for i, item in enumerate(items) if _entry_matches("automation", item, entry_id)]
+        if len(matches) > 1:
+            return OpResult(ok=False, error_kind="duplicate", message="Duplicate automation IDs exist; resolve them in Home Assistant before writing.")
+        current = encode_tags(items[matches[0]]) if matches else None
+        conflict = automation_identity_conflict(entry_id, config, current, create=create, expected_hash=expected_hash)
+        if conflict is not None:
+            return conflict
+        if not dry_run:
+            if create:
+                items.append(config)
+            else:
+                items[matches[0]] = config
+            write_utf8_file_atomic(path, dump_tagged(items))
+        return OpResult(ok=True, before=current, file=path)
+    try:
+        located = locate_entry(layout, entry_id)
+    except LocateError as exc:
+        if not create or exc.reason not in (("not_found", "ambiguous") if generated_id else ("not_found",)):
+            return _locate_error_result(exc)
+        conflict = automation_identity_conflict(entry_id, config, None, create=True, expected_hash=expected_hash)
+        if conflict is not None:
+            return conflict
+        if dry_run:
+            return OpResult(ok=True)
+        return perform_create(config_dir, "automation", entry_id, config, generated_id=generated_id)
+    current = encode_tags(located.config)
+    conflict = automation_identity_conflict(entry_id, config, current, create=create, expected_hash=expected_hash)
+    if conflict is not None:
+        return conflict
+    if contains_include_tags(located.config):
+        return OpResult(ok=False, error_kind="refused", message=MSG_INCLUDE_REFUSAL.format(name=os.path.basename(located.ref_file)))
+    if dry_run:
+        return OpResult(ok=True, before=current)
+    return _write_entry_files(located, "automation", config)
+
+
 def perform_edit(config_dir: str, domain: str, entry_id: str, config: dict) -> OpResult:
     """Replace an entry's config in place, preserving the include layout."""
     layout = _layout_or_result(config_dir, domain)
@@ -1210,14 +1331,25 @@ def _create_filename(entry_id: str) -> str:
     return f"{stem}.yaml"
 
 
-def perform_create(config_dir: str, domain: str, entry_id: str, config: dict) -> OpResult:
+def perform_create(config_dir: str, domain: str, entry_id: str, config: dict, *, generated_id: bool = False) -> OpResult:
     """Create an entry, routing by the domain's include flavor."""
     layout = _layout_or_result(config_dir, domain)
     if isinstance(layout, OpResult):
         return layout
 
+    if domain == "automation":
+        try:
+            existing = locate_entry(layout, entry_id)
+        except LocateError as exc:
+            if exc.reason not in (("not_found", "ambiguous") if generated_id else ("not_found",)):
+                return _locate_error_result(exc)
+        else:
+            conflict = automation_identity_conflict(entry_id, config, encode_tags(existing.config), create=True)
+            assert conflict is not None
+            return conflict
+
     # Graph-wide duplicate check for named entries (scripts): mirrors the
-    # legacy "already exists" refusal. List domains mint unique ids upstream.
+    # legacy "already exists" refusal. Automation identities are checked above.
     # Refuse ONLY if the id already exists in the editable include files. Both
     # "not_found" and "ambiguous" (id absent from the include files, though the
     # config also has packages/inline that Phoenix MCP does not read) mean it is not a
