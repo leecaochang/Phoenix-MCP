@@ -359,3 +359,31 @@ async def test_offline_decision_catalog_is_a_handled_error_without_account_chang
     assert body['message_key'].endswith('providerConnectionFailedNoDetail')
     assert 'test-secret' not in response.text
     assert store.get(account) == before
+
+
+@pytest.mark.parametrize('question', ['route', 'target', 'percentage', 'summary_scope', 'private-question'])
+def test_probability_total_diagnostic_contains_only_allowlisted_aggregates(question):
+    from custom_components.phoenix_mcp.decision_provider import DecisionValidationError
+    body = {'model': 'jev-1.13.0', 'answers': {question: {
+        'type': 'choice', 'choice': 'private-choice', 'confidence': 0.95,
+        'probabilities': {'private-choice': 0.95, 'none': 0.1},
+    }}}
+    with pytest.raises(DecisionValidationError) as error:
+        parse_choice(body, {'private-choice': 'private-description', 'none': 'Decline'}, question)
+    assert error.value.check == 'probability_total'
+    expected = {} if question == 'private-question' else {
+        'question': question, 'choice_count': 2, 'probability_sum': 1.05,
+    }
+    assert error.value.diagnostics == expected
+    assert 'private' not in repr(vars(error.value))
+
+
+@pytest.mark.parametrize('bad', [float('nan'), float('inf'), -1, 2, 'private-value'])
+def test_invalid_probability_values_never_expose_aggregate_diagnostics(bad):
+    from custom_components.phoenix_mcp.decision_provider import DecisionValidationError
+    body = response()
+    body['answers']['route']['probabilities']['light_on'] = bad
+    with pytest.raises(DecisionValidationError) as error:
+        parse_choice(body, DECISION_ROUTE_CHOICES)
+    assert error.value.check == 'probability_values'
+    assert error.value.diagnostics == {}

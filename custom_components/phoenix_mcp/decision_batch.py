@@ -382,7 +382,8 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
         except CatalogLimitError as error:
             return result(str(error), catalog_limit=error.details)
         except DecisionValidationError as error:
-            return result("malformed", validation_check=error.check)
+            return result("malformed", validation_check=error.check,
+                          **({"validation_details": error.diagnostics} if error.diagnostics else {}))
         except DecisionError as error:
             return result(str(error))
         except TimeoutError:

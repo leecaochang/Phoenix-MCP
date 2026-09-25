@@ -1935,6 +1935,9 @@ DECISION_MAX_RESPONSE_BYTES = 65536
 DECISION_METRIC_SAMPLES = 256
 DECISION_METRIC_SCOPES = frozenset({"preview", "voice", "chat", "voice_shadow", "chat_shadow"})
 DECISION_METRIC_OPERATIONS = frozenset({"classify", "target", "context", "batch", "reference"})
+DECISION_DIAGNOSTIC_QUESTIONS = frozenset({
+    "route", "target", "value", "attribute", "color", "percentage", "summary_scope", "summary",
+})
 DECISION_CONTEXT_MAX_MESSAGES = 32
 DECISION_CONTEXT_MAX_BYTES = 16384
 DECISION_CONTEXT_MAX_DEPTH = 16

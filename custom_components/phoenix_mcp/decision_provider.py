@@ -13,7 +13,7 @@ from .const import (DECISION_MAX_RESPONSE_BYTES, DECISION_ROUTE_CHOICES, DECISIO
                     DECISION_BRIGHTNESS_CHOICES, DECISION_MIN_CHOICE_PROBABILITY, DECISION_CONTEXT_CHECKS,
                     DECISION_EXECUTION_CATEGORIES, DECISION_EXACT_PERCENTAGE_ENDPOINTS,
                     DECISION_PERCENTAGE_CHOICES, DECISION_PERCENTAGE_PREVIEW_CHOICES, DECISION_TARGET_INTENTS,
-                    DECISION_REFERENCE_CHECKS, DECISION_CATALOG_FORMAT_INSTRUCTIONS)
+                    DECISION_REFERENCE_CHECKS, DECISION_CATALOG_FORMAT_INSTRUCTIONS, DECISION_DIAGNOSTIC_QUESTIONS)
 from .command_operations import numeric_operation
 from .decision_metrics import DecisionMetrics
 
@@ -26,11 +26,19 @@ class DecisionError(ValueError):
 
 
 class DecisionValidationError(DecisionError):
-    """An internal validation label with no response values or provider text."""
+    """A validation label with optional bounded aggregates, never response text."""
 
-    def __init__(self, check: str) -> None:
+    def __init__(self, check: str, *, question: str | None = None,
+                 choice_count: int | None = None, probability_sum: float | None = None) -> None:
         super().__init__("malformed")
         self.check = check
+        self.diagnostics: dict[str, str | int | float] = {}
+        if (check == "probability_total" and question in DECISION_DIAGNOSTIC_QUESTIONS
+                and type(choice_count) is int and 1 <= choice_count <= 255
+                and type(probability_sum) in (int, float) and probability_sum is not None
+                and math.isfinite(probability_sum) and 0 <= probability_sum <= choice_count):
+            self.diagnostics = {"question": question, "choice_count": choice_count,
+                                "probability_sum": round(probability_sum, 6)}
 
 
 def _object(pairs: list[tuple[str, Any]]) -> dict:
@@ -71,8 +79,10 @@ def parse_choice(body: Any, choices: dict[str, str], question: str = "route") ->
         raise DecisionValidationError("probability_values")
     if not _probability(answer.get("confidence")):
         raise DecisionValidationError("confidence")
-    if not math.isclose(sum(probabilities.values()), 1, abs_tol=0.001):
-        raise DecisionValidationError("probability_total")
+    probability_sum = sum(probabilities.values())
+    if not math.isclose(probability_sum, 1, abs_tol=0.001):
+        raise DecisionValidationError("probability_total", question=question,
+                                      choice_count=len(choices), probability_sum=probability_sum)
     if probabilities[selected] < max(probabilities.values()):
         raise DecisionValidationError("selected_not_highest")
     model = body.get("model")
@@ -332,7 +342,8 @@ class DecisionProvider:
         if values:
             payload["state"]["values"] = values
             payload["questions"]["value"] = {"type": "choice", "criteria": {
-                **{key: f"Use the exact value in state.values.{key}." for key in values},
+                **{key: "Use this exact option or text value: " + json.dumps(value, ensure_ascii=False)
+                   for key, value in values.items()},
                 "none": "No value-setting operation was requested, or the value is uncertain or absent.",
             }, "instructions": (
                 instructions + " Select only a current option of the requested target and operation, or the "
@@ -523,6 +534,16 @@ class DecisionProvider:
         if "target_fields" in payload["state"] or "target_metadata" in payload["state"]:
             for question in payload["questions"].values():
                 question["instructions"] += DECISION_CATALOG_FORMAT_INSTRUCTIONS
+        # Keep every available operation, but do not ask about operations with no
+        # eligible target. Legacy callers without category metadata stay unchanged.
+        if all(isinstance(target.get("eligible_categories"), list) for target in targets.values()):
+            available = {category for target in targets.values() for category in target["eligible_categories"]}
+            available.add("provider")
+            if summary_scopes:
+                available.add("state_summary")
+            payload["questions"]["route"]["criteria"] = {
+                key: value for key, value in payload["questions"]["route"]["criteria"].items() if key in available
+            }
         body = await self._request(session, "POST", self.protocol, timeout_ms, payload)
         if not isinstance(body.get("answers"), dict) or set(body["answers"]) != set(payload["questions"]):
             raise DecisionValidationError("question_set")
