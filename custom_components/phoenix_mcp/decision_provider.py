@@ -15,7 +15,7 @@ from .const import (DECISION_MAX_RESPONSE_BYTES, DECISION_ROUTE_CHOICES, DECISIO
                     DECISION_PERCENTAGE_CHOICES, DECISION_PERCENTAGE_PREVIEW_CHOICES, DECISION_TARGET_INTENTS,
                     DECISION_REFERENCE_CHECKS, DECISION_CATALOG_FORMAT_INSTRUCTIONS, DECISION_DIAGNOSTIC_QUESTIONS,
                     DECISION_PROBABILITY_ROUNDING, DECISION_PROBABILITY_SUM_TOLERANCE,
-                    DECISION_PROBABILITY_ROUNDING_EPSILON, DECISION_BATCH_MAX_TARGETS, DECISION_MAX_CHOICE_GROUPS, DECISION_BATCH_MAX_TARGET_BYTES)
+                    DECISION_PROBABILITY_ROUNDING_EPSILON, DECISION_BATCH_MAX_TARGETS, DECISION_MAX_CHOICE_GROUPS, DECISION_BATCH_MAX_TARGET_BYTES, DECISION_SUMMARY_COMPONENTS)
 from .command_operations import numeric_operation
 from .decision_metrics import DecisionMetrics
 
@@ -58,6 +58,11 @@ def _probability(value: Any) -> bool:
 
 def confident_choice(answer: dict) -> bool:
     """A conservative admission heuristic; provider probabilities are not accuracy."""
+    if "_components" in answer:
+        components = answer["_components"]
+        return (isinstance(components, dict) and set(components) == set(DECISION_SUMMARY_COMPONENTS)
+                and all("_components" not in component and component.get("model") == answer.get("model")
+                        and confident_choice(component) for component in components.values()))
     selected = answer["probabilities"][answer["choice"]]
     return selected >= DECISION_MIN_CHOICE_PROBABILITY and sum(
         value == selected for value in answer["probabilities"].values()) == 1
@@ -669,6 +674,12 @@ class DecisionProvider:
             payload["questions"]["route"]["criteria"] = {
                 key: value for key, value in payload["questions"]["route"]["criteria"].items() if key in available
             }
+        from .decision_summary_choices import factor_summary_choices, resolve_summary_choices
+        components = (factor_summary_choices(payload, summary_scopes)
+                      if summary_scopes and self.supports_exact_percentages() else None)
+        if components is not None:
+            for question in payload["questions"].values():
+                question["instructions"] = question["instructions"].replace(format_hint, "")
         groups = self._group_choices(payload)
         body = await self._request(session, "POST", self.protocol, timeout_ms, payload)
         if not isinstance(body.get("answers"), dict) or set(body["answers"]) != set(payload["questions"]):
@@ -679,6 +690,9 @@ class DecisionProvider:
         if self.cfg.api_key and self.cfg.api_key in body["model"]:
             raise DecisionError("malformed")
         self._merge_choice_groups(answers, groups)
+        if components is not None:
+            assert summary_scopes is not None
+            resolve_summary_choices(answers, components, summary_scopes)
         return answers
 
     async def route_temporal(self, session: ClientSession, sentence: str, language: str,

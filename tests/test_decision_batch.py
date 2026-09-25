@@ -746,3 +746,28 @@ async def test_grouped_catalog_prepares_plan_only_while_all_competitors_remain_c
             assert result['proposal']['entity_ids'] == [snapshot[0][winner]['entity_id']]
         request.assert_awaited_once()
     assert not data.store.get_pending_approvals()
+
+
+async def test_low_confidence_scope_component_cannot_prepare_execution(hass, batch_home):
+    from custom_components.phoenix_mcp.command_routing import RoutingAuthority
+    from custom_components.phoenix_mcp.const import DECISION_SUMMARY_COMPONENTS
+    from custom_components.phoenix_mcp.decision_batch import async_prepare_batch
+    data, token, store, account, _ = batch_home
+    provider = DecisionProvider(store.resolve(account, purpose='decision'), 'systemone')
+    snapshot = capture_batch_targets(hass, token, extended=True)
+    scope_key = next(iter(snapshot[1]['state_summary'].targets))
+    def answer(choice, probability=1):
+        return {'choice': choice, 'model': 'jev-1.13.0', 'confidence': 1,
+                'probabilities': {choice: probability, 'other': 1 - probability}}
+    scope = {'choice': scope_key, 'model': 'jev-1.13.0',
+             '_components': {key: answer('selected', 0.89 if key == 'summary_area' else 1)
+                             for key in DECISION_SUMMARY_COMPONENTS}}
+    with (patch.object(provider, 'route_and_target', AsyncMock(return_value={
+              'route': answer('state_summary'), 'target': answer('none'),
+              'summary_scope': scope, 'summary': answer('on')})),
+          patch('custom_components.phoenix_mcp.decision_batch._capture_plan') as prepare):
+        _, result = await async_prepare_batch(
+            hass, RoutingAuthority.capture(data, token), provider, None,
+            'Count all the lights that are currently on', 'en', 'chat')
+    assert result['reason'] == 'low_probability' and '_plan' not in result
+    prepare.assert_not_called()
