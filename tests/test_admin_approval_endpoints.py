@@ -1407,3 +1407,62 @@ class TestBatchApprove:
         with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f):
             resp = await view.post(request)
         assert resp.status == 400
+
+
+@pytest.mark.parametrize("change", ["revocation", "policy", "runtime", "kill_switch"])
+async def test_approved_executor_carries_current_authority_across_wait(change):
+    """Real approval dispatch binds authority for executor revalidation."""
+    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp.request_authority import (
+        check_request_authority, policy_version, request_authority,
+    )
+
+    token = _make_token("tok-1", cap_registry_write="confirm")
+    store = _make_store(tokens=[token], pending=[_make_pending(
+        "appr_registry", tool_name="set_entity", cap_name="cap_registry_write",
+    )])
+    store.get_token_by_hash.return_value = token
+    data = _make_data(store)
+    hass = _make_hass(data)
+    view = PhoenixAdminApprovalApproveView()
+    view.hass = hass
+    entered, release = asyncio.Event(), asyncio.Event()
+    effects = []
+
+    async def executor(args, tok, hass_, data_):
+        check_request_authority()
+        assert request_authority.get().token_id == token.id
+        assert policy_version.get() == token.settings_version
+        entered.set()
+        await release.wait()
+        check_request_authority()
+        effects.append("mutation")
+        return {"content": []}, "allowed", "test"
+
+    with (
+        patch.dict(mcp_view._EXECUTOR_REGISTRY, {"set_entity": executor}),
+        patch("homeassistant.components.persistent_notification.async_dismiss"),
+        patch("homeassistant.components.persistent_notification.async_create"),
+    ):
+        task = asyncio.create_task(view.post(
+            _make_admin_request(body=b"{}"), approval_id="appr_registry"
+        ))
+        try:
+            await asyncio.wait_for(entered.wait(), 1)
+            if change == "revocation":
+                store.get_token_by_hash.return_value = None
+            elif change == "policy":
+                token.settings_version += 1
+            elif change == "runtime":
+                data.shutting_down = True
+            else:
+                store.get_settings.return_value.kill_switch = True
+        finally:
+            release.set()
+        response = await task
+    assert response.status == 500
+    assert effects == []
+    assert store._pending[0]["status"] == STATUS_FAILED
+    assert store._pending[0]["rejected_reason"] == "execution_interrupted"
+    assert not data.approvals_in_progress
+    assert request_authority.get() is None

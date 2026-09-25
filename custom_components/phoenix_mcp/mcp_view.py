@@ -3366,12 +3366,55 @@ async def _tool_set_device(
     return await _execute_set_device(args, token, hass, data)
 
 
+@dataclasses.dataclass(frozen=True)
+class _RegistryCommit:
+    """A completed synchronous mutation, ready for best-effort history capture."""
+
+    result: tuple[dict, str, str]
+    resource_type: str
+    resource_id: str
+    action: str
+    before: dict | None
+    after: dict | None
+    alias: str | None
+
+
+async def _finish_registry_commit(
+    commit: _RegistryCommit | tuple[dict, str, str],
+    token: TokenRecord,
+    data: PhoenixData,
+) -> tuple[dict, str, str]:
+    """Persist already captured history without reopening the mutation boundary."""
+    if isinstance(commit, tuple):
+        return commit
+    await _record_version(
+        data, token, resource_type=commit.resource_type,
+        resource_id=commit.resource_id, action=commit.action,
+        before=commit.before, after=commit.after, alias=commit.alias,
+    )
+    check_request_authority()
+    return commit.result
+
+
 async def _execute_set_device(
+    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+) -> tuple[dict, str, str]:
+    """Commit registry state before awaiting history persistence."""
+    return await _finish_registry_commit(
+        _commit_set_device(args, token, hass, data), token, data
+    )
+
+
+def _commit_set_device(
     args: dict,
     token: TokenRecord,
     hass: HomeAssistant,
     data: PhoenixData,
-) -> tuple[dict, str, str]:
+) -> _RegistryCommit | tuple[dict, str, str]:
+    """Validate, mutate, and capture one device result without yielding."""
+    check_request_authority()
+    if effective_cap(token, "cap_registry_write") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_device"
     device_id = str(args.get("device_id") or "").strip()
     if not device_id:
         return _tool_error("device_id is required."), "invalid_request", "set_device"
@@ -3483,16 +3526,7 @@ async def _execute_set_device(
     if updated is None:
         return _tool_error("Failed to read updated device."), "denied", device_id
     after = _device_meta_snapshot(updated)
-    await _record_version(
-        data,
-        token,
-        resource_type="device",
-        resource_id=device_id,
-        action="edit",
-        before=before,
-        after=after,
-        alias=updated.name_by_user or updated.name or device_id,
-    )
+
     body: dict[str, Any] = {
         "device_id": device_id,
         "updated": _device_public_meta(updated),
@@ -3515,7 +3549,11 @@ async def _execute_set_device(
     if mesa_decision is not None and mesa_decision.warnings:
         body["mesa_advisory"] = mesa_decision.warnings
         _mesa_advisory_ctx.set(True)
-    return _tool_success(json.dumps(body, default=str)), "allowed", device_id
+    return _RegistryCommit(
+        result=(_tool_success(json.dumps(body, default=str)), "allowed", device_id),
+        resource_type="device", resource_id=device_id, action="edit",
+        before=before, after=after, alias=updated.name_by_user or updated.name or device_id,
+    )
 
 
 _REMOVE_DEVICE_CONTEXT_FINGERPRINT = "_remove_device_context_fingerprint"
@@ -3631,7 +3669,38 @@ async def _resolve_device_removal_context(
     token: TokenRecord,
     hass: HomeAssistant,
 ) -> _DeviceRemovalContext | tuple[dict, str, str]:
-    """Resolve exact ownership and live integration support without mutation."""
+    """Load support, then resolve fresh state for the same selected owner."""
+    context = _device_removal_context(args, token, hass)
+    if isinstance(context, tuple):
+        return context
+    owner_id: str = context.config_entry.entry_id
+    hook = await _async_device_removal_hook(hass, context.config_entry)
+    check_request_authority()
+    if effective_cap(token, "cap_integration_write") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "remove_device"
+    if hass.config_entries.async_get_entry(owner_id) is not context.config_entry:
+        return _tool_error("The owning config entry changed. Review the removal again."), "denied", context.device.id
+    fresh = _device_removal_context(
+        {**args, "config_entry_id": owner_id}, token, hass, hook
+    )
+    if isinstance(fresh, tuple):
+        return fresh
+    if hook is None:
+        return (
+            _tool_error("This integration does not support device removal."),
+            "invalid_request", context.device.id,
+        )
+    return fresh
+
+
+def _device_removal_context(
+    args: dict,
+    token: TokenRecord,
+    hass: HomeAssistant,
+    hook: Any = None,
+) -> _DeviceRemovalContext | tuple[dict, str, str]:
+    """Read current ownership and membership in one event-loop segment."""
+    check_request_authority()
     device_id = str(args.get("device_id") or "").strip()
     if not device_id:
         return _tool_error("device_id is required."), "invalid_request", "remove_device"
@@ -3678,14 +3747,6 @@ async def _resolve_device_removal_context(
         return _tool_error("The owning config entry no longer exists."), "invalid_request", device_id
     if entry.domain == DOMAIN:
         return _tool_error("Phoenix MCP devices cannot be removed."), "denied", device_id
-    hook = await _async_device_removal_hook(hass, entry)
-    if hook is None:
-        return (
-            _tool_error("This integration does not support device removal."),
-            "invalid_request",
-            device_id,
-        )
-
     affected_entity_ids = sorted(
         registry_entry.entity_id
         for registry_entry in er.async_get(hass).entities.values()
@@ -3897,6 +3958,19 @@ async def _tool_remove_device(
     return await _execute_remove_device(approval_args, token, hass, data)
 
 
+def _device_removal_cleanup_error(device_id: str) -> tuple[dict, str, str]:
+    """Report partial or uncertain effects without exposing changed context."""
+    return (
+        _tool_error(
+            "The integration accepted removal, but authority or device "
+            "context changed before registry cleanup. Phoenix skipped "
+            "cleanup; integration effects may already have occurred. "
+            "Inspect the device before retrying."
+        ),
+        "denied", device_id,
+    )
+
+
 async def _execute_remove_device(
     args: dict,
     token: TokenRecord,
@@ -3966,9 +4040,39 @@ async def _execute_remove_device(
             device_id,
         )
 
+    # The integration may already have acted. Refusal here cannot undo its work
+    # and must never replay the hook or claim an untouched device.
+    try:
+        check_request_authority()
+    except AuthorityChangedError:
+        return _device_removal_cleanup_error(device_id)
     registry = dr.async_get(hass)
     current = registry.async_get(device_id)
     if current is not None and selected_owner in device_config_entry_ids(current):
+        fresh = _device_removal_context(
+            {"device_id": device_id, "config_entry_id": selected_owner},
+            token, hass, context.hook,
+        )
+        changed = (
+            effective_cap(token, "cap_integration_write") == CAP_DENY
+            or isinstance(fresh, tuple)
+        )
+        if isinstance(fresh, _DeviceRemovalContext):
+            changed = changed or (
+                fresh.config_entry is not context.config_entry
+                or fresh.fingerprint != context.fingerprint
+            )
+            current_mesa = _device_mesa_decision(
+                data, token, hass, fresh.device, actions=["remove"],
+                service_data={}, session_id="remove_device_cleanup",
+                entity_ids=fresh.affected_entity_ids,
+            )
+            changed = changed or (
+                isinstance(current_mesa, tuple)
+                or current_mesa.profile_fingerprint != mesa.profile_fingerprint
+            )
+        if changed:
+            return _device_removal_cleanup_error(device_id)
         try:
             owners = device_config_entry_ids(current)
             if len(owners) > 1:
@@ -4035,6 +4139,7 @@ async def _execute_remove_device(
         after=None,
         alias=label,
     )
+    check_request_authority()
     body: dict[str, Any] = {
         "device_id": device_id,
         "config_entry_id": selected_owner,
@@ -4262,6 +4367,19 @@ async def _tool_set_entity(
 async def _execute_set_entity(
     args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
+    """Commit registry state before awaiting history persistence."""
+    return await _finish_registry_commit(
+        _commit_set_entity(args, token, hass, data), token, data
+    )
+
+
+def _commit_set_entity(
+    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+) -> _RegistryCommit | tuple[dict, str, str]:
+    """Validate, mutate, and capture one entity result without yielding."""
+    check_request_authority()
+    if effective_cap(token, "cap_registry_write") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_entity"
     entity_id = str(args.get("entity_id") or "").strip()
     registry_entry = er.async_get(hass).async_get(entity_id)
     if registry_entry is not None:
@@ -4438,11 +4556,7 @@ async def _execute_set_entity(
         )
         return _tool_error("Failed to read updated entity."), "denied", entity_id
     after = _entity_meta_snapshot(updated_entry)
-    await _record_version(
-        data, token, resource_type="entity", resource_id=updated_id,
-        action="edit",
-        before=before, after=after, alias=after.get("name") or updated_id,
-    )
+
     public_after = {**after, "aliases": er.async_get_entity_aliases(hass, updated_entry)}
     body: dict = {"entity_id": updated_id, "updated": public_after}
     if updated_id != entity_id:
@@ -4475,7 +4589,11 @@ async def _execute_set_entity(
     if mesa_decision is not None and mesa_decision.warnings:
         body["mesa_advisory"] = mesa_decision.warnings
         _mesa_advisory_ctx.set(True)
-    return _tool_success(json.dumps(body, default=str)), "allowed", updated_id
+    return _RegistryCommit(
+        result=(_tool_success(json.dumps(body, default=str)), "allowed", updated_id),
+        resource_type="entity", resource_id=updated_id, action="edit",
+        before=before, after=after, alias=after.get("name") or updated_id,
+    )
 
 
 async def _tool_delete_entity(
@@ -4540,6 +4658,19 @@ async def _tool_delete_entity(
 async def _execute_delete_entity(
     args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
+    """Commit registry state before awaiting history persistence."""
+    return await _finish_registry_commit(
+        _commit_delete_entity(args, token, hass, data), token, data
+    )
+
+
+def _commit_delete_entity(
+    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+) -> _RegistryCommit | tuple[dict, str, str]:
+    """Validate, mutate, and capture one entity result without yielding."""
+    check_request_authority()
+    if effective_cap(token, "cap_registry_write") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_entity"
     entity_id = str(args.get("entity_id") or "").strip()
     if not entity_id:
         return _tool_error("entity_id is required."), "invalid_request", "delete_entity"
@@ -4583,15 +4714,16 @@ async def _execute_delete_entity(
     except Exception as exc:  # noqa: BLE001 - surface a clean tool error
         _LOGGER.error("delete_entity failed for %s: %s", entity_id, exc)
         return _tool_error("Failed to delete entity."), "denied", entity_id
-    await _record_version(
-        data, token, resource_type="entity", resource_id=entity_id,
-        action="delete", before=before, after=None, alias=before.get("name") or entity_id,
-    )
+
     body: dict[str, Any] = {"entity_id": entity_id, "deleted": True}
     if mesa_decision.warnings:
         body["mesa_advisory"] = mesa_decision.warnings
         _mesa_advisory_ctx.set(True)
-    return _tool_success(json.dumps(body)), "allowed", entity_id
+    return _RegistryCommit(
+        result=(_tool_success(json.dumps(body)), "allowed", entity_id),
+        resource_type="entity", resource_id=entity_id, action="delete",
+        before=before, after=None, alias=before.get("name") or entity_id,
+    )
 
 
 async def _tool_render_template(

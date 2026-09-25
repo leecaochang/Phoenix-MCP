@@ -1353,6 +1353,7 @@ async def _execute_delete_scene(
                 existing = op.before
         await hass.services.async_call("scene", "reload", blocking=True)
         # Reloading scenes.yaml does not remove the scene's entity-registry entry.
+        check_request_authority()
         registry = er.async_get(hass)
         for entry in list(registry.entities.values()):
             if entry.domain == "scene" and entry.unique_id == scene_id:

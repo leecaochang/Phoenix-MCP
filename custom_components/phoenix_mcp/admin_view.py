@@ -3351,9 +3351,22 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
     # is the distinction the two excepts below draw.
     try:
         try:
-            tool_result, outcome, _resource = await async_execute_approved_tool(
-                record.tool_name, record.args, token, hass, data,
+            # Approved executors must retain the admitted token and policy epoch
+            # across their own waits, just like ordinary MCP dispatch.
+            from .request_authority import (  # noqa: PLC0415
+                RequestAuthority, policy_version, request_authority,
             )
+            authority_ctx = request_authority.set(
+                RequestAuthority(hass, data, token.id, token.token_hash)
+            )
+            policy_ctx = policy_version.set(token.settings_version)
+            try:
+                tool_result, outcome, _resource = await async_execute_approved_tool(
+                    record.tool_name, record.args, token, hass, data,
+                )
+            finally:
+                policy_version.reset(policy_ctx)
+                request_authority.reset(authority_ctx)
         except ExecutorNotRegistered:
             # The ONLY failure that proves nothing was dispatched: raised by the
             # registry lookup before any executor is called. It has its own type

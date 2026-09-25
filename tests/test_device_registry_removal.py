@@ -499,3 +499,96 @@ async def test_phoenix_owned_entry_is_never_removable(hass: HomeAssistant):
         )
     assert outcome in ("denied", "not_found")
     assert content.get("isError") is True
+
+
+@pytest.mark.parametrize("phase", ["loading", "hook"])
+@pytest.mark.parametrize("change", ["scope", "capability", "membership", "mesa"])
+async def test_removal_revalidates_after_each_wait(hass, removal_env, phase, change):
+    """A new target or lost grant during an await cannot authorize cleanup."""
+    device_id = removal_env["device"].id
+    token = _token(device_id)
+    data = await _data(hass, "enforced" if change == "mesa" else "off")
+    if change == "mesa":
+        data.mesa.store.set(
+            removal_env["entity_id"], _profile(removal_env["entity_id"], "autonomous")
+        )
+    entered, release = asyncio.Event(), asyncio.Event()
+
+    async def hook(*args):
+        if phase == "hook":
+            entered.set()
+            await release.wait()
+        return True
+
+    called_hook = AsyncMock(side_effect=hook)
+
+    async def load(*args):
+        if phase == "loading":
+            entered.set()
+            await release.wait()
+        return called_hook
+
+    with patch("custom_components.phoenix_mcp.mcp_view._async_device_removal_hook", side_effect=load):
+        task = asyncio.create_task(_execute_remove_device(
+            {"device_id": device_id}, token, hass, data
+        ))
+        try:
+            await asyncio.wait_for(entered.wait(), 1)
+            if change == "scope":
+                token.permissions.devices[device_id].state = "RED"
+            elif change == "capability":
+                token.cap_integration_write = "deny"
+            elif change == "membership":
+                _add_owner_entity(hass, removal_env["owner"], device_id, "new-during-wait")
+            else:
+                data.mesa.store.set(
+                    removal_env["entity_id"], _profile(removal_env["entity_id"], "read_only")
+                )
+        finally:
+            release.set()
+        content, outcome, _ = await task
+    if phase == "loading" and change == "membership":
+        # No prior approval: the fresh membership is what the hook receives.
+        assert outcome == "allowed"
+        called_hook.assert_awaited_once()
+    else:
+        assert outcome == "denied"
+        assert dr.async_get(hass).async_get(device_id) is not None
+        if phase == "hook":
+            called_hook.assert_awaited_once()
+            assert "effects may already have occurred" in content["content"][0]["text"]
+        else:
+            called_hook.assert_not_awaited()
+
+
+@pytest.mark.parametrize("phase", ["loading", "hook"])
+async def test_cancelled_removal_never_runs_later_cleanup(hass, removal_env, phase):
+    device_id = removal_env["device"].id
+    token = _token(device_id)
+    data = await _data(hass)
+    entered = asyncio.Event()
+
+    async def hook(*args):
+        if phase == "hook":
+            entered.set()
+            await asyncio.Event().wait()
+        return True
+
+    called_hook = AsyncMock(side_effect=hook)
+
+    async def load(*args):
+        if phase == "loading":
+            entered.set()
+            await asyncio.Event().wait()
+        return called_hook
+
+    with patch("custom_components.phoenix_mcp.mcp_view._async_device_removal_hook", side_effect=load):
+        task = asyncio.create_task(_execute_remove_device(
+            {"device_id": device_id}, token, hass, data
+        ))
+        await asyncio.wait_for(entered.wait(), 1)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    assert dr.async_get(hass).async_get(device_id) is not None
+    assert called_hook.await_count == (1 if phase == "hook" else 0)
