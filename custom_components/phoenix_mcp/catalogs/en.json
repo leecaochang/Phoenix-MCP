@@ -1712,7 +1712,8 @@
       "routingPreviewInvalid": "Check the token, command language and routing settings.",
       "providerModelNotListed": "Choose a model returned by this provider.",
       "providerAccountChanged": "Provider account changed. Reload and try again.",
-      "routingStatisticsResetInvalid": "Choose Voice or Chat and confirm the statistics reset."
+      "routingStatisticsResetInvalid": "Choose Voice or Chat and confirm the statistics reset.",
+      "recoveryBlocked": "The operation could not be verified. Refresh and inspect current state before trying again."
     },
     "mesaSuggestion": {
       "baseline_note": " Prohibited matches the built-in baseline for this domain, so the authored profile makes that intent explicit; choose confirm in Review to allow agent control behind approvals instead.",
@@ -2031,6 +2032,30 @@
       "reset": "Reset statistics",
       "confirm": "Clear statistics for this card only? Settings stay unchanged. Requests already in progress are excluded from the new period.",
       "error": "Could not load or reset statistics. Try again."
+    },
+    "recovery": {
+      "title": "Configuration recovery",
+      "help": "Inspect current Home Assistant state before retrying an uncertain operation. Safety copies are kept separately from change history. Reviewing a record releases its retry barrier; it does not undo the operation.",
+      "failed": "The operation could not be verified. Refresh and inspect current state before trying again.",
+      "empty": "No recovery records.",
+      "before": "Safety copy",
+      "source": "Source snapshot",
+      "inspect": "Inspect current state",
+      "review": "Mark as reviewed",
+      "restoreBefore": "Restore safety copy",
+      "restoreSource": "Restore source snapshot",
+      "prepared": "Prepared",
+      "dispatching": "Dispatched; verify outcome",
+      "verified": "Verified",
+      "partial": "Incomplete",
+      "unknown": "Outcome unknown",
+      "reviewed": "Reviewed",
+      "not_applied": "Not applied",
+      "confirm_reviewed": "I have checked the current state. Release the retry barrier for this record.",
+      "confirm_restore": "Apply this snapshot to Home Assistant? Any partial replacement is retained for inspection.",
+      "confirm_delete": "Permanently delete this recovery artifact? It may be the only remaining copy.",
+      "confirm": "Confirm",
+      "delete": "Delete"
     }
   },
   "notification": {

@@ -2915,3 +2915,9 @@ hui-card { display: block; min-width: 0; }
 .routing-statistics-values dd { margin: 0; text-align: end; font-variant-numeric: tabular-nums; }
 .routing-statistics-values dd small { display: block; max-width: 22ch; color: var(--phx-text-muted); font-size: 12px; }
 .routing-statistics-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.config-recovery { margin-bottom: 20px; }
+.config-recovery > summary, .config-recovery-record > summary { cursor: pointer; padding: 10px 0; }
+.config-recovery-record { border-top: 1px solid var(--phx-divider); overflow-wrap: anywhere; }
+.config-recovery-record summary span { margin-inline-start: 12px; }
+.config-recovery-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 12px; }

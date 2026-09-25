@@ -319,6 +319,16 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     )
     await card_catalog.async_load()
 
+    from .config_recovery import ConfigurationRecovery, ConfigurationRecoveryError
+    from .const import CONFIG_RECOVERY_STORAGE_KEY
+    config_recovery = ConfigurationRecovery(Store(
+        hass, 1, CONFIG_RECOVERY_STORAGE_KEY, private=True, atomic_writes=True,
+    ))
+    try:
+        await config_recovery.async_load()
+    except ConfigurationRecoveryError:
+        _LOGGER.error("Configuration recovery storage unavailable; protected writes will retry initialization")
+
     agent_recovery = AgentRecovery(Store(hass, 1, AGENT_RECOVERY_STORAGE_KEY))
     await agent_recovery.async_load()
 
@@ -334,6 +344,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         audit=audit,
         versions=versions,
         agent_recovery=agent_recovery,
+        config_recovery=config_recovery,
         routing_statistics=routing_statistics,
         card_catalog=card_catalog,
         ready=False,

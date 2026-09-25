@@ -1651,6 +1651,67 @@ async def _tool_edit_helper(
     return await _execute_edit_helper(approval_args, token, hass, data)
 
 
+async def _protected_storage_helper_write(args, token, hass, data, before, payload, *, deleting=False):
+    """Retain a durable safety copy and verify storage readback after one dispatch."""
+    from ..config_recovery import ConfigurationRecoveryError
+    from ..request_authority import check_request_authority
+
+    helper_type = args["helper_type"]
+    helper_id = args["helper_id"]
+    operation = "delete_helper" if deleting else "edit_helper"
+    key = f"helper:{helper_type}:{helper_id}"
+    recovery = data.config_recovery
+
+    async def read():
+        rows = _storage_items(helper_type, await async_ws_command(hass, f"{helper_type}/list", {}))
+        if rows is None:
+            raise ConfigurationRecoveryError("Helper storage could not be verified.")
+        return next((row for row in rows if row.get("id") == helper_id), None)
+
+    if not isinstance(before, dict):
+        raise ConfigurationRecoveryError("A complete helper safety copy is unavailable; nothing was dispatched.")
+    # Private person bindings intentionally remain outside Phoenix storage.
+    public = _public_helper_config(helper_type, before) if helper_type == "person" else before
+    rid = None
+    async with recovery.resource(key):
+        rid = await recovery.begin(key, operation, token.id, {
+            "snapshot_type": "storage_helper", "helper_type": helper_type,
+            "helper_id": helper_id, "config": public,
+        })
+        try:
+            await recovery.mark(rid, "dispatching")
+            current = await read()
+            if current != before:
+                await recovery.mark(rid, "not_applied")
+                raise ConfigurationRecoveryError("Helper configuration changed while saving its safety copy.")
+            _, error = await _revalidate_scoped_helper_context(args, token, hass, operation)
+            if error is not None:
+                await recovery.mark(rid, "not_applied")
+                raise ConfigurationRecoveryError("Helper authority changed before dispatch.")
+            check_request_authority()
+            entity_id = _resolve_helper_entity_id(hass, helper_type, helper_id)
+            if entity_id is None:
+                raise ConfigurationRecoveryError("Helper identity changed before dispatch.")
+            context = _enforce_helper_mesa_context(args, token, hass, data, [entity_id],
+                action="delete" if deleting else "edit",
+                service_data={"helper_type": helper_type} if deleting else {"helper_type": helper_type, "config": args["config"]},
+                session_id=operation)
+            if isinstance(context, tuple):
+                await recovery.mark(rid, "not_applied")
+                raise ConfigurationRecoveryError("Helper safety policy changed before dispatch.")
+            result = await async_ws_command(hass, f"{helper_type}/{'delete' if deleting else 'update'}", payload)
+            observed = await read()
+            verified = observed is None if deleting else isinstance(observed, dict) and all(
+                observed.get(k) == v for k, v in payload.items() if k != f"{helper_type}_id"
+            )
+            await recovery.mark(rid, "verified" if verified else "partial")
+            if not verified:
+                raise ConfigurationRecoveryError("Helper write was dispatched but readback is incomplete; inspect recovery before retrying.")
+            return result
+        finally:
+            recovery.leave(rid)
+
+
 async def _execute_edit_helper(
     args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
@@ -1714,9 +1775,9 @@ async def _execute_edit_helper(
         }
     payload = {f"{helper_type}_id": helper_id, **config}
     try:
-        item = await async_ws_command(hass, f"{helper_type}/update", payload)
-    except WsDispatchError as exc:
-        return _tool_error(f"Failed to edit helper: {exc}"), "invalid_request", "edit_helper"
+        item = await _protected_storage_helper_write(args, token, hass, data, before_cfg, payload)
+    except Exception:
+        return _tool_error("Helper edit was not verified. Inspect configuration recovery and current Home Assistant state before retrying."), "invalid_request", "edit_helper"
     public_before = (
         _public_helper_config(str(helper_type), before_cfg)
         if helper_type == "person" and isinstance(before_cfg, dict)
@@ -1820,9 +1881,10 @@ async def _execute_delete_helper(
         else await _read_helper_config(hass, str(helper_type), str(helper_id))
     )
     try:
-        await async_ws_command(hass, f"{helper_type}/delete", {f"{helper_type}_id": helper_id})
-    except WsDispatchError as exc:
-        return _tool_error(f"Failed to delete helper: {exc}"), "invalid_request", "delete_helper"
+        await _protected_storage_helper_write(args, token, hass, data, before_cfg,
+            {f"{helper_type}_id": helper_id}, deleting=True)
+    except Exception:
+        return _tool_error("Helper deletion was not verified. Inspect configuration recovery and current Home Assistant state before retrying."), "invalid_request", "delete_helper"
     public_before = (
         _public_helper_config(str(helper_type), before_cfg)
         if helper_type == "person" and isinstance(before_cfg, dict)
@@ -2450,6 +2512,53 @@ async def _tool_set_config_entry_options(
 async def _execute_set_config_entry_options(
     args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
+    """Protect qualified Template writes before invoking the existing executor."""
+    from ..config_recovery import ConfigurationRecoveryError
+    from ..template_recovery import protect_template, template_snapshot
+
+    if effective_cap(token, "cap_helper_write") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_helper_settings"
+    entry = hass.config_entries.async_get_entry(str(args.get("entry_id") or ""))
+    if entry is None or entry.domain != "template":
+        return await _apply_config_entry_options(args, token, hass, data)
+    tool = "set_helper_settings"
+    pre = _config_entry_settings_precheck(args.get("settings"), entry, _settings_mechanism(entry), token, hass, tool)
+    if pre is not None:
+        return pre
+    entities = _config_entry_helper_mesa_entities(hass, entry, data)
+    if isinstance(entities, tuple):
+        return entities
+    mesa = _enforce_helper_mesa_context(args, token, hass, data, entities, action="settings",
+        service_data={"helper_type": entry.domain, "settings": args.get("settings")}, session_id=tool)
+    if isinstance(mesa, tuple):
+        return mesa
+    rid = None
+    try:
+        async with protect_template(hass, data, token, entry, tool) as rid:
+            saved = data.config_recovery.get(rid)
+            assert saved is not None
+            result = await _apply_config_entry_options(args, token, hass, data, recovery_before=saved["before"])
+            current = hass.config_entries.async_get_entry(entry.entry_id)
+            if result[0].get("isError") or current is not entry:
+                await data.config_recovery.mark(rid, "unknown")
+                return _tool_error(json.dumps({"status": "unknown", "recovery_id": rid,
+                    "retry_safe": False, "error": "Helper settings were not verified; inspect Home Assistant before retrying."})), "invalid_request", tool
+            template_snapshot(hass, current)
+            await data.config_recovery.mark(rid, "verified", entry_id=current.entry_id)
+            # Include the exact operation receipt so restore can retain a
+            # partial result without guessing which concurrent record is ours.
+            body = json.loads(result[0]["content"][0]["text"])
+            body["recovery_id"] = rid
+            return _tool_success(json.dumps(body, default=str)), result[1], result[2]
+    except Exception as exc:
+        message = str(exc) if isinstance(exc, ConfigurationRecoveryError) else "Configuration recovery storage failed. Inspect the recovery record before retrying."
+        return _tool_error(json.dumps({"error": message, "recovery_id": rid,
+            "status": "unknown" if rid else "not_applied", "retry_safe": False})), "invalid_request", tool
+
+
+async def _apply_config_entry_options(
+    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData, *, record_history: bool = True, recovery_before: dict | None = None
+) -> tuple[dict, str, str]:
     tool = "set_helper_settings"
     entry = await _helper_config_entry(hass, args.get("entry_id"))
     if entry is None:
@@ -2462,6 +2571,8 @@ async def _execute_set_config_entry_options(
     if pre is not None:
         return pre
     before = _settings_store(entry, mechanism)
+    from ..template_recovery import template_snapshot
+    version_before = template_snapshot(hass, entry) if entry.domain == "template" else before
     conflict = _cas_conflict(args.get("expected_hash"), before, tool)
     if conflict is not None:
         return conflict
@@ -2487,6 +2598,24 @@ async def _execute_set_config_entry_options(
     try:
         result = await _init_settings_flow(hass, entry, mechanism)
         flow_id = result.get("flow_id")
+        if entry.domain == "template":
+            from ..request_authority import check_request_authority
+            from ..config_recovery import ConfigurationRecoveryError
+            check_request_authority()
+            current_entry = hass.config_entries.async_get_entry(entry.entry_id)
+            if (current_entry is None or id(current_entry) != id(entry)
+                    or template_snapshot(hass, entry) != (recovery_before or version_before)):
+                raise ConfigurationRecoveryError("Template configuration changed before settings submission.")
+            fresh_entities = _config_entry_helper_mesa_entities(hass, entry, data)
+            if isinstance(fresh_entities, tuple):
+                await _abort_flow(hass, mechanism, flow_id)
+                return fresh_entities
+            fresh_mesa = _enforce_helper_mesa_context(args, token, hass, data, fresh_entities,
+                action="settings", service_data={"helper_type": entry.domain, "settings": settings},
+                session_id="set_helper_settings_execute")
+            if isinstance(fresh_mesa, tuple):
+                await _abort_flow(hass, mechanism, flow_id)
+                return fresh_mesa
         result = await _configure_settings_flow(
             hass,
             mechanism,
@@ -2525,11 +2654,17 @@ async def _execute_set_config_entry_options(
     applied_entry = hass.config_entries.async_get_entry(entry.entry_id)
     after = (_settings_store(applied_entry, mechanism)
              if applied_entry is not None else dict_arg(settings))
-    await _record_version(
-        data, token, resource_type="config_entry", resource_id=entry.entry_id,
-        action="edit", before=before, after=after, alias=entry.title,
-        summary=_version_summary("config_entry.options", subject=entry.title),
-    )
+    if entry.domain == "template" and (
+        applied_entry is not entry or result.get("data") != after
+    ):
+        return _tool_error("Template settings readback did not match the completed flow; inspect recovery before retrying."), "invalid_request", tool
+    if record_history:
+        await _record_version(
+            data, token, resource_type="config_entry", resource_id=entry.entry_id,
+            action="edit", before=version_before,
+            after=template_snapshot(hass, applied_entry) if entry.domain == "template" else after, alias=entry.title,
+            summary=_version_summary("config_entry.options", subject=entry.title),
+        )
     return (
         _tool_success(json.dumps({
             "entry_id": entry.entry_id, "domain": entry.domain, "title": entry.title,

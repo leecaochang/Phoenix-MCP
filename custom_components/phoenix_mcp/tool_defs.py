@@ -2771,8 +2771,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Permanently remove a Home Assistant config entry through ConfigEntries.async_remove. Requires "
             "complete WRITE coverage and one merged capability/MESA approval when confirmation applies. The "
             "preview reports affected resources, consumers, shared ownership, Phoenix identity references, and "
-            "MESA context. Phoenix never manually deletes registry records; successful removal is versioned but "
-            "cannot be restored."
+            "MESA context. Phoenix never manually deletes registry records. Generic removal records are not "
+            "restorable; qualified Template sensor/binary-sensor snapshots support HA-admin recovery."
         ),
         "cap": "cap_integration_write",
         "inputSchema": {

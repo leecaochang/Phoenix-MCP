@@ -4248,6 +4248,110 @@ def _version_summary(r) -> dict:
     }
 
 
+class PhoenixAdminConfigurationRecoveryView(PhoenixView):
+    """Admin-only recovery artifacts, independent of rotating Changes history."""
+
+    url = "/api/phoenix-mcp/admin/config-recovery"
+    name = "api:phoenix-mcp:admin:config-recovery"
+    requires_auth = True
+
+    @require_admin
+    async def get(self, request: web.Request) -> web.Response:
+        data: PhoenixData = self.hass.data[DOMAIN]
+        from .config_recovery import ConfigurationRecoveryError
+        try:
+            records = data.config_recovery.records()
+        except ConfigurationRecoveryError:
+            return _err("service_unavailable", "Configuration recovery storage could not be loaded.", 503, request["phoenix_mcp_rid"], key="recoveryBlocked")
+        return _ok({"records": records}, request_id=request["phoenix_mcp_rid"])
+
+
+class PhoenixAdminConfigurationRecoveryRecordView(PhoenixView):
+    """Inspect current state, restore a saved side, or explicitly reconcile."""
+
+    url = "/api/phoenix-mcp/admin/config-recovery/{recovery_id}"
+    name = "api:phoenix-mcp:admin:config-recovery:record"
+    requires_auth = True
+
+    @require_admin
+    async def post(self, request: web.Request, recovery_id: str) -> web.Response:
+        from types import SimpleNamespace
+        from .config_recovery import ConfigurationRecoveryError
+        from .mcp_view import async_restore_version
+        from .template_recovery import template_snapshot
+
+        rid = request["phoenix_mcp_rid"]
+        data: PhoenixData = self.hass.data[DOMAIN]
+        user = request[KEY_HASS_USER]
+        body = await _read_body(request, rid)
+        if isinstance(body, web.Response):
+            return body
+        record = data.config_recovery.get(recovery_id)
+        if record is None:
+            return _err("not_found", "Recovery record not found.", 404, rid, key="recoveryBlocked")
+        action = body.get("action")
+        try:
+            if action == "inspect":
+                snapshot = record.get("source") or record.get("before")
+                if isinstance(snapshot, dict) and snapshot.get("snapshot_type") == "restart_receipt":
+                    from .config_recovery import runtime_identity
+                    return _ok({"runtime_replaced": runtime_identity(self.hass) != snapshot["runtime_identity"],
+                                "execution_attribution": "unproven"}, request_id=rid)
+                if isinstance(snapshot, dict) and snapshot.get("snapshot_type") == "storage_helper":
+                    from .tools.helper import _storage_items, _public_helper_config
+                    from .ws_dispatch import async_ws_command
+                    helper_type = snapshot["helper_type"]
+                    rows = _storage_items(helper_type, await async_ws_command(self.hass, f"{helper_type}/list", {}))
+                    if rows is None:
+                        raise ConfigurationRecoveryError("Helper storage could not be read.")
+                    helper_id = record.get("observations", {}).get("replacement_helper_id") or snapshot["helper_id"]
+                    current = next((row for row in rows if row.get("id") == helper_id), None)
+                    return _ok({"observed": _public_helper_config(snapshot["helper_type"], current) if isinstance(current, dict) else None,
+                                "helper_present": current is not None, "execution_attribution": "unproven"}, request_id=rid)
+                if not isinstance(snapshot, dict) or snapshot.get("snapshot_type") != "template_helper":
+                    return _ok({"status": "manual_verification_required"}, request_id=rid)
+                replacement = record.get("observations", {}).get("replacement_entry_id")
+                entry = self.hass.config_entries.async_get_entry(replacement or snapshot["entry_id"])
+                observed = template_snapshot(self.hass, entry) if entry is not None else None
+                return _ok({"observed": observed, "entry_present": entry is not None,
+                            "execution_attribution": "unproven"}, request_id=rid)
+            if action in ("reviewed", "delete"):
+                await data.config_recovery.reviewed(recovery_id, user.id, delete=action == "delete")
+                result = {"status": action}
+            elif action == "restore":
+                if record["phase"] not in ("verified", "not_applied", "reviewed") or any(
+                    item["id"] == recovery_id and item["active"] for item in data.config_recovery.records()
+                ):
+                    raise ConfigurationRecoveryError("Review the inactive recovery record before restoring it.")
+                side = body.get("side")
+                if side not in ("before", "source") or not isinstance(record.get(side), dict):
+                    return _err("invalid_request", "Select an available before or source snapshot.", 400, rid, key="recoveryBlocked")
+                snapshot = record[side]
+                if snapshot.get("snapshot_type") == "storage_helper":
+                    resource_type = "helper"
+                    resource_id = f"{snapshot['helper_type']}:{snapshot['helper_id']}"
+                    snapshot = snapshot["config"]
+                elif snapshot.get("snapshot_type") == "template_helper":
+                    resource_type = "config_entry"
+                    resource_id = snapshot["entry_id"]
+                else:
+                    return _err("invalid_request", "This recovery artifact requires manual restoration.", 400, rid, key="recoveryBlocked")
+                restored, outcome, _ = await async_restore_version(SimpleNamespace(
+                    before=snapshot, after=None, resource_type=resource_type,
+                    resource_id=resource_id,
+                ), user.id, self.hass, data, "before")
+                result = {"result": restored, "outcome": outcome}
+            else:
+                return _err("invalid_request", "Unknown recovery action.", 400, rid, key="recoveryBlocked")
+        except ConfigurationRecoveryError as exc:
+            return _err("conflict", str(exc), 409, rid, key="recoveryBlocked")
+        data.audit.record(request_id=rid, token_id="admin", token_name=f"admin:{user.id}",
+                          method=f"config_recovery/{action}", resource=recovery_id,
+                          outcome=result.get("outcome", "allowed"),
+                          client_ip="", settings=data.store.get_settings())
+        return _ok(result, request_id=rid)
+
+
 class PhoenixAdminVersionsView(PhoenixView):
     """GET /api/phoenix-mcp/admin/versions - configuration version history for one resource.
 
@@ -4793,6 +4897,8 @@ ALL_ADMIN_VIEWS: list[type[PhoenixView]] = [
     PhoenixAdminApprovalApproveView,
     PhoenixAdminApprovalBatchApproveView,
     PhoenixAdminApprovalRejectView,
+    PhoenixAdminConfigurationRecoveryView,
+    PhoenixAdminConfigurationRecoveryRecordView,
     PhoenixAdminVersionsView,
     PhoenixAdminVersionView,
     PhoenixAdminVersionRestoreView,

@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Callable
 
 from .agent_recovery import AgentRecovery
+from .config_recovery import ConfigurationRecovery
 from .audit import AuditLog
 from .command_routing import CommandRouting
 from .decision_shadow import DecisionShadow
@@ -44,6 +45,7 @@ class PhoenixData:
     command_routing: CommandRouting = field(default_factory=CommandRouting)
     decision_shadow: DecisionShadow = field(default_factory=DecisionShadow)
     routing_statistics: RoutingStatistics = field(default_factory=RoutingStatistics)
+    config_recovery: ConfigurationRecovery = field(default_factory=ConfigurationRecovery)
     agent_recovery: AgentRecovery = field(default_factory=AgentRecovery)
     # Which Lovelace cards this instance can render, harvested by the panel
     # frontend. Always present: __init__ supplies a persistent store; direct

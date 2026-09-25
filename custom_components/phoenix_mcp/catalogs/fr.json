@@ -1708,7 +1708,8 @@
       "routingPreviewInvalid": "Vérifiez le jeton, la langue de la commande et les paramètres de routage.",
       "providerModelNotListed": "Choisissez un modèle renvoyé par ce fournisseur.",
       "providerAccountChanged": "Le compte du fournisseur a changé. Rechargez et réessayez.",
-      "routingStatisticsResetInvalid": "Choisissez Voice ou Chat et confirmez la réinitialisation des statistiques."
+      "routingStatisticsResetInvalid": "Choisissez Voice ou Chat et confirmez la réinitialisation des statistiques.",
+      "recoveryBlocked": "L’opération n’a pas pu être vérifiée. Actualisez et inspectez l’état actuel avant de réessayer."
     },
     "mesaSuggestion": {
       "baseline_note": " Interdit correspond à la ligne de base intégrée pour ce domaine, le profil créé rend donc cette intention explicite ; choisissez Confirmer dans Révision pour autoriser plutôt le contrôle de l'agent derrière les approbations.",
@@ -2027,6 +2028,30 @@
       "reset": "Réinitialiser les statistiques",
       "confirm": "Effacer uniquement les statistiques de cette carte ? Les réglages restent inchangés. Les requêtes déjà en cours sont exclues de la nouvelle période.",
       "error": "Impossible de charger ou réinitialiser les statistiques. Réessayez."
+    },
+    "recovery": {
+      "title": "Récupération de configuration",
+      "help": "Vérifiez l’état actuel de Home Assistant avant de relancer une opération incertaine. Les copies de sécurité sont distinctes de l’historique. Marquer une entrée comme vérifiée autorise une nouvelle tentative sans annuler l’opération.",
+      "failed": "L’opération n’a pas pu être vérifiée. Actualisez et inspectez l’état actuel avant de réessayer.",
+      "empty": "Aucune entrée de récupération.",
+      "before": "Copie de sécurité",
+      "source": "Instantané source",
+      "inspect": "Inspecter l’état actuel",
+      "review": "Marquer comme examiné",
+      "restoreBefore": "Restaurer la copie de sécurité",
+      "restoreSource": "Restaurer l’instantané source",
+      "prepared": "Préparé",
+      "dispatching": "Envoyé ; vérifier le résultat",
+      "verified": "Vérifié",
+      "partial": "Incomplet",
+      "unknown": "Résultat inconnu",
+      "reviewed": "Examiné",
+      "not_applied": "Non appliqué",
+      "confirm_reviewed": "J’ai vérifié l’état actuel. Autoriser une nouvelle tentative pour cette entrée.",
+      "confirm_restore": "Appliquer cet instantané à Home Assistant ? Les remplacements incomplets seront conservés pour inspection.",
+      "confirm_delete": "Supprimer définitivement cet artefact de récupération ? Il peut s’agir de la seule copie restante.",
+      "confirm": "Confirmer",
+      "delete": "Supprimer"
     }
   },
   "notification": {

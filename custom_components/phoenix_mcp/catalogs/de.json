@@ -1420,7 +1420,8 @@
       "routingPreviewInvalid": "Prüfe das Token, die Befehlssprache und die Routing-Einstellungen.",
       "providerModelNotListed": "Wählen Sie ein vom Anbieter zurückgegebenes Modell.",
       "providerAccountChanged": "Das Anbieterkonto wurde geändert. Laden Sie neu und versuchen Sie es erneut.",
-      "routingStatisticsResetInvalid": "Wählen Sie Voice oder Chat und bestätigen Sie das Zurücksetzen der Statistik."
+      "routingStatisticsResetInvalid": "Wählen Sie Voice oder Chat und bestätigen Sie das Zurücksetzen der Statistik.",
+      "recoveryBlocked": "Der Vorgang konnte nicht verifiziert werden. Aktualisieren und prüfen Sie den aktuellen Zustand vor einem erneuten Versuch."
     },
     "approvalSummary": {
       "action.approve": "Genehmigen und ausführen",
@@ -2027,6 +2028,30 @@
       "reset": "Statistik zurücksetzen",
       "confirm": "Nur die Statistik dieser Karte löschen? Einstellungen bleiben unverändert. Bereits laufende Anfragen werden im neuen Zeitraum nicht gezählt.",
       "error": "Statistik konnte nicht geladen oder zurückgesetzt werden. Erneut versuchen."
+    },
+    "recovery": {
+      "title": "Konfiguration wiederherstellen",
+      "help": "Prüfen Sie vor einem erneuten Versuch den aktuellen Zustand von Home Assistant. Sicherheitskopien bleiben vom Änderungsverlauf getrennt. Eine Prüfung hebt die Wiederholungssperre auf, macht den Vorgang aber nicht rückgängig.",
+      "failed": "Der Vorgang konnte nicht verifiziert werden. Aktualisieren und prüfen Sie den aktuellen Zustand vor einem erneuten Versuch.",
+      "empty": "Keine Wiederherstellungsdatensätze.",
+      "before": "Sicherheitskopie",
+      "source": "Quellsnapshot",
+      "inspect": "Aktuellen Zustand prüfen",
+      "review": "Als geprüft markieren",
+      "restoreBefore": "Sicherheitskopie wiederherstellen",
+      "restoreSource": "Quellsnapshot wiederherstellen",
+      "prepared": "Vorbereitet",
+      "dispatching": "Gesendet; Ergebnis prüfen",
+      "verified": "Verifiziert",
+      "partial": "Unvollständig",
+      "unknown": "Ergebnis unbekannt",
+      "reviewed": "Geprüft",
+      "not_applied": "Nicht angewendet",
+      "confirm_reviewed": "Ich habe den aktuellen Zustand geprüft. Wiederholungssperre für diesen Datensatz aufheben.",
+      "confirm_restore": "Diesen Snapshot auf Home Assistant anwenden? Unvollständige Ersatzobjekte bleiben zur Prüfung erhalten.",
+      "confirm_delete": "Dieses Wiederherstellungsartefakt endgültig löschen? Es könnte die einzige verbliebene Kopie sein.",
+      "confirm": "Bestätigen",
+      "delete": "Löschen"
     }
   },
   "notification": {

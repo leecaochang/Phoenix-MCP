@@ -973,7 +973,8 @@
       "routingPreviewInvalid": "Controleer het token, de taal van de opdracht en de routeringsinstellingen.",
       "providerModelNotListed": "Kies een model dat deze provider heeft teruggegeven.",
       "providerAccountChanged": "Het provideraccount is gewijzigd. Herlaad en probeer het opnieuw.",
-      "routingStatisticsResetInvalid": "Kies Voice of Chat en bevestig het resetten van de statistieken."
+      "routingStatisticsResetInvalid": "Kies Voice of Chat en bevestig het resetten van de statistieken.",
+      "recoveryBlocked": "De bewerking kon niet worden geverifieerd. Vernieuw en controleer de huidige toestand voordat je het opnieuw probeert."
     },
     "wizard": {
       "accessSub": "Vouw de <code>light</code>-groep uit en kies een licht dat je kunt controleren. Selecteer <strong>W</strong> om lees- en schrijftoegang te verlenen. Ken een heel apparaat toe of vouw het uit om één entiteit te kiezen. Je kunt later meer machtigingen toevoegen.",
@@ -2059,6 +2060,30 @@
       "reset": "Statistieken resetten",
       "confirm": "Alleen statistieken van deze kaart wissen? Instellingen blijven gelijk. Lopende verzoeken tellen niet mee in de nieuwe periode.",
       "error": "Statistieken laden of resetten mislukt. Probeer opnieuw."
+    },
+    "recovery": {
+      "title": "Configuratieherstel",
+      "help": "Controleer de huidige toestand van Home Assistant voordat je een onzekere bewerking herhaalt. Veiligheidskopieën staan los van de wijzigingsgeschiedenis. Beoordelen heft de blokkade op, maar maakt de bewerking niet ongedaan.",
+      "failed": "De bewerking kon niet worden geverifieerd. Vernieuw en controleer de huidige toestand voordat je het opnieuw probeert.",
+      "empty": "Geen herstelrecords.",
+      "before": "Veiligheidskopie",
+      "source": "Bronmomentopname",
+      "inspect": "Huidige toestand controleren",
+      "review": "Markeren als beoordeeld",
+      "restoreBefore": "Veiligheidskopie herstellen",
+      "restoreSource": "Bronmomentopname herstellen",
+      "prepared": "Voorbereid",
+      "dispatching": "Verzonden; controleer resultaat",
+      "verified": "Geverifieerd",
+      "partial": "Onvolledig",
+      "unknown": "Resultaat onbekend",
+      "reviewed": "Beoordeeld",
+      "not_applied": "Niet toegepast",
+      "confirm_reviewed": "Ik heb de huidige toestand gecontroleerd. Hef de blokkade voor dit record op.",
+      "confirm_restore": "Deze momentopname toepassen op Home Assistant? Onvolledige vervangingen blijven bewaard ter controle.",
+      "confirm_delete": "Dit herstelbestand definitief verwijderen? Het kan de enige overgebleven kopie zijn.",
+      "confirm": "Bevestigen",
+      "delete": "Verwijderen"
     }
   }
 }

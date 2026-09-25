@@ -1,3 +1,4 @@
+import type { RecoveryRecord } from "./components/ConfigurationRecovery";
 import type {
   CommandRoutePreview,
   RoutingStatisticsResponse,
@@ -354,6 +355,9 @@ export const api = {
     req<BatchApproveResult>("POST", "/approvals/batch/approve", { approval_ids: ids }),
   cancelApproval: (id: string) => req<void>("DELETE", `/approvals/${encodeURIComponent(id)}`),
 
+  listConfigurationRecovery: () => req<{ records: RecoveryRecord[] }>("GET", "/config-recovery"),
+  configurationRecoveryAction: (id: string, action: string, side?: string) =>
+    req<{ result?: { isError?: boolean }; [key: string]: unknown }>("POST", `/config-recovery/${encodeURIComponent(id)}`, { action, side }),
   listVersions: (params?: { resource_type?: string; resource_id?: string; limit?: number; offset?: number }) => {
     const p = new URLSearchParams();
     if (params?.resource_type) p.set("resource_type", params.resource_type);

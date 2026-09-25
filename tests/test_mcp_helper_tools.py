@@ -49,7 +49,9 @@ def _json(content: dict) -> dict:
 
 
 async def _call(name, args, token, hass):
-    return await _call_tool(name, args, token, hass, MagicMock())
+    return await _call_tool(name, args, token, hass, PhoenixData(
+        store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(),
+    ))
 
 
 @pytest.fixture

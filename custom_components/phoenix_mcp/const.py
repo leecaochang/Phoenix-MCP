@@ -83,6 +83,10 @@ AUDIT_STORAGE_VERSION = 1
 # evolve independently.
 VERSION_STORAGE_KEY = "phoenix_mcp_versions"
 VERSION_STORAGE_VERSION = 1
+CONFIG_RECOVERY_STORAGE_KEY = "phoenix_mcp_config_recovery"
+CONFIG_RECOVERY_MAX_RECORDS = 256
+CONFIG_RECOVERY_MAX_BYTES = 1_048_576
+TEMPLATE_RECOVERY_TYPES = frozenset({"sensor", "binary_sensor"})
 # Per-resource FIFO retention: the newest N versions per (resource_type,
 # resource_id) are kept; older ones are evicted on write.
 MAX_VERSIONS_PER_RESOURCE = 20

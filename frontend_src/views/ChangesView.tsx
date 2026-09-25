@@ -1,4 +1,5 @@
 /** Configuration version history view. */
+import { ConfigurationRecovery } from "../components/ConfigurationRecovery";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { VersionRecord, VersionSummary } from "../types";
 import { api } from "../api";
@@ -248,6 +249,7 @@ export function ChangesView({ hass }: { hass: unknown }) {
           <RefreshIcon />
         </button>
       </div>
+      <ConfigurationRecovery />
       {error && <ErrorMsg msg={error} />}
       {loading ? <Loading /> : feed.length === 0 ? (
         <div className="banner banner-info">

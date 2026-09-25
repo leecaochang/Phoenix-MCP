@@ -961,7 +961,8 @@
       "routingPreviewInvalid": "Comprueba el token, el idioma de la orden y los ajustes de enrutamiento.",
       "providerModelNotListed": "Elige un modelo devuelto por este proveedor.",
       "providerAccountChanged": "La cuenta del proveedor ha cambiado. Recarga y vuelve a intentarlo.",
-      "routingStatisticsResetInvalid": "Elige Voice o Chat y confirma el restablecimiento de las estadísticas."
+      "routingStatisticsResetInvalid": "Elige Voice o Chat y confirma el restablecimiento de las estadísticas.",
+      "recoveryBlocked": "No se pudo verificar la operación. Actualiza y comprueba el estado actual antes de volver a intentarlo."
     },
     "tokens": {
       "advanced": "Avanzado",
@@ -2027,6 +2028,30 @@
       "reset": "Restablecer estadísticas",
       "confirm": "¿Borrar solo las estadísticas de esta tarjeta? La configuración no cambia. Las solicitudes ya en curso se excluyen del nuevo período.",
       "error": "No se pudieron cargar o restablecer las estadísticas. Inténtalo de nuevo."
+    },
+    "recovery": {
+      "title": "Recuperación de configuración",
+      "help": "Comprueba el estado actual de Home Assistant antes de repetir una operación incierta. Las copias de seguridad se guardan aparte del historial. Marcar como revisado permite reintentar, pero no deshace la operación.",
+      "failed": "No se pudo verificar la operación. Actualiza y comprueba el estado actual antes de volver a intentarlo.",
+      "empty": "No hay registros de recuperación.",
+      "before": "Copia de seguridad",
+      "source": "Instantánea de origen",
+      "inspect": "Comprobar estado actual",
+      "review": "Marcar como revisado",
+      "restoreBefore": "Restaurar copia de seguridad",
+      "restoreSource": "Restaurar instantánea de origen",
+      "prepared": "Preparado",
+      "dispatching": "Enviado; verifica el resultado",
+      "verified": "Verificado",
+      "partial": "Incompleto",
+      "unknown": "Resultado desconocido",
+      "reviewed": "Revisado",
+      "not_applied": "No aplicado",
+      "confirm_reviewed": "He comprobado el estado actual. Permitir reintentos para este registro.",
+      "confirm_restore": "¿Aplicar esta instantánea a Home Assistant? Los reemplazos incompletos se conservarán para su revisión.",
+      "confirm_delete": "¿Eliminar permanentemente este archivo de recuperación? Podría ser la única copia restante.",
+      "confirm": "Confirmar",
+      "delete": "Eliminar"
     }
   },
   "notification": {

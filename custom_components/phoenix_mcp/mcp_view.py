@@ -1569,7 +1569,9 @@ async def _tool_get_config(
     """MCP tool: return HA config (requires cap_config_read)."""
     if effective_cap(token, "cap_config_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_config"
-    return _tool_success(json.dumps(build_safe_config(hass), default=str)), "allowed", "get_config"
+    from .config_recovery import runtime_identity
+    body = {**build_safe_config(hass), "runtime_identity": runtime_identity(hass)}
+    return _tool_success(json.dumps(body, default=str)), "allowed", "get_config"
 
 
 
@@ -4794,26 +4796,39 @@ async def _tool_restart_ha(
 async def _execute_restart_ha(
     args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    """Side-effect path for restart_ha. Assumes capability is already satisfied."""
+    """Journal restart once; a response cannot prove process replacement."""
+    from .config_recovery import ConfigurationRecoveryError, runtime_identity
+
+    if effective_cap(token, "cap_restart") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "restart_ha"
+    recovery = data.config_recovery
+    rid = None
     try:
-        async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
-            await hass.services.async_call(
-                "homeassistant",
-                "restart",
-                {},
-                blocking=True,
-            )
-    except asyncio.TimeoutError:
-        return (
-            _tool_success(json.dumps({"success": True, "partial": True, "message": "Restart dispatched."})),
-            "allowed",
-            "restart_ha",
-        )
-    except ServiceNotFound:
-        return _tool_error("Restart failed."), "denied", "restart_ha"
-    except HomeAssistantError:
-        return _tool_error("Restart failed."), "denied", "restart_ha"
-    return _tool_success(json.dumps({"success": True})), "allowed", "restart_ha"
+        async with recovery.resource("homeassistant:restart"):
+            identity = runtime_identity(hass)
+            rid = await recovery.begin("homeassistant:restart", "restart_ha", token.id,
+                                       {"snapshot_type": "restart_receipt", "runtime_identity": identity})
+            await recovery.mark(rid, "dispatching")
+            check_request_authority()
+            try:
+                async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
+                    await hass.services.async_call("homeassistant", "restart", {}, blocking=True)
+            except asyncio.TimeoutError:
+                pass
+            except ServiceNotFound:
+                await recovery.mark(rid, "not_applied")
+                return _tool_error("Restart service is unavailable; nothing was dispatched."), "invalid_request", "restart_ha"
+            return _tool_success(json.dumps({
+                "success": True, "partial": True, "status": "dispatched", "recovery_id": rid,
+                "runtime_identity": identity, "retry_safe": False,
+                "message": "Reconnect with a fresh client and compare get_config runtime_identity. Do not repeat the restart request.",
+            })), "allowed", "restart_ha"
+    except Exception as exc:
+        message = str(exc) if isinstance(exc, ConfigurationRecoveryError) else "Restart outcome is uncertain. Reconnect and inspect current Home Assistant state before retrying."
+        return _tool_error(json.dumps({"error": message, "recovery_id": rid, "retry_safe": False})), "invalid_request", "restart_ha"
+    finally:
+        if rid is not None:
+            recovery.leave(rid)
 
 
 async def _tool_get_approval_status(
@@ -5140,10 +5155,15 @@ async def _resource_exists(hass: HomeAssistant, resource_type: str, resource_id:
             )
             return current is not None
         if resource_type == "helper":
+            from .tools.helper import _storage_items
             ht, _, hid = resource_id.partition(":")
-            return await _read_helper_config(hass, ht, hid) is not None
-    except Exception:  # noqa: BLE001 - existence probe is best-effort
-        return False
+            rows = _storage_items(ht, await async_ws_command(hass, f"{ht}/list", {}))
+            if rows is None:
+                raise ValueError("Unreadable helper storage")
+            return any(row.get("id") == hid for row in rows)
+    except Exception:
+        from .config_recovery import ConfigurationRecoveryError
+        raise ConfigurationRecoveryError("Current configuration could not be read; restore was not dispatched.") from None
     return False
 
 
@@ -5174,8 +5194,14 @@ async def async_restore_version(
             "cannot be restored automatically. Re-create it manually."
         ), "invalid_request", "async_restore_version"
     token = _restore_token(admin_user_id)
-    exists = await _resource_exists(hass, resource_type, resource_id)
+    from .config_recovery import ConfigurationRecoveryError
+    try:
+        exists = await _resource_exists(hass, resource_type, resource_id)
+    except ConfigurationRecoveryError as exc:
+        return _tool_error(str(exc)), "invalid_request", "async_restore_version"
 
+    from .config_recovery import recovery_source
+    source_ctx = recovery_source.set(target)
     ctx = _restore_ctx.set({"user_id": admin_user_id})
     try:
         if resource_type == "automation":
@@ -5224,18 +5250,47 @@ async def async_restore_version(
                     for key in ("name", "device_trackers")
                     if key in target
                 }
+            recovery_source.set({"snapshot_type": "storage_helper", "helper_type": ht, "helper_id": hid, "config": target})
             if exists:
                 return await _execute_edit_helper({"helper_type": ht, "helper_id": hid, "config": target}, token, hass, data)
-            return await _execute_create_helper(
-                {
-                    "helper_type": ht,
-                    "config": target,
-                    _HELPER_RESTORE_ID: hid,
-                },
-                token,
-                hass,
-                data,
-            )
+            from .tools.helper import _helper_create_mesa_entity, _enforce_helper_mesa_context
+            create_args = {"helper_type": ht, "config": target, _HELPER_RESTORE_ID: hid}
+            mesa_precheck = _enforce_helper_mesa_context(create_args, token, hass, data,
+                [_helper_create_mesa_entity(ht, create_args, hass)], action="create",
+                service_data={"helper_type": ht, "config": target, "flow_steps": None},
+                session_id="create_helper_execute")
+            if isinstance(mesa_precheck, tuple):
+                return mesa_precheck
+            rid = None
+            try:
+                async with data.config_recovery.resource(f"helper:{resource_id}"):
+                    rid = await data.config_recovery.begin(f"helper:{resource_id}", "restore_helper", token.id, None,
+                        source={"snapshot_type": "storage_helper", "helper_type": ht, "helper_id": hid, "config": target})
+                    await data.config_recovery.mark(rid, "dispatching")
+                    if await _resource_exists(hass, "helper", resource_id):
+                        await data.config_recovery.mark(rid, "not_applied")
+                        return _tool_error("Helper identity became occupied before restoration."), "invalid_request", "async_restore_version"
+                    restored = await _execute_create_helper(
+                        {"helper_type": ht, "config": target, _HELPER_RESTORE_ID: hid}, token, hass, data,
+                    )
+                    if restored[0].get("isError"):
+                        await data.config_recovery.mark(rid, "unknown")
+                    else:
+                        body = json.loads(restored[0]["content"][0]["text"])
+                        new_id = body["helper"]["id"]
+                        observed = await _read_helper_config(hass, ht, new_id)
+                        await data.config_recovery.mark(rid, "verified" if observed is not None else "partial", replacement_helper_id=new_id)
+                        if observed is None:
+                            return _tool_error(json.dumps({"status": "partial", "recovery_id": rid,
+                                "replacement_helper_id": new_id, "retry_safe": False})), "invalid_request", "async_restore_version"
+                        body.update(recovery_id=rid, status="verified", retry_safe=False)
+                        restored = (_tool_success(json.dumps(body)), restored[1], restored[2])
+                    return restored
+            except Exception:
+                return _tool_error("Helper restoration was not verified. Inspect configuration recovery before retrying."), "invalid_request", "async_restore_version"
+            finally:
+                if rid is not None:
+                    data.config_recovery.leave(rid)
         if resource_type == "dashboard":
             # Dashboards are edit-only: re-apply the layout to the existing dashboard
             # (resource_id "lovelace" is the default dashboard, url_path None).
@@ -5244,6 +5299,9 @@ async def async_restore_version(
                 token, hass, data,
             )
         if resource_type == "config_entry":
+            if target.get("snapshot_type") == "template_helper":
+                from .template_recovery import restore_template
+                return await restore_template(target, token, hass, data)
             if target.get("restorable") is False:
                 return _tool_error(
                     "This integration version is a non-restorable audit record and cannot be restored. Phoenix "
@@ -5379,6 +5437,7 @@ async def async_restore_version(
         return _tool_error(f"Cannot restore resource type '{resource_type}'."), "invalid_request", "async_restore_version"
     finally:
         _restore_ctx.reset(ctx)
+        recovery_source.reset(source_ctx)
 
 
 class ExecutorNotRegistered(LookupError):
@@ -7249,6 +7308,42 @@ async def _tool_remove_integration(
 
 
 async def _execute_remove_integration(
+    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+) -> tuple[dict, str, str]:
+    """Use the same protected lifecycle for Template removal on the generic path."""
+    from .config_recovery import ConfigurationRecoveryError
+    from .template_recovery import protect_template
+
+    entry = hass.config_entries.async_get_entry(str(args.get("entry_id") or ""))
+    if entry is None or entry.domain != "template":
+        return await _apply_remove_integration(args, token, hass, data)
+    if effective_cap(token, "cap_integration_write") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "remove_integration"
+    perm_error = _config_entry_write_error(entry.entry_id, token, hass)
+    if perm_error is not None:
+        return perm_error
+    resolved = _config_entry_action_decision(data, token, hass, entry, actions=["remove"],
+        service_data={}, session_id="remove_integration_execute")
+    if isinstance(resolved, tuple):
+        return resolved
+    approved = _approved_exec_ctx.get() and args.get(_CONFIG_ENTRY_CONTEXT_FINGERPRINT) == resolved.fingerprint
+    if resolved.decision == "deny" or resolved.decision == "confirm" and not approved:
+        return _config_entry_mesa_error(entry.entry_id, resolved)
+    rid = None
+    try:
+        async with protect_template(hass, data, token, entry, "remove_integration") as rid:
+            result = await _apply_remove_integration(args, token, hass, data)
+            removed = hass.config_entries.async_get_entry(entry.entry_id) is None
+            remaining = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
+            await data.config_recovery.mark(rid, "verified" if removed and not remaining else "partial" if removed else "unknown", entry_removed=removed, remaining_entities=len(remaining))
+            return result
+    except Exception as exc:
+        message = str(exc) if isinstance(exc, ConfigurationRecoveryError) else "Configuration recovery failed; inspect Home Assistant before retrying."
+        return _tool_error(json.dumps({"error": message, "recovery_id": rid,
+            "status": "unknown" if rid else "not_applied", "retry_safe": False})), "invalid_request", "remove_integration"
+
+
+async def _apply_remove_integration(
     args: dict,
     token: TokenRecord,
     hass: HomeAssistant,
@@ -7295,7 +7390,9 @@ async def _execute_remove_integration(
 
     before_entity_ids = sorted(context.entity_ids)
     before_device_ids = sorted(context.device_ids)
-    version_before = _config_entry_delete_snapshot(entry, context)
+    from .template_recovery import template_snapshot
+    version_before = (template_snapshot(hass, entry) if entry.domain == "template"
+                      else _config_entry_delete_snapshot(entry, context))
     remove_result: dict[str, Any] = {}
     remove_raised = False
     try:
