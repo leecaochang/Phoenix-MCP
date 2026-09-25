@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 import pytest
 from homeassistant.core import HomeAssistant, callback
@@ -206,6 +206,8 @@ async def test_setup_reconciles_approvals_interrupted_by_the_last_shutdown(hass:
     could apply a service call or a config write a second time, which is the one
     outcome with no recovery. Pinned at the wiring level because the reconcile
     function passing its own unit tests says nothing about setup calling it.
+    Startup reconciles first, then the initial expiry sweep reconciles again
+    while excluding the live execution claims.
     """
     with patch(
         "custom_components.phoenix_mcp.approvals.async_reconcile_interrupted_approvals",
@@ -213,7 +215,12 @@ async def test_setup_reconciles_approvals_interrupted_by_the_last_shutdown(hass:
     ) as reconcile:
         await _run_setup(hass, kill_switch=False)
 
-    reconcile.assert_awaited_once()
+    data = hass.data[DOMAIN]
+    assert reconcile.await_args_list == [
+        call(data.store, skip_ids=None),
+        call(data.store, skip_ids=data.approvals_in_progress),
+    ]
+    assert reconcile.await_args_list[1].kwargs["skip_ids"] is data.approvals_in_progress
 
 
 async def test_external_alias_sentinel_loss_is_logged_without_repair(

@@ -49,7 +49,7 @@ async def hybrid_home(hass, token_store, immediate_command_observation):
 
 def wire_answer(payload, category="light_on", target="t0", percent=50, model="test-model"):
     choices = {"route": category, "target": target, "value": "none", "attribute": "none", "color": "none",
-               "percentage": str(percent),
+               "percentage": str(percent), "summary": "none", "summary_scope": "none",
                "brightness_tens": str(percent // 10), "brightness_units": str(percent % 10)}
     return {"model": model, "answers": {
         question: {"type": "choice", "choice": choices[question], "confidence": 0.1,
@@ -473,7 +473,7 @@ async def test_qualified_numeric_voice_uses_one_decision_and_shared_execution(ha
     _, domain, _, service, service_field, divisor = spec
     await home[0].store.async_patch_settings(voice_agent_routing_mode='auto')
     async def respond(session, method, path, timeout, payload):
-        assert set(payload['questions']) == {'route', 'target', 'percentage'}
+        assert set(payload['questions']) == {'route', 'target', 'percentage', 'summary', 'summary_scope'}
         return numeric_reply(payload, home, spec, percent=percent)
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
@@ -574,7 +574,7 @@ async def test_numeric_source_worker_rechecks_before_sharing_request(hass, jev_h
 @pytest.mark.parametrize("category,service", [("light_on", "turn_on"), ("light_off", "turn_off"), ("state_query", None)])
 async def test_jev_joint_routes_one_request_through_existing_executor(hass, jev_hybrid_home, category, service):
     async def respond(session, method, path, timeout, payload):
-        assert set(payload["questions"]) == {"route", "target"}
+        assert set(payload["questions"]) == {"route", "target", "summary", "summary_scope"}
         return wire_answer(payload, category, model="jev-1.13.0")
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
@@ -596,13 +596,21 @@ async def test_jev_joint_routes_one_request_through_existing_executor(hass, jev_
     ("low_route", "category_low_probability"), ("low_target", "target_low_probability"),
     ("revision", "model_unverified"), ("malformed", "malformed"),
     ("timeout", "timeout"), ("rate_limited", "rate_limited"), ("category_scope", "category_mismatch"),
+    ("unadvertised_route", "malformed"),
 ])
 async def test_jev_joint_declines_without_sequential_retry(hass, jev_hybrid_home, case, reason):
     data, token, *_ = jev_hybrid_home
-    if case == "category_scope":
+    if case in ("category_scope", "unadvertised_route"):
         token.permissions = PermissionTree(domains={"light": PermissionNode(state="YELLOW")})
+    if case == "category_scope":
+        entry = er.async_get(hass).async_get_or_create("light", "test", "zz_scope_control")
+        token.permissions.entities[entry.entity_id] = PermissionNode(state="GREEN")
+        hass.states.async_set(entry.entity_id, "off")
+        async_expose_entity(hass, "conversation", entry.entity_id, True)
     async def respond(session, method, path, timeout, payload):
-        assert set(payload["questions"]) == {"route", "target"}
+        assert set(payload["questions"]) == {"route", "target", "summary", "summary_scope"}
+        if case in ("category_scope", "unadvertised_route"):
+            assert ("light_on" in payload["questions"]["route"]["criteria"]) == (case == "category_scope")
         if case in ("timeout", "rate_limited"):
             raise DecisionError(case)
         answer = wire_answer(payload, "provider" if case == "provider" else "light_on",
@@ -637,7 +645,7 @@ async def test_jev_large_union_keeps_all_candidates_in_one_joint_request(hass, j
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, jev_hybrid_home, request=jev_response)
-    assert [set(item.args[4]["questions"]) for item in remote.await_args_list] == [{"route", "target"}]
+    assert [set(item.args[4]["questions"]) for item in remote.await_args_list] == [{"route", "target", "summary", "summary_scope"}]
     assert len(remote.await_args.args[4]["state"]["targets"]) == DECISION_MAX_TARGETS + 1
     call.assert_awaited_once()
     provider.assert_not_called()
@@ -811,7 +819,7 @@ async def expanded_numeric_home(hass, jev_hybrid_home, request):
 
 def scalar_reply(payload, entity_id, category):
     target = next(key for key, descriptor in payload['state']['targets'].items() if descriptor['entity_id'] == entity_id)
-    choices = {'route': category, 'target': target, 'percentage': 'value', 'value': 'none', 'attribute': 'none', 'color': 'none'}
+    choices = {'route': category, 'target': target, 'percentage': 'value', 'value': 'none', 'attribute': 'none', 'color': 'none', 'summary': 'none', 'summary_scope': 'none'}
     return {'model': 'jev-1.13.0', 'answers': {
         question: {'type': 'choice', 'choice': choices[question], 'confidence': 1,
                    'probabilities': {key: float(key == choices[question]) for key in spec['criteria']}}
@@ -916,7 +924,7 @@ async def temporal_home(hass, jev_hybrid_home):
 
 def temporal_wire(payload, entity_id, category='helper_datetime', value='value'):
     target = next(key for key, item in payload['state']['targets'].items() if item['entity_id'] == entity_id)
-    choices = {'route': category, 'target': target, 'value': value}
+    choices = {'route': category, 'target': target, 'value': value, 'summary': 'none', 'summary_scope': 'none'}
     return {'model': 'jev-1.13.0', 'answers': {
         question: {'type': 'choice', 'choice': choices[question], 'confidence': 1,
                    'probabilities': {key: float(key == choices[question]) for key in spec['criteria']}}
@@ -1029,7 +1037,7 @@ async def entity_command_home(hass, jev_hybrid_home, request):
 def entity_command_wire(payload, entity_id, category, value=None):
     target = next(key for key, item in payload['state']['targets'].items() if item['entity_id'] == entity_id)
     selected_value = next((key for key, item in payload['state'].get('values', {}).items() if item == value), 'none')
-    selected = {'route': category, 'target': target, 'value': selected_value, 'percentage': 'none', 'attribute': 'none', 'color': 'none'}
+    selected = {'route': category, 'target': target, 'value': selected_value, 'percentage': 'none', 'attribute': 'none', 'color': 'none', 'summary': 'none', 'summary_scope': 'none'}
     for question in ('attribute', 'color'):
         selected[question] = next((key for key, item in payload['state'].get(question + '_values', {}).items() if item == value), 'none')
     return {'model': 'jev-1.13.0', 'answers': {question: {

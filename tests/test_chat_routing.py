@@ -1394,13 +1394,14 @@ async def test_decision_followup_preserves_history_and_both_execution_proofs(has
     ('unknown_source_revision', 1), ('unknown_context_revision', 2), ('secret', 0), ('hidden_id', 0),
     ('catalog', 0)])
 async def test_decision_followup_declines_without_effects(hass, context_chat, case, calls):
-    from custom_components.phoenix_mcp.const import DECISION_BATCH_MAX_TARGETS
+    from custom_components.phoenix_mcp.const import DECISION_GROUPED_MAX_TARGETS
     data, _ = context_chat
     messages = context_messages('I would like Desk lamp at 37 percent now.')
     if case == 'secret': messages[0]['content'] = 'password: never-share-this'
     if case == 'hidden_id': messages[0]['content'] = 'Do not change lock.private_door'
     if case == 'catalog':
-        for index in range(DECISION_BATCH_MAX_TARGETS):
+        # The existing desk target puts this one past the complete grouped limit.
+        for index in range(DECISION_GROUPED_MAX_TARGETS):
             entry = er.async_get(hass).async_get_or_create('light', 'test', f'extra_{index}')
             hass.states.async_set(entry.entity_id, 'off')
     async def response(*args):

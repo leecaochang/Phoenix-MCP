@@ -53,7 +53,8 @@ async def context_home(hass, token_store):
     hass.data[DOMAIN] = data
     store = agentcli.AgentCliStore(AsyncMock())
     account = await store.add('typesafe', {'api_key': 'test-private-key', 'model': 'jev-latest'})
-    await token_store.async_patch_settings(decision_provider_id=account)
+    # Context tests exercise real recognition without depending on cold-start speed.
+    await token_store.async_patch_settings(decision_provider_id=account, command_routing_timeout_ms=5000)
     assert await async_setup_component(hass, 'homeassistant', {})
     assert await async_setup_component(hass, 'conversation', {})
     entry = er.async_get(hass).async_get_or_create('light', 'test', 'desk', original_name='Desk lamp')
@@ -416,7 +417,8 @@ async def test_preview_of_decision_candidate_reviews_full_history_without_plan(h
         if 'route' not in payload['questions']:
             return wire_answer(answer('provider' if decline else 'compatible'))
         target = next(key for key, item in payload['state']['targets'].items() if item['entity_id'] == entity)
-        selected = {'route': 'light_brightness', 'target': target, 'percentage': '37'}
+        selected = {'route': 'light_brightness', 'target': target, 'percentage': '37',
+                    'summary': 'none', 'summary_scope': 'none'}
         return {'model': 'test-model', 'answers': {
             name: {'type': 'choice', 'choice': selected[name], 'confidence': 1,
                    'probabilities': {key: float(key == selected[name]) for key in question['criteria']}}
