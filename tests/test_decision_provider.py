@@ -112,7 +112,8 @@ async def test_body_bounds_and_duplicate_keys(body,reason,socket_enabled):
 
 
 @pytest.mark.parametrize('change', ['missing','unknown','wrong_type','nan','bool','negative','sum','not_max','confidence','extra','model'])
-def test_malformed_answers_have_no_decision(change):
+@pytest.mark.parametrize('typesafe', [False, True])
+def test_malformed_answers_have_no_decision(change, typesafe):
     body=response();a=body['answers']['route']
     if change=='missing':del a['probabilities']['provider']
     if change=='unknown':a['choice']='call_service'
@@ -125,7 +126,12 @@ def test_malformed_answers_have_no_decision(change):
     if change=='confidence':a['confidence']=2
     if change=='extra':body['answers']['extra']=copy.deepcopy(a)
     if change=='model':body['model']='private output\n'
-    with pytest.raises(DecisionError):parse_choice(body,DECISION_ROUTE_CHOICES)
+    from custom_components.phoenix_mcp.const import DECISION_TYPESAFE_BASE_URL
+    provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL),
+                                'systemone')
+    parser = provider._parse_choice if typesafe else parse_choice
+    with pytest.raises(DecisionError):
+        parser(body, DECISION_ROUTE_CHOICES)
 
 
 async def test_decision_accounts_are_secret_free_and_cannot_resolve_for_conversation(decision_home):
@@ -387,3 +393,54 @@ def test_invalid_probability_values_never_expose_aggregate_diagnostics(bad):
         parse_choice(body, DECISION_ROUTE_CHOICES)
     assert error.value.check == 'probability_values'
     assert error.value.diagnostics == {}
+
+
+@pytest.mark.parametrize('kind,base_url,protocol,allowed', [
+    ('typesafe', 'https://api.typesafe.ai/v1', 'systemone', True),
+    ('systemone', 'https://api.typesafe.ai/v1', 'systemone', False),
+    ('typesafe', 'https://other.example/v1', 'systemone', False),
+    ('typesafe', 'https://api.typesafe.ai/v1', 'classifier', False),
+    ('classifier', 'http://localhost:8000/v1', 'classifier', False),
+])
+async def test_rounding_is_applied_only_to_known_typesafe_endpoint(kind, base_url, protocol, allowed):
+    provider = DecisionProvider(agentcli.ProviderConfig(kind, 'jev-latest', base_url), protocol)
+    body = response()
+    probabilities = {key: 0.95 if key == 'light_on' else 0.01 for key in DECISION_ROUTE_CHOICES}
+    body['answers']['route']['probabilities'] = probabilities
+    with patch.object(provider, '_request', AsyncMock(return_value=body)):
+        if not allowed:
+            with pytest.raises(DecisionError, match='malformed'):
+                await provider.classify(MagicMock(), 'Turn on a light', 1000)
+        else:
+            result = await provider.classify(MagicMock(), 'Turn on a light', 1000)
+            assert result['probabilities'] == probabilities
+            assert sum(result['probabilities'].values()) == pytest.approx(0.99)
+
+
+@pytest.mark.parametrize('values,valid,confident', [
+    ([0.95, 0.04, 0], True, True),
+    ([0.95, 0.06, 0], True, True),
+    ([0.5, 0.49], True, False),
+    ([0.89, 0.1, 0], True, False),
+    ([0.5, 0.5, 0], True, False),
+    ([0.51, 0.51, 0], False, False),
+    ([0.95, 0.01, 0], False, False),
+    ([0.95] + [0.01] * 26, False, False),
+])
+def test_typesafe_rounding_bounds_preserve_raw_probabilities_and_threshold(values, valid, confident):
+    from custom_components.phoenix_mcp.const import DECISION_TYPESAFE_BASE_URL
+    from custom_components.phoenix_mcp.decision_provider import confident_choice
+    provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'jev-latest', DECISION_TYPESAFE_BASE_URL),
+                                'systemone')
+    probabilities = {str(index): value for index, value in enumerate(values)}
+    choices = {key: key for key in probabilities}
+    body = {'model': 'jev-1.13.0', 'answers': {'route': {
+        'type': 'choice', 'choice': '0', 'confidence': 1, 'probabilities': probabilities,
+    }}}
+    if not valid:
+        with pytest.raises(DecisionError, match='malformed'):
+            provider._parse_choice(body, choices)
+    else:
+        result = provider._parse_choice(body, choices)
+        assert result['probabilities'] == probabilities
+        assert confident_choice(result) is confident

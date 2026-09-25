@@ -2010,6 +2010,10 @@ DECISION_PERCENTAGE_PREVIEW_CHOICES = {
 }
 # TypeSafe Choice supports 255 options; exact percentages need 101 plus a refusal.
 DECISION_EXACT_PERCENTAGE_ENDPOINTS = frozenset({("typesafe", DECISION_TYPESAFE_BASE_URL, "systemone")})
+# TypeSafe's direct API rounds probabilities to two decimal places.
+DECISION_PROBABILITY_ROUNDING = {("typesafe", DECISION_TYPESAFE_BASE_URL, "systemone"): 0.005}
+DECISION_PROBABILITY_SUM_TOLERANCE = 0.001
+DECISION_PROBABILITY_ROUNDING_EPSILON = 1e-9
 DECISION_PERCENTAGE_CHOICES = {
     **{str(value): f"The explicitly requested absolute setting is exactly {value} percent." for value in range(101)},
     "none": "No single explicit absolute whole percentage from 0 through 100 is requested for this operation.",

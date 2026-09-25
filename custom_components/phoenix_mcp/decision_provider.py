@@ -13,7 +13,9 @@ from .const import (DECISION_MAX_RESPONSE_BYTES, DECISION_ROUTE_CHOICES, DECISIO
                     DECISION_BRIGHTNESS_CHOICES, DECISION_MIN_CHOICE_PROBABILITY, DECISION_CONTEXT_CHECKS,
                     DECISION_EXECUTION_CATEGORIES, DECISION_EXACT_PERCENTAGE_ENDPOINTS,
                     DECISION_PERCENTAGE_CHOICES, DECISION_PERCENTAGE_PREVIEW_CHOICES, DECISION_TARGET_INTENTS,
-                    DECISION_REFERENCE_CHECKS, DECISION_CATALOG_FORMAT_INSTRUCTIONS, DECISION_DIAGNOSTIC_QUESTIONS)
+                    DECISION_REFERENCE_CHECKS, DECISION_CATALOG_FORMAT_INSTRUCTIONS, DECISION_DIAGNOSTIC_QUESTIONS,
+                    DECISION_PROBABILITY_ROUNDING, DECISION_PROBABILITY_SUM_TOLERANCE,
+                    DECISION_PROBABILITY_ROUNDING_EPSILON)
 from .command_operations import numeric_operation
 from .decision_metrics import DecisionMetrics
 
@@ -61,7 +63,8 @@ def confident_choice(answer: dict) -> bool:
         value == selected for value in answer["probabilities"].values()) == 1
 
 
-def parse_choice(body: Any, choices: dict[str, str], question: str = "route") -> dict:
+def parse_choice(body: Any, choices: dict[str, str], question: str = "route", *,
+                 rounding_error: float = 0) -> dict:
     """Require the complete requested distribution; keep confidence provider-defined."""
     if not isinstance(body, dict) or not isinstance(body.get("answers"), dict):
         raise DecisionValidationError("response_shape")
@@ -80,7 +83,15 @@ def parse_choice(body: Any, choices: dict[str, str], question: str = "route") ->
     if not _probability(answer.get("confidence")):
         raise DecisionValidationError("confidence")
     probability_sum = sum(probabilities.values())
-    if not math.isclose(probability_sum, 1, abs_tol=0.001):
+    normalized = math.isclose(probability_sum, 1, abs_tol=DECISION_PROBABILITY_SUM_TOLERANCE)
+    if rounding_error:
+        # Require a normalized distribution to fit within the rounding intervals.
+        # Clip at probability bounds and preserve every original value.
+        lower = math.fsum(max(0, value - rounding_error) for value in probabilities.values())
+        upper = math.fsum(min(1, value + rounding_error) for value in probabilities.values())
+        normalized = (lower <= 1 + DECISION_PROBABILITY_ROUNDING_EPSILON
+                      and upper >= 1 - DECISION_PROBABILITY_ROUNDING_EPSILON)
+    if not normalized:
         raise DecisionValidationError("probability_total", question=question,
                                       choice_count=len(choices), probability_sum=probability_sum)
     if probabilities[selected] < max(probabilities.values()):
@@ -104,6 +115,12 @@ class DecisionProvider:
         self.protocol = protocol
         self.metrics = metrics
         self.metric_scope = metric_scope
+
+    def _parse_choice(self, body: Any, choices: dict[str, str], question: str = "route") -> dict:
+        """Apply precision evidence only to the known TypeSafe endpoint."""
+        rounding_error = DECISION_PROBABILITY_ROUNDING.get(
+            (self.cfg.kind, self.cfg.base_url, self.protocol), 0)
+        return parse_choice(body, choices, question, rounding_error=rounding_error)
 
     async def _request(self, session: ClientSession, method: str, path: str,
                        timeout_ms: int, payload: dict | None = None) -> dict:
@@ -199,7 +216,7 @@ class DecisionProvider:
         # One attempt. Decision routing must not amplify outages or rate limits.
         async with asyncio.timeout(timeout_ms / 1000):
             body = await self._request(session, "POST", self.protocol, timeout_ms, payload)
-        answer = parse_choice(body, criteria)
+        answer = self._parse_choice(body, criteria)
         if self.cfg.api_key and self.cfg.api_key in answer["model"]:
             raise DecisionError("malformed")
         return answer
@@ -249,7 +266,7 @@ class DecisionProvider:
         body = await self._request(session, "POST", self.protocol, timeout_ms, payload)
         if not isinstance(body.get("answers"), dict) or set(body["answers"]) != set(DECISION_CONTEXT_CHECKS):
             raise DecisionError("malformed")
-        checks = {question: parse_choice({"model": body.get("model"), "answers": {question: body["answers"][question]}},
+        checks = {question: self._parse_choice({"model": body.get("model"), "answers": {question: body["answers"][question]}},
                                          criteria, question)
                   for question, criteria in DECISION_CONTEXT_CHECKS.items()}
         if self.cfg.api_key and self.cfg.api_key in body["model"]:
@@ -301,7 +318,7 @@ class DecisionProvider:
         body = await self._request(session, "POST", self.protocol, timeout_ms, payload)
         if not isinstance(body.get("answers"), dict) or set(body["answers"]) != set(DECISION_REFERENCE_CHECKS):
             raise DecisionError("malformed")
-        checks = {name: parse_choice({"model": body.get("model"), "answers": {name: body["answers"][name]}},
+        checks = {name: self._parse_choice({"model": body.get("model"), "answers": {name: body["answers"][name]}},
                                      choices, name) for name, choices in DECISION_REFERENCE_CHECKS.items()}
         if self.cfg.api_key and self.cfg.api_key in body["model"]:
             raise DecisionError("malformed")
@@ -547,7 +564,7 @@ class DecisionProvider:
         body = await self._request(session, "POST", self.protocol, timeout_ms, payload)
         if not isinstance(body.get("answers"), dict) or set(body["answers"]) != set(payload["questions"]):
             raise DecisionValidationError("question_set")
-        answers = {question: parse_choice({"model": body.get("model"), "answers": {question: body["answers"][question]}},
+        answers = {question: self._parse_choice({"model": body.get("model"), "answers": {question: body["answers"][question]}},
                                          spec["criteria"], question)
                    for question, spec in payload["questions"].items()}
         if self.cfg.api_key and self.cfg.api_key in body["model"]:
@@ -602,7 +619,7 @@ class DecisionProvider:
         body = await self._request(session, "POST", self.protocol, timeout_ms, payload)
         if not isinstance(body.get("answers"), dict) or set(body["answers"]) != set(payload["questions"]):
             raise DecisionValidationError("question_set")
-        answers = {question: parse_choice({"model": body.get("model"), "answers": {question: body["answers"][question]}},
+        answers = {question: self._parse_choice({"model": body.get("model"), "answers": {question: body["answers"][question]}},
                                           spec["criteria"], question)
                    for question, spec in payload["questions"].items()}
         if self.cfg.api_key and self.cfg.api_key in body["model"]:
@@ -658,7 +675,7 @@ class DecisionProvider:
         if not isinstance(body.get("answers"), dict) or set(body["answers"]) != expected:
             raise DecisionError("malformed")
         def parsed(question: str, criteria: dict[str, str]) -> dict:
-            return parse_choice({"model": body.get("model"), "answers": {question: body["answers"][question]}},
+            return self._parse_choice({"model": body.get("model"), "answers": {question: body["answers"][question]}},
                                 criteria, question)
         answer = parsed("target", choices)
         if exact_percentage:
