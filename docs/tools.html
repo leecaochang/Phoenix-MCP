@@ -67,13 +67,14 @@
           <article class="tool" data-cap="write" data-search="get_script read script config content_hash">
             <div class="tool-head"><span class="tool-name">get_script</span><span class="badge badge-cap">Script write</span></div>
             <p class="tool-desc">Read one script's full current configuration, the read half of a safe edit for the same reason as <code>get_automation</code>: <code>edit_script</code> replaces the whole config. Returns a <code>content_hash</code> for the edit's <code>expected_hash</code>, and renders YAML tags as display strings without resolving secrets.</p>
-            <dl><dt>params</dt><dd><code>script_id</code> (required), the part after <code>script.</code> in the entity id</dd></dl>
+            <dl><dt>params</dt><dd><code>script_id</code> (required), the storage key returned by <code>list_scripts</code>, which stays the same after an entity ID rename</dd></dl>
           </article>
 
           <article class="tool" data-cap="write" data-search="create_script edit_script delete_script scripts.yaml expected_hash">
             <div class="tool-head"><span class="tool-name">create_script</span><span class="tool-name">edit_script</span><span class="tool-name">delete_script</span><span class="badge badge-cap">Script write</span></div>
             <p class="tool-desc">Create, edit, or delete scripts in the YAML file your <code>configuration.yaml</code> routes scripts to. Split configurations (<code>!include</code> and <code>!include_dir_named</code>/<code>merge_named</code> layouts) are followed to the correct leaf file, preserving untouched content byte-for-byte, the same include-graph handling as the automation tools. <strong>Edit replaces the entire configuration</strong>, so read it with <code>get_script</code> first.</p>
             <dl><dt>create</dt><dd><code>script_id</code> and <code>config</code> (both required), where <code>config</code> holds <code>alias</code>, <code>sequence</code>, <code>mode</code>, <code>variables</code>, <code>fields</code></dd><dt>edit / delete</dt><dd><code>script_id</code> (the slug); edit replaces the entire config and accepts an optional <code>expected_hash</code> from <code>get_script</code></dd></dl>
+            <p class="tool-desc">Create and edit return a receipt with <code>config</code>, the storage ID, <code>write_success</code>, <code>reload_status</code>, and <code>registration</code>. Phoenix waits briefly for a registered entity and live state within the token's scope. Use the observed <code>registration.entity_id</code> for entity operations. A <code>timed_out</code> observation leaves the saved write intact: retry a lookup rather than repeating the write. Disabled entities are reported separately. A reload error also identifies that the configuration was saved. Observation confirms presence, not availability or that an edit is active.</p>
           </article>
         </section>
 
@@ -704,6 +705,7 @@
             <p class="tool-desc">Read, create, edit, or delete scenes. Writes are Confirm-eligible; reads are not. Phoenix follows <code>!include</code> and <code>!include_dir_*</code> references to the correct leaf file.</p>
             <p class="tool-desc"><code>get_scene</code> returns the name, entity map, and a <code>content_hash</code> for optional <code>expected_hash</code> checking. An edit replaces the entire scene, so read it first and resend every member. A missing scene and one containing an unwritable entity return the same response.</p>
             <dl><dt>params</dt><dd><code>scene_id</code> (required except for create), <code>config</code> (required for create/edit), <code>expected_hash</code> (edit, optional)</dd></dl>
+            <p class="tool-desc">Create and edit return a receipt with <code>config</code>, the storage ID, <code>write_success</code>, <code>reload_status</code>, and <code>registration</code>. Phoenix waits briefly for a registered entity and live state within the token's scope. Use the observed <code>registration.entity_id</code> for entity operations. A <code>timed_out</code> observation leaves the saved write intact: retry a lookup rather than repeating the write. Disabled entities are reported separately. A reload error also identifies that the configuration was saved. Observation confirms presence, not availability or that an edit is active.</p>
           </article>
 
           <article class="tool" data-cap="write" data-search="list_dashboards create_dashboard edit_dashboard delete_dashboard get_dashboard_config set_dashboard_config lovelace">

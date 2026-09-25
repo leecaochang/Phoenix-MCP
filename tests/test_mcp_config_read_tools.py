@@ -25,6 +25,8 @@ from custom_components.phoenix_mcp.tools.authoring import _read_automations_yaml
 from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
 
+pytestmark = pytest.mark.usefixtures("immediate_authoring_observation")
+
 
 @pytest.fixture(autouse=True)
 def isolated_config_dir(hass: HomeAssistant, tmp_path):
@@ -331,6 +333,23 @@ class TestListTools:
         assert row["automation_id"] == "auto-1"
         assert row["alias"] == "Porch"
 
+    async def test_renamed_script_list_preserves_editable_storage_id(self, hass):
+        hass.services.async_register("script", "reload", lambda call: None)
+        token = _token(
+            PermissionTree(domains={"script": PermissionNode(state="GREEN")}),
+            cap_registry_read="allow", cap_script_write="allow",
+        )
+        data = _data()
+        await _call_tool("create_script", {"script_id": "stored", "config": {"sequence": []}}, token, hass, data)
+        entry = er.async_get(hass).async_get_or_create("script", "script", "stored", suggested_object_id="stored")
+        entry = er.async_get(hass).async_update_entity(entry.entity_id, new_entity_id="script.renamed")
+        hass.states.async_set(entry.entity_id, "off")
+        row = _json((await _call_tool("list_scripts", {}, token, hass, data))[0])["scripts"][0]
+        assert row["entity_id"] == "script.renamed" and row["script_id"] == "stored"
+        result, outcome, _ = await _call_tool("get_script", {"script_id": row["script_id"]}, token, hass, data)
+        assert outcome == "allowed"
+        assert _json(result)["config"]["sequence"] == []
+
     async def test_list_scripts_derives_id_from_object_id(self, hass):
         data = _data()
         token = _token(
@@ -408,7 +427,7 @@ class TestGetScene:
             "create_scene",
             {"config": {"name": "Movie", "entities": {"light.lamp": "on"}}},
             token, hass, data))[0])
-        scene_id = created["id"]
+        scene_id = created["scene_id"]
 
         result, outcome, _res = await _call_tool("get_scene", {"scene_id": scene_id}, token, hass, data)
         assert outcome == "allowed"
@@ -430,7 +449,7 @@ class TestGetScene:
             "create_scene",
             {"config": {"name": "Secret", "entities": {"light.secret_lamp": "on"}}},
             writer, hass, data))[0])
-        scene_id = created["id"]
+        scene_id = created["scene_id"]
 
         narrow = _token(
             PermissionTree(entities={"light.lamp": PermissionNode(state="GREEN")}),

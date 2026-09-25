@@ -199,10 +199,8 @@ MESA_EXEMPT_ACTUATORS = {
     "tools/authoring.py::_execute_create_automation": "automation.reload after a config write",
     "tools/authoring.py::_execute_edit_automation": "automation.reload after a config write",
     "tools/authoring.py::_execute_delete_automation": "automation.reload after a config write",
-    "tools/authoring.py::_execute_create_script": "script.reload after a config write",
-    "tools/authoring.py::_execute_edit_script": "script.reload after a config write",
     "tools/authoring.py::_execute_delete_script": "script.reload after a config write",
-    "tools/authoring.py::_scene_write": "scene.reload after a config write",
+    "tools/authoring.py::_finish_entity_write": "script.reload or scene.reload after a gated config write; domain supplied by the owning executor",
     "tools/authoring.py::_execute_delete_scene": "scene.reload after a config write",
 }
 

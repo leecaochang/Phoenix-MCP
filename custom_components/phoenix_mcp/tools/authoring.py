@@ -35,7 +35,8 @@ import os
 import re
 import uuid
 from collections.abc import Awaitable, Callable
-from typing import Any
+from traceback import format_exc
+from typing import Any, Literal
 
 import voluptuous as vol
 
@@ -49,7 +50,8 @@ from homeassistant.core import HomeAssistant
 
 from ..const import CAP_DENY, DOMAIN
 from ..data import PhoenixData
-from ..helpers import content_hash, dict_arg, diff_summary_fields as _summary, effective_cap, str_arg
+from ..entity_registration import async_observe_registration
+from ..helpers import content_hash, dict_arg, diff_summary_fields as _summary, effective_cap, str_arg, _strict_phoenix_log_text
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _record_version, _tool_error, _tool_success, _truncate
 from ..policy_engine import Permission, filter_entities_for_token, resolve
 from ..request_authority import AuthorityChangedError, check_request_authority
@@ -63,6 +65,67 @@ _AUTOMATION_YAML = "automations.yaml"
 _AUTOMATION_LOCK_KEY = f"{DOMAIN}_automation_lock"
 _SCRIPT_CONFIG_PATH = "scripts.yaml"
 _SCRIPT_LOCK_KEY = f"{DOMAIN}_script_lock"
+
+
+async def _finish_entity_write(
+    hass: HomeAssistant, token: TokenRecord, *, domain: Literal["scene", "script"],
+    storage_id: str, config: dict, tool_name: str,
+) -> tuple[dict, str, str]:
+    """Reload a saved, versioned write and report observation separately.
+
+    Neither a failed reload nor a registration timeout undoes the committed
+    configuration. Keep cancellation and authority failures at the dispatch
+    boundary; never retry a write or reload here.
+    """
+    body: dict[str, Any] = {
+        "write_success": True, f"{domain}_id": storage_id, "config": config,
+        "reload_status": "completed",
+    }
+    check_request_authority()
+    try:
+        await hass.services.async_call(domain, "reload", blocking=True)
+    except AuthorityChangedError:
+        raise
+    except Exception as exc:
+        check_request_authority()
+        _LOGGER.error(
+            "%s reload failed after configuration was saved: %s",
+            tool_name, _strict_phoenix_log_text(format_exc(), token, hass),
+        )
+        body.update(
+            reload_status="failed",
+            registration={"status": "not_checked", "entity_id": None, "state_present": None},
+            error=(
+                _strict_phoenix_log_text(str(exc), token, hass)[:500]
+                if isinstance(exc, HomeAssistantError)
+                else "Internal reload error. Check HA logs for details."
+            ),
+            message="Configuration saved, but reload failed. Inspect the saved configuration and HA logs before retrying reload; do not repeat the create operation.",
+        )
+        result = _tool_success(json.dumps(body, default=str))
+        result["isError"] = True
+        return result, "invalid_request", tool_name
+
+    try:
+        body["registration"] = await async_observe_registration(hass, token, domain, storage_id)
+    except AuthorityChangedError:
+        raise
+    except Exception:
+        check_request_authority()
+        _LOGGER.error(
+            "%s registration observation failed: %s",
+            tool_name, _strict_phoenix_log_text(format_exc(), token, hass),
+        )
+        body["registration"] = {"status": "observation_failed", "entity_id": None, "state_present": None}
+    check_request_authority()
+    status = body["registration"]["status"]
+    if status == "timed_out":
+        body["message"] = "Configuration saved and reload completed. Entity registration or live state was not observed within the wait budget and token scope. Retry a lookup, not the write."
+    elif status == "disabled":
+        body["message"] = "Configuration saved and reload completed. The registered entity is disabled."
+    elif status == "observation_failed":
+        body["message"] = "Configuration saved and reload completed, but entity observation failed. Check HA logs and retry a lookup, not the write."
+    return _tool_success(json.dumps(body, indent=2, default=str)), "allowed", tool_name
 
 
 def _get_automation_lock(hass: HomeAssistant) -> asyncio.Lock:
@@ -573,11 +636,11 @@ async def _tool_list_scripts(
         entity_id = e["entity_id"]
         if not entity_id.startswith("script."):
             continue
+        entry = er.async_get(hass).async_get(entity_id)
         items.append({
             "entity_id": entity_id,
             "alias": e.get("attributes", {}).get("friendly_name"),
-            # The script id is the object_id; there is no separate id attribute.
-            "script_id": entity_id.split(".", 1)[1],
+            "script_id": entry.unique_id if entry is not None and entry.platform == "script" else entity_id.split(".", 1)[1],
             "state": e.get("state"),
         })
     items.sort(key=lambda s: s["entity_id"])
@@ -684,18 +747,19 @@ async def _execute_create_script(
             elif not op.ok:
                 outcome = "invalid_request" if op.error_kind == "already_exists" else "denied"
                 return _tool_error(op.error_text), outcome, "create_script"
-        await hass.services.async_call("script", "reload", blocking=True)
+            await _record_version(
+                data, token, resource_type="script", resource_id=script_id,
+                action="create", before=None, after=config, alias=config.get("alias"),
+            )
     except AuthorityChangedError:
         raise
     except Exception:
         _LOGGER.exception("create_script failed")
         return _tool_error("Failed to create script. Check HA logs for details."), "invalid_request", "create_script"
 
-    await _record_version(
-        data, token, resource_type="script", resource_id=script_id,
-        action="create", before=None, after=config, alias=config.get("alias"),
+    return await _finish_entity_write(
+        hass, token, domain="script", storage_id=script_id, config=config, tool_name="create_script",
     )
-    return _tool_success(json.dumps({script_id: config}, indent=2, default=str)), "allowed", "create_script"
 
 
 async def _tool_edit_script(
@@ -775,18 +839,19 @@ async def _execute_edit_script(
                 return _tool_error(op.error_text), "denied", "edit_script"
             else:
                 before_cfg = op.before
-        await hass.services.async_call("script", "reload", blocking=True)
+            await _record_version(
+                data, token, resource_type="script", resource_id=script_id,
+                action="edit", before=before_cfg, after=config, alias=config.get("alias"),
+            )
     except AuthorityChangedError:
         raise
     except Exception:
         _LOGGER.exception("edit_script failed")
         return _tool_error("Failed to edit script. Check HA logs for details."), "invalid_request", "edit_script"
 
-    await _record_version(
-        data, token, resource_type="script", resource_id=script_id,
-        action="edit", before=before_cfg, after=config, alias=config.get("alias"),
+    return await _finish_entity_write(
+        hass, token, domain="script", storage_id=script_id, config=config, tool_name="edit_script",
     )
-    return _tool_success(json.dumps({script_id: config}, indent=2, default=str)), "allowed", "edit_script"
 
 
 async def _tool_delete_script(
@@ -1102,18 +1167,19 @@ async def _scene_write(
                 )
                 if not op.ok:
                     return _tool_error(op.error_text), "denied", tool_name
-        await hass.services.async_call("scene", "reload", blocking=True)
+            await _record_version(
+                data, token, resource_type="scene", resource_id=scene_id,
+                action="edit" if replace else "create",
+                before=before_cfg, after=config, alias=config.get("name"),
+            )
     except AuthorityChangedError:
         raise
     except Exception:
         _LOGGER.exception("%s failed", tool_name)
         return _tool_error(f"Failed to {tool_name.replace('_', ' ')}. Check HA logs for details."), "invalid_request", tool_name
-    await _record_version(
-        data, token, resource_type="scene", resource_id=scene_id,
-        action="edit" if replace else "create",
-        before=before_cfg, after=config, alias=config.get("name"),
+    return await _finish_entity_write(
+        hass, token, domain="scene", storage_id=scene_id, config=config, tool_name=tool_name,
     )
-    return _tool_success(json.dumps(config, indent=2, default=str)), "allowed", tool_name
 
 
 def _scene_write_precheck(args: dict, tool_name: str, *, require_id: bool) -> tuple[dict, str, str] | None:

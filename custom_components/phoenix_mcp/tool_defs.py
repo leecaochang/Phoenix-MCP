@@ -559,7 +559,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "configuration, so editing without reading first silently destroys any part you did "
             "not resend. Returns a content_hash; pass it back as edit_script's expected_hash to "
             "make the edit conditional on the script not having changed since this read. The "
-            "script_id is the part after 'script.' in the entity_id. YAML tags are shown as "
+            "script_id is the storage key returned by list_scripts, even after an entity rename. YAML tags are shown as "
             "display strings (for example \"!secret my_key\"); Phoenix MCP never resolves a secret's value."
         ),
         "cap": "cap_script_write",
@@ -575,15 +575,17 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "create_script",
         "description": (
             "Create a new Home Assistant script in the YAML config. Provide a unique script_id slug (e.g. "
-            "'morning_routine'); it becomes script.<script_id>. HA validates before saving; invalid "
+            "'morning_routine'). HA validates before saving; invalid "
             "configs are rejected with an error. To build from a blueprint instead, pass 'use_blueprint' "
             "({'path': ..., 'input': {...}}) in place of 'sequence'; see list_blueprints."
+            " Returns a receipt with config, write_success, reload_status and registration "
+            "(status, observed entity_id and state_present). A registration timeout does not undo the saved write; retry a lookup, not the write."
         ),
         "cap": "cap_script_write",
         "inputSchema": {
             "type": "object",
             "properties": {
-                "script_id": {"type": "string", "description": "Unique slug for the script (e.g. 'morning_routine'). Becomes script.<script_id> in HA. Must not already exist."},
+                "script_id": {"type": "string", "description": "Unique storage key for the script (e.g. 'morning_routine'). Must not already exist; use the returned registration.entity_id for entity operations."},
                 "config": {"type": "object", "description": "Full HA script configuration (alias, sequence, mode, variables, fields)."},
             },
             "required": ["script_id", "config"],
@@ -598,7 +600,9 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "destroyed. "
             "Returns the updated configuration. "
             "The config is validated by HA before saving - invalid configs are rejected with an error. "
-            "Use list_scripts or search_entities with domain 'script' to find scripts; the script_id is the part after 'script.' in the entity_id."
+            "Use the script_id storage key from list_scripts; a renamed entity_id may have a different suffix."
+            " Returns a receipt with config, write_success, reload_status and registration "
+            "(status, observed entity_id and state_present). A registration timeout does not undo the saved write; retry a lookup, not the write."
         ),
         "cap": "cap_script_write",
         "inputSchema": {
@@ -615,7 +619,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "name": "delete_script",
         "description": (
             "Permanently delete a Home Assistant script from the YAML config. "
-            "Use search_entities with domain 'script' to find scripts; the script_id is the part after 'script.' in the entity_id."
+            "Use the script_id storage key from list_scripts; a renamed entity_id may have a different suffix."
         ),
         "cap": "cap_script_write",
         "inputSchema": {
@@ -2300,6 +2304,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Create a Home Assistant scene in scenes.yaml. Provide a config with 'name' and 'entities' "
             "(a map of entity_id to desired state). Every referenced entity must be writable by this token. "
             "Phoenix MCP assigns the scene id and returns the saved config."
+            " Returns a receipt with config, write_success, reload_status and registration "
+            "(status, observed entity_id and state_present). A registration timeout does not undo the saved write; retry a lookup, not the write."
         ),
         "cap": "cap_scene_write",
         "inputSchema": {
@@ -2317,6 +2323,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "replaces the current scene, so call get_scene first and resend every member you want "
             "to keep; anything you omit is destroyed. Every referenced entity must be writable by "
             "this token."
+            " Returns a receipt with config, write_success, reload_status and registration "
+            "(status, observed entity_id and state_present). A registration timeout does not undo the saved write; retry a lookup, not the write."
         ),
         "cap": "cap_scene_write",
         "inputSchema": {

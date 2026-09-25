@@ -10,6 +10,14 @@ pytest_plugins = "pytest_homeassistant_custom_component"
 
 
 @pytest.fixture
+def immediate_authoring_observation(monkeypatch):
+    """Keep no-op reload fixtures fast while still running real observation."""
+    from custom_components.phoenix_mcp import entity_registration
+
+    monkeypatch.setattr(entity_registration, "AUTHORING_REGISTRATION_TIMEOUT_SECONDS", 0)
+
+
+@pytest.fixture
 def immediate_command_observation(monkeypatch):
     """Observe real state without wall-clock waits in dispatch contract tests."""
     from custom_components.phoenix_mcp import command_verification

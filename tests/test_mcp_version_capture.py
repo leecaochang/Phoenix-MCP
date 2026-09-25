@@ -30,6 +30,8 @@ from custom_components.phoenix_mcp.tools.authoring import _read_automations_yaml
 from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
 
+pytestmark = pytest.mark.usefixtures("immediate_authoring_observation")
+
 
 # The seeded configuration.yaml. set_yaml_config refuses a write that drops a
 # top-level key without declaring it, so every write here stays a superset.
@@ -160,7 +162,7 @@ class TestSceneCapture:
         created = _text((await _call_tool(
             "create_scene", {"config": {"name": "Movie", "entities": {light_entity: "on"}}},
             token, hass, data))[0])
-        sid = created["id"]
+        sid = created["scene_id"]
         await _call_tool(
             "edit_scene", {"scene_id": sid, "config": {"name": "Movie2", "entities": {light_entity: "off"}}},
             token, hass, data)

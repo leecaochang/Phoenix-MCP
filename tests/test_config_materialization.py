@@ -1,33 +1,15 @@
-"""Does a write tool return before its result is observable?
+"""Verify authoring results against real Home Assistant integrations.
 
-Prior art (ha-mcp) polls the registry after an authoring write, with a
-configurable time budget, and emits a soft "not verified" warning on timeout.
-That exists because it observes Home Assistant across a process boundary, where
-the write and the entity appearing are separated by REST/WebSocket round trips.
-
-Phoenix MCP runs in-process and reloads with
-`hass.services.async_call(..., blocking=True)`, which awaits the reload handler
-on the same event loop; the entity should therefore be in `hass.states` the
-instant the await returns, with no window for an agent to observe a missing
-entity. These tests pin exactly that, against the REAL automation/script/scene
-integrations rather than the stub `reload` service the other authoring suites
-register, because a stub reload cannot answer the question at all.
-
-If one of these ever fails, the poll-with-budget is worth building; while they
-pass, it would be defensive code for a race this architecture does not have.
-
-Strength of the pins differs by domain, which is worth knowing rather than
-re-deriving. Making the automation and script reloads non-blocking fails the
-matching assertion here, so those two are real pins on the blocking argument.
-The scene case is not: HA creates the non-blocking service task with
-eager_start=True, so a handler that never actually suspends still runs to
-completion inline, and the scene reload is one. The scene assertion therefore
-pins the observable property only, not the argument that currently guarantees
-it.
+Blocking reloads await script and automation entity addition on the pinned HA
+version. Scene reload schedules addition, so the fast-path probe alone cannot
+prove reload completion implies registration. Delayed-addition tests exercise
+that boundary explicitly. Registration observations do not certify freshness
+of edited configuration or availability of the entity.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from unittest.mock import MagicMock
@@ -126,7 +108,7 @@ class TestCreateMaterialization:
                 "alias": "Materialization Probe",
                 "sequence": [{"service": "homeassistant.toggle", "entity_id": "input_boolean.x"}],
             }},
-            _token(cap_script_write="allow"), hass, _data(),
+            _token(PermissionTree(domains={"script": PermissionNode(state="GREEN")}), cap_script_write="allow"), hass, _data(),
         )
         assert outcome == "allowed", _text(result)
 
@@ -147,7 +129,7 @@ class TestCreateMaterialization:
             }},
             # Scene writes additionally require WRITE on every member entity.
             _token(
-                PermissionTree(domains={"input_boolean": PermissionNode(state="GREEN")}),
+                PermissionTree(domains={"input_boolean": PermissionNode(state="GREEN"), "scene": PermissionNode(state="GREEN")}),
                 cap_scene_write="allow",
             ), hass, _data(),
         )
@@ -452,3 +434,56 @@ class TestNonEntityWriteVisibility:
         )
         assert outcome == "allowed"
         assert _json(read)["content"] == "probe marker"
+
+
+async def test_delayed_real_scene_registration_and_metadata(hass, monkeypatch):
+    """A real scene reload returns while its scheduled entity addition is held."""
+    from homeassistant.helpers.entity_platform import EntityPlatform
+    from homeassistant.helpers import entity_registry as er
+    from custom_components.phoenix_mcp import entity_registration
+
+    assert await async_setup_component(hass, "scene", {})
+    await hass.async_block_till_done()
+    hass.states.async_set("input_boolean.x", "off")
+    token = _token(
+        PermissionTree(domains={name: PermissionNode(state="GREEN") for name in ("scene", "input_boolean")}),
+        cap_scene_write="allow", cap_registry_write="allow",
+    )
+    data = _data()
+    entered, release = asyncio.Event(), asyncio.Event()
+    original = EntityPlatform.async_add_entities
+
+    async def delayed(platform, *args, **kwargs):
+        if platform.domain == "scene":
+            entered.set()
+            await release.wait()
+        return await original(platform, *args, **kwargs)
+
+    monkeypatch.setattr(EntityPlatform, "async_add_entities", delayed)
+    monkeypatch.setattr(entity_registration, "AUTHORING_REGISTRATION_POLL_SECONDS", 0.001)
+    task = asyncio.create_task(_call_tool(
+        "create_scene", {"config": {"name": "Delayed Probe", "entities": {"input_boolean.x": "on"}}},
+        token, hass, data,
+    ))
+    try:
+        await asyncio.wait_for(entered.wait(), 2)
+        await asyncio.sleep(0)
+        assert not task.done(), "Write returned while real entity addition was still blocked"
+        release.set()
+        result, outcome, _ = await asyncio.wait_for(task, 2)
+        assert outcome == "allowed"
+        body = _json(result)
+        entity_id = body["registration"]["entity_id"]
+        assert body["registration"]["status"] == "observed"
+        assert entity_id == "scene.delayed_probe"
+        assert er.async_get(hass).async_get(entity_id).unique_id == body["scene_id"]
+        state, outcome, _ = await _call_tool("get_state", {"entity_id": entity_id, "projection": {"kind": "compact"}}, token, hass, data)
+        assert outcome == "allowed", _text(state)
+        metadata, outcome, _ = await _call_tool("set_entity", {"entity_id": entity_id, "changes": {"name": "Metadata Probe"}}, token, hass, data)
+        assert outcome == "allowed", _text(metadata)
+        assert er.async_get(hass).async_get(entity_id).name == "Metadata Probe"
+    finally:
+        release.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)

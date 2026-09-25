@@ -43,6 +43,8 @@ from custom_components.phoenix_mcp.tools.authoring import (
 )
 from custom_components.phoenix_mcp.version_store import VersionStore
 
+pytestmark = pytest.mark.usefixtures("immediate_authoring_observation")
+
 
 def _token(tree: PermissionTree | None = None, **caps) -> TokenRecord:
     return TokenRecord(
