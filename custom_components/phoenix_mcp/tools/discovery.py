@@ -2693,11 +2693,11 @@ async def _tool_dry_run_service(
     args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """MCP tool: preview a service call (resolved targets + MESA verdict) without executing."""
+    if effective_cap(token, "cap_search") == CAP_DENY:
+        return _tool_error("Forbidden."), "denied", "dry_run_service"
     args, error = normalize_tool_args("dry_run_service", args)
     if error:
         return _tool_error(error), "invalid_request", "dry_run_service"
-    if effective_cap(token, "cap_search") == CAP_DENY:
-        return _tool_error("Forbidden."), "denied", "dry_run_service"
 
     domain = str_arg(args.get("domain"))
     service = str_arg(args.get("service"))

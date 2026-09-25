@@ -49,7 +49,7 @@ from .template_render import TemplateRenderError, async_render_template_for_toke
 from .request_authority import (AuthorityChangedError, RequestAuthority, check_request_authority, finite_json_numbers, policy_version, request_authority)
 from .device_semantics import device_registry_snapshot, update_device_registry_entry
 from .service_targets import secondary_target_error, unsupported_secondary_targets
-from .tool_contracts import normalize_tool_args
+from .tool_contracts import normalize_tool_args, unknown_argument_error
 from .mesa import (
     RegistryMesaDecision,
     async_apply_mesa_to_call,
@@ -1160,6 +1160,25 @@ async def _tool_call_service(
     """MCP tool: call a HA service with entity targets filtered to WRITE-permitted entities."""
     args, error = normalize_tool_args("call_service", args)
     if error:
+        # Diagnostics must not override a capability denial. Inspect only the
+        # recognized service/selector shape; never repair an unknown selector.
+        service_arg = args.get("service")
+        domain = str_arg(service_arg.get("domain")) if isinstance(service_arg, dict) else str_arg(args.get("domain"))
+        service = str_arg(service_arg.get("name")) if isinstance(service_arg, dict) else str_arg(service_arg)
+        service_key = f"{domain}/{service}"
+        cap = None
+        if service_key in DUAL_GATE_SERVICES:
+            cap = "cap_restart"
+        elif call_needs_physical_gate(
+            domain=domain, service=service,
+            entity_id=args.get("entity_id"), device_id=args.get("device_id"),
+            area_id=args.get("area_id"), token=token, hass=hass,
+        ):
+            cap = "cap_physical_control"
+        elif service_key in NO_TARGET_SERVICES:
+            cap = "cap_yaml_edit"
+        if cap is not None and effective_cap(token, cap) == CAP_DENY:
+            return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "call_service"
         return _tool_error(error), "invalid_request", "call_service"
     # Coerced before anything gates on them: service_key and the physical-gate
     # domain check are set-membership tests, so a list-valued domain raises
@@ -3297,11 +3316,11 @@ async def _tool_set_device(
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: edit user-controlled device registry metadata."""
+    if effective_cap(token, "cap_registry_write") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_device"
     args, error = normalize_tool_args("set_device", args)
     if error:
         return _tool_error(error), "invalid_request", "set_device"
-    if effective_cap(token, "cap_registry_write") == CAP_DENY:
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_device"
     pre = _set_device_precheck(args, token, hass)
     if pre is not None:
         return pre
@@ -3896,6 +3915,9 @@ async def _tool_remove_device(
     """MCP tool: remove one integration's ownership through its HA hook."""
     if effective_cap(token, "cap_integration_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "remove_device"
+    error = unknown_argument_error("remove_device", args)
+    if error:
+        return _tool_error(error), "invalid_request", "remove_device"
     resolved = await _resolve_device_removal_context(args, token, hass)
     if isinstance(resolved, tuple):
         return resolved
@@ -4298,13 +4320,13 @@ async def _tool_set_entity(
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: edit an entity's registry metadata (Confirm-eligible)."""
-    args, error = normalize_tool_args("set_entity", args)
-    if error:
-        return _tool_error(error), "invalid_request", "set_entity"
     # Capability gate first: a denied token gets a uniform Forbidden with no entity
     # work, so the tool can never be a scope/existence oracle when the cap is off.
     if effective_cap(token, "cap_registry_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_entity"
+    args, error = normalize_tool_args("set_entity", args)
+    if error:
+        return _tool_error(error), "invalid_request", "set_entity"
     # Then validate entity scope and registry references before gating so a doomed
     # request cannot create a pending approval. The executor re-validates at apply time.
     pre = _registry_write_precheck(args, token, hass, "set_entity", data)
@@ -4605,6 +4627,9 @@ async def _tool_delete_entity(
     # work, so the tool can never be a scope/existence oracle when the cap is off.
     if effective_cap(token, "cap_registry_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_entity"
+    error = unknown_argument_error("delete_entity", args)
+    if error:
+        return _tool_error(error), "invalid_request", "delete_entity"
     pre = _registry_write_precheck(args, token, hass, "delete_entity", data)
     if pre is not None:
         return pre
@@ -6628,11 +6653,11 @@ async def _tool_set_integration(
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
+    if effective_cap(token, "cap_integration_write") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_integration"
     args, error = normalize_tool_args("set_integration", args)
     if error:
         return _tool_error(error), "invalid_request", "set_integration"
-    if effective_cap(token, "cap_integration_write") == CAP_DENY:
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_integration"
     entry_id = str(args.get("entry_id") or "").strip()
     if not entry_id:
         return _tool_error("entry_id is required."), "invalid_request", "set_integration"

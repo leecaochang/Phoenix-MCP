@@ -63,7 +63,7 @@ from homeassistant.core import HomeAssistant
 
 from ..const import CAP_DENY, DOMAIN, FILESYSTEM_ALLOWED_DIRS, MAX_FILE_BYTES, REDACTION_SENTINEL, YAML_PROTECTED_SUBTREES
 from ..data import PhoenixData
-from ..tool_contracts import normalize_tool_args
+from ..tool_contracts import normalize_tool_args, unknown_argument_error
 from ..helpers import content_hash, diff_summary_fields as _summary, effective_cap, redact_secrets_in_text as _redact_secrets_in_text, str_arg, str_list_arg, version_summary_fields as _version_summary
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _read_text_capped, _record_version, _restore_ctx, _text_file_cas_conflict, _tool_error, _tool_success, _truncate, _usable_path_arg, _version_content_payload, _write_text_atomic, redaction_sentinel_path
 from ..token_store import TokenRecord
@@ -145,6 +145,9 @@ async def _tool_list_files(
     """MCP tool: list files in an allowed config directory."""
     if effective_cap(token, "cap_filesystem") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "list_files"
+    error = unknown_argument_error("list_files", args)
+    if error:
+        return _tool_error(error), "invalid_request", "list_files"
     path = str_arg(args.get("path"))
     if not path:
         return _tool_success(json.dumps({"directories": list(FILESYSTEM_ALLOWED_DIRS)})), "allowed", "list_files"
@@ -165,6 +168,9 @@ async def _tool_read_file(
     """MCP tool: read a UTF-8 text file from an allowed config directory."""
     if effective_cap(token, "cap_filesystem") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "read_file"
+    error = unknown_argument_error("read_file", args)
+    if error:
+        return _tool_error(error), "invalid_request", "read_file"
     path = str_arg(args.get("path"))
     target = _resolve_fs_path(hass, path)
     if target is None or not await hass.async_add_executor_job(os.path.isfile, target):
@@ -205,6 +211,9 @@ async def _tool_write_file(
     """MCP tool: write a file under an allowed config directory (Confirm-gated)."""
     if effective_cap(token, "cap_filesystem") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "write_file"
+    error = unknown_argument_error("write_file", args)
+    if error:
+        return _tool_error(error), "invalid_request", "write_file"
     pre = _file_write_precheck(args, hass, "write_file")
     if pre is not None:
         return pre
@@ -355,6 +364,9 @@ async def _tool_get_yaml_config(
     """MCP tool: read a YAML config file, or one key inside it."""
     if effective_cap(token, "cap_yaml_edit") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_yaml_config"
+    error = unknown_argument_error("get_yaml_config", args)
+    if error:
+        return _tool_error(error), "invalid_request", "get_yaml_config"
     resolved = _resolve_yaml_read_path(hass, args.get("file"))
     if resolved is None:
         return _tool_error(_YAML_READ_REFUSED), "invalid_request", "get_yaml_config"
@@ -700,6 +712,9 @@ async def _tool_set_yaml_config(
     """MCP tool: replace a YAML configuration file whole (Confirm-gated)."""
     if effective_cap(token, "cap_yaml_edit") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_yaml_config"
+    error = unknown_argument_error("set_yaml_config", args)
+    if error:
+        return _tool_error(error), "invalid_request", "set_yaml_config"
     pre = _yaml_write_precheck(args, "set_yaml_config")
     if pre is not None:
         return pre
@@ -937,11 +952,11 @@ async def _tool_patch_yaml_config(
     so they cannot be lost on the way through either.
     """
     tool = "patch_yaml_config"
+    if effective_cap(token, "cap_yaml_edit") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     args, error = normalize_tool_args(tool, args)
     if error:
         return _tool_error(error), "invalid_request", tool
-    if effective_cap(token, "cap_yaml_edit") == CAP_DENY:
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     target = _yaml_write_target(hass, args)
     if target is None:
         return _tool_error(_YAML_WRITE_REFUSED), "invalid_request", tool

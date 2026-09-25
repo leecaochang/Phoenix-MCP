@@ -2,7 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
+
+from .const import (
+    UNKNOWN_ARGUMENT_ALIASES,
+    UNKNOWN_ARGUMENT_MAX_ERRORS,
+    UNKNOWN_ARGUMENT_MAX_NAME,
+    UNKNOWN_ARGUMENT_PROTECTED_FIELDS,
+)
+from .tool_defs import _ENTITY_TOOL_DEFS, _SYSTEM_TOOL_DEFS
 
 
 _RETIRED_REPLACEMENTS: dict[str, dict[str, str]] = {
@@ -109,11 +118,80 @@ def _migration_error(
     )
 
 
+def _near_parameter(name: str, candidate: str) -> bool:
+    """Recognize a single edit or adjacent transposition, without fuzzy words."""
+    name = name.lower().replace("_", "")
+    candidate = candidate.replace("_", "")
+    if name == candidate:
+        return True
+    if len(name) < 2 or len(candidate) < 3 or abs(len(name) - len(candidate)) > 1:
+        return False
+    if len(name) == len(candidate):
+        differences = [i for i, (a, b) in enumerate(zip(name, candidate)) if a != b]
+        return len(differences) == 1 or (
+            len(differences) == 2
+            and differences[1] == differences[0] + 1
+            and name[differences[0]] == candidate[differences[1]]
+            and name[differences[1]] == candidate[differences[0]]
+        )
+    shorter, longer = sorted((name, candidate), key=len)
+    return any(longer[:i] + longer[i + 1:] == shorter for i in range(len(longer)))
+
+
+def unknown_argument_error(tool: str, args: dict[str, Any]) -> str | None:
+    """Diagnose targeted public-name mistakes without rewriting caller input.
+
+    Surface diagnostics only after capability denial checks, before approval.
+    This is deliberately not a validator for arbitrary nested configuration.
+    """
+    protected = UNKNOWN_ARGUMENT_PROTECTED_FIELDS.get(tool)
+    if protected is None:
+        return None
+    schema = next(
+        definition["inputSchema"] for definition in (*_ENTITY_TOOL_DEFS, *_SYSTEM_TOOL_DEFS)
+        if definition["name"] == tool
+    )
+    properties = schema.get("properties", {})
+    findings: list[str] = []
+
+    def examine(values: dict, declared: dict, fields: tuple[str, ...], prefix: str = "") -> None:
+        for name in values:
+            if len(findings) >= UNKNOWN_ARGUMENT_MAX_ERRORS:
+                break
+            if not isinstance(name, str) or name in declared or len(name) > UNKNOWN_ARGUMENT_MAX_NAME:
+                continue
+            # Retired public forms keep their more specific migration guidance.
+            if not prefix and name in _RETIRED_REPLACEMENTS.get(tool, {}):
+                continue
+            candidates = [field for field in fields if (
+                name in UNKNOWN_ARGUMENT_ALIASES.get(field, ()) or _near_parameter(name, field)
+            )]
+            if not prefix and tool == "patch_dashboard" and name in UNKNOWN_ARGUMENT_ALIASES["url_path"]:
+                candidates = ["target.url_path"]
+            if not candidates:
+                continue
+            # JSON quoting prevents control characters from becoming error formatting.
+            label = json.dumps(prefix + name, ensure_ascii=True)
+            if len(candidates) == 1:
+                destination = prefix + candidates[0]
+                suffix = " (already supplied; remove the conflicting argument)" if candidates[0] in values else ""
+                findings.append(f"Unknown argument {label}. Use {destination}{suffix}.")
+            else:
+                findings.append(f"Unknown argument {label}. Possible parameters: {', '.join(prefix + c for c in sorted(candidates))}.")
+
+    examine(args, properties, protected)
+    if tool == "patch_dashboard" and isinstance(args.get("target"), dict):
+        examine(args["target"], properties["target"]["properties"], ("url_path", "path"), "target.")
+    if not findings:
+        return None
+    return " ".join(findings) + f" Valid parameters: {', '.join(sorted(properties))}. Correct the arguments and retry."
+
+
 def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
     """Translate a v2 public request to the established executor shape.
 
-    Unknown keys intentionally remain untouched. Only fields that were publicly
-    retired by Catalog v2 receive a migration error.
+    Unrelated unknown keys remain untouched. Retired fields retain migration
+    guidance; targeted selector mistakes receive correction errors.
     """
     replacements = _RETIRED_REPLACEMENTS.get(tool, {})
     retired = set(replacements) & set(args)
@@ -125,6 +203,9 @@ def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any]
         return args, _migration_error(
             tool, retired | ({"service"} if service_string else set()), extra
         )
+    error = unknown_argument_error(tool, args)
+    if error and tool not in {"call_service", "dry_run_service"}:
+        return args, error
     out = dict(args)
     if tool in {"get_state", "get_states"}:
         projection = out.pop("projection", None)
@@ -240,4 +321,4 @@ def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any]
         if not isinstance(ids, list) or not ids:
             return out, "entity_ids must be a non-empty array."
         out["entity_id"] = ids
-    return out, None
+    return out, error

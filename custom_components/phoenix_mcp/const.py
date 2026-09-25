@@ -2166,3 +2166,40 @@ ROUTING_STATISTICS_STORAGE_KEY = "phoenix_mcp_routing_statistics"
 ROUTING_STATISTICS_SURFACES = ("voice", "chat")
 ROUTING_STATISTICS_OUTCOMES = ("local", "decision", "provider", "pending", "failed", "cancelled")
 ROUTING_STATISTICS_FLUSH_INTERVAL = datetime.timedelta(seconds=30)
+
+# Targeted public-input diagnostics; unrelated extra arguments stay tolerated.
+UNKNOWN_ARGUMENT_PROTECTED_FIELDS = {
+    "get_dashboard_config": ("url_path",),
+    "set_dashboard_config": ("url_path", "expected_hash"),
+    "add_dashboard_card": ("url_path", "view_index", "section_index", "position", "expected_hash"),
+    "edit_dashboard_card": ("url_path", "view_index", "section_index", "card_index", "expected_hash"),
+    "delete_dashboard_card": ("url_path", "view_index", "section_index", "card_index", "expected_hash"),
+    "patch_dashboard": ("target", "expected_hash"),
+    "edit_dashboard": ("dashboard_id",),
+    "delete_dashboard": ("dashboard_id",),
+    "list_files": ("path",),
+    "read_file": ("path",),
+    "write_file": ("path", "expected_hash"),
+    "get_yaml_config": ("file", "key"),
+    "set_yaml_config": ("file", "expected_hash", "remove_keys", "remove_entries"),
+    "patch_yaml_config": ("file", "address", "expected_hash"),
+    "set_entity": ("entity_id",),
+    "delete_entity": ("entity_id",),
+    "set_device": ("device_id",),
+    "remove_device": ("device_id", "config_entry_id"),
+    "set_integration": ("entry_id",),
+    "call_service": ("service", "targets"),
+    "dry_run_service": ("service", "targets"),
+}
+UNKNOWN_ARGUMENT_ALIASES = {
+    "url_path": ("dashboard_url", "dashboard_url_path", "dashboard_path", "dashboard", "dashboard_id", "url"),
+    "dashboard_id": ("dashboard", "dashboard_url", "url_path"),
+    "file": ("filename", "file_name", "file_path", "path"),
+    "path": ("filename", "file_name", "file_path", "directory"),
+    "targets": ("target", "entity_ids", "device_ids", "area_ids", "entities"),
+    "entity_id": ("entity", "entity_ids"),
+    "device_id": ("device", "device_ids"),
+    "entry_id": ("integration_id", "config_entry_id"),
+}
+UNKNOWN_ARGUMENT_MAX_NAME = 80
+UNKNOWN_ARGUMENT_MAX_ERRORS = 8

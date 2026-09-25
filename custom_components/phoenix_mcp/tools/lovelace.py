@@ -29,7 +29,7 @@ from homeassistant.core import HomeAssistant
 from ..card_catalog import CardEntry
 from ..const import CAP_DENY, MAX_DIFF_INLINE_BYTES, REDACTION_SENTINEL
 from ..data import PhoenixData
-from ..tool_contracts import normalize_tool_args
+from ..tool_contracts import normalize_tool_args, unknown_argument_error
 from ..helpers import (
     content_hash,
     dict_arg,
@@ -249,6 +249,11 @@ async def _tool_edit_dashboard(
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: edit a dashboard (Confirm-gated)."""
+    if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "edit_dashboard"
+    error = unknown_argument_error("edit_dashboard", args)
+    if error:
+        return _tool_error(error), "invalid_request", "edit_dashboard"
     blocked = await _gate(
         "cap_lovelace_write", token, hass, data,
         tool_name="edit_dashboard", args=args, request_id=request_id,
@@ -280,6 +285,11 @@ async def _tool_delete_dashboard(
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: delete a dashboard (Confirm-gated)."""
+    if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_dashboard"
+    error = unknown_argument_error("delete_dashboard", args)
+    if error:
+        return _tool_error(error), "invalid_request", "delete_dashboard"
     blocked = await _gate(
         "cap_lovelace_write", token, hass, data,
         tool_name="delete_dashboard", args=args, request_id=request_id,
@@ -331,6 +341,9 @@ async def _tool_get_dashboard_config(
     """MCP tool: read a dashboard's view/card layout, entity ids redacted to scope."""
     if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_dashboard_config"
+    error = unknown_argument_error("get_dashboard_config", args)
+    if error:
+        return _tool_error(error), "invalid_request", "get_dashboard_config"
     url_path = str(args.get("url_path") or "").strip() or None
     try:
         config = await async_get_lovelace_config(hass, url_path)
@@ -403,6 +416,9 @@ async def _tool_set_dashboard_config(
     """MCP tool: replace a dashboard's view/card layout (Confirm-gated)."""
     if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_dashboard_config"
+    error = unknown_argument_error("set_dashboard_config", args)
+    if error:
+        return _tool_error(error), "invalid_request", "set_dashboard_config"
     pre = _dashboard_write_precheck(args, "set_dashboard_config")
     if pre is not None:
         return pre
@@ -677,6 +693,9 @@ async def _tool_dashboard_card(
     """
     if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
+    error = unknown_argument_error(tool_name, args)
+    if error:
+        return _tool_error(error), "invalid_request", tool_name
     current = await _dashboard_card_current(args, hass, tool_name)
     if isinstance(current, tuple):
         return current
@@ -883,11 +902,11 @@ async def _tool_patch_dashboard(
     time so a change during the approval window is caught.
     """
     tool = "patch_dashboard"
+    if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     args, error = normalize_tool_args(tool, args)
     if error:
         return _tool_error(error), "invalid_request", tool
-    if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     current = await _dashboard_card_current(args, hass, tool)
     if isinstance(current, tuple):
         return current
