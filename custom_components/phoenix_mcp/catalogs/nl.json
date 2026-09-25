@@ -970,7 +970,8 @@
       "wipeConfirmationRequired": "confirm moet WIPE zijn.",
       "routingPreviewInvalid": "Controleer het token, de taal van de opdracht en de routeringsinstellingen.",
       "providerModelNotListed": "Kies een model dat deze provider heeft teruggegeven.",
-      "providerAccountChanged": "Het provideraccount is gewijzigd. Herlaad en probeer het opnieuw."
+      "providerAccountChanged": "Het provideraccount is gewijzigd. Herlaad en probeer het opnieuw.",
+      "routingStatisticsResetInvalid": "Kies Voice of Chat en bevestig het resetten van de statistieken."
     },
     "wizard": {
       "accessSub": "Vouw de <code>light</code>-groep uit en kies een licht dat je kunt controleren. Selecteer <strong>W</strong> om lees- en schrijftoegang te verlenen. Ken een heel apparaat toe of vouw het uit om één entiteit te kiezen. Je kunt later meer machtigingen toevoegen.",
@@ -2035,6 +2036,27 @@
       "accountModel": "Model voor {name}",
       "connectionHint": "De basis-URL is het serveradres. Voeg alleen een API-sleutel toe als die server verificatie vereist.",
       "commandHelp": "Probeer eerst lokale intents en daarna de optionele beslissingsprovider. Andere verzoeken gaan naar je gebruikelijke AI-provider. Machtigingen en goedkeuringen blijven gelden."
+    },
+    "routingStats": {
+      "title": "Routeringsstatistieken",
+      "scope": "Alleen Phoenix Voice en Chat. Externe MCP-clients en AI Task tellen niet mee.",
+      "headline": "{percent}% van de verzoeken voltooid zonder het gespreksmodel.",
+      "empty": "Nog geen verzoeken geregistreerd.",
+      "since": "Sinds {date}. Blijft behouden na herstarten.",
+      "local": "Voltooid door lokale intenties",
+      "decision": "Voltooid via beslissingsprovider",
+      "provider": "Verzonden naar gespreksprovider",
+      "pending": "Wachtte op goedkeuring bij antwoord",
+      "failed": "Mislukt of onvolledig",
+      "cancelled": "Geannuleerd",
+      "decisionTokens": "Beslissingstokens: invoer / uitvoer",
+      "providerTokens": "Gesprekstokens: invoer / uitvoer",
+      "unavailable": "Niet beschikbaar",
+      "missing": "Gebruik ontbreekt voor {count} verzoeken",
+      "note": "Alleen gemelde tokens, geen geschatte besparing. Goedkeuringen tonen de situatie bij het antwoord, niet de huidige status.",
+      "reset": "Statistieken resetten",
+      "confirm": "Alleen statistieken van deze kaart wissen? Instellingen blijven gelijk. Lopende verzoeken tellen niet mee in de nieuwe periode.",
+      "error": "Statistieken laden of resetten mislukt. Probeer opnieuw."
     }
   }
 }

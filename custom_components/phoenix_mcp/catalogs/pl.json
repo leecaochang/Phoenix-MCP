@@ -976,7 +976,8 @@
       "wipeConfirmationRequired": "confirm musi mieć wartość WIPE.",
       "routingPreviewInvalid": "Sprawdź token, język polecenia i ustawienia routingu.",
       "providerModelNotListed": "Wybierz model zwrócony przez tego dostawcę.",
-      "providerAccountChanged": "Konto dostawcy uległo zmianie. Odśwież i spróbuj ponownie."
+      "providerAccountChanged": "Konto dostawcy uległo zmianie. Odśwież i spróbuj ponownie.",
+      "routingStatisticsResetInvalid": "Wybierz Voice lub Chat i potwierdź wyzerowanie statystyk."
     },
     "wizard": {
       "accessSub": "Rozwiń grupę <code>light</code> i wybierz światło, które możesz zweryfikować. Wybierz <strong>W</strong>, aby przyznać dostęp do odczytu i zapisu. Przyznaj całe urządzenie lub rozwiń je, aby wybrać jedną encję. Więcej uprawnień możesz dodać później.",
@@ -2055,6 +2056,27 @@
       "accountModel": "Model dla {name}",
       "connectionHint": "Bazowy adres URL to adres serwera. Dodaj klucz API tylko wtedy, gdy serwer wymaga uwierzytelniania.",
       "commandHelp": "Najpierw wypróbuj lokalne intencje, a następnie opcjonalnego dostawcę decyzji. Pozostałe żądania trafiają do zwykłego dostawcy AI. Uprawnienia i zatwierdzenia nadal obowiązują."
+    },
+    "routingStats": {
+      "title": "Statystyki routingu",
+      "scope": "Tylko Voice i Chat Phoenix. Zewnętrzne klienty MCP i AI Task są wyłączone.",
+      "headline": "{percent}% żądań ukończono bez modelu konwersacyjnego.",
+      "empty": "Nie zarejestrowano jeszcze żądań.",
+      "since": "Od {date}. Zachowywane po restarcie.",
+      "local": "Ukończone przez lokalne intencje",
+      "decision": "Ukończone przez dostawcę decyzji",
+      "provider": "Wysłane do dostawcy konwersacyjnego",
+      "pending": "Oczekujące na zatwierdzenie przy odpowiedzi",
+      "failed": "Nieudane lub niekompletne",
+      "cancelled": "Anulowane",
+      "decisionTokens": "Tokeny decyzji: wejście / wyjście",
+      "providerTokens": "Tokeny konwersacji: wejście / wyjście",
+      "unavailable": "Niedostępne",
+      "missing": "Brak danych użycia dla {count} żądań",
+      "note": "Tylko zgłoszone tokeny, bez szacowania oszczędności. Zatwierdzenia odzwierciedlają stan przy odpowiedzi, nie stan bieżący.",
+      "reset": "Wyzeruj statystyki",
+      "confirm": "Usunąć tylko statystyki tej karty? Ustawienia pozostaną bez zmian. Trwające żądania nie trafią do nowego okresu.",
+      "error": "Nie można wczytać lub wyzerować statystyk. Spróbuj ponownie."
     }
   }
 }

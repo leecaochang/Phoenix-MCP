@@ -322,6 +322,11 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     agent_recovery = AgentRecovery(Store(hass, 1, AGENT_RECOVERY_STORAGE_KEY))
     await agent_recovery.async_load()
 
+    from .routing_statistics import RoutingStatistics
+    from .const import ROUTING_STATISTICS_STORAGE_KEY, ROUTING_STATISTICS_FLUSH_INTERVAL
+    routing_statistics = RoutingStatistics(Store(hass, 1, ROUTING_STATISTICS_STORAGE_KEY))
+    await routing_statistics.async_load()
+
     data = PhoenixData(
         hass=hass,
         store=store,
@@ -329,6 +334,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         audit=audit,
         versions=versions,
         agent_recovery=agent_recovery,
+        routing_statistics=routing_statistics,
         card_catalog=card_catalog,
         ready=False,
         enforce_mcp_lifecycle=True,
@@ -483,6 +489,14 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         except Exception:  # noqa: BLE001
             _LOGGER.warning("Could not set up the Phoenix MCP AI Task entity", exc_info=True)
 
+    async def _flush_statistics(_now=None) -> None:
+        try:
+            await data.routing_statistics.async_save()
+        except Exception:
+            _LOGGER.warning("Routing statistics flush failed; will retry", exc_info=True)
+
+    entry.async_on_unload(async_track_time_interval(hass, _flush_statistics, ROUTING_STATISTICS_FLUSH_INTERVAL))
+
     async def _flush_last_used(_now=None) -> None:
         await store.async_flush_last_used()
 
@@ -619,6 +633,10 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
 
     async def _on_stop(event: Event) -> None:
         data.decision_shadow.cancel()
+        try:
+            await data.routing_statistics.async_save()
+        except Exception:
+            _LOGGER.exception("Could not persist routing statistics at shutdown")
         # Both writes are best-effort, for the reason spelled out on
         # async_unload_entry: this runs inside Home Assistant's own stop
         # sequence, so an unwritable store must not raise into it. The first
@@ -742,6 +760,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if data is not None:
         data.ready = False
         data.shutting_down = True
+        try:
+            await data.routing_statistics.async_save()
+        except Exception:
+            _LOGGER.exception("Could not persist routing statistics during unload")
         try:
             await data.audit.async_save()
         except Exception:  # noqa: BLE001 - teardown must not depend on a writable disk

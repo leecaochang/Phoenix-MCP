@@ -132,7 +132,8 @@
       "wipeConfirmationRequired": "confirm 必須為 WIPE。",
       "routingPreviewInvalid": "請檢查權杖、指令語言和路由設定。",
       "providerModelNotListed": "請選取此提供者傳回的模型。",
-      "providerAccountChanged": "提供者帳戶已變更，請重新整理後再試。"
+      "providerAccountChanged": "提供者帳戶已變更，請重新整理後再試。",
+      "routingStatisticsResetInvalid": "請選擇 Voice 或 Chat 並確認重設統計。"
     },
     "agentchat": {
       "answerAnyway": "仍然回答",
@@ -2008,6 +2009,27 @@
       "accountModel": "{name} 的模型",
       "connectionHint": "基礎 URL 是伺服器位址。僅當該伺服器要求驗證身分時才需要填寫 API 金鑰。",
       "commandHelp": "先嘗試本機意圖，再使用選用的決策供應商。其他請求交給慣用的 AI 供應商。權限與核准要求仍然適用。"
+    },
+    "routingStats": {
+      "title": "路由統計",
+      "scope": "僅統計 Phoenix 語音和聊天。外部 MCP 用戶端和 AI Task 不計入。",
+      "headline": "{percent}% 的請求無需對話模型即可完成。",
+      "empty": "尚無請求記錄。",
+      "since": "自 {date} 起統計。重新啟動後保留。",
+      "local": "由本機意圖完成",
+      "decision": "透過決策提供者完成",
+      "provider": "傳送至對話提供者",
+      "pending": "回覆時等待核准",
+      "failed": "失敗或未完成",
+      "cancelled": "已取消",
+      "decisionTokens": "決策權杖：輸入 / 輸出",
+      "providerTokens": "對話權杖：輸入 / 輸出",
+      "unavailable": "無法使用",
+      "missing": "{count} 個請求缺少用量報告",
+      "note": "僅顯示回報的權杖用量，不估算節省量。核准計數反映回覆時的情況，而非目前核准狀態。",
+      "reset": "重設統計",
+      "confirm": "僅清除此卡片的統計資料？設定保持不變。已在執行的請求不會計入新的統計週期。",
+      "error": "無法載入或重設統計資料，請重試。"
     }
   },
   "voice": {

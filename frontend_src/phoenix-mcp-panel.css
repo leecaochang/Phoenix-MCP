@@ -2906,3 +2906,12 @@ hui-card { display: block; min-width: 0; }
 @media (max-width: 560px) {
   .energy-preview-row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
 }
+
+.routing-statistics { margin-top: 16px; }
+.routing-statistics > summary { cursor: pointer; color: var(--phx-text-muted); }
+.routing-statistics-content { padding-top: 8px; }
+.routing-statistics-values { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; margin: 16px 0; }
+.routing-statistics-values dt { overflow-wrap: anywhere; }
+.routing-statistics-values dd { margin: 0; text-align: end; font-variant-numeric: tabular-nums; }
+.routing-statistics-values dd small { display: block; max-width: 22ch; color: var(--phx-text-muted); font-size: 12px; }
+.routing-statistics-actions { display: flex; flex-wrap: wrap; gap: 8px; }

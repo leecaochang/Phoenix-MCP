@@ -1705,7 +1705,8 @@
       "wipeConfirmationRequired": "confirm doit être WIPE.",
       "routingPreviewInvalid": "Vérifiez le jeton, la langue de la commande et les paramètres de routage.",
       "providerModelNotListed": "Choisissez un modèle renvoyé par ce fournisseur.",
-      "providerAccountChanged": "Le compte du fournisseur a changé. Rechargez et réessayez."
+      "providerAccountChanged": "Le compte du fournisseur a changé. Rechargez et réessayez.",
+      "routingStatisticsResetInvalid": "Choisissez Voice ou Chat et confirmez la réinitialisation des statistiques."
     },
     "mesaSuggestion": {
       "baseline_note": " Interdit correspond à la ligne de base intégrée pour ce domaine, le profil créé rend donc cette intention explicite ; choisissez Confirmer dans Révision pour autoriser plutôt le contrôle de l'agent derrière les approbations.",
@@ -2003,6 +2004,27 @@
       "accountModel": "Modèle pour {name}",
       "connectionHint": "L’URL de base est l’adresse du serveur. Ajoutez une clé API uniquement si ce serveur exige une authentification.",
       "commandHelp": "Essaie d’abord les intentions locales, puis le fournisseur de décisions facultatif. Les autres demandes passent par votre fournisseur d’IA habituel. Les autorisations et approbations restent applicables."
+    },
+    "routingStats": {
+      "title": "Statistiques de routage",
+      "scope": "Uniquement Voice et Chat de Phoenix. Les clients MCP externes et AI Task sont exclus.",
+      "headline": "{percent}% des requêtes ont abouti sans le modèle conversationnel.",
+      "empty": "Aucune requête enregistrée.",
+      "since": "Depuis {date}. Conservé après redémarrage.",
+      "local": "Traitées par les intentions locales",
+      "decision": "Traitées par le fournisseur de décisions",
+      "provider": "Envoyées au fournisseur conversationnel",
+      "pending": "En attente de validation lors de la réponse",
+      "failed": "Échecs ou réponses incomplètes",
+      "cancelled": "Annulées",
+      "decisionTokens": "Tokens de décision : entrée / sortie",
+      "providerTokens": "Tokens conversationnels : entrée / sortie",
+      "unavailable": "Indisponible",
+      "missing": "Consommation manquante pour {count} requêtes",
+      "note": "Tokens déclarés uniquement, sans estimation des économies. Les validations reflètent la réponse, pas leur état actuel.",
+      "reset": "Réinitialiser les statistiques",
+      "confirm": "Effacer uniquement les statistiques de cette carte ? Les réglages restent inchangés. Les requêtes déjà en cours sont exclues de la nouvelle période.",
+      "error": "Impossible de charger ou réinitialiser les statistiques. Réessayez."
     }
   },
   "notification": {

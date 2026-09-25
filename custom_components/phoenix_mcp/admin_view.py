@@ -2329,6 +2329,33 @@ async def _apply_settings_side_effects(
         await async_sync_agentchat_inject(hass)
 
 
+class PhoenixAdminRoutingStatisticsView(PhoenixView):
+    """Aggregate Phoenix-owned turn statistics, available only to administrators."""
+
+    url = "/api/phoenix-mcp/admin/command-routing/statistics"
+    name = "api:phoenix-mcp:admin:command-routing:statistics"
+    requires_auth = True
+
+    @require_admin
+    async def get(self, request: web.Request) -> web.Response:
+        data = self.hass.data[DOMAIN]
+        return _ok(data.routing_statistics.summary(), request_id=request["phoenix_mcp_rid"])
+
+    @require_admin
+    async def delete(self, request: web.Request) -> web.Response:
+        from .const import ROUTING_STATISTICS_SURFACES
+        rid = request["phoenix_mcp_rid"]
+        body = await _read_body(request, rid)
+        if isinstance(body, web.Response):
+            return body
+        if set(body) != {"surface", "confirm"} or body.get("surface") not in ROUTING_STATISTICS_SURFACES or body.get("confirm") is not True:
+            return _err("invalid_request", "Choose Voice or Chat and confirm the statistics reset.", 400, rid, key="routingStatisticsResetInvalid")
+        data = self.hass.data[DOMAIN]
+        await data.routing_statistics.async_reset(body["surface"])
+        _audit_admin(self.hass, request, rid, request.path)
+        return _ok(data.routing_statistics.summary(), request_id=rid)
+
+
 class PhoenixAdminCommandPreviewView(PhoenixView):
     """Admin-only inert recognition preview; not an MCP tool."""
 
@@ -2655,6 +2682,7 @@ class PhoenixAdminWipeView(PhoenixView):
                     data.rate_limit_notified.clear()
                     data.token_counters.clear()
                     data.stale_tools_advised.clear()
+                    await data.routing_statistics.async_wipe()
                     await data.audit.async_wipe()
                     await data.versions.async_wipe()
                     await data.agent_recovery.async_wipe(self.hass)
@@ -4699,6 +4727,7 @@ ALL_ADMIN_VIEWS: list[type[PhoenixView]] = [
     PhoenixAdminAuditView,
     PhoenixAdminSettingsView,
     PhoenixAdminCommandPreviewView,
+    PhoenixAdminRoutingStatisticsView,
     PhoenixAdminVoiceAgentPipelineView,
     PhoenixAdminAiTaskPreferredView,
     PhoenixAdminWipeView,

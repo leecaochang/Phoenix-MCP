@@ -1709,7 +1709,8 @@
       "wipeConfirmationRequired": "confirm must be WIPE.",
       "routingPreviewInvalid": "Check the token, command language and routing settings.",
       "providerModelNotListed": "Choose a model returned by this provider.",
-      "providerAccountChanged": "Provider account changed. Reload and try again."
+      "providerAccountChanged": "Provider account changed. Reload and try again.",
+      "routingStatisticsResetInvalid": "Choose Voice or Chat and confirm the statistics reset."
     },
     "mesaSuggestion": {
       "baseline_note": " Prohibited matches the built-in baseline for this domain, so the authored profile makes that intent explicit; choose confirm in Review to allow agent control behind approvals instead.",
@@ -2007,6 +2008,27 @@
       "accountModel": "Model for {name}",
       "connectionHint": "Base URL is the server address. Add an API key only if that server requires authentication.",
       "commandHelp": "Try local intents first, then the optional Decision Provider. Other requests go to your usual AI provider. Permissions and approvals still apply."
+    },
+    "routingStats": {
+      "title": "Routing statistics",
+      "scope": "Phoenix Voice and Chat only. External MCP clients and AI Task are excluded.",
+      "headline": "{percent}% of requests completed without the conversational model.",
+      "empty": "No requests recorded yet.",
+      "since": "Since {date}. Kept across restarts.",
+      "local": "Completed by local intents",
+      "decision": "Completed through decision provider",
+      "provider": "Sent to conversational provider",
+      "pending": "Queued for approval",
+      "failed": "Failed or incomplete",
+      "cancelled": "Cancelled",
+      "decisionTokens": "Decision tokens: input / output",
+      "providerTokens": "Conversational tokens: input / output",
+      "unavailable": "Unavailable",
+      "missing": "{count} requests missing usage",
+      "note": "Reported tokens only, not estimated savings. Queued counts reflect the reply, not current approval status.",
+      "reset": "Reset statistics",
+      "confirm": "Clear statistics for this card only? Settings stay unchanged. Requests already in progress are excluded from the new period.",
+      "error": "Could not load or reset statistics. Try again."
     }
   },
   "notification": {

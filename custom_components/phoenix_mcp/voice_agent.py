@@ -93,6 +93,10 @@ def _base_url(hass: HomeAssistant) -> str:
         return ""
 
 
+from .routing_statistics import tracked_turn
+
+
+@tracked_turn("voice")
 async def async_voice_answer(
     hass: HomeAssistant,
     data: Any,

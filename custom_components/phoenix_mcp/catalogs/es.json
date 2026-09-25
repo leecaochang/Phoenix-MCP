@@ -958,7 +958,8 @@
       "wipeConfirmationRequired": "confirm debe ser WIPE.",
       "routingPreviewInvalid": "Comprueba el token, el idioma de la orden y los ajustes de enrutamiento.",
       "providerModelNotListed": "Elige un modelo devuelto por este proveedor.",
-      "providerAccountChanged": "La cuenta del proveedor ha cambiado. Recarga y vuelve a intentarlo."
+      "providerAccountChanged": "La cuenta del proveedor ha cambiado. Recarga y vuelve a intentarlo.",
+      "routingStatisticsResetInvalid": "Elige Voice o Chat y confirma el restablecimiento de las estadísticas."
     },
     "tokens": {
       "advanced": "Avanzado",
@@ -2003,6 +2004,27 @@
       "accountModel": "Modelo de {name}",
       "connectionHint": "La URL base es la dirección del servidor. Añade una clave API solo si el servidor requiere autenticación.",
       "commandHelp": "Prueba primero los intents locales y después el proveedor de decisiones opcional. Las demás solicitudes se envían a tu proveedor de IA habitual. Se mantienen los permisos y las aprobaciones."
+    },
+    "routingStats": {
+      "title": "Estadísticas de enrutamiento",
+      "scope": "Solo Voice y Chat de Phoenix. Se excluyen los clientes MCP externos y AI Task.",
+      "headline": "El {percent}% de las solicitudes se completó sin el modelo conversacional.",
+      "empty": "Aún no hay solicitudes registradas.",
+      "since": "Desde {date}. Se conserva tras reiniciar.",
+      "local": "Completadas por intenciones locales",
+      "decision": "Completadas mediante el proveedor de decisiones",
+      "provider": "Enviadas al proveedor conversacional",
+      "pending": "En espera de aprobación al responder",
+      "failed": "Fallidas o incompletas",
+      "cancelled": "Canceladas",
+      "decisionTokens": "Tokens de decisión: entrada / salida",
+      "providerTokens": "Tokens conversacionales: entrada / salida",
+      "unavailable": "No disponible",
+      "missing": "Falta el consumo de {count} solicitudes",
+      "note": "Solo tokens declarados, no ahorros estimados. Las aprobaciones reflejan la respuesta, no su estado actual.",
+      "reset": "Restablecer estadísticas",
+      "confirm": "¿Borrar solo las estadísticas de esta tarjeta? La configuración no cambia. Las solicitudes ya en curso se excluyen del nuevo período.",
+      "error": "No se pudieron cargar o restablecer las estadísticas. Inténtalo de nuevo."
     }
   },
   "notification": {

@@ -1011,7 +1011,8 @@
       "wipeConfirmationRequired": "confirm は WIPE にしてください。",
       "routingPreviewInvalid": "トークン、コマンドの言語、ルーティング設定を確認してください。",
       "providerModelNotListed": "このプロバイダーが返したモデルを選んでください。",
-      "providerAccountChanged": "プロバイダーのアカウントが変更されました。再読み込みしてやり直してください。"
+      "providerAccountChanged": "プロバイダーのアカウントが変更されました。再読み込みしてやり直してください。",
+      "routingStatisticsResetInvalid": "VoiceまたはChatを選び、統計のリセットを確認してください。"
     },
     "agentchat": {
       "answerAnyway": "そのまま回答",
@@ -2003,6 +2004,27 @@
       "accountModel": "{name}のモデル",
       "connectionHint": "ベースURLはサーバーのアドレスです。サーバーが認証を要求する場合のみAPIキーを追加してください。",
       "commandHelp": "まずローカルのインテントを試し、次に任意の判断プロバイダーを使用します。その他のリクエストは通常の AI プロバイダーに送られます。権限と承認は引き続き適用されます。"
+    },
+    "routingStats": {
+      "title": "ルーティング統計",
+      "scope": "PhoenixのVoiceとChatのみ。外部MCPクライアントとAI Taskは対象外です。",
+      "headline": "リクエストの{percent}%が会話モデルを使わずに完了しました。",
+      "empty": "リクエストの記録はまだありません。",
+      "since": "{date}以降。再起動後も保持されます。",
+      "local": "ローカルインテントで完了",
+      "decision": "判断プロバイダー経由で完了",
+      "provider": "会話プロバイダーに送信",
+      "pending": "応答時に承認待ち",
+      "failed": "失敗または未完了",
+      "cancelled": "キャンセル済み",
+      "decisionTokens": "判断トークン：入力 / 出力",
+      "providerTokens": "会話トークン：入力 / 出力",
+      "unavailable": "利用不可",
+      "missing": "{count}件の使用量が未報告です",
+      "note": "報告されたトークンのみで、節約量の推定ではありません。承認件数は応答時の状態で、現在の状態ではありません。",
+      "reset": "統計をリセット",
+      "confirm": "このカードの統計だけを消去しますか？設定は変わりません。進行中のリクエストは新しい期間に含まれません。",
+      "error": "統計の読み込みまたはリセットに失敗しました。再試行してください。"
     }
   },
   "notification": {

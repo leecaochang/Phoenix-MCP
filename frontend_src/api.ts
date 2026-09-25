@@ -1,5 +1,6 @@
 import type {
   CommandRoutePreview,
+  RoutingStatisticsResponse,
   AgentCliProviderKind,
   AgentCliInstance,
   AgentCliProvidersResponse,
@@ -210,6 +211,8 @@ export const api = {
 
   getInfo: () => req<{ version: string; min_ha_version: string; github_url: string }>("GET", "/info"),
 
+  getRoutingStatistics: () => req<RoutingStatisticsResponse>("GET", "/command-routing/statistics"),
+  resetRoutingStatistics: (surface: "voice" | "chat") => req<RoutingStatisticsResponse>("DELETE", "/command-routing/statistics", { surface, confirm: true }),
   previewCommandRoute: (tokenId: string, sentence: string, decision = false, targets = false, language = "en") =>
     req<CommandRoutePreview>("POST", "/command-routing/preview", { token_id: tokenId, sentence, language, ...(decision ? { decision: true, ...(targets ? { targets: true } : {}) } : {}) }),
 

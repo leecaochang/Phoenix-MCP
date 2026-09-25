@@ -804,3 +804,12 @@ export interface CommandRoutePreview {
   voice_observations: { observations: number; candidates: number; mean_elapsed_ms: number | null;
     agent_chat?: { observations: number; candidates: number; reasons: Record<string, number> } };
 }
+
+export interface RoutingSurfaceStatistics {
+  since: string;
+  outcomes: Record<"local" | "decision" | "provider" | "pending" | "failed" | "cancelled", number>;
+  provider_turns: number;
+  decision_usage: { requests: number; reports: number; input_tokens: number; output_tokens: number };
+  provider_usage: RoutingSurfaceStatistics["decision_usage"];
+}
+export type RoutingStatisticsResponse = Record<"voice" | "chat", RoutingSurfaceStatistics>;

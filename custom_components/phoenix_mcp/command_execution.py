@@ -314,6 +314,7 @@ class LocalCommandReply:
     outcome: str = "ok"
     pending: dict | None = None
     allows_local_followup: bool = False
+    statistics_completed: bool = False
 
 
 async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
@@ -389,7 +390,7 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
     if proposal['intent'] == 'PhoenixStateSummary':
         from .command_summary import summary_text
         summary_reply = summary_text(proposal, payload, language) if plan_is_current(plan, hass, data, token) else None
-        return LocalCommandReply(summary_reply or voice_text(language, 'local_read_failed'), allows_local_followup=summary_reply is not None)
+        return LocalCommandReply(summary_reply or voice_text(language, 'local_read_failed'), allows_local_followup=summary_reply is not None, statistics_completed=summary_reply is not None)
     if not isinstance(payload, dict):
         return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
     if read:
@@ -411,7 +412,7 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
         if proposal["intent"] == "HassGetState" and isinstance(state, str) and isinstance(attributes.get("unit_of_measurement"), str):
             state += " " + attributes["unit_of_measurement"]
         if isinstance(state, str) and len(state) <= 1024:
-            return LocalCommandReply(voice_text(language, "local_state", state=state), allows_local_followup=True)
+            return LocalCommandReply(voice_text(language, "local_state", state=state), allows_local_followup=True, statistics_completed=True)
         return LocalCommandReply(voice_text(language, "local_read_failed"))
     if payload.get("partial") or payload.get("success") is not True:
         return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
@@ -420,7 +421,7 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
     matched = payload.get("state_verification") == "matched"
     text = voice_text(language, "local_state_matched" if matched else "local_state_unconfirmed")
     return LocalCommandReply(text + (f" {advisory}" if advisory else ""),
-                             allows_local_followup=matched and not warnings)
+                             allows_local_followup=matched and not warnings, statistics_completed=True)
 
 
 @recovery_turn
@@ -476,6 +477,8 @@ async def async_execute_command_plan(hass: Any, data: Any, token: Any, plan: dic
     """Consume the exact frozen plan; never replan or fall back after this boundary."""
     try:
         reply = await _run_local_command(hass, data, token, plan, authority, base_url, include_review_links, language=language)
+        from .routing_statistics import local_result
+        local_result(reply, "decision" if plan.get("decision_category") else "local")
         return reply.text
     except Exception:
         # A failed dispatch or receipt save must never cause provider replay.

@@ -1417,7 +1417,8 @@
       "wipeConfirmationRequired": "confirm muss WIPE sein.",
       "routingPreviewInvalid": "Prüfe das Token, die Befehlssprache und die Routing-Einstellungen.",
       "providerModelNotListed": "Wählen Sie ein vom Anbieter zurückgegebenes Modell.",
-      "providerAccountChanged": "Das Anbieterkonto wurde geändert. Laden Sie neu und versuchen Sie es erneut."
+      "providerAccountChanged": "Das Anbieterkonto wurde geändert. Laden Sie neu und versuchen Sie es erneut.",
+      "routingStatisticsResetInvalid": "Wählen Sie Voice oder Chat und bestätigen Sie das Zurücksetzen der Statistik."
     },
     "approvalSummary": {
       "action.approve": "Genehmigen und ausführen",
@@ -2003,6 +2004,27 @@
       "accountModel": "Modell für {name}",
       "connectionHint": "Die Basis-URL ist die Serveradresse. Fügen Sie nur dann einen API-Schlüssel hinzu, wenn der Server eine Anmeldung erfordert.",
       "commandHelp": "Zuerst werden lokale Intents genutzt, danach der optionale Entscheidungsanbieter. Andere Anfragen gehen an deinen üblichen KI-Anbieter. Berechtigungen und Genehmigungen gelten weiterhin."
+    },
+    "routingStats": {
+      "title": "Routing-Statistik",
+      "scope": "Nur Phoenix Voice und Chat. Externe MCP-Clients und AI Task sind ausgeschlossen.",
+      "headline": "{percent}% der Anfragen wurden ohne das Gesprächsmodell abgeschlossen.",
+      "empty": "Noch keine Anfragen erfasst.",
+      "since": "Seit {date}. Bleibt bei Neustarts erhalten.",
+      "local": "Durch lokale Intents abgeschlossen",
+      "decision": "Durch Entscheidungsanbieter abgeschlossen",
+      "provider": "An Gesprächsanbieter gesendet",
+      "pending": "Zur Genehmigung eingereiht",
+      "failed": "Fehlgeschlagen oder unvollständig",
+      "cancelled": "Abgebrochen",
+      "decisionTokens": "Entscheidungs-Tokens: Eingabe / Ausgabe",
+      "providerTokens": "Gesprächs-Tokens: Eingabe / Ausgabe",
+      "unavailable": "Nicht verfügbar",
+      "missing": "Bei {count} Anfragen fehlt der Verbrauch",
+      "note": "Nur gemeldete Tokens, keine geschätzten Einsparungen. Die Genehmigungszahl bezieht sich auf die Antwort, nicht den aktuellen Status.",
+      "reset": "Statistik zurücksetzen",
+      "confirm": "Nur die Statistik dieser Karte löschen? Einstellungen bleiben unverändert. Bereits laufende Anfragen werden im neuen Zeitraum nicht gezählt.",
+      "error": "Statistik konnte nicht geladen oder zurückgesetzt werden. Erneut versuchen."
     }
   },
   "notification": {

@@ -1736,7 +1736,7 @@ async def test_entity_tree_force_reload_bypasses_cache():
 
 
 def test_all_admin_views_exported():
-    assert len(ALL_ADMIN_VIEWS) == 59
+    assert len(ALL_ADMIN_VIEWS) == 60
 
 
 def test_archived_views_before_token_view():
@@ -3177,3 +3177,27 @@ async def test_command_preview_accepts_complete_provider_history_only_with_opt_i
             'messages': provider_context_history[:-1]}).encode()))
         assert refused.status == 400 and review.await_count == 1
     assert not token_store.get_pending_approvals()
+
+
+@pytest.mark.parametrize('method', ['get', 'delete'])
+@pytest.mark.parametrize('authenticated,admin,status', [(False, True, 401), (True, False, 403)])
+async def test_routing_statistics_requires_admin(method, authenticated, admin, status):
+    from custom_components.phoenix_mcp.admin_view import PhoenixAdminRoutingStatisticsView
+    view = PhoenixAdminRoutingStatisticsView()
+    view.hass = _make_hass(_make_data())
+    response = await getattr(view, method)(_make_admin_request(is_admin=admin, authenticated=authenticated))
+    assert response.status == status
+
+
+@pytest.mark.parametrize('body,status', [({},400), ({'surface':'chat','confirm':False},400),
+    ({'surface':'external','confirm':True},400), ({'surface':'chat','confirm':True},200)])
+async def test_routing_statistics_reset_is_explicit_and_surface_scoped(body,status):
+    from custom_components.phoenix_mcp.admin_view import PhoenixAdminRoutingStatisticsView
+    d = _make_data()
+    d.routing_statistics.surfaces['voice']['outcomes']['local'] = 3
+    d.routing_statistics.surfaces['chat']['outcomes']['local'] = 5
+    view = PhoenixAdminRoutingStatisticsView(); view.hass = _make_hass(d)
+    response = await view.delete(_make_admin_request(body=json.dumps(body).encode()))
+    assert response.status == status
+    assert d.routing_statistics.summary()['voice']['outcomes']['local'] == 3
+    assert d.routing_statistics.summary()['chat']['outcomes']['local'] == (0 if status == 200 else 5)

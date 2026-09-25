@@ -127,7 +127,8 @@
       "wipeConfirmationRequired": "confirm deve essere WIPE.",
       "routingPreviewInvalid": "Controlla il token, la lingua del comando e le impostazioni di instradamento.",
       "providerModelNotListed": "Scegli un modello restituito da questo fornitore.",
-      "providerAccountChanged": "L’account del fornitore è cambiato. Ricarica e riprova."
+      "providerAccountChanged": "L’account del fornitore è cambiato. Ricarica e riprova.",
+      "routingStatisticsResetInvalid": "Scegli Voice o Chat e conferma il ripristino delle statistiche."
     },
     "agentchat": {
       "announceApproval": "L'azione {name} richiede la tua approvazione.",
@@ -2003,6 +2004,27 @@
       "accountModel": "Modello per {name}",
       "connectionHint": "L’URL di base è l’indirizzo del server. Aggiungi una chiave API solo se il server richiede l’autenticazione.",
       "commandHelp": "Prova prima gli intenti locali, poi il fornitore di decisioni facoltativo. Le altre richieste passano al consueto fornitore IA. Permessi e approvazioni restano validi."
+    },
+    "routingStats": {
+      "title": "Statistiche di instradamento",
+      "scope": "Solo Voice e Chat di Phoenix. Client MCP esterni e AI Task sono esclusi.",
+      "headline": "Il {percent}% delle richieste è stato completato senza il modello conversazionale.",
+      "empty": "Nessuna richiesta registrata.",
+      "since": "Dal {date}. Conservate dopo il riavvio.",
+      "local": "Completate dagli intenti locali",
+      "decision": "Completate dal fornitore di decisioni",
+      "provider": "Inviate al fornitore conversazionale",
+      "pending": "In attesa di approvazione alla risposta",
+      "failed": "Fallite o incomplete",
+      "cancelled": "Annullate",
+      "decisionTokens": "Token decisionali: ingresso / uscita",
+      "providerTokens": "Token conversazionali: ingresso / uscita",
+      "unavailable": "Non disponibile",
+      "missing": "Consumo mancante per {count} richieste",
+      "note": "Solo token dichiarati, non risparmi stimati. Le approvazioni riflettono la risposta, non lo stato attuale.",
+      "reset": "Reimposta statistiche",
+      "confirm": "Cancellare solo le statistiche di questa scheda? Le impostazioni non cambiano. Le richieste già in corso sono escluse dal nuovo periodo.",
+      "error": "Impossibile caricare o reimpostare le statistiche. Riprova."
     }
   },
   "notification": {

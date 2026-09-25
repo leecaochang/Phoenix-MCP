@@ -37,6 +37,8 @@ from urllib.parse import urlparse, urlunparse
 
 from aiohttp import ClientError, ClientSession, ClientTimeout, web
 
+from .routing_statistics import tracked_turn, provider_events, voice_result, untracked_turn
+
 from .view_base import PhoenixView
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -3078,9 +3080,9 @@ async def _stream_turn_resilient(
         attempt += 1
         produced = False
         retry = False
-        events = _cancelable_provider_events(provider.stream_turn(
+        events = _cancelable_provider_events(provider_events(provider.stream_turn(
             session, system_prompt=system_prompt, messages=messages, tools=tools, options=options,
-        ), cancel)
+        )), cancel)
         async with aclosing(events):
             async for ev in events:
                 etype = ev.get("type")
@@ -3486,6 +3488,7 @@ async def _run_tool_batch(
     )
 
 
+@tracked_turn("chat")
 @recovery_turn
 async def async_run_agent_turn(
     *, hass: HomeAssistant, data: PhoenixData, token: TokenRecord,
@@ -4037,6 +4040,7 @@ async def async_run_voice_turn(
         seed=user_text, client_ip=VOICE_AGENT_CLIENT_IP, max_iterations=max_iterations,
         detect_focus_refusal=home_focused,
     )
+    voice_result(turn.outcome, bool(turn.review_urls), bool(turn.text.strip()))
     # Never raise at a microphone: every ending becomes something sayable, in the
     # CONVERSATION's language (voice_text), not the server's. A partial answer the
     # model already produced is preferred over an apology that discards it.
@@ -4108,6 +4112,7 @@ class AiTaskError(Exception):
     """The AI Task model loop failed (provider/stream error)."""
 
 
+@untracked_turn
 async def async_run_ai_task(
     hass: HomeAssistant,
     data: PhoenixData,

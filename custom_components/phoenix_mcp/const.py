@@ -2154,3 +2154,9 @@ COMMAND_SUMMARY_MODES = ('total', 'breakdown', *COMMAND_SUMMARY_UNKNOWN_STATES, 
 COMMAND_SUMMARY_MAX_STATES = 20
 COMMAND_ROUTING_INTENTS |= {'PhoenixStateSummary'}
 DECISION_TARGET_INTENTS['state_summary'] = 'PhoenixStateSummary'
+
+# Aggregate routing telemetry has fixed dimensions and contains no transcripts.
+ROUTING_STATISTICS_STORAGE_KEY = "phoenix_mcp_routing_statistics"
+ROUTING_STATISTICS_SURFACES = ("voice", "chat")
+ROUTING_STATISTICS_OUTCOMES = ("local", "decision", "provider", "pending", "failed", "cancelled")
+ROUTING_STATISTICS_FLUSH_INTERVAL = datetime.timedelta(seconds=30)

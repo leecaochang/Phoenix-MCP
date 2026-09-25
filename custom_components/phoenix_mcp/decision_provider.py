@@ -185,6 +185,8 @@ class DecisionProvider:
             headers["Authorization"] = f"Bearer {self.cfg.api_key}"
         started = monotonic()
         parsed = None
+        from .routing_statistics import begin_decision, end_decision
+        statistics = begin_decision(self.metric_scope) if method == "POST" and payload is not None else None
         size = len(json.dumps(payload).encode()) if payload is not None else 0
         try:
             async with session.request(method, f"{self.cfg.base_url}/{path}", headers=headers,
@@ -209,6 +211,7 @@ class DecisionProvider:
         except (UnicodeError, json.JSONDecodeError, RecursionError):
             raise DecisionError("malformed") from None
         finally:
+            end_decision(statistics, parsed)
             if self.metrics is not None and method == "POST" and payload is not None:
                 questions = set(payload.get("questions", {}))
                 operation = ("reference" if questions == set(DECISION_REFERENCE_CHECKS) else

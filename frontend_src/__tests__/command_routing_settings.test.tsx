@@ -8,8 +8,9 @@ import { CommandRoutingToggle } from "../components/CommandRoutingToggle";
 it("keeps the Decision Provider card limited to account settings", () => {
   const change = vi.fn();
   render(<CommandRoutingSettings settings={{} as GlobalSettings} onChange={change} saving={false} />);
-  expect(screen.getByRole("heading", { name: "Decision Provider" })).toBeVisible();
+  expect(screen.getByRole("heading", { name: /Decision Provider/ })).toBeVisible();
   expect(screen.getByText("Accounts")).toBeVisible();
+  expect(screen.getByRole("link", { name: "Decision Provider documentation" })).toHaveAttribute("href", "https://leecaochang.github.io/phoenix-mcp/operations.html#command-routing");
   expect(screen.queryByRole("checkbox")).toBeNull();
   expect(screen.queryByText("Test a command")).toBeNull();
   expect(screen.queryByText("Automatic routing languages")).toBeNull();

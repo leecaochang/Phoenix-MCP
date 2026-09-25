@@ -1,3 +1,4 @@
+import { RoutingStatistics } from "./RoutingStatistics";
 import { CommandRoutingToggle } from "./CommandRoutingToggle";
 import { IconButton, EditIcon, RefreshIcon, ProbeIcon, TrashIcon } from "./ProviderAccountControls";
 import { useEffect, useRef, useState } from "react";
@@ -414,6 +415,7 @@ export function AgentCliSettings({
       </p>
 
       <CommandRoutingToggle surface="chat" mode={routingMode} onChange={onRoutingChange} saving={saving} />
+      <RoutingStatistics surface="chat" />
 
       <ProviderAddForm
         providerTypes={providerTypes}

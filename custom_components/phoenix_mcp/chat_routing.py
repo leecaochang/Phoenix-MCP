@@ -50,6 +50,8 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
     sentence = messages[-1]["content"]
 
     async def finish(reply: LocalCommandReply, *, local: bool = False, subject: dict | None = None) -> bool:
+        from .routing_statistics import local_result
+        local_result(reply, "local" if local else "decision")
         if reply.outcome != "ok":
             await emit("error", {"code": reply.outcome, "message": reply.text, "retryable": False})
         else:
