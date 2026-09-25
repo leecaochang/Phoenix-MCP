@@ -1949,7 +1949,6 @@ async def test_wipe_core_tears_down_pending_approvals():
          "status": "approved", "created_at": "2026-07-10T00:00:00+00:00",
          "expires_at": "2026-07-10T01:00:00+00:00"},
     ])
-    data.approvals_in_progress = {"ap-inflight"}
     hass = _make_hass(data)
     view = PhoenixAdminWipeView()
     view.hass = hass
@@ -1964,8 +1963,44 @@ async def test_wipe_core_tears_down_pending_approvals():
     assert fire.call_count == 1
     assert fire.call_args[0][1].id == "ap-pending"
     assert fire.call_args[0][1].status == "cancelled"
-    # The in-progress guard set is cleared by the wipe.
     assert data.approvals_in_progress == set()
+
+
+@pytest.mark.asyncio
+async def test_wipe_core_refuses_while_an_approval_executor_is_running():
+    data = _make_wipe_data()
+    data.approvals_in_progress.add("ap-inflight")
+    hass = _make_hass(data)
+    view = PhoenixAdminWipeView()
+    view.hass = hass
+
+    response = await view.delete(_make_admin_request(body=_wipe_body()))
+
+    assert response.status == 409
+    data.store.async_wipe.assert_not_awaited()
+    assert data.approvals_in_progress == {"ap-inflight"}
+    assert data.core_wipe_in_progress is False
+
+
+@pytest.mark.asyncio
+async def test_wipe_core_preserves_a_pending_interrupted_approval():
+    data = _make_wipe_data()
+    data.store.get_pending_approvals.return_value = [
+        {
+            "id": "ap-interrupted",
+            "status": "pending",
+            "execution_started_at": "2026-09-25T00:00:00+00:00",
+        },
+    ]
+    hass = _make_hass(data)
+    view = PhoenixAdminWipeView()
+    view.hass = hass
+
+    response = await view.delete(_make_admin_request(body=_wipe_body()))
+
+    assert response.status == 409
+    data.store.async_wipe.assert_not_awaited()
+    assert data.core_wipe_in_progress is False
 
 
 @pytest.mark.asyncio

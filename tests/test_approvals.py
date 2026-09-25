@@ -274,6 +274,27 @@ class TestCancelForToken:
         assert cancelled == []
         assert get_approval(store, record.id).status == STATUS_PENDING
 
+    @pytest.mark.asyncio
+    async def test_token_cleanup_surfaces_a_stale_execution_as_interrupted(self, store):
+        record = await async_create_pending_approval(
+            store, token_id="t1", token_name="a", tool_name="x",
+            cap_name="cap_restart", args={}, diff={}, request_id="r1",
+        )
+        async with store.async_lock:
+            assert await async_mark_execution_started(
+                store, record.id, approved_by_user_id="admin",
+            )
+
+        async with store.async_lock:
+            changed = await async_cancel_approvals_for_token(
+                store, "t1", "token_revoked",
+            )
+
+        assert [item.id for item in changed] == [record.id]
+        assert changed[0].status == STATUS_FAILED
+        assert changed[0].rejected_reason == REASON_EXECUTION_INTERRUPTED
+        assert "execution_started_at" not in store.get_pending_approvals()[0]
+
 
 # --- collect_pending_approvals_for_wipe ---------------------------------------
 
@@ -666,6 +687,23 @@ class TestInterruptedExecution:
         # Approving it again is the one unrecoverable outcome, so the record must
         # not be pending any more.
         assert get_approval(store, approval_id).status != STATUS_PENDING
+
+    @pytest.mark.asyncio
+    async def test_reconciliation_skips_a_still_live_execution_claim(self, store):
+        approval_id = await self._pending(store)
+        await async_mark_execution_started(
+            store, approval_id, approved_by_user_id="admin",
+        )
+
+        changed = await async_reconcile_interrupted_approvals(
+            store,
+            skip_ids={approval_id},
+        )
+
+        assert changed == []
+        entry = store.get_pending_approvals()[0]
+        assert entry["status"] == STATUS_PENDING
+        assert entry["execution_started_at"]
 
     @pytest.mark.asyncio
     async def test_an_untouched_pending_approval_is_left_alone(self, store):

@@ -70,9 +70,12 @@ class PhoenixData:
     token_counters: dict[str, dict[str, int]] = field(default_factory=dict)
     # Approval IDs whose saved action is currently mid-execution. Guards
     # _approve_approval against a concurrent double-approve re-running the same
-    # side effect; in memory only (a restart drops it, leaving the approval
-    # pending for retry).
+    # side effect. The durable execution_started_at marker handles process loss.
     approvals_in_progress: set[str] = field(default_factory=set)
+    # Core wipe sets this under the token-store lock after confirming there is no
+    # live or interrupted approval execution. Approval dispatch checks it under
+    # the same lock until the wipe has removed the records.
+    core_wipe_in_progress: bool = False
     template_slots: asyncio.Semaphore = field(default_factory=lambda: asyncio.Semaphore(TEMPLATE_WORKER_CONCURRENCY))
     entity_tree_cache: dict | None = None
     entity_tree_cache_valid: bool = False

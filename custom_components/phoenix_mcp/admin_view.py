@@ -1017,7 +1017,7 @@ class PhoenixAdminTokenView(PhoenixView):
 
     @require_admin
     async def delete(self, request: web.Request, token_id: str) -> web.Response:
-        """Revoke a token. Archives it, cancels its queued approvals, fires the bus event."""
+        """Revoke a token, close its queued approvals, and fire the bus event."""
         from .approvals import (  # noqa: PLC0415
             REASON_REVOKED,
             async_cancel_approvals_for_token,
@@ -1058,12 +1058,13 @@ class PhoenixAdminTokenView(PhoenixView):
                 if _patch:
                     await data.store.async_patch_settings(**_patch)
                 # A revoked token's queued approvals must not linger as approvable
-                # entries; an approval mid-execution is protected, like the sweep.
-                cancelled = await async_cancel_approvals_for_token(
+                # entries. Live claims are skipped; a stale marker is closed as
+                # interrupted so token cleanup preserves its uncertainty.
+                changed_approvals = await async_cancel_approvals_for_token(
                     data.store, token_id, REASON_REVOKED,
                     skip_ids=data.approvals_in_progress,
                 )
-        for approval in cancelled:
+        for approval in changed_approvals:
             dismiss_approval_notification(hass, approval.id)
             fire_approval_resolved_event(hass, approval)
 
@@ -2661,49 +2662,67 @@ class PhoenixAdminWipeView(PhoenixView):
                 fire_approval_resolved_event,
             )
 
-            # Logger restoration records live outside hass.data[DOMAIN] so a
-            # Phoenix reload cannot strand them. Restore matching runtime-only
-            # changes before the core wipe removes their ownership context.
-            if data.logger_control is not None:
-                await data.logger_control.async_restore_all()
-
             # Settings PATCH validates token references under this lock and then
             # takes the store lock. Core wipe must use the same order so it cannot
             # remove every token between validation and settings persistence.
             async with data.settings_update_lock:
-                # Pipeline creation uses this same lock through HA creation and id
-                # persistence. Remove it here before settings are reset so a
-                # concurrent one-click create cannot leave an untracked pipeline.
-                from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
-                await async_remove_assist_pipeline(hass, data)
-
                 async with data.store.async_lock:
-                    data.rate_limiter.destroy_all()
-                    data.rate_limit_notified.clear()
-                    data.token_counters.clear()
-                    data.stale_tools_advised.clear()
-                    await data.routing_statistics.async_wipe()
-                    await data.audit.async_wipe()
-                    await data.versions.async_wipe()
-                    await data.agent_recovery.async_wipe(self.hass)
-                    # The card catalog is a regenerable cache of what this instance
-                    # can render, not user data, but it is Phoenix-owned storage and
-                    # a wipe must not leave a file behind. The panel re-harvests on
-                    # its next load, so clearing it costs nothing.
-                    await data.card_catalog.async_clear()
+                    if data.approvals_in_progress:
+                        return _err(
+                            "conflict",
+                            "An approval is still executing. Wait for it to finish before wiping core data.",
+                            409, rid, key="approvalWipeInProgress",
+                        )
+                    interrupted = any(
+                        entry.get("status") == "pending" and entry.get("execution_started_at")
+                        for entry in data.store.get_pending_approvals()
+                    )
+                    if interrupted:
+                        return _err(
+                            "conflict",
+                            "An approval execution may already have applied. Check its result before wiping core data.",
+                            409, rid, key="approvalWipeExecutionUncertain",
+                        )
+                    data.core_wipe_in_progress = True
 
-                    for _tid in list(data.expiry_timers):
-                        cancel_expiry_timer(data, _tid)
+                try:
+                    # Logger restoration records live outside hass.data[DOMAIN]
+                    # so a Phoenix reload cannot strand a timed logger restoration.
+                    if data.logger_control is not None:
+                        await data.logger_control.async_restore_all()
 
-                    # Capture pending approvals BEFORE the wipe clears them, so their
-                    # notifications can be dismissed and phoenix_mcp_approval_resolved fired
-                    # (a wipe deletes every token, so its queued approvals must be torn
-                    # down exactly as revocation tears down a single token's).
-                    wiped_approvals = collect_pending_approvals_for_wipe(data.store, REASON_WIPED)
-                    data.approvals_in_progress.clear()
+                    # Pipeline creation uses this same lock through HA creation
+                    # and id persistence. Remove it before resetting settings.
+                    from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
+                    await async_remove_assist_pipeline(hass, data)
 
-                    active_slugs = [token_name_slug(t.name) for t in data.store.list_tokens()]
-                    await data.store.async_wipe()
+                    async with data.store.async_lock:
+                        data.rate_limiter.destroy_all()
+                        data.rate_limit_notified.clear()
+                        data.token_counters.clear()
+                        data.stale_tools_advised.clear()
+                        await data.routing_statistics.async_wipe()
+                        await data.audit.async_wipe()
+                        await data.versions.async_wipe()
+                        await data.agent_recovery.async_wipe(self.hass)
+                        # The card catalog is a regenerable cache of what this instance
+                        # can render, not user data, but a wipe must not leave a file
+                        # behind. The panel re-harvests on its next load.
+                        await data.card_catalog.async_clear()
+
+                        for _tid in list(data.expiry_timers):
+                            cancel_expiry_timer(data, _tid)
+
+                        # Capture pending approvals BEFORE the wipe clears them, so
+                        # their notifications can be dismissed and resolved events
+                        # fired after releasing the lock.
+                        wiped_approvals = collect_pending_approvals_for_wipe(
+                            data.store, REASON_WIPED,
+                        )
+                        active_slugs = [token_name_slug(t.name) for t in data.store.list_tokens()]
+                        await data.store.async_wipe()
+                finally:
+                    data.core_wipe_in_progress = False
 
             for approval in wiped_approvals:
                 dismiss_approval_notification(hass, approval.id)
@@ -3096,6 +3115,14 @@ async def _resolve_approval(
                 "conflict", "Approval is already being processed.", 409, rid,
                 key="approvalProcessing",
             )
+        if record.execution_started_at is not None:
+            return _err(
+                "conflict",
+                "A previous attempt may already have applied. Check the result "
+                "before changing or retrying this approval.",
+                409, rid,
+                key="approvalExecutionInterrupted",
+            )
         updated = await async_update_approval_status(
             data.store,
             approval_id,
@@ -3129,6 +3156,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
         REASON_TOKEN_INACTIVE,
         STATUS_APPROVED,
         STATUS_CANCELLED,
+        STATUS_EXPIRED,
         STATUS_FAILED,
         create_approval_notification,
         dismiss_approval_notification,
@@ -3145,12 +3173,21 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
     rid = request["phoenix_mcp_rid"]
     data: PhoenixData = hass.data[DOMAIN]
     user = request[KEY_HASS_USER]
-    settings = data.store.get_settings()
-
+    closed_record = None
+    closed_method: str | None = None
+    closed_reason: str | None = None
+    closed_response: web.Response | None = None
+    resolved = False
     async with data.store.async_lock:
+        if data.core_wipe_in_progress:
+            return _err(
+                "conflict", "Approval execution is paused while core data is being wiped.",
+                409, rid, key="approvalWipeInProgress",
+            )
         record = get_approval(data.store, approval_id)
         if record is None:
             return _err("not_found", "Approval not found.", 404, rid, key="approvalNotFound")
+        settings = data.store.get_settings()
 
         def _record_admin_lifecycle(
             method: str,
@@ -3173,83 +3210,13 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
         if record.is_terminal():
             return _ok(record.to_dict(), request_id=rid)
 
-        token = data.store.get_token_by_id(record.token_id)
-        if token is None or not token.is_valid():
-            await async_update_approval_status(
-                data.store, approval_id,
-                status=STATUS_CANCELLED,
-                approved_by_user_id=user.id,
-                rejected_reason=REASON_TOKEN_INACTIVE,
-            )
-            updated = get_approval(data.store, approval_id)
-            if updated:
-                dismiss_approval_notification(hass, approval_id)
-                fire_approval_resolved_event(hass, updated)
-                _record_admin_lifecycle(
-                    "approval/cancelled",
-                    outcome="denied",
-                    reason=REASON_TOKEN_INACTIVE,
-                )
-            return _err(
-                "not_found", "Token no longer active.", 409, rid,
-                key="approvalTokenInactive",
-            )
-
-        # The MESA sentinel cap is not a real token capability, so effective_cap
-        # would auto-deny it. The MESA re-evaluation happens inside the executor
-        # instead (it rejects entities that became prohibited/read_only).
-        if record.cap_name != MESA_CONFIRM_CAP and effective_cap(token, record.cap_name) == "deny":
-            await async_update_approval_status(
-                data.store, approval_id,
-                status=STATUS_FAILED,
-                approved_by_user_id=user.id,
-                rejected_reason=REASON_CAPABILITY_DENIED,
-            )
-            updated = get_approval(data.store, approval_id)
-            if updated:
-                dismiss_approval_notification(hass, approval_id)
-                fire_approval_resolved_event(hass, updated)
-                _record_admin_lifecycle(
-                    "approval/failed",
-                    outcome="denied",
-                    reason=REASON_CAPABILITY_DENIED,
-                )
-            return _err(
-                "forbidden", "Capability is now denied for this token.", 409, rid,
-                key="approvalCapabilityDenied",
-            )
-
-        if settings.kill_switch:
-            await async_update_approval_status(
-                data.store, approval_id,
-                status=STATUS_CANCELLED,
-                approved_by_user_id=user.id,
-                rejected_reason=REASON_KILL_SWITCH,
-            )
-            updated = get_approval(data.store, approval_id)
-            if updated:
-                dismiss_approval_notification(hass, approval_id)
-                fire_approval_resolved_event(hass, updated)
-                _record_admin_lifecycle(
-                    "approval/cancelled",
-                    outcome="denied",
-                    reason=REASON_KILL_SWITCH,
-                )
-            return _err(
-                "service_unavailable", "Kill switch engaged.", 503, rid,
-                key="killSwitchEngaged",
-            )
-
-        # Atomic claim before releasing the lock: a second concurrent approve
-        # that finds this id already claimed is rejected, so the saved side
-        # effect runs exactly once even under a double-click / double POST.
         if approval_id in data.approvals_in_progress:
             return _err(
                 "conflict", "Approval is already being processed.", 409, rid,
                 key="approvalProcessing",
             )
-        data.approvals_in_progress.add(approval_id)
-        # The claim above dies with the process. Record the same fact on disk,
+
+        # The in-memory claim dies with the process. Record the same fact on disk,
         # still under the lock, so a stop or crash during the execution below
         # leaves a trace: the executor runs OUTSIDE the lock and its outcome is
         # written afterwards, so without this a restart in that window left an
@@ -3264,41 +3231,119 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
         # dispatch and never reported back, so this approval may already have
         # applied. Refuse rather than overwrite the marker: overwriting is what
         # would let an admin retry straight past the evidence that something is
-        # unresolved. Startup reconciliation resolves these; nothing else should.
+        # unresolved. Recovery resolves these; nothing else should.
         if record.execution_started_at is not None:
-            data.approvals_in_progress.discard(approval_id)
             return _err(
                 "conflict",
-                "A previous attempt to run this approval did not report back, so it "
-                "may already have applied. It will be resolved on the next restart; "
-                "check the result rather than running it again.",
+                "A previous attempt may already have applied. Check the result "
+                "before changing or retrying this approval.",
                 409, rid,
                 key="approvalExecutionInterrupted",
             )
-        if not await async_mark_execution_started(
-            data.store, approval_id, approved_by_user_id=user.id,
-        ):
-            data.approvals_in_progress.discard(approval_id)
-            return _err(
-                "service_unavailable",
-                "Could not record this approval before running it. Nothing was run; try again.",
-                503, rid,
-                key="approvalRecordFailed",
+
+        if record.expires_at <= utcnow():
+            closed_record = await async_update_approval_status(
+                data.store,
+                approval_id,
+                status=STATUS_EXPIRED,
             )
+            closed_method = "approval/expired"
+            closed_response = _err(
+                "conflict", "Approval was already resolved.", 409, rid,
+                key="approvalAlreadyResolved",
+            )
+        else:
+            token = data.store.get_token_by_id(record.token_id)
+            if token is None or not token.is_valid():
+                closed_record = await async_update_approval_status(
+                    data.store, approval_id,
+                    status=STATUS_CANCELLED,
+                    approved_by_user_id=user.id,
+                    rejected_reason=REASON_TOKEN_INACTIVE,
+                )
+                closed_method = "approval/cancelled"
+                closed_reason = REASON_TOKEN_INACTIVE
+                closed_response = _err(
+                    "not_found", "Token no longer active.", 409, rid,
+                    key="approvalTokenInactive",
+                )
+            elif record.cap_name != MESA_CONFIRM_CAP and effective_cap(token, record.cap_name) == "deny":
+                # The MESA sentinel cap is re-evaluated by its executor instead.
+                closed_record = await async_update_approval_status(
+                    data.store, approval_id,
+                    status=STATUS_FAILED,
+                    approved_by_user_id=user.id,
+                    rejected_reason=REASON_CAPABILITY_DENIED,
+                )
+                closed_method = "approval/failed"
+                closed_reason = REASON_CAPABILITY_DENIED
+                closed_response = _err(
+                    "forbidden", "Capability is now denied for this token.", 409, rid,
+                    key="approvalCapabilityDenied",
+                )
+            elif settings.kill_switch:
+                closed_record = await async_update_approval_status(
+                    data.store, approval_id,
+                    status=STATUS_CANCELLED,
+                    approved_by_user_id=user.id,
+                    rejected_reason=REASON_KILL_SWITCH,
+                )
+                closed_method = "approval/cancelled"
+                closed_reason = REASON_KILL_SWITCH
+                closed_response = _err(
+                    "service_unavailable", "Kill switch engaged.", 503, rid,
+                    key="killSwitchEngaged",
+                )
+            elif not await async_mark_execution_started(
+                data.store, approval_id, approved_by_user_id=user.id,
+            ):
+                return _err(
+                    "service_unavailable",
+                    "Could not record this approval before running it. Nothing was run; try again.",
+                    503, rid,
+                    key="approvalRecordFailed",
+                )
+            else:
+                # Add the in-memory claim only after durable persistence succeeds.
+                # Cancellation during the save leaves the marker as the backstop,
+                # without stranding a process-local claim.
+                data.approvals_in_progress.add(approval_id)
+
+    if closed_response is not None:
+        if closed_record is None:
+            return _err("not_found", "Approval not found.", 404, rid, key="approvalNotFound")
+        dismiss_approval_notification(hass, approval_id)
+        fire_approval_resolved_event(hass, closed_record)
+        _record_admin_lifecycle(
+            closed_method or "approval/failed",
+            outcome="denied",
+            reason=closed_reason,
+        )
+        return closed_response
+    if token is None:
+        return _err(
+            "not_found", "Token no longer active.", 409, rid,
+            key="approvalTokenInactive",
+        )
 
     # Persisting the execution marker above also persisted approved_at and the
     # approving admin. Mirror that durable decision into the audit ring BEFORE
     # dispatch, so the audit never says consent happened after the side effect.
-    _record_admin_lifecycle("approval/approved", outcome="allowed")
+    try:
+        _record_admin_lifecycle("approval/approved", outcome="allowed")
 
     # Tell every surface the claim landed, BEFORE the execution rather than after
     # it: the resolved event cannot fire until the tool finishes, and until then
     # the panel, Agent Chat and the notification would all still offer Approve and
     # Reject on an approval that is already being acted on. Dismissing the
     # notification here is the same signal for the surface that has no UI state.
-    resolved = False
-    fire_approval_claim_event(hass, approval_id, claimed=True)
-    dismiss_approval_notification(hass, approval_id)
+        fire_approval_claim_event(hass, approval_id, claimed=True)
+        dismiss_approval_notification(hass, approval_id)
+    except BaseException:
+        # The durable marker still blocks a retry. Release only the local guard
+        # because dispatch has not started.
+        data.approvals_in_progress.discard(approval_id)
+        raise
 
     # Execute outside the lock so the tool can use it freely. The claim is
     # released in the finally below; whether the approval is OFFERED AGAIN after a
@@ -3337,10 +3382,9 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
             # applied: a service call that succeeded and then failed in result
             # handling is indistinguishable from one that never ran. Re-offering
             # invites the admin to apply it a second time, so the record resolves
-            # exactly as startup reconciliation resolves an interrupted one. The
-            # durable marker alone did not cover this, because it is read only at
-            # STARTUP while this leaves the approval re-approvable seconds later,
-            # in-process, by the admin already looking at the error.
+            # exactly as recovery resolves an interrupted one. If persisting that
+            # terminal state also fails, the durable marker still blocks a retry
+            # until the periodic recovery sweep closes the record.
             cancelled = isinstance(exc, asyncio.CancelledError)
             if cancelled:
                 _LOGGER.warning(
@@ -3351,9 +3395,9 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 _LOGGER.exception("Approval execution failed for %s", approval_id)
             # Best-effort during a cancellation: awaiting inside a cancelled task
             # can be interrupted again, and the marker left on disk is the
-            # backstop either way (startup reconciles it, and the pre-existing
+            # backstop either way (recovery reconciles it, and the pre-existing
             # marker check above refuses any retry before then). So a failure to
-            # resolve here degrades to "resolved at next startup", never to
+            # resolve here degrades to "resolved at next recovery sweep", never to
             # "offered again now".
             try:
                 async with data.store.async_lock:
@@ -3374,7 +3418,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
             except BaseException:  # noqa: BLE001 - the marker is the backstop
                 _LOGGER.exception(
                     "Could not resolve approval %s after a failed execution; the "
-                    "next startup will close it as interrupted", approval_id,
+                    "recovery will close it as interrupted", approval_id,
                 )
                 # NOT resolved, so the finally re-offers it, but the marker check
                 # refuses the retry. Leave `resolved` False only for cancellation,

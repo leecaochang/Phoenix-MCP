@@ -576,6 +576,13 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
             fire_approval_resolved_event,
         )
 
+        # A pending execution marker with no live claim means the previous
+        # executor stopped reporting back. Resolve it before ordinary expiry can
+        # present the action as a harmless timeout.
+        await _reconcile_interrupted_approvals(
+            skip_ids=data.approvals_in_progress,
+            at_startup=False,
+        )
         async with store.async_lock:
             expired = await async_expire_overdue_approval_records(
                 store,
@@ -585,12 +592,15 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
             dismiss_approval_notification(hass, approval.id)
             fire_approval_resolved_event(hass, approval)
 
-    async def _reconcile_interrupted_approvals() -> None:
-        """Resolve approvals whose executor started but never reported back.
+    async def _reconcile_interrupted_approvals(
+        *,
+        skip_ids: set[str] | frozenset[str] | None = None,
+        at_startup: bool = True,
+    ) -> None:
+        """Resolve approvals whose execution claim has no recorded outcome.
 
-        Runs once, at startup, BEFORE the expiry sweep: an interrupted approval
-        is still pending and could otherwise be expired instead, which would
-        report a clean timeout for an action that may well have applied.
+        Runs at startup and during expiry sweeps, before ordinary expiry can
+        report a clean timeout for an action that may already have applied.
         """
         from .approvals import (  # noqa: PLC0415
             dismiss_approval_notification,
@@ -599,7 +609,10 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         )
 
         async with store.async_lock:
-            interrupted = await async_reconcile_interrupted_approvals(store)
+            interrupted = await async_reconcile_interrupted_approvals(
+                store,
+                skip_ids=skip_ids,
+            )
         for approval in interrupted:
             dismiss_approval_notification(hass, approval.id)
             fire_approval_resolved_event(hass, approval)
@@ -618,7 +631,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
                         approval.approved_at.isoformat()
                         if approval.approved_at else None
                     ),
-                    "reconciled_at_startup": True,
+                    "reconciled_at_startup": at_startup,
                 },
             )
 

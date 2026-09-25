@@ -46,9 +46,9 @@ REASON_ADMIN_CANCELLED = "admin_cancelled"
 REASON_REVOKED = "token_revoked"
 REASON_TOKEN_EXPIRED = "token_expired"
 REASON_WIPED = "phoenix_mcp_data_wiped"
-# The approval's executor started and Home Assistant stopped before its outcome
-# was persisted, so whether the side effect landed is genuinely UNKNOWN. See
-# async_reconcile_interrupted_approvals for why that resolves as failed.
+# The execution claim was persisted but Home Assistant stopped before its
+# outcome was saved, so whether the side effect landed is genuinely UNKNOWN.
+# See async_reconcile_interrupted_approvals for why that resolves as failed.
 REASON_EXECUTION_INTERRUPTED = "execution_interrupted"
 REASON_AGENT_CHAT_ENDED = "agent_chat_ended"
 # There is deliberately no constant for target_out_of_scope / target_missing /
@@ -306,8 +306,8 @@ async def async_mark_execution_started(
     process. The executor runs outside the store lock and its outcome is written
     afterwards, so a stop or crash in that window left an untouched pending record
     whose side effect may already have been applied, and an admin could approve it
-    again. This marker is what async_reconcile_interrupted_approvals reads at the
-    next startup.
+    again. This marker is what async_reconcile_interrupted_approvals reads at
+    startup and during periodic recovery.
 
     Returns True when the marker is durable. A False return MUST stop the caller
     from executing, and that is a FAIL-CLOSED choice replacing an earlier
@@ -358,8 +358,8 @@ async def async_clear_execution_marker(
 
     Only for failures that happen BEFORE the executor could apply anything (today
     just an unregistered tool name, which the registry lookup raises on before
-    doing any work). Leaving the marker there would have the next startup resolve
-    a perfectly good pending approval as interrupted.
+    doing any work). Leaving the marker there would make recovery resolve a
+    perfectly good pending approval as interrupted.
 
     Never call this after a failure that might have applied something: that is the
     case the marker exists for, and the caller resolves the record instead.
@@ -380,20 +380,23 @@ async def async_clear_execution_marker(
                 await store.async_save()
             except Exception:  # noqa: BLE001 - the record is still pending either way
                 _LOGGER.exception(
-                    "Could not clear the execution marker for approval %s; the next "
-                    "startup will resolve it as interrupted", approval_id,
+                    "Could not clear the execution marker for approval %s; recovery "
+                    "will resolve it as interrupted", approval_id,
                 )
             return
 
 
 async def async_reconcile_interrupted_approvals(
     store: TokenStore,
+    *,
+    skip_ids: set[str] | frozenset[str] | None = None,
 ) -> list[PendingApproval]:
-    """Resolve approvals whose executor started but never reported an outcome.
+    """Resolve approvals whose execution claim has no recorded outcome.
 
-    Called once at startup. A record still PENDING while carrying
-    execution_started_at is one whose side effect was begun by a process that is
-    now gone, so whether it landed is genuinely unknown.
+    Called at startup and by the periodic approval sweep. A record still PENDING
+    while carrying execution_started_at has no live in-process executor, so
+    whether its side effect landed is genuinely unknown. Active executions are
+    skipped by ID.
 
     It resolves to FAILED rather than being left pending, and the asymmetry is
     the whole point: leaving it pending offers the admin a button that may apply a
@@ -406,10 +409,13 @@ async def async_reconcile_interrupted_approvals(
     Returns the records it changed so the caller can dismiss their notifications
     and fire the resolved event. Caller must hold store.async_lock.
     """
+    skip_ids = skip_ids or frozenset()
     raw = store.get_pending_approvals()
     changed: list[PendingApproval] = []
     for entry in raw:
         if entry.get("status") != STATUS_PENDING:
+            continue
+        if entry.get("id") in skip_ids:
             continue
         if not entry.get("execution_started_at"):
             continue
@@ -439,18 +445,19 @@ async def async_cancel_approvals_for_token(
     *,
     skip_ids: set[str] | frozenset[str] | None = None,
 ) -> list[PendingApproval]:
-    """Mark every pending approval for a token as cancelled; return the changed records.
+    """Close pending approvals for a token and return the changed records.
 
     Called when a token is revoked or expires, so its queued approvals do not
     linger as approvable-looking entries until the expiry sweep. skip_ids
     protects an approval whose saved action is mid-execution
-    (data.approvals_in_progress), matching the expiry sweep. Caller must hold
-    async_lock, and must dismiss each returned record's notification and fire
-    phoenix_mcp_approval_resolved outside the lock.
+    (data.approvals_in_progress). A stale execution marker resolves as failed
+    and interrupted so token cleanup cannot erase evidence of an uncertain side
+    effect. Caller must hold async_lock, and must dismiss each returned record's
+    notification and fire phoenix_mcp_approval_resolved outside the lock.
     """
     skip_ids = skip_ids or frozenset()
     raw = store.get_pending_approvals()
-    cancelled: list[PendingApproval] = []
+    changed: list[PendingApproval] = []
     now_iso = utcnow().isoformat()
     for entry in raw:
         if entry.get("token_id") != token_id:
@@ -459,14 +466,16 @@ async def async_cancel_approvals_for_token(
             continue
         if entry.get("id") in skip_ids:
             continue
-        entry["status"] = STATUS_CANCELLED
+        interrupted = bool(entry.get("execution_started_at"))
+        entry["status"] = STATUS_FAILED if interrupted else STATUS_CANCELLED
         entry["resolved_at"] = now_iso
-        entry["rejected_reason"] = reason
-        cancelled.append(PendingApproval.from_dict(entry))
-    if cancelled:
+        entry["rejected_reason"] = REASON_EXECUTION_INTERRUPTED if interrupted else reason
+        entry.pop("execution_started_at", None)
+        changed.append(PendingApproval.from_dict(entry))
+    if changed:
         store.set_pending_approvals(raw)
         await store.async_save()
-    return cancelled
+    return changed
 
 
 def collect_pending_approvals_for_wipe(

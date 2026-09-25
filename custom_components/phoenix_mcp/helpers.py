@@ -385,7 +385,7 @@ async def async_archive_expired_token(
 ) -> None:
     """Move an expired token to the archive and perform full cleanup.
 
-    Archives the record to storage, cancels its queued approvals, destroys rate
+    Archives the record to storage, closes its queued approvals, destroys rate
     limiter and counter state, fires the phoenix_mcp_token_expired bus event, and
     removes sensor entities.
     """
@@ -432,11 +432,11 @@ async def async_archive_expired_token(
                 _patch["ai_task_token_id"] = None
             if _patch:
                 await data.store.async_patch_settings(**_patch)
-            cancelled = await async_cancel_approvals_for_token(
+            changed_approvals = await async_cancel_approvals_for_token(
                 data.store, current.id, REASON_TOKEN_EXPIRED,
                 skip_ids=data.approvals_in_progress,
             )
-    for approval in cancelled:
+    for approval in changed_approvals:
         dismiss_approval_notification(hass, approval.id)
         fire_approval_resolved_event(hass, approval)
     # Advisory leases the token still held; in-memory, so outside the store lock.

@@ -22,6 +22,7 @@ from custom_components.phoenix_mcp.admin_view import (
 from custom_components.phoenix_mcp.approvals import (
     STATUS_APPROVED,
     STATUS_CANCELLED,
+    STATUS_EXPIRED,
     STATUS_FAILED,
     STATUS_PENDING,
     STATUS_REJECTED,
@@ -339,6 +340,26 @@ class TestApprovalReject:
         assert resp.status == 409
         assert next(r for r in store._pending if r["id"] == "appr_a")["status"] == STATUS_PENDING
 
+    @pytest.mark.asyncio
+    async def test_reject_preserves_a_stale_execution_marker(self):
+        pending = _make_pending("appr_a")
+        pending["execution_started_at"] = utcnow().isoformat()
+        store = _make_store(pending=[pending])
+        data = _make_data(store)
+        hass = _make_hass(data)
+        view = PhoenixAdminApprovalRejectView()
+        view.hass = hass
+
+        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f):
+            response = await view.post(
+                _make_admin_request(body=b"{}"), approval_id="appr_a",
+            )
+
+        stored = next(r for r in store._pending if r["id"] == "appr_a")
+        assert response.status == 409
+        assert stored["status"] == STATUS_PENDING
+        assert stored["execution_started_at"]
+
 
 # ---- approve view ------------------------------------------------------------
 
@@ -471,6 +492,161 @@ class TestApprovalApprove:
         executor.assert_not_called()
         # Untouched: still pending for the in-flight request to finalize.
         assert next(r for r in store._pending if r["id"] == "appr_a")["status"] == STATUS_PENDING
+
+    @pytest.mark.asyncio
+    async def test_approve_cannot_claim_during_core_wipe(self):
+        token = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        data = _make_data(store)
+        data.core_wipe_in_progress = True
+        hass = _make_hass(data)
+        view = PhoenixAdminApprovalApproveView()
+        view.hass = hass
+        executor = AsyncMock()
+
+        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor):
+            response = await view.post(
+                _make_admin_request(body=b"{}"), approval_id="appr_a",
+            )
+
+        assert response.status == 409
+        assert json.loads(response.text)["message_key"] == "adminError.approvalWipeInProgress"
+        executor.assert_not_awaited()
+        assert next(r for r in store._pending if r["id"] == "appr_a")["status"] == STATUS_PENDING
+
+    @pytest.mark.asyncio
+    async def test_two_admin_clients_cannot_execute_the_same_approval_twice(self):
+        token = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        data = _make_data(store)
+        hass = _make_hass(data)
+        view = PhoenixAdminApprovalApproveView()
+        view.hass = hass
+        started = asyncio.Event()
+        finish = asyncio.Event()
+
+        async def _blocked_executor(name, args, tok, hass, data):
+            started.set()
+            await finish.wait()
+            return ({"content": [{"type": "text", "text": "{}"}]}, "allowed", "restart_ha")
+
+        executor = AsyncMock(side_effect=_blocked_executor)
+        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor), \
+             patch("homeassistant.components.persistent_notification.async_dismiss"):
+            first_task = asyncio.create_task(
+                view.post(_make_admin_request(body=b"{}"), approval_id="appr_a")
+            )
+            await started.wait()
+            second_response = await view.post(
+                _make_admin_request(body=b"{}"), approval_id="appr_a",
+            )
+            finish.set()
+            first_response = await first_task
+
+        assert first_response.status == 200
+        assert second_response.status == 409
+        assert json.loads(first_response.text)["status"] == STATUS_APPROVED
+        assert executor.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_approve_expires_an_overdue_record_before_claiming_it(self):
+        token = _make_token("tok-1", cap_restart="confirm")
+        pending = _make_pending(
+            "appr_a",
+            token_id="tok-1",
+            expires_at=(utcnow() - timedelta(seconds=1)).isoformat(),
+        )
+        store = _make_store(pending=[pending], tokens=[token])
+        data = _make_data(store)
+        hass = _make_hass(data)
+        view = PhoenixAdminApprovalApproveView()
+        view.hass = hass
+        executor = AsyncMock()
+
+        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor), \
+             patch("homeassistant.components.persistent_notification.async_dismiss"), \
+             patch("custom_components.phoenix_mcp.approvals.fire_approval_resolved_event") as resolved:
+            response = await view.post(
+                _make_admin_request(body=b"{}"), approval_id="appr_a",
+            )
+
+        stored = next(r for r in store._pending if r["id"] == "appr_a")
+        assert response.status == 409
+        assert stored["status"] == STATUS_EXPIRED
+        executor.assert_not_awaited()
+        resolved.assert_called_once()
+        assert resolved.call_args.args[1].status == STATUS_EXPIRED
+        assert data.audit.record.call_args.kwargs["method"] == "approval/expired"
+
+    @pytest.mark.asyncio
+    async def test_approve_reads_settings_after_waiting_for_the_store_lock(self):
+        token = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        data = _make_data(store)
+        hass = _make_hass(data)
+        view = PhoenixAdminApprovalApproveView()
+        view.hass = hass
+        executor = AsyncMock()
+        queued = asyncio.Event()
+
+        async def _patch_kill_switch():
+            queued.set()
+            async with store.async_lock:
+                store.get_settings.return_value = GlobalSettings(kill_switch=True)
+
+        await store.async_lock.acquire()
+        update_task = asyncio.create_task(_patch_kill_switch())
+        await queued.wait()
+        approve_task = asyncio.create_task(
+            view.post(_make_admin_request(body=b"{}"), approval_id="appr_a")
+        )
+        await asyncio.sleep(0)
+        store.async_lock.release()
+
+        await update_task
+        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor), \
+             patch("homeassistant.components.persistent_notification.async_dismiss"):
+            response = await approve_task
+
+        stored = next(r for r in store._pending if r["id"] == "appr_a")
+        assert response.status == 503
+        assert stored["status"] == STATUS_CANCELLED
+        assert stored["rejected_reason"] == "kill_switch"
+        executor.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_marker_save_cancellation_does_not_strand_the_local_claim(self):
+        token = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        data = _make_data(store)
+        hass = _make_hass(data)
+        view = PhoenixAdminApprovalApproveView()
+        view.hass = hass
+        save_started = asyncio.Event()
+        executor = AsyncMock()
+
+        async def _blocked_save():
+            save_started.set()
+            await asyncio.Future()
+
+        store.async_save = AsyncMock(side_effect=_blocked_save)
+        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+             patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor):
+            task = asyncio.create_task(
+                view.post(_make_admin_request(body=b"{}"), approval_id="appr_a")
+            )
+            await save_started.wait()
+            task.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await task
+
+        assert "appr_a" not in data.approvals_in_progress
+        assert next(r for r in store._pending if r["id"] == "appr_a")["execution_started_at"]
+        executor.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_approve_releases_in_progress_claim(self):
@@ -801,9 +977,10 @@ class TestApprovalClaimSignal:
         call that succeeded and then raised in result handling is indistinguishable
         from one that never ran, so re-offering invites the admin to apply it a
         second time, seconds later, while they are still looking at it. The
-        durable marker did not cover this: it is only read at STARTUP.
+        A durable marker protects process loss, but this in-process failure also
+        needs a terminal update before the admin can try again.
 
-        The record is therefore resolved exactly as startup reconciliation
+        The record is therefore resolved exactly as recovery reconciliation
         resolves an interrupted one, and the surfaces learn from the resolved
         event rather than from the approval reappearing.
         """
@@ -979,14 +1156,13 @@ class TestApprovalClaimSignal:
         A marker on a still-pending record means an earlier attempt reached
         dispatch and never reported back, so the action may already have applied.
         Overwriting the marker and running again is exactly the retry that must
-        not happen; startup reconciliation is what resolves these.
+        not happen; recovery reconciliation is what resolves these.
         """
         from custom_components.phoenix_mcp import mcp_view
 
-        token = _make_token("tok-1", cap_restart="confirm")
         pending = _make_pending("appr_a", token_id="tok-1", tool_name="restart_ha")
         pending["execution_started_at"] = utcnow().isoformat()
-        store = _make_store(pending=[pending], tokens=[token])
+        store = _make_store(pending=[pending], tokens=[])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -1006,6 +1182,9 @@ class TestApprovalClaimSignal:
         assert resp.status == 409
         assert applied == []
         assert "appr_a" not in data.approvals_in_progress
+        stored = next(r for r in store._pending if r["id"] == "appr_a")
+        assert stored["status"] == STATUS_PENDING
+        assert stored["execution_started_at"]
 
     @pytest.mark.asyncio
     async def test_list_reports_in_progress_so_a_reloaded_panel_agrees(self):
