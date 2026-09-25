@@ -259,7 +259,12 @@ async def test_target_http_contract_and_generated_id_rejection(protocol, invalid
         else:
             assert (await provider.select_target(session, "lamp on", "light_on", targets, 1000))["choice"] == "t0"
     assert len(requests) == 1
-    assert requests[0]["state"] == {"utterance": "lamp on", "language": "en", "category": "light_on", "targets": targets}
+    expected_state = {"utterance": "lamp on", "language": "en", "category": "light_on"}
+    if protocol == "classifier":
+        assert json.loads(requests[0]["questions"]["target"]["criteria"]["t0"]) == targets["t0"]
+    else:
+        expected_state["targets"] = targets
+    assert requests[0]["state"] == expected_state
     assert set(requests[0]["questions"]["target"]["criteria"]) == {"t0", "none"}
 
 
@@ -703,6 +708,10 @@ async def test_generic_choice_capacity_is_model_scoped_and_bounded(advertised, e
 
 async def test_advertised_extended_choices_avoid_unnecessary_groups(socket_enabled):
     requests = []
+    targets = {f't{i}': {'entity_id': f'light.fixture_{i}', 'name': f'Lamp {i}',
+                        'aliases': [f'ランプ {i}', f'Lampe {i}'], 'area': 'Test room',
+                        'numeric_operations': {'brightness': {'minimum': 0, 'maximum': 100}}}
+               for i in range(95)}
     async def models(_request):
         return web.json_response({"data": [{"id": "test-model", "x_max_choice_options": 255}]})
     async def classify(request):
@@ -716,9 +725,11 @@ async def test_advertised_extended_choices_avoid_unnecessary_groups(socket_enabl
     async with TestServer(app) as server, ClientSession() as session:
         provider = DecisionProvider(agentcli.ProviderConfig('classifier', 'test-model', str(server.make_url('')).rstrip('/')), 'classifier')
         result = await provider.select_target(session, 'turn off Lamp 94', 'light_off',
-                                             {f't{i}': {'name': f'Lamp {i}'} for i in range(95)}, 1000)
+                                             targets, 1000)
     assert result['choice'] == 't94'
     assert set(requests[0]['questions']) == {'target'}
     assert len(requests[0]['questions']['target']['criteria']) == 96
-    assert all(value is None for key, value in requests[0]['questions']['target']['criteria'].items() if key != 'none')
-    assert len(requests[0]['state']['targets']) == 95
+    assert {key: json.loads(value) for key, value in requests[0]['questions']['target']['criteria'].items()
+            if key != 'none'} == targets
+    assert requests[0]['state'] == {'utterance': 'turn off Lamp 94', 'language': 'en', 'category': 'light_off'}
+    assert 'state.targets' not in requests[0]['questions']['target']['instructions']

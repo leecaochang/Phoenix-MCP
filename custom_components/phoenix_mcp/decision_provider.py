@@ -790,6 +790,7 @@ class DecisionProvider:
                 "This selection does not grant authorization to execute."
             )}},
         }
+        target_instructions = payload["questions"]["target"]["instructions"]
         from .decision_targets import catalog_state
         payload["state"] = {"utterance": sentence, "language": language, "category": category,
                             **catalog_state(targets)}
@@ -804,6 +805,15 @@ class DecisionProvider:
             )
         choice_limit = (await self.target_choice_limit(session, timeout_ms)
                         if len(targets) > DECISION_MAX_TARGETS else DECISION_MAX_TARGETS + 1)
+        if self.protocol == "classifier" and len(targets) < choice_limit:
+            # A single Choice can carry the complete catalog beside its labels,
+            # avoiding both indirect key lookups and duplicated entity metadata.
+            payload["state"] = {"utterance": sentence, "language": language, "category": category}
+            payload["questions"]["target"].update(
+                criteria={**{key: json.dumps(target, ensure_ascii=False, separators=(",", ":"))
+                             for key, target in targets.items()}, "none": choices["none"]},
+                instructions=target_instructions + " Each choice description is its complete entity descriptor.",
+            )
         groups = self._group_choices(payload, sequential=True, choice_limit=choice_limit)
         operation = numeric_operation(DECISION_TARGET_INTENTS.get(category, ""))
         exact_percentage = operation is not None and self.supports_exact_percentages()
