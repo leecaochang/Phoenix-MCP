@@ -2054,6 +2054,10 @@ DECISION_PERCENTAGE_PREVIEW_CHOICES.update({
 })
 # Leave one of the common classifier format's 50 choices for declining.
 DECISION_MAX_TARGETS = 49
+# Generic sequential selection keeps every question within the common 50-choice format.
+DECISION_SEQUENTIAL_CHOICE_GROUPS = 8
+DECISION_SEQUENTIAL_MAX_TARGETS = DECISION_MAX_TARGETS * DECISION_SEQUENTIAL_CHOICE_GROUPS
+DECISION_SEQUENTIAL_TARGET_BYTES = 65536
 # Qualified TypeSafe joint requests leave one of 255 choices for declining.
 DECISION_BATCH_MAX_TARGETS = 254
 # Qualified joint requests partition complete selections into bounded questions.

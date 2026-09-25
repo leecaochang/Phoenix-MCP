@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Callable
 
 from aiohttp import ClientError, ClientSession, ClientTimeout
 
-from .const import (DECISION_MAX_RESPONSE_BYTES, DECISION_ROUTE_CHOICES, DECISION_ENTITY_CHOICES, DECISION_TIMEOUT_DEFAULT_MS,
+from .const import (DECISION_MAX_RESPONSE_BYTES, DECISION_MAX_TARGETS, DECISION_SEQUENTIAL_CHOICE_GROUPS, DECISION_ROUTE_CHOICES, DECISION_ENTITY_CHOICES, DECISION_TIMEOUT_DEFAULT_MS,
                     DECISION_BRIGHTNESS_CHOICES, DECISION_MIN_CHOICE_PROBABILITY, DECISION_CONTEXT_CHECKS,
                     DECISION_EXECUTION_CATEGORIES, DECISION_EXACT_PERCENTAGE_ENDPOINTS,
                     DECISION_PERCENTAGE_CHOICES, DECISION_PERCENTAGE_PREVIEW_CHOICES, DECISION_TARGET_INTENTS,
@@ -127,24 +127,26 @@ class DecisionProvider:
             (self.cfg.kind, self.cfg.base_url, self.protocol), 0)
         return parse_choice(body, choices, question, rounding_error=rounding_error)
 
-    def _group_choices(self, payload: dict) -> dict[str, list[str]]:
+    def _group_choices(self, payload: dict, *, sequential: bool = False, choice_limit: int = DECISION_MAX_TARGETS + 1) -> dict[str, list[str]]:
         """Keep all candidates in shared state; partition only bounded Choice answers."""
         groups: dict[str, list[str]] = {}
+        page_size = choice_limit - 1 if sequential else DECISION_BATCH_MAX_TARGETS
+        max_groups = DECISION_SEQUENTIAL_CHOICE_GROUPS if sequential else DECISION_MAX_CHOICE_GROUPS
         for name in ("target", "summary_scope"):
             spec = payload["questions"].get(name)
-            if spec is None or len(spec["criteria"]) <= DECISION_BATCH_MAX_TARGETS + 1:
+            if spec is None or len(spec["criteria"]) <= page_size + 1:
                 continue
-            if not self.supports_exact_percentages():
+            if not sequential and not self.supports_exact_percentages():
                 raise DecisionError("too_many_targets")
             criteria = spec["criteria"]
             keys = [key for key in criteria if key != "none"]
-            count = math.ceil(len(keys) / DECISION_BATCH_MAX_TARGETS)
-            if count > DECISION_MAX_CHOICE_GROUPS:
+            count = math.ceil(len(keys) / page_size)
+            if count > max_groups:
                 raise DecisionError("too_many_targets")
             names = [name] + [f"{name}_{index + 1}" for index in range(1, count)]
             groups[name] = names
             for index, question in enumerate(names):
-                page = keys[index * DECISION_BATCH_MAX_TARGETS:(index + 1) * DECISION_BATCH_MAX_TARGETS]
+                page = keys[index * page_size:(index + 1) * page_size]
                 payload["questions"][question] = {
                     **spec,
                     # Keys resolve to the complete shared catalog; repeating each descriptor
@@ -243,6 +245,23 @@ class DecisionProvider:
 
     async def list_model_capabilities(self, session: ClientSession, models: list[str]) -> dict:
         return {}
+
+    async def target_choice_limit(self, session: ClientSession, timeout_ms: int) -> int:
+        """Use advertised format capacity, never as evidence of model accuracy."""
+        if self.supports_exact_percentages():
+            return DECISION_BATCH_MAX_TARGETS + 1
+        body = await self._request(session, "GET", "models", timeout_ms)
+        entries = body.get("models", body.get("data"))
+        if not isinstance(entries, list):
+            raise DecisionError("malformed")
+        matches = [item for item in entries if isinstance(item, dict)
+                   and item.get("name", item.get("id")) == self.cfg.model]
+        if len(matches) != 1:
+            raise DecisionError("model_unverified")
+        limit = matches[0].get("x_max_choice_options", DECISION_MAX_TARGETS + 1)
+        if type(limit) is not int or not 2 <= limit <= DECISION_BATCH_MAX_TARGETS + 1:
+            raise DecisionError("malformed")
+        return limit
 
     def supports_exact_percentages(self) -> bool:
         """Use the documented larger Choice format only at the known provider endpoint."""
@@ -756,6 +775,7 @@ class DecisionProvider:
     async def select_target(self, session: ClientSession, sentence: str, category: str,
                             targets: dict[str, dict], timeout_ms: int, language: str = "en") -> dict:
         """Choose an opaque catalog key or decline; never accept generated entity IDs."""
+        started = monotonic()
         choices = {key: f"The single entity described by state.targets.{key}." for key in targets}
         choices["none"] = "No single unambiguous listed entity matches the complete request."
         payload: dict[str, Any] = {
@@ -770,6 +790,21 @@ class DecisionProvider:
                 "This selection does not grant authorization to execute."
             )}},
         }
+        from .decision_targets import catalog_state
+        payload["state"] = {"utterance": sentence, "language": language, "category": category,
+                            **catalog_state(targets)}
+        if len(targets) > DECISION_MAX_TARGETS or "target_fields" in payload["state"] or "target_metadata" in payload["state"]:
+            payload["questions"]["target"]["instructions"] += " " + DECISION_CATALOG_FORMAT_INSTRUCTIONS
+        if len(targets) > DECISION_MAX_TARGETS:
+            # Descriptors already appear in full shared state. Repeating a lookup
+            # sentence for every option inflates small-model prompt/context usage.
+            payload["questions"]["target"]["criteria"] = {**{key: None for key in targets}, "none": choices["none"]}
+            payload["questions"]["target"]["instructions"] += (
+                " Each non-none choice key identifies its exact entity descriptor in state.targets."
+            )
+        choice_limit = (await self.target_choice_limit(session, timeout_ms)
+                        if len(targets) > DECISION_MAX_TARGETS else DECISION_MAX_TARGETS + 1)
+        groups = self._group_choices(payload, sequential=True, choice_limit=choice_limit)
         operation = numeric_operation(DECISION_TARGET_INTENTS.get(category, ""))
         exact_percentage = operation is not None and self.supports_exact_percentages()
         if exact_percentage:
@@ -797,14 +832,20 @@ class DecisionProvider:
                 )}
         elif operation is not None:
             raise DecisionError("unsupported_category")
-        body = await self._request(session, "POST", self.protocol, timeout_ms, payload)
+        remaining = timeout_ms - int((monotonic() - started) * 1000)
+        if remaining <= 0:
+            raise DecisionError("timeout")
+        body = await self._request(session, "POST", self.protocol, remaining, payload)
         expected = set(payload["questions"])
         if not isinstance(body.get("answers"), dict) or set(body["answers"]) != expected:
             raise DecisionError("malformed")
         def parsed(question: str, criteria: dict[str, str]) -> dict:
             return self._parse_choice({"model": body.get("model"), "answers": {question: body["answers"][question]}},
                                 criteria, question)
-        answer = parsed("target", choices)
+        answers = {question: parsed(question, payload["questions"][question]["criteria"])
+                   for question in groups.get("target", ["target"])}
+        self._merge_choice_groups(answers, groups)
+        answer = answers["target"]
         if exact_percentage:
             value = parsed("percentage", DECISION_PERCENTAGE_CHOICES)
             percent = int(value["choice"]) if value["choice"] != "none" and confident_choice(value) else None

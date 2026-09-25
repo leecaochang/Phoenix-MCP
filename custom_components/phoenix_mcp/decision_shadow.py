@@ -186,7 +186,7 @@ class DecisionShadow:
     async def _select_target(self, hass: Any, authority: RoutingAuthority, provider: DecisionProvider,
                              session: Any, sentence: str, category: dict, timeout_ms: int,
                              *, prepare: bool = False, ingress: str = "voice", language: str = "en") -> dict:
-        from .decision_targets import capture_targets
+        from .decision_targets import capture_sequential_targets
 
         started = monotonic()
         def result(reason: str, entity_id: str | None = None, decision: dict | None = None) -> dict:
@@ -201,7 +201,7 @@ class DecisionShadow:
         if token is None:
             return result("authority_changed")
         try:
-            snapshot = capture_targets(hass, token, category["choice"])
+            snapshot = capture_sequential_targets(hass, token, category["choice"])
             if not snapshot.targets:
                 return result("no_target")
             operation = numeric_operation(DECISION_TARGET_INTENTS[category["choice"]])
@@ -214,7 +214,7 @@ class DecisionShadow:
             if token is None:
                 return result("authority_changed")
             try:
-                current = capture_targets(hass, token, category["choice"])
+                current = capture_sequential_targets(hass, token, category["choice"])
             except DecisionError:
                 return result("targets_changed")
             if current != snapshot:

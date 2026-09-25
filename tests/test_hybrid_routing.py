@@ -1317,3 +1317,42 @@ async def test_structured_requests_keep_original_text_and_normal_provider(hass, 
     provider.assert_awaited_once()
     assert provider.await_args.args[6] == sentence
     dispatch.assert_not_called()
+
+
+@pytest.mark.parametrize('confirm', [False, True])
+async def test_generic_large_catalog_dispatch_and_approval_revalidation(hass, hybrid_home, confirm):
+    """A grouped plan reaches shared execution; later competitor changes invalidate approval."""
+    data, token, store, _, entity_id = hybrid_home
+    account = await store.add('classifier', {'base_url': 'http://example.test/v1', 'model': 'local-model'})
+    await data.store.async_patch_settings(decision_provider_id=account)
+    registry = er.async_get(hass)
+    for i in range(50):
+        other = registry.async_get_or_create('light', 'test', f'extra_{i}')
+        hass.states.async_set(other.entity_id, 'off')
+    if confirm:
+        await set_mesa(hass, hybrid_home, 'confirm')
+    async def respond(session, method, path, timeout, payload=None):
+        if method == 'GET':
+            return {'data': [{'id': 'local-model'}]}
+        selected = {'route': 'light_on', 'target': 't0', 'target_2': 'none'}
+        return {'model': 'local-model', 'answers': {
+            name: {'type': 'choice', 'choice': selected[name], 'confidence': 1.0,
+                   'probabilities': {key: float(key == selected[name]) for key in spec['criteria']}}
+            for name, spec in payload['questions'].items()}}
+    with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        answer, remote, provider = await run_voice(hass, hybrid_home, request=respond)
+    provider.assert_not_called()
+    assert remote.await_count == 3
+    assert len(remote.await_args.args[4]['state']['targets']) == 51
+    if not confirm:
+        call.assert_awaited_once_with('light', 'turn_on', {'entity_id': [entity_id]}, blocking=True, return_response=False)
+    else:
+        assert 'approval' in answer
+        call.assert_not_called()
+        approval = data.store.get_pending_approvals()[0]
+        plan = approval['args'][COMMAND_ROUTING_PLAN_KEY]
+        from custom_components.phoenix_mcp.command_execution import _decision_plan_current
+        assert _decision_plan_current(plan, hass, data, token)
+        registry.async_update_entity(other.entity_id, aliases={'Desk lamp'})
+        assert not _decision_plan_current(plan, hass, data, token)

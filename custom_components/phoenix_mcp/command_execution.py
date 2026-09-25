@@ -119,7 +119,7 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
         return "decision_batch" not in plan
     from .agentcli import decision_account_fingerprint, loaded_decision_account
     from .decision_batch import batch_catalog_digest, batch_execution_eligible, capture_batch_targets, percentage_execution_eligible
-    from .decision_targets import capture_targets
+    from .decision_targets import capture_sequential_targets
 
     settings = data.store.get_settings()
     category = plan["decision_category"]
@@ -182,7 +182,7 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
                 and DECISION_TARGET_INTENTS.get(category) == plan["proposal"]["intent"]
                 and plan.get("decision_account") is not None
                 and decision_account_fingerprint(hass, settings.decision_provider_id) == plan["decision_account"]
-                and (catalog_digest or capture_targets(hass, token, category).digest()) == plan.get("decision_catalog"))
+                and (catalog_digest or capture_sequential_targets(hass, token, category).digest()) == plan.get("decision_catalog"))
 
 
 def _context_plan_current(plan: dict, hass: Any, data: Any) -> bool:

@@ -13,7 +13,8 @@ from .command_operations import numeric_metadata, command_domain
 from .command_execution import _target_fingerprint, _digest
 from .const import (
     DECISION_CATALOG_PACK_THRESHOLD, DECISION_MAX_TARGETS, DECISION_MAX_TARGET_BYTES, DECISION_MAX_TARGET_TEXT,
-    DECISION_MAX_TARGET_ALIASES, DECISION_TARGET_INTENTS, COMMAND_ROUTING_TEMPORAL_OPERATIONS, COMMAND_ROUTING_ENTITY_INTENTS,
+    DECISION_MAX_TARGET_ALIASES, DECISION_TARGET_INTENTS,
+    DECISION_SEQUENTIAL_MAX_TARGETS, DECISION_SEQUENTIAL_TARGET_BYTES, COMMAND_ROUTING_TEMPORAL_OPERATIONS, COMMAND_ROUTING_ENTITY_INTENTS,
 )
 from .decision_provider import DecisionError
 from .device_semantics import DeviceRegistrySnapshot, device_registry_snapshot
@@ -116,6 +117,18 @@ def capture_targets(hass: Any, token: Any, category: str, *,
     if size > max_bytes:
         raise CatalogLimitError(category, "metadata_bytes", size, max_bytes)
     return TargetSnapshot(targets, fingerprints)
+
+
+def capture_sequential_targets(hass: Any, token: Any, category: str) -> TargetSnapshot:
+    """Preserve small catalogs and losslessly expand larger generic selections."""
+    try:
+        return capture_targets(hass, token, category)
+    except CatalogLimitError as error:
+        if error.details["bound"] not in ("target_count", "metadata_bytes"):
+            raise
+    return capture_targets(hass, token, category, compact=True,
+                           max_targets=DECISION_SEQUENTIAL_MAX_TARGETS,
+                           max_bytes=DECISION_SEQUENTIAL_TARGET_BYTES)
 
 
 def catalog_state(targets: dict[str, dict]) -> dict:

@@ -605,3 +605,120 @@ def test_catalog_packing_retains_supplied_null_and_does_not_mutate_source():
     packed = catalog_state(targets)
     assert 'target_fields' not in packed
     assert unpack_catalog(packed) == targets
+
+
+@pytest.mark.parametrize("protocol", ["classifier", "systemone"])
+@pytest.mark.parametrize("case", ["selected", "declined", "conflict", "uncertain", "missing", "foreign"])
+async def test_generic_grouped_targets_http_contract(protocol, case, socket_enabled):
+    """All groups see competitors; a confident final-group winner is necessary."""
+    targets = {f"t{i}": {"entity_id": f"light.item_{i}", "name": f"Lamp {i}",
+                          "aliases": ["shared alias"] if i in (0, 98) else []} for i in range(99)}
+    requests = []
+    async def handler(request):
+        payload = await request.json()
+        requests.append(payload)
+        answers = {}
+        for name, spec in payload["questions"].items():
+            selected = "t98" if "t98" in spec["criteria"] and case != "declined" else "none"
+            if case == "conflict" and name == "target":
+                selected = "t0"
+            answer = {"type": "choice", **choice(selected, spec["criteria"])}
+            if case == "uncertain" and name == "target":
+                answer.update(confidence=0.8, probabilities={key: 0.8 if key == "none" else 0.2 if key == "t0" else 0.0
+                                                           for key in spec["criteria"]})
+            if case == "foreign" and name == "target":
+                answer = {"type": "choice", **choice("t98", [*spec["criteria"], "t98"])}
+            answers[name] = answer
+        if case == "missing":
+            del answers["target_2"]
+        return web.json_response({"model": "test-model", "answers": answers})
+    app = web.Application()
+    app.router.add_post("/" + protocol, handler)
+    async def models(_request):
+        return web.json_response({"data": [{"id": "test-model"}]})
+    app.router.add_get("/models", models)
+    async with TestServer(app) as server, ClientSession() as session:
+        cfg = agentcli.ProviderConfig(protocol, "test-model", str(server.make_url("")).rstrip("/"))
+        provider = DecisionProvider(cfg, protocol)
+        call = provider.select_target(session, "switch Lamp 98 off", "light_off", targets, 1000)
+        if case in ("selected", "declined"):
+            answer = await call
+            assert answer["choice"] == ("t98" if case == "selected" else "none")
+        else:
+            with pytest.raises(DecisionError, match={"conflict": "category_mismatch", "uncertain": "low_probability",
+                                                   "missing": "malformed", "foreign": "malformed"}[case]):
+                await call
+    assert len(requests) == 1
+    payload = requests[0]
+    assert len(payload["state"]["targets"]) == 99
+    assert "shared alias" in json.dumps(payload["state"])
+    assert set(payload["questions"]) == {"target", "target_2", "target_3"}
+    assert all(len(q["criteria"]) <= 50 and "COMPLETE shared catalog" in q["instructions"]
+               for q in payload["questions"].values())
+    assert {key for q in payload["questions"].values() for key in q["criteria"]} == {*targets, "none"}
+
+
+async def test_generic_grouped_catalog_bound_and_stale_competitor(hass, target_home):
+    from custom_components.phoenix_mcp.const import DECISION_SEQUENTIAL_MAX_TARGETS
+    from custom_components.phoenix_mcp.decision_targets import capture_sequential_targets
+    data, token, _, _, _ = target_home
+    registry = er.async_get(hass)
+    for i in range(DECISION_SEQUENTIAL_MAX_TARGETS - 1):
+        entry = registry.async_get_or_create("light", "test", f"extra_{i}")
+        hass.states.async_set(entry.entity_id, "off")
+    snapshot = capture_sequential_targets(hass, token, "light_on")
+    assert len(snapshot.targets) == DECISION_SEQUENTIAL_MAX_TARGETS
+    async def select(_self, _session, _sentence, _category, targets, *_args):
+        assert len(targets) == DECISION_SEQUENTIAL_MAX_TARGETS
+        # A competing alias changes while the model is evaluating another group.
+        registry.async_update_entity(entry.entity_id, aliases={"Desk lamp"})
+        return choice("t0", ["t0", "none"])
+    first, _ = mocks()
+    with first, patch.object(DecisionProvider, "select_target", select):
+        result = await preview(hass, target_home)
+    assert result["target_selection"]["reason"] == "targets_changed"
+    extra = registry.async_get_or_create("light", "test", "overflow")
+    hass.states.async_set(extra.entity_id, "off")
+    with pytest.raises(CatalogLimitError, match="too_many_targets"):
+        capture_sequential_targets(hass, token, "light_on")
+    assert not data.store.get_pending_approvals()
+
+
+@pytest.mark.parametrize("advertised,expected", [(255, 255), (50, 50), (64, 64), (True, None), (256, None), (1, None), ("255", None)])
+async def test_generic_choice_capacity_is_model_scoped_and_bounded(advertised, expected, socket_enabled):
+    async def models(_request):
+        return web.json_response({"data": [{"id": "other", "x_max_choice_options": 255},
+                                           {"id": "test-model", "x_max_choice_options": advertised}]})
+    app = web.Application()
+    app.router.add_get('/models', models)
+    async with TestServer(app) as server, ClientSession() as session:
+        provider = DecisionProvider(agentcli.ProviderConfig("classifier", "test-model", str(server.make_url('')).rstrip('/')), 'classifier')
+        if expected is None:
+            with pytest.raises(DecisionError, match='malformed'):
+                await provider.target_choice_limit(session, 1000)
+        else:
+            assert await provider.target_choice_limit(session, 1000) == expected
+        assert not provider.supports_exact_percentages()
+
+
+async def test_advertised_extended_choices_avoid_unnecessary_groups(socket_enabled):
+    requests = []
+    async def models(_request):
+        return web.json_response({"data": [{"id": "test-model", "x_max_choice_options": 255}]})
+    async def classify(request):
+        payload = await request.json()
+        requests.append(payload)
+        return web.json_response({"model": "test-model", "answers": {
+            "target": {"type": "choice", **choice("t94", payload['questions']['target']['criteria'])}}})
+    app = web.Application()
+    app.router.add_get('/models', models)
+    app.router.add_post('/classifier', classify)
+    async with TestServer(app) as server, ClientSession() as session:
+        provider = DecisionProvider(agentcli.ProviderConfig('classifier', 'test-model', str(server.make_url('')).rstrip('/')), 'classifier')
+        result = await provider.select_target(session, 'turn off Lamp 94', 'light_off',
+                                             {f't{i}': {'name': f'Lamp {i}'} for i in range(95)}, 1000)
+    assert result['choice'] == 't94'
+    assert set(requests[0]['questions']) == {'target'}
+    assert len(requests[0]['questions']['target']['criteria']) == 96
+    assert all(value is None for key, value in requests[0]['questions']['target']['criteria'].items() if key != 'none')
+    assert len(requests[0]['state']['targets']) == 95
