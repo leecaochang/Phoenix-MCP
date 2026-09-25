@@ -25,7 +25,10 @@
     "local_cancelled": "Отменено.",
     "local_unauthorized": "Этот токен больше не авторизован.",
     "local_state_matched": "Home Assistant сообщает о запрошенном состоянии.",
-    "local_state_unconfirmed": "Команда отправлена. Home Assistant ещё не подтвердил запрошенное состояние."
+    "local_state_unconfirmed": "Команда отправлена. Home Assistant ещё не подтвердил запрошенное состояние.",
+    "local_summary_count": "Среди доступных мне сущностей, предоставленных Assist: {matched} из {total} имеют состояние {state}; у {unknown} состояние неизвестно или недоступно.",
+    "local_summary_total": "Среди доступных мне сущностей, предоставленных Assist: {total} сущностей; у {unknown} состояние неизвестно или недоступно.",
+    "local_summary_breakdown": "Среди доступных мне сущностей, предоставленных Assist: {total} сущностей. {summary}."
   },
   "panel": {
     "adminError": {

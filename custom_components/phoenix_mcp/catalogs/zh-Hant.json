@@ -2030,6 +2030,9 @@
     "local_cancelled": "已取消。",
     "local_unauthorized": "此權杖已失去授權。",
     "local_state_matched": "Home Assistant 回報已達到要求的狀態。",
-    "local_state_unconfirmed": "命令已傳送。Home Assistant 尚未確認要求的狀態。"
+    "local_state_unconfirmed": "命令已傳送。Home Assistant 尚未確認要求的狀態。",
+    "local_summary_count": "在已向 Assist 公開且我有權存取的實體中：{total} 個中有 {matched} 個的狀態為 {state}；{unknown} 個的狀態未知或無法使用。",
+    "local_summary_total": "在已向 Assist 公開且我有權存取的實體中：共 {total} 個實體；{unknown} 個的狀態未知或無法使用。",
+    "local_summary_breakdown": "在已向 Assist 公開且我有權存取的實體中：共 {total} 個實體。{summary}。"
   }
 }

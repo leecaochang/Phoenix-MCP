@@ -2030,6 +2030,9 @@
     "local_cancelled": "キャンセルしました。",
     "local_unauthorized": "このトークンは認可されていません。",
     "local_state_matched": "Home Assistant は要求された状態を報告しています。",
-    "local_state_unconfirmed": "コマンドを送信しました。Home Assistant は要求された状態をまだ確認していません。"
+    "local_state_unconfirmed": "コマンドを送信しました。Home Assistant は要求された状態をまだ確認していません。",
+    "local_summary_count": "アクセス可能でAssistに公開されているエンティティのうち、{total}件中{matched}件の状態は{state}です。{unknown}件は状態が不明または利用できません。",
+    "local_summary_total": "アクセス可能でAssistに公開されているエンティティは{total}件です。{unknown}件は状態が不明または利用できません。",
+    "local_summary_breakdown": "アクセス可能でAssistに公開されているエンティティは{total}件です。{summary}。"
   }
 }

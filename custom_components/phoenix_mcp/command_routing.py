@@ -129,6 +129,11 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant) -> tuple[str
     if intent_name not in COMMAND_ROUTING_INTENTS:
         return "unsupported", None
     slots = {name: entity.value for name, entity in result.entities.items()}
+    if intent_name == "HassGetState":
+        from .command_summary import local_summary
+        summary = local_summary(hass, token, result, slots)
+        if summary is not None:
+            return "supported", summary
     if intent_name == "HassLightSet" and "temperature" in slots and "brightness" not in slots:
         intent_name = "PhoenixLightTemperature"
     operation = numeric_operation(intent_name)

@@ -63,7 +63,7 @@ def command_domain(intent: str) -> str | None:
 
 def supports_command(state: State, intent: str) -> bool:
     """Check domain and current device support before planning or execution."""
-    if intent == "HassGetState":
+    if intent in ("HassGetState", "PhoenixStateSummary"):
         return True
     if intent in COMMAND_ROUTING_TEMPORAL_OPERATIONS:
         from .temporal_values import temporal_supports

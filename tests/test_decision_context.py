@@ -439,8 +439,8 @@ async def test_explicit_candidate_decline_preserves_fallback_in_context_preview(
         payload = args[4]
         selected = {'route': 'provider', 'target': 'none'}
         return {'model': 'jev-1.13.0', 'answers': {
-            name: {'type': 'choice', 'choice': selected[name], 'confidence': 1,
-                   'probabilities': {key: float(key == selected[name]) for key in spec['criteria']}}
+            name: {'type': 'choice', 'choice': selected.get(name, 'none'), 'confidence': 1,
+                   'probabilities': {key: float(key == selected.get(name, 'none')) for key in spec['criteria']}}
             for name, spec in payload['questions'].items()}}
     history = [{'role': 'user', 'content': 'turn on Desk lamp'}, {'role': 'assistant', 'content': 'Command sent.'}]
     with patch.object(DecisionProvider, '_request', side_effect=response) as request:

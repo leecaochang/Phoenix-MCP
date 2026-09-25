@@ -37,8 +37,17 @@ def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = Fals
     snapshots = {category: capture_targets(hass, token, category, devices=devices, max_targets=max_targets,
                                           compact=extended)
                  for category in sorted(categories)}
+    if extended and not temporal:
+        from .command_summary import summary_catalog
+        try:
+            snapshots['state_summary'] = summary_catalog(hass, token, devices=devices)
+        except CatalogLimitError:
+            # Disable this complete query catalog rather than truncating it or other routes.
+            pass
     entities: dict[str, dict] = {}
     for category, snapshot in snapshots.items():
+        if category == 'state_summary':
+            continue
         for descriptor in snapshot.targets.values():
             identity = {key: value for key, value in descriptor.items() if key not in ("numeric", "value_kind", "entity_command")}
             item = entities.setdefault(descriptor["entity_id"], {**identity, "eligible_categories": []})
@@ -56,6 +65,8 @@ def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = Fals
     max_bytes = DECISION_BATCH_MAX_TARGET_BYTES if extended else DECISION_MAX_TARGET_BYTES
     if size > max_bytes:
         raise CatalogLimitError("combined", "metadata_bytes", size, max_bytes)
+    # Collection scopes have their own complete 16 KiB/254-choice budget.
+    # Sharing the entity catalog budget silently disables summaries in larger homes.
     return targets, snapshots
 
 
@@ -126,11 +137,14 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
             return None
         raise
     targets, catalogs = snapshot
-    if not targets:
+    summaries = catalogs.get('state_summary')
+    if not targets and not (summaries and summaries.targets):
         raise DecisionError("no_target")
-    if provider.cfg.api_key and provider.cfg.api_key in json.dumps(targets, ensure_ascii=False):
+    if provider.cfg.api_key and provider.cfg.api_key in json.dumps({"targets": targets, "summaries": summaries.targets if summaries else {}}, ensure_ascii=False):
         raise DecisionError("context_unavailable")
     options: dict[str, Any] = {"numeric_preview": True} if numeric else {}
+    if summaries and summaries.targets:
+        options['summary_scopes'] = summaries.targets
     if scalar:
         options["scalar_value"] = source_value
     answer = await provider.route_and_target(session, sentence, targets,
@@ -155,14 +169,23 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
     if not confident_choice(category):
         return category, {**selection, "reason": "low_probability"}
     selection["decision"] = target
+    is_summary = category['choice'] == 'state_summary'
+    if is_summary:
+        if target['choice'] != 'none' or not confident_choice(target):
+            return category, {**selection, 'reason': 'category_mismatch'}
+        if summaries is None:
+            raise DecisionError('category_mismatch')
+        target = answer['summary_scope']
+    elif answer.get('summary_scope', {}).get('choice', 'none') != 'none':
+        return category, {**selection, 'reason': 'category_mismatch'}
     if target["choice"] == "none":
         return category, {**selection, "reason": "target_declined"}
     if not confident_choice(target):
         return category, {**selection, "reason": "low_probability"}
-    descriptor = targets[target["choice"]]
-    if category["choice"] not in descriptor["eligible_categories"]:
+    descriptor = summaries.targets[target['choice']] if is_summary and summaries is not None else targets[target['choice']]
+    if not is_summary and category["choice"] not in descriptor["eligible_categories"]:
         raise DecisionError("category_mismatch")
-    proposal: dict[str, Any] = {"intent": DECISION_TARGET_INTENTS[category["choice"]], "entity_ids": [descriptor["entity_id"]]}
+    proposal: dict[str, Any] = {"intent": DECISION_TARGET_INTENTS[category["choice"]], "entity_ids": [descriptor["entity_id"]] if not is_summary else []}
     selected_numeric = category["choice"] in DECISION_NUMERIC_CATEGORIES
     if numeric and selected_numeric:
         operation = numeric_operation(proposal["intent"])
@@ -179,6 +202,17 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
     if numeric and not selected_numeric and (answer["percentage"]["choice"] != "none"
             or answer["percentage"]["model"] != category["model"] or not confident_choice(answer["percentage"])):
         return category, {**selection, "reason": "numeric_unverified"}
+    if category['choice'] == 'state_summary':
+        from .command_summary import summary_proposal
+        choice = answer.get('summary', {})
+        if not confident_choice(choice) or choice.get('model') != category['model']:
+            return category, {**selection, 'reason': 'low_probability'}
+        candidate = summary_proposal(hass, current, descriptor, choice['choice'])
+        if candidate is None:
+            return category, {**selection, 'reason': 'category_mismatch'}
+        proposal = candidate
+    elif answer.get('summary', {}).get('choice', 'none') != 'none':
+        return category, {**selection, 'reason': 'category_mismatch'}
     typed = proposal["intent"] in COMMAND_ROUTING_VALUE_INTENTS
     if typed:
         from .entity_commands import chosen_entity_value
@@ -194,13 +228,15 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
     plan.update(decision_category=category["choice"], decision_catalog=catalogs[category["choice"]].digest(),
                 decision_batch={"model": category["model"], "language": language,
                                 "catalog": batch_catalog_digest(snapshot)})
+    if is_summary:
+        plan['decision_batch']['proposal'] = _digest(proposal)
     if typed:
         plan["decision_batch"].update(value=proposal["value"], proposal=_digest(proposal))
     if numeric and selected_numeric:
         plan["decision_batch"].update(percentage=source_value, proposal=_digest(proposal))
     elif numeric:
         plan["decision_batch"]["catalog_numeric"] = True
-    return category, {**selection, "reason": "target_selected", "entity_id": descriptor["entity_id"],
+    return category, {**selection, "reason": "target_selected", **({"entity_id": descriptor["entity_id"]} if not is_summary else {}),
                       "proposal": proposal, "_plan": plan}
 
 
@@ -255,12 +291,15 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
                 return result("unsupported_category")
             extended = batch_execution_eligible(cfg, lang)
             snapshot = capture_batch_targets(hass, current, numeric_preview=numeric_preview, extended=extended, temporal=temporal is not None)
-            targets, _ = snapshot
-            if not targets:
+            targets, catalogs = snapshot
+            summaries = catalogs.get('state_summary')
+            if not targets and not (summaries and summaries.targets):
                 return result("no_target")
-            if cfg.api_key and cfg.api_key in json.dumps(targets, ensure_ascii=False):
+            if cfg.api_key and cfg.api_key in json.dumps({"targets": targets, "summaries": summaries.targets if summaries else {}}, ensure_ascii=False):
                 return result("context_unavailable")
             options: dict[str, Any] = {"numeric_preview": True} if numeric_preview else {}
+            if summaries and summaries.targets:
+                options['summary_scopes'] = summaries.targets
             source_value = None
             scalar = False
             async with asyncio.timeout_at(deadline):
@@ -290,14 +329,32 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
                 reason, temporal_candidate = temporal_proposal(answer, targets, temporal, timezone, sentence)
                 return result(reason, decision=answer, proposal=temporal_candidate)
             category, target = answer["route"], answer["target"]
+            is_summary = category['choice'] == 'state_summary'
+            if is_summary:
+                if target['choice'] != 'none' or not confident_choice(target):
+                    return result('category_mismatch', decision=answer)
+                target = answer['summary_scope']
+            elif answer.get('summary_scope', {}).get('choice', 'none') != 'none':
+                return result('category_mismatch', decision=answer)
             if category["choice"] == "provider" or target["choice"] == "none":
                 return result("provider_fallback", decision=answer)
             if not confident_choice(category) or not confident_choice(target):
                 return result("low_probability", decision=answer)
-            descriptor = targets[target["choice"]]
-            if category["choice"] not in descriptor["eligible_categories"]:
+            descriptor = summaries.targets[target['choice']] if is_summary and summaries is not None else targets[target['choice']]
+            if not is_summary and category["choice"] not in descriptor["eligible_categories"]:
                 return result("category_mismatch", decision=answer)
-            proposal: dict[str, Any] = {"intent": DECISION_TARGET_INTENTS[category["choice"]], "entity_ids": [descriptor["entity_id"]]}
+            proposal: dict[str, Any] = {"intent": DECISION_TARGET_INTENTS[category["choice"]], "entity_ids": [descriptor["entity_id"]] if not is_summary else []}
+            if category['choice'] == 'state_summary':
+                from .command_summary import summary_proposal
+                choice = answer.get('summary', {})
+                if not confident_choice(choice):
+                    return result('low_probability', decision=answer)
+                candidate = summary_proposal(hass, current, descriptor, choice['choice'])
+                if candidate is None:
+                    return result('category_mismatch', decision=answer)
+                proposal = candidate
+            elif answer.get('summary', {}).get('choice', 'none') != 'none':
+                return result('category_mismatch', decision=answer)
             if proposal["intent"] in COMMAND_ROUTING_VALUE_INTENTS:
                 from .entity_commands import chosen_entity_value
                 chosen_value = chosen_entity_value(answer, sentence, targets, descriptor, category["choice"])

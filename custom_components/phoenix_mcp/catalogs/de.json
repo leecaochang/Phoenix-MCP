@@ -2030,6 +2030,9 @@
     "local_cancelled": "Abgebrochen.",
     "local_unauthorized": "Dieses Token ist nicht mehr autorisiert.",
     "local_state_matched": "Home Assistant meldet den gewünschten Zustand.",
-    "local_state_unconfirmed": "Befehl gesendet. Home Assistant hat den gewünschten Zustand noch nicht bestätigt."
+    "local_state_unconfirmed": "Befehl gesendet. Home Assistant hat den gewünschten Zustand noch nicht bestätigt.",
+    "local_summary_count": "Unter den für Assist freigegebenen Entitäten, auf die ich zugreifen kann: {matched} von {total} haben den Zustand {state}; bei {unknown} ist der Zustand unbekannt oder nicht verfügbar.",
+    "local_summary_total": "Unter den für Assist freigegebenen Entitäten, auf die ich zugreifen kann: {total} Entitäten; bei {unknown} ist der Zustand unbekannt oder nicht verfügbar.",
+    "local_summary_breakdown": "Unter den für Assist freigegebenen Entitäten, auf die ich zugreifen kann: {total} Entitäten. {summary}."
   }
 }

@@ -96,12 +96,12 @@ async def test_chat_executes_qualified_source_checked_percentages(hass, chat_hom
     hass.states.async_set(entry.entity_id, 'off', attributes)
     async_expose_entity(hass, 'conversation', entry.entity_id, True)
     async def response(session, method, path, timeout, payload):
-        assert set(payload['questions']) == {'route', 'target', 'percentage'}
+        assert set(payload['questions']) == {'route', 'target', 'percentage', 'summary', 'summary_scope'}
         target = next(key for key, item in payload['state']['targets'].items() if item['entity_id'] == entry.entity_id)
         selected = {'route': category, 'target': target, 'percentage': '37'}
         return {'model': 'jev-1.13.0', 'answers': {
-            name: {'type': 'choice', 'choice': selected[name], 'confidence': 1,
-                   'probabilities': {key: float(key == selected[name]) for key in question['criteria']}}
+            name: {'type': 'choice', 'choice': selected.get(name, 'none'), 'confidence': 1,
+                   'probabilities': {key: float(key == selected.get(name, 'none')) for key in question['criteria']}}
             for name, question in payload['questions'].items()}}
     with (patch.object(DecisionProvider, '_request', side_effect=response) as remote,
           patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
@@ -578,8 +578,8 @@ def chat_decision_wire(payload, category='light_on', target='t0', percent=50):
     choices = {'route': category, 'target': target,
                'brightness_tens': str(percent // 10), 'brightness_units': str(percent % 10)}
     return {'model': 'test-model', 'answers': {
-        question: {'type': 'choice', 'choice': choices[question], 'confidence': 0.1,
-                   'probabilities': {key: float(key == choices[question]) for key in spec['criteria']}}
+        question: {'type': 'choice', 'choice': choices.get(question, 'none'), 'confidence': 0.1,
+                   'probabilities': {key: float(key == choices.get(question, 'none')) for key in spec['criteria']}}
         for question, spec in payload['questions'].items()}}
 
 
@@ -1329,7 +1329,7 @@ async def test_qualified_jev_chat_uses_one_joint_request(hass, hybrid_chat, cate
     store = await agentcli._get_secret_store(hass)
     await store.set_model(data.store.get_settings().decision_provider_id, 'jev-latest')
     async def response(session, method, path, timeout, payload):
-        assert set(payload['questions']) == {'route', 'target'}
+        assert set(payload['questions']) == {'route', 'target', 'summary', 'summary_scope'}
         return {**chat_decision_wire(payload, category), 'model': 'jev-1.13.0'}
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
@@ -1353,8 +1353,8 @@ def followup_response(payload, *, value='37', decline=False):
                   if item['entity_id'] == 'light.test_desk')
     selected = {'route': 'light_brightness', 'target': target, 'percentage': value}
     return {'model': 'jev-1.13.0', 'answers': {
-        name: {'type': 'choice', 'choice': selected[name], 'confidence': 1,
-               'probabilities': {key: float(key == selected[name]) for key in question['criteria']}}
+        name: {'type': 'choice', 'choice': selected.get(name, 'none'), 'confidence': 1,
+               'probabilities': {key: float(key == selected.get(name, 'none')) for key in question['criteria']}}
         for name, question in payload['questions'].items()}}
 
 
@@ -1377,7 +1377,7 @@ async def test_decision_followup_preserves_history_and_both_execution_proofs(has
         original = json.loads(json.dumps(messages))
         provider, _, history = await chat_turn(hass, context_chat, messages)
     assert remote.await_count == 2
-    assert set(captured[0]['questions']) == {'route', 'target', 'percentage'}
+    assert set(captured[0]['questions']) == {'route', 'target', 'percentage', 'summary', 'summary_scope'}
     assert 'history' not in captured[0]['state']
     assert captured[1]['state']['history'] == original[:-1]
     assert captured[1]['state']['candidate']['brightness_pct'] == 37
@@ -1583,7 +1583,7 @@ async def test_categorical_followup_routes_with_more_than_common_catalog_limit(h
         provider, _, history = await chat_turn(hass, context_chat,
             context_messages('Please report the current status of Desk lamp.'))
     assert len(seen[0]['state']['targets']) == 61
-    assert set(seen[0]['questions']) == {'route', 'target'}
+    assert set(seen[0]['questions']) == {'route', 'target', 'summary', 'summary_scope'}
     assert remote.await_count == 2, data.decision_shadow.summary()
     assert not provider.stream_turn.called, data.decision_shadow.summary()
     assert seen[1]['state']['history'] == CONTEXT_HISTORY
@@ -1596,8 +1596,8 @@ def reference_chat_wire(payload, category='light_off', *, restrict=False):
     selected = ({'route': category, 'reference': 'bound', 'constraints': 'restricted' if restrict else 'clear'}
                 if 'reference' in payload['questions'] else {'route': 'provider', 'target': 'none'})
     return {'model': 'jev-1.13.0', 'answers': {
-        name: {'type': 'choice', 'choice': selected[name], 'confidence': 1,
-               'probabilities': {key: float(key == selected[name]) for key in spec['criteria']}}
+        name: {'type': 'choice', 'choice': selected.get(name, 'none'), 'confidence': 1,
+               'probabilities': {key: float(key == selected.get(name, 'none')) for key in spec['criteria']}}
         for name, spec in payload['questions'].items()}}
 
 
@@ -1762,8 +1762,8 @@ async def test_temporal_chat_command_preserves_full_history_review(hass, context
         target = next(key for key, item in payload['state']['targets'].items() if item['entity_id'] == entry.entity_id)
         choices = {'route': 'time_value', 'target': target, 'value': 'value'}
         return {'model': 'jev-1.13.0', 'answers': {
-            question: {'type': 'choice', 'choice': choices[question], 'confidence': 1,
-                       'probabilities': {key: float(key == choices[question]) for key in spec['criteria']}}
+            question: {'type': 'choice', 'choice': choices.get(question, 'none'), 'confidence': 1,
+                       'probabilities': {key: float(key == choices.get(question, 'none')) for key in spec['criteria']}}
             for question, spec in payload['questions'].items()}}
     with (patch.object(DecisionProvider, '_request', side_effect=respond) as remote,
           patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
@@ -1799,8 +1799,8 @@ async def test_option_command_in_chat_rechecks_complete_history(hass, context_ch
         choices = {'route': 'select_option', 'target': target, 'value': value,
                    'attribute': 'none', 'color': 'none'}
         return {'model': 'jev-1.13.0', 'answers': {question: {
-            'type': 'choice', 'choice': choices[question], 'confidence': 1,
-            'probabilities': {key: float(key == choices[question]) for key in spec['criteria']}}
+            'type': 'choice', 'choice': choices.get(question, 'none'), 'confidence': 1,
+            'probabilities': {key: float(key == choices.get(question, 'none')) for key in spec['criteria']}}
             for question, spec in payload['questions'].items()}}
     with (patch.object(DecisionProvider, '_request', side_effect=respond) as remote,
           patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),

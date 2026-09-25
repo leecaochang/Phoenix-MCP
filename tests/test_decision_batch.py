@@ -54,7 +54,7 @@ def wire_targets(payload):
 
 def wire_response(payload, category='light_on', target='t0'):
     choices = [('route', category), ('target', target)]
-    choices.extend((key, 'none') for key in ('value', 'attribute', 'color') if key in payload['questions'])
+    choices.extend((key, 'none') for key in ('value', 'attribute', 'color', 'summary', 'summary_scope', 'percentage') if key in payload['questions'])
     return {'model': 'jev-1.13.0', 'answers': {
         question: {'type': 'choice', 'choice': selected, 'confidence': 1,
                    'probabilities': {key: float(key == selected) for key in payload['questions'][question]['criteria']}}
@@ -126,7 +126,12 @@ async def test_no_request_when_catalog_or_local_recognition_is_ineligible(hass, 
     local = None
     if case == 'denied': token.permissions = PermissionTree()
     if case == 'unexposed': async_expose_entity(hass, 'conversation', entity_id, False)
-    if case == 'unavailable': hass.states.async_set(entity_id, 'unavailable')
+    if case == 'unavailable':
+        hass.states.async_set(entity_id, 'unavailable')
+        async def decline(*args): return wire_response(args[4], 'provider', 'none')
+        with patch.object(DecisionProvider, '_request', side_effect=decline):
+            assert (await preview(hass, batch_home, numeric_preview=numeric))['reason'] == 'provider_fallback'
+        return
     if case == 'oversized':
         for index in range(DECISION_BATCH_MAX_TARGETS):
             entry = er.async_get(hass).async_get_or_create('light', 'test', str(index))
@@ -296,7 +301,7 @@ async def test_joint_percentage_preview_uses_one_request_and_never_prepares_exec
     entity_id = entities[category]
     async def response(*args):
         payload = args[4]
-        assert set(payload['questions']) == {'route', 'target', 'percentage'}
+        assert set(payload['questions']) == {'route', 'target', 'percentage', 'summary', 'summary_scope'}
         assert len(payload['questions']['percentage']['criteria']) == 102
         assert len(wire_targets(payload)) == 3
         assert 'private-state' not in json.dumps(payload)
@@ -568,7 +573,7 @@ async def test_categorical_catalog_bounds_follow_qualified_account(hass, batch_h
         expected.add(entry.entity_id)
     async def response(*args):
         payload = args[4]
-        assert set(payload['questions']) == {'route', 'target'}
+        assert set(payload['questions']) == ({'route', 'target', 'summary', 'summary_scope'} if qualified else {'route', 'target'})
         assert len(payload['questions']['target']['criteria']) == count + 1
         assert {item['entity_id'] for item in wire_targets(payload).values()} == expected
         return wire_response(payload, 'state_query', 't0')
@@ -627,3 +632,16 @@ async def test_large_operation_snapshot_uses_packed_budget_without_hiding_target
         result = await preview(hass, batch_home)
     request.assert_awaited_once()
     assert result['reason'] == 'target_selected' and result['executed'] is False
+
+
+async def test_summary_scopes_do_not_compete_with_full_entity_catalog_budget(hass,batch_home):
+    from custom_components.phoenix_mcp.command_summary import summary_wire
+    _,token,*_=batch_home
+    initial=capture_batch_targets(hass,token,extended=True)
+    entity_bytes=len(json.dumps(catalog_state(initial[0]),ensure_ascii=False).encode())
+    summary_bytes=len(json.dumps(summary_wire(initial[1]['state_summary'].targets),ensure_ascii=False).encode())
+    assert summary_bytes>0
+    with patch('custom_components.phoenix_mcp.decision_batch.DECISION_BATCH_MAX_TARGET_BYTES',entity_bytes):
+        targets,catalogs=capture_batch_targets(hass,token,extended=True)
+    assert targets==initial[0]
+    assert catalogs['state_summary']==initial[1]['state_summary']

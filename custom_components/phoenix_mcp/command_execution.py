@@ -44,8 +44,9 @@ def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str, *,
     permissions = (Permission.READ, Permission.WRITE) if readable else (Permission.WRITE,)
     unknown_action = bool(state and state.domain in COMMAND_ROUTING_UNKNOWN_ACTION_DOMAINS
                           and intent in COMMAND_ROUTING_ENTITY_INTENTS)
-    if (state is None or state.state == "unavailable" or (state.state == "unknown" and not unknown_action) or entry is None
+    if (state is None or (intent != "PhoenixStateSummary" and (state.state == "unavailable" or (state.state == "unknown" and not unknown_action))) or entry is None
             or entry.disabled_by or entry.hidden_by or entry.platform == "group"
+            or (intent == "PhoenixStateSummary" and entry.entity_category is not None)
             or "entity_id" in state.attributes or resolve(entity_id, token, hass) not in permissions
             or not async_should_expose(hass, "conversation", entity_id)):
         return None
@@ -101,6 +102,10 @@ def _capture_plan(hass: Any, data: Any, token: Any, proposal: dict, *, ingress: 
         return None
     if not _temporal_current(hass, proposal):
         return None
+    if proposal['intent'] == 'PhoenixStateSummary':
+        from .command_summary import summary_current
+        if not summary_current(hass, token, proposal):
+            return None
     fingerprints = {entity_id: _target_fingerprint(hass, token, entity_id, proposal["intent"])
                     for entity_id in proposal["entity_ids"]}
     if not fingerprints or any(value is None for value in fingerprints.values()):
@@ -118,6 +123,8 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
 
     settings = data.store.get_settings()
     category = plan["decision_category"]
+    if category == 'state_summary' and 'decision_batch' not in plan:
+        return False
     numeric = category in DECISION_NUMERIC_CATEGORIES
     temporal = category in DECISION_TEMPORAL_CATEGORIES
     typed = plan["proposal"].get("intent") in COMMAND_ROUTING_VALUE_INTENTS
@@ -132,6 +139,10 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
         account = settings.decision_provider_id
         cfg = loaded_decision_account(hass, account) if account else None
         keys = {"model", "language", "catalog"} | ({"percentage", "proposal"} if numeric else {"value", "proposal"} if temporal or typed else set())
+        if category == 'state_summary':
+            keys.add('proposal')
+            if review.get('proposal') != _digest(plan['proposal']):
+                return False
         if "catalog_numeric" in review:
             if numeric or temporal or review["catalog_numeric"] is not True:
                 return False
@@ -166,7 +177,7 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
         if batch_catalog_digest(snapshot) != review["catalog"] or category not in snapshot[1]:
             return False
         catalog_digest = snapshot[1][category].digest()
-    return bool((category in DECISION_EXECUTION_CATEGORIES or numeric or temporal)
+    return bool((category in DECISION_EXECUTION_CATEGORIES or category == "state_summary" or numeric or temporal)
                 and mode == "hybrid" and settings.decision_provider_id
                 and DECISION_TARGET_INTENTS.get(category) == plan["proposal"]["intent"]
                 and plan.get("decision_account") is not None
@@ -237,6 +248,10 @@ def plan_is_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
         if operation and any(not valid_target_value(hass.states.get(eid), proposal["intent"],
                                                    proposal.get(operation.proposal_field)) for eid in proposal["entity_ids"]):
             return False
+        if proposal['intent'] == 'PhoenixStateSummary':
+            from .command_summary import summary_current
+            if not summary_current(hass, token, proposal):
+                return False
         if not _temporal_current(hass, proposal):
             return False
         ingress = plan.get("ingress", "voice")
@@ -320,7 +335,11 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
     read = proposal["intent"] in COMMAND_ROUTING_READ_INTENTS
     if not read and data.agent_recovery.blocks(token.id):
         return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
-    if read:
+    arguments: dict[str, Any]
+    if proposal['intent'] == 'PhoenixStateSummary':
+        name = 'get_states'
+        arguments = {'projection': {'kind': 'fields', 'fields': ['entity_id', 'state']}}
+    elif read:
         name = "get_state"
         field = "state" if proposal["intent"] == "HassGetState" else "attr." + proposal["value"]
         arguments = {"entity_id": proposal["entity_ids"][0], "projection": {
@@ -367,6 +386,10 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
                 break
             except (ValueError, TypeError):
                 continue
+    if proposal['intent'] == 'PhoenixStateSummary':
+        from .command_summary import summary_text
+        summary_reply = summary_text(proposal, payload, language) if plan_is_current(plan, hass, data, token) else None
+        return LocalCommandReply(summary_reply or voice_text(language, 'local_read_failed'), allows_local_followup=summary_reply is not None)
     if not isinstance(payload, dict):
         return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
     if read:

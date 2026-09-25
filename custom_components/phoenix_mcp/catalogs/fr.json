@@ -2030,6 +2030,9 @@
     "local_cancelled": "Annulé.",
     "local_unauthorized": "Ce jeton n’est plus autorisé.",
     "local_state_matched": "Home Assistant indique que l’état demandé est atteint.",
-    "local_state_unconfirmed": "Commande envoyée. Home Assistant n’a pas encore confirmé l’état demandé."
+    "local_state_unconfirmed": "Commande envoyée. Home Assistant n’a pas encore confirmé l’état demandé.",
+    "local_summary_count": "Parmi les entités exposées à Assist auxquelles je peux accéder : {matched} sur {total} ont l’état {state} ; {unknown} ont un état inconnu ou indisponible.",
+    "local_summary_total": "Parmi les entités exposées à Assist auxquelles je peux accéder : {total} entités ; {unknown} ont un état inconnu ou indisponible.",
+    "local_summary_breakdown": "Parmi les entités exposées à Assist auxquelles je peux accéder : {total} entités. {summary}."
   }
 }

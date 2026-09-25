@@ -1626,6 +1626,10 @@ VOICE_TEMPLATES: dict[str, str] = {
     "local_review": "Review command",
     "local_failed": "Phoenix MCP could not complete this command.",
     "local_state": "The state is {state}.",
+    'local_summary_count': 'Among entities exposed to Assist that I can access: {matched} of {total} have state {state}; {unknown} have unknown or unavailable state.',
+    'local_summary_total': 'Among entities exposed to Assist that I can access: {total} entities; {unknown} have unknown or unavailable state.',
+    'local_summary_breakdown': 'Among entities exposed to Assist that I can access: {total} entities. {summary}.',
+
     "local_read_failed": "Phoenix MCP could not read the state.",
     "unavailable": "The Phoenix MCP voice agent is currently unavailable.",
     "not_configured": "The Phoenix MCP voice agent is not fully configured.",
@@ -1864,7 +1868,7 @@ COMMAND_ROUTING_ENTITY_COMMANDS.update({
 })
 # Read selection reuses known public state projections, never writable service fields.
 COMMAND_ROUTING_ENTITY_COMMANDS["attribute_read"] = ('', '', 'attribute', '__read_attributes__', '', '')
-COMMAND_ROUTING_READ_INTENTS = frozenset({"HassGetState", "PhoenixEntityAttributeRead"})
+COMMAND_ROUTING_READ_INTENTS = frozenset({"HassGetState", "PhoenixEntityAttributeRead", "PhoenixStateSummary"})
 COMMAND_ROUTING_READ_PERCENT_SCALES = {
     "brightness": (("light",), 255), "volume_level": (("media_player",), 1),
     "current_position": (("cover", "valve"), 100), "current_tilt_position": (("cover",), 100),
@@ -2119,3 +2123,20 @@ DECISION_BRIGHTNESS_CHOICES = {
         f"{percent}%" for percent in range(value, 101, 10)) + "."
         for value in range(10)}, "none": "No single explicit whole brightness percentage from 0% to 100%."},
 }
+
+# Summary filters are native primary states, never inferred attributes or thresholds.
+COMMAND_SUMMARY_STATES = {
+    **{domain: ('on', 'off') for domain in ('light', 'switch', 'input_boolean', 'binary_sensor', 'fan', 'humidifier', 'automation')},
+    **{domain: ('open', 'closed', 'opening', 'closing') for domain in ('cover', 'valve')},
+    'lock': ('locked', 'unlocked', 'locking', 'unlocking', 'jammed'),
+    'media_player': ('on', 'off', 'playing', 'paused', 'idle', 'standby'),
+    'timer': ('active', 'paused', 'idle'),
+    'person': ('home', 'not_home'),
+    'device_tracker': ('home', 'not_home'),
+    'vacuum': ('cleaning', 'docked', 'idle', 'paused', 'returning', 'error'),
+}
+COMMAND_SUMMARY_UNKNOWN_STATES = ('unknown', 'unavailable')
+COMMAND_SUMMARY_MODES = ('total', 'breakdown', *COMMAND_SUMMARY_UNKNOWN_STATES, *sorted({state for states in COMMAND_SUMMARY_STATES.values() for state in states}))
+COMMAND_SUMMARY_MAX_STATES = 20
+COMMAND_ROUTING_INTENTS |= {'PhoenixStateSummary'}
+DECISION_TARGET_INTENTS['state_summary'] = 'PhoenixStateSummary'

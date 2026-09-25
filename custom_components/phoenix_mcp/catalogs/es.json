@@ -2030,6 +2030,9 @@
     "local_cancelled": "Cancelado.",
     "local_unauthorized": "Este token ya no está autorizado.",
     "local_state_matched": "Home Assistant informa del estado solicitado.",
-    "local_state_unconfirmed": "Comando enviado. Home Assistant aún no ha confirmado el estado solicitado."
+    "local_state_unconfirmed": "Comando enviado. Home Assistant aún no ha confirmado el estado solicitado.",
+    "local_summary_count": "Entre las entidades expuestas a Assist a las que tengo acceso: {matched} de {total} tienen el estado {state}; {unknown} tienen un estado desconocido o no disponible.",
+    "local_summary_total": "Entre las entidades expuestas a Assist a las que tengo acceso: {total} entidades; {unknown} tienen un estado desconocido o no disponible.",
+    "local_summary_breakdown": "Entre las entidades expuestas a Assist a las que tengo acceso: {total} entidades. {summary}."
   }
 }

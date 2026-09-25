@@ -2030,6 +2030,9 @@
     "local_cancelled": "已取消。",
     "local_unauthorized": "此令牌已失去授权。",
     "local_state_matched": "Home Assistant 报告已达到请求的状态。",
-    "local_state_unconfirmed": "命令已发送。Home Assistant 尚未确认请求的状态。"
+    "local_state_unconfirmed": "命令已发送。Home Assistant 尚未确认请求的状态。",
+    "local_summary_count": "在已向 Assist 公开且我有权访问的实体中：{total} 个中有 {matched} 个的状态为 {state}；{unknown} 个的状态未知或不可用。",
+    "local_summary_total": "在已向 Assist 公开且我有权访问的实体中：共 {total} 个实体；{unknown} 个的状态未知或不可用。",
+    "local_summary_breakdown": "在已向 Assist 公开且我有权访问的实体中：共 {total} 个实体。{summary}。"
   }
 }

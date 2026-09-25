@@ -56,15 +56,23 @@ def _state(hass: Any, token: Any, sentence: str, language: str,
     intent = proposal["intent"]
     operation = numeric_operation(intent)
     value_field = operation.proposal_field if operation else "value" if intent in COMMAND_ROUTING_TEMPORAL_OPERATIONS or intent in COMMAND_ROUTING_VALUE_INTENTS else None
-    fields = {"intent", "entity_ids"} | ({value_field} if value_field else set())
+    summary = intent == 'PhoenixStateSummary'
+    fields = {"intent", "entity_ids"} | ({'summary_scope', 'summary_mode'} if summary else {value_field} if value_field else set())
     ids = proposal.get("entity_ids")
-    if (set(proposal) != fields or not isinstance(ids, list) or len(ids) != 1
-            or not isinstance(ids[0], str)):
+    if (set(proposal) != fields or not isinstance(ids, list) or not ids or (not summary and len(ids) != 1)
+            or any(not isinstance(eid, str) for eid in ids)):
         return None
     service = None if intent in COMMAND_ROUTING_READ_INTENTS else service_arguments(proposal)
     if intent not in COMMAND_ROUTING_READ_INTENTS and service is None:
         return None
-    fingerprint = _target_fingerprint(hass, token, ids[0], intent)
+    fingerprint: str | None
+    if summary:
+        from .command_summary import summary_current
+        if not summary_current(hass, token, proposal):
+            return None
+        fingerprint = _digest({eid: _target_fingerprint(hass, token, eid, intent) for eid in ids})
+    else:
+        fingerprint = _target_fingerprint(hass, token, ids[0], intent)
     if fingerprint is None:
         return None
     try:
@@ -75,6 +83,8 @@ def _state(hass: Any, token: Any, sentence: str, language: str,
         if redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(text) or "", token, hass) != text:
             return None
     candidate = {"intent": intent, "entity_ids": list(ids)}
+    if summary:
+        candidate.update(summary_scope=proposal['summary_scope'], summary_mode=proposal['summary_mode'])
     if value_field:
         candidate[value_field] = proposal[value_field]
     state = {"utterance": sentence, "language": language, "history": history, "candidate": candidate}

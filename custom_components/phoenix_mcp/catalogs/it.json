@@ -2030,6 +2030,9 @@
     "local_cancelled": "Annullato.",
     "local_unauthorized": "Questo token non è più autorizzato.",
     "local_state_matched": "Home Assistant segnala lo stato richiesto.",
-    "local_state_unconfirmed": "Comando inviato. Home Assistant non ha ancora confermato lo stato richiesto."
+    "local_state_unconfirmed": "Comando inviato. Home Assistant non ha ancora confermato lo stato richiesto.",
+    "local_summary_count": "Tra le entità esposte ad Assist a cui posso accedere: {matched} su {total} hanno lo stato {state}; {unknown} hanno uno stato sconosciuto o non disponibile.",
+    "local_summary_total": "Tra le entità esposte ad Assist a cui posso accedere: {total} entità; {unknown} hanno uno stato sconosciuto o non disponibile.",
+    "local_summary_breakdown": "Tra le entità esposte ad Assist a cui posso accedere: {total} entità. {summary}."
   }
 }
