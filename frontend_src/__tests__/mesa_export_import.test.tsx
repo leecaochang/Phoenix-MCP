@@ -1,7 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, fireEvent, waitFor } from "@testing-library/react";
 import { ExportModal, ImportModal } from "../views/MesaView";
 import { api } from "../api";
+import { setFormatLocale } from "../i18n";
+
+afterEach(() => setFormatLocale({}, "en"));
 
 vi.mock("../api", () => ({
   api: {
@@ -31,6 +34,13 @@ function pickFile(container: HTMLElement, contents: string) {
 
 describe("ExportModal", () => {
   beforeEach(() => vi.clearAllMocks());
+
+  it("formats the visible profile count using HA preferences", () => {
+    setFormatLocale({ locale: { number_format: "decimal_comma" } }, "en");
+    const { getByText } = render(<ExportModal profileCount={1234} onClose={() => {}} />);
+    expect(getByText(/Download 1\.234 MESA profiles/)).toBeInTheDocument();
+    expect(api.exportMesaProfiles).not.toHaveBeenCalled();
+  });
 
   it("downloads the archive only after the explicit confirm", async () => {
     vi.mocked(api.exportMesaProfiles).mockResolvedValue(archive);

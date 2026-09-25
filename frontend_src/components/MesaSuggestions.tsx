@@ -3,7 +3,7 @@
 // Review / Dismiss per row. Purely presentational; all api calls live in
 // MesaView so this component stays trivially testable.
 import { useState } from "react";
-import { t, hasMessage } from "../i18n";
+import { t, hasMessage, localeNumber } from "../i18n";
 import type { MesaSuggestion } from "../types";
 
 const SIGNAL_LABEL_KEYS: Record<string, string> = {
@@ -86,7 +86,7 @@ export function MesaSuggestions({
         >
           <span className={`collapsible-chevron${open ? " open" : ""}`} aria-hidden="true" />
           <span>{t("mesa.suggestTitle")}</span>
-          {suggestions.length > 0 && <span className="badge badge-amber mesa-suggest-count">{suggestions.length}</span>}
+          {suggestions.length > 0 && <span className="badge badge-amber mesa-suggest-count">{localeNumber(suggestions.length)}</span>}
         </button>
         {open && (
           <button className="btn btn-outline btn-sm" onClick={onRescan} disabled={rescanning}>

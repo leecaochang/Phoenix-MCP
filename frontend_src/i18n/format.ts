@@ -1,58 +1,47 @@
-// Locale-aware date, time and number formatting.
-//
-// Every toLocale* call in the panel and the two injected bundles goes through
-// here. A bare toLocaleString() follows the BROWSER's language, which is not
-// the language the panel is showing: the panel resolves its own (the phx-lang
-// override, else Home Assistant's profile language), so a panel switched to
-// Chinese still printed its timestamps in the browser's convention.
-//
-// Grounded in HA's own frontend rather than invented. The FrontendLocaleData
-// shape mirrors src/data/translation.ts, the NumberFormat table mirrors
-// numberFormatToLocale in src/common/number/format_number.ts (including
-// quote_decimal, the Swiss 1'234.56 style, and none, which is en-US with
-// grouping switched off), and the 12-hour probe mirrors useAmPm in
-// src/common/datetime/use_am_pm.ts, 22:00 rendering as "10" being what tells a
-// 12-hour locale from a 24-hour one.
-//
-// DELIBERATELY not honored, because each would mean hand-building Intl option
-// sets rather than reading a preference, and no panel surface needs one:
-// date_format's DMY/MDY/YMD overrides (dates here sit in table cells where the
-// language default reads fine), time_zone's "server" option (every timestamp
-// the panel shows is absolute and rendered in local time, HA's own default),
-// and first_weekday (there is no date picker).
-//
-// Must never import from api.ts, nor from ./index.ts: index.ts calls
-// setFormatLocale from loadTranslations so no caller can forget it, which only
-// stays acyclic while this module imports nothing of its own.
+// Shared presentation formatting for the panel and injected bundles.
+// Phoenix's selected language supplies defaults; explicit HA profile choices
+// override them. Machine values and protocol payloads never use these helpers.
+// First day of week has no consumer: Phoenix has no calendar or week-based UI.
+// This module must not import api.ts or index.ts (which installs its state).
 
-/** The subset of HA's FrontendLocaleData this module reads. All optional: an
- *  older HA, or a test double, may carry no locale object at all. */
+/** Formatting preferences from HA's FrontendLocaleData. */
 export interface HassLocale {
   language?: string;
   number_format?: string;
   time_format?: string;
+  date_format?: string;
+  time_zone?: string;
 }
 
 interface HassLike {
   language?: string;
   locale?: HassLocale;
+  config?: { time_zone?: string };
 }
 
-// Undefined until setFormatLocale runs, which means the browser default: the
-// pre-load state is exactly today's behaviour rather than a guess.
 let dateLocale: string | undefined;
+let pluralLocale: string | undefined;
 let numberLocale: string | string[] | undefined;
 let numberGrouping = true;
 let hour12: boolean | undefined;
-
-// Built lazily and dropped whenever the locale moves. Constructing an Intl
-// object is the expensive part, and the collator is used inside sort
-// comparators where it would otherwise be rebuilt once per comparison.
+let dateFormat = "language";
+let timeZone: string | undefined;
 let compactFormatter: Intl.NumberFormat | null = null;
 let collator: Intl.Collator | null = null;
 let pluralRules: Intl.PluralRules | null = null;
+const dateFormatters = new Map<string, Intl.DateTimeFormat>();
 
-/** HA's numberFormatToLocale. The default branch is the display language. */
+/** Keep regional/script tags even when Phoenix has no matching translation. */
+export function validFormatLocale(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
+  try {
+    return Intl.getCanonicalLocales(value.trim().replace(/_/g, "-"))[0];
+  } catch {
+    return undefined;
+  }
+}
+
+/** HA's numberFormatToLocale, including the ungrouped English `none` mode. */
 function resolveNumberLocale(format: string | undefined, language: string | undefined): string | string[] | undefined {
   switch (format) {
     case "comma_decimal": return ["en-US", "en"];
@@ -65,96 +54,123 @@ function resolveNumberLocale(format: string | undefined, language: string | unde
   }
 }
 
-/**
- * HA's useAmPm. An absent time_format returns undefined rather than guessing,
- * so Intl picks the convention from the locale on its own.
- */
 function resolveHour12(format: string | undefined, language: string | undefined): boolean | undefined {
   if (format === "12") return true;
   if (format === "24") return false;
   if (format !== "language" && format !== "system") return undefined;
-  const probeLanguage = format === "language" ? language : undefined;
+  return new Intl.DateTimeFormat(format === "system" ? undefined : language, {
+    hour: "numeric",
+  }).resolvedOptions().hour12;
+}
+
+function validTimeZone(value: unknown): string | undefined {
+  if (typeof value !== "string" || !value) return undefined;
   try {
-    return new Date("January 1, 2023 22:00:00").toLocaleString(probeLanguage).includes("10");
+    return new Intl.DateTimeFormat("en", { timeZone: value }).resolvedOptions().timeZone;
   } catch {
     return undefined;
   }
 }
 
-/**
- * Adopt a language and Home Assistant's formatting preferences.
- *
- * `language` is the panel's RESOLVED display language, which outranks
- * hass.locale.language: an admin who overrides the panel to Chinese while
- * leaving their HA profile in English is asking this panel to be Chinese, and a
- * date in the other language's convention would read as a bug.
- */
-export function setFormatLocale(hass: unknown, language?: string): boolean {
+/** Adopt presentation preferences; catalogLanguage controls grammar only. */
+export function setFormatLocale(hass: unknown, language?: string, catalogLanguage?: string): boolean {
   const h = (hass ?? {}) as HassLike;
   const locale = h.locale ?? {};
   const before = signature();
-  dateLocale = language || locale.language || h.language || undefined;
+  dateLocale = validFormatLocale(language) ?? validFormatLocale(locale.language) ?? validFormatLocale(h.language);
+  pluralLocale = validFormatLocale(catalogLanguage) ?? dateLocale;
   numberLocale = resolveNumberLocale(locale.number_format, dateLocale);
   numberGrouping = locale.number_format !== "none";
   hour12 = resolveHour12(locale.time_format, dateLocale);
+  dateFormat = ["system", "DMY", "MDY", "YMD"].includes(locale.date_format ?? "")
+    ? locale.date_format! : "language";
+  const localZone = validTimeZone(new Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const serverZone = validTimeZone(h.config?.time_zone);
+  timeZone = locale.time_zone === "server"
+    ? serverZone ?? localZone ?? "UTC"
+    : localZone ?? serverZone ?? "UTC";
+  if (signature() === before) return false;
   compactFormatter = null;
   collator = null;
   pluralRules = null;
-  return signature() !== before;
+  dateFormatters.clear();
+  return true;
 }
 
-// Returned so syncTranslations can repaint when only a FORMAT preference moved.
-// An admin who switches HA to 24-hour time never changes the language, so
-// keying the repaint on the language alone would leave every timestamp on the
-// page in the old convention until something else happened to re-render.
+// A format-only change must repaint without fetching another catalog.
 function signature(): string {
-  return JSON.stringify([dateLocale, numberLocale, numberGrouping, hour12]);
+  return JSON.stringify([dateLocale, pluralLocale, numberLocale, numberGrouping, hour12, dateFormat, timeZone]);
 }
 
-/** The resolved date locale, or undefined for the browser default. */
 export function getFormatLocale(): string | undefined {
   return dateLocale;
 }
 
-// Spread rather than passed as `hour12: undefined`, which Intl reads as an
-// explicit request rather than as "no preference".
-function withHour12(options: Intl.DateTimeFormatOptions): Intl.DateTimeFormatOptions {
-  return hour12 === undefined ? options : { ...options, hour12 };
+function dateFormatter(kind: "date" | "shortDate" | "clock" | "time"): Intl.DateTimeFormat {
+  let formatter = dateFormatters.get(kind);
+  if (!formatter) {
+    const isDate = kind === "date" || kind === "shortDate";
+    const options: Intl.DateTimeFormatOptions = isDate
+      ? { month: "numeric", day: "numeric", ...(kind === "date" ? { year: "numeric" } : {}) }
+      : { hour: "2-digit", minute: "2-digit", ...(kind === "time" ? { second: "2-digit" } : {}),
+          ...(hour12 === undefined ? {} : { hourCycle: hour12 ? "h12" : "h23" }) };
+    formatter = new Intl.DateTimeFormat(isDate && dateFormat === "system" ? undefined : dateLocale, {
+      ...options, timeZone,
+    });
+    dateFormatters.set(kind, formatter);
+  }
+  return formatter;
 }
 
-/** Date only. */
+function formatDate(date: Date, short = false): string {
+  const formatter = dateFormatter(short ? "shortDate" : "date");
+  if (dateFormat === "language" || dateFormat === "system") return formatter.format(date);
+  // Match HA's numeric-date override: retain locale digits and separators,
+  // reorder the calendar fields. The compact form omits the year.
+  const parts = formatter.formatToParts(date);
+  const value = (type: string) => parts.find(part => part.type === type)?.value;
+  const fields = dateFormat === "DMY" ? ["day", "month", "year"]
+    : dateFormat === "YMD" ? ["year", "month", "day"] : ["month", "day", "year"];
+  const separator = value("literal") ?? "/";
+  const last = parts[parts.length - 1];
+  const suffix = last?.type === "literal" && !(dateLocale === "bg" && dateFormat === "YMD") ? last.value : "";
+  return fields.filter(field => !short || field !== "year").map(value).join(separator) + suffix;
+}
+
+/** Date only, in the selected zone and calendar order. */
 export function localeDate(iso: string | number | Date): string {
-  return new Date(iso).toLocaleDateString(dateLocale);
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "Invalid Date" : formatDate(date);
 }
 
-/** Date and time, the full default form. */
+/** Numeric date and time, independently respecting both profile preferences. */
 export function localeDateTime(iso: string | number | Date): string {
-  const options = withHour12({});
-  return new Date(iso).toLocaleString(dateLocale, Object.keys(options).length ? options : undefined);
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "Invalid Date" : `${formatDate(date)}, ${dateFormatter("time").format(date)}`;
 }
 
-/** Month, day and time: the compact form the narrow audit table uses. */
+/** Month, day and time for the narrow audit table. */
 export function localeDateTimeShort(iso: string | number | Date): string {
-  return new Date(iso).toLocaleString(dateLocale, withHour12({
-    month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit",
-  }));
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "Invalid Date" : `${formatDate(date, true)}, ${dateFormatter("clock").format(date)}`;
 }
 
 /** Wall clock, hours and minutes only. */
 export function localeClock(ts: string | number | Date): string {
-  return new Date(ts).toLocaleTimeString(dateLocale, withHour12({
-    hour: "2-digit", minute: "2-digit",
-  }));
+  const date = new Date(ts);
+  return Number.isNaN(date.getTime()) ? "Invalid Date" : dateFormatter("clock").format(date);
 }
 
 /** A plain number, grouped per the operator's HA number-format preference. */
 export function localeNumber(value: number): string {
-  return value.toLocaleString(numberLocale, numberGrouping ? undefined : { useGrouping: false });
+  // Preserve numeric evidence in interpolated summaries; Intl's default of
+  // three fractional digits can otherwise turn a small nonzero value into 0.
+  return value.toLocaleString(numberLocale, { useGrouping: numberGrouping, maximumSignificantDigits: 21 });
 }
 
 /** CLDR plural category for a count in the active panel language. */
 export function localePluralCategory(value: number): Intl.LDMLPluralRule {
-  if (pluralRules === null) pluralRules = new Intl.PluralRules(dateLocale);
+  if (pluralRules === null) pluralRules = new Intl.PluralRules(pluralLocale);
   return pluralRules.select(value);
 }
 

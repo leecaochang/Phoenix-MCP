@@ -5,6 +5,15 @@ import { localeDateTime, localeNumber } from "../i18n/format";
 import { Modal } from "./Modal";
 import type { RoutingSurfaceStatistics } from "../types";
 
+const OUTCOME_LABELS = {
+  local: "routingStats.local",
+  decision: "routingStats.decision",
+  provider: "routingStats.provider",
+  pending: "routingStats.pending",
+  failed: "routingStats.failed",
+  cancelled: "routingStats.cancelled",
+} as const;
+
 export function RoutingStatistics({ surface }: { surface: "voice" | "chat" }) {
   const [open, setOpen] = useState(false);
   const [stats, setStats] = useState<RoutingSurfaceStatistics | null>(null);
@@ -48,8 +57,8 @@ export function RoutingStatistics({ surface }: { surface: "voice" | "chat" }) {
         <p>{total ? t("routingStats.headline", { percent: localeNumber(percent) }) : t("routingStats.empty")}</p>
         <p className="agentcli-settings-hint">{t("routingStats.since", { date: localeDateTime(stats.since) })}</p>
         <dl className="routing-statistics-values">
-          {(["local", "decision", "provider", "pending", "failed", "cancelled"] as const).map(key =>
-            <Fragment key={key}><dt>{t(`routingStats.${key}`)}</dt><dd>{localeNumber(key === "provider" ? stats.provider_turns : stats.outcomes[key])}</dd></Fragment>)}
+          {(Object.keys(OUTCOME_LABELS) as Array<keyof typeof OUTCOME_LABELS>).map(key =>
+            <Fragment key={key}><dt>{t(OUTCOME_LABELS[key])}</dt><dd>{localeNumber(key === "provider" ? stats.provider_turns : stats.outcomes[key])}</dd></Fragment>)}
           <dt>{t("routingStats.decisionTokens")}</dt><dd>{tokens(stats.decision_usage)}</dd>
           <dt>{t("routingStats.providerTokens")}</dt><dd>{tokens(stats.provider_usage)}</dd>
         </dl>

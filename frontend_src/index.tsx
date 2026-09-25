@@ -26,6 +26,7 @@ import {
   resolveLanguage,
   setLanguagePreference,
   syncTranslations,
+  localeNumber,
   t,
 } from "./i18n";
 import { Loading, ErrorMsg, RefreshIcon, DOCS_BASE_URL } from "./components/common";
@@ -524,7 +525,7 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
               >
                 {t(TAB_LABEL_KEYS[tabKey])}
                 {tabKey === "approvals" && pendingCount > 0 && (
-                  <span className="phx-tab-badge" aria-hidden="true">{pendingCount}</span>
+                  <span className="phx-tab-badge" aria-hidden="true">{localeNumber(pendingCount)}</span>
                 )}
               </button>
             </React.Fragment>

@@ -10,7 +10,7 @@ import { PERSONA_CAP_DEFAULTS } from "../personas";
 import { buildTestPrompt, firstGreenTarget } from "../wizard_helpers";
 import { patchDurable as patchAgentCliDurable } from "../utils/agentcli_state";
 import { ErrorMsg } from "../index";
-import { t } from "../i18n";
+import { localeNumber, t } from "../i18n";
 import { tRich } from "../i18n/rich";
 
 const NAME_REGEX = /^[A-Za-z0-9_\-]{3,32}$/;
@@ -184,7 +184,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
             className={`wizard-step${i === step ? " wizard-step-active" : ""}${i < step ? " wizard-step-done" : ""}`}
             aria-current={i === step ? "step" : undefined}
           >
-            <span className="wizard-step-num">{i + 1}</span>
+            <span className="wizard-step-num">{localeNumber(i + 1)}</span>
             <span className="wizard-step-label">{label}</span>
           </li>
         ))}

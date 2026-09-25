@@ -119,3 +119,15 @@ describe("localized token statuses", () => {
     expect(names).toEqual(["Expired row", "Active row", "Revoked row"]);
   });
 });
+
+
+describe("token dates", () => {
+  it("shows the selected calendar order and server zone in cells and tooltips", () => {
+    setFormatLocale({
+      locale: { date_format: "YMD", time_format: "24", time_zone: "server" },
+      config: { time_zone: "Asia/Tokyo" },
+    }, "en-US");
+    renderList([token({ created_at: "2026-03-04T22:05:06Z" })]);
+    expect(screen.getByText("2026/3/5")).toHaveAttribute("title", "2026/3/5, 07:05:06");
+  });
+});

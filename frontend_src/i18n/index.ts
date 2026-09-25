@@ -17,7 +17,7 @@
 // This module must never import from api.ts. 17 test files mock "../api" with
 // exhaustive factory objects, so an import edge would break all of them at once.
 
-import { localePluralCategory, setFormatLocale } from "./format";
+import { localeNumber, localePluralCategory, setFormatLocale, validFormatLocale } from "./format";
 
 // Date, time and number formatting lives in ./format and is re-exported here so
 // every consumer has one import for "anything locale-dependent". The dependency
@@ -144,16 +144,7 @@ export function resolveLanguage(hass: any): string {
 
 function formatLanguage(hass: any, resolved: string): string {
   if (getLanguagePreference() !== LANGUAGE_AUTO) return resolved;
-  const profile = normalizeLanguageTag(hass?.language);
-  if (!profile) return resolved;
-  const value = [profile.base, ...profile.subtags].join("-");
-  try {
-    Intl.getCanonicalLocales(value);
-    if (!knownLanguage(value)) return resolved;
-    return value;
-  } catch {
-    return resolved;
-  }
+  return validFormatLocale(hass?.locale?.language) ?? validFormatLocale(hass?.language) ?? resolved;
 }
 
 let strings: Record<string, string> = {};
@@ -249,7 +240,7 @@ export async function loadTranslations(hass: any, language: string): Promise<boo
     }
   } finally {
     if (generation === requestGeneration) {
-      setFormatLocale(hass, formattingLocale);
+      setFormatLocale(hass, formattingLocale, resolved);
       ready = true;
     }
   }
@@ -274,7 +265,7 @@ export async function syncTranslations(hass: any): Promise<boolean> {
     requestGeneration += 1;
     // Same language, but HA's own 24-hour or number-format preference may have
     // moved; adopting it is a repaint even though no catalog is refetched.
-    return setFormatLocale(hass, formatLanguage(hass, want)) || superseded;
+    return setFormatLocale(hass, formatLanguage(hass, want), want) || superseded;
   }
   return loadTranslations(hass, want);
 }
@@ -292,7 +283,7 @@ export function rawMessage(key: string): string {
 export function interpolate(template: string, params?: Params): string {
   if (!params) return template;
   return template.replace(/\{(\w+)\}/g, (match, name: string) =>
-    name in params ? String(params[name]) : match,
+    name in params ? (typeof params[name] === "number" ? localeNumber(params[name]) : params[name]) : match,
   );
 }
 

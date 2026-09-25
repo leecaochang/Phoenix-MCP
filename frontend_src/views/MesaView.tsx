@@ -15,7 +15,7 @@ import { Modal } from "../components/Modal";
 import { TagInput } from "../components/TagInput";
 import { MesaSuggestions } from "../components/MesaSuggestions";
 import { Loading, ErrorMsg, RefreshIcon, ExportIcon, ImportIcon } from "../components/common";
-import { compareStrings, t, tn } from "../i18n";
+import { compareStrings, localeNumber, t, tn } from "../i18n";
 import { tRich } from "../i18n/rich";
 
 // HA domain -> the canonical tag namespace roots that describe an ENTITY of that
@@ -1511,14 +1511,14 @@ export function MesaView() {
           <div className="mesa-summary" role="group" aria-label={t("mesa.filterByControlMode")}>
             <button className={`mesa-chip${filter === "" ? " mesa-chip-active" : ""}`} aria-pressed={filter === ""} onClick={() => setFilter("")}>
               <span className="sr-only">{filter === "" ? t("mesa.currentFilter") : ""}</span>
-              {t("mesa.filterAll")} <span className="mesa-chip-count">{totalCount}</span>
+              {t("mesa.filterAll")} <span className="mesa-chip-count">{localeNumber(totalCount)}</span>
             </button>
             {chips.map((c) => (
               <button key={c.key}
                 className={`mesa-chip${filter === c.key ? " mesa-chip-active" : ""}`}
                 aria-pressed={filter === c.key}
                 onClick={() => setFilter(filter === c.key ? "" : c.key)}>
-                {t(c.labelKey)} <span className="mesa-chip-count">{c.n}</span>
+                {t(c.labelKey)} <span className="mesa-chip-count">{localeNumber(c.n)}</span>
               </button>
             ))}
           </div>
@@ -1548,7 +1548,7 @@ export function MesaView() {
                       <button className="mesa-group-header" onClick={() => toggleGroup(c.sentinel)} aria-expanded={!isCollapsed}>
                         <span className={`collapsible-chevron${!isCollapsed ? " open" : ""}`} aria-hidden="true" />
                         <span className="mesa-group-scope">{t(c.titleKey)}</span>
-                        <span className="mesa-group-count">{c.rows.length}</span>
+                        <span className="mesa-group-count">{localeNumber(c.rows.length)}</span>
                       </button>
                       {!isCollapsed && (
                         <table className="data-table mesa-profile-table">
@@ -1600,7 +1600,7 @@ export function MesaView() {
                     <button className="mesa-group-header" onClick={() => toggleGroup(domain)} aria-expanded={!isCollapsed}>
                       <span className={`collapsible-chevron${!isCollapsed ? " open" : ""}`} aria-hidden="true" />
                       <code>{domain}</code>
-                      <span className="mesa-group-count">{items.length}</span>
+                      <span className="mesa-group-count">{localeNumber(items.length)}</span>
                     </button>
                     {!isCollapsed && (
                       <table className="data-table mesa-profile-table">
