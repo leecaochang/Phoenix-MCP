@@ -45,6 +45,9 @@ _NOT_PAGINATION = {
     # Clips an over-long card name/description harvested from third-party card
     # code to a bound. The value is a string, not a page of rows.
     "card_catalog.py:_clean_str",
+    # Bounds one diagnostic message or source excerpt, with an explicit ellipsis.
+    # This is caller-visible string clipping, not pagination over result rows.
+    "template_diagnostics.py:_bounded_text",
 }
 
 

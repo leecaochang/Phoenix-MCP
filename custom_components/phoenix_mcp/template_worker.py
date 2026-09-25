@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 import resource
 import runpy
@@ -26,6 +27,7 @@ def main() -> None:
         phase = "imports"
         from homeassistant.util import dt as dt_util
         from custom_components.phoenix_mcp.helpers import ScrubbedState, render_template_snapshot
+        from custom_components.phoenix_mcp.template_diagnostics import describe_template_failure
 
     except Exception as exc:
         # No caller input has been read: emit only failure type and missing module.
@@ -37,16 +39,33 @@ def main() -> None:
         sys.stderr.write(detail + "\n")
         raise SystemExit(70) from None
 
-    payload = json.loads(sys.stdin.buffer.read(input_bytes + 1))
-    time_zone = dt_util.get_time_zone(payload["time_zone"])
-    if time_zone is None:
-        raise ValueError("Invalid Home Assistant time zone.")
-    dt_util.set_default_time_zone(time_zone)
-    permitted = {}
-    for row in payload["states"]:
-        state = ScrubbedState.from_dict(row)
-        permitted[state.entity_id] = state
-    sys.stdout.write(render_template_snapshot(payload["template"], permitted))
+    # HA's undefined-variable logger can contain runtime values. Diagnostics use
+    # the private stdout protocol; do not emit render logs or Python tracebacks.
+    previous_logging_disable = logging.root.manager.disable
+    logging.disable(logging.CRITICAL)
+    try:
+        raw = sys.stdin.buffer.read(input_bytes + 1)
+        if len(raw) > input_bytes:
+            raise ValueError("Worker input exceeded its limit.")
+        payload = json.loads(raw)
+        time_zone = dt_util.get_time_zone(payload["time_zone"])
+        if time_zone is None:
+            raise ValueError("Invalid Home Assistant time zone.")
+        dt_util.set_default_time_zone(time_zone)
+        permitted = {}
+        for row in payload["states"]:
+            state = ScrubbedState.from_dict(row)
+            permitted[state.entity_id] = state
+        rendered = render_template_snapshot(payload["template"], permitted)
+    except Exception as exc:
+        diagnostic = json.dumps(describe_template_failure(exc), ensure_ascii=False)
+        if len(diagnostic.encode()) > limits["TEMPLATE_DIAGNOSTIC_BYTES"]:
+            diagnostic = '{"kind":"worker"}'
+        sys.stdout.write(diagnostic)
+        raise SystemExit(limits["TEMPLATE_WORKER_DIAGNOSTIC_EXIT"]) from None
+    finally:
+        logging.disable(previous_logging_disable)
+    sys.stdout.write(rendered)
 
 
 if __name__ == "__main__":

@@ -4766,6 +4766,8 @@ async def _tool_render_template(
 
     try:
         rendered = await async_render_template_for_token(template_str, token, hass, data)
+    except AuthorityChangedError:
+        raise
     except TemplateRenderError as exc:
         return _tool_error(str(exc)), "invalid_request", "render_template"
     except Exception:

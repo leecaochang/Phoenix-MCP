@@ -176,6 +176,7 @@
           <article class="tool" data-cap="read" data-search="render_template jinja2">
             <div class="tool-head"><span class="tool-name">render_template</span><span class="badge badge-cap">Template render</span></div>
             <p class="tool-desc">Render a Jinja2 template against a snapshot of entities the token can read. Rendering is limited to 2 concurrent workers, 2 seconds of CPU time, 5 seconds of elapsed time, and 512 MB of worker memory. Oversized input, output, exhausted capacity, and unavailable operating-system resource limits return an error.</p>
+            <p class="tool-desc">Template failures report a bounded syntax or runtime explanation and, when available, the line number and source excerpt from your submitted template. Runtime values and Python tracebacks are omitted. Startup failures, timeouts, and recognized resource limits have separate messages; an unexpected worker exit may not identify which limit was reached.</p>
             <dl><dt>params</dt><dd><code>template</code> (string, required)</dd></dl>
           </article>
         </section>

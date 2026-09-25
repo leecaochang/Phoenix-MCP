@@ -46,6 +46,24 @@ TEMPLATE_WORKER_CPU_SECONDS = 2
 TEMPLATE_WORKER_MEMORY_BYTES = 512 * 1024 * 1024
 TEMPLATE_WORKER_INPUT_BYTES = 1_048_576
 TEMPLATE_WORKER_CONCURRENCY = 2
+TEMPLATE_WORKER_DIAGNOSTIC_EXIT = 65
+TEMPLATE_DIAGNOSTIC_BYTES = 4096
+TEMPLATE_DIAGNOSTIC_MESSAGE_CHARS = 320
+TEMPLATE_DIAGNOSTIC_SOURCE_CHARS = 240
+TEMPLATE_DIAGNOSTIC_TRACEBACK_FRAMES = 64
+TEMPLATE_FAILURE_MESSAGES = {
+    "syntax": "Template syntax error",
+    "undefined": "Template runtime error: undefined variable or attribute. Check the name and use a default for missing values.",
+    "division": "Template runtime error: division by zero. Check the divisor before dividing.",
+    "value": "Template runtime error: invalid value. Check filter inputs and supply a valid default for conversions.",
+    "type": "Template runtime error: incompatible value types or arguments. Check the operation and its inputs.",
+    "security": "Template runtime error: access blocked by the template sandbox.",
+    "runtime": "Template runtime error. Check the expression and its inputs.",
+    "output": "Template output exceeded its size limit. Reduce the rendered output.",
+    "memory": "Template rendering exhausted its memory budget. Reduce the template workload.",
+    "recursion": "Template rendering exceeded its recursion limit. Reduce nested or recursive calls.",
+    "worker": "Template worker failed. Check Phoenix diagnostics.",
+}
 
 TOKEN_PREFIX = "phx_"
 TOKEN_HEX_LENGTH = 64

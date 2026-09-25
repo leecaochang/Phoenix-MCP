@@ -38,7 +38,7 @@ async def test_worker_is_killed_and_reaped_on_timeout_or_cancel(hass, cancel):
         await started.wait()
         if cancel:
             task.cancel()
-        with pytest.raises(asyncio.CancelledError if cancel else TimeoutError):
+        with pytest.raises(asyncio.CancelledError if cancel else template_render.TemplateRenderError):
             await task
     process.kill.assert_called_once()
     process.wait.assert_awaited_once()
@@ -163,3 +163,189 @@ def test_snapshot_preserves_all_template_metadata_without_user_identity(monkeypa
     with patch.object(template_worker.resource, 'setrlimit'), patch('homeassistant.util.dt.set_default_time_zone'):
         template_worker.main()
     assert output.getvalue() == expected
+
+
+@pytest.mark.parametrize('returncode,payload,expected', [
+    (65, b'{"kind":"division","line":2}', 'Line 2: {{ 1 / 0 }}'),
+    (65, b'{"kind":"syntax","message":"unexpected end","line":2}', 'syntax error: unexpected end'),
+    (65, b'not-json-secret', 'Template worker failed'),
+    (-9, b'secret', 'exited unexpectedly'),
+    (1, b'secret', 'exited unexpectedly'),
+    (-24, b'', 'CPU budget'),
+])
+async def test_parent_classifies_worker_failures(hass, returncode, payload, expected):
+    import signal
+    if returncode == -24:
+        returncode = -signal.SIGXCPU
+    token, data = _env()
+    process = MagicMock(returncode=returncode)
+    process.communicate = AsyncMock(return_value=(payload, b'private-stderr'))
+    process.wait = AsyncMock()
+    with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock(return_value=process)):
+        with pytest.raises(template_render.TemplateRenderError) as failure:
+            await template_render.async_render_template_for_token('first\n{{ 1 / 0 }}', token, hass, data)
+    assert expected in str(failure.value)
+    assert 'secret' not in str(failure.value)
+    assert 'private-stderr' not in str(failure.value)
+    process.wait.assert_awaited_once()
+
+
+async def test_spawn_failure_is_safe_and_releases_capacity(hass):
+    token, data = _env()
+    with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock(side_effect=OSError('private-path'))):
+        with pytest.raises(template_render.TemplateRenderError, match='could not start') as failure:
+            await template_render.async_render_template_for_token('ok', token, hass, data)
+    assert 'private-path' not in str(failure.value)
+    assert data.template_slots._value == TEMPLATE_WORKER_CONCURRENCY
+
+
+@pytest.mark.parametrize('change', ['policy', 'revoke', 'kill', 'unload'])
+async def test_diagnostics_recheck_real_authority_after_worker_wait(hass, change):
+    from custom_components.phoenix_mcp.const import DOMAIN
+    from custom_components.phoenix_mcp.request_authority import (
+        AuthorityChangedError, RequestAuthority, policy_version, request_authority,
+    )
+    token, data = _env()
+    data.ready = True
+    hass.data[DOMAIN] = data
+    data.store.get_token_by_hash.return_value = token
+    data.store.get_settings.return_value.kill_switch = False
+    process = MagicMock(returncode=65)
+    async def communicate(payload):
+        if change == 'policy':
+            token.settings_version += 1
+        elif change == 'revoke':
+            data.store.get_token_by_hash.return_value = None
+        elif change == 'kill':
+            data.store.get_settings.return_value.kill_switch = True
+        else:
+            data.shutting_down = True
+        return b'{"kind":"syntax","message":"never-disclose","line":1}', b''
+    process.communicate = communicate
+    process.wait = AsyncMock()
+    authority_reset = request_authority.set(RequestAuthority(hass, data, token.id, token.token_hash))
+    policy_reset = policy_version.set(token.settings_version)
+    try:
+        with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock(return_value=process)):
+            from custom_components.phoenix_mcp.mcp_view import _tool_render_template
+            with pytest.raises(AuthorityChangedError):
+                await _tool_render_template({'template': 'private-input'}, token, hass, data)
+    finally:
+        request_authority.reset(authority_reset)
+        policy_version.reset(policy_reset)
+    process.wait.assert_awaited_once()
+
+
+@pytest.mark.parametrize('template,kind,line', [
+    ('first\n{{ 1 + }}', 'syntax', 2),
+    ('\n{{ 1 / 0 }}', 'division', 2),
+    ('{{ missing.foo }}', 'undefined', 1),
+    ('{{ "x" * 300000 }}', 'output', None),
+])
+def test_worker_serializes_real_failures_without_tracebacks(monkeypatch, caplog, template, kind, line):
+    import logging
+    from io import BytesIO, StringIO
+    from types import SimpleNamespace
+    from custom_components.phoenix_mcp import template_worker
+    payload = json.dumps({'template': template, 'states': [], 'time_zone': 'UTC'}).encode()
+    output = StringIO()
+    monkeypatch.setattr(sys, 'path', list(sys.path))
+    monkeypatch.setattr(sys, 'stdin', SimpleNamespace(buffer=BytesIO(payload)))
+    monkeypatch.setattr(sys, 'stdout', output)
+    previous_logging_disable = logging.root.manager.disable
+    with patch.object(template_worker.resource, 'setrlimit'), patch('homeassistant.util.dt.set_default_time_zone'):
+        with pytest.raises(SystemExit) as exit_info:
+            template_worker.main()
+    assert exit_info.value.code == 65
+    detail = json.loads(output.getvalue())
+    assert detail['kind'] == kind
+    assert detail['line'] == line
+    assert 'Traceback' not in output.getvalue()
+    assert not caplog.records
+    assert logging.root.manager.disable == previous_logging_disable
+
+
+async def test_error_response_uses_only_scoped_snapshot(hass, monkeypatch):
+    from io import BytesIO, StringIO
+    from types import SimpleNamespace
+    from custom_components.phoenix_mcp import template_worker
+    from custom_components.phoenix_mcp.mcp_view import _tool_render_template
+    from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree
+
+    token, data = _env()
+    token.pass_through = False
+    token.cap_template_render = 'allow'
+    token.permissions = PermissionTree(entities={'sensor.allowed': PermissionNode(state='YELLOW')})
+    hass.states.async_set('sensor.allowed', 'private-visible-value', {'access_token': 'private-credential'})
+    hass.states.async_set('sensor.hidden', 'private-hidden-value')
+    snapshots = []
+    async def spawn(*args, **kwargs):
+        process = MagicMock(returncode=None)
+        process.wait = AsyncMock()
+        async def communicate(payload):
+            snapshots.append(json.loads(payload))
+            output = StringIO()
+            with monkeypatch.context() as worker_patch:
+                worker_patch.setattr(sys, 'path', list(sys.path))
+                worker_patch.setattr(sys, 'stdin', SimpleNamespace(buffer=BytesIO(payload)))
+                worker_patch.setattr(sys, 'stdout', output)
+                with patch.object(template_worker.resource, 'setrlimit'), patch('homeassistant.util.dt.set_default_time_zone'):
+                    try:
+                        template_worker.main()
+                    except SystemExit as exc:
+                        process.returncode = exc.code
+                    else:
+                        process.returncode = 0
+            return output.getvalue().encode(), b''
+        process.communicate = communicate
+        return process
+    with patch.object(template_render.asyncio, 'create_subprocess_exec', spawn):
+        arguments = {'template': "{{ states('sensor.hidden') | int }}"}
+        hidden, outcome, _ = await _tool_render_template(arguments, token, hass, data)
+        hass.states.async_remove('sensor.hidden')
+        missing, _, _ = await _tool_render_template(arguments, token, hass, data)
+        visible, _, _ = await _tool_render_template({'template': "{{ states('sensor.allowed') | int }}"}, token, hass, data)
+    assert hidden == missing
+    assert outcome == 'invalid_request' and hidden['isError']
+    assert 'Line 1:' in hidden['content'][0]['text']
+    assert 'private-' not in json.dumps([hidden, visible])
+    assert 'private-hidden-value' not in json.dumps(snapshots)
+    assert 'private-credential' not in json.dumps(snapshots)
+    assert snapshots[0]['states'][0]['state'] == 'private-visible-value'
+
+
+async def test_capability_denial_precedes_diagnostics(hass):
+    from custom_components.phoenix_mcp.mcp_view import _tool_render_template
+    token, data = _env()
+    token.pass_through = False
+    token.cap_template_render = 'deny'
+    with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock()) as spawn:
+        result, outcome, _ = await _tool_render_template({'template': '{{ invalid + }}'}, token, hass, data)
+    assert outcome == 'denied'
+    assert result['isError'] and result['content'][0]['text'] == 'Forbidden.'
+    spawn.assert_not_called()
+
+
+async def test_authority_change_during_reaping_suppresses_diagnostics(hass):
+    from custom_components.phoenix_mcp.request_authority import AuthorityChangedError
+    token, data = _env()
+    process = MagicMock(returncode=65)
+    process.communicate = AsyncMock(return_value=(b'{"kind":"division","line":1}', b''))
+    authority_changed = False
+    async def wait():
+        nonlocal authority_changed
+        authority_changed = True
+    def check():
+        if authority_changed:
+            raise AuthorityChangedError('Permissions changed.')
+    process.wait = wait
+    with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock(return_value=process)), patch.object(template_render, 'check_request_authority', check):
+        with pytest.raises(AuthorityChangedError):
+            await template_render.async_render_template_for_token('{{ 1 / 0 }}', token, hass, data)
+
+
+@pytest.mark.skipif(sys.platform != 'linux', reason='HA production OS resource limits require Linux')
+async def test_real_worker_returns_template_location(hass):
+    token, data = _env()
+    with pytest.raises(template_render.TemplateRenderError, match='Line 2:'):
+        await template_render.async_render_template_for_token('\n{{ 1 / 0 }}', token, hass, data)

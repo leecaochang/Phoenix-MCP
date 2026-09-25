@@ -644,8 +644,8 @@ def render_template_for_token(template_str: str, token: TokenRecord, hass: HomeA
 def render_template_snapshot(template_str: str, permitted: dict) -> str:
     """Render a detached state snapshot; production calls run in the worker."""
     from homeassistant.helpers.template import MAX_TEMPLATE_OUTPUT
-    from homeassistant.exceptions import TemplateError
     from homeassistant.util import dt as dt_util
+    from .template_diagnostics import TemplateOutputLimitError
 
     filtered_states = FilteredStates(permitted)
 
@@ -722,7 +722,7 @@ def render_template_snapshot(template_str: str, permitted: dict) -> str:
     for chunk in compiled.generate(variables):
         size += len(chunk)
         if size > MAX_TEMPLATE_OUTPUT:
-            raise TemplateError("Template output exceeded maximum size.")
+            raise TemplateOutputLimitError("Template output exceeded maximum size.")
         chunks.append(chunk)
     return "".join(chunks).strip()
 
