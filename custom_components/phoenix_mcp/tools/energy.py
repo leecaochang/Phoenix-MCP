@@ -74,7 +74,7 @@ from ..tool_common import (
 )
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
 from ..request_authority import check_request_authority
-from ..ws_dispatch import WsDispatchError, async_ws_command
+from ..ws_dispatch import WsCommandNotDispatchedError, WsDispatchError, async_ws_command
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -913,7 +913,7 @@ async def _execute_edit_energy_config(
                     await async_ws_command(hass, "energy/save_prefs", payload)
                 except WsDispatchError as err:
                     _LOGGER.exception("edit_energy_config: energy/save_prefs failed")
-                    await recovery.mark(rid, "not_applied", error="save_rejected")
+                    await recovery.mark(rid, "not_applied" if isinstance(err, WsCommandNotDispatchedError) else "unknown", error="save_rejected")
                     return _tool_error(f"Home Assistant rejected the Energy configuration: {err}"), "invalid_request", tool
                 try:
                     observed = await _read_prefs_raw(hass)
@@ -927,6 +927,11 @@ async def _execute_edit_energy_config(
                             await recovery.set_source(rid, source_snapshot)
                     else:
                         await recovery.mark(rid, "partial", observed_hash=content_hash(observed))
+                        return _tool_success(json.dumps({
+                            "status": "partial", "saved": False, "recovery_id": rid,
+                            "message": "Energy preferences were submitted but readback differs; inspect configuration recovery before retrying.",
+                            **_scoped_body(observed, True, token, hass),
+                        }, default=str)), "allowed", "energy:preferences"
                 except Exception:  # noqa: BLE001 - a committed write with failed readback is uncertain
                     await recovery.mark(rid, "unknown", readback="unavailable")
                     return _tool_error("Energy preferences were submitted, but readback is incomplete; inspect configuration recovery before retrying."), "invalid_request", tool

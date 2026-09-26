@@ -53,7 +53,7 @@ from ..tool_common import (
     _usable_path_arg,
     _version_content_payload,
 )
-from ..ws_dispatch import WsDispatchError, async_ws_command
+from ..ws_dispatch import WsCommandNotDispatchedError, WsDispatchError, async_ws_command
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -314,6 +314,18 @@ async def _read_blueprint_source(hass: HomeAssistant, target: str) -> str | None
         return None
 
 
+def _canonical_blueprint_source(domain: str, content: str) -> str:
+    """Return the source HA's blueprint/save command will persist."""
+    from homeassistant.components.blueprint.models import Blueprint
+    from homeassistant.components.blueprint.schemas import BLUEPRINT_SCHEMA
+    from homeassistant.util import yaml as yaml_util
+
+    parsed = yaml_util.parse_yaml(content)
+    if not isinstance(parsed, dict):
+        raise ConfigurationRecoveryError("Blueprint source must be a YAML mapping.")
+    return Blueprint(parsed, expected_domain=domain, schema=BLUEPRINT_SCHEMA).yaml()
+
+
 def _blueprint_recovery_snapshot(domain: str, rel: str, content: str | None) -> dict:
     """Capture exact blueprint source only when textual secret scrubbing is lossless."""
     if content is not None and redact_secrets_in_text(content) != content:
@@ -445,6 +457,7 @@ async def _save_blueprint(
         return pre
     domain = str(args.get("domain") or "").strip().lower()
     content = args["content"]
+    expected_source = _canonical_blueprint_source(domain, content)
     before = await _read_blueprint_source(hass, target)
     if allow_override and before is None:
         return _tool_error("Blueprint not found."), "not_found", tool_name
@@ -471,10 +484,10 @@ async def _save_blueprint(
                         "allow_override": allow_override,
                     })
                 except WsDispatchError as exc:
-                    await recovery.mark(rid, "not_applied", error="save_rejected")
+                    await recovery.mark(rid, "not_applied" if isinstance(exc, WsCommandNotDispatchedError) else "unknown", error="save_rejected")
                     return _tool_error(f"Failed to save blueprint: {exc}"), "invalid_request", tool_name
                 observed = await _read_blueprint_source(hass, target)
-                if observed != content:
+                if observed != expected_source:
                     await recovery.mark(rid, "partial", observed_hash=content_hash(observed or ""))
                     return _tool_success(json.dumps({
                         "status": "partial", "recovery_id": rid,
@@ -493,7 +506,7 @@ async def _save_blueprint(
         data, token, resource_type="blueprint", resource_id=f"{domain}/{rel}",
         action="edit" if before is not None else "create",
         before=_version_content_payload(before) if before is not None else None,
-        after=_version_content_payload(content),
+        after=_version_content_payload(observed),
         alias=rel,
     )
     body = {
@@ -555,7 +568,7 @@ async def _execute_delete_blueprint(
                 try:
                     await async_ws_command(hass, "blueprint/delete", {"domain": domain, "path": rel})
                 except WsDispatchError as exc:
-                    await recovery.mark(rid, "not_applied", error="delete_rejected")
+                    await recovery.mark(rid, "not_applied" if isinstance(exc, WsCommandNotDispatchedError) else "unknown", error="delete_rejected")
                     return _tool_error(f"Failed to delete blueprint: {exc}"), "invalid_request", "delete_blueprint"
                 if await _read_blueprint_source(hass, target) is not None:
                     await recovery.mark(rid, "partial", observed="blueprint_still_exists")

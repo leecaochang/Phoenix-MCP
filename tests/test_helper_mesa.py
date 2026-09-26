@@ -392,3 +392,73 @@ async def test_template_menu_uses_selected_entity_domain_for_mesa(hass, kind):
     assert "read_only" in content["content"][0]["text"]
     gate.assert_not_awaited()
     assert not hass.config_entries.async_entries("template")
+
+
+@pytest.mark.parametrize("changed", [False, True])
+async def test_template_restore_retains_approved_mesa_fingerprint(hass, changed):
+    from homeassistant.config_entries import SOURCE_USER
+    from custom_components.phoenix_mcp.template_recovery import template_snapshot
+
+    assert await async_setup_component(hass, "homeassistant", {})
+    flow = hass.config_entries.flow
+    result = await flow.async_init("template", context={"source": SOURCE_USER})
+    result = await flow.async_configure(result["flow_id"], {"next_step_id": "sensor"})
+    result = await flow.async_configure(result["flow_id"], {"name": "Confirmed restore", "state": "{{ 7 }}"})
+    await hass.async_block_till_done()
+    entry = result["result"]
+    snapshot = template_snapshot(hass, entry)
+    hass.config_entries.async_update_entry(entry, options={**entry.options, "state": "{{ 8 }}"})
+    data, token = await _data(hass), _token("sensor")
+    entity_id = snapshot["entities"][0]["entity_id"]
+    data.mesa.store.set(entity_id, _profile(entity_id, "confirm"))
+    rid = await data.config_recovery.begin(f"config_entry:{entry.entry_id}", "edit", token.id, snapshot)
+    await data.config_recovery.mark(rid, "verified")
+    data.config_recovery.leave(rid)
+    args = {"recovery_id": rid, "side": "before"}
+    content, outcome, _ = await _call_tool("restore_configuration", args, token, hass, data)
+    assert outcome == "allowed", content
+    receipt = json.loads(content["content"][0]["text"])
+    args.update({key: receipt[key] for key in ("snapshot_digest", "target_fingerprint")})
+    gate = AsyncMock(return_value=({}, "pending_approval", "approval-1"))
+    with patch("custom_components.phoenix_mcp.tools.helper._gate", gate):
+        _, outcome, _ = await _call_tool("restore_configuration", args, token, hass, data)
+    assert outcome == "pending_approval"
+    saved_args = gate.await_args.kwargs["args"]
+    if changed:
+        data.mesa.store.set(entity_id, _profile(entity_id, "read_only"))
+    content, outcome, _ = await async_execute_approved_tool("restore_configuration", saved_args, token, hass, data)
+    if changed:
+        assert outcome == "denied", content
+        assert entry.options["state"] == "{{ 8 }}"
+        assert len(data.config_recovery.records()) == 1
+    else:
+        assert outcome == "allowed", content
+        assert entry.options["state"] == "{{ 7 }}"
+        assert data.config_recovery.records()[0]["phase"] == "verified"
+
+
+async def test_allow_capability_and_advisory_mesa_need_no_template_approval(hass):
+    data, token = await _data(hass, "advisory"), _token("sensor", cap="allow")
+    assert await async_setup_component(hass, "homeassistant", {})
+    content, outcome, _ = await _call_tool("create_helper", {
+        "helper_type": "template", "flow_steps": [
+            {"step_id": "user", "data": {"next_step_id": "sensor"}},
+            {"step_id": "sensor", "data": {"name": "Advisory helper", "state": "{{ 7 }}"}},
+        ],
+    }, token, hass, data)
+    assert outcome == "allowed", content
+    entry_id = json.loads(content["content"][0]["text"])["config_entry"]["entry_id"]
+    content, outcome, _ = await _call_tool("set_helper_settings", {
+        "entry_id": entry_id, "settings": {"state": "{{ 8 }}"},
+    }, token, hass, data)
+    assert outcome == "allowed", content
+    rid = json.loads(content["content"][0]["text"])["recovery_id"]
+    args = {"recovery_id": rid, "side": "before"}
+    content, outcome, _ = await _call_tool("restore_configuration", args, token, hass, data)
+    assert outcome == "allowed", content
+    receipt = json.loads(content["content"][0]["text"])
+    args.update({key: receipt[key] for key in ("snapshot_digest", "target_fingerprint")})
+    content, outcome, _ = await _call_tool("restore_configuration", args, token, hass, data)
+    assert outcome == "allowed", content
+    assert hass.config_entries.async_get_entry(entry_id).options["state"] == "{{ 7 }}"
+    data.store.get_pending_approvals.assert_not_called()

@@ -6,7 +6,7 @@ import pytest
 from homeassistant.setup import async_setup_component
 
 import custom_components.phoenix_mcp.ws_dispatch as wd_module
-from custom_components.phoenix_mcp.ws_dispatch import WsDispatchError, async_ws_command
+from custom_components.phoenix_mcp.ws_dispatch import WsCommandNotDispatchedError, WsDispatchError, async_ws_command
 from custom_components.phoenix_mcp.tools.helper import HELPER_TYPES
 
 
@@ -69,7 +69,7 @@ async def test_command_not_on_allowlist_rejected(hass, hass_admin_user):
 async def test_invalid_payload_raises(hass, hass_admin_user):
     assert await async_setup_component(hass, "input_boolean", {"input_boolean": {}})
     # input_boolean/create requires a name; omitting it should fail schema validation.
-    with pytest.raises(WsDispatchError):
+    with pytest.raises(WsCommandNotDispatchedError):
         await async_ws_command(hass, "input_boolean/create", {})
 
 

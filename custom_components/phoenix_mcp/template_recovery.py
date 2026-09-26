@@ -98,6 +98,24 @@ def validate_snapshot(snapshot: dict) -> None:
         raise ConfigurationRecoveryError("Template entity mapping cannot be restored safely.")
 
 
+def validate_restore_scope(snapshot: dict, token, hass) -> None:
+    """Require current target and reference WRITE scope, including recreation."""
+    from .policy_engine import Permission, resolve_registry_access
+    from .tools.helper import _scoped_helper_create_scope_error, _unwritable_option_entities
+
+    entity_id = snapshot["entities"][0]["entity_id"]
+    if er.async_get(hass).async_get(entity_id) is not None or hass.states.get(entity_id) is not None:
+        allowed = resolve_registry_access(entity_id, token, hass) == Permission.WRITE
+    else:
+        # A replacement is first materialized under HA's generated identity.
+        allowed = _scoped_helper_create_scope_error(entity_id.split(".")[0], token) is None
+        node = token.permissions.entities.get(entity_id)
+        if not token.pass_through and node is not None and node.state in ("RED", "YELLOW"):
+            allowed = False
+    if not allowed or _unwritable_option_entities(snapshot["options"], token, hass):
+        raise PermissionError("Forbidden.")
+
+
 @asynccontextmanager
 async def protect_template(hass, data, token, entry, operation: str, *, source=None):
     """Persist a safety copy and revalidate before entering a mutation boundary."""
@@ -118,12 +136,14 @@ async def protect_template(hass, data, token, entry, operation: str, *, source=N
             recovery.leave(rid)
 
 
-async def restore_template(snapshot: dict, token, hass, data) -> tuple[dict, str, str]:
+async def restore_template(
+    snapshot: dict, token, hass, data, *, mesa_fingerprint: str | None = None,
+) -> tuple[dict, str, str]:
     """Restore one qualified helper through HA flows, retaining partial effects."""
     from homeassistant.config_entries import SOURCE_USER
     from homeassistant.data_entry_flow import FlowResultType
     from .tools.helper import (
-        _apply_config_entry_options, _helper_mesa_context,
+        _HELPER_MESA_FINGERPRINT, _apply_config_entry_options, _helper_mesa_context,
         _helper_mesa_error, _settings_form_payload, _unwritable_option_entities,
     )
     from .tool_common import _record_version, _tool_error, _tool_success
@@ -136,6 +156,7 @@ async def restore_template(snapshot: dict, token, hass, data) -> tuple[dict, str
     recovery = data.config_recovery
     try:
         validate_snapshot(snapshot)
+        validate_restore_scope(snapshot, token, hass)
         original_id = snapshot["entry_id"]
         expected = snapshot["entities"][0]
         options = deepcopy(snapshot["options"])
@@ -152,7 +173,8 @@ async def restore_template(snapshot: dict, token, hass, data) -> tuple[dict, str
             settings.update({k: None for k in current.options if k not in options})
             async with protect_template(hass, data, token, current, tool, source=snapshot) as rid:
                 result = await _apply_config_entry_options(
-                    {"entry_id": original_id, "settings": settings}, token, hass, data, record_history=False, recovery_before=existing,
+                    {"entry_id": original_id, "settings": settings, _HELPER_MESA_FINGERPRINT: mesa_fingerprint},
+                    token, hass, data, record_history=False, recovery_before=existing,
                 )
                 check_request_authority()
                 if result[0].get("isError") or dict(current.options) != options:
@@ -180,6 +202,7 @@ async def restore_template(snapshot: dict, token, hass, data) -> tuple[dict, str
 
         def absent():
             check_request_authority()
+            validate_restore_scope(snapshot, token, hass)
             if (hass.config_entries.async_get_entry(original_id) is not None
                     or registry.async_get(expected["entity_id"]) is not None
                     or hass.states.get(expected["entity_id"]) is not None):
@@ -219,6 +242,10 @@ async def restore_template(snapshot: dict, token, hass, data) -> tuple[dict, str
                     or dict(entry.options) != options):
                 raise ConfigurationRecoveryError("The replacement helper is incomplete; inspect it before retrying.")
             entity = created[0]
+            from .policy_engine import Permission, resolve_registry_access
+            validate_restore_scope(snapshot, token, hass)
+            if resolve_registry_access(entity.entity_id, token, hass) != Permission.WRITE:
+                raise PermissionError("Forbidden.")
             post_mesa = _helper_mesa_context(data, token, [entity.entity_id, expected["entity_id"]], action="create",
                                             service_data={"helper_type": "template"}, session_id=tool)
             if isinstance(post_mesa, tuple) or post_mesa.decision == "deny":
@@ -237,6 +264,8 @@ async def restore_template(snapshot: dict, token, hass, data) -> tuple[dict, str
             return _tool_success(json.dumps({"recovery_id": rid, "status": "verified",
                 "entry_id": entry.entry_id, "original_entry_id": original_id,
                 "entity_id": expected["entity_id"], "retry_safe": False})), "allowed", tool
+    except PermissionError:
+        return _tool_error("Forbidden."), "denied", tool
     except Exception as exc:
         message = str(exc) if isinstance(exc, ConfigurationRecoveryError) else "Template recovery failed; inspect the recovery record before retrying."
         return _tool_error(json.dumps({"error": message, "recovery_id": rid,

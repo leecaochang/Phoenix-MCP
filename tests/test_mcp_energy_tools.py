@@ -264,6 +264,7 @@ def _writer(prefs: dict):
     hands back a DEEP COPY so a test can prove the tool built its result from its
     own mutation rather than from a shared object it happened to edit in place.
     """
+    prefs = json.loads(json.dumps(prefs))
     saved: list[dict] = []
 
     async def dispatch(hass, command, payload, **kw):
@@ -271,6 +272,7 @@ def _writer(prefs: dict):
             return json.loads(json.dumps(prefs))
         assert command == "energy/save_prefs", command
         saved.append(payload)
+        prefs.update(json.loads(json.dumps(payload)))
         return json.loads(json.dumps(prefs))
 
     return AsyncMock(side_effect=dispatch), saved
@@ -684,6 +686,7 @@ def _bus(prefs: dict, *, validate: dict | None = None, forecast: dict | None = N
     energy/solar_forecast, so a read that folds in the health check can be
     exercised end to end.
     """
+    prefs = json.loads(json.dumps(prefs))
     saved: list[dict] = []
 
     async def dispatch(hass, command, payload, **kw):
@@ -697,6 +700,7 @@ def _bus(prefs: dict, *, validate: dict | None = None, forecast: dict | None = N
             return {} if forecast is None else forecast
         assert command == "energy/save_prefs", command
         saved.append(payload)
+        prefs.update(json.loads(json.dumps(payload)))
         return json.loads(json.dumps(prefs))
 
     return AsyncMock(side_effect=dispatch), saved
@@ -1077,7 +1081,7 @@ async def test_every_write_records_a_restorable_version(hass: HomeAssistant) -> 
     """
     _seed_states(hass, "sensor.dryer_energy")
     data = _data()
-    ws, saved = _bus(LIVE)
+    ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         _, outcome, _ = await _call_tool(
             "edit_energy_config",

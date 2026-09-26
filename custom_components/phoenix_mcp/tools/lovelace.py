@@ -54,6 +54,7 @@ from ..tool_common import (
     resolve_json_path,
 )
 from ..ws_dispatch import (
+    WsCommandNotDispatchedError,
     WsDashboardNotFoundError,
     WsDispatchError,
     async_get_lovelace_config,
@@ -108,7 +109,7 @@ async def _recoverable_dashboard_registry_write(
                 try:
                     result = await async_ws_command(hass, command, payload)
                 except WsDispatchError as exc:
-                    await recovery.mark(rid, "not_applied", error="command_rejected")
+                    await recovery.mark(rid, "not_applied" if isinstance(exc, WsCommandNotDispatchedError) else "unknown", error="command_rejected")
                     return _tool_error(f"Dashboard registry operation failed: {exc}"), "invalid_request", operation
                 try:
                     after = await _dashboard_registry_snapshot(hass, dashboard_id)
@@ -144,7 +145,7 @@ async def _recoverable_dashboard_registry_write(
 async def _recoverable_dashboard_save(
     *, url_path: str | None, before: dict | None, after: dict,
     token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
-    return_result: bool = False,
+    return_result: bool = False, recovery_id_out: dict[str, str] | None = None,
 ) -> tuple[dict, str, str] | None:
     """Persist and verify one dashboard-layout write under its resource lock."""
     resource_id = url_path or "lovelace"
@@ -154,6 +155,8 @@ async def _recoverable_dashboard_save(
         before_snapshot = _dashboard_layout_snapshot(url_path, before)
         async with recovery.resource(resource):
             rid = await recovery.begin(resource, "dashboard_layout_write", token.id, before_snapshot)
+            if recovery_id_out is not None:
+                recovery_id_out["recovery_id"] = rid
             try:
                 await recovery.mark(rid, "dispatching")
                 try:
@@ -167,7 +170,7 @@ async def _recoverable_dashboard_save(
                 try:
                     await async_save_lovelace_config(hass, url_path, after)
                 except WsDispatchError as exc:
-                    await recovery.mark(rid, "not_applied", error="save_rejected")
+                    await recovery.mark(rid, "not_applied" if isinstance(exc, WsCommandNotDispatchedError) else "unknown", error="save_rejected")
                     return _tool_error(f"Failed to save dashboard config: {exc}"), "invalid_request", "dashboard"
                 try:
                     observed = await async_get_lovelace_config(hass, url_path)
@@ -626,8 +629,9 @@ async def _execute_set_dashboard_config(
     conflict = _cas_conflict(args.get("expected_hash"), before, "set_dashboard_config")
     if conflict is not None:
         return conflict
+    recovery_receipt: dict[str, str] = {}
     recovery_result = await _recoverable_dashboard_save(
-        url_path=url_path, before=before, after=config, token=token, hass=hass, data=data,
+        url_path=url_path, before=before, after=config, token=token, hass=hass, data=data, recovery_id_out=recovery_receipt,
     )
     if recovery_result is not None:
         return recovery_result
@@ -636,7 +640,7 @@ async def _execute_set_dashboard_config(
         action="edit" if before is not None else "create",
         before=before, after=config, alias=url_path or "(default)",
     )
-    body: dict[str, Any] = {"url_path": url_path, "saved": True}
+    body: dict[str, Any] = {"url_path": url_path, "saved": True, **recovery_receipt}
     warnings = _card_warnings(config, data)
     if warnings:
         body["warnings"] = warnings
@@ -879,8 +883,9 @@ async def _execute_dashboard_card(
         return _tool_error(reason or "Invalid card operation."), "invalid_request", tool_name
     url_path = str(args.get("url_path") or "").strip() or None
     resource_id = url_path or "lovelace"
+    recovery_receipt: dict[str, str] = {}
     recovery_result = await _recoverable_dashboard_save(
-        url_path=url_path, before=current, after=new_config, token=token, hass=hass, data=data,
+        url_path=url_path, before=current, after=new_config, token=token, hass=hass, data=data, recovery_id_out=recovery_receipt,
     )
     if recovery_result is not None:
         return recovery_result
@@ -903,7 +908,7 @@ async def _execute_dashboard_card(
         ),
     )
     body: dict[str, Any] = {
-        "url_path": url_path, "saved": True, "op": op,
+        "url_path": url_path, "saved": True, **recovery_receipt, "op": op,
         "view_index": args.get("view_index"),
         # Unlike a whole-blob replace (which must be re-read and merged after a
         # conflict), a card op is structural, so the resulting layout's hash is
@@ -1092,8 +1097,9 @@ async def _execute_patch_dashboard(
         return _tool_error(reason or "Invalid patch operation."), "invalid_request", tool
     url_path = str_arg(args.get("url_path")).strip() or None
     resource_id = url_path or "lovelace"
+    recovery_receipt: dict[str, str] = {}
     recovery_result = await _recoverable_dashboard_save(
-        url_path=url_path, before=current, after=new_config, token=token, hass=hass, data=data,
+        url_path=url_path, before=current, after=new_config, token=token, hass=hass, data=data, recovery_id_out=recovery_receipt,
     )
     if recovery_result is not None:
         return recovery_result
@@ -1105,7 +1111,7 @@ async def _execute_patch_dashboard(
         summary=_version_summary(f"patch.{op}", subject=path_label),
     )
     body: dict[str, Any] = {
-        "url_path": url_path, "saved": True, "op": op, "path": path_label,
+        "url_path": url_path, "saved": True, **recovery_receipt, "op": op, "path": path_label,
         # Structural like the card ops, so the resulting hash is safe to hand back
         # and the agent can chain further patches without another read.
         "content_hash": content_hash(new_config),

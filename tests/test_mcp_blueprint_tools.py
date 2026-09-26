@@ -104,7 +104,10 @@ def _patch_ws(side_effect=None, return_value=None):
         if command == "blueprint/save":
             os.makedirs(os.path.dirname(target), exist_ok=True)
             with open(target, "w", encoding="utf-8") as stream:
-                stream.write(payload["yaml"])
+                from homeassistant.components.blueprint.models import Blueprint
+                from homeassistant.components.blueprint.schemas import BLUEPRINT_SCHEMA
+                from homeassistant.util import yaml as yaml_util
+                stream.write(Blueprint(yaml_util.parse_yaml(payload["yaml"]), expected_domain=payload["domain"], schema=BLUEPRINT_SCHEMA).yaml())
         elif command == "blueprint/delete" and os.path.isfile(target):
             os.remove(target)
         return result

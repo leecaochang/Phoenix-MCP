@@ -265,7 +265,7 @@ async def test_agent_blueprint_restore_uses_ha_blueprint_command(hass):
     path = Path(hass.config.path("blueprints", "automation", "author", "restore.yaml"))
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("blueprint: current\n", encoding="utf-8")
-    snapshot = _blueprint_recovery_snapshot("automation", "author/restore.yaml", "blueprint: before\n")
+    snapshot = _blueprint_recovery_snapshot("automation", "author/restore.yaml", "blueprint:\n  name: Before\n  domain: automation\ntriggers: []\nactions: []\n")
     target = _blueprint_recovery_snapshot("automation", "author/restore.yaml", "blueprint: current\n")
     runtime = data()
     rid = await runtime.config_recovery.begin(
@@ -275,7 +275,10 @@ async def test_agent_blueprint_restore_uses_ha_blueprint_command(hass):
 
     async def ws(_hass, command, payload):
         assert command == "blueprint/save"
-        path.write_text(payload["yaml"], encoding="utf-8")
+        from homeassistant.components.blueprint.models import Blueprint
+        from homeassistant.components.blueprint.schemas import BLUEPRINT_SCHEMA
+        from homeassistant.util import yaml as yaml_util
+        path.write_text(Blueprint(yaml_util.parse_yaml(payload["yaml"]), expected_domain="automation", schema=BLUEPRINT_SCHEMA).yaml(), encoding="utf-8")
         return {"overrides_existing": True}
 
     with patch("custom_components.phoenix_mcp.ws_dispatch.async_ws_command", AsyncMock(side_effect=ws)):
@@ -288,7 +291,8 @@ async def test_agent_blueprint_restore_uses_ha_blueprint_command(hass):
     body = json.loads(result["content"][0]["text"])
     assert outcome == "allowed", body
     assert body["status"] == "verified"
-    assert path.read_text(encoding="utf-8") == "blueprint: before\n"
+    assert "name: Before" in path.read_text(encoding="utf-8")
+    assert runtime.config_recovery.records()[0]["source"]["content"] == path.read_text(encoding="utf-8")
 
 
 async def test_agent_dashboard_registry_restore_uses_dashboard_command(hass):

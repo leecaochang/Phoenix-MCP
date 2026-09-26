@@ -4334,6 +4334,15 @@ class PhoenixAdminConfigurationRecoveryRecordView(PhoenixView):
                 elif snapshot.get("snapshot_type") == "template_helper":
                     resource_type = "config_entry"
                     resource_id = snapshot["entry_id"]
+                elif snapshot.get("snapshot_type") in (
+                    "energy_preferences", "authored_file", "yaml_file", "blueprint_source",
+                    "dashboard_registry", "dashboard_layout",
+                ):
+                    from .mcp_view import async_restore_configuration
+                    restored, outcome, _ = await async_restore_configuration(
+                        recovery_id, side, user.id, self.hass, data,
+                    )
+                    return _ok({"result": restored, "outcome": outcome}, request_id=rid)
                 else:
                     return _err("invalid_request", "This recovery artifact requires manual restoration.", 400, rid, key="recoveryBlocked")
                 restored, outcome, _ = await async_restore_version(SimpleNamespace(

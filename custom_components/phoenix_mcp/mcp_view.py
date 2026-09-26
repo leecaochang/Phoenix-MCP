@@ -5170,6 +5170,24 @@ async def _resource_exists(hass: HomeAssistant, resource_type: str, resource_id:
     return False
 
 
+async def async_restore_configuration(
+    recovery_id: str, side: str, admin_user_id: str, hass: HomeAssistant, data: PhoenixData,
+) -> tuple[dict, str, str]:
+    """Restore a recovery snapshot following an authenticated administrator review."""
+    token = _restore_token(admin_user_id)
+    ctx = _restore_ctx.set({"user_id": admin_user_id})
+    try:
+        args = {"recovery_id": recovery_id, "side": side}
+        receipt = await _tool_restore_configuration(args, token, hass, data)
+        if receipt[1] != "allowed" or receipt[0].get("isError"):
+            return receipt
+        body = json.loads(receipt[0]["content"][0]["text"])
+        args.update({key: body[key] for key in ("snapshot_digest", "target_fingerprint")})
+        return await _execute_restore_configuration(args, token, hass, data)
+    finally:
+        _restore_ctx.reset(ctx)
+
+
 async def async_restore_version(
     record: Any, admin_user_id: str, hass: HomeAssistant, data: PhoenixData, side: str | None = None
 ) -> tuple[dict, str, str]:

@@ -124,7 +124,11 @@ class WsDispatchError(Exception):
     """Raised when an in-process WS command cannot be dispatched or fails."""
 
 
-class WsDashboardNotFoundError(WsDispatchError):
+class WsCommandNotDispatchedError(WsDispatchError):
+    """The command was refused before its handler could execute."""
+
+
+class WsDashboardNotFoundError(WsCommandNotDispatchedError):
     """Raised when a named Lovelace dashboard does not exist.
 
     Split out from the generic error so callers can tell "this dashboard is not
@@ -229,11 +233,11 @@ async def async_ws_command(
     admin user is available, or the handler reports an error / times out.
     """
     if command not in ALLOWED_WS_COMMANDS:
-        raise WsDispatchError(f"WebSocket command not allowed: {command}")
+        raise WsCommandNotDispatchedError(f"WebSocket command not allowed: {command}")
 
     handlers = hass.data.get(ws_const.DOMAIN)
     if not handlers or command not in handlers:
-        raise WsDispatchError(f"WebSocket command not available: {command}")
+        raise WsCommandNotDispatchedError(f"WebSocket command not available: {command}")
     handler, schema = handlers[command]
 
     msg: dict[str, Any] = {"id": 1, "type": command, **payload}
@@ -241,7 +245,7 @@ async def async_ws_command(
         try:
             msg = schema(msg)
         except vol.Invalid as err:
-            raise WsDispatchError(f"Invalid arguments for {command}: {err}") from err
+            raise WsCommandNotDispatchedError(f"Invalid arguments for {command}: {err}") from err
 
     user = await _resolve_admin_user(hass)
     check_request_authority()
@@ -444,7 +448,7 @@ async def async_save_lovelace_config(
         raise WsDashboardNotFoundError(f"config_not_found: unknown dashboard {url_path!r}")
     # mode property returns "storage" (MODE_STORAGE) or "yaml" (MODE_YAML).
     if getattr(config, "mode", None) != "storage":
-        raise WsDispatchError(
+        raise WsCommandNotDispatchedError(
             "only storage-mode dashboards can be written; this dashboard is YAML-mode"
         )
     try:

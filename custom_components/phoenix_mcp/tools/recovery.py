@@ -11,13 +11,24 @@ from homeassistant.helpers import entity_registry as er
 from ..config_recovery import ConfigurationRecoveryError
 from ..helpers import content_hash, effective_cap
 from ..request_authority import check_request_authority
-from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _gate, _tool_error, _tool_success
+from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _gate, _restore_ctx, _tool_error, _tool_success
 from .helper import (
+    _HELPER_MESA_FINGERPRINT,
     _enforce_helper_mesa_context,
     _helper_mesa_approval_gate,
     _helper_mesa_context,
     _unwritable_option_entities,
 )
+
+
+def _may_restore_record(record: dict | None, token) -> bool:
+    """Agent records are owner-only; HA admin restoration uses a bound context."""
+    if record is None:
+        return False
+    context = _restore_ctx.get()
+    return record.get("token_id") == token.id or (
+        context is not None and token.id == f"__restore__:{context['user_id']}"
+    )
 
 
 def _template_record_target(record: dict[str, Any], side: str, hass) -> dict[str, Any]:
@@ -60,9 +71,9 @@ def _selected_template_snapshot(record: dict[str, Any], side: str) -> dict[str, 
     return selected
 
 
-def _restore_diff(record: dict[str, Any], side: str) -> dict[str, Any]:
+def _restore_diff(record: dict[str, Any], side: str, current: dict[str, Any]) -> dict[str, Any]:
     selected = _selected_template_snapshot(record, side)
-    before = record.get("before")
+    before = current["entry"]
     return {
         "kind": "config_diff",
         "summary": "Restore Template helper configuration",
@@ -108,8 +119,9 @@ async def _tool_restore_configuration(
     if not isinstance(rid, str) or not rid or side not in ("before", "source"):
         return _tool_error("recovery_id and side ('before' or 'source') are required."), "invalid_request", tool
     record = data.config_recovery.get(rid)
-    if record is None or record.get("token_id") != token.id:
+    if not _may_restore_record(record, token):
         return _tool_error("Configuration recovery record not found."), "not_found", tool
+    assert record is not None
     if record.get("active") or record.get("phase") in ("prepared", "dispatching", "partial", "unknown"):
         return _tool_error("The recovery record is unresolved; inspect it in the administrator recovery panel first."), "invalid_request", tool
     selected = record.get(side)
@@ -136,12 +148,16 @@ async def _tool_restore_configuration(
     if effective_cap(token, "cap_helper_write") == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     try:
-        from ..template_recovery import validate_snapshot
+        from ..template_recovery import validate_restore_scope, validate_snapshot
 
         selected = _selected_template_snapshot(record, side)
         validate_snapshot(selected)
+        validate_restore_scope(selected, token, hass)
         digest = content_hash(selected)
-        fingerprint = content_hash(_template_record_target(record, side, hass))
+        target = _template_record_target(record, side, hass)
+        fingerprint = content_hash(target)
+    except PermissionError:
+        return _tool_error("Forbidden."), "denied", tool
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", tool
     except Exception:  # noqa: BLE001 - malformed persisted values must not disclose internals
@@ -169,7 +185,7 @@ async def _tool_restore_configuration(
             "side": side,
             "snapshot_digest": digest,
             "target_fingerprint": fingerprint,
-            "diff": _restore_diff(record, side),
+            "diff": _restore_diff(record, side, target),
             "adapter": {
                 "type": options["template_type"],
                 "action_capable": TEMPLATE_RECOVERY_ADAPTERS[options["template_type"]].action_capable,
@@ -186,7 +202,7 @@ async def _tool_restore_configuration(
     approval_args, blocked = await _helper_mesa_approval_gate(
         bound, token, hass, data, context=context,
         tool_name=tool, request_id=request_id, client_ip=client_ip,
-        diff_builder=lambda: _restore_diff(record, side),
+        diff_builder=lambda: _restore_diff(record, side, target),
     )
     if blocked is not None:
         return blocked
@@ -263,11 +279,12 @@ async def _tool_restore_file_configuration(
             )
             if refusal is not None:
                 return refusal
-            refusal = await hass.async_add_executor_job(
-                _yaml_removal_check, current_text, content, {"remove_keys": []}, tool,
-            )
-            if refusal is not None:
-                return refusal
+            if _restore_ctx.get() is None:
+                refusal = await hass.async_add_executor_job(
+                    _yaml_removal_check, current_text, content, {"remove_keys": []}, tool,
+                )
+                if refusal is not None:
+                    return refusal
         target_snapshot = _authored_file_snapshot(rel, current_exists, current_text, family)
         digest, fingerprint = content_hash(snapshot), content_hash(target_snapshot)
     except ConfigurationRecoveryError as exc:
@@ -275,11 +292,10 @@ async def _tool_restore_file_configuration(
     except Exception:  # noqa: BLE001 - path and persisted-state failures fail closed
         return _tool_error("The selected file target is not usable."), "invalid_request", tool
     if args.get("snapshot_digest") is None and args.get("target_fingerprint") is None:
-        before = record.get("before") or {}
         diff = {
             "kind": "config_diff", "summary": "Restore authored file content",
             "target": {"type": family, "id": rel, "label": rel},
-            "before": before.get("content"), "after": content if want_exists else None,
+            "before": current_text, "after": content if want_exists else None,
         }
         return _tool_success(json.dumps({
             "status": "needs_confirmation", "recovery_id": record["id"], "side": side,
@@ -294,7 +310,7 @@ async def _tool_restore_file_configuration(
         request_id=request_id, client_ip=client_ip,
         diff=lambda: {"kind": "config_diff", "summary": "Restore authored file content",
                       "target": {"type": family, "id": rel, "label": rel},
-                      "before": (record.get("before") or {}).get("content"), "after": content if want_exists else None},
+                      "before": current_text, "after": content if want_exists else None},
     )
     if blocked is not None:
         return blocked
@@ -513,9 +529,11 @@ async def _execute_restore_dashboard_registry(args, record, side, snapshot, toke
                     if current_row is None:
                         result = await async_ws_command(hass, "lovelace/dashboards/create", metadata)
                     else:
+                        from homeassistant.components.lovelace.const import STORAGE_DASHBOARD_UPDATE_FIELDS
+                        fields = {getattr(field, "schema", field) for field in STORAGE_DASHBOARD_UPDATE_FIELDS}
                         result = await async_ws_command(
                             hass, "lovelace/dashboards/update",
-                            {"dashboard_id": current_row["id"], **metadata},
+                            {"dashboard_id": current_row["id"], **{k: v for k, v in metadata.items() if k in fields}},
                         )
                 elif target.get("exists"):
                     row = target.get("dashboard")
@@ -610,8 +628,9 @@ async def _execute_restore_configuration(
     """Revalidate the owner and snapshot, then use the qualified Template adapter."""
     tool = "restore_configuration"
     record = data.config_recovery.get(str(args.get("recovery_id") or ""))
-    if record is None or record.get("token_id") != token.id:
+    if not _may_restore_record(record, token):
         return _tool_error("Configuration recovery record not found."), "not_found", tool
+    assert record is not None
     if record.get("phase") in ("prepared", "dispatching", "partial", "unknown"):
         return _tool_error("The recovery record is unresolved; inspect it in the administrator recovery panel first."), "invalid_request", tool
     side = args.get("side")
@@ -650,10 +669,11 @@ async def _execute_restore_configuration(
     if effective_cap(token, "cap_helper_write") == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     try:
-        from ..template_recovery import restore_template, validate_snapshot
+        from ..template_recovery import restore_template, validate_restore_scope, validate_snapshot
 
         selected = _selected_template_snapshot(record, side)
         validate_snapshot(selected)
+        validate_restore_scope(selected, token, hass)
         if content_hash(selected) != args.get("snapshot_digest"):
             return _tool_error("The selected recovery snapshot changed after approval."), "invalid_request", tool
         if content_hash(_template_record_target(record, side, hass)) != args.get("target_fingerprint"):
@@ -669,7 +689,11 @@ async def _execute_restore_configuration(
         if isinstance(context, tuple):
             return context
         check_request_authority()
-        return await restore_template(selected, token, hass, data)
+        return await restore_template(
+            selected, token, hass, data, mesa_fingerprint=args.get(_HELPER_MESA_FINGERPRINT),
+        )
+    except PermissionError:
+        return _tool_error("Forbidden."), "denied", tool
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", tool
     except Exception:  # noqa: BLE001 - restoration adapter owns the detailed recovery receipt
@@ -733,11 +757,12 @@ async def _execute_restore_file_configuration(args, record, side, snapshot, toke
                 refusal = await hass.async_add_executor_job(_yaml_protected_check, current, content, tool)
                 if refusal is not None:
                     return refusal
-                refusal = await hass.async_add_executor_job(
-                    _yaml_removal_check, current, content, {"remove_keys": []}, tool,
-                )
-                if refusal is not None:
-                    return refusal
+                if _restore_ctx.get() is None:
+                    refusal = await hass.async_add_executor_job(
+                        _yaml_removal_check, current, content, {"remove_keys": []}, tool,
+                    )
+                    if refusal is not None:
+                        return refusal
             return await _recoverable_file_write(
                 path=path, rel=rel, before_exists=exists, before_content=current,
                 content=content, token=token, data=data, operation=tool,
@@ -752,7 +777,7 @@ async def _execute_restore_file_configuration(args, record, side, snapshot, toke
 async def _execute_restore_blueprint_configuration(args, record, side, snapshot, token, hass, data):
     """Restore blueprint source only through HA's validated blueprint commands."""
     from .blueprint import (
-        _blueprint_denied, _blueprint_recovery_snapshot, _read_blueprint_source,
+        _blueprint_denied, _blueprint_recovery_snapshot, _canonical_blueprint_source, _read_blueprint_source,
         _resolve_blueprint_path,
     )
     from ..tool_common import _record_version, _version_content_payload
@@ -777,6 +802,7 @@ async def _execute_restore_blueprint_configuration(args, record, side, snapshot,
     try:
         if content_hash(snapshot) != args.get("snapshot_digest"):
             return _tool_error("The selected blueprint snapshot changed after approval."), "invalid_request", tool
+        expected_source = _canonical_blueprint_source(domain, snapshot["content"]) if snapshot["exists"] else None
         async with recovery.resource(resource):
             before_text = await _read_blueprint_source(hass, target_path)
             before = _blueprint_recovery_snapshot(domain, path, before_text)
@@ -794,7 +820,7 @@ async def _execute_restore_blueprint_configuration(args, record, side, snapshot,
                 elif before_text is not None:
                     await async_ws_command(hass, "blueprint/delete", {"domain": domain, "path": path})
                 observed = await _read_blueprint_source(hass, target_path)
-                if observed != snapshot.get("content"):
+                if observed != expected_source:
                     await recovery.mark(rid, "partial", observed_hash=content_hash(observed or ""))
                     return _tool_success(json.dumps({
                         "status": "partial", "recovery_id": rid,
