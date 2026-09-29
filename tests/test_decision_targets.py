@@ -588,6 +588,10 @@ def unpack_catalog(state):
         targets = {key: {field: value for field, value in zip(state['target_fields'], row, strict=True) if value is not None}
                    for key, row in targets.items()}
     for target in targets.values():
+        for field in ('entity_command', 'numeric'):
+            value = target.get(field)
+            if isinstance(value, dict) and set(value) == {'ref'}:
+                target[field] = deepcopy(state['target_metadata'][value['ref']])
         for group in ('entity_operations', 'numeric_operations'):
             for category, value in target.get(group, {}).items():
                 if set(value) == {'ref'}:
@@ -781,3 +785,22 @@ async def test_small_target_catalog_obeys_model_capacity(protocol, limit, count,
         result = await provider.select_target(session, f'turn off Lamp {count - 1}', 'light_off', targets, 1000)
     assert result['choice'] == f't{count - 1}'
     assert requests == ['GET', 'POST']
+
+
+@pytest.mark.parametrize('field,metadata', [
+    ('entity_command', {'kind': 'attribute', 'options': ['brightness', 'rgb_color', 'color_temp_kelvin', 'effect']}),
+    ('entity_command', {'kind': 'option', 'options': ['Mode 1', 'Mode 2', 'Mode 3', '模式 4']}),
+    ('numeric', {'minimum': -10, 'maximum': 100, 'step': 0.5, 'unit': '°C'}),
+])
+def test_operation_metadata_pooling_is_lossless_and_keeps_distinct_values(field, metadata):
+    from copy import deepcopy
+    from custom_components.phoenix_mcp.decision_targets import catalog_state
+    targets = {f't{i}': {'entity_id': f'sensor.item_{i}', 'name': f'Item {i}', field: deepcopy(metadata)}
+               for i in range(100)}
+    targets['t99'][field] = {**metadata, 'unique': 'Preserve this competitor'}
+    original = deepcopy(targets)
+    packed = catalog_state(targets)
+    assert 'target_metadata' in packed
+    assert unpack_catalog(packed) == original == targets
+    assert len(json.dumps(packed).encode()) < len(json.dumps({'targets': targets}).encode()) * 0.6
+    assert catalog_state(targets) == packed

@@ -795,3 +795,53 @@ async def test_color_preview_requires_the_selected_literal_identity(hass, batch_
     assert result['reason'] == ('target_unverified' if missing else 'target_selected'), result
     assert bool(result.get('proposal')) is not missing
     assert result['executed'] is False
+
+
+async def test_temporal_catalog_pools_repeated_attributes_without_losing_competitors(hass, batch_home):
+    from custom_components.phoenix_mcp.decision_batch import batch_catalog_digest
+    _, token, *_ = batch_home
+    token.permissions = PermissionTree(domains={domain: PermissionNode(state='GREEN') for domain in ('light', 'timer')})
+    registry = er.async_get(hass)
+    for index in range(95):
+        entry = registry.async_get_or_create('light', 'test', f'fixture_{index}')
+        hass.states.async_set(entry.entity_id, 'on', {'friendly_name': f'Long hallway fixture {index} with a descriptive registered name',
+            'brightness': 160, 'rgb_color': [255, 255, 255], 'color_temp_kelvin': 3000,
+            'effect': 'none', 'supported_color_modes': ['rgb']})
+        async_expose_entity(hass, 'conversation', entry.entity_id, True)
+    timer = registry.async_get_or_create('timer', 'test', 'duration_fixture')
+    hass.states.async_set(timer.entity_id, 'idle', {'friendly_name': 'Duration fixture'})
+    async_expose_entity(hass, 'conversation', timer.entity_id, True)
+    snapshot = capture_batch_targets(hass, token, extended=True, temporal=True)
+    targets, catalogs = snapshot
+    attributes = catalogs['attribute_read'].targets
+    # This operation previously exceeded its unchanged 16 KiB budget, blocking timers.
+    assert len(json.dumps(attributes, ensure_ascii=False).encode()) > DECISION_MAX_TARGET_BYTES
+    assert len(json.dumps(catalog_state(attributes), ensure_ascii=False).encode()) <= DECISION_MAX_TARGET_BYTES
+    expected = {state.entity_id for state in hass.states.async_all() if state.domain in ('light', 'timer')}
+    assert {target['entity_id'] for target in targets.values()} == expected
+    assert any(target['entity_id'] == timer.entity_id for target in targets.values())
+    assert all(target['entity_command']['options'] == ['brightness', 'color_temp_kelvin', 'effect', 'rgb_color']
+               for target in attributes.values())
+    async def response(*args):
+        payload = args[4]
+        wire = wire_targets(payload)
+        assert {target['entity_id'] for target in wire.values()} == expected
+        for key, target in wire.items():
+            for category, metadata in target.get('entity_operations', {}).items():
+                resolved = payload['state']['target_metadata'][metadata['ref']] if set(metadata) == {'ref'} else metadata
+                assert resolved == targets[key]['entity_operations'][category]
+        assert all('lossless storage' in question['instructions'] for question in payload['questions'].values())
+        timer_key = next(key for key, target in wire.items() if target['entity_id'] == timer.entity_id)
+        body = wire_response(payload, 'timer_duration', timer_key)
+        body['answers']['value'].update(choice='value', probabilities={'value': 1.0, 'none': 0.0})
+        return body
+    provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'jev-latest', 'https://example.test'), 'systemone')
+    with patch.object(provider, '_request', side_effect=response) as request:
+        answers = await provider.route_temporal(MagicMock(), 'Start timer named Duration fixture for five minutes',
+                                               'en', targets, {'kind': 'duration', 'value': '00:05:00'}, 'UTC', 1000)
+    request.assert_awaited_once()
+    assert answers['route']['choice'] == 'timer_duration' and answers['value']['choice'] == 'value'
+    before = batch_catalog_digest(snapshot)
+    state = hass.states.get(entry.entity_id)
+    hass.states.async_set(entry.entity_id, state.state, {**state.attributes, 'effect_list': ['none', 'rainbow']})
+    assert batch_catalog_digest(capture_batch_targets(hass, token, extended=True, temporal=True)) != before

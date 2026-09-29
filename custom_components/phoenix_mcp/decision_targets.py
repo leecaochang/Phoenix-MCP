@@ -140,19 +140,21 @@ def catalog_state(targets: dict[str, dict]) -> dict:
     if size(plain) <= DECISION_CATALOG_PACK_THRESHOLD:
         return plain
     copied = deepcopy(targets)
-    occurrences: Counter[str] = Counter()
-    for target in copied.values():
-        for group in ('entity_operations', 'numeric_operations'):
-            for metadata in target.get(group, {}).values():
-                occurrences[json.dumps(metadata, sort_keys=True, ensure_ascii=False)] += 1
+    # Operation snapshots use direct metadata; joint catalogs nest it by category.
+    # Pool both layouts so per-operation admission measures the same lossless form.
+    slots = [(target, field) for target in copied.values()
+             for field in ('entity_command', 'numeric') if field in target]
+    slots.extend((target[group], category) for target in copied.values()
+                 for group in ('entity_operations', 'numeric_operations')
+                 for category in target.get(group, {}))
+    occurrences: Counter[str] = Counter(json.dumps(owner[key], sort_keys=True, ensure_ascii=False)
+                                       for owner, key in slots)
     shared = {encoded: f"m{index}" for index, encoded in enumerate(sorted(
         encoded for encoded, count in occurrences.items() if count > 1 and len(encoded.encode()) > 48))}
-    for target in copied.values():
-        for group in ('entity_operations', 'numeric_operations'):
-            for category, metadata in target.get(group, {}).items():
-                reference = shared.get(json.dumps(metadata, sort_keys=True, ensure_ascii=False))
-                if reference is not None:
-                    target[group][category] = {"ref": reference}
+    for owner, key in slots:
+        reference = shared.get(json.dumps(owner[key], sort_keys=True, ensure_ascii=False))
+        if reference is not None:
+            owner[key] = {"ref": reference}
     pooled: dict = {"targets": copied}
     if shared:
         pooled["target_metadata"] = {key: json.loads(encoded) for encoded, key in shared.items()}
