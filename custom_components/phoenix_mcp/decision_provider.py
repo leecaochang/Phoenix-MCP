@@ -7,9 +7,9 @@ import math
 from time import monotonic
 from typing import TYPE_CHECKING, Any, Callable
 
-from aiohttp import ClientError, ClientSession, ClientTimeout
+from aiohttp import ClientError, ClientResponse, ClientSession, ClientTimeout
 
-from .const import (DECISION_MAX_RESPONSE_BYTES, DECISION_MAX_TARGETS, DECISION_SEQUENTIAL_CHOICE_GROUPS, DECISION_ROUTE_CHOICES, DECISION_ENTITY_CHOICES, DECISION_TIMEOUT_DEFAULT_MS,
+from .const import (DECISION_MAX_RESPONSE_BYTES, DECISION_MAX_ERROR_BYTES, DECISION_TYPESAFE_HTTP_ERRORS, DECISION_MAX_TARGETS, DECISION_SEQUENTIAL_CHOICE_GROUPS, DECISION_ROUTE_CHOICES, DECISION_ENTITY_CHOICES, DECISION_TIMEOUT_DEFAULT_MS,
                     DECISION_BRIGHTNESS_CHOICES, DECISION_MIN_CHOICE_PROBABILITY, DECISION_CONTEXT_CHECKS,
                     DECISION_EXECUTION_CATEGORIES, DECISION_EXACT_PERCENTAGE_ENDPOINTS,
                     DECISION_PERCENTAGE_CHOICES, DECISION_PERCENTAGE_PREVIEW_CHOICES, DECISION_TARGET_INTENTS,
@@ -180,6 +180,30 @@ class DecisionProvider:
                 del answers[question]
             answers[name] = selected[0] if selected else pages[0]
 
+    async def _http_error_reason(self, response: ClientResponse) -> str:
+        """Recognize bounded TypeSafe error codes without retaining their bodies."""
+        if response.status in (401, 403):
+            return "authentication"
+        if response.status in (429, 529):
+            return "rate_limited"
+        if response.status != 400 or self.cfg.kind != "typesafe" or self.protocol != "systemone":
+            return "http_error"
+        try:
+            raw = bytearray()
+            async for chunk in response.content.iter_chunked(1024):
+                raw.extend(chunk)
+                if len(raw) > DECISION_MAX_ERROR_BYTES:
+                    return "http_error"
+            body = json.loads(raw, object_pairs_hook=_object)
+            detail = body.get("detail") if isinstance(body, dict) else None
+            code = detail.get("error_type") if isinstance(detail, dict) else None
+            if isinstance(code, str):
+                return DECISION_TYPESAFE_HTTP_ERRORS.get(code, "http_error")
+        except (TimeoutError, ClientError, UnicodeError, json.JSONDecodeError, RecursionError, DecisionError):
+            # The known HTTP refusal survives malformed or incomplete diagnostics.
+            pass
+        return "http_error"
+
     async def _request(self, session: ClientSession, method: str, path: str,
                        timeout_ms: int, payload: dict | None = None) -> dict:
         headers = {"Content-Type": "application/json"}
@@ -195,8 +219,7 @@ class DecisionProvider:
                                        json=payload, allow_redirects=False,
                                        timeout=ClientTimeout(total=timeout_ms / 1000)) as response:
                 if response.status != 200:
-                    raise DecisionError("authentication" if response.status in (401, 403)
-                                        else "rate_limited" if response.status in (429, 529) else "http_error")
+                    raise DecisionError(await self._http_error_reason(response))
                 raw = bytearray()
                 async for chunk in response.content.iter_chunked(8192):
                     raw.extend(chunk)

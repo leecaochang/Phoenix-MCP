@@ -553,3 +553,138 @@ async def test_oversized_catalog_kind_selection_keeps_complete_relevant_catalog(
             assert result['route']['choice'] == ('light_on' if kind == 'entity' else 'state_summary')
         assert request.await_count == (1 if failure in ('authority', 'uncertain', 'declined') else 2)
         assert revalidate.call_count == (0 if failure in ('uncertain', 'declined') else 1)
+
+
+@pytest.mark.parametrize('body,expected', [
+    ('{"detail":{"error_type":"max_tokens_exceeded"}}', 'provider_context_limit'),
+    ('{"detail":{"error_type":"max_tokens_exceeded","message":"private prompt test-secret"},'
+     '"usage":{"input_tokens":999,"output_tokens":99}}', 'provider_context_limit'),
+    ('{"detail":{"error_type":"private prompt test-secret"}}', 'http_error'),
+    ('{"detail":{"error_type":{}}}', 'http_error'),
+    ('{"detail":[]}', 'http_error'),
+    ('[]', 'http_error'),
+    ('{"detail":{"error_type":"max_tokens_exceeded","error_type":"max_tokens_exceeded"}}', 'http_error'),
+    ('{"detail":{"error_type":"max_tokens_exceeded"},"padding":"' + 'x' * 4096 + '"}', 'http_error'),
+    ('{"detail":' + '[' * 2000, 'http_error'),
+    ('private prompt test-secret', 'http_error'),
+    (b'\xff', 'http_error'),
+], ids=['capacity', 'private_extras', 'unknown_code', 'object_code', 'array_detail', 'array_body',
+        'duplicate', 'oversized', 'deep_json', 'non_json', 'invalid_utf8'])
+async def test_typesafe_capacity_error_is_bounded_and_secret_free(body, expected, socket_enabled, caplog):
+    from custom_components.phoenix_mcp.decision_metrics import DecisionMetrics
+
+    calls = 0
+    async def handler(request):
+        nonlocal calls
+        calls += 1
+        assert request.headers['Authorization'] == 'Bearer test-secret'
+        return web.Response(status=400, body=body.encode() if isinstance(body, str) else body,
+                            headers={'Location': '/must-not-follow'})
+    app = web.Application()
+    app.router.add_post('/systemone', handler)
+    metrics = DecisionMetrics()
+    async with TestServer(app) as server, ClientSession() as session:
+        cfg = agentcli.ProviderConfig('typesafe', 'jev-latest', str(server.make_url('')).rstrip('/'), 'test-secret')
+        provider = DecisionProvider(cfg, 'systemone', metrics=metrics)
+        with pytest.raises(DecisionError, match='^' + expected + '$'):
+            await provider.classify(session, 'private prompt', 1000)
+    assert calls == 1
+    summary = metrics.summary()['typesafe']['preview']['classify']
+    assert summary['requests'] == 1 and summary['responses'] == 0
+    assert summary['usage_unknown'] == 1 and summary['reported_input_tokens'] is None
+    assert 'private prompt' not in repr(metrics) + caplog.text
+    assert 'test-secret' not in repr(metrics) + caplog.text
+
+
+@pytest.mark.parametrize('kind,protocol,status,expected', [
+    ('systemone', 'systemone', 400, 'http_error'),
+    ('classifier', 'classifier', 400, 'http_error'),
+    ('typesafe', 'systemone', 401, 'authentication'),
+    ('typesafe', 'systemone', 403, 'authentication'),
+    ('typesafe', 'systemone', 429, 'rate_limited'),
+    ('typesafe', 'systemone', 529, 'rate_limited'),
+    ('typesafe', 'systemone', 302, 'http_error'),
+    ('typesafe', 'systemone', 500, 'http_error'),
+    ('typesafe', 'systemone', 422, 'http_error'),
+])
+async def test_capacity_code_does_not_override_status_or_other_adapters(kind, protocol, status, expected, socket_enabled):
+    calls = 0
+    async def handler(request):
+        nonlocal calls
+        calls += 1
+        return web.json_response({'detail': {'error_type': 'max_tokens_exceeded'}}, status=status,
+                                 headers={'Location': '/must-not-follow'})
+    app = web.Application()
+    app.router.add_post('/' + protocol, handler)
+    async with TestServer(app) as server, ClientSession() as session:
+        cfg = agentcli.ProviderConfig(kind, 'model', str(server.make_url('')).rstrip('/'))
+        with pytest.raises(DecisionError, match='^' + expected + '$'):
+            await DecisionProvider(cfg, protocol).classify(session, 'command', 1000)
+    assert calls == 1
+
+
+async def test_capacity_refusal_reaches_preview_and_fixed_hybrid_counters(hass, decision_home, socket_enabled):
+    data, token, store, _ = decision_home
+    calls = 0
+    async def handler(request):
+        nonlocal calls
+        calls += 1
+        return web.json_response({'detail': {'error_type': 'max_tokens_exceeded', 'message': 'private prompt'}}, status=400)
+    app = web.Application()
+    app.router.add_post('/systemone', handler)
+    async with TestServer(app) as server:
+        cfg = agentcli.ProviderConfig('typesafe', 'jev-latest', str(server.make_url('')).rstrip('/'), 'test-secret')
+        with (patch.object(store, 'resolve', return_value=cfg),
+              patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
+            result = await async_preview_decision(hass, data, token, 'command', 'en', {'reason': 'no_match', 'proposal': None})
+    assert calls == 1
+    assert result['reason'] == 'provider_context_limit'
+    assert result['decision'] is None and result['executed'] is False and '_plan' not in result
+    assert data.store.get_pending_approvals() == []
+    dispatch.assert_not_called()
+    for chat in (False, True):
+        data.decision_shadow.observe_hybrid(result, chat=chat)
+        key = 'chat_hybrid' if chat else 'hybrid'
+        assert data.decision_shadow.summary()[key]['reasons'] == {'provider_context_limit': 1}
+    assert 'private prompt' not in json.dumps(result) + repr(data.decision_shadow)
+
+
+@pytest.mark.parametrize('cancel', [False, True])
+async def test_capacity_error_body_obeys_deadline_and_cancellation(cancel, socket_enabled):
+    entered, release = asyncio.Event(), asyncio.Event()
+    calls = 0
+    async def handler(request):
+        nonlocal calls
+        calls += 1
+        reply = web.StreamResponse(status=400)
+        await reply.prepare(request)
+        await reply.write(b'{"detail":')
+        await release.wait()
+        return reply
+    app = web.Application()
+    app.router.add_post('/systemone', handler)
+    async with TestServer(app) as server, ClientSession() as session:
+        cfg = agentcli.ProviderConfig('typesafe', 'jev-latest', str(server.make_url('')).rstrip('/'))
+        provider = DecisionProvider(cfg, 'systemone')
+        original = provider._http_error_reason
+        async def observe(reply):
+            entered.set()
+            return await original(reply)
+        with patch.object(provider, '_http_error_reason', side_effect=observe):
+            task = asyncio.create_task(provider._request(session, 'POST', 'systemone', 1000 if cancel else 50,
+                                                         {'state': {'utterance': 'command'}, 'questions': {}}))
+            try:
+                await asyncio.wait_for(entered.wait(), 1)
+                if cancel:
+                    task.cancel()
+                    with pytest.raises(asyncio.CancelledError):
+                        await task
+                else:
+                    with pytest.raises(DecisionError, match='^http_error$'):
+                        await asyncio.wait_for(task, 1)
+            finally:
+                release.set()
+                if not task.done():
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
+    assert calls == 1

@@ -1967,6 +1967,8 @@ DECISION_TIMEOUT_DEFAULT_MS = 5000
 DECISION_TIMEOUT_MIN_MS = 250
 DECISION_TIMEOUT_MAX_MS = 30000
 DECISION_MAX_RESPONSE_BYTES = 65536
+DECISION_MAX_ERROR_BYTES = 4096
+DECISION_TYPESAFE_HTTP_ERRORS = {"max_tokens_exceeded": "provider_context_limit"}
 DECISION_METRIC_SAMPLES = 256
 DECISION_METRIC_SCOPES = frozenset({"preview", "voice", "chat", "voice_shadow", "chat_shadow"})
 DECISION_METRIC_OPERATIONS = frozenset({"classify", "target", "context", "batch", "reference"})
@@ -2166,7 +2168,7 @@ DECISION_HYBRID_REASONS = frozenset({
     "unsupported_category", "too_many_targets", "target_metadata_too_large", "unsupported_language",
     "invalid_input", "authority_changed", "not_enabled", "not_configured", "local_match", "numeric_unverified",
     "local_unavailable", "busy", "cancelled", "authentication", "rate_limited", "http_error",
-    "response_too_large", "malformed", "timeout", "unavailable",
+    "response_too_large", "provider_context_limit", "malformed", "timeout", "unavailable",
     "context_unverified", "context_unavailable", "context_changed", "low_probability", "invalid_context",
     "model_unverified", "category_mismatch",
 })
