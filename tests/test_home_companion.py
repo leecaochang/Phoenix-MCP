@@ -158,7 +158,12 @@ async def test_shared_loop_reads_with_complete_catalog(hass,companion,monkeypatc
     assert not companion[0].home_companion_active and home._turn.get() is None
 
 
-async def test_separate_requests_start_fresh_but_keep_their_own_tool_results(hass,companion,monkeypatch):
+@pytest.mark.parametrize('user_request', [
+    'Read sensor.temperature. Do not change any device.',
+    "Read the temperature in Alex's office. Do not change any device.",
+    'Read only a sensor named exactly "Office temperature". If none matches, do not substitute another sensor.',
+])
+async def test_separate_requests_start_fresh_but_keep_their_own_tool_results(hass,companion,monkeypatch,user_request):
     transcripts = []
     scripted(monkeypatch, [
         json.dumps({'status':'clarification_needed','message':'Rephrase and resend the complete request with targets and restrictions.'}),
@@ -167,10 +172,9 @@ async def test_separate_requests_start_fresh_but_keep_their_own_tool_results(has
     ], transcripts=transcripts)
     first = payload(await rpc(hass,companion,args={'request':'Read that sensor again.'}))
     assert first['status'] == 'clarification_needed'
-    request = 'Read sensor.temperature. Do not change any device.'
-    second = payload(await rpc(hass,companion,args={'request':request}))
+    second = payload(await rpc(hass,companion,args={'request':user_request}))
     assert second['status'] == 'completed'
-    assert transcripts[1] == [{'role':'user','content':request}]
+    assert transcripts[1] == [{'role':'user','content':user_request}]
     assert len(transcripts[2]) == 3
     assert transcripts[2][-1]['content'][0]['type'] == 'tool_result'
     assert '23' in json.dumps(transcripts[2][-1])
