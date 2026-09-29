@@ -3998,15 +3998,15 @@ async def test_claude_bad_arguments_are_not_replaced_with_empty_object():
 @pytest.mark.asyncio
 async def test_schema_retry_count_and_dispatch_boundary():
     error = {"type": agentcli.EV_ERROR, "code": "provider_malformed", "retryable": True}
-    for dispatched, expected in [(False, 3), (True, 1)]:
+    for dispatched, write_started, expected in [(False, False, 3), (True, False, 1), (True, True, 1)]:
         provider = _ScriptedProvider([[error]] * 5)
         with patch.object(agentcli, "_CONNECT_RETRY_BACKOFF_SECONDS", 0):
             events = await _collect(agentcli._stream_turn_resilient(
                 provider, None, system_prompt="s", messages=[], tools=[], options={},
-                cancel=asyncio.Event(), dispatch_started=dispatched))
+                cancel=asyncio.Event(), dispatch_started=dispatched, write_started=write_started))
         assert provider.i == expected
         if dispatched:
-            assert events[-1]["outcome"] == "outcome_unknown"
+            assert (events[-1].get("outcome") == "outcome_unknown") is write_started
             assert events[-1]["retryable"] is False
 
 
@@ -4050,14 +4050,15 @@ async def test_cancel_closes_a_silent_provider_stream(task_cancel):
 
 
 @pytest.mark.asyncio
-async def test_provider_failure_after_successful_write_retains_receipt_and_blocks_replay(hass):
+@pytest.mark.parametrize('tool_name', ['get_state', 'call_service'])
+async def test_provider_failure_after_dispatch_retains_only_write_uncertainty(hass, tool_name):
     provider = _ScriptedProvider([
-        [{"type": agentcli.EV_TOOL, "id": "a", "name": "call_service", "input": {}}, _done("tool_use")],
+        [{"type": agentcli.EV_TOOL, "id": "a", "name": tool_name, "input": {}}, _done("tool_use")],
         [{"type": agentcli.EV_ERROR, "code": "network", "retryable": True}],
     ])
     data = _loop_data()
     token = data.store.get_token_by_id.return_value
-    dispatch = AsyncMock(return_value=({"result": {"content": []}}, "call_service", "call_service", "allowed"))
+    dispatch = AsyncMock(return_value=({"result": {"content": []}}, tool_name, tool_name, "allowed"))
     events = []
     async def emit(name, payload):
         events.append((name, payload))
@@ -4069,9 +4070,18 @@ async def test_provider_failure_after_successful_write_retains_receipt_and_block
             emit=emit, cancel=asyncio.Event())
     assert provider.i == 2
     dispatch.assert_awaited_once()
-    assert data.agent_recovery.blocks(token.id)
-    assert data.agent_recovery.records(token.id)[0]["dispatch_result"] == "received"
-    assert any(name == "error" and body["code"] == "provider_after_dispatch" for name, body in events)
+    errors = [body for name, body in events if name == 'error']
+    assert len(errors) == 1 and errors[0]['retryable'] is False
+    if tool_name == 'call_service':
+        assert data.agent_recovery.blocks(token.id)
+        assert data.agent_recovery.records(token.id)[0]["dispatch_result"] == "received"
+        assert errors[0]['code'] == 'provider_after_dispatch'
+        assert errors[0]['outcome'] == 'outcome_unknown'
+    else:
+        assert not data.agent_recovery.blocks(token.id)
+        assert not data.agent_recovery.records(token.id)
+        assert errors[0]['code'] == 'network'
+        assert errors[0].get('outcome') != 'outcome_unknown'
 
 
 @pytest.mark.asyncio

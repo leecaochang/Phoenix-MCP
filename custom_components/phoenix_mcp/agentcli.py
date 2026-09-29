@@ -49,7 +49,7 @@ from homeassistant.util.dt import parse_datetime, utcnow
 
 from .admin_view import _err, _ok, _read_body, require_admin
 from .audit import generate_request_id
-from .agent_recovery import RecoveryRequired, dispatch_agent_tool, recovery_turn
+from .agent_recovery import RecoveryRequired, dispatch_agent_tool, recovery_turn, tool_is_read_only
 from .approvals import (
     REASON_AGENT_CHAT_ENDED,
     STATUS_APPROVED,
@@ -3077,6 +3077,7 @@ async def _stream_turn_resilient(
     system_prompt: str, messages: list[dict], tools: list[dict], options: dict,
     cancel: asyncio.Event,
     dispatch_started: bool = False,
+    write_started: bool = False,
 ) -> AsyncIterator[dict]:
     """provider.stream_turn wrapped with a bounded retry for a transient connection
     failure (e.g. a DNS/connect timeout) that occurs BEFORE any content is
@@ -3105,9 +3106,12 @@ async def _stream_turn_resilient(
                     retry = True
                     break
                 if etype == EV_ERROR and dispatch_started:
-                    ev = {**ev, "code": "provider_after_dispatch", "retryable": False,
-                          "dispatch_started": True, "outcome": "outcome_unknown",
-                          "message": "The provider failed after tool dispatch. Earlier actions may have run. Reconcile Home Assistant and approval results before retrying."}
+                    # Reads still stop automatic retries, but cannot create an
+                    # uncertain device action. Classify from server annotations.
+                    ev = {**ev, "retryable": False, "dispatch_started": True}
+                    if write_started:
+                        ev = {**ev, "code": "provider_after_dispatch", "outcome": "outcome_unknown",
+                              "message": "The provider failed after tool dispatch. Earlier actions may have run. Reconcile Home Assistant and approval results before retrying."}
                 if etype == EV_ERROR and attempt > 1:
                     detail = str(ev.get("message") or "").strip()
                     seconds = int(_CONNECT_RETRY_WINDOW_SECONDS)
@@ -3249,6 +3253,7 @@ async def _consume_model_stream(
     context_tokens: int,
     detect_focus_refusal: bool = False,
     dispatch_started: bool = False,
+    write_started: bool = False,
 ) -> _ModelCallResult:
     """Drain one model call's normalized event stream into a result.
 
@@ -3270,6 +3275,7 @@ async def _consume_model_stream(
     async for ev in _stream_turn_resilient(
         provider, session, system_prompt=system, messages=messages,
         tools=tools, options=options, cancel=cancel, dispatch_started=dispatch_started,
+        write_started=write_started,
     ):
         etype = ev["type"]
         if etype == EV_TEXT:
@@ -3309,7 +3315,7 @@ async def _consume_model_stream(
         elif etype == EV_ERROR:
             await emit("error", {"code": ev.get("code"), "message": ev.get("message"),
                                  "retryable": ev.get("retryable", False),
-                                 **({"outcome": "outcome_unknown"} if ev.get("dispatch_started") else {}),
+                                 **({"outcome": "outcome_unknown"} if ev.get("outcome") == "outcome_unknown" else {}),
                                  **({"diagnostic": ev["diagnostic"]} if ev.get("diagnostic") else {}),
                                  **({"message_params": ev["message_params"]}
                                     if ev.get("message_params") else {}),
@@ -3350,6 +3356,7 @@ class _ToolBatchResult:
     human_resolved: bool
     stop_turn: bool
     authority_lost: bool
+    write_started: bool = False
 
 
 async def _run_tool_batch(
@@ -3380,6 +3387,7 @@ async def _run_tool_batch(
     human_resolved = False
     stop_turn = False
     authority_lost = False
+    write_started = False
 
     for tc in tool_calls:
         name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
@@ -3422,6 +3430,7 @@ async def _run_tool_batch(
             })
             continue
         dispatch_request_id = generate_request_id()
+        write_started = write_started or not tool_is_read_only(name)
         resp_msg, _m, _r, outcome = await _dispatch_with_progress(
             emit, tc.get("id"),
             dispatch_agent_tool(
@@ -3498,6 +3507,7 @@ async def _run_tool_batch(
     return _ToolBatchResult(
         results=results, human_resolved=human_resolved,
         stop_turn=stop_turn, authority_lost=authority_lost,
+        write_started=write_started,
     )
 
 
@@ -3562,6 +3572,7 @@ async def async_run_agent_turn(
 
     stop_reason = "end_turn"
     dispatch_started = False
+    write_started = False
     saw_text = False
     turn_errored = False
     # Bound the TOTAL provider-generated output retained across the whole turn.
@@ -3608,6 +3619,7 @@ async def async_run_agent_turn(
             usage_done_input=usage_done_input, usage_done_output=usage_done_output,
             context_tokens=context_tokens,
             detect_focus_refusal=home_focused, dispatch_started=dispatch_started,
+            write_started=write_started,
         )
         tool_calls = call.tool_calls
         assistant_msg = call.assistant_msg
@@ -3668,6 +3680,7 @@ async def async_run_agent_turn(
             stop_reason = "error"
             break
         results = batch.results
+        write_started = write_started or batch.write_started
         human_resolved = batch.human_resolved
         stop_turn = batch.stop_turn
         authority_lost = batch.authority_lost
@@ -3834,6 +3847,7 @@ async def _run_headless_turn(
     exhausted = True
     focus_declined = False
     dispatch_started = False
+    write_started = False
 
     for iteration in range(max_iterations):
         from .home_companion import check_turn_context
@@ -3846,6 +3860,7 @@ async def _run_headless_turn(
         async for ev in _stream_turn_resilient(
             provider, session, system_prompt=system, messages=messages,
             tools=tools, options={}, cancel=cancel, dispatch_started=dispatch_started,
+            write_started=write_started,
         ):
             etype = ev["type"]
             if etype == EV_TEXT:
@@ -3858,7 +3873,7 @@ async def _run_headless_turn(
             elif etype == EV_ERROR:
                 return _HeadlessTurnResult(
                     final_text, review_urls,
-                    outcome=TURN_OUTCOME_UNKNOWN if dispatch_started else TURN_PROVIDER_ERROR,
+                    outcome=TURN_OUTCOME_UNKNOWN if write_started else TURN_PROVIDER_ERROR,
                     detail=str(ev.get("message") or _HEADLESS_PROVIDER_ERROR),
                     focus_declined=focus_declined,
                 )
@@ -3916,6 +3931,7 @@ async def _run_headless_turn(
                 continue
             dispatch_request_id = generate_request_id()
             dispatch_started = True
+            write_started = write_started or not tool_is_read_only(name)
             try:
                 resp_msg, _m, _r, outcome = await dispatch_agent_tool(
                     _dispatch_mcp, hass=hass, data=data, token=dispatch_token,

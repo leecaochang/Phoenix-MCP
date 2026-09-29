@@ -1,6 +1,7 @@
 """Single-tool delegation enforces explicit scope and preserves real dispatch boundaries."""
 import asyncio
 import json
+from copy import deepcopy
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -52,17 +53,21 @@ def payload(response):
     return json.loads(response[0]['result']['content'][0]['text'])
 
 
-def scripted(monkeypatch, rounds, *, before=None):
+def scripted(monkeypatch, rounds, *, before=None, transcripts=None):
     provider = agentcli.ClaudeProvider(agentcli.ProviderConfig('claude','test','http://test','key'))
     catalogs = []
     async def stream(session, *, system_prompt, messages, tools, options):
         catalogs.append(tools)
+        if transcripts is not None:
+            transcripts.append(deepcopy(messages))
         if before:
             await before(len(catalogs))
         current = rounds.pop(0)
         if isinstance(current,str):
             yield {'type':agentcli.EV_TEXT,'text':current}
             yield {'type':agentcli.EV_DONE,'stop_reason':'end_turn','assistant_msg':{'role':'assistant','content':[{'type':'text','text':current}]}}
+        elif isinstance(current,dict):
+            yield current
         else:
             calls = [{'type':'tool_use','id':f't{len(catalogs)}_{i}','name':name,'input':args} for i,(name,args) in enumerate(current)]
             for call in calls:
@@ -122,6 +127,24 @@ async def test_shared_loop_reads_with_complete_catalog(hass,companion,monkeypatc
     assert result['tool_outcomes']==[{'tool':'get_state','outcome':'allowed'}]
     assert {t['name'] for t in catalogs[0]}==HOME_COMPANION_TOOLS
     assert not companion[0].home_companion_active and home._turn.get() is None
+
+
+async def test_separate_requests_start_fresh_but_keep_their_own_tool_results(hass,companion,monkeypatch):
+    transcripts = []
+    scripted(monkeypatch, [
+        json.dumps({'status':'clarification_needed','message':'Rephrase and resend the complete request with targets and restrictions.'}),
+        [('get_state', {'entity_id':'sensor.temperature','projection':{'kind':'compact'}})],
+        json.dumps({'status':'completed','message':'23 degrees.'}),
+    ], transcripts=transcripts)
+    first = payload(await rpc(hass,companion,args={'request':'Read that sensor again.'}))
+    assert first['status'] == 'clarification_needed'
+    request = 'Read sensor.temperature. Do not change any device.'
+    second = payload(await rpc(hass,companion,args={'request':request}))
+    assert second['status'] == 'completed'
+    assert transcripts[1] == [{'role':'user','content':request}]
+    assert len(transcripts[2]) == 3
+    assert transcripts[2][-1]['content'][0]['type'] == 'tool_result'
+    assert '23' in json.dumps(transcripts[2][-1])
 
 
 async def test_real_native_write_resolves_only_selected_light(hass,companion,monkeypatch):
@@ -263,4 +286,27 @@ async def test_provider_failure_after_write_does_not_replay(hass,companion,monke
     result=payload(await rpc(hass,companion))
     assert result['status']=='outcome_unknown'
     assert len(calls)==1
+    assert not companion[0].home_companion_active
+
+
+@pytest.mark.parametrize('write_first', [False, True])
+async def test_provider_error_after_reads_preserves_only_real_write_uncertainty(hass,companion,monkeypatch,write_first):
+    calls = []
+    async def turn_on(call):
+        calls.append(call.data)
+    hass.services.async_register('light','turn_on',turn_on)
+    rounds = [[('get_state', {'entity_id':'sensor.temperature','projection':{'kind':'compact'}})],
+              {'type':agentcli.EV_ERROR,'code':'network','retryable':True}]
+    if write_first:
+        rounds.insert(0, [('light__HassLightSet', {'name':'light.selected','brightness':40})])
+    catalogs = scripted(monkeypatch, rounds)
+    result = payload(await rpc(hass,companion))
+    assert result['status'] == ('outcome_unknown' if write_first else 'provider_error')
+    if not write_first:
+        assert 'No device action started' in result['message']
+    assert result['tool_outcomes'][-1] == {'tool':'get_state','outcome':'allowed'}
+    assert len(catalogs) == (3 if write_first else 2)
+    assert len(calls) == int(write_first)
+    assert companion[0].agent_recovery.blocks(companion[1].id) is write_first
+    assert not companion[0].store.get_pending_approvals()
     assert not companion[0].home_companion_active
