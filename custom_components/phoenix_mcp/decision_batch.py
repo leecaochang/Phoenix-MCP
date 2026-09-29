@@ -18,6 +18,7 @@ from .const import (
     DECISION_PERCENTAGE_EXECUTION_MODELS, DECISION_TEMPORAL_CATEGORIES,
     COMMAND_ROUTING_VALUE_INTENTS, DECISION_TARGET_INTENTS, DECISION_NUMERIC_CATEGORIES, DECISION_BATCH_MAX_TARGETS, MAX_SEARCH_QUERY_LEN,
 )
+from .decision_identity import explicit_write_target
 from .decision_provider import DecisionError, DecisionValidationError, DecisionProvider, confident_choice
 from .decision_targets import catalog_state, capture_targets, CatalogLimitError, TargetSnapshot
 from .device_semantics import device_registry_snapshot
@@ -233,9 +234,12 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
         proposal["value"] = value
     elif any(answer.get(question, {}).get("choice", "none") != "none" for question in DECISION_ENTITY_VALUE_QUESTIONS):
         return category, {**selection, "reason": "category_mismatch"}
+    if not explicit_write_target(sentence, targets, proposal, language):
+        return category, {**selection, "reason": "target_unverified"}
     plan = _capture_plan(hass, authority.data, current, proposal, ingress=ingress)
     if plan is None:
         raise DecisionError("targets_changed")
+    plan["decision_target_evidence"] = _digest(proposal)
     plan.update(decision_category=category["choice"], decision_catalog=catalogs[category["choice"]].digest(),
                 decision_batch={"model": category["model"], "language": language,
                                 "catalog": batch_catalog_digest(snapshot)})
@@ -345,7 +349,7 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
                 return result("targets_changed")
             if temporal is not None:
                 from .decision_temporal import temporal_proposal
-                reason, temporal_candidate = temporal_proposal(answer, targets, temporal, timezone, sentence)
+                reason, temporal_candidate = temporal_proposal(answer, targets, temporal, timezone, sentence, lang)
                 return result(reason, decision=answer, proposal=temporal_candidate)
             category, target = answer["route"], answer["target"]
             is_summary = category['choice'] == 'state_summary'
@@ -395,6 +399,8 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
                     evidence["value_check"] = compare_percentage(source_value, proposal[operation.proposal_field])
                 elif value["choice"] != "none":
                     return result("percentage_mismatch", decision=answer)
+            if not explicit_write_target(sentence, targets, proposal, lang):
+                return result("target_unverified", decision=answer)
             return result("target_selected", decision=answer, proposal=proposal,
                           **evidence,
                           local_agreement=proposal == local.get("proposal") if local.get("proposal") else None)

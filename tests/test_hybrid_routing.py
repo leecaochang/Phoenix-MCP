@@ -344,6 +344,7 @@ async def test_enabled_language_hybrid_voice_carries_language_through_dispatch(h
     await hybrid_home[0].store.async_patch_settings(voice_agent_routing_mode=routing_mode)
     data, _, _, _, entity_id = hybrid_home
     await data.store.async_patch_settings(command_routing_languages=[language])
+    er.async_get(hass).async_update_entity(entity_id, aliases={'台灯', 'lámpara'})
     local = {"reason": "no_match", "proposal": None, "elapsed_ms": 1, "route": "provider"}
     with (patch("custom_components.phoenix_mcp.command_routing.async_evaluate_command", AsyncMock(return_value=local)),
           patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
@@ -478,9 +479,9 @@ async def test_qualified_numeric_voice_uses_one_decision_and_shared_execution(ha
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, home, request=respond,
-            sentence=(f'Quiero el dispositivo al {percent} por ciento ahora.' if language == 'es-MX'
-                      else f'我希望设备现在的亮度是百分之{percent}。' if language == 'zh-Hans'
-                      else f'I would like the device at {percent} percent now.'), language=language)
+            sentence=(f'Quiero {home[-1]} al {percent} por ciento ahora.' if language == 'es-MX'
+                      else f'我希望 {home[-1]} 现在的亮度是百分之{percent}。' if language == 'zh-Hans'
+                      else f'I would like {home[-1]} at {percent} percent now.'), language=language)
     remote.assert_awaited_once()
     provider.assert_not_called()
     call.assert_awaited_once_with(domain, service, {'entity_id': [home[-1]], service_field: percent / divisor
@@ -496,7 +497,7 @@ async def test_numeric_disagreement_or_uncertainty_falls_back_without_execution(
                              model='new-revision' if case == 'revision' else 'jev-1.13.0')
         if case == 'low_value': body['answers']['percentage']['probabilities'].update({'37': 0.8, 'none': 0.2})
         return body
-    sentence = 'I would like the device at 37 percent now.'
+    sentence = f'I would like {home[-1]} at 37 percent now.'
     if case == 'multiple': sentence += ' Not 73 percent.'
     with patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call:
         _, remote, provider = await run_voice(hass, home, request=respond, sentence=sentence)
@@ -515,7 +516,7 @@ async def test_numeric_approval_binds_evidence_catalog_and_current_authority(has
     async def respond(session, method, path, timeout, payload): return numeric_reply(payload, home, spec)
     with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
         reply, remote, provider = await run_voice(hass, home, request=respond,
-                                                sentence='I would like the device at thirty-seven percent now.')
+                                                sentence=f'I would like {home[-1]} at thirty-seven percent now.')
     assert 'needs approval' in reply
     remote.assert_awaited_once()
     provider.assert_not_called()
@@ -545,7 +546,7 @@ async def test_numeric_fast_path_preserves_capability_and_mesa(hass, jev_numeric
     async def respond(session, method, path, timeout, payload): return numeric_reply(payload, home, spec)
     with patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call:
         _, remote, provider = await run_voice(hass, home, request=respond,
-                                            sentence='I would like the device at 37 percent now.')
+                                            sentence=f'I would like {home[-1]} at 37 percent now.')
     remote.assert_awaited_once()
     provider.assert_not_called()
     # Existing physical-control policy gates covers, not lighting or media volume.
@@ -671,7 +672,7 @@ async def test_jev_joint_preserves_mesa(hass, jev_hybrid_home, restriction):
         assert "decision-secret" not in json.dumps(plan) and "Desk lamp" not in json.dumps(plan)
 
 
-@pytest.mark.parametrize("change", ["none", "account", "model_restored", "scope", "name", "new_candidate", "read_competitor", "mesa"])
+@pytest.mark.parametrize("change", ["none", "account", "model_restored", "scope", "name", "new_candidate", "read_competitor", "mesa", "missing_target_evidence", "wrong_target_evidence"])
 async def test_jev_joint_approval_binds_full_union_and_model(hass, jev_hybrid_home, change):
     data, token, _, _, entity_id = jev_hybrid_home
     token.permissions.domains["sensor"] = PermissionNode(state="YELLOW")
@@ -684,7 +685,11 @@ async def test_jev_joint_approval_binds_full_union_and_model(hass, jev_hybrid_ho
         answer, _, _ = await run_voice(hass, jev_hybrid_home, request=jev_response)
     assert "needs approval" in answer
     record = data.store.get_pending_approvals()[0]
-    if change == "read_competitor":
+    if change == "missing_target_evidence":
+        del record["args"][COMMAND_ROUTING_PLAN_KEY]["decision_target_evidence"]
+    elif change == "wrong_target_evidence":
+        record["args"][COMMAND_ROUTING_PLAN_KEY]["decision_target_evidence"] = "wrong"
+    elif change == "read_competitor":
         # This candidate is absent from the light-on catalog but was in scope for the joint choice.
         entry = er.async_get(hass).async_get_or_create("sensor", "test", "competing", original_name="Desk lamp")
         hass.states.async_set(entry.entity_id, "20")
@@ -1443,3 +1448,55 @@ async def test_saved_zero_duration_plan_is_rejected_at_execution(hass, jev_hybri
     assert plan_is_current(plan, hass, data, token)
     plan['proposal']['value'] = '00:00:00'
     assert not plan_is_current(plan, hass, data, token)
+
+
+@pytest.mark.parametrize('ingress', ['voice', 'chat'])
+async def test_confident_missing_name_cannot_prepare_a_color_write(hass, jev_hybrid_home, ingress):
+    """A catalog-valid winner still needs identity evidence in the current request."""
+    from custom_components.phoenix_mcp.decision_shadow import async_preview_decision
+    from custom_components.phoenix_mcp.command_execution import _capture_plan
+    data, token, _, _, entity_id = jev_hybrid_home
+    await data.store.async_patch_settings(agentcli_routing_mode='auto')
+    hass.services.async_register('light', 'turn_on', AsyncMock())
+    hass.states.async_set(entity_id, 'off', {
+        'friendly_name': 'Audit Lamp', 'supported_color_modes': ['rgb']})
+    async def respond(*args):
+        body = entity_command_wire(args[4], entity_id, 'light_color', 'blue')
+        for question, probability in [('route', 0.96), ('target', 0.92), ('color', 0.92)]:
+            answer = body['answers'][question]
+            answer['probabilities'] = {key: 0.0 for key in answer['probabilities']}
+            answer['probabilities'][answer['choice']] = probability
+            answer['probabilities']['provider' if question == 'route' else 'none'] = 1 - probability
+        return body
+    with (patch.object(DecisionProvider, '_request', AsyncMock(side_effect=respond)) as remote,
+          patch('custom_components.phoenix_mcp.decision_batch._capture_plan', wraps=_capture_plan) as capture):
+        result = await async_preview_decision(hass, data, token, 'Set Audit Missing Lamp to blue.', 'en',
+            {'reason': 'no_match', 'proposal': None}, targets=True, prepare=True, ingress=ingress)
+    remote.assert_awaited_once()
+    assert result.get('target_selection', {}).get('reason') == 'target_unverified', result
+    assert '_plan' not in result
+    capture.assert_not_called()
+
+
+async def test_sequential_missing_name_falls_back_without_write_or_approval(hass, hybrid_home):
+    with patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call:
+        answer, remote, provider = await run_voice(hass, hybrid_home, sentence='Please illuminate Desk Missing Lamp')
+    assert answer == 'Provider answer'
+    assert remote.await_count == 2
+    provider.assert_awaited_once()
+    call.assert_not_called()
+    assert not hybrid_home[0].store.get_pending_approvals()
+    assert hybrid_home[0].decision_shadow.summary()['hybrid']['reasons'] == {'target_unverified': 1}
+
+
+async def test_temporal_missing_name_falls_back_before_approval(hass, temporal_home):
+    await set_mesa(hass, temporal_home, 'confirm')
+    async def respond(*args): return temporal_wire(args[4], temporal_home[-1])
+    with patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call:
+        answer, remote, provider = await run_voice(hass, temporal_home, request=respond,
+            sentence='Set UnknownHelper to 2026-12-25 18:30')
+    remote.assert_awaited_once()
+    assert answer == 'Provider answer'
+    provider.assert_awaited_once()
+    call.assert_not_called()
+    assert not temporal_home[0].store.get_pending_approvals()

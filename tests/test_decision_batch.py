@@ -287,9 +287,9 @@ def percentage_response(payload, category, entity_id, percentage):
     return body
 
 
-async def percentage_preview(hass, home):
+async def percentage_preview(hass, home, entity_id=None):
     data, token, *_ = home
-    return await async_preview_batch(hass, data, token, 'Set a device to thirty-seven percent', 'en',
+    return await async_preview_batch(hass, data, token, f'Set {entity_id or home[-1]} to thirty-seven percent', 'en',
                                       {'reason': 'no_match', 'proposal': None}, numeric_preview=True)
 
 
@@ -317,7 +317,7 @@ async def test_joint_percentage_preview_uses_one_request_and_never_prepares_exec
     with (patch.object(DecisionProvider, '_request', side_effect=response) as request,
           patch('custom_components.phoenix_mcp.decision_batch._capture_plan') as plan,
           patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
-        result = await percentage_preview(hass, home)
+        result = await percentage_preview(hass, home, entities[category])
     request.assert_awaited_once(); plan.assert_not_called(); dispatch.assert_not_called()
     assert result['proposal'] == {'intent': intent, 'entity_ids': [entity_id], field: percent}
     assert result['executed'] is False and '_plan' not in result and not home[0].store.get_pending_approvals()
@@ -516,7 +516,7 @@ async def test_numeric_preview_reports_independent_value_evidence_without_execut
         return percentage_response(args[4], category, entities[category], model_value)
     with (patch.object(DecisionProvider, '_request', side_effect=response),
           patch('custom_components.phoenix_mcp.decision_batch._capture_plan') as prepare):
-        result = await percentage_preview(hass, home)
+        result = await percentage_preview(hass, home, entities[category])
     assert result['value_check'] == {'status': status, 'source_value': 37}
     assert result['reason'] == 'target_selected' and result['executed'] is False
     assert '_plan' not in result
@@ -771,3 +771,27 @@ async def test_low_confidence_scope_component_cannot_prepare_execution(hass, bat
             'Count all the lights that are currently on', 'en', 'chat')
     assert result['reason'] == 'low_probability' and '_plan' not in result
     prepare.assert_not_called()
+
+
+@pytest.mark.parametrize('numeric_preview', [False, True])
+@pytest.mark.parametrize('missing', [False, True])
+async def test_color_preview_requires_the_selected_literal_identity(hass, batch_home, numeric_preview, missing):
+    data, token, _, _, entity_id = batch_home
+    hass.services.async_register('light', 'turn_on', AsyncMock())
+    hass.states.async_set(entity_id, 'off', {'friendly_name': 'Audit Lamp', 'supported_color_modes': ['rgb']})
+    async def respond(*args):
+        payload = args[4]
+        target = next(key for key, item in wire_targets(payload).items() if item['entity_id'] == entity_id)
+        body = wire_response(payload, 'light_color', target)
+        color = next(key for key, value in payload['state']['color_values'].items() if value == 'blue')
+        body['answers']['color'].update(choice=color, probabilities={
+            key: float(key == color) for key in payload['questions']['color']['criteria']})
+        return body
+    with patch.object(DecisionProvider, '_request', AsyncMock(side_effect=respond)) as remote:
+        result = await async_preview_batch(hass, data, token,
+            'Set Audit Missing Lamp to blue.' if missing else 'Set Audit Lamp to blue.', 'en',
+            {'reason': 'no_match', 'proposal': None}, numeric_preview=numeric_preview)
+    remote.assert_awaited_once()
+    assert result['reason'] == ('target_unverified' if missing else 'target_selected'), result
+    assert bool(result.get('proposal')) is not missing
+    assert result['executed'] is False

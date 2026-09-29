@@ -123,6 +123,9 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
 
     settings = data.store.get_settings()
     category = plan["decision_category"]
+    if (plan["proposal"]["intent"] not in COMMAND_ROUTING_READ_INTENTS and "reference_review" not in plan
+            and plan.get("decision_target_evidence") != _digest(plan["proposal"])):
+        return False
     if category == 'state_summary' and 'decision_batch' not in plan:
         return False
     numeric = category in DECISION_NUMERIC_CATEGORIES

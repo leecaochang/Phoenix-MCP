@@ -460,6 +460,7 @@ async def test_target_selector_cannot_prepare_numeric_plan_even_with_matching_va
 ])
 async def test_multilingual_target_and_brightness_preview_keeps_language_and_no_plan(hass, target_home, language, wire_language, sentence):
     data, token, _, _, entity_id = target_home
+    er.async_get(hass).async_update_entity(entity_id, aliases={'台灯', 'lámpara'})
     payloads = []
     async def request(session, method, path, timeout, payload):
         payloads.append(payload)
@@ -512,7 +513,7 @@ async def test_jev_exact_percentage_preview_is_scoped_and_inert(hass, target_hom
             for question, spec in payload['questions'].items()}}
     with (patch.object(DecisionProvider, '_request', AsyncMock(side_effect=response)) as request,
           patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
-        result = await async_preview_decision(hass, data, token, f'Set the {domain} to {percent} percent', 'en',
+        result = await async_preview_decision(hass, data, token, f'Set {entity_id} to {percent} percent', 'en',
                                               {'reason': 'no_match', 'proposal': None}, targets=True, ingress='preview')
     assert result['target_selection']['proposal'] == {'intent': intent, 'entity_ids': [entity_id], field: percent}
     assert result['target_selection']['value_check'] == {'status': 'match', 'source_value': percent}

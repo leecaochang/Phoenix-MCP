@@ -2157,9 +2157,12 @@ DECISION_PERCENTAGE_EVIDENCE_CONNECTORS = {"en": frozenset({"and"}), "es": froze
 DECISION_PERCENTAGE_UNITS = (("%",), ("％",), ("percent",), ("per", "cent"), ("por", "ciento"), ("百", "分", "之"))
 # Adding a preview category must not automatically authorize an execution path.
 DECISION_EXECUTION_CATEGORIES = frozenset({"light_on", "light_off", "state_query", *DECISION_ENTITY_CATEGORIES})
+# Bound independent identity checks without assuming whitespace in every language.
+DECISION_TARGET_MENTION_LIMIT = 256
+DECISION_UNSEGMENTED_TARGET_LANGUAGES = frozenset({'zh', 'ja', 'ko', 'th', 'lo', 'km', 'my'})
 DECISION_HYBRID_REASONS = frozenset({
     "plan_ready", "provider_fallback", "category_low_probability", "target_low_probability",
-    "target_declined", "ambiguous_target", "brightness_declined", "no_target", "targets_changed",
+    "target_declined", "target_unverified", "ambiguous_target", "brightness_declined", "no_target", "targets_changed",
     "unsupported_category", "too_many_targets", "target_metadata_too_large", "unsupported_language",
     "invalid_input", "authority_changed", "not_enabled", "not_configured", "local_match", "numeric_unverified",
     "local_unavailable", "busy", "cancelled", "authentication", "rate_limited", "http_error",

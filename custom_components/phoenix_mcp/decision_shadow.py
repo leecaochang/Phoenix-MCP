@@ -13,6 +13,7 @@ from .command_operations import numeric_operation
 from .const import MAX_SEARCH_QUERY_LEN, DECISION_TARGET_INTENTS, DECISION_HYBRID_REASONS, DECISION_NUMERIC_CATEGORIES, DECISION_EXECUTION_CATEGORIES, DECISION_ENTITY_CATEGORIES
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 from .decision_metrics import DecisionMetrics
+from .decision_identity import explicit_write_target
 from .numeric_evidence import read_explicit_percentage, compare_percentage
 
 
@@ -234,14 +235,17 @@ class DecisionShadow:
                 if type(percent) is not int or not 0 <= percent <= 100:
                     return result("brightness_declined" if category["choice"] == "light_brightness" else "percentage_declined", decision=answer)
                 proposal[operation.proposal_field] = percent
+            if not explicit_write_target(sentence, snapshot.targets, proposal, language):
+                return result("target_unverified", decision=answer)
             selection = {**result("target_selected", entity_id, answer), "proposal": proposal}
             if operation is not None:
                 selection["value_check"] = compare_percentage(source_value, proposal[operation.proposal_field])
             if prepare:
-                from .command_execution import _capture_plan
+                from .command_execution import _capture_plan, _digest
                 plan = _capture_plan(hass, authority.data, token, proposal, ingress=ingress)
                 if plan is None:
                     return result("targets_changed")
+                plan["decision_target_evidence"] = _digest(proposal)
                 plan.update(decision_category=category["choice"], decision_catalog=snapshot.digest())
                 selection["_plan"] = plan
             return selection

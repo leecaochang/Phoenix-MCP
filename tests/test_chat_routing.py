@@ -836,6 +836,7 @@ async def test_multilingual_hybrid_chat_approval_and_language_revalidation(hass,
     from custom_components.phoenix_mcp.mesa import async_setup_mesa
     from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
     data, token = hybrid_chat
+    er.async_get(hass).async_update_entity('light.test_desk', aliases={'台灯', 'lámpara'})
     await data.store.async_patch_settings(command_routing_languages=[language], mesa_mode='enforced')
     data.mesa = await async_setup_mesa(hass, 'enforced')
     data.mesa.store.set('light.test_desk', SemanticProfile.from_dict('light.test_desk',
