@@ -120,7 +120,15 @@ async def _async_review_reference(hass: Any, data: Any, token: Any, sentence: st
                 if len(encoded.encode()) > DECISION_CONTEXT_MAX_BYTES or (cfg.api_key and cfg.api_key in encoded):
                     return result("context_unavailable")
                 provider = DecisionProvider(cfg, PROVIDER_DEFINITIONS[cfg.kind].adapter,
+                                        request_budget=data.decision_budget, request_limit=authority.settings.decision_request_budget,
                                             metrics=runtime.metrics, metric_scope="chat" if prepare else "preview")
+                def request_guard() -> None:
+                    latest = authority.current(hass)
+                    if latest is None or store.resolve(account, purpose='decision') != cfg:
+                        raise DecisionError('authority_changed')
+                    if capture_batch_targets(hass, latest, extended=extended) != snapshot:
+                        raise DecisionError('context_changed')
+                provider.request_guard = request_guard
                 answer = await provider.review_reference(async_get_clientsession(hass), state,
                                                          authority.settings.decision_timeout_ms)
                 current = authority.current(hass)

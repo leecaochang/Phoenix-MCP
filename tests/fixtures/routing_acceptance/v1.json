@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "purpose": "Provider-independent routing acceptance; simulated provider answers do not qualify a hosted model.",
+  "profiles": {
+    "native": ["tests/test_native_action_routing.py", "tests/test_numeric_recognition.py", "tests/test_command_summary.py", "tests/test_command_display.py"],
+    "conversation": ["tests/test_command_clarification.py", "tests/test_voice_context.py", "tests/test_command_execution.py", "tests/test_chat_routing_history.py"],
+    "decision": ["tests/test_decision_provider.py", "tests/test_decision_identity.py", "tests/test_decision_targets.py", "tests/test_decision_batch.py", "tests/test_decision_temporal.py", "tests/test_decision_context.py", "tests/test_decision_reference.py", "tests/test_decision_budget.py"]
+  },
+  "model_qualification": {
+    "required": ["complete scoped catalog", "every answer meets configured confidence", "literal target identity", "literal numeric, unit and option evidence", "positive controls", "negated, deferred, multiple and unsupported requests refuse", "fresh authority after every wait", "approval revalidation", "no effect from previews"],
+    "record": ["model revision", "adapter revision", "catalog entity and byte counts", "language", "expected and observed choices", "confidence for every answer", "latency", "HTTP attempts", "accepted and refused counts", "state before and after", "settings and fixture cleanup"],
+    "deferred_models": ["Simple-JEV", "Laya"]
+  }
+}

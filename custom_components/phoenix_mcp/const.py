@@ -1654,6 +1654,8 @@ NOTIFICATION_TEMPLATES: dict[str, str] = {
 # within earshot of the satellite.
 VOICE_TEMPLATES: dict[str, str] = {
     "local_cancelled": "Cancelled.",
+    "local_clarification": "Which target do you mean? {choices}. Reply with its number or exact entity ID, or say cancel. This choice expires in two minutes.",
+    "local_clarification_expired": "That choice is no longer current. Please repeat the full command.",
     "local_unauthorized": "This token is no longer authorized.",
     "local_state_matched": "Home Assistant reports the requested state.",
     "local_state_unconfirmed": "Command sent. Home Assistant has not yet confirmed the requested state.",
@@ -1661,6 +1663,8 @@ VOICE_TEMPLATES: dict[str, str] = {
     "local_review": "Review command",
     "local_failed": "Phoenix MCP could not complete this command.",
     "local_state": "The state is {state}.",
+    "local_state_unknown": "Unknown",
+    "local_state_unavailable": "Unavailable",
     'local_summary_count': 'Among entities exposed to Assist that I can access: {matched} of {total} have state {state}; {unknown} have unknown or unavailable state.',
     'local_summary_total': 'Among entities exposed to Assist that I can access: {total} entities; {unknown} have unknown or unavailable state.',
     'local_summary_breakdown': 'Among entities exposed to Assist that I can access: {total} entities. {summary}.',
@@ -1699,6 +1703,15 @@ COMMAND_ROUTING_SETTINGS_VERSION = 1
 COMMAND_ROUTING_MODES = frozenset({"off", "auto", "local_shadow", "local", "hybrid"})
 CHAT_COMMAND_ROUTING_MODES = frozenset({"off", "auto", "local", "hybrid"})
 CHAT_ROUTING_HISTORY_LIMIT = 128
+COMMAND_CLARIFICATION_LIMIT = 64
+COMMAND_CLARIFICATION_TTL_SECONDS = 120
+COMMAND_CLARIFICATION_MAX_CHOICES = 5
+COMMAND_ROUTING_PROOF_FIELDS = frozenset({'voice_origin', 'clarification'})
+DECISION_REQUEST_BUDGET_MAX = 100000
+DECISION_BUDGET_WINDOW_SECONDS = 3600
+DECISION_BUDGET_STORAGE_KEY = 'phoenix_mcp_decision_budget'
+COMMAND_CLARIFICATION_CANCEL = frozenset({'cancel', 'never mind', 'nevermind', '取消', '取消吧',
+    'abbrechen', 'cancelar', 'annuler', 'annulla', 'キャンセル', '취소', 'annuleren', 'anuluj', 'отмена'})
 CHAT_ROUTING_HISTORY_TTL_SECONDS = 1800
 CHAT_ROUTING_HISTORY_MAX_MESSAGES = 128
 CHAT_ROUTING_HISTORY_MAX_BYTES = 65536
@@ -1938,11 +1951,29 @@ COMMAND_ROUTING_FIXED_OBSERVATIONS = {intent: values for intent, values in COMMA
 COMMAND_ROUTING_FIXED_OBSERVATIONS[DECISION_ENTITY_CATEGORIES["water_away_on"]] = {"away_mode": "on"}
 COMMAND_ROUTING_FIXED_OBSERVATIONS[DECISION_ENTITY_CATEGORIES["water_away_off"]] = {"away_mode": "off"}
 COMMAND_ROUTING_VALUE_INTENTS = frozenset(intent for intent, spec in COMMAND_ROUTING_ENTITY_INTENTS.items() if spec[2])
+# Native named actions share projections and approval checks with typed decisions.
+COMMAND_ROUTING_NATIVE_ACTIONS = {
+    "HassMediaPause": "media_pause", "HassMediaUnpause": "media_play",
+    "HassMediaNext": "media_next_track", "HassMediaPrevious": "media_previous_track",
+    "HassMediaPlayerMute": "media_mute", "HassMediaPlayerUnmute": "media_unmute",
+    "HassVacuumStart": "vacuum_start", "HassVacuumReturnToBase": "vacuum_return_to_base",
+}
+COMMAND_ROUTING_REQUIRED_STATES = {
+    "HassMediaPause": frozenset({"playing"}), "HassMediaNext": frozenset({"playing"}),
+    "HassMediaPrevious": frozenset({"playing"}),
+}
+for _intent, _category in COMMAND_ROUTING_NATIVE_ACTIONS.items():
+    COMMAND_ROUTING_ENTITY_INTENTS[_intent] = COMMAND_ROUTING_ENTITY_COMMANDS[_category]
+    if _category in COMMAND_ROUTING_ENTITY_FIXED_DATA:
+        COMMAND_ROUTING_FIXED_INTENT_DATA[_intent] = COMMAND_ROUTING_ENTITY_FIXED_DATA[_category]
+        COMMAND_ROUTING_FIXED_OBSERVATIONS[_intent] = COMMAND_ROUTING_ENTITY_FIXED_DATA[_category]
 COMMAND_ROUTING_INTENTS |= COMMAND_ROUTING_ENTITY_INTENTS.keys()
 COMMAND_ROUTING_ENTITY_VALUE_LIMIT = 254
 DECISION_ENTITY_VALUE_QUESTIONS = ("value", "attribute", "color")
 COMMAND_ROUTING_TIMER_OBSERVATION_TOLERANCE_SECONDS = 2
 COMMAND_ROUTING_UNKNOWN_ACTION_DOMAINS = frozenset({"button", "input_button", "scene"})
+COMMAND_ROUTING_NUMERIC_READ_DOMAINS = frozenset({"sensor", "number", "input_number", "counter"})
+COMMAND_ROUTING_TRANSLATION_TIMEOUT_SECONDS = 2
 
 # Typed helper updates are immediate value writes, never scheduling requests.
 COMMAND_ROUTING_TEMPORAL_OPERATIONS = {
@@ -2169,6 +2200,7 @@ DECISION_HYBRID_REASONS = frozenset({
     "invalid_input", "authority_changed", "not_enabled", "not_configured", "local_match", "numeric_unverified",
     "local_unavailable", "busy", "cancelled", "authentication", "rate_limited", "http_error",
     "response_too_large", "provider_context_limit", "malformed", "timeout", "unavailable",
+    "request_budget_exhausted", "budget_unavailable",
     "context_unverified", "context_unavailable", "context_changed", "low_probability", "invalid_context",
     "model_unverified", "category_mismatch",
 })

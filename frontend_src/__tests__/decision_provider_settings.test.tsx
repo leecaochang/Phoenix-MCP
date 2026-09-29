@@ -28,6 +28,27 @@ beforeEach(() => {
   mocks.models.mockResolvedValue({ models: ["jev-latest"] });
 });
 
+it("saves an hourly request limit and rejects empty or fractional drafts", async () => {
+  const change = vi.fn();
+  const props = { settings: { ...settings, decision_provider_id: "decision", decision_request_budget: 12 }, onChange: change, saving: false };
+  const view = render(<DecisionProviderSettings {...props} />);
+  await screen.findByText("TypeSafe / JEV");
+  fireEvent.click(screen.getByText("Connection settings"));
+  const input = screen.getByLabelText("Decision requests per hour (0 = unlimited)");
+  for (const value of ["", "1.5", "-1", "100001"]) {
+    fireEvent.change(input, { target: { value } });
+    fireEvent.blur(input);
+    expect(input).toHaveValue(12);
+  }
+  expect(change).not.toHaveBeenCalled();
+  fireEvent.change(input, { target: { value: "20" } });
+  fireEvent.blur(input);
+  expect(change).toHaveBeenCalledExactlyOnceWith("decision_request_budget", 20);
+  view.rerender(<DecisionProviderSettings {...props} settings={{ ...props.settings, decision_request_budget: 20 }} saving />);
+  expect(input).toHaveValue(20);
+  expect(input).toBeDisabled();
+});
+
 it("keeps remote observation opt-in and sends no completion on mount", async () => {
   const change = vi.fn();
   render(<DecisionProviderSettings settings={settings} onChange={change} saving={false} />);

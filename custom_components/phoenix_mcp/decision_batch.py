@@ -158,6 +158,7 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
         if capture_batch_targets(hass, latest, numeric_preview=numeric, extended=True) != snapshot:
             raise DecisionError("targets_changed")
 
+    provider.request_guard = revalidate
     answer = await provider.route_and_target(session, sentence, targets,
                                             authority.settings.decision_timeout_ms, language,
                                             revalidate=revalidate, **options)
@@ -295,6 +296,7 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
             if not safe_text(current) or (cfg.api_key and cfg.api_key in sentence):
                 return result("context_unavailable")
             provider = DecisionProvider(cfg, PROVIDER_DEFINITIONS[cfg.kind].adapter,
+                                        request_budget=data.decision_budget, request_limit=authority.settings.decision_request_budget,
                                         metrics=runtime.metrics, metric_scope="preview")
             from .temporal_values import async_read_temporal_value
             async with asyncio.timeout_at(deadline):
@@ -310,6 +312,15 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
             extended = batch_execution_eligible(cfg, lang)
             snapshot = capture_batch_targets(hass, current, numeric_preview=numeric_preview, extended=extended, temporal=temporal is not None)
             targets, catalogs = snapshot
+            def request_guard() -> None:
+                latest = authority.current(hass)
+                if latest is None or store.resolve(account, purpose='decision') != cfg:
+                    raise DecisionError('authority_changed')
+                if (not safe_text(latest) or hass.config.time_zone != timezone
+                        or capture_batch_targets(hass, latest, numeric_preview=numeric_preview, extended=extended,
+                                                 temporal=temporal is not None) != snapshot):
+                    raise DecisionError('targets_changed')
+            provider.request_guard = request_guard
             summaries = catalogs.get('state_summary')
             if not targets and not (summaries and summaries.targets):
                 return result("no_target")

@@ -29,7 +29,11 @@
     "local_summary_count": "Wśród encji udostępnionych Assist, do których mam dostęp: {matched} z {total} ma stan {state}; stan {unknown} jest nieznany lub niedostępny.",
     "local_summary_total": "Wśród encji udostępnionych Assist, do których mam dostęp: {total} encji; stan {unknown} jest nieznany lub niedostępny.",
     "local_summary_breakdown": "Wśród encji udostępnionych Assist, do których mam dostęp: {total} encji. {summary}.",
-    "local_attribute_unavailable": "Home Assistant nie podaje obecnie wartości żądanej właściwości."
+    "local_attribute_unavailable": "Home Assistant nie podaje obecnie wartości żądanej właściwości.",
+    "local_state_unknown": "Nieznany",
+    "local_state_unavailable": "Niedostępny",
+    "local_clarification": "Który cel masz na myśli? {choices}. Podaj numer lub dokładny identyfikator encji albo powiedz anuluj. Ten wybór wygasa za dwie minuty.",
+    "local_clarification_expired": "Ten wybór nie jest już aktualny. Powtórz pełne polecenie."
   },
   "panel": {
     "shell": {
@@ -2058,7 +2062,9 @@
       "failed": "Nie udało się zapisać lub wczytać ustawień kierowania poleceń.",
       "accountModel": "Model dla {name}",
       "connectionHint": "Bazowy adres URL to adres serwera. Dodaj klucz API tylko wtedy, gdy serwer wymaga uwierzytelniania.",
-      "commandHelp": "Najpierw wypróbuj lokalne intencje, a następnie opcjonalnego dostawcę decyzji. Pozostałe żądania trafiają do zwykłego dostawcy AI. Uprawnienia i zatwierdzenia nadal obowiązują."
+      "commandHelp": "Najpierw wypróbuj lokalne intencje, a następnie opcjonalnego dostawcę decyzji. Pozostałe żądania trafiają do zwykłego dostawcy AI. Uprawnienia i zatwierdzenia nadal obowiązują.",
+      "requestLimit": "Żądania decyzyjne na godzinę (0 = bez limitu)",
+      "requestLimitHint": "Wspólny limit dla głosu, czatu, podglądów i kontroli w tle. Po włączeniu liczy próby, także nieudane, i zachowuje licznik po ponownym uruchomieniu. Zeruje się o każdej pełnej godzinie UTC. Zwykły dostawca ma osobny limit. To limit żądań, a nie kwoty wydatków."
     },
     "routingStats": {
       "title": "Statystyki routingu",

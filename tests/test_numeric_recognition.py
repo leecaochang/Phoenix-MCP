@@ -13,10 +13,17 @@ from custom_components.phoenix_mcp.numeric_recognition import NumericIdMatch, _l
     ('light.test_lamp', 'set {entity} to {value} percent brightness', 'HassLightSet'),
     ('media_player.test_speaker', 'set {entity} volume to {value} percent', 'HassSetVolume'),
     ('cover.test_blind', 'set {entity} to {value} percent', 'HassSetPosition'),
+    ('valve.test_valve', 'set {entity} to {value} percent', 'PhoenixValvePosition'),
 ])
 @pytest.mark.parametrize('text,value', [('0', 0), ('37', 37), ('100', 100), ('thirty seven', 37)])
 def test_real_templates_retain_exact_values(entity, pattern, intent, text, value):
     assert recognize_numeric_ids(pattern.format(entity=entity, value=text), 'en', (entity,)) == NumericIdMatch(intent, entity, value)
+
+
+@pytest.mark.parametrize('value', [2000, 3500, 6500])
+def test_exact_id_color_temperature_uses_builtin_numeric_grammar(value):
+    entity = 'light.test_lamp'
+    assert recognize_numeric_ids(f'Set {entity} color temperature to {value} kelvin', 'en', (entity,)) == NumericIdMatch('PhoenixLightTemperature', entity, value)
 
 
 @pytest.mark.parametrize('sentence', [

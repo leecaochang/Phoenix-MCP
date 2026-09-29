@@ -52,6 +52,14 @@ async def async_prepare_temporal(hass: Any, authority: RoutingAuthority, provide
         raise DecisionError("numeric_unverified")
     snapshot = capture_batch_targets(hass, current, extended=True, temporal=True)
     targets, catalogs = snapshot
+    def request_guard() -> None:
+        latest = authority.current(hass)
+        if (latest is None or loaded_decision_account(hass, authority.settings.decision_provider_id or '') != provider.cfg
+                or hass.config.time_zone != timezone):
+            raise DecisionError('authority_changed')
+        if capture_batch_targets(hass, latest, extended=True, temporal=True) != snapshot:
+            raise DecisionError('targets_changed')
+    provider.request_guard = request_guard
     answer = await provider.route_temporal(session, sentence, language, targets, source, timezone,
                                            authority.settings.decision_timeout_ms)
     current = authority.current(hass)

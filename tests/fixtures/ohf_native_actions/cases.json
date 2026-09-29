@@ -1,0 +1,105 @@
+{
+  "upstream": "OHF-Voice/intents",
+  "revision": "d7bab6f383ec338d70df985747d23f43946d4dc9",
+  "language": "en",
+  "cases": [
+    {
+      "intent": "HassMediaPause",
+      "sentence": "pause TV",
+      "name": "TV",
+      "domain": "media_player",
+      "source": "tests/en/HassMediaPause/name_only.yaml"
+    },
+    {
+      "intent": "HassMediaPause",
+      "sentence": "TV pause",
+      "name": "TV",
+      "domain": "media_player",
+      "source": "tests/en/HassMediaPause/name_only.yaml"
+    },
+    {
+      "intent": "HassMediaUnpause",
+      "sentence": "unpause TV",
+      "name": "TV",
+      "domain": "media_player",
+      "source": "tests/en/HassMediaUnpause/name_only.yaml"
+    },
+    {
+      "intent": "HassMediaUnpause",
+      "sentence": "TV unpause",
+      "name": "TV",
+      "domain": "media_player",
+      "source": "tests/en/HassMediaUnpause/name_only.yaml"
+    },
+    {
+      "intent": "HassMediaNext",
+      "sentence": "next item on TV",
+      "name": "TV",
+      "domain": "media_player",
+      "source": "tests/en/HassMediaNext/name_only.yaml"
+    },
+    {
+      "intent": "HassMediaNext",
+      "sentence": "skip song on the TV",
+      "name": "TV",
+      "domain": "media_player",
+      "source": "tests/en/HassMediaNext/name_only.yaml"
+    },
+    {
+      "intent": "HassMediaPrevious",
+      "sentence": "previous track on the TV",
+      "name": "TV",
+      "domain": "media_player",
+      "source": "tests/en/HassMediaPrevious/name_only.yaml"
+    },
+    {
+      "intent": "HassMediaPrevious",
+      "sentence": "go back on TV",
+      "name": "TV",
+      "domain": "media_player",
+      "source": "tests/en/HassMediaPrevious/name_only.yaml"
+    },
+    {
+      "intent": "HassMediaPlayerMute",
+      "sentence": "mute the TV",
+      "name": "TV",
+      "domain": "media_player",
+      "source": "tests/en/HassMediaPlayerMute/name_only.yaml"
+    },
+    {
+      "intent": "HassMediaPlayerMute",
+      "sentence": "mute music on the TV",
+      "name": "TV",
+      "domain": "media_player",
+      "source": "tests/en/HassMediaPlayerMute/name_only.yaml"
+    },
+    {
+      "intent": "HassMediaPlayerUnmute",
+      "sentence": "unmute the TV",
+      "name": "TV",
+      "domain": "media_player",
+      "source": "tests/en/HassMediaPlayerUnmute/name_only.yaml"
+    },
+    {
+      "intent": "HassMediaPlayerUnmute",
+      "sentence": "unmute music on the TV",
+      "name": "TV",
+      "domain": "media_player",
+      "source": "tests/en/HassMediaPlayerUnmute/name_only.yaml"
+    },
+    {
+      "intent": "HassVacuumStart",
+      "sentence": "start rover",
+      "name": "Rover",
+      "domain": "vacuum",
+      "source": "tests/en/HassVacuumStart/name_only.yaml"
+    },
+    {
+      "intent": "HassVacuumReturnToBase",
+      "sentence": "return rover to base",
+      "name": "Rover",
+      "domain": "vacuum",
+      "source": "tests/en/HassVacuumReturnToBase/name_only.yaml"
+    }
+  ]
+}

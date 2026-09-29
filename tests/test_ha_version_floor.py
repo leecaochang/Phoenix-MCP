@@ -193,6 +193,8 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         # Verified absent in 2024.2.5, present in 2024.3.0.
         "label_registry": "2024.3.0",
         "sun": "0.0.0",
+        # Module and async_get_translations verified in the 2025.2.0 source.
+        "translation": "2025.2.0",
     },
     "homeassistant.helpers.aiohttp_client": {
         "async_get_clientsession": "0.0.0",

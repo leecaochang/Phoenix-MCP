@@ -336,8 +336,13 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     from .const import ROUTING_STATISTICS_STORAGE_KEY, ROUTING_STATISTICS_FLUSH_INTERVAL
     routing_statistics = RoutingStatistics(Store(hass, 1, ROUTING_STATISTICS_STORAGE_KEY))
     await routing_statistics.async_load()
+    from .decision_budget import DecisionRequestBudget
+    from .const import DECISION_BUDGET_STORAGE_KEY
+    decision_budget = DecisionRequestBudget(Store(hass, 1, DECISION_BUDGET_STORAGE_KEY, atomic_writes=True))
+    await decision_budget.async_load()
 
     data = PhoenixData(
+        decision_budget=decision_budget,
         hass=hass,
         store=store,
         rate_limiter=rate_limiter,

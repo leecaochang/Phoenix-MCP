@@ -140,8 +140,13 @@ class DecisionShadow:
                 return result("authority_changed")
             scope = ingress if prepare or ingress == "preview" else f"{ingress}_shadow"
             provider = DecisionProvider(cfg, PROVIDER_DEFINITIONS[cfg.kind].adapter,
+                                        request_budget=data.decision_budget, request_limit=authority.settings.decision_request_budget,
                                         metrics=self.metrics, metric_scope=scope)
             session = async_get_clientsession(hass)
+            def request_guard() -> None:
+                if authority.current(hass) is None or store.resolve(account, purpose='decision') != cfg:
+                    raise DecisionError('authority_changed')
+            provider.request_guard = request_guard
             # Joint and sequential choices share the existing slot and wall-clock budget.
             async with asyncio.timeout(settings.decision_timeout_ms / 1000):
                 joint = None
@@ -208,6 +213,14 @@ class DecisionShadow:
             operation = numeric_operation(DECISION_TARGET_INTENTS[category["choice"]])
             if prepare and operation is not None:
                 return result("numeric_unverified")
+            from .agentcli import loaded_decision_account
+            def request_guard() -> None:
+                latest = authority.current(hass)
+                if latest is None or loaded_decision_account(hass, authority.settings.decision_provider_id or '') != provider.cfg:
+                    raise DecisionError('authority_changed')
+                if capture_sequential_targets(hass, latest, category['choice']) != snapshot:
+                    raise DecisionError('targets_changed')
+            provider.request_guard = request_guard
             answer = await provider.select_target(session, sentence, category["choice"], snapshot.targets, timeout_ms, language)
             source_value = (await hass.async_add_executor_job(read_explicit_percentage, sentence, language)
                             if operation is not None else None)

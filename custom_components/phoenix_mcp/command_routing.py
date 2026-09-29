@@ -11,11 +11,13 @@ from typing import Any, TYPE_CHECKING
 from homeassistant.core import HomeAssistant
 
 from .chat_routing_history import ChatRoutingHistory
+from .command_clarification import CommandClarifications
 from .command_operations import command_domain, numeric_operation, supports_command, valid_target_value
 from .const import (
     COMMAND_ROUTING_INTENTS, COMMAND_ROUTING_TARGET_SLOTS, COMMAND_ROUTING_LANGUAGES,
     COMMAND_ROUTING_DEFAULT_LANGUAGES, COMMAND_ROUTING_LANGUAGE_ALIASES,
     MAX_SEARCH_QUERY_LEN, COMMAND_ROUTING_NUMERIC_OPERATIONS, COMMAND_ROUTING_NUMERIC_TARGET_LIMIT,
+    COMMAND_ROUTING_NATIVE_ACTIONS,
 )
 from .numeric_recognition import NumericIdMatch, recognize_numeric_ids
 from .intent_recognition import RecognitionUnavailable, SentenceTriggerMatch, async_recognize
@@ -48,6 +50,7 @@ class CommandRouting:
     chat_reasons: dict[str, int] = field(default_factory=dict)
     chat_candidates: int = 0
     chat_history: ChatRoutingHistory = field(default_factory=ChatRoutingHistory, repr=False)
+    clarifications: CommandClarifications = field(default_factory=CommandClarifications, repr=False)
 
     def observe(self, result: dict, *, chat: bool = False) -> None:
         """Retain separate aggregate counts, without utterances or entity IDs."""
@@ -108,7 +111,8 @@ class RoutingAuthority:
 
 
 
-def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant) -> tuple[str, dict | None]:
+def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant, *,
+              candidates: list[str] | None = None, selected: str | None = None) -> tuple[str, dict | None]:
     """Map only supported, complete HA slots against current Phoenix scope."""
     if isinstance(result, NumericIdMatch):
         from .command_execution import _target_fingerprint
@@ -143,6 +147,9 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant) -> tuple[str
     if slots.keys() - allowed:
         return "unsupported", None
     name, area = slots.get("name"), slots.get("area")
+    native_action = intent_name in COMMAND_ROUTING_NATIVE_ACTIONS
+    if native_action and not name:
+        return "unsupported", None
     if not (name or area) or name == "all":
         return "unsupported", None
     if any(value is not None and (not isinstance(value, str) or not value.strip())
@@ -154,18 +161,27 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant) -> tuple[str
         return "unsupported", None
     read_only = intent_name == "HassGetState"
     expected_domain = command_domain(intent_name)
-    if operation and domains and domains != expected_domain:
+    if (operation or native_action) and domains and domains != expected_domain:
         return "unsupported", None
     if read_only and (not name or getattr(result, "response", None) not in (None, "default", "one")):
         return "unsupported", None
     # Match the HA intent's domains, not only the domains we can execute.
     # Paired remotes cannot set volume; valves still make position ambiguous.
-    target_domains = [domains] if domains else list(operation.match_domains) if operation else None
+    target_domains = ([domains] if domains else [expected_domain] if native_action and expected_domain is not None else
+                      list(operation.match_domains) if operation else None)
     ids = resolve_intent_entities(
         hass, token, name=name, area=area,
         domains=target_domains,
         device_classes=[device_class] if device_class else None, read_only=True,
+        allow_duplicate_names=candidates is not None or selected is not None,
     )
+    if name and len(ids) > 1:
+        if selected in ids:
+            ids = [selected]
+        else:
+            if candidates is not None:
+                candidates.extend(sorted(ids))
+            return 'no_target', None
     if not ids or (name and len(ids) != 1) or (read_only and len(ids) != 1):
         return "no_target", None
     if intent_name == "HassSetPosition" and all(eid.startswith("valve.") for eid in ids):
@@ -239,9 +255,10 @@ def routing_language(language: object, *, preview: bool = False,
 
 
 async def _recognize_command(hass: HomeAssistant, authority: RoutingAuthority,
-                             sentence: str, language: str) -> Any:
+                             sentence: str, language: str, voice_origin: dict | None = None) -> Any:
     """Keep both parsers in one bounded job, with HA trigger precedence intact."""
-    result = await async_recognize(hass, sentence, language, strict=True)
+    context = {'voice_origin': voice_origin} if voice_origin is not None else {}
+    result = await async_recognize(hass, sentence, language, strict=True, **context)
     if result is not None:
         return result
     token = authority.current(hass)
@@ -264,13 +281,15 @@ async def _recognize_command(hass: HomeAssistant, authority: RoutingAuthority,
     if numeric is None or authority.current(hass) is None:
         return None
     # Respect triggers and custom sentences added while the independent worker ran.
-    latest = await async_recognize(hass, sentence, language, strict=True)
+    latest = await async_recognize(hass, sentence, language, strict=True, **context)
     return latest if latest is not None else numeric
 
 
 async def async_evaluate_command(
     hass: HomeAssistant, data: PhoenixData, token: TokenRecord,
     sentence: object, language: object = "en", *, preview: bool = False, ingress: str = "voice",
+    voice_origin: dict | None = None,
+    clarify: bool = False,
 ) -> dict:
     """Return an inert candidate or fallback with elapsed local wall time.
 
@@ -299,7 +318,7 @@ async def async_evaluate_command(
         return outcome("busy")
     # Only recognition runs in the background. Projection and disclosure happen
     # synchronously after the authority check, never in a timed-out task.
-    task = asyncio.create_task(_recognize_command(hass, authority, sentence.strip(), recognition_language))
+    task = asyncio.create_task(_recognize_command(hass, authority, sentence.strip(), recognition_language, voice_origin))
     runtime.task = task
     task.add_done_callback(runtime._finished)
     try:
@@ -318,9 +337,21 @@ async def async_evaluate_command(
     current = authority.current(hass)
     if current is None:
         return outcome("authority_changed")
+    if voice_origin is not None:
+        from .voice_context import voice_origin_current
+        if ingress != 'voice' or not voice_origin_current(hass, voice_origin):
+            return outcome('authority_changed')
     try:
         reason, proposal = _proposal(recognized, current, hass)
     except Exception:
         _LOGGER.debug("Local command projection failed")
         return outcome("unavailable")
-    return outcome(reason, proposal)
+    if proposal is not None and voice_origin is not None:
+        proposal['voice_origin'] = dict(voice_origin)
+    result = outcome(reason, proposal)
+    if clarify and reason == 'no_target':
+        from .command_clarification import capture_choices
+        choices = capture_choices(hass, data, current, recognized, ingress=ingress, voice_origin=voice_origin)
+        if choices is not None:
+            result['_clarification'] = {'sentence': sentence.strip(), 'choices': choices}
+    return result

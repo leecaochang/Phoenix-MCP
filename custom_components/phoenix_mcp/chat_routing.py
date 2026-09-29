@@ -33,9 +33,13 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
     assert isinstance(language, str)
     authority = RoutingAuthority.capture(data, token)
     binding = [token.id, token.token_hash, token.settings_version, language, authority.settings_values]
+    from .command_clarification import (async_clarification_reply, clarification_binding, clarification_prompt, is_clarification_cancel)
+    clarification_key = ['chat', messages[:-1]]
+    clarification_scope = clarification_binding(hass, authority, language)
+    pending = data.command_routing.clarifications.consume(clarification_key, clarification_scope) if execute else None
     followup = len(messages) != 1
     contextual = False
-    if followup:
+    if followup and pending is None:
         if not execute:
             return True
         if not data.command_routing.chat_history.consume(messages[:-1], binding):
@@ -49,9 +53,10 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
         context_account = decision_account_fingerprint(hass, settings.decision_provider_id)
     sentence = messages[-1]["content"]
 
-    async def finish(reply: LocalCommandReply, *, local: bool = False, subject: dict | None = None) -> bool:
+    async def finish(reply: LocalCommandReply, *, local: bool = False, subject: dict | None = None,
+                     route: str | None = None) -> bool:
         from .routing_statistics import local_result
-        local_result(reply, "local" if local else "decision")
+        local_result(reply, route or ("local" if local else "decision"))
         if reply.outcome != "ok":
             await emit("error", {"code": reply.outcome, "message": reply.text, "retryable": False})
         else:
@@ -77,7 +82,21 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
 
     if cancel.is_set() or authority.current(hass) is None:
         return await stop()
-    result = await async_evaluate_command(hass, data, token, sentence, language, ingress="chat")
+    if pending is not None:
+        selected, reply_text = await async_clarification_reply(hass, data, token, pending, sentence, language, ingress='chat')
+        current = authority.current(hass)
+        if current is None or cancel.is_set() or messages != snapshot:
+            return await stop()
+        if reply_text is not None:
+            outcome = 'cancelled' if not pending.get('_expired') and is_clarification_cancel(sentence) else 'ok'
+            return await finish(LocalCommandReply(reply_text, outcome), route='local')
+        if selected is not None:
+            reply = await async_execute_chat_command(hass, data, current, selected, authority,
+                base_url, client_ip, cancel, language=language)
+            return await finish(reply or LocalCommandReply(voice_text(language, 'local_clarification_expired')), route='local')
+        # A new full command is independent; the one-use choice has been consumed.
+        contextual = False
+    result = await async_evaluate_command(hass, data, token, sentence, language, ingress="chat", clarify=execute and not contextual)
     current = authority.current(hass)
     if cancel.is_set() or current is None or (followup and messages != snapshot):
         return await stop()
@@ -85,6 +104,12 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
                        decision_account_fingerprint(hass, settings.decision_provider_id) != context_account):
         return await stop()
     data.command_routing.observe(result, chat=True)
+    if execute and not contextual and result.get('_clarification') is not None:
+        request = result['_clarification']
+        await finish(LocalCommandReply(clarification_prompt(language, request)), route='local')
+        if not cancel.is_set() and authority.current(hass) is not None:
+            data.command_routing.clarifications.remember(['chat', messages], clarification_scope, request)
+        return False
     if contextual:
         decision = await async_prepare_chat_context(hass, data, current, sentence, language,
                                                     messages[:-1], result, cancel)

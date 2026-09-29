@@ -1939,6 +1939,8 @@ async def test_wipe_defaults_hit_core_and_providers_but_not_mesa():
 @pytest.mark.asyncio
 async def test_wipe_core_tears_down_pending_approvals():
     data = _make_wipe_data()
+    data.command_routing.clarifications.remember('conversation', 'binding', {'sentence': 'private'})
+    await data.decision_budget.reserve(1)
     # One pending approval (must be dismissed) + one already-terminal (must be
     # ignored). Only "pending" gets a notification dismiss + resolved event.
     data.store.get_pending_approvals = MagicMock(return_value=[
@@ -1964,6 +1966,8 @@ async def test_wipe_core_tears_down_pending_approvals():
     assert fire.call_args[0][1].id == "ap-pending"
     assert fire.call_args[0][1].status == "cancelled"
     assert data.approvals_in_progress == set()
+    assert data.command_routing.clarifications.consume('conversation', 'binding') is None
+    assert data.decision_budget.summary(1)['used'] == 0
 
 
 @pytest.mark.asyncio

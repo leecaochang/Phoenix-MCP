@@ -713,6 +713,34 @@ async def test_joint_option_descriptions_include_exact_values_without_dropping_c
     assert result['route']['choice'] == 'provider'
 
 
+@pytest.mark.parametrize('change', [None, 'scope', 'alias', 'account', 'settings'])
+async def test_real_catalog_guard_runs_between_kind_and_target_requests(hass, batch_home, change):
+    from custom_components.phoenix_mcp.command_routing import RoutingAuthority
+    from custom_components.phoenix_mcp.decision_batch import async_prepare_batch
+    data, token, store, account, entity_id = batch_home
+    provider = DecisionProvider(store.resolve(account, purpose='decision'), 'systemone')
+    authority = RoutingAuthority.capture(data, token)
+    async def response(*args):
+        payload = args[4]
+        if 'catalog' not in payload['questions']:
+            return wire_response(payload, 'state_query')
+        if change == 'scope': token.permissions = PermissionTree()
+        if change == 'alias': er.async_get(hass).async_update_entity(entity_id, aliases={'changed'})
+        if change == 'account': await store.set_model(account, 'different')
+        if change == 'settings': await data.store.async_patch_settings(decision_timeout_ms=1234)
+        return {'model': 'jev-1.13.0', 'answers': {'catalog': {'type': 'choice', 'choice': 'entity',
+            'confidence': 1, 'probabilities': {'entity': 1, 'collection': 0, 'provider': 0}}}}
+    with (patch('custom_components.phoenix_mcp.decision_provider.DECISION_BATCH_MAX_TARGET_BYTES', 1),
+          patch.object(provider, '_request', side_effect=response) as request):
+        if change:
+            with pytest.raises(DecisionError, match='authority_changed|targets_changed'):
+                await async_prepare_batch(hass, authority, provider, None, 'Read the Desk lamp state', 'en', 'chat')
+        else:
+            _, selection = await async_prepare_batch(hass, authority, provider, None, 'Read the Desk lamp state', 'en', 'chat')
+            assert selection['reason'] == 'target_selected'
+        assert request.await_count == (1 if change else 2)
+
+
 @pytest.mark.parametrize('change', [None, 'competitor_alias', 'authority'])
 async def test_grouped_catalog_prepares_plan_only_while_all_competitors_remain_current(hass, batch_home, change):
     from custom_components.phoenix_mcp.command_routing import RoutingAuthority

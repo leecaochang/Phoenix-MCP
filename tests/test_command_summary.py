@@ -43,6 +43,35 @@ def proposal(hass, token, mode='on'):
     return summary_proposal(hass,token,descriptor,mode)
 
 
+@pytest.mark.parametrize('limit', ['count', 'bytes'])
+async def test_summary_catalog_overflow_refuses_without_truncation(hass, summary_home, limit):
+    from custom_components.phoenix_mcp.decision_targets import CatalogLimitError
+    _, token, _ = summary_home
+    full = summary_catalog(hass, token)
+    assert len(full.targets) > 1
+    with pytest.raises(CatalogLimitError):
+        summary_catalog(hass, token, **({'max_targets': 1} if limit == 'count' else {'max_bytes': 1}))
+
+
+@pytest.mark.parametrize('private', ['light.hidden_private', 'phx_' + 'a'*64])
+async def test_summary_area_metadata_cannot_disclose_hidden_ids_or_secrets(hass, summary_home, private):
+    from custom_components.phoenix_mcp.decision_provider import DecisionError
+    _, token, ids = summary_home
+    entry = er.async_get(hass).async_get(ids[0])
+    ar.async_get(hass).async_update(entry.area_id, aliases={private})
+    with pytest.raises(DecisionError, match='context_unavailable'):
+        summary_catalog(hass, token)
+
+
+def test_summary_duplicate_rows_and_unbounded_breakdown_are_not_partial_answers():
+    from custom_components.phoenix_mcp.const import COMMAND_SUMMARY_MAX_STATES
+    ids = [f'sensor.fixture_{index}' for index in range(COMMAND_SUMMARY_MAX_STATES+1)]
+    query = {'entity_ids': ids, 'summary_mode': 'breakdown'}
+    rows = [{'entity_id': entity, 'state': str(index)} for index, entity in enumerate(ids)]
+    assert summary_text(query, rows, 'en') is None
+    assert summary_text({'entity_ids': ids[:1], 'summary_mode': 'total'}, rows[:1]*2, 'en') is None
+
+
 async def test_real_local_count_and_dispatch(hass, summary_home):
     data,token,ids=summary_home
     result=await async_evaluate_command(hass,data,token,'how many lights are on','en',preview=True)

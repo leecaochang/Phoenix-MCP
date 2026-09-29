@@ -2011,7 +2011,9 @@
       "failed": "無法儲存或載入命令路由設定。",
       "accountModel": "{name} 的模型",
       "connectionHint": "基礎 URL 是伺服器位址。僅當該伺服器要求驗證身分時才需要填寫 API 金鑰。",
-      "commandHelp": "先嘗試本機意圖，再使用選用的決策供應商。其他請求交給慣用的 AI 供應商。權限與核准要求仍然適用。"
+      "commandHelp": "先嘗試本機意圖，再使用選用的決策供應商。其他請求交給慣用的 AI 供應商。權限與核准要求仍然適用。",
+      "requestLimit": "每小時決策請求數（0 = 不限制）",
+      "requestLimitHint": "語音、聊天、預覽和影子檢查共用此限額。啟用時會統計所有嘗試，包括失敗請求，重新啟動後仍保留計數。每個 UTC 整點重設。常用提供者有獨立的額度。這是請求數量限制，不是金額上限。"
     },
     "routingStats": {
       "title": "路由統計",
@@ -2084,6 +2086,10 @@
     "local_summary_count": "在已向 Assist 公開且我有權存取的實體中：{total} 個中有 {matched} 個的狀態為 {state}；{unknown} 個的狀態未知或無法使用。",
     "local_summary_total": "在已向 Assist 公開且我有權存取的實體中：共 {total} 個實體；{unknown} 個的狀態未知或無法使用。",
     "local_summary_breakdown": "在已向 Assist 公開且我有權存取的實體中：共 {total} 個實體。{summary}。",
-    "local_attribute_unavailable": "Home Assistant 目前未提供所請求屬性的值。"
+    "local_attribute_unavailable": "Home Assistant 目前未提供所請求屬性的值。",
+    "local_state_unknown": "未知",
+    "local_state_unavailable": "無法使用",
+    "local_clarification": "您指的是哪個目標？{choices}。請回覆編號或完整實體 ID，或說「取消」。此選擇將在兩分鐘後到期。",
+    "local_clarification_expired": "此選擇已失效。請重新說出完整指令。"
   }
 }

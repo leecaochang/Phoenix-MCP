@@ -1024,6 +1024,7 @@ def resolve_intent_entities(
     area: str | None = None,
     floor: str | None = None,
     read_only: bool = False,
+    allow_duplicate_names: bool = False,
 ) -> list[str]:
     """Resolve intent-based targeting (area/name/floor/domain/device_class) to entity_id list.
 
@@ -1111,6 +1112,7 @@ def resolve_intent_entities(
         domains=domains,
         device_classes=device_classes,
         assistant=None,
+        allow_duplicate_names=allow_duplicate_names,
     )
     result = async_match_targets(
         hass,

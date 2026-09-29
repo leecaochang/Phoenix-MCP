@@ -2006,7 +2006,9 @@
       "failed": "Einstellungen zur Befehlsweiterleitung konnten nicht gespeichert oder geladen werden.",
       "accountModel": "Modell für {name}",
       "connectionHint": "Die Basis-URL ist die Serveradresse. Fügen Sie nur dann einen API-Schlüssel hinzu, wenn der Server eine Anmeldung erfordert.",
-      "commandHelp": "Zuerst werden lokale Intents genutzt, danach der optionale Entscheidungsanbieter. Andere Anfragen gehen an deinen üblichen KI-Anbieter. Berechtigungen und Genehmigungen gelten weiterhin."
+      "commandHelp": "Zuerst werden lokale Intents genutzt, danach der optionale Entscheidungsanbieter. Andere Anfragen gehen an deinen üblichen KI-Anbieter. Berechtigungen und Genehmigungen gelten weiterhin.",
+      "requestLimit": "Entscheidungsanfragen pro Stunde (0 = unbegrenzt)",
+      "requestLimitHint": "Gemeinsam für Sprache, Chat, Vorschauen und Schattenprüfungen. Zählt bei Aktivierung alle Versuche einschließlich Fehlern und bleibt nach einem Neustart erhalten. Wird zu jeder vollen UTC-Stunde zurückgesetzt. Dein üblicher Anbieter hat ein separates Kontingent. Dies begrenzt Anfragen, keine Geldbeträge."
     },
     "routingStats": {
       "title": "Routing-Statistik",
@@ -2084,6 +2086,10 @@
     "local_summary_count": "Unter den für Assist freigegebenen Entitäten, auf die ich zugreifen kann: {matched} von {total} haben den Zustand {state}; bei {unknown} ist der Zustand unbekannt oder nicht verfügbar.",
     "local_summary_total": "Unter den für Assist freigegebenen Entitäten, auf die ich zugreifen kann: {total} Entitäten; bei {unknown} ist der Zustand unbekannt oder nicht verfügbar.",
     "local_summary_breakdown": "Unter den für Assist freigegebenen Entitäten, auf die ich zugreifen kann: {total} Entitäten. {summary}.",
-    "local_attribute_unavailable": "Home Assistant meldet derzeit keinen Wert für die angefragte Eigenschaft."
+    "local_attribute_unavailable": "Home Assistant meldet derzeit keinen Wert für die angefragte Eigenschaft.",
+    "local_state_unknown": "Unbekannt",
+    "local_state_unavailable": "Nicht verfügbar",
+    "local_clarification": "Welches Ziel meinst du? {choices}. Antworte mit der Nummer oder der genauen Entitäts-ID, oder sage Abbrechen. Diese Auswahl läuft nach zwei Minuten ab.",
+    "local_clarification_expired": "Diese Auswahl ist nicht mehr aktuell. Bitte wiederhole den vollständigen Befehl."
   }
 }

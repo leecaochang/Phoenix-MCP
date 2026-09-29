@@ -11,6 +11,7 @@ from .config_recovery import ConfigurationRecovery
 from .audit import AuditLog
 from .command_routing import CommandRouting
 from .decision_shadow import DecisionShadow
+from .decision_budget import DecisionRequestBudget
 from .routing_statistics import RoutingStatistics
 from .const import TEMPLATE_WORKER_CONCURRENCY
 from .card_catalog import CardCatalogStore
@@ -44,6 +45,7 @@ class PhoenixData:
     versions: VersionStore = field(default_factory=VersionStore)
     command_routing: CommandRouting = field(default_factory=CommandRouting)
     decision_shadow: DecisionShadow = field(default_factory=DecisionShadow)
+    decision_budget: DecisionRequestBudget = field(default_factory=DecisionRequestBudget)
     routing_statistics: RoutingStatistics = field(default_factory=RoutingStatistics)
     config_recovery: ConfigurationRecovery = field(default_factory=ConfigurationRecovery)
     agent_recovery: AgentRecovery = field(default_factory=AgentRecovery)

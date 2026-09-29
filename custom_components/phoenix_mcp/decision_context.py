@@ -199,7 +199,18 @@ async def _async_review_context(hass: Any, data: Any, token: Any, sentence: str,
             if cfg.api_key and any(cfg.api_key in text for text in history_texts(state)):
                 return result("context_unavailable")
             provider = DecisionProvider(cfg, PROVIDER_DEFINITIONS[cfg.kind].adapter,
+                                        request_budget=data.decision_budget, request_limit=authority.settings.decision_request_budget,
                                         metrics=runtime.metrics, metric_scope="chat" if prepare else "preview")
+            def request_guard() -> None:
+                latest_token = authority.current(hass)
+                if latest_token is None or store.resolve(account, purpose='decision') != cfg:
+                    raise DecisionError('authority_changed')
+                latest_state = _state(hass, latest_token, sentence, lang, history, proposal)
+                if decision_candidate and latest_state is not None:
+                    latest_state[0]['candidate_source'] = 'decision'
+                if latest_state != snapshot or not source_current(latest_token):
+                    raise DecisionError('context_changed')
+            provider.request_guard = request_guard
             async with asyncio.timeout(authority.settings.decision_timeout_ms / 1000):
                 answer = await provider.review_context(async_get_clientsession(hass), state,
                                                        authority.settings.decision_timeout_ms)

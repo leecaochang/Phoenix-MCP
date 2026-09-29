@@ -18,6 +18,7 @@ class SentenceTriggerMatch(Exception):
 
 async def async_recognize(
     hass: HomeAssistant, sentence: str, language: str, *, strict: bool = False,
+    voice_origin: dict | None = None,
 ) -> Any:
     """Recognize only; never process a conversation or invoke an intent handler.
 
@@ -48,6 +49,11 @@ async def async_recognize(
         "device_id": None, "satellite_id": None, "language": language,
         "agent_id": HOME_ASSISTANT_AGENT, "extra_system_prompt": None,
     }
+    if voice_origin is not None:
+        from .voice_context import voice_origin_current
+        if not voice_origin_current(hass, voice_origin):
+            raise RecognitionUnavailable
+        wanted.update(device_id=voice_origin['device_id'], satellite_id=voice_origin['satellite_id'])
     declared = {field.name for field in dataclasses.fields(ConversationInput)}
     input_type: Any = ConversationInput
     user_input = input_type(**{key: val for key, val in wanted.items() if key in declared})

@@ -84,7 +84,7 @@ def summary_proposal(hass: Any, token: Any, descriptor: dict, mode: str) -> dict
 
 def summary_current(hass: Any, token: Any, proposal: dict) -> bool:
     """Revalidate collection membership as well as individual entity identities."""
-    if set(proposal) != {'intent', 'entity_ids', 'summary_scope', 'summary_mode'}:
+    if set(proposal) - {'voice_origin'} != {'intent', 'entity_ids', 'summary_scope', 'summary_mode'}:
         return False
     scope = proposal['summary_scope']
     if not isinstance(scope, dict) or set(scope) != {'domain', 'device_class', 'area_id'}:

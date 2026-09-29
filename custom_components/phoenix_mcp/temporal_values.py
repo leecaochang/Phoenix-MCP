@@ -129,12 +129,13 @@ def temporal_supports(state: Any, intent: str) -> bool:
 
 
 def temporal_arguments(proposal: dict) -> dict | None:
+    from .const import COMMAND_ROUTING_PROOF_FIELDS
     spec = COMMAND_ROUTING_TEMPORAL_OPERATIONS.get(proposal.get("intent", ""))
     if spec is None:
         return None
     domain, service, field, kind = spec
     ids = proposal.get("entity_ids")
-    if (set(proposal) != {"intent", "entity_ids", "value"} or not isinstance(ids, list) or len(ids) != 1
+    if (set(proposal) - COMMAND_ROUTING_PROOF_FIELDS != {"intent", "entity_ids", "value"} or not isinstance(ids, list) or len(ids) != 1
             or not isinstance(ids[0], str) or not ids[0].startswith(domain + ".")
             or not valid_temporal_value(kind, proposal.get("value"))):
         return None

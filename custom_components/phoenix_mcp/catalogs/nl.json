@@ -29,7 +29,11 @@
     "local_summary_count": "Van de aan Assist blootgestelde entiteiten waartoe ik toegang heb: {matched} van {total} hebben status {state}; {unknown} hebben een onbekende of niet-beschikbare status.",
     "local_summary_total": "Van de aan Assist blootgestelde entiteiten waartoe ik toegang heb: {total} entiteiten; {unknown} hebben een onbekende of niet-beschikbare status.",
     "local_summary_breakdown": "Van de aan Assist blootgestelde entiteiten waartoe ik toegang heb: {total} entiteiten. {summary}.",
-    "local_attribute_unavailable": "Home Assistant geeft momenteel geen waarde voor de gevraagde eigenschap door."
+    "local_attribute_unavailable": "Home Assistant geeft momenteel geen waarde voor de gevraagde eigenschap door.",
+    "local_state_unknown": "Onbekend",
+    "local_state_unavailable": "Niet beschikbaar",
+    "local_clarification": "Welk doel bedoel je? {choices}. Antwoord met het nummer of de exacte entiteits-ID, of zeg annuleren. Deze keuze verloopt na twee minuten.",
+    "local_clarification_expired": "Deze keuze is niet meer actueel. Herhaal de volledige opdracht."
   },
   "panel": {
     "shell": {
@@ -2038,7 +2042,9 @@
       "failed": "Routeringsinstellingen konden niet worden opgeslagen of geladen.",
       "accountModel": "Model voor {name}",
       "connectionHint": "De basis-URL is het serveradres. Voeg alleen een API-sleutel toe als die server verificatie vereist.",
-      "commandHelp": "Probeer eerst lokale intents en daarna de optionele beslissingsprovider. Andere verzoeken gaan naar je gebruikelijke AI-provider. Machtigingen en goedkeuringen blijven gelden."
+      "commandHelp": "Probeer eerst lokale intents en daarna de optionele beslissingsprovider. Andere verzoeken gaan naar je gebruikelijke AI-provider. Machtigingen en goedkeuringen blijven gelden.",
+      "requestLimit": "Beslissingsverzoeken per uur (0 = onbeperkt)",
+      "requestLimitHint": "Gedeeld door Spraak, Chat, voorbeelden en schaduwcontroles. Telt pogingen wanneer ingeschakeld, inclusief fouten, en blijft bewaard na een herstart. Wordt elk heel UTC-uur gereset. Je gebruikelijke provider heeft een afzonderlijk tegoed. Dit is een verzoeklimiet, geen geldlimiet."
     },
     "routingStats": {
       "title": "Routeringsstatistieken",

@@ -71,7 +71,7 @@ async def test_local_voice_dispatches_exactly_once_without_model(hass, local_hom
 async def test_local_state_read_and_provider_fallback(hass, local_home):
     data, _, _ = local_home
     answer, build, _ = await run_voice(hass, data, "what is the state of the desk lamp", language="en")
-    assert answer == "The state is off."
+    assert answer == "The state is Off."
     build.assert_not_called()
     answer, _, provider = await run_voice(hass, data, "why is the desk lamp off", language="en")
     assert answer == "Provider answer"
@@ -329,8 +329,8 @@ async def test_multilingual_voice_approval_rechecks_language_selection(hass, loc
     assert call.await_count == (0 if remove_language else 1)
 
 
-@pytest.mark.parametrize("language,expected", [("zh-Hans", "状态为 off。"), ("es", "El estado es off.")])
-async def test_command_state_reply_localizes_prose_without_rewriting_ha_state(hass, local_home, language, expected):
+@pytest.mark.parametrize("language,expected", [("zh-Hans", "状态为 关闭。"), ("es", "El estado es Apagado.")])
+async def test_command_state_reply_localizes_prose_and_ha_state(hass, local_home, language, expected):
     data, token, entity_id = local_home
     await data.store.async_patch_settings(command_routing_languages=[language])
     answer = await async_execute_local_command(hass, data, token,
@@ -475,3 +475,23 @@ async def test_attribute_read_distinguishes_absent_value_from_zero_and_invalid(h
     call.assert_not_called()
     if value is None:
         assert not answer.allows_local_followup
+
+
+@pytest.mark.parametrize('change', ['scope', 'rotation', 'settings', 'identity'])
+async def test_localized_read_rechecks_authority_after_translation_wait(hass, local_home, change):
+    data, token, entity_id = local_home
+    async def display(*args, **kwargs):
+        if change == 'scope':
+            token.permissions = PermissionTree()
+        elif change == 'rotation':
+            token.token_hash = 'rotated'
+        elif change == 'settings':
+            await data.store.async_patch_settings(kill_switch=True)
+        else:
+            er.async_get(hass).async_update_entity(entity_id, name='Changed identity')
+        return 'private translated state'
+    with patch('custom_components.phoenix_mcp.command_display.async_display_state', side_effect=display):
+        answer, build, provider = await run_voice(hass, data, 'what is the state of the desk lamp', language='en')
+    assert 'private translated state' not in answer
+    build.assert_not_called()
+    provider.assert_not_called()

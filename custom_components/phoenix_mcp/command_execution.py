@@ -81,6 +81,10 @@ def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str, *,
 
 
 def _temporal_current(hass: Any, proposal: dict) -> bool:
+    if 'voice_origin' in proposal:
+        from .voice_context import voice_origin_current
+        if not voice_origin_current(hass, proposal['voice_origin']):
+            return False
     if proposal.get("intent") in COMMAND_ROUTING_VALUE_INTENTS:
         from .entity_commands import valid_entity_value
         return all(valid_entity_value(hass.states.get(eid), proposal["intent"], proposal.get("value"))
@@ -94,6 +98,10 @@ def _temporal_current(hass: Any, proposal: dict) -> bool:
 
 
 def _capture_plan(hass: Any, data: Any, token: Any, proposal: dict, *, ingress: str = "voice") -> dict | None:
+    if 'clarification' in proposal:
+        from .command_clarification import clarification_current
+        if not clarification_current(hass, data, token, proposal):
+            return None
     if proposal["intent"] not in COMMAND_ROUTING_READ_INTENTS and service_arguments(proposal) is None:
         return None
     operation = numeric_operation(proposal["intent"])
@@ -245,6 +253,10 @@ def plan_is_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
     try:
         settings = data.store.get_settings()
         proposal = plan["proposal"]
+        if 'clarification' in proposal:
+            from .command_clarification import clarification_current
+            if not clarification_current(hass, data, token, proposal):
+                return False
         if proposal["intent"] not in COMMAND_ROUTING_READ_INTENTS and service_arguments(proposal) is None:
             return False
         operation = numeric_operation(proposal["intent"])
@@ -347,7 +359,7 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
         name = "get_state"
         field = "state" if proposal["intent"] == "HassGetState" else "attr." + proposal["value"]
         arguments = {"entity_id": proposal["entity_ids"][0], "projection": {
-            "kind": "fields", "fields": [field, "attr.unit_of_measurement", "attr.temperature_unit"]}}
+            "kind": "fields", "fields": [field, "attr.unit_of_measurement", "attr.temperature_unit", "attr.device_class"]}}
     else:
         name = "call_service"
         service_args = service_arguments(proposal)
@@ -406,14 +418,16 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
         if proposal["intent"] != "HassGetState":
             if state is None:
                 return LocalCommandReply(voice_text(language, "local_attribute_unavailable"))
-            from .entity_commands import attribute_display
-            domain = proposal["entity_ids"][0].split(".", 1)[0]
-            temperature_unit = (hass.config.units.temperature_unit if domain in ("climate", "water_heater")
-                                else attributes.get("temperature_unit") if domain == "weather" else None)
-            state = attribute_display(proposal["value"], state, temperature_unit if isinstance(temperature_unit, str) else None, domain)
-        # Units describe primary sensor states, not arbitrary attributes like battery or device class.
-        if proposal["intent"] == "HassGetState" and isinstance(state, str) and isinstance(attributes.get("unit_of_measurement"), str):
-            state += " " + attributes["unit_of_measurement"]
+        from .command_display import async_display_state
+        domain = proposal["entity_ids"][0].split(".", 1)[0]
+        temperature_unit = (hass.config.units.temperature_unit if domain in ("climate", "water_heater")
+                            else attributes.get("temperature_unit") if domain == "weather" else None)
+        state = await async_display_state(hass, proposal["entity_ids"][0], payload, language,
+            field=proposal.get("value") if proposal["intent"] != "HassGetState" else None,
+            temperature_unit=temperature_unit if isinstance(temperature_unit, str) else None)
+        current = authority.current(hass)
+        if current is None or not plan_is_current(plan, hass, data, current):
+            return LocalCommandReply(voice_text(language, "token_unavailable"))
         if isinstance(state, str) and len(state) <= 1024:
             return LocalCommandReply(voice_text(language, "local_state", state=state), allows_local_followup=True, statistics_completed=True)
         return LocalCommandReply(voice_text(language, "local_read_failed"))

@@ -2006,7 +2006,9 @@
       "failed": "Impossibile salvare o caricare le impostazioni di instradamento.",
       "accountModel": "Modello per {name}",
       "connectionHint": "L’URL di base è l’indirizzo del server. Aggiungi una chiave API solo se il server richiede l’autenticazione.",
-      "commandHelp": "Prova prima gli intenti locali, poi il fornitore di decisioni facoltativo. Le altre richieste passano al consueto fornitore IA. Permessi e approvazioni restano validi."
+      "commandHelp": "Prova prima gli intenti locali, poi il fornitore di decisioni facoltativo. Le altre richieste passano al consueto fornitore IA. Permessi e approvazioni restano validi.",
+      "requestLimit": "Richieste di decisione all’ora (0 = illimitate)",
+      "requestLimitHint": "Condivise tra Voce, Chat, anteprime e controlli in background. Conta i tentativi quando attivo, inclusi quelli falliti, e conserva il conteggio al riavvio. Si azzera a ogni ora esatta UTC. Il fornitore abituale ha una quota separata. È un limite di richieste, non un tetto di spesa."
     },
     "routingStats": {
       "title": "Statistiche di instradamento",
@@ -2084,6 +2086,10 @@
     "local_summary_count": "Tra le entità esposte ad Assist a cui posso accedere: {matched} su {total} hanno lo stato {state}; {unknown} hanno uno stato sconosciuto o non disponibile.",
     "local_summary_total": "Tra le entità esposte ad Assist a cui posso accedere: {total} entità; {unknown} hanno uno stato sconosciuto o non disponibile.",
     "local_summary_breakdown": "Tra le entità esposte ad Assist a cui posso accedere: {total} entità. {summary}.",
-    "local_attribute_unavailable": "Home Assistant al momento non fornisce un valore per la proprietà richiesta."
+    "local_attribute_unavailable": "Home Assistant al momento non fornisce un valore per la proprietà richiesta.",
+    "local_state_unknown": "Sconosciuto",
+    "local_state_unavailable": "Non disponibile",
+    "local_clarification": "Quale destinazione intendi? {choices}. Rispondi con il numero o l’ID esatto dell’entità, oppure dì annulla. Questa scelta scade tra due minuti.",
+    "local_clarification_expired": "Questa scelta non è più attuale. Ripeti il comando completo."
   }
 }

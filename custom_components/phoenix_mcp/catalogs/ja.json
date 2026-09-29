@@ -2006,7 +2006,9 @@
       "failed": "ルーティング設定を保存または読み込めませんでした。",
       "accountModel": "{name}のモデル",
       "connectionHint": "ベースURLはサーバーのアドレスです。サーバーが認証を要求する場合のみAPIキーを追加してください。",
-      "commandHelp": "まずローカルのインテントを試し、次に任意の判断プロバイダーを使用します。その他のリクエストは通常の AI プロバイダーに送られます。権限と承認は引き続き適用されます。"
+      "commandHelp": "まずローカルのインテントを試し、次に任意の判断プロバイダーを使用します。その他のリクエストは通常の AI プロバイダーに送られます。権限と承認は引き続き適用されます。",
+      "requestLimit": "一時間あたりの判定リクエスト数（0 = 無制限）",
+      "requestLimitHint": "音声、チャット、プレビュー、シャドーチェックで共有します。有効時の試行を失敗も含めて数え、再起動後も保持します。UTC の毎正時にリセットします。通常のプロバイダーの利用枠は別です。これはリクエスト数の制限であり、金額の上限ではありません。"
     },
     "routingStats": {
       "title": "ルーティング統計",
@@ -2084,6 +2086,10 @@
     "local_summary_count": "アクセス可能でAssistに公開されているエンティティのうち、{total}件中{matched}件の状態は{state}です。{unknown}件は状態が不明または利用できません。",
     "local_summary_total": "アクセス可能でAssistに公開されているエンティティは{total}件です。{unknown}件は状態が不明または利用できません。",
     "local_summary_breakdown": "アクセス可能でAssistに公開されているエンティティは{total}件です。{summary}。",
-    "local_attribute_unavailable": "Home Assistant は現在、要求されたプロパティの値を報告していません。"
+    "local_attribute_unavailable": "Home Assistant は現在、要求されたプロパティの値を報告していません。",
+    "local_state_unknown": "不明",
+    "local_state_unavailable": "利用不可",
+    "local_clarification": "どの対象ですか？{choices}。番号か正確なエンティティ ID を答えるか、キャンセルと言ってください。この選択は二分後に期限切れになります。",
+    "local_clarification_expired": "この選択は現在無効です。完全なコマンドをもう一度入力してください。"
   }
 }

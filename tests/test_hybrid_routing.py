@@ -95,7 +95,7 @@ async def test_state_query_uses_existing_scoped_read(hass, hybrid_home):
     token.permissions = PermissionTree(domains={"light": PermissionNode(state="YELLOW")})
     with patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call:
         answer, remote, provider = await run_voice(hass, hybrid_home, category="state_query")
-    assert answer == "The state is off."
+    assert answer == "The state is Off."
     assert remote.await_count == 2
     call.assert_not_called()
     provider.assert_not_called()
@@ -588,7 +588,7 @@ async def test_jev_joint_routes_one_request_through_existing_executor(hass, jev_
         assert "requested state" in answer
     else:
         call.assert_not_called()
-        assert answer == "The state is off."
+        assert answer == "The state is Off."
     assert jev_hybrid_home[0].decision_shadow.summary()["hybrid"]["reasons"] == {"plan_ready": 1}
 
 

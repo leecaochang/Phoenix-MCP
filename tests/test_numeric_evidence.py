@@ -7,6 +7,19 @@ from custom_components.phoenix_mcp.const import MAX_SEARCH_QUERY_LEN
 from custom_components.phoenix_mcp.numeric_evidence import read_explicit_percentage, compare_percentage
 
 
+@pytest.mark.parametrize('language,text', [('en', 'two'), ('de', 'zwei'), ('es', 'dos'),
+    ('fr', 'deux'), ('it', 'due'), ('nl', 'twee'), ('pl', 'dwa'), ('ru', 'два'), ('zh-CN', '二')])
+def test_clarification_cardinals_reuse_ha_number_spellings(language, text):
+    from custom_components.phoenix_mcp.numeric_evidence import read_choice_number
+    assert read_choice_number(text, language, 5) == 2
+
+
+@pytest.mark.parametrize('text', ['two and three', '-2', '0', '6', 'second', '2.5', 'pick 2', '٢'])
+def test_clarification_requires_a_whole_bounded_cardinal(text):
+    from custom_components.phoenix_mcp.numeric_evidence import read_choice_number
+    assert read_choice_number(text, 'en', 5) is None
+
+
 @pytest.mark.parametrize('value', range(101))
 def test_exact_ascii_percentage_range(value):
     assert read_explicit_percentage(f'Please adjust the device to {value}%.', 'en') == value

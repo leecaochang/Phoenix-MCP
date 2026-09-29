@@ -21,7 +21,7 @@ from homeassistant.components.vacuum import VacuumEntityFeature
 from homeassistant.components.valve import ValveEntityFeature
 from homeassistant.components.water_heater import WaterHeaterEntityFeature
 
-from .const import COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_ENTITY_VALUE_LIMIT, COMMAND_ROUTING_FIXED_INTENT_DATA, COMMAND_ROUTING_READ_INTENTS, COMMAND_ROUTING_READ_ATTRIBUTES, COMMAND_ROUTING_READ_PERCENT_SCALES, DECISION_ENTITY_VALUE_QUESTIONS
+from .const import COMMAND_ROUTING_ENTITY_INTENTS, COMMAND_ROUTING_ENTITY_VALUE_LIMIT, COMMAND_ROUTING_FIXED_INTENT_DATA, COMMAND_ROUTING_READ_INTENTS, COMMAND_ROUTING_READ_ATTRIBUTES, COMMAND_ROUTING_READ_PERCENT_SCALES, DECISION_ENTITY_VALUE_QUESTIONS, COMMAND_ROUTING_REQUIRED_STATES
 
 _FEATURES = {'alarm_control_panel': AlarmControlPanelEntityFeature, 'light': LightEntityFeature, 'climate': ClimateEntityFeature, 'cover': CoverEntityFeature, 'fan': FanEntityFeature,
              'humidifier': HumidifierEntityFeature, 'lawn_mower': LawnMowerEntityFeature, 'lock': LockEntityFeature,
@@ -44,6 +44,8 @@ def command_options(state: Any, intent: str) -> list[str] | None:
 
 def supports_entity_command(state: Any, intent: str) -> bool:
     spec = COMMAND_ROUTING_ENTITY_INTENTS[intent]
+    if intent in COMMAND_ROUTING_REQUIRED_STATES and state.state not in COMMAND_ROUTING_REQUIRED_STATES[intent]:
+        return False
     if intent in COMMAND_ROUTING_READ_INTENTS:
         return command_options(state, intent) is not None
     if state.domain != spec[0]:
@@ -102,12 +104,13 @@ def valid_entity_value(state: Any, intent: str, value: Any) -> bool:
 
 
 def entity_arguments(proposal: dict) -> dict | None:
+    from .const import COMMAND_ROUTING_PROOF_FIELDS
     spec = COMMAND_ROUTING_ENTITY_INTENTS.get(proposal.get('intent', ''))
     if spec is None or proposal.get("intent") in COMMAND_ROUTING_READ_INTENTS:
         return None
     ids = proposal.get('entity_ids')
     fields = {'intent', 'entity_ids'} | ({'value'} if spec[2] else set())
-    if (set(proposal) != fields or not isinstance(ids, list) or len(ids) != 1
+    if (set(proposal) - COMMAND_ROUTING_PROOF_FIELDS != fields or not isinstance(ids, list) or len(ids) != 1
             or not isinstance(ids[0], str) or not ids[0].startswith(spec[0] + '.')
             or (spec[2] and (not isinstance(proposal['value'], str) or len(proposal['value']) > 255))):
         return None

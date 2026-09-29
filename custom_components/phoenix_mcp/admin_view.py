@@ -23,6 +23,7 @@ from .const import (
     COMMAND_ROUTING_MODES,
     CHAT_COMMAND_ROUTING_MODES,
     DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS,
+    DECISION_REQUEST_BUDGET_MAX,
     COMMAND_ROUTING_TIMEOUT_MIN_MS,
     COMMAND_ROUTING_TIMEOUT_MAX_MS,
     MAX_SEARCH_QUERY_LEN,
@@ -2037,7 +2038,7 @@ _SURFACE_TOKEN_PROVIDER_PAIRS = (
 )
 
 _PATCHABLE_SETTINGS = _BOOL_SETTINGS | {
-    "voice_agent_routing_mode", "agentcli_routing_mode", "command_routing_languages", "command_routing_timeout_ms", "decision_timeout_ms",
+    "voice_agent_routing_mode", "agentcli_routing_mode", "command_routing_languages", "command_routing_timeout_ms", "decision_timeout_ms", "decision_request_budget",
     "audit_flush_interval", "audit_log_maxlen", "mesa_mode",
     "agentcli_scrollback_lines", "agentcli_max_iterations", "assist_bound_token_id",
     *_NULLABLE_STRING_SETTINGS,
@@ -2158,6 +2159,11 @@ async def _validated_settings_patch(
         value = patchable["decision_timeout_ms"]
         if type(value) is not int or not DECISION_TIMEOUT_MIN_MS <= value <= DECISION_TIMEOUT_MAX_MS:
             return {}, _err("invalid_request", "Invalid decision time budget.", 400, rid, key="routingPreviewInvalid")
+
+    if 'decision_request_budget' in patchable:
+        value = patchable['decision_request_budget']
+        if type(value) is not int or not 0 <= value <= DECISION_REQUEST_BUDGET_MAX:
+            return {}, _err('invalid_request', 'Invalid decision request limit.', 400, rid, key='routingPreviewInvalid')
 
     int_checks = (
         ("audit_flush_interval", {"allowed": _VALID_FLUSH_INTERVALS}),
@@ -2367,7 +2373,8 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
     @require_admin
     async def get(self, request: web.Request) -> web.Response:
         data: PhoenixData = self.hass.data[DOMAIN]
-        return _ok({**data.command_routing.summary(), "decision_shadow": data.decision_shadow.summary()},
+        return _ok({**data.command_routing.summary(), "decision_shadow": data.decision_shadow.summary(),
+                    'request_budget': data.decision_budget.summary(data.store.get_settings().decision_request_budget)},
                    request_id=request["phoenix_mcp_rid"])
 
     @require_admin
@@ -2701,6 +2708,8 @@ class PhoenixAdminWipeView(PhoenixView):
                         data.rate_limit_notified.clear()
                         data.token_counters.clear()
                         data.stale_tools_advised.clear()
+                        data.command_routing.clarifications.clear()
+                        await data.decision_budget.async_wipe()
                         await data.routing_statistics.async_wipe()
                         await data.audit.async_wipe()
                         await data.versions.async_wipe()

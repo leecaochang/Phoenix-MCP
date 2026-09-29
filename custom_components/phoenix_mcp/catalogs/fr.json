@@ -2006,7 +2006,9 @@
       "failed": "Impossible d’enregistrer ou de charger les paramètres de routage.",
       "accountModel": "Modèle pour {name}",
       "connectionHint": "L’URL de base est l’adresse du serveur. Ajoutez une clé API uniquement si ce serveur exige une authentification.",
-      "commandHelp": "Essaie d’abord les intentions locales, puis le fournisseur de décisions facultatif. Les autres demandes passent par votre fournisseur d’IA habituel. Les autorisations et approbations restent applicables."
+      "commandHelp": "Essaie d’abord les intentions locales, puis le fournisseur de décisions facultatif. Les autres demandes passent par votre fournisseur d’IA habituel. Les autorisations et approbations restent applicables.",
+      "requestLimit": "Requêtes de décision par heure (0 = illimité)",
+      "requestLimitHint": "Partagé entre Voix, Chat, aperçus et vérifications en arrière-plan. Compte les tentatives lorsque la limite est activée, échecs compris, et persiste après redémarrage. Réinitialisation à chaque heure pleine UTC. Votre fournisseur habituel dispose d’un quota séparé. Il s’agit d’une limite de requêtes, pas d’un plafond monétaire."
     },
     "routingStats": {
       "title": "Statistiques de routage",
@@ -2084,6 +2086,10 @@
     "local_summary_count": "Parmi les entités exposées à Assist auxquelles je peux accéder : {matched} sur {total} ont l’état {state} ; {unknown} ont un état inconnu ou indisponible.",
     "local_summary_total": "Parmi les entités exposées à Assist auxquelles je peux accéder : {total} entités ; {unknown} ont un état inconnu ou indisponible.",
     "local_summary_breakdown": "Parmi les entités exposées à Assist auxquelles je peux accéder : {total} entités. {summary}.",
-    "local_attribute_unavailable": "Home Assistant ne fournit actuellement aucune valeur pour la propriété demandée."
+    "local_attribute_unavailable": "Home Assistant ne fournit actuellement aucune valeur pour la propriété demandée.",
+    "local_state_unknown": "Inconnu",
+    "local_state_unavailable": "Indisponible",
+    "local_clarification": "Quelle cible souhaitez-vous ? {choices}. Répondez par son numéro ou son identifiant d’entité exact, ou dites annuler. Ce choix expire dans deux minutes.",
+    "local_clarification_expired": "Ce choix n’est plus à jour. Veuillez répéter la commande complète."
   }
 }

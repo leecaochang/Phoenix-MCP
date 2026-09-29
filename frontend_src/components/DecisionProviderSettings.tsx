@@ -28,6 +28,8 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
   const mounted = useRef(true);
   const [budget, setBudget] = useState(String(settings.decision_timeout_ms ?? 5000));
   useEffect(() => { setBudget(String(settings.decision_timeout_ms ?? 5000)); }, [settings.decision_timeout_ms]);
+  const [requestLimit, setRequestLimit] = useState(String(settings.decision_request_budget ?? 0));
+  useEffect(() => { setRequestLimit(String(settings.decision_request_budget ?? 0)); }, [settings.decision_request_budget]);
 
   async function load() {
     const current = ++generation.current;
@@ -206,6 +208,18 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
           }} />
       </label>
       <p className="agentcli-settings-hint">{t("routing.timeoutHint")}</p>
+      <label className="agentcli-settings-field" htmlFor="routing-request-limit">
+        <span>{t("routing.requestLimit")}</span>
+        <input id="routing-request-limit" className="input" type="number" min={0} max={100000} step={1}
+          aria-describedby="routing-request-limit-hint" value={requestLimit} disabled={saving || busy}
+          onChange={event => setRequestLimit(event.target.value)} onBlur={() => {
+            const value = Number(requestLimit);
+            if (requestLimit.trim() && Number.isInteger(value) && value >= 0 && value <= 100000) {
+              if (value !== (settings.decision_request_budget ?? 0)) onChange("decision_request_budget", value);
+            } else setRequestLimit(String(settings.decision_request_budget ?? 0));
+          }} />
+      </label>
+      <p className="agentcli-settings-hint" id="routing-request-limit-hint">{t("routing.requestLimitHint")}</p>
     </details>}
     {error && !confirmRemove && <p className="banner banner-error" role="alert">{error}</p>}
   </div>;

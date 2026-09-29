@@ -137,6 +137,18 @@ def read_explicit_percentage(sentence: str, language: str) -> int | None:
     return value
 
 
+def read_choice_number(sentence: str, language: str, maximum: int) -> int | None:
+    """Read a whole cardinal response, never extract a number from other words."""
+    if not isinstance(sentence, str) or not 0 < len(sentence) <= 64:
+        return None
+    try:
+        values, _ = _number_words(language)
+    except (ImportError, LookupError, ValueError):
+        return None
+    value = values.get(' '.join(_tokens(sentence)))
+    return value if value is not None and 1 <= value <= maximum else None
+
+
 def compare_percentage(source_value: int | None, proposed_value: int) -> dict:
     """Expose a fixed diagnostic without retaining source text or granting authority."""
     if source_value is None:

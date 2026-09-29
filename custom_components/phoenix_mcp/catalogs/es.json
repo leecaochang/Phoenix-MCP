@@ -2006,7 +2006,9 @@
       "failed": "No se pudieron guardar o cargar los ajustes de enrutamiento.",
       "accountModel": "Modelo de {name}",
       "connectionHint": "La URL base es la dirección del servidor. Añade una clave API solo si el servidor requiere autenticación.",
-      "commandHelp": "Prueba primero los intents locales y después el proveedor de decisiones opcional. Las demás solicitudes se envían a tu proveedor de IA habitual. Se mantienen los permisos y las aprobaciones."
+      "commandHelp": "Prueba primero los intents locales y después el proveedor de decisiones opcional. Las demás solicitudes se envían a tu proveedor de IA habitual. Se mantienen los permisos y las aprobaciones.",
+      "requestLimit": "Solicitudes de decisión por hora (0 = sin límite)",
+      "requestLimitHint": "Compartido por Voz, Chat, vistas previas y comprobaciones en segundo plano. Cuenta los intentos mientras está activo, incluidos los fallidos, y se conserva al reiniciar. Se restablece cada hora en punto UTC. Tu proveedor habitual tiene una cuota aparte. Es un límite de solicitudes, no de dinero."
     },
     "routingStats": {
       "title": "Estadísticas de enrutamiento",
@@ -2084,6 +2086,10 @@
     "local_summary_count": "Entre las entidades expuestas a Assist a las que tengo acceso: {matched} de {total} tienen el estado {state}; {unknown} tienen un estado desconocido o no disponible.",
     "local_summary_total": "Entre las entidades expuestas a Assist a las que tengo acceso: {total} entidades; {unknown} tienen un estado desconocido o no disponible.",
     "local_summary_breakdown": "Entre las entidades expuestas a Assist a las que tengo acceso: {total} entidades. {summary}.",
-    "local_attribute_unavailable": "Home Assistant no está proporcionando un valor para la propiedad solicitada en este momento."
+    "local_attribute_unavailable": "Home Assistant no está proporcionando un valor para la propiedad solicitada en este momento.",
+    "local_state_unknown": "Desconocido",
+    "local_state_unavailable": "No disponible",
+    "local_clarification": "¿A qué objetivo te refieres? {choices}. Responde con su número o el ID exacto de la entidad, o di cancelar. Esta selección caduca en dos minutos.",
+    "local_clarification_expired": "Esta selección ya no está vigente. Repite el comando completo."
   }
 }

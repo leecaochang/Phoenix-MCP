@@ -2006,7 +2006,9 @@
       "failed": "无法保存或加载命令路由设置。",
       "accountModel": "{name} 的模型",
       "connectionHint": "基础 URL 是服务器地址。仅当该服务器要求身份验证时才需要填写 API 密钥。",
-      "commandHelp": "先尝试本地意图，再使用可选的决策提供商。其他请求交给常用的 AI 提供商。权限和审批要求仍然适用。"
+      "commandHelp": "先尝试本地意图，再使用可选的决策提供商。其他请求交给常用的 AI 提供商。权限和审批要求仍然适用。",
+      "requestLimit": "每小时决策请求数（0 = 不限制）",
+      "requestLimitHint": "语音、聊天、预览和影子检查共用此限额。启用时会统计所有尝试，包括失败请求，重启后仍保留计数。每个 UTC 整点重置。常用提供商有单独的额度。这是请求数量限制，不是金额上限。"
     },
     "routingStats": {
       "title": "路由统计",
@@ -2084,6 +2086,10 @@
     "local_summary_count": "在已向 Assist 公开且我有权访问的实体中：{total} 个中有 {matched} 个的状态为 {state}；{unknown} 个的状态未知或不可用。",
     "local_summary_total": "在已向 Assist 公开且我有权访问的实体中：共 {total} 个实体；{unknown} 个的状态未知或不可用。",
     "local_summary_breakdown": "在已向 Assist 公开且我有权访问的实体中：共 {total} 个实体。{summary}。",
-    "local_attribute_unavailable": "Home Assistant 目前未提供所请求属性的值。"
+    "local_attribute_unavailable": "Home Assistant 目前未提供所请求属性的值。",
+    "local_state_unknown": "未知",
+    "local_state_unavailable": "不可用",
+    "local_clarification": "您指的是哪个目标？{choices}。请回复编号或完整实体 ID，或说“取消”。此选择将在两分钟后过期。",
+    "local_clarification_expired": "此选择已失效。请重新说出完整命令。"
   }
 }

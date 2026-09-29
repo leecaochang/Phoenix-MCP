@@ -162,6 +162,7 @@ export interface GlobalSettings {
   decision_provider_id?: string | null;
   decision_shadow_enabled?: boolean;
   decision_timeout_ms?: number;
+  decision_request_budget?: number;
   voice_agent_enabled?: boolean;
   voice_agent_token_id?: string | null;
   voice_agent_provider_id?: string | null;

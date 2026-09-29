@@ -113,13 +113,17 @@ class DecisionProvider:
     """The common Choice subset of System One and Simple-JEV; no tool execution API."""
 
     def __init__(self, cfg: ProviderConfig, protocol: str, *, metrics: DecisionMetrics | None = None,
-                 metric_scope: str = "preview") -> None:
+                 metric_scope: str = "preview", request_budget: Any = None, request_limit: int = 0,
+                 request_guard: Callable[[], None] | None = None) -> None:
         if protocol not in ("systemone", "classifier"):
             raise ValueError("Unsupported decision protocol")
         self.cfg = cfg
         self.protocol = protocol
         self.metrics = metrics
         self.metric_scope = metric_scope
+        self.request_budget = request_budget
+        self.request_limit = request_limit
+        self.request_guard = request_guard
 
     def _parse_choice(self, body: Any, choices: dict[str, str], question: str = "route") -> dict:
         """Apply precision evidence only to the known TypeSafe endpoint."""
@@ -206,6 +210,14 @@ class DecisionProvider:
 
     async def _request(self, session: ClientSession, method: str, path: str,
                        timeout_ms: int, payload: dict | None = None) -> dict:
+        if method == 'POST' and payload is not None and self.request_budget is not None:
+            from .decision_budget import DecisionBudgetError
+            try:
+                await self.request_budget.reserve(self.request_limit)
+            except DecisionBudgetError as error:
+                raise DecisionError(str(error)) from None
+        if self.request_guard is not None:
+            self.request_guard()
         headers = {"Content-Type": "application/json"}
         if self.cfg.api_key:
             headers["Authorization"] = f"Bearer {self.cfg.api_key}"

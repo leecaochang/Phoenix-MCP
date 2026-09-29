@@ -104,6 +104,9 @@ async def async_voice_answer(
     *,
     include_review_links: bool = False,
     language: object = None,
+    satellite_id: object = None,
+    device_id: object = None,
+    conversation_id: object = None,
 ) -> str:
     """Resolve config + token + provider, then run the gated voice loop; return text.
 
@@ -151,10 +154,41 @@ async def async_voice_answer(
     if authority is not None:
         if authority.current(hass) is None:
             return voice_text(language, "token_unavailable")
-        observation = await async_evaluate_command(hass, data, token, user_text, language or "en")
+        from .voice_context import capture_voice_origin
+        from .command_clarification import (async_clarification_reply, clarification_binding, clarification_prompt, is_clarification_cancel)
+        origin = capture_voice_origin(hass, satellite_id, device_id)
+        context: dict[str, Any] = {'voice_origin': origin} if origin is not None else {}
+        can_clarify = routing_mode in ('local', 'hybrid') and isinstance(conversation_id, str) and 0 < len(conversation_id) <= 128
+        conversation = ['voice', conversation_id, satellite_id, device_id]
+        binding = clarification_binding(hass, authority, language, origin)
+        pending = data.command_routing.clarifications.consume(conversation, binding) if can_clarify else None
+        if pending is not None:
+            selected, reply = await async_clarification_reply(hass, data, token, pending, user_text,
+                language if isinstance(language, str) else 'en', ingress='voice', voice_origin=origin)
+            token = authority.current(hass)
+            if token is None:
+                return voice_text(language, 'token_unavailable')
+            if reply is not None:
+                if not pending.get('_expired') and is_clarification_cancel(user_text):
+                    from .command_execution import LocalCommandReply
+                    from .routing_statistics import local_result
+                    local_result(LocalCommandReply(reply, 'cancelled'), 'local')
+                return reply
+            if selected is not None:
+                from .command_execution import async_execute_local_command
+                answer = await async_execute_local_command(hass, data, token, selected, authority,
+                    _base_url(hass), include_review_links, language=language)
+                return answer if answer is not None else voice_text(language, 'local_clarification_expired')
+        if can_clarify:
+            context['clarify'] = True
+        observation = await async_evaluate_command(hass, data, token, user_text, language or "en", **context)
         token = authority.current(hass)
-        if token is None:
+        if token is None or observation['reason'] == 'authority_changed':
             return voice_text(language, "token_unavailable")
+        if can_clarify and observation.get('_clarification') is not None:
+            pending = observation['_clarification']
+            data.command_routing.clarifications.remember(conversation, binding, pending)
+            return clarification_prompt(language, pending)
         data.command_routing.observe(observation)
         # Preserve the ordinary voice loop, including its zero inline wait.
         token = _current_dispatch_token(data, token.id)
@@ -227,16 +261,21 @@ if _CONVERSATION_AVAILABLE:
             # Sanitize every response because HA uses this one plain-speech value for
             # both its visible Assist reply and TTS input.
             satellite_id = getattr(user_input, "satellite_id", None)
+            from uuid import uuid4
+            conversation_id = user_input.conversation_id or uuid4().hex
             text = await async_voice_answer(
                 self.hass, self._data, user_input.text,
                 include_review_links=satellite_id is None,
                 language=user_input.language,
+                satellite_id=satellite_id,
+                device_id=getattr(user_input, 'device_id', None),
+                conversation_id=conversation_id,
             )
             response = intent.IntentResponse(language=user_input.language)
             response.async_set_speech(_spoken_text(text))
             return _conversation.ConversationResult(
                 response=response,
-                conversation_id=user_input.conversation_id,
+                conversation_id=conversation_id,
             )
 
 else:  # pragma: no cover - conversation absent only in broken envs

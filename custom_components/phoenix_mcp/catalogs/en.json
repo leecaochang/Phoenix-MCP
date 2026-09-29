@@ -2010,7 +2010,9 @@
       "failed": "Could not save or load command routing settings.",
       "accountModel": "Model for {name}",
       "connectionHint": "Base URL is the server address. Add an API key only if that server requires authentication.",
-      "commandHelp": "Try local intents first, then the optional Decision Provider. Other requests go to your usual AI provider. Permissions and approvals still apply."
+      "commandHelp": "Try local intents first, then the optional Decision Provider. Other requests go to your usual AI provider. Permissions and approvals still apply.",
+      "requestLimit": "Decision requests per hour (0 = unlimited)",
+      "requestLimitHint": "Shared by Voice, Chat, previews and shadow checks. Counts attempts while enabled, including failures, and survives restart. Resets at each UTC hour. Your usual provider has a separate allowance. This is a request limit, not a currency cap."
     },
     "routingStats": {
       "title": "Routing statistics",
@@ -2072,13 +2074,17 @@
     "focus_declined": "This conversation is in Home-focused mode, so I can only help with requests about your home and Home Assistant.",
     "local_attribute_unavailable": "Home Assistant is not reporting a value for the requested property right now.",
     "local_cancelled": "Cancelled.",
+    "local_clarification": "Which target do you mean? {choices}. Reply with its number or exact entity ID, or say cancel. This choice expires in two minutes.",
+    "local_clarification_expired": "That choice is no longer current. Please repeat the full command.",
     "local_failed": "Phoenix MCP could not complete this command.",
     "local_pending": "This command needs approval in the Phoenix MCP panel.",
     "local_read_failed": "Phoenix MCP could not read the state.",
     "local_review": "Review command",
     "local_state": "The state is {state}.",
     "local_state_matched": "Home Assistant reports the requested state.",
+    "local_state_unavailable": "Unavailable",
     "local_state_unconfirmed": "Command sent. Home Assistant has not yet confirmed the requested state.",
+    "local_state_unknown": "Unknown",
     "local_summary_breakdown": "Among entities exposed to Assist that I can access: {total} entities. {summary}.",
     "local_summary_count": "Among entities exposed to Assist that I can access: {matched} of {total} have state {state}; {unknown} have unknown or unavailable state.",
     "local_summary_total": "Among entities exposed to Assist that I can access: {total} entities; {unknown} have unknown or unavailable state.",

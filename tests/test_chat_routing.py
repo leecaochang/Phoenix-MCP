@@ -286,7 +286,7 @@ async def test_chat_read_then_explicit_command_uses_local_routing(hass, executin
         provider, _, messages = await chat_turn(hass, executing_chat,
             [{'role': 'user', 'content': 'what is the state of the desk lamp'}])
         provider.stream_turn.assert_not_called()
-        assert messages[-1]['content'] == 'The state is off.'
+        assert messages[-1]['content'] == 'The state is Off.'
         with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
               patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
             followup, _, result = await chat_turn(hass, executing_chat,
@@ -614,7 +614,7 @@ async def test_chat_hybrid_uses_real_decision_validation_and_one_dispatch(hass, 
         call.assert_not_called()
     assert messages[-1]['content'] == (
         'Home Assistant reports the requested state.' if service == 'turn_off' else
-        'Command sent. Home Assistant has not yet confirmed the requested state.' if service else 'The state is off.')
+        'Command sent. Home Assistant has not yet confirmed the requested state.' if service else 'The state is Off.')
     assert events[-1] == ('done', {'stop_reason': 'end_turn'})
     assert data.agent_recovery.records(token.id) == []
     assert data.decision_shadow.summary()['chat_hybrid'] == {'evaluations': 1, 'reasons': {'plan_ready': 1}}
@@ -627,7 +627,7 @@ async def test_chat_hybrid_uses_real_decision_validation_and_one_dispatch(hass, 
 
 async def test_chat_hybrid_local_match_spends_no_decision_call(hass, hybrid_chat):
     provider, _, messages, remote = await decision_chat_turn(hass, hybrid_chat, sentence='what is the state of the desk lamp')
-    assert messages[-1]['content'] == 'The state is off.'
+    assert messages[-1]['content'] == 'The state is Off.'
     provider.stream_turn.assert_not_called()
     remote.assert_not_called()
     assert hybrid_chat[0].decision_shadow.summary()['chat_hybrid']['evaluations'] == 0
@@ -1341,7 +1341,7 @@ async def test_qualified_jev_chat_uses_one_joint_request(hass, hybrid_chat, cate
         call.assert_awaited_once_with('light', service, {'entity_id': ['light.test_desk']}, blocking=True, return_response=False)
     else:
         call.assert_not_called()
-        assert messages[-1]['content'] == 'The state is off.'
+        assert messages[-1]['content'] == 'The state is Off.'
     assert events[-1] == ('done', {'stop_reason': 'end_turn'})
     assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'plan_ready': 1}
 
@@ -1590,7 +1590,7 @@ async def test_categorical_followup_routes_with_more_than_common_catalog_limit(h
     assert not provider.stream_turn.called, data.decision_shadow.summary()
     assert seen[1]['state']['history'] == CONTEXT_HISTORY
     assert history[:2] == CONTEXT_HISTORY
-    assert history[-1]['content'] == 'The state is off.'
+    assert history[-1]['content'] == 'The state is Off.'
     assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'plan_ready': 1}
 
 
@@ -1610,7 +1610,7 @@ async def test_chat_reference_uses_full_history_and_guarded_dispatch(hass, conte
     from custom_components.phoenix_mcp import mcp_view
     data, _ = context_chat
     history = [{'role': 'user', 'content': 'what is the state of Desk lamp'},
-               {'role': 'assistant', 'content': 'The state is off.'}]
+               {'role': 'assistant', 'content': 'The state is Off.'}]
     if local_chain:
         _, _, history = await chat_turn(hass, context_chat, history[:1])
         assert data.command_routing.chat_history._entries
@@ -1636,7 +1636,7 @@ async def test_chat_reference_uses_full_history_and_guarded_dispatch(hass, conte
 async def test_reference_not_attempted_after_errors_and_never_overrides_restrictions(hass, context_chat, failure):
     from custom_components.phoenix_mcp.decision_provider import DecisionError
     data, _ = context_chat
-    history = [{'role': 'user', 'content': 'what is the state of Desk lamp'}, {'role': 'assistant', 'content': 'The state is off.'}]
+    history = [{'role': 'user', 'content': 'what is the state of Desk lamp'}, {'role': 'assistant', 'content': 'The state is Off.'}]
     async def response(*args):
         payload = args[4]
         if failure in ('malformed', 'timeout'): raise DecisionError(failure)
@@ -1667,7 +1667,7 @@ async def test_reference_approval_rechecks_bound_plan(hass, context_chat, change
     data.mesa = await async_setup_mesa(hass, 'enforced')
     data.mesa.store.set('light.test_desk', SemanticProfile.from_dict('light.test_desk',
         {'semantic_profile': {'operational_boundaries': {'control_mode': 'confirm'}}}, default_origin=MetadataOrigin.USER))
-    messages = [{'role': 'user', 'content': 'what is the state of Desk lamp'}, {'role': 'assistant', 'content': 'The state is off.'},
+    messages = [{'role': 'user', 'content': 'what is the state of Desk lamp'}, {'role': 'assistant', 'content': 'The state is Off.'},
                 {'role': 'user', 'content': 'turn it on'}]
     async def response(*args): return reference_chat_wire(args[4], 'light_on')
     with (patch.object(DecisionProvider, '_request', side_effect=response),
@@ -1694,7 +1694,7 @@ async def test_reference_approval_rechecks_bound_plan(hass, context_chat, change
 async def test_reference_and_explicit_selection_share_total_deadline(hass, context_chat):
     data, _ = context_chat
     await data.store.async_patch_settings(decision_timeout_ms=250)
-    messages = [{'role': 'user', 'content': 'what is the state of Desk lamp'}, {'role': 'assistant', 'content': 'The state is off.'},
+    messages = [{'role': 'user', 'content': 'what is the state of Desk lamp'}, {'role': 'assistant', 'content': 'The state is Off.'},
                 {'role': 'user', 'content': 'turn it off'}]
     async def response(*args):
         await asyncio.sleep(.15)
@@ -1724,7 +1724,7 @@ async def test_repeated_references_use_exact_successful_subject_and_fresh_histor
             assert history[:len(previous)] == previous
             assert seen[-1]['state']['history'] == previous
             assert seen[-1]['state']['anchor']['source'] == 'verified_reply'
-            assert history[-1]['content'] == 'The state is off.'
+            assert history[-1]['content'] == 'The state is Off.'
     assert remote.await_count == 6
     assert not data.command_routing.chat_history._entries
 

@@ -28,6 +28,7 @@ from .const import (
     CHAT_COMMAND_ROUTING_MODES,
     COMMAND_ROUTING_TIMEOUT_DEFAULT_MS,
     DECISION_TIMEOUT_DEFAULT_MS, DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS,
+    DECISION_REQUEST_BUDGET_MAX,
     COMMAND_ROUTING_TIMEOUT_MIN_MS,
     COMMAND_ROUTING_TIMEOUT_MAX_MS,
     CONVERSATION_STYLES,
@@ -627,6 +628,7 @@ class GlobalSettings:
     decision_provider_id: str | None = None
     decision_shadow_enabled: bool = False
     decision_timeout_ms: int = DECISION_TIMEOUT_DEFAULT_MS
+    decision_request_budget: int = 0
     voice_agent_enabled: bool = False
     voice_agent_token_id: str | None = None
     voice_agent_provider_id: str | None = None
@@ -682,6 +684,7 @@ class GlobalSettings:
             "decision_provider_id": self.decision_provider_id,
             "decision_shadow_enabled": self.decision_shadow_enabled,
             "decision_timeout_ms": self.decision_timeout_ms,
+            "decision_request_budget": self.decision_request_budget,
             "voice_agent_enabled": self.voice_agent_enabled,
             "voice_agent_token_id": self.voice_agent_token_id,
             "voice_agent_provider_id": self.voice_agent_provider_id,
@@ -745,6 +748,7 @@ class GlobalSettings:
             decision_shadow_enabled=data.get("decision_shadow_enabled") is True,
             decision_timeout_ms=_clamp_range(data.get("decision_timeout_ms", DECISION_TIMEOUT_DEFAULT_MS),
                                             DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS, DECISION_TIMEOUT_DEFAULT_MS),
+            decision_request_budget=_clamp_range(data.get('decision_request_budget', 0), 0, DECISION_REQUEST_BUDGET_MAX, 0),
             voice_agent_routing_mode=_closed_choice(
                 data.get("voice_agent_routing_mode"), COMMAND_ROUTING_MODES, "off",
             ),
