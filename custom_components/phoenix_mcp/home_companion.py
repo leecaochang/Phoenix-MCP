@@ -53,11 +53,18 @@ def wrapper_tool() -> dict:
             "Preserve the user's target wording and actual restrictions when delegating. Phoenix resolves natural device "
             "names from accessible search results. Do not add exact-name, literal-match or no-fallback requirements "
             "unless the user explicitly requested them. Identifying the intended device does not require identical wording. "
-            "If clarification is needed, rephrase and resend the complete request, not just the missing detail. "
+            "When clarification is needed, your final user-facing reply must explicitly ask the user to try again "
+            "with a complete request containing the action, target and restrictions, not just a device name or "
+            "missing detail. Include a complete example using a discovered candidate, clearly as an example rather "
+            "than a chosen action. Preserve this guidance when summarizing Phoenix's reply; do not shorten it to "
+            "a question such as 'Which light?'. A bare follow-up answer is not enough for this stateless tool. "
             "Inspect status, message, tool_outcomes and review_urls. Pending approval is not execution. "
             "Explain the result naturally and briefly: lead with what happened, then any needed next step. "
             "Do not recite tool traces, internal status codes or policy unless the user asks. "
-            "Never retry an outcome_unknown action automatically."
+            "A missing or malformed final reply does not mean a device command failed. If control was attempted "
+            "but confirmation is incomplete, acknowledge possible effects and ask the user to check the current "
+            "state in Home Assistant. Do not offer to resend the action or claim repeating on/off commands is safe "
+            "because they are idempotent. Never retry an outcome_unknown action automatically; follow any recovery guidance."
         ),
         "inputSchema": {"type": "object", "properties": {
             "request": {"type": "string", "minLength": 1, "maxLength": HOME_COMPANION_MAX_REQUEST_BYTES,
@@ -177,14 +184,18 @@ async def run_request(arguments: dict, token: Any, hass: Any, data: Any) -> tupl
             "candidate to evaluate, not a failed action or permission to choose an ambiguous target. When one candidate "
             "clearly fits the requested device and restrictions, proceed without requiring the user to repeat its "
             "registered name. Honor an explicit exact-name requirement; ask for clarification when the target remains "
-            "ambiguous. Do not guess missing targets. If the request depends on missing "
-            "context, return clarification_needed and ask the user to rephrase and resend the complete request "
-            "with the targets and restrictions, not just a follow-up detail. "
+            "ambiguous. Do not guess missing targets. For every clarification, including ambiguous names and missing "
+            "context, return clarification_needed. The message must explicitly ask the user to try again with the "
+            "complete request, including the action, target and restrictions, not just a device name or follow-up "
+            "detail. Give a complete example using a discovered candidate when available, clearly labeled as an "
+            "example, and preserve any restrictions in it. Do not end with only 'Which light?' or 'Which one?'. "
             "If a search returns no matches, explain that no accessible entities matched the search. "
             "Do not infer that the entity does not exist or that its name is wrong. Ask the user to check "
             "the name, search filters and token permissions, then resend the complete request instead of "
             "repeating empty lookups. A count covers only accessible entities, not the whole house. "
             "A denied, failed, timed-out or unknown action must not be retried or replaced with another write. "
+            "If a command's confirmation is incomplete, ask the user to check the current state in Home Assistant. "
+            "Do not offer to repeat it or claim that repeating an on/off command is harmless. "
             "Queued approval means no action happened yet. Never claim physical success without evidence. "
             "Each request is independent. At the end return only a JSON object with status "
             "completed, clarification_needed, or refused, and a message in the requested language. "
@@ -242,6 +253,8 @@ async def run_request(arguments: dict, token: Any, hass: Any, data: Any) -> tupl
                     or not isinstance(answer["message"], str) or not answer["message"].strip()):
                 raise ValueError
         except (ValueError, TypeError):
+            if turn.write_started:
+                return _result("invalid_output", "A device command was attempted, but I couldn't finish its confirmation. The device may already have changed. Check its current state in Home Assistant before deciding what to do next. Do not resend the command just because this reply failed.", outcomes=turn.outcomes)
             return _result("invalid_output", "The model did not return a valid completion result. Inspect tool outcomes before trying again.", outcomes=turn.outcomes)
         failed = [row for row in turn.outcomes if row["outcome"] != "allowed"]
         if failed:

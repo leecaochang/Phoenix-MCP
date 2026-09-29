@@ -308,6 +308,24 @@ async def test_final_envelope_accepts_fences_but_rejects_wrong_shapes(hass,compa
     assert payload(await rpc(hass,companion))['status']==expected
 
 
+async def test_invalid_final_reply_after_control_reports_possible_effects_without_retry(hass,companion,monkeypatch):
+    calls = []
+    async def turn_on(call):
+        calls.append(call.data)
+        hass.states.async_set('light.selected','on',{'friendly_name':'Selected lamp'})
+    hass.services.async_register('light','turn_on',turn_on)
+    scripted(monkeypatch, [[('light__HassLightSet',{'name':'light.selected','brightness':40})],
+                          'Malformed final reply.'])
+    result = payload(await rpc(hass,companion,args={'request':'Set the selected lamp to 40%.'}))
+    assert result['status'] == 'invalid_output'
+    assert len(calls) == 1 and hass.states.get('light.selected').state == 'on'
+    assert result['tool_outcomes'] == [{'tool':'light__HassLightSet','outcome':'allowed'}]
+    assert 'may already have changed' in result['message']
+    assert 'Check its current state in Home Assistant' in result['message']
+    assert 'Do not resend' in result['message']
+    assert not companion[0].agent_recovery.blocks(companion[1].id)
+
+
 async def test_provider_failure_after_write_does_not_replay(hass,companion,monkeypatch):
     calls=[]
     async def turn_on(call):
