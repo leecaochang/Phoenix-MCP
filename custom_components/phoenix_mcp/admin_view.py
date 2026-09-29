@@ -65,6 +65,7 @@ from .policy_engine import (
     get_effective_hint,
     resolve,
 )
+from .const import TOOL_ROUTING_MODES, TOOL_ROUTING_SETTINGS
 from .token_store import (
     valid_command_routing_languages,
     PermissionNode,
@@ -1981,7 +1982,12 @@ def _settings_response(settings, hass=None) -> dict:
     from .tools.esphome import esphome_availability  # noqa: PLC0415
     from .voice_agent import assist_pipeline_supported  # noqa: PLC0415
 
+    from .agentcli import loaded_decision_account
+    from .tool_routing import qualified_languages
+
     body = settings.to_dict()
+    cfg = loaded_decision_account(hass, settings.decision_provider_id) if hass and settings.decision_provider_id else None
+    body["tool_routing_qualified_languages"] = qualified_languages(cfg)
     body["assist_api_supported"] = assist_api_supported()
     body["voice_agent_pipeline_supported"] = assist_pipeline_supported()
     body["ai_task_supported"] = ai_task_supported()
@@ -2038,6 +2044,7 @@ _SURFACE_TOKEN_PROVIDER_PAIRS = (
 )
 
 _PATCHABLE_SETTINGS = _BOOL_SETTINGS | {
+    *TOOL_ROUTING_SETTINGS.values(),
     "voice_agent_routing_mode", "agentcli_routing_mode", "command_routing_languages", "command_routing_timeout_ms", "decision_timeout_ms", "decision_request_budget",
     "audit_flush_interval", "audit_log_maxlen", "mesa_mode",
     "agentcli_scrollback_lines", "agentcli_max_iterations", "assist_bound_token_id",
@@ -2137,7 +2144,8 @@ async def _validated_settings_patch(
             )
 
     for key, modes in (("voice_agent_routing_mode", COMMAND_ROUTING_MODES),
-                       ("agentcli_routing_mode", CHAT_COMMAND_ROUTING_MODES)):
+                       ("agentcli_routing_mode", CHAT_COMMAND_ROUTING_MODES),
+                       *((key, TOOL_ROUTING_MODES) for key in TOOL_ROUTING_SETTINGS.values())):
         if key in patchable and (not isinstance(patchable[key], str) or patchable[key] not in modes):
             return {}, _err(
                 "invalid_request", "Unsupported command routing mode.", 400, rid,
@@ -2242,15 +2250,25 @@ async def _validated_settings_patch(
             return {}, _err("invalid_request", "Choose a decision provider account.", 400, rid,
                             key="configuredProviderRequired", params={"field": "decision_provider_id"})
     if (patchable.get("decision_shadow_enabled") or patchable.get("voice_agent_routing_mode") == "hybrid"
-            or patchable.get("agentcli_routing_mode") == "hybrid"):
+            or patchable.get("agentcli_routing_mode") == "hybrid"
+            or any(patchable.get(key) in ("observe", "advise") for key in TOOL_ROUTING_SETTINGS.values())):
         account = patchable.get("decision_provider_id", data.store.get_settings().decision_provider_id)
         from .agentcli import _get_secret_store
         provider_store = await _get_secret_store(hass)
         if not account or provider_store.resolve(account, purpose="decision") is None:
             return {}, _err("invalid_request", "Choose a decision provider account.", 400, rid,
                             key="configuredProviderRequired", params={"field": "decision_provider_id"})
+    if any(patchable.get(key) == "advise" for key in TOOL_ROUTING_SETTINGS.values()):
+        from .tool_routing import qualified_languages
+        from .agentcli import _get_secret_store
+        provider_store = await _get_secret_store(hass)
+        account = patchable.get("decision_provider_id", data.store.get_settings().decision_provider_id)
+        if not qualified_languages(provider_store.resolve(account or "", purpose="decision")):
+            return {}, _err("invalid_request", "This decision model has not qualified for tool advice.",
+                            400, rid, key="toolRoutingUnqualified")
     if "decision_provider_id" in patchable and patchable["decision_provider_id"] is None:
         patchable["decision_shadow_enabled"] = False
+        patchable.update({key: "off" for key in TOOL_ROUTING_SETTINGS.values()})
         for key in ("voice_agent_routing_mode", "agentcli_routing_mode"):
             if getattr(data.store.get_settings(), key) == "hybrid":
                 patchable.setdefault(key, "off")
@@ -2787,7 +2805,8 @@ class PhoenixAdminWipeView(PhoenixView):
                             ai_task_model=None,
                         )
                     if settings.decision_provider_id:
-                        provider_patch.update(decision_provider_id=None, decision_shadow_enabled=False)
+                        provider_patch.update(decision_provider_id=None, decision_shadow_enabled=False,
+                                              **{key: "off" for key in TOOL_ROUTING_SETTINGS.values()})
                         for key in ("voice_agent_routing_mode", "agentcli_routing_mode"):
                             if getattr(settings, key) == "hybrid":
                                 provider_patch[key] = "off"

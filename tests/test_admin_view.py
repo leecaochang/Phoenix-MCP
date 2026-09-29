@@ -2059,6 +2059,7 @@ async def test_wipe_providers_only_clears_dependent_settings():
         ai_task_provider_id="task-provider",
         ai_task_model="task-model",
         decision_provider_id="decision-provider", decision_shadow_enabled=True,
+        agentcli_tool_routing_mode="observe", voice_agent_tool_routing_mode="observe", ai_task_tool_routing_mode="observe",
         voice_agent_routing_mode="hybrid", agentcli_routing_mode="hybrid",
     )
     data.async_sync_voice_agent = MagicMock()
@@ -2085,6 +2086,7 @@ async def test_wipe_providers_only_clears_dependent_settings():
         ai_task_provider_id=None,
         ai_task_model=None,
         decision_provider_id=None, decision_shadow_enabled=False,
+        agentcli_tool_routing_mode="off", voice_agent_tool_routing_mode="off", ai_task_tool_routing_mode="off",
         voice_agent_routing_mode="off", agentcli_routing_mode="off",
     )
     data.async_sync_voice_agent.assert_called_once_with()

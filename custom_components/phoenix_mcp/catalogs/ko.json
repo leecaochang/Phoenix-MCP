@@ -848,7 +848,8 @@
       "providerModelNotListed": "이 제공자가 반환한 모델을 선택하세요.",
       "providerAccountChanged": "제공자 계정이 변경되었습니다. 새로 고친 후 다시 시도하세요.",
       "routingStatisticsResetInvalid": "Voice 또는 Chat을 선택하고 통계 초기화를 확인하세요.",
-      "recoveryBlocked": "작업 결과를 확인할 수 없습니다. 새로고침하고 현재 상태를 확인한 후 다시 시도하세요."
+      "recoveryBlocked": "작업 결과를 확인할 수 없습니다. 새로고침하고 현재 상태를 확인한 후 다시 시도하세요.",
+      "toolRoutingUnqualified": "이 모델이 도구 선택 평가를 통과하기 전에는 조언 모드를 사용할 수 없습니다."
     },
     "mesa": {
       "addAreaProfile": "영역 프로필 추가",
@@ -2059,6 +2060,16 @@
       "confirm_delete": "이 복구 자료를 영구 삭제할까요? 유일하게 남은 사본일 수 있습니다.",
       "confirm": "확인",
       "delete": "삭제"
+    },
+    "toolRouting": {
+      "label": "도구 선택 검토",
+      "help": "작업 맥락을 판단 제공자와 공유합니다. 관찰 모드는 권장 사항을 기록하고 조언 모드는 턴마다 한 번 재계획을 요청할 수 있습니다. 권한과 승인은 계속 적용됩니다.",
+      "accountRequired": "검토를 활성화하려면 판단 제공자 계정을 선택하세요.",
+      "unqualified": "이 모델이 도구 선택 평가를 통과하기 전에는 조언 모드를 사용할 수 없습니다.",
+      "qualified": "조언 모드가 검증된 언어: {languages}. 다른 언어는 계획 모델이 계속 처리합니다.",
+      "off": "꺼짐",
+      "observe": "관찰만",
+      "advise": "조언"
     }
   },
   "voice": {

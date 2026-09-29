@@ -962,7 +962,8 @@
       "providerModelNotListed": "Elige un modelo devuelto por este proveedor.",
       "providerAccountChanged": "La cuenta del proveedor ha cambiado. Recarga y vuelve a intentarlo.",
       "routingStatisticsResetInvalid": "Elige Voice o Chat y confirma el restablecimiento de las estadísticas.",
-      "recoveryBlocked": "No se pudo verificar la operación. Actualiza y comprueba el estado actual antes de volver a intentarlo."
+      "recoveryBlocked": "No se pudo verificar la operación. Actualiza y comprueba el estado actual antes de volver a intentarlo.",
+      "toolRoutingUnqualified": "El asesoramiento activo no está disponible hasta que este modelo supere la evaluación de selección de herramientas."
     },
     "tokens": {
       "advanced": "Avanzado",
@@ -2054,6 +2055,16 @@
       "confirm_delete": "¿Eliminar permanentemente este archivo de recuperación? Podría ser la única copia restante.",
       "confirm": "Confirmar",
       "delete": "Eliminar"
+    },
+    "toolRouting": {
+      "label": "Revisión de selección de herramientas",
+      "help": "Comparte el contexto de la tarea con el proveedor de decisiones. Observar registra recomendaciones; Asesorar puede solicitar una nueva planificación por turno. Los permisos y las aprobaciones siguen vigentes.",
+      "accountRequired": "Selecciona una cuenta del proveedor de decisiones para activar la revisión.",
+      "unqualified": "El asesoramiento activo no está disponible hasta que este modelo supere la evaluación de selección de herramientas.",
+      "qualified": "El asesoramiento activo está validado para: {languages}. En otros idiomas se continúa con el modelo planificador.",
+      "off": "Desactivado",
+      "observe": "Solo observar",
+      "advise": "Asesorar"
     }
   },
   "notification": {

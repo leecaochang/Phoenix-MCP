@@ -125,7 +125,13 @@ export interface ArchivedTokenRecord {
 export type ConversationStyle = "direct" | "warm" | "calm_guide" | "lively" | "technical";
 export type DetailLevel = "concise" | "balanced" | "detailed";
 
+export type ToolRoutingMode = "off" | "observe" | "advise";
+
 export interface GlobalSettings {
+  agentcli_tool_routing_mode?: ToolRoutingMode;
+  voice_agent_tool_routing_mode?: ToolRoutingMode;
+  ai_task_tool_routing_mode?: ToolRoutingMode;
+  tool_routing_qualified_languages?: string[];
   kill_switch: boolean;
   disable_all_logging: boolean;
   log_allowed: boolean;

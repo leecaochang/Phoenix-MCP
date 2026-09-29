@@ -22,6 +22,7 @@ import binascii
 import dataclasses
 import codecs
 from contextlib import aclosing, suppress
+from copy import deepcopy
 import functools
 import hashlib
 from datetime import datetime, timedelta, tzinfo
@@ -2423,6 +2424,14 @@ def build_mcp_tool_list(token: TokenRecord, data: PhoenixData) -> list[dict]:
     return out
 
 
+def build_agent_tool_list(token: TokenRecord, data: PhoenixData, surface: str) -> list[dict]:
+    """Share each planner's complete announced catalog with tool review."""
+    tools = build_mcp_tool_list(token, data)
+    # Chat already supplies current local time in every turn's system context.
+    return deepcopy([tool for tool in tools if surface != "chat"
+                     or tool.get("name") not in ("llm__GetDateTime", "GetDateTime")])
+
+
 def catalog_payload_metrics(token: TokenRecord, data: PhoenixData) -> dict[str, int]:
     """Return deterministic byte metrics for the token's announced catalog."""
     tools = build_mcp_tool_list(token, data)
@@ -3524,6 +3533,9 @@ async def async_run_agent_turn(
                                            base_url=base_url, client_ip=client_ip, emit=emit):
         return messages
 
+    from .tool_routing import create_review_state, async_review_tools, withheld_results
+    review_state = create_review_state(data, token, "chat")
+
     from .mcp_view import _build_instructions  # noqa: PLC0415
 
     system = (
@@ -3535,13 +3547,7 @@ async def async_run_agent_turn(
         + _AGENTCLI_ADDENDUM
         + _home_focus_output_contract(home_focused)
     )
-    # Current local time is supplied above on every user turn. Keeping both the
-    # canonical and legacy date-time names out of this one catalog prevents a
-    # redundant call. External MCP catalogs continue to announce the canonical name.
-    agent_tools = [
-        tool for tool in build_mcp_tool_list(token, data)
-        if tool.get("name") not in ("llm__GetDateTime", "GetDateTime")
-    ]
+    agent_tools = build_agent_tool_list(token, data, "chat")
     tools = provider.format_tools(agent_tools)
     # The token is re-resolved per dispatch (see _current_dispatch_token), so a
     # mid-turn revoke/expire/cap-change/kill-switch is honored before any side
@@ -3634,6 +3640,17 @@ async def async_run_agent_turn(
         if stop_reason != "tool_use":
             break
 
+        review = await async_review_tools(hass, data, review_state, surface="chat",
+            language=routing_language, messages=messages, calls=tool_calls, system=system,
+            remaining_rounds=max_iterations - iterations, cancel=cancel, announced_tools=agent_tools)
+        if review.action != "continue":
+            provider.append_tool_results(messages, withheld_results(tool_calls, review))
+            if review.action == "stop":
+                await emit("error", {"code": "cancelled" if review.reason == "cancelled" else "unauthorized",
+                                    "message": "Tool selection stopped because cancellation or authority changed."})
+                turn_errored = True
+                break
+            continue
         dispatch_started = True
         try:
             batch = await _run_tool_batch(
@@ -3758,6 +3775,8 @@ async def _run_headless_turn(
     client_ip: str,
     max_iterations: int,
     detect_focus_refusal: bool = False,
+    routing_surface: str = "voice",
+    routing_language: object = None,
 ) -> _HeadlessTurnResult:
     """Run one headless model/tool turn to completion.
 
@@ -3785,7 +3804,10 @@ async def _run_headless_turn(
     if data.agent_recovery.blocks(token.id):
         return _HeadlessTurnResult("", [], outcome=TURN_OUTCOME_UNKNOWN)
 
-    tools = provider.format_tools(build_mcp_tool_list(token, data))
+    from .tool_routing import create_review_state, async_review_tools, withheld_results
+    review_state = create_review_state(data, token, routing_surface)
+    agent_tools = build_agent_tool_list(token, data, routing_surface)
+    tools = provider.format_tools(agent_tools)
     messages: list[dict] = [{"role": "user", "content": seed}]
     token_id = token.id
     cancel = asyncio.Event()  # never fired; the stream primitive expects one
@@ -3809,7 +3831,7 @@ async def _run_headless_turn(
     focus_declined = False
     dispatch_started = False
 
-    for _ in range(max_iterations):
+    for iteration in range(max_iterations):
         tool_calls: list[dict] = []
         assistant_msg: dict | None = None
         stop_reason = "end_turn"
@@ -3865,6 +3887,14 @@ async def _run_headless_turn(
         # The answer is the model's LAST text (after tools resolve), not the
         # intermediate "let me check..." text before a tool round; reset it here.
         final_text = ""
+        review = await async_review_tools(hass, data, review_state, surface=routing_surface,
+            language=routing_language, messages=messages, calls=tool_calls, system=system,
+            remaining_rounds=max_iterations - iteration - 1, announced_tools=agent_tools)
+        if review.action != "continue":
+            provider.append_tool_results(messages, withheld_results(tool_calls, review))
+            if review.action == "stop":
+                return _HeadlessTurnResult("", review_urls, outcome=TURN_AUTHORITY_LOST)
+            continue
         results: list[dict] = []
         for tc in tool_calls:
             name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
@@ -4038,7 +4068,7 @@ async def async_run_voice_turn(
             + _home_focus_output_contract(home_focused)
         ),
         seed=user_text, client_ip=VOICE_AGENT_CLIENT_IP, max_iterations=max_iterations,
-        detect_focus_refusal=home_focused,
+        detect_focus_refusal=home_focused, routing_surface="voice", routing_language=language,
     )
     voice_result(turn.outcome, bool(turn.review_urls), bool(turn.text.strip()))
     # Never raise at a microphone: every ending becomes something sayable, in the
@@ -4158,7 +4188,7 @@ async def async_run_ai_task(
     turn = await _run_headless_turn(
         hass, data, token, provider, session, base_url,
         system=system, seed=instructions, client_ip=AI_TASK_CLIENT_IP,
-        max_iterations=max_iterations,
+        max_iterations=max_iterations, routing_surface="ai_task", routing_language=hass.config.language,
     )
     # Unlike the voice surface there is no one listening to an apology: an
     # automation asked for data, so every non-OK ending is an error the caller
@@ -4745,7 +4775,8 @@ class PhoenixAgentCliProviderView(PhoenixView):
                 patchable: dict[str, Any] = {}
                 if settings.decision_provider_id == instance_id:
                     data.decision_shadow.cancel()
-                    patchable.update(decision_provider_id=None, decision_shadow_enabled=False)
+                    patchable.update(decision_provider_id=None, decision_shadow_enabled=False,
+                                     agentcli_tool_routing_mode="off", voice_agent_tool_routing_mode="off", ai_task_tool_routing_mode="off")
                     for key in ("voice_agent_routing_mode", "agentcli_routing_mode"):
                         if getattr(settings, key) == "hybrid":
                             patchable[key] = "off"

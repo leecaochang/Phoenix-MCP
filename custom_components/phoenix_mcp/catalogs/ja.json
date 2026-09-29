@@ -1015,7 +1015,8 @@
       "providerModelNotListed": "このプロバイダーが返したモデルを選んでください。",
       "providerAccountChanged": "プロバイダーのアカウントが変更されました。再読み込みしてやり直してください。",
       "routingStatisticsResetInvalid": "VoiceまたはChatを選び、統計のリセットを確認してください。",
-      "recoveryBlocked": "操作結果を検証できませんでした。更新して現在の状態を確認してから再試行してください。"
+      "recoveryBlocked": "操作結果を検証できませんでした。更新して現在の状態を確認してから再試行してください。",
+      "toolRoutingUnqualified": "このモデルがツール選択の評価に合格するまで、助言モードは利用できません。"
     },
     "agentchat": {
       "answerAnyway": "そのまま回答",
@@ -2054,6 +2055,16 @@
       "confirm_delete": "この復旧データを完全に削除しますか？最後のコピーの可能性があります。",
       "confirm": "確認",
       "delete": "削除"
+    },
+    "toolRouting": {
+      "label": "ツール選択の確認",
+      "help": "タスクのコンテキストを判断プロバイダーと共有します。観察モードは推奨を記録し、助言モードは各ターンで最大一回の再計画を求めます。権限と承認は引き続き適用されます。",
+      "accountRequired": "確認を有効にするには、判断プロバイダーのアカウントを選択してください。",
+      "unqualified": "このモデルがツール選択の評価に合格するまで、助言モードは利用できません。",
+      "qualified": "助言モードの評価済み言語：{languages}。その他の言語は計画モデルが引き続き処理します。",
+      "off": "無効",
+      "observe": "観察のみ",
+      "advise": "助言"
     }
   },
   "notification": {

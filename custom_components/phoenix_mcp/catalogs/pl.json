@@ -984,7 +984,8 @@
       "providerModelNotListed": "Wybierz model zwrócony przez tego dostawcę.",
       "providerAccountChanged": "Konto dostawcy uległo zmianie. Odśwież i spróbuj ponownie.",
       "routingStatisticsResetInvalid": "Wybierz Voice lub Chat i potwierdź wyzerowanie statystyk.",
-      "recoveryBlocked": "Nie udało się zweryfikować operacji. Odśwież i sprawdź bieżący stan przed ponowieniem."
+      "recoveryBlocked": "Nie udało się zweryfikować operacji. Odśwież i sprawdź bieżący stan przed ponowieniem.",
+      "toolRoutingUnqualified": "Aktywne doradzanie będzie dostępne dopiero po zaliczeniu przez ten model oceny wyboru narzędzi."
     },
     "wizard": {
       "accessSub": "Rozwiń grupę <code>light</code> i wybierz światło, które możesz zweryfikować. Wybierz <strong>W</strong>, aby przyznać dostęp do odczytu i zapisu. Przyznaj całe urządzenie lub rozwiń je, aby wybrać jedną encję. Więcej uprawnień możesz dodać później.",
@@ -2110,6 +2111,16 @@
       "confirm_delete": "Trwale usunąć ten plik odzyskiwania? Może to być jedyna pozostała kopia.",
       "confirm": "Potwierdź",
       "delete": "Usuń"
+    },
+    "toolRouting": {
+      "label": "Weryfikacja wyboru narzędzia",
+      "help": "Udostępnia kontekst zadania dostawcy decyzji. Obserwacja zapisuje zalecenia; Doradzanie może poprosić o ponowne planowanie raz na turę. Uprawnienia i zatwierdzenia nadal obowiązują.",
+      "accountRequired": "Wybierz konto dostawcy decyzji, aby włączyć weryfikację.",
+      "unqualified": "Aktywne doradzanie będzie dostępne dopiero po zaliczeniu przez ten model oceny wyboru narzędzi.",
+      "qualified": "Aktywne doradzanie zweryfikowano dla języków: {languages}. W pozostałych językach zadanie kontynuuje model planujący.",
+      "off": "Wyłączone",
+      "observe": "Tylko obserwacja",
+      "advise": "Doradzanie"
     }
   }
 }

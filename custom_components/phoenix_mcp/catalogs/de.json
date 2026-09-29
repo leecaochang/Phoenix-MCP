@@ -1421,7 +1421,8 @@
       "providerModelNotListed": "Wählen Sie ein vom Anbieter zurückgegebenes Modell.",
       "providerAccountChanged": "Das Anbieterkonto wurde geändert. Laden Sie neu und versuchen Sie es erneut.",
       "routingStatisticsResetInvalid": "Wählen Sie Voice oder Chat und bestätigen Sie das Zurücksetzen der Statistik.",
-      "recoveryBlocked": "Der Vorgang konnte nicht verifiziert werden. Aktualisieren und prüfen Sie den aktuellen Zustand vor einem erneuten Versuch."
+      "recoveryBlocked": "Der Vorgang konnte nicht verifiziert werden. Aktualisieren und prüfen Sie den aktuellen Zustand vor einem erneuten Versuch.",
+      "toolRoutingUnqualified": "Aktive Beratung ist erst verfügbar, wenn dieses Modell die Prüfung der Werkzeugauswahl bestanden hat."
     },
     "approvalSummary": {
       "action.approve": "Genehmigen und ausführen",
@@ -2054,6 +2055,16 @@
       "confirm_delete": "Dieses Wiederherstellungsartefakt endgültig löschen? Es könnte die einzige verbliebene Kopie sein.",
       "confirm": "Bestätigen",
       "delete": "Löschen"
+    },
+    "toolRouting": {
+      "label": "Prüfung der Werkzeugauswahl",
+      "help": "Teilt den Aufgabenkontext mit dem Entscheidungsanbieter. Beobachten zeichnet Empfehlungen auf; Beraten kann einmal pro Runde eine neue Planung anfordern. Berechtigungen und Freigaben gelten weiterhin.",
+      "accountRequired": "Wählen Sie ein Konto beim Entscheidungsanbieter, um die Prüfung zu aktivieren.",
+      "unqualified": "Aktive Beratung ist erst verfügbar, wenn dieses Modell die Prüfung der Werkzeugauswahl bestanden hat.",
+      "qualified": "Aktive Beratung ist für folgende Sprachen geprüft: {languages}. Bei anderen Sprachen entscheidet weiterhin das Planungsmodell.",
+      "off": "Aus",
+      "observe": "Nur beobachten",
+      "advise": "Beraten"
     }
   },
   "notification": {

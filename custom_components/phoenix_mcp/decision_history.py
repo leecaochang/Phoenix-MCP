@@ -103,7 +103,7 @@ def _assistant(message: dict) -> tuple[str, dict[str, str]] | None:
     return ("anthropic", calls) if calls else None
 
 
-def _transcript(messages: list[dict]) -> bool:
+def _transcript(messages: list[dict], pending_calls: dict[str, str] | None = None) -> bool:
     expected = "user"
     pending: dict[str, str] = {}
     seen: set[str] = set()
@@ -156,6 +156,8 @@ def _transcript(messages: list[dict]) -> bool:
                 seen.update(pending)
             else:
                 expected = "user"
+    if pending_calls is not None:
+        return bool(pending) and pending == pending_calls
     return expected == "user" and not pending
 
 
@@ -172,4 +174,29 @@ def structured_context_history(messages: Any) -> list[dict] | None:
             return None
         return deepcopy(messages)
     except (TypeError, ValueError, RecursionError):
+        return None
+
+
+def pending_context_history(messages: Any, calls: list[dict]) -> list[dict] | None:
+    """Validate an actual unfinished exchange, including exact pending arguments."""
+    if not isinstance(messages, list) or not messages or len(messages) > DECISION_CONTEXT_MAX_MESSAGES:
+        return None
+    try:
+        encoded = json.dumps(messages, ensure_ascii=False, allow_nan=False)
+        if len(encoded.encode()) > DECISION_CONTEXT_MAX_BYTES:
+            return None
+        history_texts(messages)
+        pending = {call["id"]: call["name"] for call in calls}
+        if not pending or len(pending) != len(calls) or not _transcript(messages, pending):
+            return None
+        last = messages[-1]
+        if "tool_calls" in last:
+            actual = [(c["id"], c["function"]["name"], _json(c["function"]["arguments"]))
+                      for c in last["tool_calls"]]
+        else:
+            actual = [(c["id"], c["name"], c["input"]) for c in last["content"] if c["type"] == "tool_use"]
+        if actual != [(c["id"], c["name"], c["input"]) for c in calls]:
+            return None
+        return deepcopy(messages)
+    except (KeyError, TypeError, ValueError, RecursionError):
         return None

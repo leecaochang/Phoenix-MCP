@@ -25,7 +25,7 @@ from .const import (
     AGENTCLI_SCROLLBACK_MIN,
     APPROVAL_REASON_FORMAT_INCOMPATIBLE,
     COMMAND_ROUTING_SETTINGS_VERSION, COMMAND_ROUTING_MODES, COMMAND_ROUTING_LANGUAGES, COMMAND_ROUTING_DEFAULT_LANGUAGES,
-    CHAT_COMMAND_ROUTING_MODES,
+    CHAT_COMMAND_ROUTING_MODES, TOOL_ROUTING_MODES,
     COMMAND_ROUTING_TIMEOUT_DEFAULT_MS,
     DECISION_TIMEOUT_DEFAULT_MS, DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS,
     DECISION_REQUEST_BUDGET_MAX,
@@ -625,6 +625,9 @@ class GlobalSettings:
     voice_agent_routing_mode: str = "off"
     command_routing_languages: list[str] = field(default_factory=lambda: list(COMMAND_ROUTING_DEFAULT_LANGUAGES))
     command_routing_timeout_ms: int = COMMAND_ROUTING_TIMEOUT_DEFAULT_MS
+    agentcli_tool_routing_mode: str = "off"
+    voice_agent_tool_routing_mode: str = "off"
+    ai_task_tool_routing_mode: str = "off"
     decision_provider_id: str | None = None
     decision_shadow_enabled: bool = False
     decision_timeout_ms: int = DECISION_TIMEOUT_DEFAULT_MS
@@ -681,6 +684,9 @@ class GlobalSettings:
             "voice_agent_routing_mode": self.voice_agent_routing_mode,
             "command_routing_languages": list(self.command_routing_languages),
             "command_routing_timeout_ms": self.command_routing_timeout_ms,
+            "agentcli_tool_routing_mode": self.agentcli_tool_routing_mode,
+            "voice_agent_tool_routing_mode": self.voice_agent_tool_routing_mode,
+            "ai_task_tool_routing_mode": self.ai_task_tool_routing_mode,
             "decision_provider_id": self.decision_provider_id,
             "decision_shadow_enabled": self.decision_shadow_enabled,
             "decision_timeout_ms": self.decision_timeout_ms,
@@ -744,6 +750,9 @@ class GlobalSettings:
             agentcli_routing_shadow_enabled=data.get("agentcli_routing_shadow_enabled") is True,
             agentcli_routing_mode=_closed_choice(data.get("agentcli_routing_mode"), CHAT_COMMAND_ROUTING_MODES, "off"),
             assist_bound_token_id=_coerce_opt_str(data.get("assist_bound_token_id")),
+            agentcli_tool_routing_mode=_closed_choice(data.get("agentcli_tool_routing_mode"), TOOL_ROUTING_MODES, "off"),
+            voice_agent_tool_routing_mode=_closed_choice(data.get("voice_agent_tool_routing_mode"), TOOL_ROUTING_MODES, "off"),
+            ai_task_tool_routing_mode=_closed_choice(data.get("ai_task_tool_routing_mode"), TOOL_ROUTING_MODES, "off"),
             decision_provider_id=data.get("decision_provider_id") if isinstance(data.get("decision_provider_id"), str) else None,
             decision_shadow_enabled=data.get("decision_shadow_enabled") is True,
             decision_timeout_ms=_clamp_range(data.get("decision_timeout_ms", DECISION_TIMEOUT_DEFAULT_MS),

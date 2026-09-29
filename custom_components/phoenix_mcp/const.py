@@ -2001,8 +2001,8 @@ DECISION_MAX_RESPONSE_BYTES = 65536
 DECISION_MAX_ERROR_BYTES = 4096
 DECISION_TYPESAFE_HTTP_ERRORS = {"max_tokens_exceeded": "provider_context_limit"}
 DECISION_METRIC_SAMPLES = 256
-DECISION_METRIC_SCOPES = frozenset({"preview", "voice", "chat", "voice_shadow", "chat_shadow"})
-DECISION_METRIC_OPERATIONS = frozenset({"classify", "target", "context", "batch", "reference"})
+DECISION_METRIC_SCOPES = frozenset({"preview", "voice", "chat", "voice_shadow", "chat_shadow", "tool_chat", "tool_voice", "tool_ai_task"})
+DECISION_METRIC_OPERATIONS = frozenset({"classify", "target", "context", "batch", "reference", "tool"})
 DECISION_DIAGNOSTIC_QUESTIONS = frozenset({
     "route", "target", "value", "attribute", "color", "percentage", "summary_scope", "summary",
 })
@@ -2273,3 +2273,25 @@ UNKNOWN_ARGUMENT_ALIASES = {
 }
 UNKNOWN_ARGUMENT_MAX_NAME = 80
 UNKNOWN_ARGUMENT_MAX_ERRORS = 8
+
+# Tool advice has separate qualification from direct-command execution.
+TOOL_ROUTING_MODES = frozenset({"off", "observe", "advise"})
+TOOL_ROUTING_SETTINGS = {
+    "chat": "agentcli_tool_routing_mode", "voice": "voice_agent_tool_routing_mode",
+    "ai_task": "ai_task_tool_routing_mode",
+}
+TOOL_ROUTING_MAX_REVIEWS = 2
+TOOL_ROUTING_MAX_REPLANS = 1
+TOOL_ROUTING_MAX_BYTES = 262144
+TOOL_ROUTING_MAX_GROUPS = 8
+# (provider, endpoint, configured model, language): admitted returned models.
+# Populate only from independent tool-selection and paired task qualification.
+TOOL_ROUTING_QUALIFIED_MODELS: dict[tuple[str, str, str, str], tuple[str, ...]] = {}
+TOOL_ROUTING_REASONS = frozenset({
+    "agreement", "alternative", "replan", "declined", "low_probability", "unqualified",
+    "off", "limit", "last_round", "no_account", "unsupported_language", "context_unavailable",
+    "catalog_unavailable", "catalog_changed", "context_changed", "authority_changed", "cancelled",
+    "busy", "timeout", "unavailable", "malformed", "request_budget_exhausted", "budget_unavailable",
+    "provider_context_limit", "authentication", "rate_limited", "http_error", "response_too_large",
+    "model_unverified", "too_many_targets", "category_mismatch",
+})

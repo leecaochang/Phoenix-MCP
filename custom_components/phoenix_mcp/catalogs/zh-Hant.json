@@ -136,7 +136,8 @@
       "providerModelNotListed": "請選取此提供者傳回的模型。",
       "providerAccountChanged": "提供者帳戶已變更，請重新整理後再試。",
       "routingStatisticsResetInvalid": "請選擇 Voice 或 Chat 並確認重設統計。",
-      "recoveryBlocked": "無法驗證操作結果。請重新整理並檢查目前狀態，再行重試。"
+      "recoveryBlocked": "無法驗證操作結果。請重新整理並檢查目前狀態，再行重試。",
+      "toolRoutingUnqualified": "此模型通過工具選擇評估前，無法啟用建議模式。"
     },
     "agentchat": {
       "answerAnyway": "仍然回答",
@@ -2059,6 +2060,16 @@
       "confirm_delete": "永久刪除此復原檔案？它可能是僅存的副本。",
       "confirm": "確認",
       "delete": "刪除"
+    },
+    "toolRouting": {
+      "label": "工具選擇複核",
+      "help": "將任務上下文分享給決策提供商。觀察模式記錄建議；建議模式每輪最多請求一次重新規劃。權限和審批仍然適用。",
+      "accountRequired": "請選擇決策提供商帳戶以啟用複核。",
+      "unqualified": "此模型通過工具選擇評估前，無法啟用建議模式。",
+      "qualified": "建議模式已通過以下語言的評估：{languages}。其他語言繼續由規劃模型處理。",
+      "off": "關閉",
+      "observe": "僅觀察",
+      "advise": "建議"
     }
   },
   "voice": {

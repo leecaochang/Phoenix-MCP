@@ -1709,7 +1709,8 @@
       "providerModelNotListed": "Choisissez un modèle renvoyé par ce fournisseur.",
       "providerAccountChanged": "Le compte du fournisseur a changé. Rechargez et réessayez.",
       "routingStatisticsResetInvalid": "Choisissez Voice ou Chat et confirmez la réinitialisation des statistiques.",
-      "recoveryBlocked": "L’opération n’a pas pu être vérifiée. Actualisez et inspectez l’état actuel avant de réessayer."
+      "recoveryBlocked": "L’opération n’a pas pu être vérifiée. Actualisez et inspectez l’état actuel avant de réessayer.",
+      "toolRoutingUnqualified": "Le conseil actif reste indisponible tant que ce modèle ne réussit pas l’évaluation du choix des outils."
     },
     "mesaSuggestion": {
       "baseline_note": " Interdit correspond à la ligne de base intégrée pour ce domaine, le profil créé rend donc cette intention explicite ; choisissez Confirmer dans Révision pour autoriser plutôt le contrôle de l'agent derrière les approbations.",
@@ -2054,6 +2055,16 @@
       "confirm_delete": "Supprimer définitivement cet artefact de récupération ? Il peut s’agir de la seule copie restante.",
       "confirm": "Confirmer",
       "delete": "Supprimer"
+    },
+    "toolRouting": {
+      "label": "Vérification du choix des outils",
+      "help": "Partage le contexte de la tâche avec le fournisseur de décisions. Observer enregistre les recommandations ; Conseiller peut demander une nouvelle planification par tour. Les permissions et approbations restent applicables.",
+      "accountRequired": "Sélectionnez un compte de fournisseur de décisions pour activer la vérification.",
+      "unqualified": "Le conseil actif reste indisponible tant que ce modèle ne réussit pas l’évaluation du choix des outils.",
+      "qualified": "Le conseil actif est validé pour : {languages}. Pour les autres langues, le modèle de planification poursuit la tâche.",
+      "off": "Désactivé",
+      "observe": "Observer uniquement",
+      "advise": "Conseiller"
     }
   },
   "notification": {

@@ -1713,7 +1713,8 @@
       "providerModelNotListed": "Choose a model returned by this provider.",
       "providerAccountChanged": "Provider account changed. Reload and try again.",
       "routingStatisticsResetInvalid": "Choose Voice or Chat and confirm the statistics reset.",
-      "recoveryBlocked": "The operation could not be verified. Refresh and inspect current state before trying again."
+      "recoveryBlocked": "The operation could not be verified. Refresh and inspect current state before trying again.",
+      "toolRoutingUnqualified": "Active advice is unavailable until this model passes tool-selection qualification."
     },
     "mesaSuggestion": {
       "baseline_note": " Prohibited matches the built-in baseline for this domain, so the authored profile makes that intent explicit; choose confirm in Review to allow agent control behind approvals instead.",
@@ -2058,6 +2059,16 @@
       "confirm_delete": "Permanently delete this recovery artifact? It may be the only remaining copy.",
       "confirm": "Confirm",
       "delete": "Delete"
+    },
+    "toolRouting": {
+      "label": "Tool selection review",
+      "help": "Shares task context with the Decision Provider. Observe records recommendations; Advise may request one replan per turn. Permissions and approvals still apply.",
+      "accountRequired": "Select a Decision Provider account to enable review.",
+      "unqualified": "Active advice is unavailable until this model passes tool-selection qualification.",
+      "qualified": "Active advice is qualified for: {languages}. Other languages continue with the planner.",
+      "off": "Off",
+      "observe": "Observe only",
+      "advise": "Advise"
     }
   },
   "notification": {

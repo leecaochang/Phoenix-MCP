@@ -634,7 +634,8 @@
       "providerModelNotListed": "请选择此提供商返回的模型。",
       "providerAccountChanged": "提供商账户已更改，请刷新后重试。",
       "routingStatisticsResetInvalid": "请选择 Voice 或 Chat 并确认重置统计。",
-      "recoveryBlocked": "无法验证操作结果。请刷新并检查当前状态，然后再试。"
+      "recoveryBlocked": "无法验证操作结果。请刷新并检查当前状态，然后再试。",
+      "toolRoutingUnqualified": "此模型通过工具选择评估前，无法启用建议模式。"
     },
     "audit": {
       "allOutcomes": "所有结果",
@@ -2054,6 +2055,16 @@
       "confirm_delete": "永久删除此恢复文件？它可能是仅存的副本。",
       "confirm": "确认",
       "delete": "删除"
+    },
+    "toolRouting": {
+      "label": "工具选择复核",
+      "help": "将任务上下文分享给决策提供商。观察模式记录建议；建议模式每轮最多请求一次重新规划。权限和审批仍然适用。",
+      "accountRequired": "请选择决策提供商账户以启用复核。",
+      "unqualified": "此模型通过工具选择评估前，无法启用建议模式。",
+      "qualified": "建议模式已通过以下语言的评估：{languages}。其他语言继续由规划模型处理。",
+      "off": "关闭",
+      "observe": "仅观察",
+      "advise": "建议"
     }
   },
   "notification": {

@@ -131,7 +131,8 @@
       "providerModelNotListed": "Scegli un modello restituito da questo fornitore.",
       "providerAccountChanged": "L’account del fornitore è cambiato. Ricarica e riprova.",
       "routingStatisticsResetInvalid": "Scegli Voice o Chat e conferma il ripristino delle statistiche.",
-      "recoveryBlocked": "Impossibile verificare l’operazione. Aggiorna e controlla lo stato attuale prima di riprovare."
+      "recoveryBlocked": "Impossibile verificare l’operazione. Aggiorna e controlla lo stato attuale prima di riprovare.",
+      "toolRoutingUnqualified": "I consigli attivi non sono disponibili finché questo modello non supera la valutazione della scelta degli strumenti."
     },
     "agentchat": {
       "announceApproval": "L'azione {name} richiede la tua approvazione.",
@@ -2054,6 +2055,16 @@
       "confirm_delete": "Eliminare definitivamente questo artefatto di ripristino? Potrebbe essere l’unica copia rimasta.",
       "confirm": "Conferma",
       "delete": "Elimina"
+    },
+    "toolRouting": {
+      "label": "Verifica della scelta degli strumenti",
+      "help": "Condivide il contesto dell’attività con il fornitore di decisioni. Osserva registra i suggerimenti; Consiglia può richiedere una nuova pianificazione per turno. Permessi e approvazioni restano validi.",
+      "accountRequired": "Seleziona un account del fornitore di decisioni per attivare la verifica.",
+      "unqualified": "I consigli attivi non sono disponibili finché questo modello non supera la valutazione della scelta degli strumenti.",
+      "qualified": "I consigli attivi sono convalidati per: {languages}. Per le altre lingue continua il modello di pianificazione.",
+      "off": "Disattivato",
+      "observe": "Solo osservazione",
+      "advise": "Consiglia"
     }
   },
   "notification": {

@@ -152,7 +152,7 @@ def voice_result(outcome: str, pending: bool, has_text: bool) -> None:
 
 def begin_decision(scope: str) -> TurnStatistics | None:
     turn = _current.get()
-    if turn is not None and not turn.closed and scope == turn.surface:
+    if turn is not None and not turn.closed and scope in (turn.surface, f"tool_{turn.surface}"):
         turn.decision_usage["requests"] += 1
         return turn
     return None

@@ -978,7 +978,8 @@
       "providerModelNotListed": "Kies een model dat deze provider heeft teruggegeven.",
       "providerAccountChanged": "Het provideraccount is gewijzigd. Herlaad en probeer het opnieuw.",
       "routingStatisticsResetInvalid": "Kies Voice of Chat en bevestig het resetten van de statistieken.",
-      "recoveryBlocked": "De bewerking kon niet worden geverifieerd. Vernieuw en controleer de huidige toestand voordat je het opnieuw probeert."
+      "recoveryBlocked": "De bewerking kon niet worden geverifieerd. Vernieuw en controleer de huidige toestand voordat je het opnieuw probeert.",
+      "toolRoutingUnqualified": "Actief advies is pas beschikbaar nadat dit model de evaluatie van gereedschapskeuze heeft doorstaan."
     },
     "wizard": {
       "accessSub": "Vouw de <code>light</code>-groep uit en kies een licht dat je kunt controleren. Selecteer <strong>W</strong> om lees- en schrijftoegang te verlenen. Ken een heel apparaat toe of vouw het uit om één entiteit te kiezen. Je kunt later meer machtigingen toevoegen.",
@@ -2090,6 +2091,16 @@
       "confirm_delete": "Dit herstelbestand definitief verwijderen? Het kan de enige overgebleven kopie zijn.",
       "confirm": "Bevestigen",
       "delete": "Verwijderen"
+    },
+    "toolRouting": {
+      "label": "Controle van gereedschapskeuze",
+      "help": "Deelt de taakcontext met de beslissingsprovider. Observeren registreert aanbevelingen; Adviseren kan eenmaal per beurt om een nieuw plan vragen. Machtigingen en goedkeuringen blijven gelden.",
+      "accountRequired": "Selecteer een account bij de beslissingsprovider om de controle in te schakelen.",
+      "unqualified": "Actief advies is pas beschikbaar nadat dit model de evaluatie van gereedschapskeuze heeft doorstaan.",
+      "qualified": "Actief advies is gevalideerd voor: {languages}. Voor andere talen gaat het planningsmodel verder.",
+      "off": "Uit",
+      "observe": "Alleen observeren",
+      "advise": "Adviseren"
     }
   }
 }

@@ -12,7 +12,9 @@ from .command_routing import RoutingAuthority, routing_language, routing_languag
 from .command_operations import numeric_operation
 from .const import MAX_SEARCH_QUERY_LEN, DECISION_TARGET_INTENTS, DECISION_HYBRID_REASONS, DECISION_NUMERIC_CATEGORIES, DECISION_EXECUTION_CATEGORIES, DECISION_ENTITY_CATEGORIES
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
+from .const import TOOL_ROUTING_SETTINGS, TOOL_ROUTING_REASONS
 from .decision_metrics import DecisionMetrics
+from copy import deepcopy
 from .decision_identity import explicit_write_target
 from .numeric_evidence import read_explicit_percentage, compare_percentage
 
@@ -31,16 +33,28 @@ class DecisionShadow:
     chat_choices: dict[str, int] = field(default_factory=dict)
     chat_hybrid_reasons: dict[str, int] = field(default_factory=dict)
     metrics: DecisionMetrics = field(default_factory=DecisionMetrics)
+    tool_reviews: dict[str, dict] = field(default_factory=dict)
 
     def summary(self) -> dict:
         return {"observations": self.observations, "reasons": dict(self.reasons),
                 "choices": dict(self.choices), "busy": self.task is not None, "requests": self.metrics.summary(),
+                "tool_routing": deepcopy(self.tool_reviews),
                 "mean_elapsed_ms": round(self.total_elapsed_ms / self.observations, 2)
                 if self.observations else None,
                 "hybrid": {"evaluations": sum(self.hybrid_reasons.values()), "reasons": dict(self.hybrid_reasons)},
                 "chat_hybrid": {"evaluations": sum(self.chat_hybrid_reasons.values()), "reasons": dict(self.chat_hybrid_reasons)},
                 "agent_chat": {"observations": sum(self.chat_reasons.values()),
                                "reasons": dict(self.chat_reasons), "choices": dict(self.chat_choices)}}
+
+    def observe_tool_review(self, surface: str, reason: str, elapsed_ms: float) -> None:
+        """Aggregate fixed review labels, never candidate names or context."""
+        if surface not in TOOL_ROUTING_SETTINGS:
+            return
+        reason = reason if reason in TOOL_ROUTING_REASONS else "unavailable"
+        stats = self.tool_reviews.setdefault(surface, {"reviews": 0, "reasons": {}, "elapsed_ms": 0.0})
+        stats["reviews"] += reason not in {"off", "limit", "last_round", "busy", "unsupported_language"}
+        stats["reasons"][reason] = stats["reasons"].get(reason, 0) + 1
+        stats["elapsed_ms"] += elapsed_ms
 
     def observe_hybrid(self, result: dict, *, authority_changed: bool = False, chat: bool = False) -> None:
         """Count each ingress separately without decision payloads or execution claims."""
