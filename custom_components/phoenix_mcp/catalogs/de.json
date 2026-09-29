@@ -406,7 +406,7 @@
       "home_companion": {
         "label": "Hausbegleiter",
         "description": "Experimentell: ein Aufgabenwerkzeug für ausgewählte Lichter, Ventilatoren und einfache Sensoren. Nutzt das Sprachdialogmodell.",
-        "setup": "Wählen Sie Anbieter und Modell in den Spracheinstellungen. Gewähren Sie einzelnen Lichtern und Ventilatoren Lese- oder Schreibzugriff; ausgewählte Temperatur-, Feuchtigkeits-, Beleuchtungs-, Leistungs-, Energie- und Batteriesensoren sind nur lesbar. Domain- und Gerätefreigaben werden ignoriert. Durchleitung und vollständige Werkzeugankündigung sind deaktiviert. Änderungen an Fähigkeiten erweitern den festen internen Katalog nicht."
+        "setup": "Wählen Sie Anbieter und Modell in den Spracheinstellungen. Gewähren Sie Lichtern und Ventilatoren über den normalen Berechtigungsbaum Lese- oder Schreibzugriff; ausgewählte Temperatur-, Feuchtigkeits-, Beleuchtungs-, Leistungs-, Energie- und Batteriesensoren sind nur lesbar. Für Domain-, Geräte- und Entitätsfreigaben gelten dieselben Vererbungs- und Sperrregeln wie bei anderen Personas. Durchleitung und vollständige Werkzeugankündigung sind deaktiviert. Änderungen an Fähigkeiten erweitern den festen internen Katalog nicht."
       }
     },
     "wizard": {
@@ -2086,6 +2086,7 @@
     "not_configured": "Der Phoenix-MCP-Sprachassistent ist nicht vollständig konfiguriert.",
     "out_of_steps": "Entschuldigung, mir sind die Schritte ausgegangen, bevor ich fertig war.",
     "output_limit": "Entschuldigung, das Modell hat zu viel Ausgabe erzeugt, daher habe ich aufgehört.",
+    "prior_action_unresolved": "Diese neue Anfrage wurde nicht ausgeführt, weil das Ergebnis einer früheren Aktion noch ungeklärt ist. Prüfen Sie die frühere Aktion in Home Assistant und klären Sie sie unter Einstellungen > System > Reparaturen, bevor Sie es erneut versuchen.",
     "provider_error": "Entschuldigung, {reason}.",
     "token_unavailable": "Das Token des Phoenix-MCP-Sprachassistenten ist nicht mehr verfügbar.",
     "unavailable": "Der Phoenix-MCP-Sprachassistent ist derzeit nicht verfügbar.",

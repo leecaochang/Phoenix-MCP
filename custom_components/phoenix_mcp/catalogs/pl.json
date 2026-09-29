@@ -13,6 +13,7 @@
     "not_configured": "Agent głosowy Phoenix MCP nie jest w pełni skonfigurowany.",
     "out_of_steps": "Przepraszam, skończyły mi się kroki przed ukończeniem tego.",
     "output_limit": "Przepraszam, model wygenerował zbyt dużo danych wyjściowych, więc się zatrzymałem.",
+    "prior_action_unresolved": "To nowe żądanie nie zostało wykonane, ponieważ wynik wcześniejszej czynności pozostaje nierozstrzygnięty. Sprawdź wcześniejszą czynność w Home Assistant i rozwiąż problem w Ustawienia > System > Naprawy, zanim spróbujesz ponownie.",
     "provider_error": "Przepraszam, {reason}.",
     "token_unavailable": "Token agenta głosowego Phoenix MCP nie jest już dostępny.",
     "unavailable": "Agent głosowy Phoenix MCP jest obecnie niedostępny.",
@@ -128,7 +129,7 @@
       "home_companion": {
         "label": "Asystent domowy",
         "description": "Eksperymentalne: jedno narzędzie zadań dla wybranych świateł, wentylatorów i podstawowych czujników. Używa modelu rozmów głosowych.",
-        "setup": "Wybierz dostawcę i model w ustawieniach głosu. Nadaj ODCZYT lub ZAPIS pojedynczym światłom i wentylatorom; wybrane czujniki temperatury, wilgotności, oświetlenia, mocy, energii i baterii pozostają tylko do odczytu. Uprawnienia domen i urządzeń są ignorowane. Tryb bezpośredni i udostępnianie wszystkich narzędzi są wyłączone. Zmiany możliwości nie rozszerzają stałego katalogu wewnętrznego."
+        "setup": "Wybierz dostawcę i model w ustawieniach głosu. Nadaj ODCZYT lub ZAPIS światłom i wentylatorom za pomocą zwykłego drzewa uprawnień; wybrane czujniki temperatury, wilgotności, oświetlenia, mocy, energii i baterii pozostają tylko do odczytu. Uprawnienia domen, urządzeń i encji podlegają tym samym regułom dziedziczenia i odmowy co w innych personach. Tryb bezpośredni i udostępnianie wszystkich narzędzi są wyłączone. Zmiany możliwości nie rozszerzają stałego katalogu wewnętrznego."
       }
     },
     "mesaSuggestion": {

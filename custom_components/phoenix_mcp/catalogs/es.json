@@ -1978,7 +1978,7 @@
       "home_companion": {
         "label": "Asistente del hogar",
         "description": "Experimental: una herramienta de tareas para luces, ventiladores y sensores básicos seleccionados. Usa el modelo de conversación de Voz.",
-        "setup": "Elige un proveedor y un modelo en los ajustes de Voz. Concede LECTURA o ESCRITURA a luces y ventiladores individuales; los sensores seleccionados de temperatura, humedad, iluminación, potencia, energía y batería son de solo lectura. Se ignoran los permisos por dominio o dispositivo. El acceso directo y el anuncio de todas las herramientas están desactivados. Cambiar capacidades no amplía el catálogo interno fijo."
+        "setup": "Elige un proveedor y un modelo en los ajustes de Voz. Concede LECTURA o ESCRITURA a luces y ventiladores mediante el árbol de permisos habitual; los sensores seleccionados de temperatura, humedad, iluminación, potencia, energía y batería son de solo lectura. Los permisos de dominio, dispositivo y entidad siguen las mismas reglas de herencia y denegación que en las demás personas. El acceso directo y el anuncio de todas las herramientas están desactivados. Cambiar capacidades no amplía el catálogo interno fijo."
       }
     },
     "shell": {
@@ -2086,6 +2086,7 @@
     "not_configured": "El agente de voz de Phoenix MCP no está totalmente configurado.",
     "out_of_steps": "Lo siento, me quedé sin pasos antes de terminar.",
     "output_limit": "Lo siento, el modelo generó demasiada salida, así que me detuve.",
+    "prior_action_unresolved": "Esta nueva solicitud no se ejecutó porque el resultado de una acción anterior sigue sin resolverse. Revisa esa acción en Home Assistant y resuélvela en Ajustes > Sistema > Reparaciones antes de volver a intentarlo.",
     "provider_error": "Lo siento, {reason}.",
     "token_unavailable": "El token del agente de voz de Phoenix MCP ya no está disponible.",
     "unavailable": "El agente de voz de Phoenix MCP no está disponible en este momento.",

@@ -304,7 +304,7 @@
       "home_companion": {
         "label": "Compagnon domestique",
         "description": "Expérimental : un outil de tâches pour les lampes, ventilateurs et capteurs simples sélectionnés. Utilise le modèle de conversation vocale.",
-        "setup": "Choisissez un fournisseur et un modèle dans les réglages vocaux. Accordez la LECTURE ou l’ÉCRITURE aux lampes et ventilateurs individuellement ; les capteurs sélectionnés de température, humidité, éclairement, puissance, énergie et batterie restent en lecture seule. Les autorisations par domaine ou appareil sont ignorées. Le mode direct et l’annonce de tous les outils sont désactivés. Modifier les capacités n’élargit pas le catalogue interne fixe."
+        "setup": "Choisissez un fournisseur et un modèle dans les réglages vocaux. Accordez la LECTURE ou l’ÉCRITURE aux lampes et ventilateurs via l’arbre de permissions habituel ; les capteurs sélectionnés de température, humidité, éclairement, puissance, énergie et batterie restent en lecture seule. Les autorisations de domaine, d’appareil et d’entité suivent les mêmes règles d’héritage et de refus que pour les autres personas. Le mode direct et l’annonce de tous les outils sont désactivés. Modifier les capacités n’élargit pas le catalogue interne fixe."
       }
     },
     "tokens": {
@@ -2086,6 +2086,7 @@
     "not_configured": "L'agent vocal Phoenix MCP n'est pas entièrement configuré.",
     "out_of_steps": "Désolé, je n'ai pas eu assez d'étapes pour terminer.",
     "output_limit": "Désolé, le modèle a produit trop de contenu en sortie, je me suis donc arrêté.",
+    "prior_action_unresolved": "Cette nouvelle demande n’a pas été exécutée car le résultat d’une action précédente reste incertain. Vérifiez cette action dans Home Assistant et résolvez le problème dans Paramètres > Système > Réparations avant de réessayer.",
     "provider_error": "Désolé, {reason}.",
     "token_unavailable": "Le jeton de l'agent vocal Phoenix MCP n'est plus disponible.",
     "unavailable": "L'agent vocal Phoenix MCP est actuellement indisponible.",

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from itertools import product
 from typing import Any
 from unittest.mock import patch
 
@@ -64,6 +65,21 @@ def _make_token(
 
 def _node(state: str, hint: str | None = None) -> PermissionNode:
     return PermissionNode(state=state, hint=hint)
+
+
+@pytest.mark.parametrize('domain_state,device_state,entity_state', product(
+    (None, 'GREY', 'YELLOW', 'GREEN', 'RED'), repeat=3,
+))
+async def test_companion_uses_ordinary_light_tree_precedence(hass, device_env, domain_state, device_state, entity_state):
+    entity = device_env['light_main']
+    token = _make_token(
+        domains={'light':domain_state} if domain_state else {},
+        devices={device_env['device'].id:device_state} if device_state else {},
+        entities={entity.entity_id:entity_state} if entity_state else {},
+    )
+    ordinary = resolve(entity.entity_id, token, hass)
+    token.persona = 'home_companion'
+    assert resolve(entity.entity_id, token, hass) == ordinary
 
 
 @pytest.fixture

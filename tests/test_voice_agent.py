@@ -87,6 +87,19 @@ def _make_data(**settings_over):
 # --------------------------------------------------------------------------- #
 
 @pytest.mark.asyncio
+async def test_prior_action_warning_says_new_request_was_not_executed(hass):
+    token = _make_token()
+    data = _make_data()
+    await data.agent_recovery.begin(token.id, 'call_service', 'earlier')
+    data.agent_recovery.interrupted('earlier')
+    with patch('custom_components.phoenix_mcp.mcp_view._build_instructions', return_value='sys'), \
+         patch.object(agentcli, '_stream_turn_resilient') as stream:
+        result = await async_run_voice_turn(hass, data, token, _MockProvider(), None, '', 'Turn on the light.', language='en')
+    assert result == VOICE_TEMPLATES['prior_action_unresolved']
+    stream.assert_not_called()
+    assert data.agent_recovery.blocks(token.id)
+
+@pytest.mark.asyncio
 async def test_voice_turn_tool_then_answer_uses_voice_sentinel():
     token = _make_token()
     data = _make_data()

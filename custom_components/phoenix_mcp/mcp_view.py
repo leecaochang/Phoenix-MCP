@@ -8107,7 +8107,7 @@ async def _dispatch_mcp(
             if data.agent_recovery.blocks(token.id, request_id):
                 _log(data, token, request_id=request_id, method=params["name"], resource=params["name"],
                      outcome="denied", client_ip=client_ip)
-                recovery_error = _tool_error("An earlier agent action has an unknown outcome. Check Home Assistant Repairs before retrying; reads remain available.")
+                recovery_error = _tool_error("This new request was not executed because an earlier agent action has an unresolved outcome. Check the earlier action in Home Assistant and resolve it in Settings > System > Repairs before trying again. Direct read-only tools remain available where this token exposes them; delegated requests are blocked.")
                 return _jsonrpc_result(msg_id, recovery_error), method, params["name"], "denied"
         result = await _dispatch_mcp_authorized(method, msg_id, params, token, hass, data, client_ip, base_url, request_id)
         check_request_authority()

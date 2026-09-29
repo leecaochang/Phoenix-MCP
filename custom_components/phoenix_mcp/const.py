@@ -1687,6 +1687,7 @@ VOICE_TEMPLATES: dict[str, str] = {
     "could_not_complete": "Sorry, I could not complete that.",
     "provider_error": "Sorry, {reason}.",
     "outcome_unknown": 'Actions may have run. Check Home Assistant and approval results before retrying. Resolve uncertain actions in Settings > System > Repairs.',
+    "prior_action_unresolved": "This new request was not executed because an earlier action has an unresolved outcome. Check the earlier action in Home Assistant and resolve it in Settings > System > Repairs before trying again.",
     "output_limit": "Sorry, the model produced too much output, so I stopped.",
     "out_of_steps": "Sorry, I ran out of steps before finishing that.",
     "focus_declined": (

@@ -107,17 +107,46 @@ async def test_guessed_external_calls_never_dispatch(hass,companion,name):
     assert not companion[0].store.get_pending_approvals()
 
 
-async def test_scope_ignores_inherited_grants_and_excludes_sensitive_classes(hass,companion):
+async def test_scope_honors_inherited_grants_and_excludes_sensitive_classes(hass,companion):
     _,token,_,_=companion
     token.permissions.domains = {d:PermissionNode('GREEN') for d in ('light','sensor','lock')}
     token.permissions.entities['lock.door'] = PermissionNode('GREEN')
     token.permissions.entities['sensor.location'] = PermissionNode('GREEN')
     assert resolve('light.selected',token,hass) == Permission.WRITE
+    assert resolve('light.other',token,hass) == Permission.WRITE
     assert resolve('sensor.temperature',token,hass) == Permission.READ
-    for entity in ('light.other','lock.door','sensor.location'):
+    for entity in ('lock.door','sensor.location'):
         assert resolve(entity,token,hass) == Permission.NO_ACCESS
     token.permissions.domains['light'] = PermissionNode('RED')
     assert resolve('light.selected',token,hass) == Permission.DENY
+
+
+@pytest.mark.parametrize('grant', ['YELLOW', 'GREEN'])
+async def test_domain_grants_discover_lights_and_gate_native_writes(hass,companion,monkeypatch,grant):
+    _, token, _, _ = companion
+    token.permissions = PermissionTree(
+        domains={'light':PermissionNode(grant)},
+        entities={'light.other':PermissionNode('RED')},
+    )
+    calls = []
+    async def turn_on(call):
+        calls.append(call.data)
+    hass.services.async_register('light','turn_on',turn_on)
+    transcripts = []
+    scripted(monkeypatch, [
+        [('search_entities', {'domain':'light'})],
+        [('light__HassLightSet', {'domain':['light'],'brightness':40})],
+        json.dumps({'status':'completed' if grant == 'GREEN' else 'refused','message':'Finished.'}),
+    ], transcripts=transcripts)
+    result = payload(await rpc(hass,companion))
+    discovered = json.dumps(transcripts[1][-1])
+    assert 'light.selected' in discovered and 'light.other' not in discovered
+    if grant == 'GREEN':
+        assert result['status'] == 'completed'
+        assert len(calls) == 1 and calls[0]['entity_id'] == ['light.selected']
+    else:
+        assert result['status'] == 'refused'
+        assert not calls
 
 
 async def test_shared_loop_reads_with_complete_catalog(hass,companion,monkeypatch):
@@ -245,6 +274,7 @@ async def test_uncertain_prior_write_blocks_new_provider_turn(hass,companion,mon
     catalogs=scripted(monkeypatch,[])
     result=await rpc(hass,companion)
     assert result[0]['result']['isError']
+    assert 'This new request was not executed' in result[0]['result']['content'][0]['text']
     assert not catalogs
 
 
@@ -287,6 +317,61 @@ async def test_provider_failure_after_write_does_not_replay(hass,companion,monke
     assert result['status']=='outcome_unknown'
     assert len(calls)==1
     assert not companion[0].home_companion_active
+
+
+@pytest.mark.parametrize('entity', ['light.other', 'light.nonexistent'])
+async def test_failed_reads_explain_name_or_access_without_revealing_hidden_entities(hass,companion,monkeypatch,entity):
+    scripted(monkeypatch, [[('get_state', {'entity_id':entity,'projection':{'kind':'compact'}})],
+                          json.dumps({'status':'completed','message':'Unsupported claim.'})])
+    result = payload(await rpc(hass,companion))
+    assert result['status'] == 'refused'
+    assert 'name or search filters' in result['message']
+    assert 'may not have access' in result['message']
+    assert 'try again with the complete request' in result['message']
+    assert entity not in result['message']
+
+
+async def test_last_round_reports_completed_write_without_another_tool_batch(hass,companion,monkeypatch):
+    calls = []
+    async def turn_on(call):
+        calls.append(call.data)
+    hass.services.async_register('light','turn_on',turn_on)
+    read = [('get_state', {'entity_id':'light.selected','projection':{'kind':'compact'}})]
+    catalogs = scripted(monkeypatch, [read, read,
+        [('light__HassLightSet', {'name':'light.selected','brightness':40})],
+        json.dumps({'status':'completed','message':'The brightness command was accepted.'}),
+    ])
+    result = payload(await rpc(hass,companion))
+    assert result['status'] == 'completed'
+    assert len(calls) == 1 and len(catalogs) == 4
+    assert catalogs[-1] == [] and all(catalogs[:-1])
+    assert not companion[0].agent_recovery.blocks(companion[1].id)
+
+
+@pytest.mark.parametrize('write_first', [False, True])
+async def test_final_round_ignoring_no_tools_cannot_act_and_reports_prior_effects(hass,companion,monkeypatch,write_first):
+    calls = []
+    async def turn_on(call):
+        calls.append(call.data)
+    hass.services.async_register('light','turn_on',turn_on)
+    read = [('get_state', {'entity_id':'light.selected','projection':{'kind':'compact'}})]
+    write = [('light__HassLightSet', {'name':'light.selected','brightness':40})]
+    catalogs = scripted(monkeypatch, [write if write_first else read, read, read,
+        [('light__HassLightSet', {'name':'light.selected','brightness':70})],
+    ])
+    result = payload(await rpc(hass,companion))
+    assert result['status'] == 'exhausted'
+    assert len(catalogs) == 4 and catalogs[-1] == []
+    assert len(result['tool_outcomes']) == 3
+    assert len(calls) == int(write_first)
+    assert companion[0].agent_recovery.blocks(companion[1].id) is write_first
+    if write_first:
+        assert 'may already have changed' in result['message']
+        assert 'Do not repeat' in result['message']
+    else:
+        assert 'too many steps' in result['message']
+        assert 'try again with one complete request' in result['message']
+    assert not companion[0].store.get_pending_approvals()
 
 
 @pytest.mark.parametrize('write_first', [False, True])

@@ -16,7 +16,7 @@ describe("Home Companion setup", () => {
     await waitFor(() => expect(onUpdate).toHaveBeenCalledWith(updated));
     expect(api.patchToken).toHaveBeenCalledWith("test", expect.objectContaining({ persona: "home_companion", cap_filesystem: "deny" }));
     view.rerender(<PersonaPicker token={updated} onUpdate={onUpdate} />);
-    expect(screen.getByText(/Domain\/device grants are ignored/)).toBeTruthy();
+    expect(screen.getByText(/Domain, device and entity grants use the same inheritance and denial rules/)).toBeTruthy();
     expect(screen.getByRole("button", { name: /Home Companion/ }).getAttribute("aria-pressed")).toBe("true");
   });
 });

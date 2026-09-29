@@ -305,7 +305,7 @@
       "home_companion": {
         "label": "Home Companion",
         "description": "Experimental: one task tool for selected lights, fans and basic sensors. Uses the Voice conversation model.",
-        "setup": "Choose a provider and model in Voice settings. Grant READ or WRITE to individual lights and fans; selected temperature, humidity, illuminance, power, energy and battery sensors are read-only. Domain/device grants are ignored. Pass-through and announce-all are disabled. Capability edits cannot expand the fixed internal catalog."
+        "setup": "Choose a provider and model in Voice settings. Grant READ or WRITE to lights and fans through the normal permission tree; selected temperature, humidity, illuminance, power, energy and battery sensors are read-only. Domain, device and entity grants use the same inheritance and denial rules as other personas. Pass-through and announce-all are disabled. Capability edits cannot expand the fixed internal catalog."
       }
     },
     "tokens": {
@@ -2109,6 +2109,7 @@
     "out_of_steps": "Sorry, I ran out of steps before finishing that.",
     "outcome_unknown": "Actions may have run. Check Home Assistant and approval results before retrying. Resolve uncertain actions in Settings > System > Repairs.",
     "output_limit": "Sorry, the model produced too much output, so I stopped.",
+    "prior_action_unresolved": "This new request was not executed because an earlier action has an unresolved outcome. Check the earlier action in Home Assistant and resolve it in Settings > System > Repairs before trying again.",
     "provider_error": "Sorry, {reason}.",
     "token_unavailable": "The Phoenix MCP voice agent's token is no longer available.",
     "unavailable": "The Phoenix MCP voice agent is currently unavailable."

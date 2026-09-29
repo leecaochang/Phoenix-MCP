@@ -13,6 +13,7 @@
     "not_configured": "De Phoenix MCP-spraakagent is niet volledig geconfigureerd.",
     "out_of_steps": "Sorry, ik had geen stappen meer over voordat ik dat kon afronden.",
     "output_limit": "Sorry, het model produceerde te veel uitvoer, dus ik ben gestopt.",
+    "prior_action_unresolved": "Dit nieuwe verzoek is niet uitgevoerd omdat de uitkomst van een eerdere actie nog niet is opgehelderd. Controleer die actie in Home Assistant en los dit op via Instellingen > Systeem > Reparaties voordat je het opnieuw probeert.",
     "provider_error": "Sorry, {reason}.",
     "token_unavailable": "Het token van de Phoenix MCP-spraakagent is niet meer beschikbaar.",
     "unavailable": "De Phoenix MCP-spraakagent is momenteel niet beschikbaar.",
@@ -128,7 +129,7 @@
       "home_companion": {
         "label": "Huisassistent",
         "description": "Experimenteel: één taaktool voor geselecteerde lampen, ventilatoren en basissensoren. Gebruikt het gespreksmodel voor Spraak.",
-        "setup": "Kies een provider en model in de spraakinstellingen. Geef afzonderlijke lampen en ventilatoren lees- of schrijftoegang; geselecteerde temperatuur-, vochtigheids-, lichtsterkte-, vermogens-, energie- en batterijsensoren zijn alleen leesbaar. Domein- en apparaatrechten worden genegeerd. Doorvoer en het aankondigen van alle tools zijn uitgeschakeld. Wijzigingen in mogelijkheden breiden de vaste interne catalogus niet uit."
+        "setup": "Kies een provider en model in de spraakinstellingen. Geef lampen en ventilatoren lees- of schrijftoegang via de normale rechtenboom; geselecteerde temperatuur-, vochtigheids-, lichtsterkte-, vermogens-, energie- en batterijsensoren zijn alleen leesbaar. Voor domein-, apparaat- en entiteitsrechten gelden dezelfde overervings- en weigeringsregels als bij andere persona’s. Doorvoer en het aankondigen van alle tools zijn uitgeschakeld. Wijzigingen in mogelijkheden breiden de vaste interne catalogus niet uit."
       }
     },
     "mesaSuggestion": {

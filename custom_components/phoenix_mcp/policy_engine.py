@@ -123,10 +123,9 @@ def resolve(entity_id: str, token: TokenRecord, hass: HomeAssistant) -> Permissi
     from .const import PERSONA_HOME_COMPANION, HOME_COMPANION_SENSOR_CLASSES
     companion = token.persona == PERSONA_HOME_COMPANION
     if companion:
-        node = token.permissions.entities.get(entity_id)
         state = hass.states.get(entity_id)
-        if (token.pass_through or node is None or node.state not in {"GREEN", "YELLOW"}
-                or state is None or (domain not in {"light", "fan"} and
+        # Restrict device types without changing the shared permission tree.
+        if (token.pass_through or state is None or (domain not in {"light", "fan"} and
                     (domain != "sensor" or state.attributes.get("device_class") not in HOME_COMPANION_SENSOR_CLASSES))):
             return Permission.NO_ACCESS
 

@@ -3776,6 +3776,7 @@ class _HeadlessTurnResult:
     outcome: str = TURN_OK
     detail: str = ""
     focus_declined: bool = False
+    blocked_by_prior_action: bool = False
 
 
 @recovery_turn
@@ -3794,6 +3795,7 @@ async def _run_headless_turn(
     detect_focus_refusal: bool = False,
     routing_surface: str = "voice",
     routing_language: object = None,
+    reserve_final_round: bool = False,
 ) -> _HeadlessTurnResult:
     """Run one headless model/tool turn to completion.
 
@@ -3819,7 +3821,7 @@ async def _run_headless_turn(
 
     await data.agent_recovery.reconcile(data.store, token.id)
     if data.agent_recovery.blocks(token.id):
-        return _HeadlessTurnResult("", [], outcome=TURN_OUTCOME_UNKNOWN)
+        return _HeadlessTurnResult("", [], outcome=TURN_OUTCOME_UNKNOWN, blocked_by_prior_action=True)
 
     from .tool_routing import create_review_state, async_review_tools, withheld_results
     review_state = create_review_state(data, token, routing_surface)
@@ -3851,15 +3853,25 @@ async def _run_headless_turn(
 
     for iteration in range(max_iterations):
         from .home_companion import check_turn_context
-        if not check_turn_context(token, system, messages):
+        final_round = reserve_final_round and iteration == max_iterations - 1
+        round_system = system
+        if final_round:
+            round_system += (
+                "\nThis is the final response round. No further tools are available. "
+                "Return the required final answer using only the results already received. "
+                "Distinguish an accepted device command from a verified physical state. "
+                "If the results are insufficient, explain what is known and what is missing. "
+                "Do not claim that no action occurred when a control tool already ran."
+            )
+        if not check_turn_context(token, round_system, messages):
             return _HeadlessTurnResult("", review_urls, outcome=TURN_OUTPUT_LIMIT)
         tool_calls: list[dict] = []
         assistant_msg: dict | None = None
         stop_reason = "end_turn"
         call_text = ""
         async for ev in _stream_turn_resilient(
-            provider, session, system_prompt=system, messages=messages,
-            tools=tools, options={}, cancel=cancel, dispatch_started=dispatch_started,
+            provider, session, system_prompt=round_system, messages=messages,
+            tools=[] if final_round else tools, options={}, cancel=cancel, dispatch_started=dispatch_started,
             write_started=write_started,
         ):
             etype = ev["type"]
@@ -3893,6 +3905,10 @@ async def _run_headless_turn(
                 )
             provider.append_assistant(messages, assistant_msg)
             turn_output_bytes = prospective
+        if final_round and tool_calls:
+            # A provider ignoring the final-round instruction cannot dispatch
+            # another batch and leave no round for reporting its outcome.
+            return _HeadlessTurnResult("", review_urls, outcome=TURN_EXHAUSTED)
         if stop_reason != "tool_use":
             exhausted = False
             break
@@ -4101,7 +4117,7 @@ async def async_run_voice_turn(
     # CONVERSATION's language (voice_text), not the server's. A partial answer the
     # model already produced is preferred over an apology that discards it.
     if turn.outcome == TURN_OUTCOME_UNKNOWN:
-        return voice_text(language, "outcome_unknown")
+        return voice_text(language, "prior_action_unresolved" if turn.blocked_by_prior_action else "outcome_unknown")
     if turn.outcome == TURN_PROVIDER_ERROR:
         return turn.text.strip() or voice_text(language, "provider_error", reason=turn.detail)
     if turn.outcome == TURN_OUTPUT_LIMIT:
@@ -4221,6 +4237,8 @@ async def async_run_ai_task(
     # wraps as a HomeAssistantError. These messages are operator-facing and
     # deliberately English, like the rest of the agent-facing error text.
     if turn.outcome == TURN_OUTCOME_UNKNOWN:
+        if turn.blocked_by_prior_action:
+            raise AiTaskError("This task was not executed because an earlier action has an unresolved outcome. Check Home Assistant Repairs before trying again.")
         raise AiTaskError("An action outcome is unknown. Reconcile Home Assistant and approval results before retrying.")
     if turn.outcome == TURN_PROVIDER_ERROR:
         raise AiTaskError(turn.detail)
