@@ -301,6 +301,11 @@
       "voice_assistant": {
         "label": "Voice assistant",
         "description": "Can read entities, run services, and make announcements. Locks, alarms, covers, and valves require approval."
+      },
+      "home_companion": {
+        "label": "Home Companion",
+        "description": "Experimental: one task tool for selected lights, fans and basic sensors. Uses the Voice conversation model.",
+        "setup": "Choose a provider and model in Voice settings. Grant READ or WRITE to individual lights and fans; selected temperature, humidity, illuminance, power, energy and battery sensors are read-only. Domain/device grants are ignored. Pass-through and announce-all are disabled. Capability edits cannot expand the fixed internal catalog."
       }
     },
     "tokens": {

@@ -356,7 +356,8 @@ async def _mesa_gate_native(
         data, "mesa_setup_failed", False
     ) is not True:
         return _MesaGate(None, list(entities), [])
-    request_id = request_id or generate_request_id()
+    from ..request_authority import dispatch_request_id
+    request_id = request_id or dispatch_request_id.get() or generate_request_id()
     mesa_kwargs: dict[str, Any] = {}
     if approval_tool_name is not None:
         mesa_kwargs["approval_tool_name"] = approval_tool_name

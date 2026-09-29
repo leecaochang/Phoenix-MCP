@@ -920,6 +920,11 @@
       "voice_assistant": {
         "description": "Può leggere entità, eseguire servizi e diffondere annunci. Serrature, allarmi, tapparelle e valvole richiedono approvazione.",
         "label": "Assistente vocale"
+      },
+      "home_companion": {
+        "label": "Assistente domestico",
+        "description": "Sperimentale: uno strumento per attività su luci, ventilatori e sensori di base selezionati. Usa il modello di conversazione Voce.",
+        "setup": "Scegli un fornitore e un modello nelle impostazioni Voce. Concedi LETTURA o SCRITTURA alle singole luci e ai ventilatori; i sensori selezionati di temperatura, umidità, illuminamento, potenza, energia e batteria sono di sola lettura. Le autorizzazioni per dominio o dispositivo vengono ignorate. Accesso diretto e annuncio di tutti gli strumenti sono disattivati. Modificare le capacità non amplia il catalogo interno fisso."
       }
     },
     "inject": {

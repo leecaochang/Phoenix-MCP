@@ -1974,6 +1974,11 @@
       "voice_assistant": {
         "label": "Asistente de voz",
         "description": "Puede leer entidades, ejecutar servicios y realizar anuncios. Las cerraduras, las alarmas, las persianas y las válvulas requieren aprobación."
+      },
+      "home_companion": {
+        "label": "Asistente del hogar",
+        "description": "Experimental: una herramienta de tareas para luces, ventiladores y sensores básicos seleccionados. Usa el modelo de conversación de Voz.",
+        "setup": "Elige un proveedor y un modelo en los ajustes de Voz. Concede LECTURA o ESCRITURA a luces y ventiladores individuales; los sensores seleccionados de temperatura, humedad, iluminación, potencia, energía y batería son de solo lectura. Se ignoran los permisos por dominio o dispositivo. El acceso directo y el anuncio de todas las herramientas están desactivados. Cambiar capacidades no amplía el catálogo interno fijo."
       }
     },
     "shell": {

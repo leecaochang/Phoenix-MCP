@@ -62,7 +62,7 @@ export function PersonaPicker(props: Props) {
     <div className="persona-picker">
       {error && <div className="banner banner-error mb-8">{error}</div>}
       {!isSelectMode && (
-        <p className="persona-helper">{t("personas.helper")}</p>
+        <p className="persona-helper">{t(activeKey === "home_companion" ? "personas.home_companion.setup" : "personas.helper")}</p>
       )}
       <div className="persona-grid">
         {PERSONAS.filter((p) =>

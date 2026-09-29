@@ -43,6 +43,7 @@ class PhoenixData:
     # Configuration version history. Always present: __init__ supplies a
     # persistent store; direct constructions (tests) get an in-memory default.
     versions: VersionStore = field(default_factory=VersionStore)
+    home_companion_active: set[str] = field(default_factory=set)
     command_routing: CommandRouting = field(default_factory=CommandRouting)
     decision_shadow: DecisionShadow = field(default_factory=DecisionShadow)
     decision_budget: DecisionRequestBudget = field(default_factory=DecisionRequestBudget)

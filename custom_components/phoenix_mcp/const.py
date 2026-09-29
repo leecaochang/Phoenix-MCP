@@ -902,6 +902,7 @@ PERSONA_AUTOMATION_BUILDER = "automation_builder"
 PERSONA_POWER_USER = "power_user"
 PERSONA_HOME_ADMIN = "home_admin"
 PERSONA_CUSTOM = "custom"
+PERSONA_HOME_COMPANION = "home_companion"
 # Gentle starter persona: reads plus service calls, physical control gated to
 # confirm. Seeded by the onboarding wizard and also offered in the normal picker.
 PERSONA_NEW_USER = "new_user"
@@ -916,6 +917,7 @@ PERSONA_MAINTENANCE = "maintenance"
 # admin still scopes the entity tree to the ESPHome devices.
 PERSONA_ESPHOME = "esphome"
 PERSONA_NAMES = frozenset({
+    PERSONA_HOME_COMPANION,
     PERSONA_READ_ONLY,
     PERSONA_VOICE_ASSISTANT,
     PERSONA_AUTOMATION_BUILDER,
@@ -2295,3 +2297,21 @@ TOOL_ROUTING_REASONS = frozenset({
     "provider_context_limit", "authentication", "rate_limited", "http_error", "response_too_large",
     "model_unverified", "too_many_targets", "category_mismatch",
 })
+
+# The experimental delegated persona has a fixed, bounded internal catalog.
+HOME_COMPANION_TOOLS = frozenset({
+    "get_capability_summary", "search_entities", "describe_entity", "describe_area",
+    "get_state", "get_states", "get_history", "get_statistics", "compare_states",
+    "compare_entities", "intent__HassTurnOn", "intent__HassTurnOff",
+    "light__HassLightSet", "fan__HassFanSetSpeed",
+})
+HOME_COMPANION_CONTROL_TOOLS = frozenset({"intent__HassTurnOn", "intent__HassTurnOff", "light__HassLightSet", "fan__HassFanSetSpeed"})
+HOME_COMPANION_SENSOR_CLASSES = frozenset({
+    "temperature", "humidity", "illuminance", "power", "energy", "battery",
+})
+HOME_COMPANION_MAX_ROUNDS = 4
+HOME_COMPANION_MAX_CALLS = 8
+HOME_COMPANION_MAX_REQUEST_BYTES = 4096
+HOME_COMPANION_MAX_CATALOG_BYTES = 24576
+HOME_COMPANION_MAX_CONTEXT_BYTES = 16384
+HOME_COMPANION_TIMEOUT_SECONDS = 120

@@ -53,6 +53,7 @@ from .const import (
     MESA_MODE_ADVISORY,
     MESA_MODES,
     PERSONA_CUSTOM,
+    PERSONA_HOME_COMPANION,
     PERSONA_NAMES,
     RELATIVE_VOLUME_PLAN_VERSION,
     STORAGE_KEY,
@@ -199,7 +200,7 @@ class TokenPreset:
 
     Presets hold caps, persona, permission tree, rate limits, pass_through,
     use_assist_exposure, announce_all_tools, and confirm_inline_wait_seconds.
-    The persona is a display snapshot only; applying a preset re-derives it
+    Ordinary personas are display snapshots; applying a preset re-derives them
     from the applied caps.
     """
 
@@ -1060,12 +1061,15 @@ class TokenStore:
                 if key == "confirm_inline_wait_seconds":
                     value = _clamp_inline_wait(value)
                 setattr(token, key, value)
+        if token.persona == PERSONA_HOME_COMPANION:
+            token.pass_through = False
+            token.announce_all_tools = False
         if token.rate_limit_requests == 0:
             token.rate_limit_burst = 0
         # If any capability changed, re-derive persona from the resulting cap set.
         # This keeps the persona label honest: applying a preset and then tweaking
         # any cap drops the token to "custom" (or to a different matching preset).
-        if cap_changed:
+        if cap_changed and token.persona != PERSONA_HOME_COMPANION:
             from .personas import detect_persona  # noqa: PLC0415 - avoid circular import at module load
             token.persona = detect_persona(token.caps_dict())
         # Anything beyond a bare rename or an inline-wait tweak changes what the

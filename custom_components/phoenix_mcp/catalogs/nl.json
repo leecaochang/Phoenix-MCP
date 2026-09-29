@@ -124,6 +124,11 @@
       "voice_assistant": {
         "description": "Kan entiteiten lezen, services uitvoeren en aankondigingen doen. Sloten, alarmen, rolluiken en kleppen vereisen goedkeuring.",
         "label": "Spraakassistent"
+      },
+      "home_companion": {
+        "label": "Huisassistent",
+        "description": "Experimenteel: één taaktool voor geselecteerde lampen, ventilatoren en basissensoren. Gebruikt het gespreksmodel voor Spraak.",
+        "setup": "Kies een provider en model in de spraakinstellingen. Geef afzonderlijke lampen en ventilatoren lees- of schrijftoegang; geselecteerde temperatuur-, vochtigheids-, lichtsterkte-, vermogens-, energie- en batterijsensoren zijn alleen leesbaar. Domein- en apparaatrechten worden genegeerd. Doorvoer en het aankondigen van alle tools zijn uitgeschakeld. Wijzigingen in mogelijkheden breiden de vaste interne catalogus niet uit."
       }
     },
     "mesaSuggestion": {

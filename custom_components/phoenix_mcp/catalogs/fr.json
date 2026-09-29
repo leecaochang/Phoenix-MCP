@@ -300,6 +300,11 @@
       "voice_assistant": {
         "label": "Assistant vocal",
         "description": "Peut lire les entités, exécuter des services et faire des annonces. Les serrures, les alarmes, les volets et les vannes nécessitent une approbation."
+      },
+      "home_companion": {
+        "label": "Compagnon domestique",
+        "description": "Expérimental : un outil de tâches pour les lampes, ventilateurs et capteurs simples sélectionnés. Utilise le modèle de conversation vocale.",
+        "setup": "Choisissez un fournisseur et un modèle dans les réglages vocaux. Accordez la LECTURE ou l’ÉCRITURE aux lampes et ventilateurs individuellement ; les capteurs sélectionnés de température, humidité, éclairement, puissance, énergie et batterie restent en lecture seule. Les autorisations par domaine ou appareil sont ignorées. Le mode direct et l’annonce de tous les outils sont désactivés. Modifier les capacités n’élargit pas le catalogue interne fixe."
       }
     },
     "tokens": {

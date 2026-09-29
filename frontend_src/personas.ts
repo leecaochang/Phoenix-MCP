@@ -15,6 +15,7 @@ export interface PersonaDef {
 }
 
 export const PERSONAS: PersonaDef[] = [
+  { key: "home_companion", labelKey: "personas.home_companion.label", descriptionKey: "personas.home_companion.description" },
   {
     key: "read_only",
     labelKey: "personas.read_only.label",
@@ -68,6 +69,37 @@ export const PERSONAS: PersonaDef[] = [
 ];
 
 export const PERSONA_CAP_DEFAULTS: Record<Persona, Record<string, string> | null> = {
+  home_companion: {
+    "cap_config_read": "deny",
+    "cap_camera_read": "deny",
+    "cap_template_render": "deny",
+    "cap_log_read": "deny",
+    "cap_log_control": "deny",
+    "cap_search": "allow",
+    "cap_registry_read": "allow",
+    "cap_traces": "deny",
+    "cap_diagnostics": "deny",
+    "cap_broadcast": "deny",
+    "cap_service_response": "deny",
+    "cap_automation_write": "deny",
+    "cap_script_write": "deny",
+    "cap_blueprint_write": "deny",
+    "cap_scene_write": "deny",
+    "cap_helper_write": "deny",
+    "cap_physical_control": "deny",
+    "cap_restart": "deny",
+    "cap_integration_write": "deny",
+    "cap_integration_reconfigure": "deny",
+    "cap_lovelace_write": "deny",
+    "cap_registry_write": "deny",
+    "cap_radio_write": "deny",
+    "cap_energy_write": "deny",
+    "cap_backup": "deny",
+    "cap_filesystem": "deny",
+    "cap_yaml_edit": "deny",
+    "cap_esphome_yaml": "deny",
+    "cap_esphome_flash": "deny"
+},
   new_user: {
     cap_config_read: "allow",
     cap_camera_read: "deny",

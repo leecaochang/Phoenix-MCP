@@ -1293,6 +1293,7 @@ class PhoenixAdminTokenPresetApplyView(PhoenixView):
 
             await data.store.async_patch_token(
                 token_id,
+                persona=preset.persona,
                 pass_through=preset.pass_through,
                 use_assist_exposure=preset.use_assist_exposure if preset.pass_through else False,
                 announce_all_tools=preset.announce_all_tools,

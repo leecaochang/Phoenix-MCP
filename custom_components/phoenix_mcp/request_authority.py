@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from .const import DOMAIN
 
@@ -42,8 +42,16 @@ request_authority: ContextVar[RequestAuthority | None] = ContextVar("phoenix_req
 policy_version: ContextVar[int | None] = ContextVar("phoenix_request_policy_version", default=None)
 
 
+dispatch_request_id: ContextVar[str] = ContextVar("phoenix_dispatch_request_id", default="")
+
+execution_guard: ContextVar[Callable[[], None] | None] = ContextVar("phoenix_execution_guard", default=None)
+
+
 def check_request_authority() -> None:
     """Refuse further dispatch/disclosure if authority changed during a wait."""
+    guard = execution_guard.get()
+    if guard is not None:
+        guard()
     authority = request_authority.get()
     if authority is None:
         return

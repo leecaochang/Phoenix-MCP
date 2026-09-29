@@ -410,6 +410,11 @@ def _tool_gate_map(
     dry_run_service to preview an individual call. Mirrors _tool_is_announced so
     the summary and tools/list agree.
     """
+    from .home_companion import is_companion
+    if is_companion(token):
+        from .agentcli import build_mcp_tool_list
+        return {"usable": [tool["name"] for tool in build_mcp_tool_list(token, data)],
+                "needs_approval": [], "unavailable": []}
     has_write = token_has_write_scope(token)
     mesa_defs = mesa_tool_defs() if data.mesa is not None else []
     usable: list[str] = []
@@ -7640,6 +7645,16 @@ async def _call_tool(
     is enforced by an adversarial sweep over the whole surface instead.
     """
     check_request_authority()
+    from .home_companion import is_companion, authorize_call, run_request, record_outcome
+    if is_companion(token):
+        refusal = authorize_call(token, tool_name, arguments)
+        if refusal:
+            record_outcome(token, tool_name, "denied")
+            return _tool_error(refusal), "denied", tool_name
+        if tool_name == "phoenix_request":
+            return await run_request(arguments, token, hass, data)
+    elif tool_name == "phoenix_request":
+        return _tool_error("This tool requires the Home Companion persona."), "denied", tool_name
     if not finite_json_numbers(arguments):
         return _tool_error("Non-finite numbers are not allowed."), "invalid_request", tool_name
     internal_name = _NATIVE_TOOL_PUBLIC_TO_INTERNAL.get(tool_name, tool_name)
@@ -7648,10 +7663,16 @@ async def _call_tool(
         return _tool_error(f"Unknown tool: {tool_name}"), "denied", tool_name
     handler, wanted, bound = entry
     context = {"data": data, "request_id": request_id, "client_ip": client_ip}
-    result = await handler(
-        arguments, token, hass, **{k: context[k] for k in wanted}, **bound
-    )
+    from .request_authority import dispatch_request_id
+    request_context = dispatch_request_id.set(request_id)
+    try:
+        result = await handler(
+            arguments, token, hass, **{k: context[k] for k in wanted}, **bound
+        )
+    finally:
+        dispatch_request_id.reset(request_context)
     check_request_authority()
+    record_outcome(token, tool_name, result[1])
     return result
 
 
@@ -7848,6 +7869,12 @@ def _build_instructions(token: TokenRecord, data: PhoenixData, base_url: str) ->
     per-entity safety layer) plus this token's gated capabilities and a link to
     the full guide at /api/phoenix-mcp/skill.
     """
+    from .home_companion import is_companion
+    if is_companion(token):
+        return ("This token uses Phoenix Home Companion. Only phoenix_request is exposed. "
+                "Send a complete home request with all restrictions. Each request is independent. "
+                "Read the structured status and tool_outcomes; pending approval is not execution. "
+                "Do not automatically retry an unknown action outcome.")
     caps = effective_caps(token)
     confirm_gated = sorted(c for c, m in caps.items() if m == CAP_CONFIRM)
     lines = [
@@ -8070,7 +8097,7 @@ async def _dispatch_mcp(
         # all authorization fields while preserving only that execution setting.
         token = (
             dataclasses.replace(current, confirm_inline_wait_seconds=0)
-            if admitted_context is not None and token.confirm_inline_wait_seconds == 0
+            if token.confirm_inline_wait_seconds == 0
             and current.confirm_inline_wait_seconds != 0
             else current
         )
@@ -8162,6 +8189,12 @@ async def _dispatch_mcp_authorized(
              resource="/api/phoenix-mcp", outcome="allowed", client_ip=client_ip)
         return resp, "ping", "/api/phoenix-mcp", "allowed"
 
+    from .home_companion import is_companion
+    if is_companion(token) and method in {"resources/list", "resources/templates/list", "prompts/list"}:
+        key = {"resources/list": "resources", "resources/templates/list": "resourceTemplates", "prompts/list": "prompts"}[method]
+        return _jsonrpc_result(msg_id, {key: []}), method, "/api/phoenix-mcp", "allowed"
+    if is_companion(token) and method in {"resources/read", "prompts/get"}:
+        return _jsonrpc_error(msg_id, -32602, "Unavailable for this persona."), method, "/api/phoenix-mcp", "denied"
     if method == "tools/list":
         # Announce only the tools this token can use, unless announce_all_tools
         # is set. Cap-tied tools gate on their cap; write/action tools gate on
@@ -8176,6 +8209,9 @@ async def _dispatch_mcp_authorized(
         for tool_def in list(_ENTITY_TOOL_DEFS) + list(_NATIVE_TOOL_DEFS) + list(_SYSTEM_TOOL_DEFS) + mesa_defs:
             if announce_all or _tool_is_announced(tool_def, token, has_write, hass):
                 tools.append({k: v for k, v in tool_def.items() if k not in ("cap", "caps", "caps_any", "requires")})
+        if is_companion(token):
+            from .home_companion import wrapper_tool
+            tools = [wrapper_tool()]
         resp = _jsonrpc_result(msg_id, {"tools": tools})
         # The client's tool list is now current: echo the settings version (in
         # memory; persisted by the periodic flush, like last_used_at) and clear

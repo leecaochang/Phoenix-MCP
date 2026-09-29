@@ -11,6 +11,7 @@ export type Outcome =
 
 export type CapMode = "deny" | "allow" | "confirm";
 export type Persona =
+  | "home_companion"
   | "new_user"
   | "read_only"
   | "voice_assistant"

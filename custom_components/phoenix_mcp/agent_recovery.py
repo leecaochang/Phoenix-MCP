@@ -236,7 +236,7 @@ async def dispatch_agent_tool(
 ) -> tuple:
     """One dispatch, with no retry after the durable boundary."""
     recovery = data.agent_recovery
-    write = not tool_is_read_only(name)
+    write = name != "phoenix_request" and not tool_is_read_only(name)
     try:
         if write:
             await recovery.reconcile(data.store, token.id)

@@ -21,7 +21,7 @@ import base64
 import binascii
 import dataclasses
 import codecs
-from contextlib import aclosing, suppress
+from contextlib import aclosing
 from copy import deepcopy
 import functools
 import hashlib
@@ -2411,7 +2411,10 @@ def build_mcp_tool_list(token: TokenRecord, data: PhoenixData) -> list[dict]:
     )
     from .mesa_tools import mesa_tool_defs  # noqa: PLC0415
 
-    announce_all = getattr(token, "announce_all_tools", False)
+    from .home_companion import is_companion, internal_turn, wrapper_tool
+    if is_companion(token) and not internal_turn(token):
+        return [wrapper_tool()]
+    announce_all = getattr(token, "announce_all_tools", False) and not is_companion(token)
     has_write = token_has_write_scope(token)
     hass = getattr(data, "hass", None)
     mesa_defs = mesa_tool_defs() if getattr(data, "mesa", None) is not None else []
@@ -2419,6 +2422,9 @@ def build_mcp_tool_list(token: TokenRecord, data: PhoenixData) -> list[dict]:
     for d in list(_ENTITY_TOOL_DEFS) + list(_NATIVE_TOOL_DEFS) + list(_SYSTEM_TOOL_DEFS) + mesa_defs:
         if announce_all or _tool_is_announced(d, token, has_write, cast(Any, hass)):
             out.append({k: v for k, v in d.items() if k not in ("cap", "caps", "caps_any", "requires")})
+    if is_companion(token):
+        from .const import HOME_COMPANION_TOOLS
+        out = [tool for tool in out if tool["name"] in HOME_COMPANION_TOOLS]
     rank = {name: i for i, name in enumerate(_TOOL_PRIORITY)}
     out.sort(key=lambda t: rank.get(t["name"], len(rank)))
     return out
@@ -3060,11 +3066,9 @@ async def _cancelable_provider_events(events: Any, cancel: asyncio.Event) -> Asy
     finally:
         if next_event is not None:
             next_event.cancel()
-            with suppress(asyncio.CancelledError, StopAsyncIteration):
-                await next_event
         stopped.cancel()
-        with suppress(asyncio.CancelledError):
-            await stopped
+        await asyncio.gather(*([next_event] if next_event is not None else []),
+                             stopped, return_exceptions=True)
         await events.aclose()
 
 
@@ -3832,6 +3836,9 @@ async def _run_headless_turn(
     dispatch_started = False
 
     for iteration in range(max_iterations):
+        from .home_companion import check_turn_context
+        if not check_turn_context(token, system, messages):
+            return _HeadlessTurnResult("", review_urls, outcome=TURN_OUTPUT_LIMIT)
         tool_calls: list[dict] = []
         assistant_msg: dict | None = None
         stop_reason = "end_turn"
@@ -3939,6 +3946,9 @@ async def _run_headless_turn(
                     }),
                     "is_error": False,
                 })
+                from .home_companion import internal_turn
+                if internal_turn(dispatch_token):
+                    return _HeadlessTurnResult("", review_urls)
                 continue
             content = result.get("content", [])
             results.append({

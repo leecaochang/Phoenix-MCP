@@ -188,6 +188,8 @@ class TestDetectPersona:
         # Every named preset must be recognized from its own caps, otherwise
         # applying it would silently flip the token to "custom".
         for name in PERSONA_DEFINITIONS:
+            if name == "home_companion":
+                continue  # Delegation requires an explicit persona selection.
             caps = get_persona_caps(name)
             assert detect_persona(caps) == name, f"{name} did not round-trip"
 

@@ -124,6 +124,11 @@
       "voice_assistant": {
         "description": "Może odczytywać encje, uruchamiać usługi i wygłaszać ogłoszenia. Zamki, alarmy, rolety i zawory wymagają zatwierdzenia.",
         "label": "Asystent głosowy"
+      },
+      "home_companion": {
+        "label": "Asystent domowy",
+        "description": "Eksperymentalne: jedno narzędzie zadań dla wybranych świateł, wentylatorów i podstawowych czujników. Używa modelu rozmów głosowych.",
+        "setup": "Wybierz dostawcę i model w ustawieniach głosu. Nadaj ODCZYT lub ZAPIS pojedynczym światłom i wentylatorom; wybrane czujniki temperatury, wilgotności, oświetlenia, mocy, energii i baterii pozostają tylko do odczytu. Uprawnienia domen i urządzeń są ignorowane. Tryb bezpośredni i udostępnianie wszystkich narzędzi są wyłączone. Zmiany możliwości nie rozszerzają stałego katalogu wewnętrznego."
       }
     },
     "mesaSuggestion": {

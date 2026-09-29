@@ -96,11 +96,12 @@
         </details>
 
         <h2 id="personas">Personas</h2>
-        <p>You rarely set capabilities one at a time. A <strong>persona</strong> is a named preset that fills in the entire matrix at once, and choosing one applies the whole set, not just a label. After applying a persona you can still adjust any single capability; the token then shows as <strong>Custom</strong> unless the new combination happens to match another preset.</p>
+        <p>You rarely set capabilities one at a time. A <strong>persona</strong> is a named preset that fills in the entire matrix at once, and choosing one applies the whole set, not just a label. For ordinary personas, adjusting capabilities changes the label to <strong>Custom</strong> unless the combination matches another preset. The experimental <strong>Home Companion</strong> is different: it retains an enforced, fixed tool boundary until you choose another persona.</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th scope="col">Persona</th><th scope="col">What it sets up</th></tr></thead>
             <tbody>
+              <tr><td><a href="#home-companion">Home Companion (experimental)</a></td><td>One task tool backed by Phoenix: selected lights, fans and basic sensors, with a fixed internal catalog and existing safety checks.</td></tr>
               <tr><td>Read-only observer</td><td>Reads state, history, logs, and templates. No actions, no broadcast.</td></tr>
               <tr><td>Voice assistant</td><td>Reads, service calls, and broadcast. Locks, alarms, covers, and valves require admin confirmation.</td></tr>
               <tr><td>Dashboard designer</td><td>Reads and discovers entities and builds Lovelace dashboards. Filesystem access (theme and custom-card assets) requires confirmation. No device control or config authoring.</td></tr>
@@ -114,6 +115,12 @@
             </tbody>
           </table>
         </div>
+
+        <h2 id="home-companion">Home Companion (experimental)</h2>
+        <p>Select Home Companion on a token, then grant READ or WRITE to individual light and fan entities in its permission tree. Selected temperature, humidity, illuminance, power, energy and battery sensors are readable only. Positive grants on domains and devices are ignored; RED ancestors still block access. Pass-through and announce-all are disabled. Choosing another persona ends these additional restrictions.</p>
+        <p>Choose a conversation provider and model in Voice settings. Home Companion uses that provider with this token's own permissions; it does not inherit the Voice token's scope, and Voice itself need not be enabled. Requests and permitted tool results are sent to that provider. The external client sees only <code>phoenix_request</code>. Its <code>request</code> field accepts a complete natural-language task, with an optional <code>language</code>. Each call is independent; include all context and restrictions again when answering a clarification.</p>
+        <p>The internal catalog is capped at fourteen entries for discovery, state, history, light/fan power, light brightness/color and fan speed. Capability changes can restrict these tools but cannot add others. Requests are bounded to four model rounds and eight internal calls. Oversized context or catalogs stop the request rather than silently dropping content. JEV review follows the Voice tool-selection setting and its existing qualification gate.</p>
+        <p>Read the structured <code>status</code>, <code>message</code>, <code>tool_outcomes</code> and <code>review_urls</code>. A queued approval ends the request before further calls in the batch; use the Phoenix panel to review it. An <code>outcome_unknown</code> response must not be retried automatically. Completed service dispatch is not proof that physical hardware changed. No configuration, filesystem, lock, alarm or other actuator tools are available through this persona.</p>
 
         <h2 id="automation-write">Automation and script write</h2>
         <p><strong>Automation write</strong> and <strong>Script write</strong> are elevated-trust capabilities. Enable them only for clients you fully control.</p>

@@ -2,7 +2,8 @@
 
 Personas seed the capability matrix when an admin selects them. After applying,
 the admin may override individual caps; the token's persona field records
-which preset was applied for display purposes only and is not enforced.
+which preset was applied. Home Companion additionally enforces delegated access;
+ordinary persona labels are not authorization.
 
 Adding a new capability requires extending every persona in PERSONA_DEFINITIONS
 to include a value for it (or to explicitly inherit a default).
@@ -17,6 +18,7 @@ from .const import (
     CAPABILITY_NAMES,
     PERSONA_AUTOMATION_BUILDER,
     PERSONA_CUSTOM,
+    PERSONA_HOME_COMPANION,
     PERSONA_DASHBOARD_DESIGNER,
     PERSONA_ESPHOME,
     PERSONA_HOME_ADMIN,
@@ -28,6 +30,8 @@ from .const import (
 )
 
 PERSONA_DEFINITIONS: dict[str, dict[str, str]] = {
+    PERSONA_HOME_COMPANION: {name: CAP_ALLOW if name in {"cap_search", "cap_registry_read"} else CAP_DENY
+                             for name in CAPABILITY_NAMES},
     PERSONA_NEW_USER: {
         "cap_config_read": CAP_ALLOW,
         "cap_camera_read": CAP_DENY,
