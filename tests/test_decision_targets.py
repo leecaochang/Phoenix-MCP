@@ -249,6 +249,9 @@ async def test_target_http_contract_and_generated_id_rejection(protocol, invalid
         return web.json_response({"model": "test-model", "answers": {"target": {"type": "choice", **answer}}})
     app = web.Application()
     app.router.add_post("/" + protocol, handler)
+    async def models(_request):
+        return web.json_response({"data": [{"id": "test-model"}]})
+    app.router.add_get("/models", models)
     async with TestServer(app) as server, ClientSession() as session:
         cfg = agentcli.ProviderConfig("systemone", "test-model", str(server.make_url("")).rstrip("/"))
         provider = DecisionProvider(cfg, protocol)
@@ -281,7 +284,7 @@ async def test_plain_observation_never_enumerates_or_sends_targets(hass, target_
     assert data.decision_shadow.observations == 1
 
 
-@pytest.mark.parametrize("reason", ["supported", "sentence_trigger", "timeout", "unavailable"])
+@pytest.mark.parametrize("reason", ["supported", "sentence_trigger", "custom_sentence", "timeout", "unavailable"])
 async def test_local_match_or_unsafe_recognition_skips_both_calls(hass, target_home, reason):
     data, token, *_ = target_home
     first, second = mocks()
@@ -360,6 +363,9 @@ async def test_brightness_multi_question_http_contract(protocol, percent, socket
             for question, spec in payload["questions"].items()}})
     app = web.Application()
     app.router.add_post("/" + protocol, handler)
+    async def models(_request):
+        return web.json_response({"data": [{"id": "test-model"}]})
+    app.router.add_get("/models", models)
     async with TestServer(app) as server, ClientSession() as session:
         cfg = agentcli.ProviderConfig("systemone", "test-model", str(server.make_url("")).rstrip("/"))
         answer = await DecisionProvider(cfg, protocol).select_target(
@@ -377,7 +383,9 @@ async def test_brightness_multi_question_http_contract(protocol, percent, socket
 @pytest.mark.parametrize("change", ["missing", "extra", "fractional", "out_of_range", "none", "low_probability", "bool"])
 async def test_brightness_answers_are_closed_and_bounded(change):
     cfg = agentcli.ProviderConfig("typesafe", "test-model", "http://example.invalid")
-    async def request(session, method, path, timeout, payload):
+    async def request(session, method, path, timeout, payload=None):
+        if method == "GET":
+            return {"data": [{"id": "test-model"}]}
         selected = {"target": "t0", "brightness_tens": "5", "brightness_units": "0"}
         if change == "fractional": selected["brightness_units"] = "0.5"
         if change == "out_of_range": selected.update(brightness_tens="10", brightness_units="1")
@@ -733,3 +741,42 @@ async def test_advertised_extended_choices_avoid_unnecessary_groups(socket_enabl
             if key != 'none'} == targets
     assert requests[0]['state'] == {'utterance': 'turn off Lamp 94', 'language': 'en', 'category': 'light_off'}
     assert 'state.targets' not in requests[0]['questions']['target']['instructions']
+
+
+@pytest.mark.parametrize('protocol', ['classifier', 'systemone'])
+@pytest.mark.parametrize('limit,count', [(2, 2), (10, 9), (10, 10), (10, 12), (50, 12), (64, 12), (None, 12)])
+async def test_small_target_catalog_obeys_model_capacity(protocol, limit, count, socket_enabled):
+    targets = {f't{i}': {'entity_id': f'light.fixture_{i}', 'name': f'Lamp {i}'} for i in range(count)}
+    requests = []
+    capacity = limit or 50
+
+    async def models(request):
+        requests.append(request.method)
+        selected = {'id': 'test-model'}
+        if limit is not None:
+            selected['x_max_choice_options'] = limit
+        return web.json_response({'data': [{'id': 'other', 'x_max_choice_options': 255}, selected]})
+
+    async def classify(request):
+        requests.append(request.method)
+        payload = await request.json()
+        questions = payload['questions']
+        assert all(len(q['criteria']) <= capacity and 'none' in q['criteria'] for q in questions.values())
+        assert {key for q in questions.values() for key in q['criteria']} == {*targets, 'none'}
+        if len(questions) > 1 or protocol == 'systemone':
+            assert unpack_catalog(payload['state']) == targets
+        else:
+            assert {k: json.loads(v) for k, v in questions['target']['criteria'].items() if k != 'none'} == targets
+        selected = f't{count - 1}'
+        return web.json_response({'model': 'test-model', 'answers': {
+            name: {'type': 'choice', **choice(selected if selected in spec['criteria'] else 'none', spec['criteria'])}
+            for name, spec in questions.items()}})
+
+    app = web.Application()
+    app.router.add_get('/models', models)
+    app.router.add_post('/' + protocol, classify)
+    async with TestServer(app) as server, ClientSession() as session:
+        provider = DecisionProvider(agentcli.ProviderConfig(protocol, 'test-model', str(server.make_url('')).rstrip('/')), protocol)
+        result = await provider.select_target(session, f'turn off Lamp {count - 1}', 'light_off', targets, 1000)
+    assert result['choice'] == f't{count - 1}'
+    assert requests == ['GET', 'POST']

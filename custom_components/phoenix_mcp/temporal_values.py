@@ -98,7 +98,8 @@ def valid_temporal_value(kind: str, value: Any, timezone: str | None = None) -> 
             return date.fromisoformat(value).isoformat() == value
         if kind in ("time", "duration"):
             parsed_time = time.fromisoformat(value)
-            return parsed_time.tzinfo is None and parsed_time.isoformat(timespec="seconds") == value
+            return (parsed_time.tzinfo is None and parsed_time.isoformat(timespec="seconds") == value
+                    and (kind != "duration" or parsed_time != time.min))
         if kind != "datetime":
             return False
         parsed = datetime.fromisoformat(value)

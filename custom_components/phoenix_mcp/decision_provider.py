@@ -803,8 +803,7 @@ class DecisionProvider:
             payload["questions"]["target"]["instructions"] += (
                 " Each non-none choice key identifies its exact entity descriptor in state.targets."
             )
-        choice_limit = (await self.target_choice_limit(session, timeout_ms)
-                        if len(targets) > DECISION_MAX_TARGETS else DECISION_MAX_TARGETS + 1)
+        choice_limit = await self.target_choice_limit(session, timeout_ms)
         if self.protocol == "classifier" and len(targets) < choice_limit:
             # A single Choice can carry the complete catalog beside its labels,
             # avoiding both indirect key lookups and duplicated entity metadata.

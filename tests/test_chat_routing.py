@@ -1819,3 +1819,30 @@ async def test_option_command_in_chat_rechecks_complete_history(hass, context_ch
         call.assert_awaited_once_with('select', 'select_option',
                                      {'entity_id': [entry.entity_id], 'option': 'Away'},
                                      blocking=True, return_response=False)
+
+
+@pytest.mark.parametrize('mode,contextual', [('hybrid', False), ('auto', False), ('off', False), ('auto', True)])
+async def test_custom_sentence_keeps_precedence_through_chat(
+        hass, context_chat, custom_sentence_recognition, mode, contextual):
+    data, _ = context_chat
+    await data.store.async_patch_settings(agentcli_routing_mode=mode, agentcli_routing_shadow_enabled=True)
+    sentence = 'turn on the desk lamp'
+    messages = context_messages(sentence) if contextual else [{'role': 'user', 'content': sentence}]
+    async def respond(*args):
+        payload = args[4]
+        if 'route' not in payload['questions']:
+            return context_response()
+        return {**chat_decision_wire(payload, 'light_on'), 'model': 'jev-1.13.0'}
+    from custom_components.phoenix_mcp import mcp_view
+    with (patch.object(DecisionProvider, '_request', AsyncMock(side_effect=respond)) as remote,
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(data.decision_shadow, 'start', wraps=data.decision_shadow.start) as start,
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        provider, _, result = await chat_turn(hass, context_chat, messages)
+    provider.stream_turn.assert_called_once()
+    assert result[-1]['content'] == 'Normal provider reply'
+    remote.assert_not_called()
+    start.assert_not_called()
+    call.assert_not_called()
+    assert data.command_routing.chat_reasons == {'custom_sentence': 1}
+    assert data.store.get_pending_approvals() == []

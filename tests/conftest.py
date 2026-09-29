@@ -10,6 +10,22 @@ pytest_plugins = "pytest_homeassistant_custom_component"
 
 
 @pytest.fixture
+def custom_sentence_recognition(monkeypatch):
+    """Mark a real HA match with the metadata used for custom sentence precedence."""
+    from custom_components.phoenix_mcp import command_routing
+
+    recognize = command_routing.async_recognize
+
+    async def custom(*args, **kwargs):
+        result = await recognize(*args, **kwargs)
+        assert result is not None
+        result.intent_metadata = {**(result.intent_metadata or {}), "hass_custom_sentence": True}
+        return result
+
+    monkeypatch.setattr(command_routing, "async_recognize", custom)
+
+
+@pytest.fixture
 def immediate_authoring_observation(monkeypatch):
     """Keep no-op reload fixtures fast while still running real observation."""
     from custom_components.phoenix_mcp import entity_registration

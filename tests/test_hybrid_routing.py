@@ -742,10 +742,17 @@ async def test_other_models_and_endpoints_keep_sequential_routing(
     data, _, store, *_ = hybrid_home
     account = await store.add(kind, {'api_key': 'test-secret', 'model': model, 'base_url': base_url})
     await data.store.async_patch_settings(decision_provider_id=account, command_routing_languages=[language])
+    async def respond(session, method, path, timeout, payload=None):
+        if method == "GET":
+            assert path == "models"
+            return {"data": [{"id": model}]}
+        return await jev_response(session, method, path, timeout, payload)
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, remote, provider = await run_voice(hass, hybrid_home, language=language, request=jev_response)
-    assert [set(item.args[4]['questions']) for item in remote.await_args_list] == [{'route'}, {'target'}]
+        _, remote, provider = await run_voice(hass, hybrid_home, language=language, request=respond)
+    assert [set(item.args[4]['questions']) for item in remote.await_args_list if item.args[1] == 'POST'] == [{'route'}, {'target'}]
+    protocol = 'classifier' if kind == 'classifier' else 'systemone'
+    assert [item.args[1:3] for item in remote.await_args_list] == [('POST', protocol), ('GET', 'models'), ('POST', protocol)]
     call.assert_awaited_once()
     provider.assert_not_called()
 
@@ -1364,3 +1371,75 @@ async def test_generic_large_catalog_dispatch_and_approval_revalidation(hass, hy
         assert _decision_plan_current(plan, hass, data, token)
         registry.async_update_entity(other.entity_id, aliases={'Desk lamp'})
         assert not _decision_plan_current(plan, hass, data, token)
+
+
+@pytest.mark.parametrize('mode', ['hybrid', 'auto', 'local_shadow', 'local'])
+async def test_custom_sentence_keeps_precedence_through_voice(
+        hass, jev_hybrid_home, custom_sentence_recognition, mode):
+    home = jev_hybrid_home
+    await home[0].store.async_patch_settings(voice_agent_routing_mode=mode, decision_shadow_enabled=True)
+    async def respond(*args):
+        return wire_answer(args[4], model='jev-1.13.0')
+    with (patch.object(home[0].decision_shadow, 'start', wraps=home[0].decision_shadow.start) as start,
+          patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
+          patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
+        answer, remote, provider = await run_voice(hass, home, sentence='turn on the desk lamp', request=respond)
+    assert answer == 'Provider answer'
+    provider.assert_awaited_once()
+    remote.assert_not_called()
+    start.assert_not_called()
+    call.assert_not_called()
+    assert home[0].command_routing.reasons == {'custom_sentence': 1}
+    assert home[0].store.get_pending_approvals() == []
+
+
+@pytest.mark.parametrize('initial_state', ['idle', 'active', 'paused'])
+@pytest.mark.parametrize('duration,expected', [('00:00:00', None), ('zero seconds', None),
+                                             ('00:00:01', '0:00:01'), ('23:59:59', '23:59:59')])
+async def test_timer_duration_preserves_real_ha_runtime_semantics(hass, jev_hybrid_home, initial_state, duration, expected):
+    data, token, *_ = jev_hybrid_home
+    token.permissions.domains['timer'] = PermissionNode(state='GREEN')
+    assert await async_setup_component(hass, 'timer', {'timer': {'test_timer': {'name': 'Test timer', 'duration': '00:05:00'}}})
+    entity_id = 'timer.test_timer'
+    async_expose_entity(hass, 'conversation', entity_id, True)
+    if initial_state != 'idle':
+        await hass.services.async_call('timer', 'start', {'entity_id': entity_id}, blocking=True)
+    if initial_state == 'paused':
+        await hass.services.async_call('timer', 'pause', {'entity_id': entity_id}, blocking=True)
+    before = hass.states.get(entity_id)
+    assert before.state == initial_state
+    async def respond(*args):
+        return temporal_wire(args[4], entity_id, 'timer_duration')
+    try:
+        with patch.object(type(hass.services), 'async_call', new_callable=AsyncMock, wraps=hass.services.async_call) as call:
+            _, _, provider = await run_voice(hass, jev_hybrid_home, request=respond,
+                sentence=f'Start timer named Test timer for {duration}')
+        after = hass.states.get(entity_id)
+        if expected is None:
+            call.assert_not_called()
+            provider.assert_awaited_once()
+            assert after == before
+        else:
+            call.assert_awaited_once()
+            provider.assert_not_called()
+            assert after.state == 'active'
+            assert after.attributes['duration'] == expected
+    finally:
+        await hass.services.async_call('timer', 'cancel', {'entity_id': entity_id}, blocking=True)
+
+
+
+async def test_saved_zero_duration_plan_is_rejected_at_execution(hass, jev_hybrid_home):
+    from custom_components.phoenix_mcp.command_execution import _capture_plan, plan_is_current
+    data, token, *_ = jev_hybrid_home
+    token.permissions.domains['timer'] = PermissionNode(state='GREEN')
+    entry = er.async_get(hass).async_get_or_create('timer', 'test', 'test_timer', original_name='Test timer')
+    hass.states.async_set(entry.entity_id, 'idle', {'friendly_name': 'Test timer', 'duration': '0:05:00'})
+    async_expose_entity(hass, 'conversation', entry.entity_id, True)
+    proposal = {'intent': 'PhoenixTimerDuration', 'entity_ids': [entry.entity_id], 'value': '00:00:01'}
+    # Simulate a pre-fix saved plan, preserving its bindings to isolate value validation.
+    plan = _capture_plan(hass, data, token, proposal)
+    assert plan is not None
+    assert plan_is_current(plan, hass, data, token)
+    plan['proposal']['value'] = '00:00:00'
+    assert not plan_is_current(plan, hass, data, token)

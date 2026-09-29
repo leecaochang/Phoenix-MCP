@@ -103,3 +103,15 @@ async def test_new_sentence_trigger_refuses_timer_evidence(hass):
     with patch('custom_components.phoenix_mcp.intent_recognition.async_recognize', AsyncMock(side_effect=SentenceTriggerMatch)):
         with pytest.raises(SentenceTriggerMatch):
             await async_read_temporal_value(hass, 'Start timer named Test for five minutes', 'en')
+
+
+@pytest.mark.parametrize('value,allowed', [('00:00:00', False), ('00:00:01', True),
+                                          ('23:59:59', True), ('24:00:00', False)])
+def test_duration_bounds_are_distinct_from_clock_time(value, allowed):
+    from custom_components.phoenix_mcp.temporal_values import temporal_value_current
+    proposal = {'intent': 'PhoenixTimerDuration', 'entity_ids': ['timer.test'], 'value': value}
+    assert valid_temporal_value('duration', value) is allowed
+    assert (service_arguments(proposal) is not None) is allowed
+    assert temporal_value_current(proposal, State('timer.test', 'idle'), 'UTC') is allowed
+    assert valid_temporal_value('time', '00:00:00')
+    assert service_arguments({'intent': 'PhoenixInputTime', 'entity_ids': ['input_datetime.test'], 'value': '00:00:00'})

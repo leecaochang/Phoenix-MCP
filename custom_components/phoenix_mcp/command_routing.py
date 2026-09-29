@@ -124,7 +124,7 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant) -> tuple[str
         return "no_match", None
     metadata = getattr(result, "intent_metadata", None) or {}
     if metadata.get("hass_custom_sentence"):
-        return "unsupported", None
+        return "custom_sentence", None
     intent_name = result.intent.name
     if intent_name not in COMMAND_ROUTING_INTENTS:
         return "unsupported", None
