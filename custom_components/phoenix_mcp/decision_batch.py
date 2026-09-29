@@ -194,6 +194,9 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
         return category, {**selection, "reason": "target_declined"}
     if not confident_choice(target):
         return category, {**selection, "reason": "low_probability"}
+    # Unused value and collection answers still exclude competing interpretations.
+    if not all(confident_choice(choice) for choice in answer.values()):
+        return category, {**selection, "reason": "low_probability"}
     descriptor = summaries.targets[target['choice']] if is_summary and summaries is not None else targets[target['choice']]
     if not is_summary and category["choice"] not in descriptor["eligible_categories"]:
         raise DecisionError("category_mismatch")
@@ -361,7 +364,7 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
                 return result('category_mismatch', decision=answer)
             if category["choice"] == "provider" or target["choice"] == "none":
                 return result("provider_fallback", decision=answer)
-            if not confident_choice(category) or not confident_choice(target):
+            if not all(confident_choice(choice) for choice in answer.values()):
                 return result("low_probability", decision=answer)
             descriptor = summaries.targets[target['choice']] if is_summary and summaries is not None else targets[target['choice']]
             if not is_summary and category["choice"] not in descriptor["eligible_categories"]:

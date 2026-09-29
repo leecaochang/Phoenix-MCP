@@ -779,6 +779,65 @@ async def test_low_confidence_scope_component_cannot_prepare_execution(hass, bat
     prepare.assert_not_called()
 
 
+@pytest.mark.parametrize('ingress', ['preview', 'execution'])
+@pytest.mark.parametrize('operation,question', [
+    ('option', 'attribute'), ('option', 'color'), ('option', 'summary_scope'), ('option', 'summary'),
+    ('fixed', 'value'), ('fixed', 'attribute'), ('fixed', 'color'), ('fixed', 'summary_scope'),
+    ('numeric', 'value'), ('numeric', 'attribute'), ('numeric', 'color'), ('numeric', 'summary_scope'),
+])
+@pytest.mark.parametrize('probability', [0.5, 0.89, 0.90])
+async def test_joint_admission_requires_confident_unused_answers(
+        hass, batch_home, ingress, operation, question, probability):
+    from custom_components.phoenix_mcp.command_routing import RoutingAuthority
+    from custom_components.phoenix_mcp.decision_batch import async_prepare_batch
+    data, token, store, account, lamp = batch_home
+    token.permissions = PermissionTree(domains={
+        domain: PermissionNode(state='GREEN') for domain in ('light', 'input_select')})
+    mode = er.async_get(hass).async_get_or_create('input_select', 'test', 'mode', original_name='Audit mode')
+    hass.states.async_set(mode.entity_id, 'Mode 1', {'friendly_name': 'Audit mode', 'options': ['Mode 1', 'Mode 2']})
+    hass.states.async_set(lamp, 'off', {'friendly_name': 'Desk lamp', 'brightness': 64, 'supported_color_modes': ['rgb']})
+    for entity in (lamp, mode.entity_id):
+        async_expose_entity(hass, 'conversation', entity, True)
+    hass.services.async_register('light', 'turn_on', AsyncMock())
+    hass.services.async_register('input_select', 'select_option', AsyncMock())
+    sentence, category, entity_id = {
+        'option': ('Set Audit mode to Mode 2', 'input_select_option', mode.entity_id),
+        'fixed': ('Turn on Desk lamp', 'light_on', lamp),
+        'numeric': ('Set Desk lamp to 37 percent brightness', 'light_brightness', lamp),
+    }[operation]
+    async def respond(*args):
+        payload = args[4]
+        target = next(key for key, item in wire_targets(payload).items() if item['entity_id'] == entity_id)
+        body = wire_response(payload, category, target)
+        if operation == 'option':
+            selected = next(key for key, value in payload['state']['values'].items() if value == 'Mode 2')
+            body['answers']['value'].update(choice=selected, probabilities={
+                key: float(key == selected) for key in payload['questions']['value']['criteria']})
+        if operation == 'numeric':
+            body['answers']['percentage'].update(choice='37', probabilities={
+                key: float(key == '37') for key in payload['questions']['percentage']['criteria']})
+        assert body['answers'][question]['choice'] == 'none'
+        other = next(key for key in body['answers'][question]['probabilities'] if key != 'none')
+        body['answers'][question]['probabilities'].update({'none': probability, other: 1 - probability})
+        return body
+    with patch.object(DecisionProvider, '_request', AsyncMock(side_effect=respond)) as request:
+        if ingress == 'preview':
+            result = await async_preview_batch(hass, data, token, sentence, 'en',
+                {'reason': 'no_match', 'proposal': None}, numeric_preview=True)
+        else:
+            provider = DecisionProvider(store.resolve(account, purpose='decision'), 'systemone')
+            _, result = await async_prepare_batch(hass, RoutingAuthority.capture(data, token),
+                                                   provider, None, sentence, 'en', 'voice')
+    request.assert_awaited_once()
+    assert result['reason'] == ('target_selected' if probability >= 0.90 else 'low_probability'), result
+    if probability >= 0.90:
+        assert result['proposal']['entity_ids'] == [entity_id]
+        assert ('_plan' in result) is (ingress == 'execution')
+    else:
+        assert result.get('proposal') is None and '_plan' not in result
+    assert not data.store.get_pending_approvals()
+
+
 @pytest.mark.parametrize('numeric_preview', [False, True])
 @pytest.mark.parametrize('missing', [False, True])
 async def test_color_preview_requires_the_selected_literal_identity(hass, batch_home, numeric_preview, missing):
