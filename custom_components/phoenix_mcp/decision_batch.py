@@ -34,7 +34,7 @@ def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = Fals
     if temporal:
         categories = DECISION_EXECUTION_CATEGORIES | DECISION_TEMPORAL_CATEGORIES.keys()
     extended = (numeric_preview and not temporal) or extended
-    grouped = extended and not temporal
+    grouped = extended
     max_targets = DECISION_GROUPED_MAX_TARGETS if grouped else DECISION_BATCH_MAX_TARGETS if extended else DECISION_MAX_TARGETS
     operation_bytes = DECISION_GROUPED_OPERATION_BYTES if grouped else DECISION_MAX_TARGET_BYTES
     snapshots = {category: capture_targets(hass, token, category, devices=devices, max_targets=max_targets,

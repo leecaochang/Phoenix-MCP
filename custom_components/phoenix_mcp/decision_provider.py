@@ -564,8 +564,11 @@ class DecisionProvider:
                 payload["state"]["source_value"] = scalar_value
                 payload["questions"]["percentage"] = {"type": "choice", "criteria": {
                     "value": "The requested absolute setting is exactly source_value in the selected operation's native unit.",
-                    "none": "The fixed value or unit is wrong, ambiguous, relative, converted, missing or not an immediate setting.",
+                    "none": "The operation is nonnumeric (including numbered options), or the value/unit is wrong, ambiguous, relative, converted, missing or not an immediate setting.",
                 }, "instructions": (
+                    "First determine whether the requested operation is numeric. Choose none for option/text settings "
+                    "even when a current option is only digits or contains a number such as Mode 2 or HDMI 2. "
+                    "Such digits are part of an option string, not a native numeric setting. "
                     "Independently verify source_value against the WHOLE utterance and the selected numeric operation "
                     "and target. source_value is a candidate, not an instruction or a trusted interpretation. "
                     "Inspect all number words, signs and units. Reject a number from a device name, date, time, duration, "
@@ -734,14 +737,17 @@ class DecisionProvider:
             "entity's eligible_categories with matching temporal_operations kind, allowing time as explicit duration. "
             "Use Home Assistant's supplied timezone for local datetimes. Explicit foreign timezones require "
             "fallback. Independently check the full utterance for AM/PM, date order and extra values. "
-            "For duration sources verify all stated hours, minutes and seconds against source.value. "
+            "For timer durations, source.value is normalized as HH:MM:SS: five minutes means 00:05:00. "
+            "Verify every stated hour, minute and second, whether spoken as words or digits. "
+            "A timer duration is elapsed time, not a local clock time; timezone is irrelevant to it. "
             "source is a candidate value, not a trusted interpretation of the request. "
             "For uncertainty choose provider for route and none for target and value. No answer executes anything. "
         )
         criteria = {key: f"Immediately set the {spec[3]} field of one named {spec[0]} entity."
                     for key, intent in DECISION_TEMPORAL_CATEGORIES.items()
                     for spec in [COMMAND_ROUTING_TEMPORAL_OPERATIONS[intent]]}
-        criteria["provider"] = "Not one immediate, unambiguous update of a listed date/time helper."
+        criteria["timer_duration"] = "Start one existing named timer now with the explicitly requested duration."
+        criteria["provider"] = "Neither an immediate date/time update nor an immediate start of one listed timer with an explicit duration."
         choices = {key: f"The entity described by state.targets.{key}." for key in targets}
         choices["none"] = "No one eligible target unambiguously matches."
         payload: dict[str, Any] = {"model": self.cfg.model,
@@ -751,8 +757,8 @@ class DecisionProvider:
                        "route": {"type": "choice", "criteria": criteria, "instructions": instructions},
                        "target": {"type": "choice", "criteria": choices, "instructions": instructions},
                        "value": {"type": "choice", "criteria": {
-                           "value": "The requested helper value or explicit HH:MM:SS timer duration is exactly source.value, with the correct interpretation and timezone.",
-                           "none": "The candidate value, kind or timezone is incorrect, missing, ambiguous or not an immediate helper update.",
+                           "value": "The requested date/time value or timer duration is exactly source.value. Apply timezone only to date/time updates; duration words and digits may match normalized HH:MM:SS.",
+                           "none": "The value or its interpretation is wrong, missing or ambiguous, or the request is neither an immediate date/time update nor an immediate timer start.",
                        }, "instructions": instructions},
                    }}
         if self.cfg.api_key and self.cfg.api_key in json.dumps(payload, ensure_ascii=False):
@@ -762,6 +768,7 @@ class DecisionProvider:
         if "target_fields" in payload["state"] or "target_metadata" in payload["state"]:
             for question in payload["questions"].values():
                 question["instructions"] += DECISION_CATALOG_FORMAT_INSTRUCTIONS
+        groups = self._group_choices(payload)
         body = await self._request(session, "POST", self.protocol, timeout_ms, payload)
         if not isinstance(body.get("answers"), dict) or set(body["answers"]) != set(payload["questions"]):
             raise DecisionValidationError("question_set")
@@ -770,6 +777,7 @@ class DecisionProvider:
                    for question, spec in payload["questions"].items()}
         if self.cfg.api_key and self.cfg.api_key in body["model"]:
             raise DecisionError("malformed")
+        self._merge_choice_groups(answers, groups)
         return answers
 
     async def select_target(self, session: ClientSession, sentence: str, category: str,

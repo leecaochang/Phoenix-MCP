@@ -540,8 +540,9 @@ async def test_value_worker_wait_rechecks_authority_before_disclosure(hass, perc
     assert not {'proposal', 'decision', 'value_check', '_plan'} & result.keys()
 
 
+@pytest.mark.parametrize('temporal', [False, True])
 @pytest.mark.parametrize('failure,bound', [('name', 'text_length'), ('aliases', 'alias_count'), ('bytes', 'metadata_bytes')])
-async def test_preview_limit_diagnostic_contains_only_scoped_counts(hass, batch_home, failure, bound):
+async def test_preview_limit_diagnostic_contains_only_scoped_counts(hass, batch_home, failure, bound, temporal):
     _, _, _, _, entity_id = batch_home
     registry = er.async_get(hass)
     if failure == 'name': hass.states.async_set(entity_id, 'off', {'friendly_name': 'x' * 257})
@@ -552,7 +553,12 @@ async def test_preview_limit_diagnostic_contains_only_scoped_counts(hass, batch_
             registry.async_update_entity(entry.entity_id, aliases={str(i) * 200 for i in range(8)})
             hass.states.async_set(entry.entity_id, 'off')
     with patch.object(DecisionProvider, '_request') as request:
-        result = await percentage_preview(hass, batch_home)
+        if temporal:
+            data, token, *_ = batch_home
+            result = await async_preview_batch(hass, data, token, 'Start Missing timer for 00:05:00', 'en',
+                                               {'reason': 'no_match', 'proposal': None})
+        else:
+            result = await percentage_preview(hass, batch_home)
     request.assert_not_called()
     assert result['reason'] == 'target_metadata_too_large'
     diagnostic = result['catalog_limit']
@@ -814,7 +820,7 @@ async def test_temporal_catalog_pools_repeated_attributes_without_losing_competi
     snapshot = capture_batch_targets(hass, token, extended=True, temporal=True)
     targets, catalogs = snapshot
     attributes = catalogs['attribute_read'].targets
-    # This operation previously exceeded its unchanged 16 KiB budget, blocking timers.
+    # Packing also fits the historical 16 KiB operation budget without dropping metadata.
     assert len(json.dumps(attributes, ensure_ascii=False).encode()) > DECISION_MAX_TARGET_BYTES
     assert len(json.dumps(catalog_state(attributes), ensure_ascii=False).encode()) <= DECISION_MAX_TARGET_BYTES
     expected = {state.entity_id for state in hass.states.async_all() if state.domain in ('light', 'timer')}
@@ -845,3 +851,44 @@ async def test_temporal_catalog_pools_repeated_attributes_without_losing_competi
     state = hass.states.get(entry.entity_id)
     hass.states.async_set(entry.entity_id, state.state, {**state.attributes, 'effect_list': ['none', 'rainbow']})
     assert batch_catalog_digest(capture_batch_targets(hass, token, extended=True, temporal=True)) != before
+
+
+@pytest.mark.parametrize('case', ['selected', 'declined', 'conflict', 'uncertain', 'missing', 'unqualified', 'overflow'])
+async def test_temporal_groups_keep_all_candidates_and_require_one_confident_winner(case):
+    count = DECISION_GROUPED_MAX_TARGETS + 1 if case == 'overflow' else 300
+    targets = {f't{i}': {'entity_id': f'timer.fixture_{i}', 'name': f'Timer {i}',
+                        'eligible_categories': ['timer_duration'], 'temporal_operations': {'timer_duration': 'duration'}}
+               for i in range(count)}
+    cfg = agentcli.ProviderConfig('typesafe', 'jev-latest', 'https://api.typesafe.ai/v1')
+    if case == 'unqualified':
+        cfg = agentcli.ProviderConfig('custom_decision', 'other', 'https://example.test')
+    provider = DecisionProvider(cfg, 'systemone')
+    async def response(*args):
+        payload = args[4]
+        assert len(wire_targets(payload)) == 300
+        assert 'target_2' in payload['questions']
+        assert all(len(spec['criteria']) <= 255 for spec in payload['questions'].values())
+        body = wire_response(payload, 'timer_duration', 'none')
+        for name in ('target', 'target_2'):
+            selected = 't299' if name == 'target_2' and case != 'declined' else 'none'
+            if case == 'conflict' and name == 'target':
+                selected = 't0'
+            probabilities = {key: float(key == selected) for key in payload['questions'][name]['criteria']}
+            if case == 'uncertain' and name == 'target':
+                probabilities.update(none=0.89, t0=0.11)
+            body['answers'][name].update(choice=selected, probabilities=probabilities)
+        body['answers']['value'].update(choice='value', probabilities={'value': 1, 'none': 0})
+        if case == 'missing':
+            del body['answers']['target_2']
+        return body
+    with patch.object(provider, '_request', side_effect=response) as request:
+        if case in ('selected', 'declined'):
+            answer = await provider.route_temporal(MagicMock(), 'Start Timer 299 for five minutes', 'en', targets,
+                                                  {'kind': 'duration', 'value': '00:05:00'}, 'UTC', 1000)
+            assert answer['target']['choice'] == ('t299' if case == 'selected' else 'none')
+            assert set(answer) == {'route', 'target', 'value'}
+        else:
+            with pytest.raises(DecisionError):
+                await provider.route_temporal(MagicMock(), 'Start Timer 299 for five minutes', 'en', targets,
+                                              {'kind': 'duration', 'value': '00:05:00'}, 'UTC', 1000)
+    assert request.await_count == (0 if case in ('unqualified', 'overflow') else 1)

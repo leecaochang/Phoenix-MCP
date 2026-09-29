@@ -935,12 +935,19 @@ async def temporal_home(hass, jev_hybrid_home):
 
 
 def temporal_wire(payload, entity_id, category='helper_datetime', value='value'):
-    target = next(key for key, item in payload['state']['targets'].items() if item['entity_id'] == entity_id)
-    choices = {'route': category, 'target': target, 'value': value, 'summary': 'none', 'summary_scope': 'none'}
+    state = payload['state']
+    targets = state['targets']
+    if 'target_fields' in state:
+        targets = {key: dict(zip(state['target_fields'], row, strict=True)) for key, row in targets.items()}
+    target = next(key for key, item in targets.items() if item['entity_id'] == entity_id)
+    choices = {'route': category, 'value': value, 'summary': 'none', 'summary_scope': 'none'}
+    choices.update({name: target if target in spec['criteria'] else 'none'
+                    for name, spec in payload['questions'].items() if name == 'target' or name.startswith('target_')})
     return {'model': 'jev-1.13.0', 'answers': {
         question: {'type': 'choice', 'choice': choices[question], 'confidence': 1,
                    'probabilities': {key: float(key == choices[question]) for key in spec['criteria']}}
         for question, spec in payload['questions'].items()}}
+
 
 
 @pytest.mark.parametrize('category,value,field', [
@@ -961,9 +968,16 @@ async def test_temporal_helpers_dispatch_only_the_exact_requested_field(hass, te
         {'entity_id': [temporal_home[-1]], field: value}, blocking=True, return_response=False)
 
 
+@pytest.mark.parametrize('large', [False, True])
 @pytest.mark.parametrize('change', ['none', 'value', 'flags', 'timezone', 'competitor', 'permission'])
-async def test_temporal_approval_revalidates_value_catalog_and_authority(hass, temporal_home, change):
+async def test_temporal_approval_revalidates_value_catalog_and_authority(hass, temporal_home, change, large):
     data, token, _, _, entity_id = temporal_home
+    if large:
+        token.permissions.domains['sensor'] = PermissionNode(state='YELLOW')
+        for index in range(300):
+            entry = er.async_get(hass).async_get_or_create('sensor', 'test', f'competitor_{index}')
+            hass.states.async_set(entry.entity_id, '20', {'friendly_name': f'Competing reading {index}'})
+            async_expose_entity(hass, 'conversation', entry.entity_id, True)
     await set_mesa(hass, temporal_home, 'confirm')
     async def respond(*args): return temporal_wire(args[4], entity_id)
     with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
