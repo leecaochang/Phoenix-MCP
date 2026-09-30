@@ -35,11 +35,25 @@ export function codexTokenEnv(tokenName: string): string {
   return "PHOENIX_TOKEN_" + tokenName.toUpperCase().replace(/-/g, "_");
 }
 
+// Harness accepts at most 32 characters. The backend's unique token slug fits
+// without truncation; omit the optional phx- prefix for this client only.
+export function harnessServerName(tokenName: string): string {
+  return mcpServerName(tokenName).slice(4);
+}
+
+// Editable URLs can contain shell metacharacters. Keep ordinary URLs readable
+// and quote everything else without allowing shell expansion.
+function shellArg(value: string): string {
+  return /^[A-Za-z0-9_/:.,@%+=-]+$/.test(value)
+    ? value
+    : `'${value.replace(/'/g, "'\\''")}'`;
+}
+
 // The verified `claude mcp add` command. Phoenix MCP authenticates via
 // `Authorization: Bearer phx_<token>` (NOT X-API-Key, NOT OAuth) and the modern
 // Streamable HTTP transport is `--transport http`.
 export function buildClaudeCommand(url: string, token: string, serverName: string): string {
-  return `claude mcp add --transport http ${serverName} ${url} --header "Authorization: Bearer ${token}"`;
+  return `claude mcp add --transport http ${serverName} ${shellArg(url)} --header ${shellArg(`Authorization: ${buildBearerValue(token)}`)}`;
 }
 
 // A generic MCP server config block for clients that use a JSON file
@@ -62,7 +76,7 @@ export function buildMcpJson(url: string, token: string, serverName: string): st
 
 // Gemini CLI: `gemini mcp add <name> <url> --transport http --header ...`.
 export function buildGeminiCommand(url: string, token: string, serverName: string): string {
-  return `gemini mcp add ${serverName} ${url} --transport http --header "Authorization: Bearer ${token}"`;
+  return `gemini mcp add ${serverName} ${shellArg(url)} --transport http --header ${shellArg(`Authorization: ${buildBearerValue(token)}`)}`;
 }
 
 // The value for an Authorization header (for GUI clients that take a header
@@ -71,13 +85,20 @@ export function buildBearerValue(token: string): string {
   return `Bearer ${token}`;
 }
 
-// Codex's `codex mcp add` CLI is stdio-only; remote HTTP servers are added via
-// its GUI or ~/.codex/config.toml, which reads the token from an env var.
+// Codex shares its HTTP MCP configuration across local clients.
 export function buildCodexEnv(token: string, envVar: string): string {
-  return `export ${envVar}="${token}"`;
+  return `export ${envVar}=${shellArg(token)}`;
+}
+export function buildCodexCommand(url: string, serverName: string, envVar: string): string {
+  return `codex mcp add ${serverName} --url ${shellArg(url)} --bearer-token-env-var ${envVar}`;
 }
 export function buildCodexConfig(url: string, serverName: string, envVar: string): string {
-  return `[mcp_servers.${serverName}]\nurl = "${url}"\nbearer_token_env_var = "${envVar}"`;
+  return `[mcp_servers.${serverName}]\nurl = ${JSON.stringify(url)}\nbearer_token_env_var = ${JSON.stringify(envVar)}`;
+}
+
+export function buildHarnessConfig(url: string, token: string, tokenName: string): string {
+  const name = harnessServerName(tokenName);
+  return `- insert:\n    - id: mcp-phx-${name}\n      name: '@deepseek-ai/dsh-mcp-client'\n      config:\n        serverName: ${JSON.stringify(name)}\n        transport: streamable-http\n        url: ${JSON.stringify(url)}\n        headers:\n          Authorization: ${JSON.stringify(buildBearerValue(token))}`;
 }
 
 // Cursor reads remote servers from ~/.cursor/mcp.json using url + headers
@@ -103,14 +124,12 @@ export interface AgentTab {
   href: string;
   intro?: string;
   blocks: AgentBlock[];
-  showSkillInstall?: boolean;
 }
 
 // Per-agent connection instructions, default first (Claude Code). Verified
-// against each tool's current docs; DeepSeek is a model used via an MCP client,
-// so it gets the generic config rather than a CLI command. tokenName drives
-// the per-token server name (and Codex env var), so every token can coexist
-// as its own entry in one client.
+// against each tool's current docs. tokenName drives each client's per-token
+// server name (and Codex env var), so entries can coexist without replacing one
+// another. Harness is an external client, separate from Agent Chat providers.
 export function buildAgentTabs(url: string, token: string, tokenName: string): AgentTab[] {
   const serverName = mcpServerName(tokenName);
   const envVar = codexTokenEnv(tokenName);
@@ -118,40 +137,28 @@ export function buildAgentTabs(url: string, token: string, tokenName: string): A
     {
       key: "claude",
       label: "Claude Code",
-      href: "https://docs.claude.com/en/docs/claude-code/mcp",
+      href: "https://code.claude.com/docs/en/mcp",
       blocks: [
         { hint: t("wizard.agentClaudeHint"), code: buildClaudeCommand(url, token, serverName) },
       ],
     },
     {
-      key: "claude-web",
-      label: t("wizard.agentClaudeWebLabel"),
-      href: "https://claude.com/docs/connectors/custom/remote-mcp",
-      intro: t("wizard.agentClaudeWebIntro"),
-      blocks: [
-        {
-          title: t("wizard.agentClaudeWebSetupTitle"),
-          hint: t("wizard.agentClaudeWebSetupHint"),
-          fields: [
-            { label: t("wizard.codexHeaderKeyLabel"), value: "Authorization" },
-            { label: t("wizard.codexHeaderValueLabel"), value: buildBearerValue(token) },
-          ],
-        },
-      ],
-      showSkillInstall: false,
-    },
-    {
       key: "gemini",
       label: "Gemini CLI",
-      href: "https://google-gemini.github.io/gemini-cli/docs/tools/mcp-server.html",
+      href: "https://geminicli.com/docs/tools/mcp-server/",
       blocks: [{ hint: t("wizard.agentGeminiHint"), code: buildGeminiCommand(url, token, serverName) }],
     },
     {
       key: "codex",
       label: "Codex",
-      href: "https://developers.openai.com/codex/mcp",
+      href: "https://learn.chatgpt.com/docs/extend/mcp?surface=cli",
       intro: t("wizard.agentCodexIntro"),
       blocks: [
+        {
+          title: t("wizard.codexEnvTitle", { envVar }),
+          hint: t("wizard.codexEnvHint", { envVar }),
+          code: `${buildCodexEnv(token, envVar)}\n${buildCodexCommand(url, serverName, envVar)}`,
+        },
         {
           title: t("wizard.codexAppSettingsTitle"),
           hint: t("wizard.codexAppSettingsHint", { serverName }),
@@ -166,11 +173,6 @@ export function buildAgentTabs(url: string, token: string, tokenName: string): A
           hint: t("wizard.codexConfigFileHint"),
           code: buildCodexConfig(url, serverName, envVar),
         },
-        {
-          title: t("wizard.codexEnvTitle", { envVar }),
-          hint: t("wizard.codexEnvHint", { envVar }),
-          code: buildCodexEnv(token, envVar),
-        },
       ],
     },
     {
@@ -179,6 +181,24 @@ export function buildAgentTabs(url: string, token: string, tokenName: string): A
       href: "https://cursor.com/docs/mcp",
       intro: t("wizard.agentCursorIntro"),
       blocks: [{ code: buildCursorJson(url, token, serverName) }],
+    },
+    {
+      key: "deepseek-harness",
+      label: t("wizard.agentHarnessLabel"),
+      href: "https://www.deepseek.com/en/harness/",
+      intro: t("wizard.agentHarnessIntro"),
+      blocks: [
+        {
+          title: t("wizard.harnessConfigTitle"),
+          hint: t("wizard.harnessConfigHint"),
+          code: buildHarnessConfig(url, token, tokenName),
+        },
+        {
+          title: t("wizard.harnessLaunchTitle"),
+          hint: t("wizard.harnessLaunchHint"),
+          code: 'npx @deepseek-ai/dsh web --patch "$PWD/phoenix.cordis.yml"',
+        },
+      ],
     },
     {
       key: "other",
@@ -192,10 +212,8 @@ export function buildAgentTabs(url: string, token: string, tokenName: string): A
 
 // Per-agent "install the Phoenix MCP skill" guidance (Channel B). Channel A already
 // links every connection to the same guide, so installing it locally is
-// optional, but it makes the agent use Phoenix MCP correctly from the first turn. Only
-// Claude Code has a first-class skills directory; other agents load a project
-// context or rules file, so for those we download the guide and name where to
-// reference it. agentKey matches the keys from buildAgentTabs.
+// optional. Native skills expose their metadata first and load the guide when
+// activated; Cursor uses a project rule that references the downloaded guide.
 export function buildSkillInstall(skillUrl: string, agentKey: string): AgentBlock[] {
   const title = t("wizard.skillInstallTitle");
   switch (agentKey) {
@@ -203,34 +221,41 @@ export function buildSkillInstall(skillUrl: string, agentKey: string): AgentBloc
       return [{
         title,
         hint: t("wizard.skillClaudeHint"),
-        code: `mkdir -p ~/.claude/skills/phoenix && curl -fsSL ${skillUrl} -o ~/.claude/skills/phoenix/SKILL.md`,
+        code: `mkdir -p ~/.claude/skills/phoenix && curl -fsSL ${shellArg(skillUrl)} -o ~/.claude/skills/phoenix/SKILL.md`,
       }];
     case "cursor":
       return [{
         title,
         hint: t("wizard.skillCursorHint"),
-        code: `mkdir -p .cursor/rules && curl -fsSL ${skillUrl} -o .cursor/rules/phoenix.md`,
+        code: `mkdir -p .cursor/rules && curl -fsSL ${shellArg(skillUrl)} -o .cursor/phoenix.md && cat > .cursor/rules/phoenix.mdc <<'PHOENIX_RULE'\n---\ndescription: Use when inspecting, controlling, or configuring Home Assistant through Phoenix MCP\nalwaysApply: false\n---\nBefore using Phoenix MCP tools, read @.cursor/phoenix.md for scoped permissions, approvals, and MESA guidance.\nPHOENIX_RULE`,
       }];
     case "gemini":
       return [{
         title,
         hint: t("wizard.skillGeminiHint"),
         fields: [{ label: t("wizard.skillGuideUrlLabel"), value: skillUrl }],
-        code: `curl -fsSL ${skillUrl} -o phoenix.md`,
+        code: `mkdir -p ~/.gemini/skills/phoenix && curl -fsSL ${shellArg(skillUrl)} -o ~/.gemini/skills/phoenix/SKILL.md`,
       }];
     case "codex":
       return [{
         title,
         hint: t("wizard.skillCodexHint"),
         fields: [{ label: t("wizard.skillGuideUrlLabel"), value: skillUrl }],
-        code: `curl -fsSL ${skillUrl} -o phoenix.md`,
+        code: `mkdir -p ~/.agents/skills/phoenix && curl -fsSL ${shellArg(skillUrl)} -o ~/.agents/skills/phoenix/SKILL.md`,
+      }];
+    case "deepseek-harness":
+      return [{
+        title,
+        hint: t("wizard.skillHarnessHint"),
+        fields: [{ label: t("wizard.skillGuideUrlLabel"), value: skillUrl }],
+        code: `mkdir -p ~/.dsh/skills/phoenix && curl -fsSL ${shellArg(skillUrl)} -o ~/.dsh/skills/phoenix/SKILL.md`,
       }];
     default:
       return [{
         title,
         hint: t("wizard.skillOtherHint"),
         fields: [{ label: t("wizard.skillGuideUrlLabel"), value: skillUrl }],
-        code: `curl -fsSL ${skillUrl} -o phoenix.md`,
+        code: `curl -fsSL ${shellArg(skillUrl)} -o phoenix.md`,
       }];
   }
 }

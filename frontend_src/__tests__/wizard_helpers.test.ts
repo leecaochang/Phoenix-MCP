@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildAgentTabs, buildBearerValue, buildClaudeCommand, buildCodexConfig, buildCursorJson, buildGeminiCommand, buildMcpJson, buildMcpUrl, buildSkillInstall, buildTestPrompt, codexTokenEnv, firstGreenEntity, firstGreenTarget, mcpServerName, skillUrlFromMcp } from "../wizard_helpers";
+import { load } from "js-yaml";
+import { buildAgentTabs, buildBearerValue, buildClaudeCommand, buildCodexCommand, buildCodexConfig, buildCursorJson, buildGeminiCommand, buildHarnessConfig, buildMcpJson, buildMcpUrl, buildSkillInstall, buildTestPrompt, codexTokenEnv, firstGreenEntity, firstGreenTarget, harnessServerName, mcpServerName, skillUrlFromMcp } from "../wizard_helpers";
 import { PERSONA_CAP_DEFAULTS } from "../personas";
 import type { EntityTree, PermissionTree } from "../types";
 
@@ -40,7 +41,7 @@ describe("buildClaudeCommand", () => {
     const cmd = buildClaudeCommand("http://192.168.1.11:8123/api/phoenix-mcp", "phx_abc", "phx-voice");
     expect(cmd).toContain("claude mcp add --transport http phx-voice");
     expect(cmd).toContain("http://192.168.1.11:8123/api/phoenix-mcp");
-    expect(cmd).toContain('--header "Authorization: Bearer phx_abc"');
+    expect(cmd).toContain("--header 'Authorization: Bearer phx_abc'");
     expect(cmd).not.toContain("X-API-Key");
   });
 });
@@ -60,7 +61,7 @@ describe("buildGeminiCommand", () => {
     const cmd = buildGeminiCommand("http://ha/api/phoenix-mcp", "phx_abc", "phx-voice");
     expect(cmd).toContain("gemini mcp add phx-voice http://ha/api/phoenix-mcp");
     expect(cmd).toContain("--transport http");
-    expect(cmd).toContain('--header "Authorization: Bearer phx_abc"');
+    expect(cmd).toContain("--header 'Authorization: Bearer phx_abc'");
   });
 });
 
@@ -73,25 +74,55 @@ describe("buildCodexConfig", () => {
   });
 });
 
+describe("HTTP client configuration", () => {
+  it("adds Codex over HTTP using the configured bearer environment variable", () => {
+    expect(buildCodexCommand("http://ha/api/phoenix-mcp", "phx-voice", "PHOENIX_TOKEN_VOICE"))
+      .toBe("codex mcp add phx-voice --url http://ha/api/phoenix-mcp --bearer-token-env-var PHOENIX_TOKEN_VOICE");
+  });
+
+  it("quotes editable URL metacharacters instead of expanding them in a shell", () => {
+    const url = "https://ha.test/api/phoenix-mcp?x=$(touch injected)&y='test'";
+    for (const command of [
+      buildClaudeCommand(url, "phx_abc", "phx-voice"),
+      buildGeminiCommand(url, "phx_abc", "phx-voice"),
+      buildCodexCommand(url, "phx-voice", "PHOENIX_TOKEN_VOICE"),
+    ]) {
+      expect(command).toContain("'https://ha.test/api/phoenix-mcp?x=$(touch injected)&y='\\''test'\\''' ");
+    }
+  });
+
+  it("keeps Harness names within its schema without truncating distinct tokens", () => {
+    const first = "a".repeat(31) + "b";
+    const second = "a".repeat(31) + "c";
+    expect(harnessServerName(first)).toMatch(/^[A-Za-z0-9_-]{1,32}$/);
+    expect(harnessServerName(first)).not.toBe(harnessServerName(second));
+    expect(harnessServerName("Voice_Assist")).toBe("voice-assist");
+  });
+
+  it("emits a parseable Harness insert overlay with the bearer header intact", () => {
+    const url = 'https://ha.test/api/phoenix-mcp?value="quoted"';
+    const overlay = load(buildHarnessConfig(url, "phx_secret", "Voice_Assist")) as Array<{
+      insert: Array<{ name: string; config: { serverName: string; transport: string; url: string; headers: Record<string, string> } }>;
+    }>;
+    const entry = overlay[0].insert[0];
+    expect(entry.name).toBe("@deepseek-ai/dsh-mcp-client");
+    expect(entry.config).toEqual({
+      serverName: "voice-assist", transport: "streamable-http", url,
+      headers: { Authorization: "Bearer phx_secret" },
+    });
+  });
+});
+
 describe("buildAgentTabs", () => {
-  it("returns the supported agents plus an explained Claude hosted-connector limit", () => {
+  it("returns the supported clients with Harness and keeps the limited hosted beta out", () => {
     const tabs = buildAgentTabs("http://ha/api/phoenix-mcp", "phx_abc", "Voice_Assist");
-    expect(tabs.map((t) => t.key)).toEqual(["claude", "claude-web", "gemini", "codex", "cursor", "other"]);
+    expect(tabs.map((t) => t.key)).toEqual(["claude", "gemini", "codex", "cursor", "deepseek-harness", "other"]);
     expect(tabs[0].blocks[0].code).toContain("claude mcp add");
     // Every tab carries a docs link and at least one block.
     for (const t of tabs) {
       expect(t.href).toMatch(/^https:\/\//);
       expect(t.blocks.length).toBeGreaterThan(0);
     }
-  });
-
-  it("provides the full bearer header but no local skill install for Claude hosted connectors", () => {
-    const claudeWeb = buildAgentTabs("http://ha/api/phoenix-mcp", "phx_secret", "Voice_Assist")
-      .find((t) => t.key === "claude-web")!;
-    expect(claudeWeb.showSkillInstall).toBe(false);
-    expect(claudeWeb.blocks[0].fields).toContainEqual({ label: "Header key", value: "Authorization" });
-    expect(claudeWeb.blocks[0].fields).toContainEqual({ label: "Header value", value: "Bearer phx_secret" });
-    expect(claudeWeb.blocks[0].code).toBeUndefined();
   });
 
   it("threads the token-derived server name into every tab", () => {
@@ -106,13 +137,15 @@ describe("buildAgentTabs", () => {
 
   it("Codex tab gives the exact Authorization header key/value as fields and a per-token env var", () => {
     const codex = buildAgentTabs("http://ha/api/phoenix-mcp", "phx_abc", "Voice_Assist").find((t) => t.key === "codex")!;
-    const guiFields = codex.blocks[0].fields!;
+    expect(codex.blocks[0].code).toContain("codex mcp add phx-voice-assist --url");
+    expect(codex.blocks[0].code).toContain("export PHOENIX_TOKEN_VOICE_ASSIST=phx_abc");
+    const guiFields = codex.blocks[1].fields!;
     expect(guiFields).toContainEqual({ label: "Server name", value: "phx-voice-assist" });
     expect(guiFields).toContainEqual({ label: "Header key", value: "Authorization" });
     expect(guiFields).toContainEqual({ label: "Header value", value: "Bearer phx_abc" });
-    expect(codex.blocks[1].code).toContain("[mcp_servers.phx-voice-assist]");
-    expect(codex.blocks[1].code).toContain('bearer_token_env_var = "PHOENIX_TOKEN_VOICE_ASSIST"');
-    expect(codex.blocks[2].code).toBe('export PHOENIX_TOKEN_VOICE_ASSIST="phx_abc"');
+    expect(codex.blocks[2].title).toContain("~/.codex/config.toml");
+    expect(codex.blocks[2].code).toContain("[mcp_servers.phx-voice-assist]");
+    expect(codex.blocks[2].code).toContain('bearer_token_env_var = "PHOENIX_TOKEN_VOICE_ASSIST"');
   });
 });
 
@@ -217,20 +250,29 @@ describe("buildSkillInstall", () => {
     expect(blocks[0].code).toContain("~/.claude/skills/phoenix/SKILL.md");
     expect(blocks[0].code).toContain(url);
   });
-  it("writes a Cursor project rule under .cursor/rules", () => {
+  it("creates a recognized Cursor rule referencing the downloaded guide", () => {
     const blocks = buildSkillInstall(url, "cursor");
-    expect(blocks[0].code).toContain(".cursor/rules/phoenix.md");
+    const command = blocks[0].code!;
+    expect(command).toContain("-o .cursor/phoenix.md");
+    expect(command).toContain(".cursor/rules/phoenix.mdc");
+    const metadata = command.split("\n---\n")[1];
+    expect(load(metadata)).toEqual({
+      description: "Use when inspecting, controlling, or configuring Home Assistant through Phoenix MCP",
+      alwaysApply: false,
+    });
+    expect(command).toContain("@.cursor/phoenix.md");
   });
   it("gives non-Claude agents the skill URL as a copyable field plus a download", () => {
-    for (const key of ["gemini", "codex", "other"]) {
+    for (const key of ["gemini", "codex", "deepseek-harness", "other"]) {
       const blocks = buildSkillInstall(url, key);
       expect(blocks[0].fields).toContainEqual({ label: "Skill guide URL", value: url });
       expect(blocks[0].code).toContain(url);
     }
   });
-  it("names the agent's own context file for Gemini and Codex", () => {
-    expect(buildSkillInstall(url, "gemini")[0].hint).toContain("GEMINI.md");
-    expect(buildSkillInstall(url, "codex")[0].hint).toContain("Codex project instructions");
+  it("installs native skills in each client's discovered user directory", () => {
+    expect(buildSkillInstall(url, "gemini")[0].code).toContain("~/.gemini/skills/phoenix/SKILL.md");
+    expect(buildSkillInstall(url, "codex")[0].code).toContain("~/.agents/skills/phoenix/SKILL.md");
+    expect(buildSkillInstall(url, "deepseek-harness")[0].code).toContain("~/.dsh/skills/phoenix/SKILL.md");
   });
 });
 

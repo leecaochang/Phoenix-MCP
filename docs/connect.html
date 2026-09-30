@@ -33,8 +33,10 @@
           <div class="callout-body"><p class="callout-title">Choose the shortest setup for you</p><ul><li><strong>First token:</strong> follow the <a href="quickstart.html">guided quick start</a> to grant one device and test it.</li><li><strong>No external client:</strong> use <a href="agentcli.html">Agent Chat</a> inside Home Assistant with the same scope and approvals.</li></ul></div>
         </div>
 
-        <h2 id="claude-compatibility">Claude compatibility</h2>
-        <p><strong>Claude Code works directly.</strong> Claude's hosted custom connector also works when your organization has Anthropic's limited Request headers beta.</p>
+        <details class="advanced" id="claude-compatibility">
+          <summary>Advanced: Claude web/app (limited beta)</summary>
+          <div class="advanced-content">
+        <p><strong>Claude Code works directly.</strong> Claude's hosted custom connector is available for Phoenix only when your organization has Anthropic's limited Request headers beta. It is therefore omitted from the panel's normal client chooser.</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th scope="col">Claude client</th><th scope="col">Status</th><th scope="col">What to do</th></tr></thead>
@@ -44,22 +46,19 @@
             </tbody>
           </table>
         </div>
-        <details class="advanced">
-          <summary>What changed in Claude's connector flow</summary>
-          <div class="advanced-content">
             <ul>
               <li>Claude now uses one hosted remote-connector system across the web app, Desktop, mobile apps, and Cowork. Connections originate from Anthropic's cloud, so the MCP endpoint must be public.</li>
               <li>Personal plans add connectors under <strong>Customize &gt; Connectors</strong>. Team and Enterprise owners add them for the organization before members connect.</li>
               <li>Users can control connector access and individual tool permissions.</li>
-              <li>Request header authentication is a limited organization beta. In the two-step dialog, choose <strong>Authentication: None</strong>, add a required <code>Authorization</code> header, and enter the full value <code>Bearer phx_your_token_here</code>.</li>
+              <li>Request header authentication is a limited organization beta. Choose <strong>Authentication: No sign-in</strong>, add a required <code>Authorization</code> header, and enter the full value <code>Bearer phx_your_token_here</code>. Dialog layouts vary; some show authentication fields under <strong>Advanced</strong>.</li>
               <li>The token is shared by everyone in the organization who uses the connector. Create a dedicated least-privilege Phoenix token for this connector.</li>
               <li>Do not put the token in the connector URL. Claude sends request-header values exactly as entered and does not add the <code>Bearer</code> prefix for you.</li>
             </ul>
-            <p>See Anthropic's <a href="https://claude.com/docs/connectors/custom/remote-mcp" target="_blank" rel="noopener">remote connector setup</a> and <a href="https://claude.com/docs/connectors/building/authentication" target="_blank" rel="noopener">connector authentication</a> documentation.</p>
+            <p>See Anthropic's <a href="https://claude.com/docs/connectors/custom/add-unlisted" target="_blank" rel="noopener">remote connector setup</a> and <a href="https://claude.com/docs/connectors/building/authentication" target="_blank" rel="noopener">connector authentication</a> documentation.</p>
           </div>
         </details>
 
-        <h2>The five steps</h2>
+        <h2>Connect and verify</h2>
         <div class="steps">
 
           <div class="step"><div class="step-body">
@@ -87,7 +86,7 @@
             <pre class="code" data-lang="bash" data-label="Remote address"><code>claude mcp add --transport http phx-claude-code \
   https://your-instance.ui.nabu.casa/api/phoenix-mcp \
   --header "Authorization: Bearer phx_your_token_here"</code></pre>
-            <p>This example uses Claude Code's CLI. For Cursor, Codex, Gemini CLI, or another compatible MCP client, the panel's <strong>Connect</strong> step generates the command or config and links to that client's setup guide. The client must support the endpoint ending in <code>/api/phoenix-mcp</code> and an <code>Authorization: Bearer</code> header carrying your token.</p>
+            <p>This example uses Claude Code's CLI and registers the server for your current project. Add <code>--scope user</code> to use it across projects. The panel's <strong>Connect</strong> step generates commands or configs for the clients below. Each client must support Streamable HTTP at <code>/api/phoenix-mcp</code> and an <code>Authorization: Bearer</code> header carrying your token.</p>
           </div></div>
 
           <div class="step"><div class="step-body">
@@ -97,7 +96,7 @@
 
           <div class="step"><div class="step-body">
             <h3>Adding more tokens as separate profiles</h3>
-            <p>Because each token gets its own server name, you can keep several configured in one client at once, one entry per token, all pointing at the same Phoenix MCP URL with a different bearer token each. To add another, create a second token in the panel, and on the screen shown after it is created choose <strong>Connect to an Agent&hellip;</strong> and run the command it shows, the same way you did for the first. Switch between them by toggling which entry is enabled in the client (in Claude Code, <code>/mcp</code>) instead of clearing and retyping credentials. Enable only one <code>phx-*</code> server at a time: enabling several gives your agent duplicate Home Assistant toolsets with different permissions.</p>
+            <p>Because each token gets its own server name, you can keep several configured in one client at once, one entry per token, all pointing at the same Phoenix MCP URL with a different bearer token each. To add another, create a second token in the panel, and on the screen shown after it is created choose <strong>Connect to an Agent&hellip;</strong> and run the command it shows, the same way you did for the first. Switch between them by toggling which entry is enabled in the client (in Claude Code, <code>/mcp</code>) instead of clearing and retyping credentials. Enable only one Phoenix MCP server at a time: enabling several gives your agent duplicate Home Assistant toolsets with different permissions.</p>
             <div class="callout warn">
               <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.8 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.8a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><circle cx="12" cy="17" r="0.4" fill="currentColor"/></svg>
               <div class="callout-body"><p class="callout-title">Save each token's command when you first see it</p><p>Phoenix MCP stores only a hash of a token's value, so the panel cannot show a token's config again after you close its creation (or rotation) dialog. If you lose it, rotate the token to get a fresh value and command.</p></div>
@@ -106,10 +105,68 @@
 
           <div class="step"><div class="step-body">
             <h3>The agent skill <span class="badge badge-neutral">optional</span></h3>
-            <p>You do not have to brief the client yourself. On connection, Phoenix MCP already sends it a short, token-aware primer (see below) that links to the full guide it can fetch on demand. Installing the skill is an optional extra that loads the complete guidance from the first turn.</p>
+            <p>On connection, Phoenix MCP sends a short, token-aware primer that links to the full guide. Optional skill installation makes the guide available locally. Native skill clients discover its name and description first, then load the full guidance when the skill is activated.</p>
           </div></div>
 
         </div>
+
+        <h2 id="client-setup">Client-specific setup</h2>
+        <p>The examples use a token named <code>home</code>. Replace the address and token before running them. The panel generates these values for your actual token. Terminal commands below use macOS/Linux shell syntax.</p>
+
+        <h3 id="gemini-cli">Gemini CLI</h3>
+        <pre class="code" data-lang="bash"><code>gemini mcp add phx-home http://your-ha-address:8123/api/phoenix-mcp \
+  --transport http --header 'Authorization: Bearer phx_your_token_here'</code></pre>
+        <p>Run from your project directory, then check with <code>gemini mcp list</code>. Add <code>--scope user</code> to make it available across projects. See <a href="https://geminicli.com/docs/tools/mcp-server/" target="_blank" rel="noopener">Gemini's MCP instructions</a>.</p>
+
+        <h3 id="codex">Codex</h3>
+        <pre class="code" data-lang="bash"><code>export PHOENIX_TOKEN_HOME=phx_your_token_here
+codex mcp add phx-home --url http://your-ha-address:8123/api/phoenix-mcp \
+  --bearer-token-env-var PHOENIX_TOKEN_HOME</code></pre>
+        <p>Check with <code>codex mcp list</code>, then start Codex from that shell. For future terminals, put the export in your shell profile. In PowerShell, set <code>$env:PHOENIX_TOKEN_HOME="phx_your_token_here"</code> for the current session; <code>setx</code> only affects newly started processes.</p>
+        <p>Alternatively, add this table to <code>~/.codex/config.toml</code> or a project's <code>.codex/config.toml</code>, with the same environment variable set before starting Codex:</p>
+        <pre class="code" data-lang="toml"><code>[mcp_servers.phx-home]
+url = "http://your-ha-address:8123/api/phoenix-mcp"
+bearer_token_env_var = "PHOENIX_TOKEN_HOME"</code></pre>
+        <p>Local Codex clients share MCP configuration on the same host. An app launched separately may not inherit shell variables. In that case, use the app's MCP server settings: add a Streamable HTTP server, leave its bearer-token environment field empty, and add <code>Authorization</code> with the value <code>Bearer phx_your_token_here</code>. Save and reconnect. Choose one setup method; see the <a href="https://learn.chatgpt.com/docs/extend/mcp?surface=cli" target="_blank" rel="noopener">official MCP documentation</a>.</p>
+
+        <h3 id="cursor">Cursor</h3>
+        <p>Add this entry to <code>~/.cursor/mcp.json</code> for all projects or <code>.cursor/mcp.json</code> for one project, preserving any existing servers. Enable it in Cursor's MCP settings.</p>
+        <pre class="code" data-lang="json"><code>{
+  "mcpServers": {
+    "phx-home": {
+      "url": "http://your-ha-address:8123/api/phoenix-mcp",
+      "headers": { "Authorization": "Bearer phx_your_token_here" }
+    }
+  }
+}</code></pre>
+        <p>See <a href="https://cursor.com/docs/mcp" target="_blank" rel="noopener">Cursor's MCP instructions</a>.</p>
+
+        <h3 id="deepseek-harness">DeepSeek Harness <span class="badge badge-neutral">experimental</span></h3>
+        <p><a href="https://www.deepseek.com/en/harness/" target="_blank" rel="noopener">DeepSeek Harness</a> offers a desktop app for macOS and Windows, as well as a CLI. Configure your model account in Harness, separately from Phoenix's Agent Chat provider accounts. Phoenix support is experimental while Harness is in preview.</p>
+        <h4>Desktop app</h4>
+        <ol>
+          <li>Install and open Harness once, then fully quit the application. Closing its window can leave it running in the background.</li>
+          <li>Open <code>~/.dsh/profiles/desktop/cordis.patch.yml</code> in a text editor. Here <code>~</code> means your home directory; on Windows the path is <code>%USERPROFILE%\.dsh\profiles\desktop\cordis.patch.yml</code>. If you set a custom <code>DSH_HOME</code>, use <code>$DSH_HOME/profiles/desktop/cordis.patch.yml</code>.</li>
+          <li>If the file does not exist, create it with the YAML below. If it already exists, append this entire <code>- insert:</code> block as another top-level list item, preserving existing entries. Replace the address and token; keep the file private.</li>
+          <li>Save the file and reopen Harness. Ask it to list your Home Assistant lights and confirm it calls Phoenix tools.</li>
+        </ol>
+        <p>Harness uses the token's lowercase name with underscores replaced by hyphens, without the <code>phx-</code> prefix, so a 32-character token name fits its server-name limit.</p>
+        <pre class="code" data-lang="yaml"><code>- insert:
+    - id: mcp-phx-home
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: "home"
+        transport: streamable-http
+        url: "http://your-ha-address:8123/api/phoenix-mcp"
+        headers:
+          Authorization: "Bearer phx_your_token_here"</code></pre>
+        <h4>CLI alternative</h4>
+        <p>For a CLI launch, save the same YAML as a new <code>phoenix.cordis.yml</code> file in your working directory. Install Node.js, then run from that directory. This launches the web interface; it does not start the desktop app.</p>
+        <pre class="code" data-lang="bash"><code>npx @deepseek-ai/dsh web --patch "$PWD/phoenix.cordis.yml"</code></pre>
+        <p>For persistent CLI setup, use the matching profile's <code>cordis.patch.yml</code>. The shared <code>~/.dsh/cordis.patch.yml</code> applies to every profile, including Desktop; use it only if you want the same connection in every profile. See the <a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/apps/desktop/README.md" target="_blank" rel="noopener">desktop reference</a>, <a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/mcp/mcp-client/README.md" target="_blank" rel="noopener">MCP client reference</a>, and <a href="https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/guide/mcp-memory.md" target="_blank" rel="noopener">profile patch instructions</a>.</p>
+
+        <h3 id="other-clients">Other clients</h3>
+        <p>The panel's Other MCP client tab supplies an example for clients accepting <code>mcpServers</code> JSON. Client configuration formats are not standardized by MCP. Follow your client's guide and preserve the Phoenix URL and bearer header.</p>
 
         <details class="advanced">
           <summary>Install the optional agent skill</summary>
@@ -126,7 +183,7 @@
           <div class="card">
             <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg></div>
             <h3>Installed skill</h3>
-            <p>The full guide is served, unauthenticated, at <code>/api/phoenix-mcp/skill</code>. The <strong>Connect</strong> step in the panel shows a per-agent install command. For Claude Code it installs as a real skill.</p>
+            <p>The full guide is served, unauthenticated, at <code>/api/phoenix-mcp/skill</code>. The <strong>Connect</strong> step in the panel shows native skill installation for Claude Code, Codex, Gemini CLI, and DeepSeek Harness, and a project rule for Cursor.</p>
           </div>
         </div>
 
@@ -134,7 +191,23 @@
   curl -fsSL http://your-ha-address:8123/api/phoenix-mcp/skill \
   -o ~/.claude/skills/phoenix/SKILL.md</code></pre>
 
-        <p>Other agents (Cursor, Codex, Gemini CLI, and so on) download the same guide and reference it from their project rules or context file; the panel shows the exact path per agent. The guide is generic and contains no token or entity data.</p>
+        <p>For another native skill client, use its destination from this table with the same <code>mkdir -p</code> and <code>curl -fsSL</code> pattern. The guide is generic and contains no token or entity data.</p>
+        <div class="table-wrap"><table>
+          <thead><tr><th scope="col">Client</th><th scope="col">User skill file</th><th scope="col">After installation</th></tr></thead>
+          <tbody>
+            <tr><td>Claude Code</td><td><code>~/.claude/skills/phoenix/SKILL.md</code></td><td>Check the available skills in a new session.</td></tr>
+            <tr><td>Codex</td><td><code>~/.agents/skills/phoenix/SKILL.md</code></td><td>Check <code>/skills</code>; restart if missing.</td></tr>
+            <tr><td>Gemini CLI</td><td><code>~/.gemini/skills/phoenix/SKILL.md</code></td><td>Run <code>/skills reload</code>.</td></tr>
+            <tr><td>DeepSeek Harness</td><td><code>~/.dsh/skills/phoenix/SKILL.md</code></td><td>With a custom <code>DSH_HOME</code>, use its <code>skills</code> directory instead.</td></tr>
+          </tbody>
+        </table></div>
+        <p>For Cursor, download the guide to <code>.cursor/phoenix.md</code> and add <code>.cursor/rules/phoenix.mdc</code> with the metadata below. The panel supplies the complete command. A plain <code>.md</code> file in <code>.cursor/rules</code> is ignored.</p>
+        <pre class="code" data-lang="markdown"><code>---
+description: Use when inspecting, controlling, or configuring Home Assistant through Phoenix MCP
+alwaysApply: false
+---
+Before using Phoenix MCP tools, read @.cursor/phoenix.md for scoped permissions, approvals, and MESA guidance.</code></pre>
+        <p>See <a href="https://learn.chatgpt.com/docs/build-skills" target="_blank" rel="noopener">Codex skills</a>, <a href="https://geminicli.com/docs/cli/creating-skills/" target="_blank" rel="noopener">Gemini skills</a>, and <a href="https://cursor.com/docs/context/rules" target="_blank" rel="noopener">Cursor rules</a>. For other clients, reference the downloaded guide from their supported project instructions.</p>
 
         <div class="callout note">
           <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9.2"/><path d="M12 11v5"/><circle cx="12" cy="7.6" r="0.4" fill="currentColor"/></svg>

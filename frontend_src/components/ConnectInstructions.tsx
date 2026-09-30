@@ -122,7 +122,7 @@ export function ConnectInstructions({ token, tokenName }: { token: string; token
           </a>
         </div>
       )}
-      {current && current.showSkillInstall !== false && (
+      {current && (
         <div className="connect-skill-section">
           <div className="wizard-tabs-label">{t("wizard.skillSectionTitle")}</div>
           <p className="wizard-sub">{t("wizard.skillSectionBody", { label: current.label })}</p>
