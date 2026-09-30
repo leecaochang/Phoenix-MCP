@@ -2044,16 +2044,6 @@
       "reset": "Reimposta statistiche",
       "confirm": "Cancellare solo le statistiche di questa scheda? Le impostazioni non cambiano. Le richieste già in corso sono escluse dal nuovo periodo.",
       "error": "Impossibile caricare o reimpostare le statistiche. Riprova."
-    },
-    "toolRouting": {
-      "label": "Verifica della scelta degli strumenti",
-      "help": "Condivide il contesto dell’attività con il fornitore di decisioni. Osserva registra i suggerimenti; Consiglia può richiedere una nuova pianificazione per turno. Permessi e approvazioni restano validi. Home Companion non usa la verifica del provider di decisioni.",
-      "accountRequired": "Seleziona un account del fornitore di decisioni per attivare la verifica.",
-      "unqualified": "I consigli attivi non sono disponibili finché questo modello non supera la valutazione della scelta degli strumenti.",
-      "qualified": "I consigli attivi sono convalidati per: {languages}. Per le altre lingue continua il modello di pianificazione.",
-      "off": "Disattivato",
-      "observe": "Solo osservazione",
-      "advise": "Consiglia"
     }
   },
   "notification": {

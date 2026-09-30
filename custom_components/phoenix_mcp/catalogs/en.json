@@ -2048,16 +2048,6 @@
       "reset": "Reset statistics",
       "confirm": "Clear statistics for this card only? Settings stay unchanged. Requests already in progress are excluded from the new period.",
       "error": "Could not load or reset statistics. Try again."
-    },
-    "toolRouting": {
-      "label": "Tool selection review",
-      "help": "Shares task context with the Decision Provider. Observe records recommendations; Advise may request one replan per turn. Permissions and approvals still apply. Home Companion does not use Decision Provider review.",
-      "accountRequired": "Select a Decision Provider account to enable review.",
-      "unqualified": "Active advice is unavailable until this model passes tool-selection qualification.",
-      "qualified": "Active advice is qualified for: {languages}. Other languages continue with the planner.",
-      "off": "Off",
-      "observe": "Observe only",
-      "advise": "Advise"
     }
   },
   "notification": {

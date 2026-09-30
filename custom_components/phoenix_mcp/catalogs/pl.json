@@ -2142,16 +2142,6 @@
       "reset": "Wyzeruj statystyki",
       "confirm": "Usunąć tylko statystyki tej karty? Ustawienia pozostaną bez zmian. Trwające żądania nie trafią do nowego okresu.",
       "error": "Nie można wczytać lub wyzerować statystyk. Spróbuj ponownie."
-    },
-    "toolRouting": {
-      "label": "Weryfikacja wyboru narzędzia",
-      "help": "Udostępnia kontekst zadania dostawcy decyzji. Obserwacja zapisuje zalecenia; Doradzanie może poprosić o ponowne planowanie raz na turę. Uprawnienia i zatwierdzenia nadal obowiązują. Home Companion nie korzysta z oceny dostawcy decyzji.",
-      "accountRequired": "Wybierz konto dostawcy decyzji, aby włączyć weryfikację.",
-      "unqualified": "Aktywne doradzanie będzie dostępne dopiero po zaliczeniu przez ten model oceny wyboru narzędzi.",
-      "qualified": "Aktywne doradzanie zweryfikowano dla języków: {languages}. W pozostałych językach zadanie kontynuuje model planujący.",
-      "off": "Wyłączone",
-      "observe": "Tylko obserwacja",
-      "advise": "Doradzanie"
     }
   }
 }

@@ -113,6 +113,13 @@ describe("AgentCliSettings", () => {
     setAgentCliProviderModel.mockResolvedValue({ instance: { id: "i1", model: "deepseek-v4-pro" } });
   });
 
+  it("does not expose internal decision review", async () => {
+    renderCard();
+    await screen.findByLabelText("Provider type");
+    expect(screen.queryByLabelText("Tool selection review")).toBeNull();
+    expect(screen.getByLabelText("Handle chat commands directly")).toBeInTheDocument();
+  });
+
   it("Validate with no API key shows an error and does not create", async () => {
     renderCard();
     await waitFor(() => expect(getAgentCliProviders).toHaveBeenCalled());

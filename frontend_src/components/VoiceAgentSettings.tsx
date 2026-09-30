@@ -1,4 +1,3 @@
-import { ToolRoutingControl } from "./ToolRoutingControl";
 import { RoutingStatistics } from "./RoutingStatistics";
 import { CommandRoutingToggle } from "./CommandRoutingToggle";
 import { useEffect, useState } from "react";
@@ -176,9 +175,6 @@ export function VoiceAgentSettings({
 
       {!companion && <CommandRoutingToggle surface="voice" mode={settings.voice_agent_routing_mode}
         onChange={value => onChange("voice_agent_routing_mode", value)} saving={saving} />}
-      {!companion && <ToolRoutingControl surface="voice" mode={settings.voice_agent_tool_routing_mode}
-        onChange={value => onChange("voice_agent_tool_routing_mode", value)} hasAccount={!!settings.decision_provider_id}
-        qualifiedLanguages={settings.tool_routing_qualified_languages} saving={saving} />}
       <RoutingStatistics surface="voice" />
 
       <ConversationBehaviorControls

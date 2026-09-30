@@ -19,6 +19,8 @@ from custom_components.phoenix_mcp.const import (
     STORAGE_VERSION,
     TOKEN_LENGTH,
     TOKEN_PREFIX,
+    TOOL_ROUTING_SETTINGS,
+    TOOL_ROUTING_SETTINGS_VERSION,
 )
 from custom_components.phoenix_mcp.token_store import (
     ArchivedTokenRecord,
@@ -570,7 +572,7 @@ class TestTokenStoreLoad:
             }],
             "archived_tokens": [],
             "pending_approvals": [],
-            "settings": {},
+            "settings": GlobalSettings().to_dict(),
             "entity_hints": {"light.kitchen": "hint"},
         }
         mock_store = AsyncMock()
@@ -1089,6 +1091,43 @@ class TestArchivedDeletion:
 
 
 class TestSettings:
+    @pytest.mark.parametrize("marker", [None, 0, True, 1.0, "1", [], {}])
+    async def test_review_upgrade_resets_only_review_and_persists_once(self, hass, marker):
+        settings = GlobalSettings(
+            agentcli_tool_routing_mode="observe",
+            voice_agent_tool_routing_mode="observe",
+            ai_task_tool_routing_mode="advise",
+            agentcli_routing_mode="auto", voice_agent_routing_mode="auto",
+            decision_provider_id="decision-account", mesa_mode="enforced",
+        ).to_dict()
+        settings.pop("tool_routing_version")
+        if marker is not None:
+            settings["tool_routing_version"] = marker
+        expected = {**settings, "tool_routing_version": TOOL_ROUTING_SETTINGS_VERSION,
+                    **{key: "off" for key in TOOL_ROUTING_SETTINGS.values()}}
+        storage = AsyncMock()
+        storage.async_load.return_value = {"version": STORAGE_VERSION, "settings": settings}
+        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=storage):
+            store = await TokenStore.async_create(hass)
+            assert store.get_settings().to_dict() == expected
+            storage.async_save.assert_awaited_once()
+            persisted = storage.async_save.call_args.args[0]
+            storage.async_load.return_value = persisted
+            storage.async_save.reset_mock()
+            reloaded = await TokenStore.async_create(hass)
+        assert reloaded.get_settings().to_dict() == expected
+        storage.async_save.assert_not_awaited()
+
+    async def test_deliberate_review_opt_in_survives_reload(self, token_store, mock_store):
+        updates = {key: "observe" for key in TOOL_ROUTING_SETTINGS.values()}
+        await token_store.async_patch_settings(**updates)
+        persisted = mock_store.async_save.call_args.args[0]
+        mock_store.async_load.return_value = persisted
+        mock_store.async_save.reset_mock()
+        await token_store.async_load()
+        assert all(token_store.get_settings().to_dict()[key] == mode for key, mode in updates.items())
+        mock_store.async_save.assert_not_awaited()
+
     async def test_get_settings_defaults(self, token_store):
         settings = token_store.get_settings()
         assert settings.kill_switch is False

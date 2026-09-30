@@ -2122,16 +2122,6 @@
       "reset": "Statistieken resetten",
       "confirm": "Alleen statistieken van deze kaart wissen? Instellingen blijven gelijk. Lopende verzoeken tellen niet mee in de nieuwe periode.",
       "error": "Statistieken laden of resetten mislukt. Probeer opnieuw."
-    },
-    "toolRouting": {
-      "label": "Controle van gereedschapskeuze",
-      "help": "Deelt de taakcontext met de beslissingsprovider. Observeren registreert aanbevelingen; Adviseren kan eenmaal per beurt om een nieuw plan vragen. Machtigingen en goedkeuringen blijven gelden. Home Companion gebruikt geen beoordeling door de beslissingsprovider.",
-      "accountRequired": "Selecteer een account bij de beslissingsprovider om de controle in te schakelen.",
-      "unqualified": "Actief advies is pas beschikbaar nadat dit model de evaluatie van gereedschapskeuze heeft doorstaan.",
-      "qualified": "Actief advies is gevalideerd voor: {languages}. Voor andere talen gaat het planningsmodel verder.",
-      "off": "Uit",
-      "observe": "Alleen observeren",
-      "advise": "Adviseren"
     }
   }
 }

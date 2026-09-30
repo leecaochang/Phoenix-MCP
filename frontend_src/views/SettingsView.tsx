@@ -131,10 +131,6 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
         {/* Left column: Agent Chat, Voice Agent, AI Task, Assist Bridge */}
         <div>
           <AgentCliSettings
-            toolRoutingMode={settings.agentcli_tool_routing_mode}
-            onToolRoutingChange={value => patchSetting("agentcli_tool_routing_mode", value)}
-            decisionAccount={settings.decision_provider_id}
-            qualifiedLanguages={settings.tool_routing_qualified_languages}
             routingMode={settings.agentcli_routing_mode}
             onRoutingChange={value => patchSetting("agentcli_routing_mode", value)}
             scrollback={settings.agentcli_scrollback_lines}

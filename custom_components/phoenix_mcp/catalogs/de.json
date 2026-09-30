@@ -2044,16 +2044,6 @@
       "reset": "Statistik zurücksetzen",
       "confirm": "Nur die Statistik dieser Karte löschen? Einstellungen bleiben unverändert. Bereits laufende Anfragen werden im neuen Zeitraum nicht gezählt.",
       "error": "Statistik konnte nicht geladen oder zurückgesetzt werden. Erneut versuchen."
-    },
-    "toolRouting": {
-      "label": "Prüfung der Werkzeugauswahl",
-      "help": "Teilt den Aufgabenkontext mit dem Entscheidungsanbieter. Beobachten zeichnet Empfehlungen auf; Beraten kann einmal pro Runde eine neue Planung anfordern. Berechtigungen und Freigaben gelten weiterhin. Home Companion verwendet keine Prüfung durch den Entscheidungsanbieter.",
-      "accountRequired": "Wählen Sie ein Konto beim Entscheidungsanbieter, um die Prüfung zu aktivieren.",
-      "unqualified": "Aktive Beratung ist erst verfügbar, wenn dieses Modell die Prüfung der Werkzeugauswahl bestanden hat.",
-      "qualified": "Aktive Beratung ist für folgende Sprachen geprüft: {languages}. Bei anderen Sprachen entscheidet weiterhin das Planungsmodell.",
-      "off": "Aus",
-      "observe": "Nur beobachten",
-      "advise": "Beraten"
     }
   },
   "notification": {

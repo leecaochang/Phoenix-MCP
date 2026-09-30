@@ -2336,6 +2336,7 @@ UNKNOWN_ARGUMENT_MAX_NAME = 80
 UNKNOWN_ARGUMENT_MAX_ERRORS = 8
 
 # Tool advice has separate qualification from direct-command execution.
+TOOL_ROUTING_SETTINGS_VERSION = 1
 TOOL_ROUTING_MODES = frozenset({"off", "observe", "advise"})
 TOOL_ROUTING_SETTINGS = {
     "chat": "agentcli_tool_routing_mode", "voice": "voice_agent_tool_routing_mode",

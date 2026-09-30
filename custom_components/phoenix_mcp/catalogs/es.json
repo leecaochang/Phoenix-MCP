@@ -2044,16 +2044,6 @@
       "reset": "Restablecer estadísticas",
       "confirm": "¿Borrar solo las estadísticas de esta tarjeta? La configuración no cambia. Las solicitudes ya en curso se excluyen del nuevo período.",
       "error": "No se pudieron cargar o restablecer las estadísticas. Inténtalo de nuevo."
-    },
-    "toolRouting": {
-      "label": "Revisión de selección de herramientas",
-      "help": "Comparte el contexto de la tarea con el proveedor de decisiones. Observar registra recomendaciones; Asesorar puede solicitar una nueva planificación por turno. Los permisos y las aprobaciones siguen vigentes. Home Companion no utiliza la revisión del proveedor de decisiones.",
-      "accountRequired": "Selecciona una cuenta del proveedor de decisiones para activar la revisión.",
-      "unqualified": "El asesoramiento activo no está disponible hasta que este modelo supere la evaluación de selección de herramientas.",
-      "qualified": "El asesoramiento activo está validado para: {languages}. En otros idiomas se continúa con el modelo planificador.",
-      "off": "Desactivado",
-      "observe": "Solo observar",
-      "advise": "Asesorar"
     }
   },
   "notification": {

@@ -162,14 +162,14 @@ describe("AiTaskSettings", () => {
     expect(onChange).toHaveBeenCalledWith("ai_task_enabled", false);
   });
 
-  it("hides decision review for Home Companion and restores it for ordinary tokens", async () => {
+  it("does not expose internal decision review for any token", async () => {
     listTokens.mockResolvedValue([{ id: "tok-1", name: "Home token", persona: "home_companion" },
       { id: "tok-2", name: "Ordinary token", persona: "voice_assistant" }]);
     const { rerender } = render(<AiTaskSettings settings={settings({ ai_task_token_id: "tok-1", ai_task_tool_routing_mode: "observe" })} onChange={vi.fn()} saving={false} />);
     await screen.findByRole("option", { name: "Home token" });
     expect(screen.queryByLabelText("Tool selection review")).toBeNull();
-    rerender(<AiTaskSettings settings={settings({ ai_task_token_id: "tok-2" })} onChange={vi.fn()} saving={false} />);
-    expect(screen.getByLabelText("Tool selection review")).toBeTruthy();
+    rerender(<AiTaskSettings settings={settings({ ai_task_token_id: "tok-2", ai_task_tool_routing_mode: "observe" })} onChange={vi.fn()} saving={false} />);
+    expect(screen.queryByLabelText("Tool selection review")).toBeNull();
   });
 
 });

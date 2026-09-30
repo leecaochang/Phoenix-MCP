@@ -1,4 +1,3 @@
-import { ToolRoutingControl } from "./ToolRoutingControl";
 import { useEffect, useState } from "react";
 import type { GlobalSettings, TokenRecord, AgentCliInstance, AiTaskPreferredStatus } from "../types";
 import { api } from "../api";
@@ -34,7 +33,6 @@ export function AiTaskSettings({
   const tokenId = settings.ai_task_token_id ?? "";
   const model = settings.ai_task_model ?? "";
   const noProviders = instances.length === 0;
-  const companion = tokens.some(token => token.id === tokenId && token.persona === "home_companion");
 
   useEffect(() => {
     api.listTokens().then(setTokens).catch(() => setTokens([]));
@@ -180,9 +178,6 @@ export function AiTaskSettings({
         </select>
       </div>
 
-      {!companion && <ToolRoutingControl surface="ai_task" mode={settings.ai_task_tool_routing_mode}
-        onChange={value => onChange("ai_task_tool_routing_mode", value)} hasAccount={!!settings.decision_provider_id}
-        qualifiedLanguages={settings.tool_routing_qualified_languages} saving={saving} />}
       <ConversationBehaviorControls
         surface={t("settings.aiTaskCard")}
         style={settings.ai_task_conversation_style ?? "direct"}

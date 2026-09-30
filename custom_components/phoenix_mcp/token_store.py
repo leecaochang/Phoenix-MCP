@@ -25,7 +25,7 @@ from .const import (
     AGENTCLI_SCROLLBACK_MIN,
     APPROVAL_REASON_FORMAT_INCOMPATIBLE,
     COMMAND_ROUTING_SETTINGS_VERSION, COMMAND_ROUTING_MODES, COMMAND_ROUTING_LANGUAGES, COMMAND_ROUTING_DEFAULT_LANGUAGES,
-    CHAT_COMMAND_ROUTING_MODES, TOOL_ROUTING_MODES,
+    CHAT_COMMAND_ROUTING_MODES, TOOL_ROUTING_MODES, TOOL_ROUTING_SETTINGS, TOOL_ROUTING_SETTINGS_VERSION,
     COMMAND_ROUTING_TIMEOUT_DEFAULT_MS,
     DECISION_TIMEOUT_DEFAULT_MS, DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS,
     DECISION_REQUEST_BUDGET_MAX,
@@ -571,6 +571,12 @@ def _closed_choice(value: object, valid: frozenset[str], default: str) -> str:
     return value if isinstance(value, str) and value in valid else default
 
 
+def _tool_routing_settings_need_reset(data: dict) -> bool:
+    """Require a current storage marker for deliberate API-only review opt-ins."""
+    version = data.get("tool_routing_version")
+    return type(version) is not int or version != TOOL_ROUTING_SETTINGS_VERSION
+
+
 def valid_command_routing_languages(value: object) -> bool:
     """A closed, duplicate-free language selection; an empty list pauses routing."""
     return (isinstance(value, list) and len(value) <= len(COMMAND_ROUTING_LANGUAGES)
@@ -685,6 +691,7 @@ class GlobalSettings:
             "voice_agent_routing_mode": self.voice_agent_routing_mode,
             "command_routing_languages": list(self.command_routing_languages),
             "command_routing_timeout_ms": self.command_routing_timeout_ms,
+            "tool_routing_version": TOOL_ROUTING_SETTINGS_VERSION,
             "agentcli_tool_routing_mode": self.agentcli_tool_routing_mode,
             "voice_agent_tool_routing_mode": self.voice_agent_tool_routing_mode,
             "ai_task_tool_routing_mode": self.ai_task_tool_routing_mode,
@@ -714,6 +721,8 @@ class GlobalSettings:
         if data.get("command_routing_version") != COMMAND_ROUTING_SETTINGS_VERSION:
             data = {**data, "voice_agent_routing_mode": "off", "agentcli_routing_mode": "off",
                     "decision_shadow_enabled": False, "agentcli_routing_shadow_enabled": False}
+        if _tool_routing_settings_need_reset(data):
+            data = {**data, **{key: "off" for key in TOOL_ROUTING_SETTINGS.values()}}
         mesa_mode = data.get("mesa_mode", MESA_MODE_ADVISORY)
         languages = data.get("command_routing_languages", list(COMMAND_ROUTING_DEFAULT_LANGUAGES))
         return cls(
@@ -824,6 +833,7 @@ class TokenStore:
         Applies storage migrations in place when older data is detected.
         """
         raw = await self._store.async_load()
+        had_storage = raw is not None
         raw, normalized = _normalize_storage_root(raw)
         migrated = _migrate_storage(raw)
         notification_marker_present = "_invalidated_approval_notification_ids" in raw
@@ -860,7 +870,9 @@ class TokenStore:
                 )
         self._archived = archived
 
-        self._settings = GlobalSettings.from_dict(raw.get("settings", {}))
+        raw_settings = raw.get("settings", {})
+        tool_routing_reset = had_storage and _tool_routing_settings_need_reset(raw_settings)
+        self._settings = GlobalSettings.from_dict(raw_settings)
         # The collection is normalized to a list above, but its MEMBERS are not:
         # a non-dict entry (string/int) would crash the startup expiry sweep,
         # which calls entry.get(...) on every member. Discard non-dict members.
@@ -876,7 +888,7 @@ class TokenStore:
                 "Phoenix MCP storage migrated to v%d; saving canonical form",
                 STORAGE_VERSION,
             )
-        if migrated or normalized or approvals_cleaned or notification_marker_present:
+        if migrated or normalized or approvals_cleaned or notification_marker_present or tool_routing_reset:
             # Persist the cleaned form so a one-time corruption does not have to
             # be re-normalized on every load.
             await self.async_save()

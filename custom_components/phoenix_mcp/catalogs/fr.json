@@ -2044,16 +2044,6 @@
       "reset": "Réinitialiser les statistiques",
       "confirm": "Effacer uniquement les statistiques de cette carte ? Les réglages restent inchangés. Les requêtes déjà en cours sont exclues de la nouvelle période.",
       "error": "Impossible de charger ou réinitialiser les statistiques. Réessayez."
-    },
-    "toolRouting": {
-      "label": "Vérification du choix des outils",
-      "help": "Partage le contexte de la tâche avec le fournisseur de décisions. Observer enregistre les recommandations ; Conseiller peut demander une nouvelle planification par tour. Les permissions et approbations restent applicables. Home Companion n’utilise pas la vérification du fournisseur de décisions.",
-      "accountRequired": "Sélectionnez un compte de fournisseur de décisions pour activer la vérification.",
-      "unqualified": "Le conseil actif reste indisponible tant que ce modèle ne réussit pas l’évaluation du choix des outils.",
-      "qualified": "Le conseil actif est validé pour : {languages}. Pour les autres langues, le modèle de planification poursuit la tâche.",
-      "off": "Désactivé",
-      "observe": "Observer uniquement",
-      "advise": "Conseiller"
     }
   },
   "notification": {

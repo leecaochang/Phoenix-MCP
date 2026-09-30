@@ -178,9 +178,9 @@ async def test_provider_groups_keep_complete_catalog_and_declines(capacity):
 
 def test_settings_roundtrip_and_untrusted_values():
     raw = {key: 'observe' for key in TOOL_ROUTING_SETTINGS.values()}
-    settings = GlobalSettings.from_dict(raw)
+    settings = GlobalSettings.from_dict({**GlobalSettings().to_dict(), **raw})
     assert all(settings.to_dict()[key] == 'observe' for key in raw)
-    assert all(getattr(GlobalSettings.from_dict({key: []}), key) == 'off' for key in raw)
+    assert all(getattr(GlobalSettings.from_dict({**settings.to_dict(), key: []}), key) == 'off' for key in raw)
 
 
 @pytest.mark.parametrize('surface', ['chat', 'voice', 'ai_task'])

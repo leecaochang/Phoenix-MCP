@@ -1,5 +1,3 @@
-import { ToolRoutingControl } from "./ToolRoutingControl";
-import type { ToolRoutingMode } from "../types";
 import { RoutingStatistics } from "./RoutingStatistics";
 import { CommandRoutingToggle } from "./CommandRoutingToggle";
 import { IconButton, EditIcon, RefreshIcon, ProbeIcon, TrashIcon } from "./ProviderAccountControls";
@@ -129,10 +127,6 @@ function notifyChanged() {
 }
 
 interface Props {
-  toolRoutingMode?: ToolRoutingMode;
-  onToolRoutingChange?: (mode: ToolRoutingMode) => void;
-  decisionAccount?: string | null;
-  qualifiedLanguages?: string[];
   routingMode: string | undefined;
   onRoutingChange: (mode: "auto" | "off") => void;
   scrollback: number;
@@ -151,7 +145,6 @@ interface Props {
 }
 
 export function AgentCliSettings({
-  toolRoutingMode, onToolRoutingChange, decisionAccount, qualifiedLanguages,
   routingMode, onRoutingChange, scrollback, onScrollbackChange, maxIterations, onMaxIterationsChange,
   globalVisible, onGlobalChange, conversationStyle, onConversationStyleChange,
   detailLevel, onDetailLevelChange, homeFocused, onHomeFocusedChange, saving,
@@ -422,8 +415,6 @@ export function AgentCliSettings({
       </p>
 
       <CommandRoutingToggle surface="chat" mode={routingMode} onChange={onRoutingChange} saving={saving} />
-      {onToolRoutingChange && <ToolRoutingControl surface="chat" mode={toolRoutingMode}
-        onChange={onToolRoutingChange} hasAccount={!!decisionAccount} qualifiedLanguages={qualifiedLanguages} saving={saving} />}
       <RoutingStatistics surface="chat" />
 
       <ProviderAddForm
