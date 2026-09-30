@@ -6,18 +6,22 @@ import asyncio
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from copy import deepcopy
+from datetime import timedelta
 import json
 from typing import Any
 import uuid
 
 from homeassistant.helpers.storage import Store
-from homeassistant.util.dt import utcnow
+from homeassistant.util.dt import parse_datetime, utcnow
 
-from .const import CONFIG_RECOVERY_MAX_BYTES, CONFIG_RECOVERY_MAX_RECORDS
+from .const import (CONFIG_RECOVERY_MAX_BYTES, CONFIG_RECOVERY_MAX_RECORDS,
+                    CONFIG_RECOVERY_RETENTION_DAYS, CONFIG_RECOVERY_PER_RESOURCE,
+                    CONFIG_RECOVERY_UNRESOLVED)
 from .helpers import redact_structure
 
 
 recovery_source: ContextVar[dict | None] = ContextVar("phoenix_recovery_source", default=None)
+recovery_resolution: ContextVar[str | None] = ContextVar("phoenix_recovery_resolution", default=None)
 
 
 def runtime_identity(hass) -> str:
@@ -61,6 +65,9 @@ class ConfigurationRecovery:
         self._resources: set[str] = set()
         self._active: set[str] = set()
         self._load_failed = False
+        self.reconcile_lock = asyncio.Lock()
+        self.reconcile_cursor = 0
+        self.announced_approvals: set[str] = set()
 
     async def async_load(self) -> None:
         """Retry failed initialization without discarding unreadable recovery data."""
@@ -80,10 +87,11 @@ class ConfigurationRecovery:
                             "prepared", "dispatching", "verified", "partial", "unknown", "reviewed", "not_applied"
                         )):
                     raise ValueError
-                if any(record.get(field) is not None and not isinstance(record[field], dict) for field in ("before", "source")):
+                if any(record.get(field) is not None and not isinstance(record[field], dict) for field in ("before", "source", "expected")):
                     raise ValueError
                 safe_snapshot(record.get("before"))
                 safe_snapshot(record.get("source"))
+                safe_snapshot(record.get("expected"))
             self._records = records
             self._load_failed = False
         except Exception:
@@ -105,6 +113,56 @@ class ConfigurationRecovery:
         record = self._records.get(rid)
         return deepcopy(record) if record is not None else None
 
+    def inactive(self, rid: str) -> bool:
+        record = self._records.get(rid)
+        return record is not None and rid not in self._active and record["resource"] not in self._resources
+
+    def _retained(self, *, reserve: int = 0) -> dict:
+        """Bound completed rollback copies without ever dropping unresolved work."""
+        cutoff = utcnow() - timedelta(days=CONFIG_RECOVERY_RETENTION_DAYS)
+        counts: dict[str, int] = {}
+        retained = {}
+        for rid, record in reversed(list(self._records.items())):
+            if rid in self._active or record["phase"] in CONFIG_RECOVERY_UNRESOLVED:
+                retained[rid] = record
+                continue
+            created = parse_datetime(record["created_at"])
+            resource = record["resource"]
+            counts[resource] = counts.get(resource, 0) + 1
+            if created is not None and created.tzinfo is not None and created >= cutoff and counts[resource] <= CONFIG_RECOVERY_PER_RESOURCE:
+                retained[rid] = record
+        for rid in reversed(list(retained)):
+            if len(retained) <= CONFIG_RECOVERY_MAX_RECORDS - reserve:
+                break
+            if rid not in self._active and retained[rid]["phase"] not in CONFIG_RECOVERY_UNRESOLVED:
+                del retained[rid]
+        return {rid: deepcopy(retained[rid]) for rid in self._records if rid in retained}
+
+    async def prune(self) -> None:
+        async with self._lock:
+            old = self._records
+            retained = self._retained()
+            if retained == old:
+                return
+            self._records = retained
+            try:
+                await self._save()
+            except BaseException:
+                self._records = old
+                raise
+
+    async def update(self, rid: str, **fields: Any) -> None:
+        """Persist internal reconciliation bindings without replacing observations."""
+        safe_snapshot(fields)
+        async with self._lock:
+            old = self._records[rid]
+            self._records[rid] = {**old, **deepcopy(fields)}
+            try:
+                await self._save()
+            except BaseException:
+                self._records[rid] = old
+                raise
+
     @asynccontextmanager
     async def resource(self, key: str):
         """Refuse concurrent Phoenix writes, including unresolved prior effects."""
@@ -117,27 +175,27 @@ class ConfigurationRecovery:
             self._resources.discard(key)
 
     async def begin(self, resource: str, operation: str, token_id: str,
-                    before: dict | None, *, source: dict | None = None) -> str:
+                    before: dict | None, *, source: dict | None = None,
+                    expected: dict | None = None) -> str:
         """Persist before dispatch; storage failure always prevents the mutation."""
         before = safe_snapshot(before)
         source = safe_snapshot(source if source is not None else recovery_source.get())
+        expected = safe_snapshot(expected)
         async with self._lock:
             if self._load_failed:
                 await self.async_load()
-            if any(r["resource"] == resource and r["phase"] in (
-                "prepared", "dispatching", "partial", "unknown"
-            ) for r in self._records.values()):
-                raise ConfigurationRecoveryError("Review the previous configuration recovery record before retrying.")
-            records = deepcopy(self._records)
+            if any(r["resource"] == resource and r["phase"] in CONFIG_RECOVERY_UNRESOLVED
+                   and r["id"] != recovery_resolution.get() for r in self._records.values()):
+                raise ConfigurationRecoveryError("Resolve the configuration recovery request in Approvals before retrying.")
+            records = self._retained(reserve=1)
             if len(records) >= CONFIG_RECOVERY_MAX_RECORDS:
-                # Completed copies also require explicit admin removal. Never
-                # rotate away the only surviving deleted-resource snapshot.
-                raise ConfigurationRecoveryError("Configuration recovery storage is full; review and remove completed records.")
+                raise ConfigurationRecoveryError("Configuration recovery is full of unresolved operations; resolve them in Approvals.")
             rid = uuid.uuid4().hex
             records[rid] = {
                 "id": rid, "resource": resource, "operation": operation,
                 "token_id": token_id, "created_at": utcnow().isoformat(),
                 "phase": "prepared", "before": before, "source": source,
+                "expected": expected,
             }
             self._records = records
             try:

@@ -627,6 +627,7 @@ async def test_agent_restore_receipt_accepts_energy_owned_record(hass: HomeAssis
         "energy:preferences", "edit_energy_config", token.id, snapshot,
     )
     await runtime.config_recovery.mark(rid, "verified")
+    runtime.config_recovery.leave(rid)
 
     current = {"energy_sources": [], "device_consumption": [], "device_consumption_water": []}
     with patch(_WS, AsyncMock(return_value=current)):

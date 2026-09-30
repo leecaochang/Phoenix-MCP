@@ -673,7 +673,9 @@
       "zigbee_reporting": "Zigbee-attribuutrapportage configureren",
       "zigbee_reporting.device": "{cluster}.{attribute}-rapportage voor {label} configureren",
       "zigbee_topology": "Zigbee-topologie scannen",
-      "zigbee_topology.backend": "Buurtabellen van {backend} scannen voor de afgebakende Zigbee-kaart"
+      "zigbee_topology.backend": "Buurtabellen van {backend} scannen voor de afgebakende Zigbee-kaart",
+      "configuration_recovery.restore": "Opgeslagen configuratie voor {resource} herstellen",
+      "configuration_recovery.acknowledge": "Configuratie controleren na een onderbroken wijziging aan {resource}"
     },
     "approvals": {
       "approve": "Goedkeuren en uitvoeren",
@@ -2076,7 +2078,11 @@
       "zigbee_topology.backend.body": "Hiermee worden Zigbee-routers op {backend} actief bevraagd. Het mesh-netwerk kan minder responsief zijn tijdens de scan.",
       "zigbee_topology.backend.title": "Buurtabellen van {backend} scannen voor de afgebakende Zigbee-kaart",
       "zigbee_topology.body": "Hiermee worden Zigbee-routers actief bevraagd. Het mesh-netwerk kan minder responsief zijn tijdens de scan.",
-      "zigbee_topology.title": "Zigbee-topologie scannen"
+      "zigbee_topology.title": "Zigbee-topologie scannen",
+      "configuration_recovery.restore.title": "Opgeslagen configuratie voor {resource} herstellen",
+      "configuration_recovery.restore.body": "Een eerdere wijziging kon niet worden geverifieerd. Goedkeuren herstelt de opgeslagen configuratie die in Details wordt getoond. Afwijzen behoudt de huidige configuratie. De oorspronkelijke opdracht wordt niet herhaald.",
+      "configuration_recovery.acknowledge.title": "Configuratie controleren na een onderbroken wijziging aan {resource}",
+      "configuration_recovery.acknowledge.body": "Een eerdere wijziging kon niet worden geverifieerd en kan hier niet veilig worden hersteld. Controleer deze bron in Home Assistant en keur daarna goed om de huidige toestand te accepteren en wijzigingen vrij te geven. Afwijzen houdt wijzigingen geblokkeerd. De oorspronkelijke opdracht wordt niet herhaald."
     },
     "routing": {
       "providerOptions": "Beslissingsproviders gebruiken vaste routeringskeuzes, zonder Chat-opties zoals denkniveaus. Modellen vernieuwen controleert de beschikbaarheid zonder een opdracht uit te voeren; het test niet de nauwkeurigheid van de routering.",
@@ -2116,30 +2122,6 @@
       "reset": "Statistieken resetten",
       "confirm": "Alleen statistieken van deze kaart wissen? Instellingen blijven gelijk. Lopende verzoeken tellen niet mee in de nieuwe periode.",
       "error": "Statistieken laden of resetten mislukt. Probeer opnieuw."
-    },
-    "recovery": {
-      "title": "Configuratieherstel",
-      "help": "Controleer de huidige toestand van Home Assistant voordat je een onzekere bewerking herhaalt. Veiligheidskopieën staan los van de wijzigingsgeschiedenis. Beoordelen heft de blokkade op, maar maakt de bewerking niet ongedaan.",
-      "failed": "De bewerking kon niet worden geverifieerd. Vernieuw en controleer de huidige toestand voordat je het opnieuw probeert.",
-      "empty": "Geen herstelrecords.",
-      "before": "Veiligheidskopie",
-      "source": "Bronmomentopname",
-      "inspect": "Huidige toestand controleren",
-      "review": "Markeren als beoordeeld",
-      "restoreBefore": "Veiligheidskopie herstellen",
-      "restoreSource": "Bronmomentopname herstellen",
-      "prepared": "Voorbereid",
-      "dispatching": "Verzonden; controleer resultaat",
-      "verified": "Geverifieerd",
-      "partial": "Onvolledig",
-      "unknown": "Resultaat onbekend",
-      "reviewed": "Beoordeeld",
-      "not_applied": "Niet toegepast",
-      "confirm_reviewed": "Ik heb de huidige toestand gecontroleerd. Hef de blokkade voor dit record op.",
-      "confirm_restore": "Deze momentopname toepassen op Home Assistant? Onvolledige vervangingen blijven bewaard ter controle.",
-      "confirm_delete": "Dit herstelbestand definitief verwijderen? Het kan de enige overgebleven kopie zijn.",
-      "confirm": "Bevestigen",
-      "delete": "Verwijderen"
     },
     "toolRouting": {
       "label": "Controle van gereedschapskeuze",

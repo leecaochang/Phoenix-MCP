@@ -1785,6 +1785,10 @@ async def _protected_storage_helper_write(args, token, hass, data, before, paylo
         rid = await recovery.begin(key, operation, token.id, {
             "snapshot_type": "storage_helper", "helper_type": helper_type,
             "helper_id": helper_id, "config": public,
+        }, expected={
+            "snapshot_type": "storage_helper", "helper_type": helper_type, "helper_id": helper_id,
+            "config": None if deleting else _public_helper_config(helper_type,
+                {**before, **{k: v for k, v in payload.items() if k != f"{helper_type}_id"}}),
         })
         try:
             await recovery.mark(rid, "dispatching")
@@ -2570,7 +2574,7 @@ async def _build_diff_set_config_entry_options(
     }
 
 
-async def _preflight_template_settings(hass, entry, settings):
+async def _preflight_template_settings(hass, entry, settings, *, intended=None):
     """Validate an options form without submitting or creating a recovery barrier."""
     from ..template_recovery import template_snapshot
 
@@ -2585,7 +2589,16 @@ async def _preflight_template_settings(hass, entry, settings):
         schema = result.get("data_schema")
         if result.get("type") != FlowResultType.FORM or not isinstance(schema, vol.Schema):
             return _tool_error("This Template helper has no supported settings form."), "invalid_request", "set_helper_settings"
-        schema(_settings_form_payload(result, settings))
+        payload = schema(_settings_form_payload(result, settings))
+        if intended is not None:
+            # The installed schema flow merges submitted values and removes
+            # omitted optional fields, including explicit clears by omission.
+            options = {**before["options"], **payload}
+            for marker, validator in schema.schema.items():
+                if (isinstance(marker, vol.Optional) and marker.schema not in payload
+                        and not getattr(validator, "config", {}).get("read_only")):
+                    options.pop(marker.schema, None)
+            intended.update(before, options=options)
     except vol.Invalid as err:
         return _tool_error(f"The settings were rejected: {err}. Nothing was changed."), "invalid_request", "set_helper_settings"
     finally:
@@ -2682,12 +2695,13 @@ async def _execute_set_config_entry_options(
         service_data={"helper_type": entry.domain, "settings": args.get("settings")}, session_id=tool)
     if isinstance(mesa, tuple):
         return mesa
-    refusal = await _preflight_template_settings(hass, entry, args["settings"])
+    wanted: dict = {}
+    refusal = await _preflight_template_settings(hass, entry, args["settings"], intended=wanted)
     if refusal is not None:
         return refusal
     rid = None
     try:
-        async with protect_template(hass, data, token, entry, tool) as rid:
+        async with protect_template(hass, data, token, entry, tool, expected=wanted) as rid:
             saved = data.config_recovery.get(rid)
             assert saved is not None
             result = await _apply_config_entry_options(args, token, hass, data, recovery_before=saved["before"])

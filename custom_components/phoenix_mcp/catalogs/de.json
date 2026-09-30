@@ -1296,7 +1296,9 @@
       "zigbee_reporting": "Zigbee-Attribut-Reporting konfigurieren",
       "zigbee_reporting.device": "{cluster}.{attribute}-Reporting für {label} konfigurieren",
       "zigbee_topology": "Zigbee-Topologie scannen",
-      "zigbee_topology.backend": "Nachbartabellen von {backend} für die eingeschränkte Zigbee-Karte scannen"
+      "zigbee_topology.backend": "Nachbartabellen von {backend} für die eingeschränkte Zigbee-Karte scannen",
+      "configuration_recovery.restore": "Gespeicherte Konfiguration für {resource} wiederherstellen",
+      "configuration_recovery.acknowledge": "Konfiguration nach einer unterbrochenen Änderung an {resource} prüfen"
     },
     "adminError": {
       "authRequired": "Authentifizierung erforderlich.",
@@ -1691,7 +1693,11 @@
       "zigbee_topology.backend.body": "Dadurch werden Zigbee-Router auf {backend} aktiv abgefragt. Das Mesh-Netz reagiert möglicherweise langsamer, während der Scan läuft.",
       "zigbee_topology.backend.title": "Nachbartabellen von {backend} für die eingeschränkte Zigbee-Karte scannen",
       "zigbee_topology.body": "Dadurch werden Zigbee-Router aktiv abgefragt. Das Mesh-Netz reagiert möglicherweise langsamer, während der Scan läuft.",
-      "zigbee_topology.title": "Zigbee-Topologie scannen"
+      "zigbee_topology.title": "Zigbee-Topologie scannen",
+      "configuration_recovery.restore.title": "Gespeicherte Konfiguration für {resource} wiederherstellen",
+      "configuration_recovery.restore.body": "Eine vorherige Änderung konnte nicht überprüft werden. Genehmigen stellt die unter Details gezeigte gespeicherte Konfiguration wieder her. Ablehnen behält die aktuelle Konfiguration bei. Der ursprüngliche Befehl wird nicht wiederholt.",
+      "configuration_recovery.acknowledge.title": "Konfiguration nach einer unterbrochenen Änderung an {resource} prüfen",
+      "configuration_recovery.acknowledge.body": "Eine vorherige Änderung konnte nicht überprüft werden und lässt sich hier nicht sicher wiederherstellen. Prüfen Sie diese Ressource in Home Assistant und genehmigen Sie anschließend, um den aktuellen Zustand zu akzeptieren und Änderungen freizugeben. Ablehnen lässt Änderungen gesperrt. Der ursprüngliche Befehl wird nicht wiederholt."
     },
     "common": {
       "after": "Nachher",
@@ -2038,30 +2044,6 @@
       "reset": "Statistik zurücksetzen",
       "confirm": "Nur die Statistik dieser Karte löschen? Einstellungen bleiben unverändert. Bereits laufende Anfragen werden im neuen Zeitraum nicht gezählt.",
       "error": "Statistik konnte nicht geladen oder zurückgesetzt werden. Erneut versuchen."
-    },
-    "recovery": {
-      "title": "Konfiguration wiederherstellen",
-      "help": "Prüfen Sie vor einem erneuten Versuch den aktuellen Zustand von Home Assistant. Sicherheitskopien bleiben vom Änderungsverlauf getrennt. Eine Prüfung hebt die Wiederholungssperre auf, macht den Vorgang aber nicht rückgängig.",
-      "failed": "Der Vorgang konnte nicht verifiziert werden. Aktualisieren und prüfen Sie den aktuellen Zustand vor einem erneuten Versuch.",
-      "empty": "Keine Wiederherstellungsdatensätze.",
-      "before": "Sicherheitskopie",
-      "source": "Quellsnapshot",
-      "inspect": "Aktuellen Zustand prüfen",
-      "review": "Als geprüft markieren",
-      "restoreBefore": "Sicherheitskopie wiederherstellen",
-      "restoreSource": "Quellsnapshot wiederherstellen",
-      "prepared": "Vorbereitet",
-      "dispatching": "Gesendet; Ergebnis prüfen",
-      "verified": "Verifiziert",
-      "partial": "Unvollständig",
-      "unknown": "Ergebnis unbekannt",
-      "reviewed": "Geprüft",
-      "not_applied": "Nicht angewendet",
-      "confirm_reviewed": "Ich habe den aktuellen Zustand geprüft. Wiederholungssperre für diesen Datensatz aufheben.",
-      "confirm_restore": "Diesen Snapshot auf Home Assistant anwenden? Unvollständige Ersatzobjekte bleiben zur Prüfung erhalten.",
-      "confirm_delete": "Dieses Wiederherstellungsartefakt endgültig löschen? Es könnte die einzige verbliebene Kopie sein.",
-      "confirm": "Bestätigen",
-      "delete": "Löschen"
     },
     "toolRouting": {
       "label": "Prüfung der Werkzeugauswahl",

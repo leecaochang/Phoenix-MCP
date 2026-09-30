@@ -471,7 +471,8 @@ async def _save_blueprint(
     try:
         before_snapshot = _blueprint_recovery_snapshot(domain, rel, before)
         async with recovery.resource(resource):
-            rid = await recovery.begin(resource, tool_name, token.id, before_snapshot)
+            rid = await recovery.begin(resource, tool_name, token.id, before_snapshot,
+                expected=_blueprint_recovery_snapshot(domain, rel, expected_source))
             try:
                 await recovery.mark(rid, "dispatching")
                 if await _read_blueprint_source(hass, target) != before:
@@ -558,7 +559,8 @@ async def _execute_delete_blueprint(
     try:
         before_snapshot = _blueprint_recovery_snapshot(domain, rel, before)
         async with recovery.resource(resource):
-            rid = await recovery.begin(resource, "delete_blueprint", token.id, before_snapshot)
+            rid = await recovery.begin(resource, "delete_blueprint", token.id, before_snapshot,
+                expected=_blueprint_recovery_snapshot(domain, rel, None))
             try:
                 await recovery.mark(rid, "dispatching")
                 if await _read_blueprint_source(hass, target) != before:

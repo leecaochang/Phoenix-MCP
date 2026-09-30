@@ -99,7 +99,12 @@ async def _recoverable_dashboard_registry_write(
     resource = f"dashboard_registry:{dashboard_id}"
     try:
         async with recovery.resource(resource):
-            rid = await recovery.begin(resource, operation, token.id, before)
+            expected_row = None if command.endswith("/delete") else {
+                **(before.get("dashboard") or {}), **{k: v for k, v in payload.items() if k != "dashboard_id"},
+            }
+            rid = await recovery.begin(resource, operation, token.id, before, expected={
+                **before, "exists": expected_row is not None, "dashboard": expected_row,
+            })
             try:
                 await recovery.mark(rid, "dispatching")
                 if await _dashboard_registry_snapshot(hass, dashboard_id) != before:
@@ -154,7 +159,8 @@ async def _recoverable_dashboard_save(
     try:
         before_snapshot = _dashboard_layout_snapshot(url_path, before)
         async with recovery.resource(resource):
-            rid = await recovery.begin(resource, "dashboard_layout_write", token.id, before_snapshot)
+            rid = await recovery.begin(resource, "dashboard_layout_write", token.id, before_snapshot,
+                expected=_dashboard_layout_snapshot(url_path, after))
             if recovery_id_out is not None:
                 recovery_id_out["recovery_id"] = rid
             try:

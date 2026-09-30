@@ -553,7 +553,11 @@
       "zigbee_topology.backend.body": "Verranno interrogati attivamente i router Zigbee su {backend}. La mesh potrebbe essere meno reattiva durante la scansione.",
       "zigbee_topology.backend.title": "Scansiona le tabelle dei vicini di {backend} per la mappa Zigbee limitata all'ambito",
       "zigbee_topology.body": "Verranno interrogati attivamente i router Zigbee. La mesh potrebbe essere meno reattiva durante la scansione.",
-      "zigbee_topology.title": "Scansiona la topologia Zigbee"
+      "zigbee_topology.title": "Scansiona la topologia Zigbee",
+      "configuration_recovery.restore.title": "Ripristina la configurazione salvata per {resource}",
+      "configuration_recovery.restore.body": "Non è stato possibile verificare una modifica precedente. Approva ripristina la configurazione salvata mostrata in Dettagli. Rifiuta mantiene la configurazione attuale. Il comando originale non verrà ripetuto.",
+      "configuration_recovery.acknowledge.title": "Controlla la configurazione dopo una modifica interrotta a {resource}",
+      "configuration_recovery.acknowledge.body": "Non è stato possibile verificare una modifica precedente e non è possibile ripristinarla qui in sicurezza. Controlla questa risorsa in Home Assistant, poi approva per accettarne lo stato attuale e sbloccare le modifiche. Rifiuta mantiene le modifiche bloccate. Il comando originale non verrà ripetuto."
     },
     "mesaSuggestion": {
       "baseline_note": " Proibito corrisponde alla base predefinita integrata per questo dominio, quindi il profilo creato rende esplicita tale intenzione; scegli conferma in Revisione per consentire invece il controllo dell'agente dietro approvazioni.",
@@ -1891,7 +1895,9 @@
       "zigbee_reporting": "Configura la segnalazione degli attributi Zigbee",
       "zigbee_reporting.device": "Configura la segnalazione di {cluster}.{attribute} per {label}",
       "zigbee_topology": "Scansiona la topologia Zigbee",
-      "zigbee_topology.backend": "Scansiona le tabelle dei vicini di {backend} per la mappa Zigbee dell'ambito"
+      "zigbee_topology.backend": "Scansiona le tabelle dei vicini di {backend} per la mappa Zigbee dell'ambito",
+      "configuration_recovery.restore": "Ripristina la configurazione salvata per {resource}",
+      "configuration_recovery.acknowledge": "Controlla la configurazione dopo una modifica interrotta a {resource}"
     },
     "wizard": {
       "accessSub": "Espandi il gruppo <code>light</code> e scegli una luce che puoi verificare. Seleziona <strong>W</strong> per concedere l'accesso in lettura e scrittura. Concedi un intero dispositivo o espandilo per scegliere una sola entità. Puoi aggiungere altre autorizzazioni in seguito.",
@@ -2038,30 +2044,6 @@
       "reset": "Reimposta statistiche",
       "confirm": "Cancellare solo le statistiche di questa scheda? Le impostazioni non cambiano. Le richieste già in corso sono escluse dal nuovo periodo.",
       "error": "Impossibile caricare o reimpostare le statistiche. Riprova."
-    },
-    "recovery": {
-      "title": "Ripristino della configurazione",
-      "help": "Controlla lo stato attuale di Home Assistant prima di ripetere un’operazione incerta. Le copie di sicurezza sono separate dalla cronologia. La revisione sblocca i tentativi successivi, ma non annulla l’operazione.",
-      "failed": "Impossibile verificare l’operazione. Aggiorna e controlla lo stato attuale prima di riprovare.",
-      "empty": "Nessun record di ripristino.",
-      "before": "Copia di sicurezza",
-      "source": "Istantanea di origine",
-      "inspect": "Controlla lo stato attuale",
-      "review": "Segna come verificato",
-      "restoreBefore": "Ripristina copia di sicurezza",
-      "restoreSource": "Ripristina istantanea di origine",
-      "prepared": "Preparato",
-      "dispatching": "Inviato; verifica l’esito",
-      "verified": "Verificato",
-      "partial": "Incompleto",
-      "unknown": "Esito sconosciuto",
-      "reviewed": "Revisionato",
-      "not_applied": "Non applicato",
-      "confirm_reviewed": "Ho controllato lo stato attuale. Sblocca i nuovi tentativi per questo record.",
-      "confirm_restore": "Applicare questa istantanea a Home Assistant? Le sostituzioni incomplete saranno conservate per l’ispezione.",
-      "confirm_delete": "Eliminare definitivamente questo artefatto di ripristino? Potrebbe essere l’unica copia rimasta.",
-      "confirm": "Conferma",
-      "delete": "Elimina"
     },
     "toolRouting": {
       "label": "Verifica della scelta degli strumenti",

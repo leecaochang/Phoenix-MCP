@@ -101,7 +101,8 @@ async def _recoverable_file_write(
     try:
         before = _authored_file_snapshot(rel, before_exists, before_content, snapshot_type)
         async with recovery.resource(resource):
-            rid = await recovery.begin(resource, operation, token.id, before)
+            rid = await recovery.begin(resource, operation, token.id, before,
+                expected=_authored_file_snapshot(rel, True, content, snapshot_type))
             if recovery_id_out is not None:
                 recovery_id_out["recovery_id"] = rid
             try:
@@ -152,7 +153,8 @@ async def _recoverable_file_delete(
     try:
         before = _authored_file_snapshot(rel, True, before_content)
         async with recovery.resource(resource):
-            rid = await recovery.begin(resource, operation, token.id, before)
+            rid = await recovery.begin(resource, operation, token.id, before,
+                expected=_authored_file_snapshot(rel, False, None))
             try:
                 await recovery.mark(rid, "dispatching")
                 exists = await hass.async_add_executor_job(os.path.isfile, path)

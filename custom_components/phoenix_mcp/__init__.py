@@ -505,6 +505,17 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         except Exception:  # noqa: BLE001
             _LOGGER.warning("Could not set up the Phoenix MCP AI Task entity", exc_info=True)
 
+    from .config_reconciliation import reconcile_configurations
+    from .const import CONFIG_RECOVERY_SWEEP_INTERVAL
+
+    async def _reconcile_configuration(_now=None) -> None:
+        try:
+            await reconcile_configurations(hass, data)
+        except Exception:
+            _LOGGER.warning("Configuration reconciliation failed; will retry", exc_info=True)
+
+    entry.async_on_unload(async_track_time_interval(hass, _reconcile_configuration, CONFIG_RECOVERY_SWEEP_INTERVAL))
+
     async def _flush_statistics(_now=None) -> None:
         try:
             await data.routing_statistics.async_save()
@@ -766,10 +777,11 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
             hass.bus.async_listen("automation_reloaded", _on_automation_reloaded)
         )
 
-    # Publish readiness as the final synchronous setup action. Anything that
-    # raised before here is caught by async_setup_entry and rolled back.
+    # Publish readiness before the bounded recovery readback. Earlier setup
+    # failures are caught by async_setup_entry and rolled back.
     data.ready = True
     hass.data[RUNTIME_READY_KEY] = True
+    await _reconcile_configuration()
     return True
 
 

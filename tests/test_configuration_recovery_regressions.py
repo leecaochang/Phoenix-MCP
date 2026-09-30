@@ -68,6 +68,7 @@ async def test_file_restore_preview_compares_live_content(hass):
     snapshot = _authored_file_snapshot(rel, True, "Before")
     rid = await d.config_recovery.begin(f"authored_file:{rel}", "write_file", t.id, snapshot)
     await d.config_recovery.mark(rid, "verified")
+    d.config_recovery.leave(rid)
     result = await _tool_restore_configuration({"recovery_id": rid, "side": "before"}, t, hass, d)
     diff = body(result)["diff"]
     assert diff["before"] == "After"

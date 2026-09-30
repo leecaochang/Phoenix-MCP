@@ -896,7 +896,8 @@ async def _execute_edit_energy_config(
             # Persist the exact raw preferences before dispatch. This is an
             # Energy-owned snapshot, independent of the redacted agent view.
             before_snapshot = _energy_recovery_snapshot(before)
-            rid = await recovery.begin(resource, tool, token.id, before_snapshot)
+            rid = await recovery.begin(resource, tool, token.id, before_snapshot,
+                expected=_energy_recovery_snapshot(after))
             try:
                 await recovery.mark(rid, "dispatching")
                 check_request_authority()
@@ -1040,7 +1041,7 @@ async def restore_energy_configuration(snapshot: dict[str, Any], token: TokenRec
         async with recovery.resource(resource):
             before = await _read_prefs_raw(hass)
             before_snapshot = _energy_recovery_snapshot(before)
-            rid = await recovery.begin(resource, tool, token.id, before_snapshot, source=snapshot)
+            rid = await recovery.begin(resource, tool, token.id, before_snapshot, source=snapshot, expected=snapshot)
             try:
                 await recovery.mark(rid, "dispatching")
                 check_request_authority()

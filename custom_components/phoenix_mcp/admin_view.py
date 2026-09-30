@@ -3152,6 +3152,13 @@ async def _resolve_approval(
                 409, rid,
                 key="approvalExecutionInterrupted",
             )
+        from .config_reconciliation import is_recovery_approval, acknowledge_recovery
+        if terminal_status == "rejected" and is_recovery_approval(record, data):
+            from .config_recovery import ConfigurationRecoveryError
+            try:
+                await acknowledge_recovery(record, user.id, hass, data, rejected=True)
+            except ConfigurationRecoveryError as exc:
+                return _err("conflict", str(exc), 409, rid, key="recoveryBlocked")
         updated = await async_update_approval_status(
             data.store,
             approval_id,
@@ -3202,6 +3209,8 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
     rid = request["phoenix_mcp_rid"]
     data: PhoenixData = hass.data[DOMAIN]
     user = request[KEY_HASS_USER]
+    from .config_reconciliation import is_recovery_approval, execute_recovery_approval
+    from .mcp_view import _restore_token
     closed_record = None
     closed_method: str | None = None
     closed_reason: str | None = None
@@ -3217,6 +3226,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
         if record is None:
             return _err("not_found", "Approval not found.", 404, rid, key="approvalNotFound")
         settings = data.store.get_settings()
+        recovery_request = is_recovery_approval(record, data)
 
         def _record_admin_lifecycle(
             method: str,
@@ -3282,7 +3292,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 key="approvalAlreadyResolved",
             )
         else:
-            token = data.store.get_token_by_id(record.token_id)
+            token = _restore_token(user.id) if recovery_request else data.store.get_token_by_id(record.token_id)
             if token is None or not token.is_valid():
                 closed_record = await async_update_approval_status(
                     data.store, approval_id,
@@ -3296,7 +3306,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                     "not_found", "Token no longer active.", 409, rid,
                     key="approvalTokenInactive",
                 )
-            elif record.cap_name != MESA_CONFIRM_CAP and effective_cap(token, record.cap_name) == "deny":
+            elif not recovery_request and record.cap_name != MESA_CONFIRM_CAP and effective_cap(token, record.cap_name) == "deny":
                 # The MESA sentinel cap is re-evaluated by its executor instead.
                 closed_record = await async_update_approval_status(
                     data.store, approval_id,
@@ -3310,7 +3320,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                     "forbidden", "Capability is now denied for this token.", 409, rid,
                     key="approvalCapabilityDenied",
                 )
-            elif settings.kill_switch:
+            elif settings.kill_switch and not recovery_request:
                 closed_record = await async_update_approval_status(
                     data.store, approval_id,
                     status=STATUS_CANCELLED,
@@ -3386,13 +3396,16 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 RequestAuthority, policy_version, request_authority,
             )
             authority_ctx = request_authority.set(
-                RequestAuthority(hass, data, token.id, token.token_hash)
+                None if recovery_request else RequestAuthority(hass, data, token.id, token.token_hash)
             )
             policy_ctx = policy_version.set(token.settings_version)
             try:
-                tool_result, outcome, _resource = await async_execute_approved_tool(
-                    record.tool_name, record.args, token, hass, data,
-                )
+                if recovery_request:
+                    tool_result, outcome, _resource = await execute_recovery_approval(record, user, hass, data)
+                else:
+                    tool_result, outcome, _resource = await async_execute_approved_tool(
+                        record.tool_name, record.args, token, hass, data,
+                    )
             finally:
                 policy_version.reset(policy_ctx)
                 request_authority.reset(authority_ctx)

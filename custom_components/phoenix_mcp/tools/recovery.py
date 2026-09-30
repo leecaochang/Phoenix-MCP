@@ -8,7 +8,7 @@ from typing import Any
 
 from homeassistant.helpers import entity_registry as er
 
-from ..config_recovery import ConfigurationRecoveryError
+from ..config_recovery import ConfigurationRecoveryError, recovery_resolution
 from ..helpers import content_hash, effective_cap
 from ..request_authority import check_request_authority
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _gate, _restore_ctx, _tool_error, _tool_success
@@ -122,8 +122,9 @@ async def _tool_restore_configuration(
     if not _may_restore_record(record, token):
         return _tool_error("Configuration recovery record not found."), "not_found", tool
     assert record is not None
-    if record.get("active") or record.get("phase") in ("prepared", "dispatching", "partial", "unknown"):
-        return _tool_error("The recovery record is unresolved; inspect it in the administrator recovery panel first."), "invalid_request", tool
+    if not data.config_recovery.inactive(rid) or (record.get("phase") in ("prepared", "dispatching", "partial", "unknown")
+            and recovery_resolution.get() != rid):
+        return _tool_error("Resolve the recovery request in Approvals before restoring this record."), "invalid_request", tool
     selected = record.get(side)
     if isinstance(selected, dict) and selected.get("snapshot_type") == "energy_preferences":
         return await _tool_restore_energy_configuration(
@@ -510,7 +511,7 @@ async def _execute_restore_dashboard_registry(args, record, side, snapshot, toke
         recovery = data.config_recovery
         resource = f"dashboard_registry:{key}"
         async with recovery.resource(resource):
-            rid = await recovery.begin(resource, "dashboard_registry_restore", token.id, target)
+            rid = await recovery.begin(resource, "dashboard_registry_restore", token.id, target, expected=snapshot)
             try:
                 await recovery.mark(rid, "dispatching")
                 current = await _dashboard_registry_snapshot(hass, key)
@@ -631,8 +632,8 @@ async def _execute_restore_configuration(
     if not _may_restore_record(record, token):
         return _tool_error("Configuration recovery record not found."), "not_found", tool
     assert record is not None
-    if record.get("phase") in ("prepared", "dispatching", "partial", "unknown"):
-        return _tool_error("The recovery record is unresolved; inspect it in the administrator recovery panel first."), "invalid_request", tool
+    if record.get("phase") in ("prepared", "dispatching", "partial", "unknown") and recovery_resolution.get() != record["id"]:
+        return _tool_error("Resolve the recovery request in Approvals before restoring this record."), "invalid_request", tool
     side = args.get("side")
     if side not in ("before", "source"):
         return _tool_error("side must be 'before' or 'source'."), "invalid_request", tool
@@ -808,7 +809,7 @@ async def _execute_restore_blueprint_configuration(args, record, side, snapshot,
             before = _blueprint_recovery_snapshot(domain, path, before_text)
             if content_hash(before) != args.get("target_fingerprint"):
                 return _tool_error("The blueprint target changed after approval."), "invalid_request", tool
-            rid = await recovery.begin(resource, tool, token.id, before, source=snapshot)
+            rid = await recovery.begin(resource, tool, token.id, before, source=snapshot, expected=snapshot)
             try:
                 await recovery.mark(rid, "dispatching")
                 check_request_authority()

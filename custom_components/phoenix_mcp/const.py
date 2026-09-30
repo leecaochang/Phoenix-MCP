@@ -104,6 +104,14 @@ VERSION_STORAGE_VERSION = 1
 CONFIG_RECOVERY_STORAGE_KEY = "phoenix_mcp_config_recovery"
 CONFIG_RECOVERY_MAX_RECORDS = 256
 CONFIG_RECOVERY_MAX_BYTES = 1_048_576
+CONFIG_RECOVERY_RETENTION_DAYS = 30
+CONFIG_RECOVERY_PER_RESOURCE = 20
+CONFIG_RECOVERY_SWEEP_INTERVAL = datetime.timedelta(seconds=30)
+CONFIG_RECOVERY_SWEEP_BATCH = 4
+CONFIG_RECOVERY_OBSERVATION_TIMEOUT = 5
+CONFIG_RECOVERY_APPROVAL_CAP = "__configuration_recovery__"
+CONFIG_RECOVERY_APPROVAL_TOKEN = "__configuration_recovery__"
+CONFIG_RECOVERY_UNRESOLVED = frozenset({"prepared", "dispatching", "partial", "unknown"})
 # Template's config flow type menu. Keep this in sync with the supported HA
 # Template platforms; _flow_step_body intersects it with the installed flow's
 # actual menu, so a type missing from an older supported HA release is omitted.
@@ -1287,6 +1295,8 @@ YAML_PROTECTED_SUBTREES: dict[str, tuple[str, ...]] = {
 # SEPARATE key rather than a runtime concatenation, because a translator has to
 # be able to move the clause.
 DIFF_SUMMARY_TEMPLATES: dict[str, str] = {
+    "configuration_recovery.restore": "Restore saved configuration for {resource}",
+    "configuration_recovery.acknowledge": "Check configuration after an interrupted change to {resource}",
     # Blueprints. Create never reports consumers (nothing uses it yet).
     "blueprint.create": "Create {domain} blueprint '{rel}'",
     "blueprint.edit": "Replace {domain} blueprint '{rel}'",
@@ -1443,6 +1453,8 @@ _APPROVAL_SUMMARY_TITLE_OVERRIDES = {
 }
 
 _APPROVAL_SUMMARY_BODIES = {
+    "configuration_recovery.restore": "A previous change could not be verified. Approve restores the saved configuration shown in Details. Reject keeps the current configuration. The original command will not be repeated.",
+    "configuration_recovery.acknowledge": "A previous change could not be verified and cannot be safely restored here. Check this resource in Home Assistant, then Approve to accept its current state and unblock changes. Reject leaves changes blocked. The original command will not be repeated.",
     "restart_ha": "Home Assistant will be briefly unavailable while it restarts.",
     "zigbee_reconfigure": "This will interview the Zigbee device again. It may be briefly unresponsive. Battery devices must be awake.",
     "zigbee_reconfigure.device": "This will interview {label} again. It may be briefly unresponsive. Battery devices must be awake.",

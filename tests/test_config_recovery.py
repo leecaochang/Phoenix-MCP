@@ -141,6 +141,7 @@ async def test_agent_template_restore_is_owner_scoped_and_rechecks_target(hass):
         f"config_entry:{entry.entry_id}", "test_agent_restore", token.id, source,
     )
     await runtime.config_recovery.mark(recovery_id, "verified")
+    runtime.config_recovery.leave(recovery_id)
 
     receipt, outcome, _ = await _call_tool(
         "restore_configuration", {"recovery_id": recovery_id, "side": "before"},
@@ -515,7 +516,7 @@ async def test_recreation_partial_keeps_replacement_and_source(hass):
     assert runtime.config_recovery.records()[0]["phase"] == "partial"
 
 
-async def test_completed_artifacts_are_not_rotated_by_history_or_capacity(monkeypatch):
+async def test_completed_artifacts_rotate_automatically_at_capacity(monkeypatch):
     from custom_components.phoenix_mcp import config_recovery
     from custom_components.phoenix_mcp.version_store import VersionStore
     monkeypatch.setattr(config_recovery, "CONFIG_RECOVERY_MAX_RECORDS", 1)
@@ -527,9 +528,11 @@ async def test_completed_artifacts_are_not_rotated_by_history_or_capacity(monkey
     for _ in range(30):
         await versions.record(resource_type="helper", resource_id="x", action="edit", before={}, after={})
     assert recovery.get(rid)["before"] == {"name": "only copy"}
+    next_id = await recovery.begin("helper:y", "delete", "t", {})
+    assert recovery.get(rid) is None
     with pytest.raises(ConfigurationRecoveryError):
-        await recovery.begin("helper:y", "delete", "t", {})
-    assert recovery.get(rid) is not None
+        await recovery.begin("helper:z", "delete", "t", {})
+    assert recovery.get(next_id) is not None
 
 
 async def test_private_atomic_store_uses_real_filesystem(hass, tmp_path):

@@ -677,7 +677,9 @@
       "zigbee_reporting": "Skonfiguruj raportowanie atrybutów Zigbee",
       "zigbee_reporting.device": "Skonfiguruj raportowanie {cluster}.{attribute} dla {label}",
       "zigbee_topology": "Skanuj topologię Zigbee",
-      "zigbee_topology.backend": "Skanuj tabele sąsiedztwa {backend} dla ograniczonej mapy Zigbee"
+      "zigbee_topology.backend": "Skanuj tabele sąsiedztwa {backend} dla ograniczonej mapy Zigbee",
+      "configuration_recovery.restore": "Przywróć zapisaną konfigurację dla {resource}",
+      "configuration_recovery.acknowledge": "Sprawdź konfigurację po przerwanej zmianie w {resource}"
     },
     "approvals": {
       "approve": "Zatwierdź i wykonaj",
@@ -2096,7 +2098,11 @@
       "zigbee_topology.backend.body": "Spowoduje to aktywne odpytywanie routerów Zigbee w {backend}. Sieć mesh może być mniej responsywna podczas skanowania.",
       "zigbee_topology.backend.title": "Skanuj tabele sąsiedztwa {backend} dla ograniczonej mapy Zigbee",
       "zigbee_topology.body": "Spowoduje to aktywne odpytywanie routerów Zigbee. Sieć mesh może być mniej responsywna podczas skanowania.",
-      "zigbee_topology.title": "Skanuj topologię Zigbee"
+      "zigbee_topology.title": "Skanuj topologię Zigbee",
+      "configuration_recovery.restore.title": "Przywróć zapisaną konfigurację dla {resource}",
+      "configuration_recovery.restore.body": "Nie udało się zweryfikować wcześniejszej zmiany. Zatwierdzenie przywraca zapisaną konfigurację widoczną w Szczegółach. Odrzucenie zachowuje bieżącą konfigurację. Oryginalne polecenie nie zostanie powtórzone.",
+      "configuration_recovery.acknowledge.title": "Sprawdź konfigurację po przerwanej zmianie w {resource}",
+      "configuration_recovery.acknowledge.body": "Nie udało się zweryfikować wcześniejszej zmiany i nie można jej tutaj bezpiecznie przywrócić. Sprawdź ten zasób w Home Assistant, a następnie zatwierdź, aby zaakceptować jego bieżący stan i odblokować zmiany. Odrzucenie pozostawia zmiany zablokowane. Oryginalne polecenie nie zostanie powtórzone."
     },
     "routing": {
       "providerOptions": "Dostawcy decyzji używają stałych opcji routingu, bez opcji czatu takich jak poziomy rozumowania. Odświeżenie modeli sprawdza dostępność bez wykonywania poleceń; nie testuje dokładności routingu.",
@@ -2136,30 +2142,6 @@
       "reset": "Wyzeruj statystyki",
       "confirm": "Usunąć tylko statystyki tej karty? Ustawienia pozostaną bez zmian. Trwające żądania nie trafią do nowego okresu.",
       "error": "Nie można wczytać lub wyzerować statystyk. Spróbuj ponownie."
-    },
-    "recovery": {
-      "title": "Odzyskiwanie konfiguracji",
-      "help": "Sprawdź bieżący stan Home Assistant przed ponowieniem operacji o niepewnym wyniku. Kopie bezpieczeństwa są przechowywane poza historią zmian. Oznaczenie jako sprawdzone znosi blokadę ponawiania, ale nie cofa operacji.",
-      "failed": "Nie udało się zweryfikować operacji. Odśwież i sprawdź bieżący stan przed ponowieniem.",
-      "empty": "Brak rekordów odzyskiwania.",
-      "before": "Kopia bezpieczeństwa",
-      "source": "Migawka źródłowa",
-      "inspect": "Sprawdź bieżący stan",
-      "review": "Oznacz jako sprawdzone",
-      "restoreBefore": "Przywróć kopię bezpieczeństwa",
-      "restoreSource": "Przywróć migawkę źródłową",
-      "prepared": "Przygotowano",
-      "dispatching": "Wysłano; sprawdź wynik",
-      "verified": "Zweryfikowano",
-      "partial": "Niekompletne",
-      "unknown": "Wynik nieznany",
-      "reviewed": "Sprawdzono",
-      "not_applied": "Nie zastosowano",
-      "confirm_reviewed": "Sprawdziłem bieżący stan. Znieś blokadę ponawiania dla tego rekordu.",
-      "confirm_restore": "Zastosować tę migawkę w Home Assistant? Niekompletne zamienniki zostaną zachowane do sprawdzenia.",
-      "confirm_delete": "Trwale usunąć ten plik odzyskiwania? Może to być jedyna pozostała kopia.",
-      "confirm": "Potwierdź",
-      "delete": "Usuń"
     },
     "toolRouting": {
       "label": "Weryfikacja wyboru narzędzia",

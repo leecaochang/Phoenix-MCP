@@ -1557,7 +1557,9 @@
       "zigbee_reporting": "Configurer le rapport d'attributs Zigbee",
       "zigbee_reporting.device": "Configurer le rapport {cluster}.{attribute} pour {label}",
       "zigbee_topology": "Analyser la topologie Zigbee",
-      "zigbee_topology.backend": "Analyser les tables de voisinage {backend} pour la carte Zigbee limitée"
+      "zigbee_topology.backend": "Analyser les tables de voisinage {backend} pour la carte Zigbee limitée",
+      "configuration_recovery.restore": "Restaurer la configuration enregistrée de {resource}",
+      "configuration_recovery.acknowledge": "Vérifier la configuration après une modification interrompue de {resource}"
     },
     "version": {
       "card.added": "ajouté {subject} ({where})",
@@ -1998,7 +2000,11 @@
       "zigbee_topology.backend.body": "Cela interroge activement les routeurs Zigbee sur {backend}. Le maillage peut être moins réactif pendant l'analyse.",
       "zigbee_topology.backend.title": "Analyser les tables de voisinage {backend} pour la carte Zigbee limitée",
       "zigbee_topology.body": "Cela interroge activement les routeurs Zigbee. Le maillage peut être moins réactif pendant l'analyse.",
-      "zigbee_topology.title": "Analyser la topologie Zigbee"
+      "zigbee_topology.title": "Analyser la topologie Zigbee",
+      "configuration_recovery.restore.title": "Restaurer la configuration enregistrée de {resource}",
+      "configuration_recovery.restore.body": "Une modification précédente n’a pas pu être vérifiée. Approuver restaure la configuration enregistrée affichée dans Détails. Rejeter conserve la configuration actuelle. La commande initiale ne sera pas répétée.",
+      "configuration_recovery.acknowledge.title": "Vérifier la configuration après une modification interrompue de {resource}",
+      "configuration_recovery.acknowledge.body": "Une modification précédente n’a pas pu être vérifiée et ne peut pas être restaurée ici en toute sécurité. Vérifiez cette ressource dans Home Assistant, puis approuvez pour accepter son état actuel et débloquer les modifications. Rejeter maintient les modifications bloquées. La commande initiale ne sera pas répétée."
     },
     "routing": {
       "providerOptions": "Les fournisseurs de décisions utilisent des choix de routage fixes, sans options de Chat telles que les niveaux de raisonnement. Actualiser les modèles vérifie leur disponibilité sans exécuter de commande et ne teste pas la précision du routage.",
@@ -2038,30 +2044,6 @@
       "reset": "Réinitialiser les statistiques",
       "confirm": "Effacer uniquement les statistiques de cette carte ? Les réglages restent inchangés. Les requêtes déjà en cours sont exclues de la nouvelle période.",
       "error": "Impossible de charger ou réinitialiser les statistiques. Réessayez."
-    },
-    "recovery": {
-      "title": "Récupération de configuration",
-      "help": "Vérifiez l’état actuel de Home Assistant avant de relancer une opération incertaine. Les copies de sécurité sont distinctes de l’historique. Marquer une entrée comme vérifiée autorise une nouvelle tentative sans annuler l’opération.",
-      "failed": "L’opération n’a pas pu être vérifiée. Actualisez et inspectez l’état actuel avant de réessayer.",
-      "empty": "Aucune entrée de récupération.",
-      "before": "Copie de sécurité",
-      "source": "Instantané source",
-      "inspect": "Inspecter l’état actuel",
-      "review": "Marquer comme examiné",
-      "restoreBefore": "Restaurer la copie de sécurité",
-      "restoreSource": "Restaurer l’instantané source",
-      "prepared": "Préparé",
-      "dispatching": "Envoyé ; vérifier le résultat",
-      "verified": "Vérifié",
-      "partial": "Incomplet",
-      "unknown": "Résultat inconnu",
-      "reviewed": "Examiné",
-      "not_applied": "Non appliqué",
-      "confirm_reviewed": "J’ai vérifié l’état actuel. Autoriser une nouvelle tentative pour cette entrée.",
-      "confirm_restore": "Appliquer cet instantané à Home Assistant ? Les remplacements incomplets seront conservés pour inspection.",
-      "confirm_delete": "Supprimer définitivement cet artefact de récupération ? Il peut s’agir de la seule copie restante.",
-      "confirm": "Confirmer",
-      "delete": "Supprimer"
     },
     "toolRouting": {
       "label": "Vérification du choix des outils",

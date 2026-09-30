@@ -1244,7 +1244,9 @@
       "zigbee_reporting": "Zigbee 属性レポートを設定",
       "zigbee_reporting.device": "{label} の {cluster}.{attribute} レポートを設定",
       "zigbee_topology": "Zigbee トポロジーをスキャン",
-      "zigbee_topology.backend": "{backend} の近隣テーブルをスキャンしてスコープ内の Zigbee マップを生成"
+      "zigbee_topology.backend": "{backend} の近隣テーブルをスキャンしてスコープ内の Zigbee マップを生成",
+      "configuration_recovery.restore": "{resource} の保存済み設定を復元",
+      "configuration_recovery.acknowledge": "{resource} の変更中断後の設定を確認"
     },
     "settings": {
       "addProviderFirst": "先に Agent Chat でプロバイダーアカウントを追加してください。",
@@ -1998,7 +2000,11 @@
       "zigbee_topology.backend.body": "{backend} 上の Zigbee ルーターへ能動的に問い合わせます。スキャン中はメッシュの応答性が低下する場合があります。",
       "zigbee_topology.backend.title": "{backend} の近隣テーブルをスキャンしてスコープ内の Zigbee マップを生成",
       "zigbee_topology.body": "Zigbee ルーターへ能動的に問い合わせます。スキャン中はメッシュの応答性が低下する場合があります。",
-      "zigbee_topology.title": "Zigbee トポロジーをスキャン"
+      "zigbee_topology.title": "Zigbee トポロジーをスキャン",
+      "configuration_recovery.restore.title": "{resource} の保存済み設定を復元",
+      "configuration_recovery.restore.body": "以前の変更を検証できませんでした。「承認」すると「詳細」に表示された保存済み設定を復元します。「拒否」すると現在の設定を維持します。元のコマンドは再実行しません。",
+      "configuration_recovery.acknowledge.title": "{resource} の変更中断後の設定を確認",
+      "configuration_recovery.acknowledge.body": "以前の変更を検証できず、ここでは安全に復元できません。Home Assistant でこのリソースを確認してから「承認」すると、現在の状態を受け入れ、変更のブロックを解除します。「拒否」すると変更はブロックされたままです。元のコマンドは再実行しません。"
     },
     "routing": {
       "providerOptions": "判断プロバイダーは固定のルーティング選択肢を使い、思考レベルなどのチャット設定は使いません。モデルの更新ではコマンドを実行せずに利用可能か確認します。ルーティングの正確さはテストしません。",
@@ -2038,30 +2044,6 @@
       "reset": "統計をリセット",
       "confirm": "このカードの統計だけを消去しますか？設定は変わりません。進行中のリクエストは新しい期間に含まれません。",
       "error": "統計の読み込みまたはリセットに失敗しました。再試行してください。"
-    },
-    "recovery": {
-      "title": "設定の復旧",
-      "help": "結果が不明な操作を再試行する前に、Home Assistant の現在の状態を確認してください。安全コピーは変更履歴とは別に保存されます。確認済みにすると再試行の制限が解除されますが、操作は取り消されません。",
-      "failed": "操作結果を検証できませんでした。更新して現在の状態を確認してから再試行してください。",
-      "empty": "復旧記録はありません。",
-      "before": "安全コピー",
-      "source": "元のスナップショット",
-      "inspect": "現在の状態を確認",
-      "review": "確認済みにする",
-      "restoreBefore": "安全コピーを復元",
-      "restoreSource": "元のスナップショットを復元",
-      "prepared": "準備済み",
-      "dispatching": "送信済み、結果の確認が必要",
-      "verified": "検証済み",
-      "partial": "未完了",
-      "unknown": "結果不明",
-      "reviewed": "確認済み",
-      "not_applied": "未適用",
-      "confirm_reviewed": "現在の状態を確認しました。この記録の再試行制限を解除します。",
-      "confirm_restore": "このスナップショットを Home Assistant に適用しますか？不完全な置き換えは確認のため保持されます。",
-      "confirm_delete": "この復旧データを完全に削除しますか？最後のコピーの可能性があります。",
-      "confirm": "確認",
-      "delete": "削除"
     },
     "toolRouting": {
       "label": "ツール選択の確認",

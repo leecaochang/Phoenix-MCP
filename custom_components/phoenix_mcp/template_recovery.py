@@ -117,13 +117,15 @@ def validate_restore_scope(snapshot: dict, token, hass) -> None:
 
 
 @asynccontextmanager
-async def protect_template(hass, data, token, entry, operation: str, *, source=None):
+async def protect_template(hass, data, token, entry, operation: str, *, source=None, expected=None):
     """Persist a safety copy and revalidate before entering a mutation boundary."""
     recovery = data.config_recovery
     key = f"config_entry:{entry.entry_id}"
     async with recovery.resource(key):
         before = template_snapshot(hass, entry)
-        rid = await recovery.begin(key, operation, token.id, before, source=source)
+        if operation == "remove_integration":
+            expected = {"snapshot_type": "template_helper", "entry_id": entry.entry_id, "exists": False}
+        rid = await recovery.begin(key, operation, token.id, before, source=source, expected=expected or source)
         try:
             await recovery.mark(rid, "dispatching")
             check_request_authority()
@@ -221,7 +223,7 @@ async def restore_template(
             payload = _settings_form_payload(result, supplied)
             # Validate all fields with HA's actual current creation schema.
             payload = result["data_schema"](payload)
-            rid = await recovery.begin(f"config_entry:{original_id}", tool, token.id, None, source=snapshot)
+            rid = await recovery.begin(f"config_entry:{original_id}", tool, token.id, None, source=snapshot, expected=snapshot)
             await recovery.mark(rid, "dispatching")
             absent()
             fresh_mesa = _helper_mesa_context(data, token, [expected["entity_id"]], action="create",

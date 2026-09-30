@@ -518,7 +518,11 @@
       "zigbee_topology.backend.body": "這將主動查詢 {backend} 上的 Zigbee 路由器。掃描期間，網狀網路的回應速度可能會降低。",
       "zigbee_topology.backend.title": "掃描 {backend} 鄰居表以生成權限範圍內的 Zigbee 拓撲圖",
       "zigbee_topology.body": "這將主動查詢 Zigbee 路由器。掃描期間，網狀網路的回應速度可能會降低。",
-      "zigbee_topology.title": "掃描 Zigbee 拓撲"
+      "zigbee_topology.title": "掃描 Zigbee 拓撲",
+      "configuration_recovery.restore.title": "還原 {resource} 的已儲存設定",
+      "configuration_recovery.restore.body": "無法驗證先前的變更。核准將還原「詳細資訊」中顯示的已儲存設定。拒絕將保留目前的設定。不會重複執行原始命令。",
+      "configuration_recovery.acknowledge.title": "檢查 {resource} 的變更中斷後的設定",
+      "configuration_recovery.acknowledge.body": "無法驗證先前的變更，也無法在此安全還原。請在 Home Assistant 中檢查此資源，然後核准以接受其目前狀態並解除變更限制。拒絕將繼續阻止變更。不會重複執行原始命令。"
     },
     "approvals": {
       "approve": "核准並執行",
@@ -980,7 +984,9 @@
       "zigbee_reporting": "設定 Zigbee 屬性上報",
       "zigbee_reporting.device": "設定 {label} 的 {cluster}.{attribute} 上報",
       "zigbee_topology": "掃描 Zigbee 拓撲",
-      "zigbee_topology.backend": "掃描 {backend} 鄰居表以生成權限範圍內的 Zigbee 拓撲圖"
+      "zigbee_topology.backend": "掃描 {backend} 鄰居表以生成權限範圍內的 Zigbee 拓撲圖",
+      "configuration_recovery.restore": "還原 {resource} 的已儲存設定",
+      "configuration_recovery.acknowledge": "檢查 {resource} 的變更中斷後的設定"
     },
     "inject": {
       "mesaProfile": "MESA 策略",
@@ -2043,30 +2049,6 @@
       "reset": "重設統計",
       "confirm": "僅清除此卡片的統計資料？設定保持不變。已在執行的請求不會計入新的統計週期。",
       "error": "無法載入或重設統計資料，請重試。"
-    },
-    "recovery": {
-      "title": "設定復原",
-      "help": "重試結果不確定的操作前，請先檢查 Home Assistant 的目前狀態。安全副本與變更歷程分開儲存。標記為已檢查會解除重試限制，但不會復原操作。",
-      "failed": "無法驗證操作結果。請重新整理並檢查目前狀態，再行重試。",
-      "empty": "沒有復原記錄。",
-      "before": "安全副本",
-      "source": "來源快照",
-      "inspect": "檢查目前狀態",
-      "review": "標記為已檢查",
-      "restoreBefore": "還原安全副本",
-      "restoreSource": "還原來源快照",
-      "prepared": "已準備",
-      "dispatching": "已傳送，請驗證結果",
-      "verified": "已驗證",
-      "partial": "未完成",
-      "unknown": "結果未知",
-      "reviewed": "已檢查",
-      "not_applied": "未套用",
-      "confirm_reviewed": "我已檢查目前狀態，解除此記錄的重試限制。",
-      "confirm_restore": "將此快照套用至 Home Assistant？未完成的替代實體將保留以供檢查。",
-      "confirm_delete": "永久刪除此復原檔案？它可能是僅存的副本。",
-      "confirm": "確認",
-      "delete": "刪除"
     },
     "toolRouting": {
       "label": "工具選擇複核",
