@@ -2014,7 +2014,6 @@
       "timeoutHint": "Permite más tiempo para conexiones lentas. Si no llega una decisión a tiempo, tu proveedor habitual atenderá la solicitud.",
       "failed": "No se pudieron guardar o cargar los ajustes de enrutamiento.",
       "accountModel": "Modelo de {name}",
-      "connectionHint": "La URL base es la dirección del servidor. Añade una clave API solo si el servidor requiere autenticación.",
       "commandHelp": "Prueba primero los intents locales y después el proveedor de decisiones opcional. Las demás solicitudes se envían a tu proveedor de IA habitual. Se mantienen los permisos y las aprobaciones.",
       "requestLimit": "Solicitudes de decisión por hora (0 = sin límite)",
       "requestLimitHint": "Compartido por Voz, Chat, vistas previas y comprobaciones en segundo plano. Cuenta los intentos mientras está activo, incluidos los fallidos, y se conserva al reiniciar. Se restablece cada hora en punto UTC. Tu proveedor habitual tiene una cuota aparte. Es un límite de solicitudes, no de dinero."

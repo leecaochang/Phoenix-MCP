@@ -2014,7 +2014,6 @@
       "timeoutHint": "Accordez plus de temps aux connexions lentes. Sans décision à temps, votre fournisseur habituel traite la demande.",
       "failed": "Impossible d’enregistrer ou de charger les paramètres de routage.",
       "accountModel": "Modèle pour {name}",
-      "connectionHint": "L’URL de base est l’adresse du serveur. Ajoutez une clé API uniquement si ce serveur exige une authentification.",
       "commandHelp": "Essaie d’abord les intentions locales, puis le fournisseur de décisions facultatif. Les autres demandes passent par votre fournisseur d’IA habituel. Les autorisations et approbations restent applicables.",
       "requestLimit": "Requêtes de décision par heure (0 = illimité)",
       "requestLimitHint": "Partagé entre Voix, Chat, aperçus et vérifications en arrière-plan. Compte les tentatives lorsque la limite est activée, échecs compris, et persiste après redémarrage. Réinitialisation à chaque heure pleine UTC. Votre fournisseur habituel dispose d’un quota séparé. Il s’agit d’une limite de requêtes, pas d’un plafond monétaire."

@@ -238,7 +238,7 @@ async def test_one_budget_for_both_requests_and_cancellation(hass, target_home):
     assert data.decision_shadow.task is None
 
 
-@pytest.mark.parametrize("protocol", ["systemone", "classifier"])
+@pytest.mark.parametrize("protocol", ['systemone'])
 @pytest.mark.parametrize("invalid", [False, True])
 async def test_target_http_contract_and_generated_id_rejection(protocol, invalid, socket_enabled):
     requests = []
@@ -253,7 +253,7 @@ async def test_target_http_contract_and_generated_id_rejection(protocol, invalid
         return web.json_response({"data": [{"id": "test-model"}]})
     app.router.add_get("/models", models)
     async with TestServer(app) as server, ClientSession() as session:
-        cfg = agentcli.ProviderConfig("systemone", "test-model", str(server.make_url("")).rstrip("/"))
+        cfg = agentcli.ProviderConfig("typesafe", "test-model", str(server.make_url("")).rstrip("/"))
         provider = DecisionProvider(cfg, protocol)
         targets = {"t0": {"name": "Desk lamp"}}
         if invalid:
@@ -263,10 +263,7 @@ async def test_target_http_contract_and_generated_id_rejection(protocol, invalid
             assert (await provider.select_target(session, "lamp on", "light_on", targets, 1000))["choice"] == "t0"
     assert len(requests) == 1
     expected_state = {"utterance": "lamp on", "language": "en", "category": "light_on"}
-    if protocol == "classifier":
-        assert json.loads(requests[0]["questions"]["target"]["criteria"]["t0"]) == targets["t0"]
-    else:
-        expected_state["targets"] = targets
+    expected_state["targets"] = targets
     assert requests[0]["state"] == expected_state
     assert set(requests[0]["questions"]["target"]["criteria"]) == {"t0", "none"}
 
@@ -350,7 +347,7 @@ def test_brightness_option_lists_partition_all_whole_percentages():
         assert 10 * int(selected["brightness_tens"]) + int(selected["brightness_units"]) == percent
 
 
-@pytest.mark.parametrize("protocol", ["systemone", "classifier"])
+@pytest.mark.parametrize("protocol", ['systemone'])
 @pytest.mark.parametrize("percent", [0, 5, 37, 50, 55, 99, 100])
 async def test_brightness_multi_question_http_contract(protocol, percent, socket_enabled):
     requests = []
@@ -367,7 +364,7 @@ async def test_brightness_multi_question_http_contract(protocol, percent, socket
         return web.json_response({"data": [{"id": "test-model"}]})
     app.router.add_get("/models", models)
     async with TestServer(app) as server, ClientSession() as session:
-        cfg = agentcli.ProviderConfig("systemone", "test-model", str(server.make_url("")).rstrip("/"))
+        cfg = agentcli.ProviderConfig("typesafe", "test-model", str(server.make_url("")).rstrip("/"))
         answer = await DecisionProvider(cfg, protocol).select_target(
             session, f"set the desk lamp to {percent} percent", "light_brightness", {"t0": {"name": "Desk lamp"}}, 1000)
     assert answer["brightness_pct"] == percent
@@ -625,7 +622,7 @@ def test_catalog_packing_retains_supplied_null_and_does_not_mutate_source():
     assert unpack_catalog(packed) == targets
 
 
-@pytest.mark.parametrize("protocol", ["classifier", "systemone"])
+@pytest.mark.parametrize("protocol", ['systemone'])
 @pytest.mark.parametrize("case", ["selected", "declined", "conflict", "uncertain", "missing", "foreign"])
 async def test_generic_grouped_targets_http_contract(protocol, case, socket_enabled):
     """All groups see competitors; a confident final-group winner is necessary."""
@@ -656,7 +653,7 @@ async def test_generic_grouped_targets_http_contract(protocol, case, socket_enab
         return web.json_response({"data": [{"id": "test-model"}]})
     app.router.add_get("/models", models)
     async with TestServer(app) as server, ClientSession() as session:
-        cfg = agentcli.ProviderConfig(protocol, "test-model", str(server.make_url("")).rstrip("/"))
+        cfg = agentcli.ProviderConfig("typesafe", "test-model", str(server.make_url("")).rstrip("/"))
         provider = DecisionProvider(cfg, protocol)
         call = provider.select_target(session, "switch Lamp 98 off", "light_off", targets, 1000)
         if case in ("selected", "declined"):
@@ -710,7 +707,7 @@ async def test_generic_choice_capacity_is_model_scoped_and_bounded(advertised, e
     app = web.Application()
     app.router.add_get('/models', models)
     async with TestServer(app) as server, ClientSession() as session:
-        provider = DecisionProvider(agentcli.ProviderConfig("classifier", "test-model", str(server.make_url('')).rstrip('/')), 'classifier')
+        provider = DecisionProvider(agentcli.ProviderConfig("typesafe", "test-model", str(server.make_url('')).rstrip('/')), 'systemone')
         if expected is None:
             with pytest.raises(DecisionError, match='malformed'):
                 await provider.target_choice_limit(session, 1000)
@@ -734,21 +731,19 @@ async def test_advertised_extended_choices_avoid_unnecessary_groups(socket_enabl
             "target": {"type": "choice", **choice("t94", payload['questions']['target']['criteria'])}}})
     app = web.Application()
     app.router.add_get('/models', models)
-    app.router.add_post('/classifier', classify)
+    app.router.add_post('/systemone', classify)
     async with TestServer(app) as server, ClientSession() as session:
-        provider = DecisionProvider(agentcli.ProviderConfig('classifier', 'test-model', str(server.make_url('')).rstrip('/')), 'classifier')
+        provider = DecisionProvider(agentcli.ProviderConfig('typesafe', 'test-model', str(server.make_url('')).rstrip('/')), 'systemone')
         result = await provider.select_target(session, 'turn off Lamp 94', 'light_off',
                                              targets, 1000)
     assert result['choice'] == 't94'
     assert set(requests[0]['questions']) == {'target'}
     assert len(requests[0]['questions']['target']['criteria']) == 96
-    assert {key: json.loads(value) for key, value in requests[0]['questions']['target']['criteria'].items()
-            if key != 'none'} == targets
-    assert requests[0]['state'] == {'utterance': 'turn off Lamp 94', 'language': 'en', 'category': 'light_off'}
-    assert 'state.targets' not in requests[0]['questions']['target']['instructions']
+    assert unpack_catalog(requests[0]['state']) == targets
+    assert 'state.targets' in requests[0]['questions']['target']['instructions']
 
 
-@pytest.mark.parametrize('protocol', ['classifier', 'systemone'])
+@pytest.mark.parametrize('protocol', ['systemone'])
 @pytest.mark.parametrize('limit,count', [(2, 2), (10, 9), (10, 10), (10, 12), (50, 12), (64, 12), (None, 12)])
 async def test_small_target_catalog_obeys_model_capacity(protocol, limit, count, socket_enabled):
     targets = {f't{i}': {'entity_id': f'light.fixture_{i}', 'name': f'Lamp {i}'} for i in range(count)}
@@ -768,10 +763,7 @@ async def test_small_target_catalog_obeys_model_capacity(protocol, limit, count,
         questions = payload['questions']
         assert all(len(q['criteria']) <= capacity and 'none' in q['criteria'] for q in questions.values())
         assert {key for q in questions.values() for key in q['criteria']} == {*targets, 'none'}
-        if len(questions) > 1 or protocol == 'systemone':
-            assert unpack_catalog(payload['state']) == targets
-        else:
-            assert {k: json.loads(v) for k, v in questions['target']['criteria'].items() if k != 'none'} == targets
+        assert unpack_catalog(payload['state']) == targets
         selected = f't{count - 1}'
         return web.json_response({'model': 'test-model', 'answers': {
             name: {'type': 'choice', **choice(selected if selected in spec['criteria'] else 'none', spec['criteria'])}
@@ -781,7 +773,7 @@ async def test_small_target_catalog_obeys_model_capacity(protocol, limit, count,
     app.router.add_get('/models', models)
     app.router.add_post('/' + protocol, classify)
     async with TestServer(app) as server, ClientSession() as session:
-        provider = DecisionProvider(agentcli.ProviderConfig(protocol, 'test-model', str(server.make_url('')).rstrip('/')), protocol)
+        provider = DecisionProvider(agentcli.ProviderConfig("typesafe", 'test-model', str(server.make_url('')).rstrip('/')), protocol)
         result = await provider.select_target(session, f'turn off Lamp {count - 1}', 'light_off', targets, 1000)
     assert result['choice'] == f't{count - 1}'
     assert requests == ['GET', 'POST']

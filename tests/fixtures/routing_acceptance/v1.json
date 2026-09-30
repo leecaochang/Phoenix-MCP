@@ -8,7 +8,6 @@
   },
   "model_qualification": {
     "required": ["complete scoped catalog", "every answer meets configured confidence", "literal target identity", "literal numeric, unit and option evidence", "positive controls", "negated, deferred, multiple and unsupported requests refuse", "fresh authority after every wait", "approval revalidation", "no effect from previews"],
-    "record": ["model revision", "adapter revision", "catalog entity and byte counts", "language", "expected and observed choices", "confidence for every answer", "latency", "HTTP attempts", "accepted and refused counts", "state before and after", "settings and fixture cleanup"],
-    "deferred_models": ["Simple-JEV", "Laya"]
+    "record": ["model revision", "adapter revision", "catalog entity and byte counts", "language", "expected and observed choices", "confidence for every answer", "latency", "HTTP attempts", "accepted and refused counts", "state before and after", "settings and fixture cleanup"]
   }
 }

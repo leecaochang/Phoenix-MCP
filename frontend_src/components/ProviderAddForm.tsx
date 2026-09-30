@@ -30,7 +30,6 @@ export interface ProviderAddFormProps {
   allowCapabilityProbe?: boolean;
   requireModel?: boolean;
   idPrefix?: string;
-  connectionHint?: string;
   completeLabel: string;
   addingLabelKey: string;
   onActiveChange?: (active: boolean) => void;
@@ -54,7 +53,7 @@ function initialValues(provider: AgentCliProviderType): Record<string, string> {
 
 export function ProviderAddForm({
   providerTypes, disabled, completeLabel, addingLabelKey, onActiveChange, onCreated,
-  allowCapabilityProbe = true, requireModel = false, idPrefix = "agentcli-add", connectionHint,
+  allowCapabilityProbe = true, requireModel = false, idPrefix = "agentcli-add",
 }: ProviderAddFormProps) {
   const [pickerValue, setPickerValue] = useState("");
   const [adding, setAdding] = useState<AgentCliProviderType | null>(null);
@@ -205,7 +204,6 @@ export function ProviderAddForm({
           </div>
           {adding.kind === "tencent" && <div className="agentcli-settings-hint">{t("settings.agentcliTencentHint")}</div>}
           {adding.kind === "mimo" && <div className="agentcli-settings-hint">{t("settings.agentcliMiMoHint")}</div>}
-          {connectionHint && adding.fields.some(field => field.id === "base_url") && <p className="agentcli-settings-hint">{connectionHint}</p>}
           {adding.fields.map((field, index) => {
             const id = `${idPrefix}-${adding.kind}-${field.id}`;
             return (

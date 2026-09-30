@@ -2018,7 +2018,6 @@
       "timeoutHint": "Allow more time for slower connections. If no decision is ready in time, your usual provider handles the request.",
       "failed": "Could not save or load command routing settings.",
       "accountModel": "Model for {name}",
-      "connectionHint": "Base URL is the server address. Add an API key only if that server requires authentication.",
       "commandHelp": "Try local intents first, then the optional Decision Provider. Other requests go to your usual AI provider. Permissions and approvals still apply.",
       "requestLimit": "Decision requests per hour (0 = unlimited)",
       "requestLimitHint": "Shared by Voice, Chat, previews and shadow checks. Counts attempts while enabled, including failures, and survives restart. Resets at each UTC hour. Your usual provider has a separate allowance. This is a request limit, not a currency cap."

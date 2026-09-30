@@ -15,13 +15,6 @@ vi.mock("../api", () => ({ api: {
 import { DecisionProviderSettings } from "../components/DecisionProviderSettings";
 const types = [
   { kind: "typesafe", label: "TypeSafe / JEV", fields: [{ id: "api_key", type: "secret", label_key: "settings.agentcliApiKey", required: true }] },
-  { kind: "systemone", label: "System One compatible", fields: [
-    { id: "base_url", type: "url", label_key: "settings.agentcliBaseUrl", required: true },
-    { id: "api_key", type: "secret", label_key: "settings.agentcliApiKey", required: false },
-  ] },
-  { kind: "ollama_decision", label: "Ollama Decision", fields: [
-    { id: "base_url", type: "url", label_key: "settings.agentcliServerUrl", required: true },
-  ] },
 ];
 const settings = { decision_provider_id: null, decision_shadow_enabled: false, decision_timeout_ms: 5000 } as GlobalSettings;
 beforeEach(() => {
@@ -31,24 +24,13 @@ beforeEach(() => {
   mocks.models.mockResolvedValue({ models: ["jev-latest"] });
 });
 
-it("discovers and saves an Ollama decision model without an API key", async () => {
-  const change = vi.fn();
-  mocks.probe.mockResolvedValue({ ok: true, models: ["nimble:latest", "tev1:4b"] });
-  mocks.create.mockResolvedValue({ instance: { id: "nimble" } });
-  render(<DecisionProviderSettings settings={settings} onChange={change} saving={false} />);
-  await screen.findByText("Ollama Decision");
-  fireEvent.change(screen.getByLabelText("Provider type"), { target: { value: "ollama_decision" } });
-  expect(screen.queryByLabelText("API key")).toBeNull();
-  fireEvent.change(screen.getByLabelText("Server URL"), { target: { value: "http://local:11434" } });
-  fireEvent.click(screen.getByText("Validate"));
-  await screen.findByLabelText("Select default model:");
-  expect(screen.getByRole("option", { name: "tev1:4b" })).toBeInTheDocument();
-  fireEvent.click(screen.getByText("Done"));
-  await waitFor(() => expect(mocks.create).toHaveBeenCalledWith("ollama_decision", {
-    base_url: "http://local:11434", model: "nimble:latest",
-  }));
-  expect(mocks.probe).toHaveBeenCalledWith("ollama_decision", { base_url: "http://local:11434" });
-  expect(change).toHaveBeenCalledWith("decision_provider_id", "nimble");
+it("offers only local routing and TypeSafe / JEV", async () => {
+  render(<DecisionProviderSettings settings={settings} onChange={vi.fn()} saving={false} />);
+  await screen.findByText("TypeSafe / JEV");
+  expect(screen.getByLabelText("Local only (no decision provider)")).toBeChecked();
+  const picker = screen.getByLabelText("Provider type");
+  expect(within(picker).getAllByRole("option").map(option => option.getAttribute("value"))).toEqual(["", "typesafe"]);
+  expect(mocks.probe).not.toHaveBeenCalled();
 });
 
 it("saves an hourly request limit and rejects empty or fractional drafts", async () => {
@@ -129,16 +111,16 @@ it("preserves a newer manual choice while account creation is pending", async ()
 
 it("discovers compatible models before saving and invalidates them when credentials change", async () => {
   render(<DecisionProviderSettings settings={settings} onChange={vi.fn()} saving={false} />);
-  await screen.findByText("System One compatible");
-  fireEvent.change(screen.getByLabelText("Provider type"), { target: { value: "systemone" } });
+  await screen.findByText("TypeSafe / JEV");
+  fireEvent.change(screen.getByLabelText("Provider type"), { target: { value: "typesafe" } });
   expect(screen.queryByLabelText("Select default model:")).toBeNull();
-  fireEvent.change(screen.getByLabelText("Base URL"), { target: { value: "http://local:8000/v1" } });
+  fireEvent.change(screen.getByLabelText("API key"), { target: { value: "first-key" } });
   fireEvent.click(screen.getByText("Validate"));
   const model = await screen.findByLabelText("Select default model:");
   expect(model.tagName).toBe("SELECT");
-  expect(mocks.probe).toHaveBeenCalledWith("systemone", { base_url: "http://local:8000/v1", api_key: "" });
+  expect(mocks.probe).toHaveBeenCalledWith("typesafe", { api_key: "first-key" });
   expect(screen.queryByText(/uses a small amount of API credit/)).toBeNull();
-  fireEvent.change(screen.getByLabelText("Base URL"), { target: { value: "http://different:8000/v1" } });
+  fireEvent.change(screen.getByLabelText("API key"), { target: { value: "changed-key" } });
   expect(screen.queryByLabelText("Select default model:")).toBeNull();
   expect(screen.queryByText("Done")).toBeNull();
 });
@@ -164,7 +146,7 @@ it("discards a model catalog after the user cancels validation", async () => {
   fireEvent.change(screen.getByLabelText("API key"), { target: { value: "key" } });
   fireEvent.click(screen.getByText("Validate"));
   fireEvent.click(screen.getByText("Cancel"));
-  fireEvent.change(screen.getByLabelText("Provider type"), { target: { value: "systemone" } });
+  fireEvent.change(screen.getByLabelText("Provider type"), { target: { value: "typesafe" } });
   await act(async () => done({ ok: true, models: ["wrong-provider-model"] }));
   expect(screen.queryByText("wrong-provider-model")).toBeNull();
   expect(screen.queryByText("Done")).toBeNull();
@@ -290,27 +272,56 @@ it("preserves the model and draft after a failed save", async () => {
 it("opens saved accounts without contacting an offline decision server", async () => {
   mocks.list.mockResolvedValue({ instances: [
     { id: "remote", name: "JEV", model: "jev-latest" },
-    { id: "local", name: "Local decision", model: "local-model" },
+    { id: "second", name: "Second JEV account", model: "jev-1.13.0" },
   ], provider_types: types });
   mocks.models.mockRejectedValue(new Error("Connection failed."));
   const change = vi.fn();
   render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "remote" }} onChange={change} saving={false} />);
-  await screen.findByText("Default model: local-model");
+  await screen.findByText("Default model: jev-1.13.0");
   expect(mocks.models).not.toHaveBeenCalled();
   expect(mocks.refresh).not.toHaveBeenCalled();
   expect(screen.queryByRole("alert")).toBeNull();
   expect(screen.getByRole("radio", { name: "JEV" })).toBeChecked();
-  const row = screen.getByRole("radio", { name: "Local decision" }).closest(".agentcli-settings-provider") as HTMLElement;
+  const row = screen.getByRole("radio", { name: "Second JEV account" }).closest(".agentcli-settings-provider") as HTMLElement;
   fireEvent.click(within(row).getByRole("button", { name: "Change default model" }));
   await screen.findByText("Connection failed.");
-  expect(mocks.models).toHaveBeenCalledExactlyOnceWith("local");
-  expect(screen.getByLabelText("Model for Local decision")).toHaveValue("local-model");
+  expect(mocks.models).toHaveBeenCalledExactlyOnceWith("second");
+  expect(screen.getByLabelText("Model for Second JEV account")).toHaveValue("jev-1.13.0");
   expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
   expect(screen.queryByRole("alert")).toBeNull();
   expect(change).not.toHaveBeenCalled();
-  mocks.models.mockResolvedValue({ models: ["local-model", "new-model"] });
+  mocks.models.mockResolvedValue({ models: ["jev-1.13.0", "new-model"] });
   fireEvent.click(within(row).getByRole("button", { name: "Change default model" }));
   await screen.findByRole("option", { name: "new-model" });
   expect(screen.queryByRole("alert")).toBeNull();
+});
+
+
+it("lets local-only clear an unsupported saved selection", async () => {
+  const change = vi.fn();
+  render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "retired" }} onChange={change} saving={false} />);
+  await screen.findByText("TypeSafe / JEV");
+  const local = screen.getByLabelText("Local only (no decision provider)");
+  expect(local).toBeChecked();
+  fireEvent.click(local);
+  expect(change).toHaveBeenCalledExactlyOnceWith("decision_provider_id", "");
+});
+
+it("does not show local-only as selected after a failed account read", async () => {
+  mocks.list.mockRejectedValue(new Error("Offline"));
+  render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "decision" }} onChange={vi.fn()} saving={false} />);
+  await screen.findByRole("alert");
+  expect(screen.getByLabelText("Local only (no decision provider)")).not.toBeChecked();
+});
+
+
+it("hides setup after JEV is configured and retains account management", async () => {
+  mocks.list.mockResolvedValue({ instances: [{ id: "decision", kind: "typesafe", name: "TypeSafe / JEV", model: "jev-latest" }], provider_types: types });
+  render(<DecisionProviderSettings settings={{ ...settings, decision_provider_id: "decision" }} onChange={vi.fn()} saving={false} />);
+  expect(await screen.findByRole("radio", { name: "TypeSafe / JEV" })).toBeChecked();
+  expect(screen.queryByLabelText("Provider type")).toBeNull();
+  expect(screen.queryByRole("option", { name: "TypeSafe / JEV" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Change default model" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Remove TypeSafe / JEV" })).toBeEnabled();
 });

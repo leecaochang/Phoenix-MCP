@@ -2112,7 +2112,6 @@
       "timeoutHint": "Daj więcej czasu wolniejszym połączeniom. Jeśli decyzja nie nadejdzie na czas, żądanie obsłuży zwykły dostawca.",
       "failed": "Nie udało się zapisać lub wczytać ustawień kierowania poleceń.",
       "accountModel": "Model dla {name}",
-      "connectionHint": "Bazowy adres URL to adres serwera. Dodaj klucz API tylko wtedy, gdy serwer wymaga uwierzytelniania.",
       "commandHelp": "Najpierw wypróbuj lokalne intencje, a następnie opcjonalnego dostawcę decyzji. Pozostałe żądania trafiają do zwykłego dostawcy AI. Uprawnienia i zatwierdzenia nadal obowiązują.",
       "requestLimit": "Żądania decyzyjne na godzinę (0 = bez limitu)",
       "requestLimitHint": "Wspólny limit dla głosu, czatu, podglądów i kontroli w tle. Po włączeniu liczy próby, także nieudane, i zachowuje licznik po ponownym uruchomieniu. Zeruje się o każdej pełnej godzinie UTC. Zwykły dostawca ma osobny limit. To limit żądań, a nie kwoty wydatków."

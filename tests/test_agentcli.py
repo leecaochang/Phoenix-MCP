@@ -1569,9 +1569,9 @@ async def test_secret_store_wipe_clears_all_accounts(hass):
     await store.add("claude", {"api_key": "sk-secretwipe", "model": "claude-opus-4-8"})
     await store.add("ollama", {"base_url": "http://192.168.1.44:11434"})
     decisions = [await store.add(kind, {"api_key": f"wipe-{kind}-key", "model": "decision-model"})
-                 for kind in ("typesafe", "systemone", "classifier")]
+                 for kind in ("typesafe",)]
     assert all(store.get(account) is not None for account in decisions)
-    assert len(store.list_instances()) == 5
+    assert len(store.list_instances()) == 3
 
     await store.async_wipe()
 
@@ -4332,7 +4332,7 @@ async def test_decision_account_admin_catalog_isolated_and_delete_clears_binding
     assert store.resolve(chat).model == 'chat'
 
 
-@pytest.mark.parametrize('kind', ['typesafe', 'systemone', 'classifier', 'ollama_decision'])
+@pytest.mark.parametrize('kind', ['typesafe'])
 @pytest.mark.parametrize('model', ['real-model', 'abcdefg', '', None, ['real-model']])
 async def test_decision_create_requires_advertised_model(hass, kind, model):
     from custom_components.phoenix_mcp.decision_provider import DecisionProvider
@@ -4343,36 +4343,35 @@ async def test_decision_create_requires_advertised_model(hass, kind, model):
     request = _admin_request({
         'kind': kind, 'api_key': 'private-key', 'base_url': 'http://localhost:8000/v1', 'model': model,
     })
-    catalog = ({'models': [{'name': 'real-model', 'capabilities': ['decision'], 'details': {'format': 'gguf'}}]}
-               if kind == 'ollama_decision' else {'data': [{'id': 'real-model'}]})
+    catalog = {'data': [{'id': 'real-model'}]}
     with (patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)),
           patch.object(agentcli, '_validate_base_url', AsyncMock(return_value=None)),
           patch.object(DecisionProvider, '_request', AsyncMock(return_value=catalog)) as transport):
         response = await view.post(request)
     assert response.status == (201 if model == 'real-model' else 400)
     assert bool(store.list_instances()) == (model == 'real-model')
-    assert all(call.args[1:3] == ('GET', 'api/tags' if kind == 'ollama_decision' else 'models')
+    assert all(call.args[1:3] == ('GET', 'models')
                for call in transport.await_args_list)
     assert 'private-key' not in response.text
 
 
-@pytest.mark.parametrize('kind', ['systemone', 'classifier', 'ollama_decision'])
-async def test_decision_discovery_needs_endpoint_but_not_model_or_key(hass, kind):
+@pytest.mark.parametrize('kind', ['typesafe'])
+async def test_decision_discovery_requires_key_but_not_model(hass, kind):
     from custom_components.phoenix_mcp.decision_provider import DecisionProvider
 
     store = agentcli.AgentCliStore(AsyncMock())
     view = agentcli.PhoenixAgentCliProbeView()
     view.hass = hass
-    request = _admin_request({'kind': kind, 'base_url': 'http://localhost:8000/v1'})
-    catalog = {'models': [{'name': 'local-model', 'capabilities': ['decision'], 'details': {'format': 'gguf'}}]}
+    request = _admin_request({'kind': kind, 'api_key': 'private-key'})
+    catalog = {'data': [{'id': 'jev-latest'}]}
     with (patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)),
           patch.object(agentcli, '_validate_base_url', AsyncMock(return_value=None)),
           patch.object(DecisionProvider, '_request', AsyncMock(return_value=catalog)) as transport):
         response = await view.post(request)
     body = json.loads(response.body)
-    assert body['ok'] and body['models'] == ['local-model']
+    assert body['ok'] and body['models'] == ['jev-latest']
     assert not store.list_instances()
-    assert all(call.args[1:3] == ('GET', 'api/tags' if kind == 'ollama_decision' else 'models')
+    assert all(call.args[1:3] == ('GET', 'models')
                for call in transport.await_args_list)
 
 
@@ -4402,7 +4401,7 @@ async def test_decision_model_edits_validate_before_save_and_recheck_account(has
     else: assert store.get(account)['model'] == ('new-model' if case == 'valid' else 'other-model' if case == 'changed' else 'old-model')
 
 
-@pytest.mark.parametrize('kind', ['typesafe', 'classifier', 'systemone'])
+@pytest.mark.parametrize('kind', ['typesafe'])
 async def test_legacy_numeric_flags_are_inert_and_model_changes_invalidate_plans(hass, kind):
     backing = AsyncMock()
     backing.async_load.return_value = {'instances': {'legacy': {

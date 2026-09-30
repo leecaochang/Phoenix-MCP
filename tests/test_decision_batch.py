@@ -69,7 +69,7 @@ async def preview(hass, home, local=None, *, numeric_preview=False):
                                       local or {'reason': 'no_match', 'proposal': None}, numeric_preview=numeric_preview)
 
 
-@pytest.mark.parametrize('protocol', ['systemone', 'classifier'])
+@pytest.mark.parametrize('protocol', ['systemone'])
 async def test_one_real_request_with_two_independent_closed_choices(protocol, socket_enabled):
     seen = []
     async def handler(request):
@@ -375,7 +375,7 @@ async def test_joint_percentage_discards_changed_catalog_or_authority(hass, perc
     assert 'decision' not in result and 'proposal' not in result
 
 
-@pytest.mark.parametrize('kind,protocol', [('typesafe', 'systemone'), ('systemone', 'systemone'), ('classifier', 'classifier')])
+@pytest.mark.parametrize('kind,protocol', [('typesafe', 'systemone')])
 async def test_unqualified_endpoint_cannot_receive_extended_numeric_choices(kind, protocol):
     provider = DecisionProvider(agentcli.ProviderConfig(kind, 'm', 'http://local.test/v1'), protocol)
     with patch.object(provider, '_request') as request, pytest.raises(DecisionError, match='unsupported_category'):
@@ -948,7 +948,7 @@ async def test_temporal_groups_keep_all_candidates_and_require_one_confident_win
                for i in range(count)}
     cfg = agentcli.ProviderConfig('typesafe', 'jev-latest', 'https://api.typesafe.ai/v1')
     if case == 'unqualified':
-        cfg = agentcli.ProviderConfig('custom_decision', 'other', 'https://example.test')
+        cfg = agentcli.ProviderConfig('typesafe', 'other', 'https://example.test')
     provider = DecisionProvider(cfg, 'systemone')
     async def response(*args):
         payload = args[4]

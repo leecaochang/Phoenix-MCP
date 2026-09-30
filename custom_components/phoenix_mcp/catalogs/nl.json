@@ -2092,7 +2092,6 @@
       "timeoutHint": "Geef tragere verbindingen meer tijd. Als er niet op tijd een beslissing is, verwerkt je gebruikelijke provider het verzoek.",
       "failed": "Routeringsinstellingen konden niet worden opgeslagen of geladen.",
       "accountModel": "Model voor {name}",
-      "connectionHint": "De basis-URL is het serveradres. Voeg alleen een API-sleutel toe als die server verificatie vereist.",
       "commandHelp": "Probeer eerst lokale intents en daarna de optionele beslissingsprovider. Andere verzoeken gaan naar je gebruikelijke AI-provider. Machtigingen en goedkeuringen blijven gelden.",
       "requestLimit": "Beslissingsverzoeken per uur (0 = onbeperkt)",
       "requestLimitHint": "Gedeeld door Spraak, Chat, voorbeelden en schaduwcontroles. Telt pogingen wanneer ingeschakeld, inclusief fouten, en blijft bewaard na een herstart. Wordt elk heel UTC-uur gereset. Je gebruikelijke provider heeft een afzonderlijk tegoed. Dit is een verzoeklimiet, geen geldlimiet."

@@ -1013,7 +1013,7 @@ async def test_context_fallback_keeps_the_full_conversation(hass, context_chat, 
     if case == 'language': language = 'zz'
     if case == 'account':
         store = await agentcli._get_secret_store(hass)
-        account = await store.add('classifier', {'base_url': 'http://example.test/v1', 'model': 'Qwen/Qwen3.5-4B'})
+        account = await store.add('typesafe', {'base_url': 'http://example.test/v1', 'model': 'unqualified-model'})
         await data.store.async_patch_settings(decision_provider_id=account)
     if case == 'endpoint':
         store = await agentcli._get_secret_store(hass)
@@ -1143,7 +1143,7 @@ async def test_context_saved_approval_rechecks_provider_and_exact_action(hass, c
     if change == 'target': er.async_get(hass).async_update_entity('light.test_desk', name='Replacement')
     if change == 'scope': token.permissions = PermissionTree()
     if change == 'model_proof': plan['context_review']['model'] = 'unreviewed-model'
-    if change == 'kind_proof': plan['context_review']['kind'] = 'classifier'
+    if change == 'kind_proof': plan['context_review']['kind'] = 'unknown'
     if change == 'language_proof': plan['context_review']['language'] = 'zh-Hant'
     if change == 'ingress': plan['ingress'] = 'voice'
     if change == 'value': record['args']['service_data']['brightness_pct'] = 99

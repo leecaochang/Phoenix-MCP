@@ -2014,7 +2014,6 @@
       "timeoutHint": "Geben Sie langsameren Verbindungen mehr Zeit. Liegt nicht rechtzeitig eine Entscheidung vor, übernimmt Ihr üblicher Anbieter die Anfrage.",
       "failed": "Einstellungen zur Befehlsweiterleitung konnten nicht gespeichert oder geladen werden.",
       "accountModel": "Modell für {name}",
-      "connectionHint": "Die Basis-URL ist die Serveradresse. Fügen Sie nur dann einen API-Schlüssel hinzu, wenn der Server eine Anmeldung erfordert.",
       "commandHelp": "Zuerst werden lokale Intents genutzt, danach der optionale Entscheidungsanbieter. Andere Anfragen gehen an deinen üblichen KI-Anbieter. Berechtigungen und Genehmigungen gelten weiterhin.",
       "requestLimit": "Entscheidungsanfragen pro Stunde (0 = unbegrenzt)",
       "requestLimitHint": "Gemeinsam für Sprache, Chat, Vorschauen und Schattenprüfungen. Zählt bei Aktivierung alle Versuche einschließlich Fehlern und bleibt nach einem Neustart erhalten. Wird zu jeder vollen UTC-Stunde zurückgesetzt. Dein üblicher Anbieter hat ein separates Kontingent. Dies begrenzt Anfragen, keine Geldbeträge."

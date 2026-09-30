@@ -2014,7 +2014,6 @@
       "timeoutHint": "Concedi più tempo alle connessioni lente. Se la decisione non arriva in tempo, il fornitore abituale gestisce la richiesta.",
       "failed": "Impossibile salvare o caricare le impostazioni di instradamento.",
       "accountModel": "Modello per {name}",
-      "connectionHint": "L’URL di base è l’indirizzo del server. Aggiungi una chiave API solo se il server richiede l’autenticazione.",
       "commandHelp": "Prova prima gli intenti locali, poi il fornitore di decisioni facoltativo. Le altre richieste passano al consueto fornitore IA. Permessi e approvazioni restano validi.",
       "requestLimit": "Richieste di decisione all’ora (0 = illimitate)",
       "requestLimitHint": "Condivise tra Voce, Chat, anteprime e controlli in background. Conta i tentativi quando attivo, inclusi quelli falliti, e conserva il conteggio al riavvio. Si azzera a ogni ora esatta UTC. Il fornitore abituale ha una quota separata. È un limite di richieste, non un tetto di spesa."

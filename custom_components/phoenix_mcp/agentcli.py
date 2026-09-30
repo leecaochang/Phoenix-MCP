@@ -398,31 +398,16 @@ PROVIDER_DEFINITIONS: dict[str, ProviderDefinition] = {
 }
 
 # Decision accounts share credential storage but cannot enter conversational loops.
-for _decision_kind, _decision_label, _decision_adapter in (
-    ("typesafe", "TypeSafe / JEV", "systemone"),
-    ("systemone", "System One compatible", "systemone"),
-    ("classifier", "Simple-JEV compatible", "classifier"),
-):
-    PROVIDER_DEFINITIONS[_decision_kind] = ProviderDefinition(
-        kind=_decision_kind, label=_decision_label, adapter=_decision_adapter,
-        base_url=DECISION_TYPESAFE_BASE_URL if _decision_kind == "typesafe" else "",
-        model=DECISION_TYPESAFE_MODEL if _decision_kind == "typesafe" else "",
-        fields=(_API_KEY_FIELD,) if _decision_kind == "typesafe" else (
-            ProviderField("base_url", "url", "settings.agentcliBaseUrl", placeholder="http://host:8000/v1"),
-            ProviderField("api_key", "secret", "settings.agentcliApiKey", required=False),
-        ),
-        purpose="decision",
-    )
-
-PROVIDER_DEFINITIONS["ollama_decision"] = ProviderDefinition(
-    kind="ollama_decision", label="Ollama Decision", adapter="systemone",
-    base_url="", fields=(_OLLAMA_URL_FIELD,), purpose="decision",
+PROVIDER_DEFINITIONS["typesafe"] = ProviderDefinition(
+    kind="typesafe", label="TypeSafe / JEV", adapter="systemone",
+    base_url=DECISION_TYPESAFE_BASE_URL, model=DECISION_TYPESAFE_MODEL,
+    fields=(_API_KEY_FIELD,), purpose="decision",
 )
 
 
 def provider_purpose(kind: str) -> str:
     definition = PROVIDER_DEFINITIONS.get(kind)
-    return definition.purpose if definition else "conversation"
+    return definition.purpose if definition else "unsupported"
 
 
 # Compatibility projection for tests and internal code being moved to the typed
@@ -478,10 +463,10 @@ def _instance_name(inst: dict, has_dupes: bool) -> str:
     label = _KINDS.get(kind, {}).get("label", kind)
     if not has_dupes:
         return label
-    if kind in ("ollama", "ollama_decision"):
+    if kind == "ollama":
         host = _host_of(inst.get("base_url", ""))
         return f"{label} ({host})" if host else label
-    if kind in ("qwen", "systemone", "classifier"):
+    if kind == "qwen":
         host = _host_of(inst.get("base_url", ""))
         return f"{label} ({host})" if host else label
     if kind in ("zai", "tencent"):
@@ -556,9 +541,9 @@ def _normalized_provider_url(value: object) -> str:
 
 def _provider_identity(kind: str, cfg: dict) -> tuple[str, str]:
     """Return the non-secret identity used to reject exact duplicate accounts."""
-    if kind in ("ollama", "ollama_decision"):
+    if kind == "ollama":
         return kind, _normalized_provider_url(cfg.get("base_url"))
-    if kind in ("qwen", "systemone", "classifier"):
+    if kind == "qwen":
         return kind, "\0".join((
             _normalized_provider_url(cfg.get("base_url")),
             str(cfg.get("api_key") or "").strip(),
@@ -707,9 +692,11 @@ class AgentCliStore:
 
     def list_instances(self) -> list[dict]:
         """Configured accounts for the panel; never includes a key."""
-        counts = Counter(inst.get("kind") for inst in self._data.values())
+        counts = Counter(inst.get("kind") for inst in self._data.values() if isinstance(inst, dict))
         out = []
         for iid, inst in self._data.items():
+            if not isinstance(inst, dict) or inst.get("kind") not in PROVIDER_DEFINITIONS:
+                continue
             kind = inst.get("kind", "")
             out.append({
                 "id": iid,
@@ -740,7 +727,7 @@ class AgentCliStore:
         if cfg is None:
             return None
         kind = cfg.get("kind", "")
-        if provider_purpose(kind) != purpose:
+        if kind not in PROVIDER_DEFINITIONS or provider_purpose(kind) != purpose:
             return None
         endpoint_id = str(cfg.get("endpoint_id") or "") or None
         base_url = (
@@ -4733,14 +4720,14 @@ async def _probe_config(kind: str, body: dict) -> ProviderConfig | ProbeConfigEr
     if any(field.id == "base_url" for field in definition.fields):
         base_url = str(body.get("base_url") or "").strip().rstrip("/")
         if not base_url:
-            if kind in ("ollama", "ollama_decision"):
+            if kind == "ollama":
                 return ProbeConfigError(
                     "Enter the Ollama server URL.", "ollamaUrlRequired",
                 )
             return ProbeConfigError(
                 "Enter the provider base URL.", "providerBaseUrlRequired",
             )
-        err = await _validate_base_url(base_url, allow_private=kind in ("ollama", "ollama_decision", "systemone", "classifier"))
+        err = await _validate_base_url(base_url, allow_private=kind == "ollama")
         if err:
             return err
     else:

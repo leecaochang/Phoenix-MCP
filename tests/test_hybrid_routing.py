@@ -358,7 +358,7 @@ async def test_enabled_language_hybrid_voice_carries_language_through_dispatch(h
     provider.assert_not_called()
 
 
-@pytest.mark.parametrize("kind", ["typesafe", "classifier", "systemone"])
+@pytest.mark.parametrize("kind", ["typesafe"])
 @pytest.mark.parametrize("language", ["en", "zh-Hans", "es"])
 @pytest.mark.parametrize("routing_mode", ["auto", "hybrid"])
 async def test_numeric_voice_automatically_falls_back_even_with_legacy_opt_in(hass, hybrid_home, kind, language, routing_mode):
@@ -737,8 +737,6 @@ async def test_jev_local_matches_keep_zero_decision_calls(hass, jev_hybrid_home,
 
 
 @pytest.mark.parametrize('kind,model,base_url,language', [
-    ('classifier', 'Qwen/Qwen3.5-4B', 'http://local.test/v1', 'en'),
-    ('systemone', 'jev-latest', 'http://local.test/v1', 'en'),
     ('typesafe', 'jev-latest', 'https://custom.test/v1', 'en'),
 ])
 async def test_other_models_and_endpoints_keep_sequential_routing(
@@ -756,7 +754,7 @@ async def test_other_models_and_endpoints_keep_sequential_routing(
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         _, remote, provider = await run_voice(hass, hybrid_home, language=language, request=respond)
     assert [set(item.args[4]['questions']) for item in remote.await_args_list if item.args[1] == 'POST'] == [{'route'}, {'target'}]
-    protocol = 'classifier' if kind == 'classifier' else 'systemone'
+    protocol = 'systemone'
     assert [item.args[1:3] for item in remote.await_args_list] == [('POST', protocol), ('GET', 'models'), ('POST', protocol)]
     call.assert_awaited_once()
     provider.assert_not_called()
@@ -1357,7 +1355,7 @@ async def test_structured_requests_keep_original_text_and_normal_provider(hass, 
 async def test_generic_large_catalog_dispatch_and_approval_revalidation(hass, hybrid_home, confirm):
     """A grouped plan reaches shared execution; later competitor changes invalidate approval."""
     data, token, store, _, entity_id = hybrid_home
-    account = await store.add('classifier', {'base_url': 'http://example.test/v1', 'model': 'local-model'})
+    account = await store.add('typesafe', {'base_url': 'http://example.test/v1', 'model': 'local-model'})
     await data.store.async_patch_settings(decision_provider_id=account)
     registry = er.async_get(hass)
     for i in range(50):

@@ -12,6 +12,7 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
   saving: boolean;
 }) {
   const [accounts, setAccounts] = useState<AgentCliInstance[]>([]);
+  const [accountsLoaded, setAccountsLoaded] = useState(false);
   const [types, setTypes] = useState<AgentCliProviderType[]>([]);
   const [models, setModels] = useState<Record<string, string[]>>({});
   const [editing, setEditing] = useState<string | null>(null);
@@ -37,6 +38,7 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
       const response = await api.getDecisionProviders();
       if (!mounted.current || current !== generation.current) return;
       setAccounts(response.instances);
+      setAccountsLoaded(true);
       setTypes(response.provider_types);
       setError("");
     } catch {
@@ -116,13 +118,18 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
     finally { if (mounted.current) setBusy(false); }
   }
 
+  const selectedAccountMissing = accountsLoaded && !!settings.decision_provider_id && !accounts.some(account => account.id === settings.decision_provider_id);
+
   return <div className="routing-provider-section">
     <p className="agentcli-settings-hint" id="routing-provider-hint">{t("routing.providerHint", { voice: t("settings.voiceCard"), chat: t("settings.agentcliCard") })}</p>
     <div className="agentcli-settings-providers" role="radiogroup" aria-label={t("routing.decisionAccount")}
       aria-describedby="routing-provider-hint">
       <label className="routing-account-choice">
-        <input type="radio" name="decision-account" checked={!settings.decision_provider_id}
-          disabled={saving || busy} onChange={() => selectAccount("")} />
+        <input type="radio" name="decision-account" checked={!settings.decision_provider_id || selectedAccountMissing}
+          disabled={saving || busy} onChange={() => selectAccount("")}
+          onClick={() => {
+            if (selectedAccountMissing) selectAccount("");
+          }} />
         {t("routing.localOnly")}
       </label>
       {accounts.map(account => <div className="agentcli-settings-provider" key={account.id}>
@@ -185,15 +192,14 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
           onClick={() => setConfirmRemove(null)}>{t("settings.cancel")}</button>
       </div>
     </Modal>}
-    <ProviderAddForm providerTypes={types} disabled={saving || busy || editing !== null}
+    {accountsLoaded && accounts.length === 0 && <ProviderAddForm providerTypes={types} disabled={saving || busy || editing !== null}
       idPrefix="decision-add" requireModel allowCapabilityProbe={false}
       completeLabel={t("settings.agentcliDone")} addingLabelKey="settings.agentcliAdding"
-      connectionHint={t("routing.connectionHint")}
       onCreated={async instance => {
         if (!mounted.current) return;
         if (selectionVersion.current === currentSelectionVersion) selectAccount(instance.id);
         await load();
-      }} />
+      }} />}
     {settings.decision_provider_id && <details className="routing-disclosure">
       <summary>{t("routing.connectionSettings")}</summary>
       <label className="agentcli-settings-field" htmlFor="routing-decision-timeout">

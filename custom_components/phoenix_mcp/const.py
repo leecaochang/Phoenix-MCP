@@ -2136,11 +2136,7 @@ DECISION_PERCENTAGE_CHOICES = {
     "none": "No single explicit absolute whole percentage from 0 through 100 is requested for this operation.",
 }
 
-DECISION_PROVIDERS = frozenset({"typesafe", "systemone", "classifier", "ollama_decision"})
-# Ollama v0.35 System One wire limits, independent of execution qualification.
-DECISION_OLLAMA_MAX_CHOICES = 26
-DECISION_OLLAMA_MAX_QUESTIONS = 64
-DECISION_OLLAMA_MAX_REQUEST_BYTES = 64 * 1024
+DECISION_PROVIDERS = frozenset({"typesafe"})
 DECISION_TARGET_INTENTS = {
     "light_on": "HassTurnOn", "light_off": "HassTurnOff",
     "light_brightness": "HassLightSet", "state_query": "HassGetState",
@@ -2173,12 +2169,11 @@ DECISION_PERCENTAGE_PREVIEW_CHOICES.update({
     category: f"One immediate explicit request to set one {spec[1]} to an absolute numeric value."
     for category, spec in DECISION_ADDITIONAL_NUMERIC.items()
 })
-# Leave one of the common classifier format's 50 choices for declining.
+# Leave one of the fallback format's 50 choices for declining.
 DECISION_MAX_TARGETS = 49
-# Generic sequential selection keeps every question within the common 50-choice format.
+# Sequential selection keeps every fallback question within 50 choices.
 DECISION_SEQUENTIAL_CHOICE_GROUPS = 8
 DECISION_SEQUENTIAL_MAX_TARGETS = DECISION_MAX_TARGETS * DECISION_SEQUENTIAL_CHOICE_GROUPS
-DECISION_OLLAMA_SEQUENTIAL_GROUPS = (DECISION_SEQUENTIAL_MAX_TARGETS + DECISION_OLLAMA_MAX_CHOICES - 2) // (DECISION_OLLAMA_MAX_CHOICES - 1)
 DECISION_SEQUENTIAL_TARGET_BYTES = 65536
 # Qualified TypeSafe joint requests leave one of 255 choices for declining.
 DECISION_BATCH_MAX_TARGETS = 254
