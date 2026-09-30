@@ -17,6 +17,7 @@
     "nvidia",
     "ollama",
     "ollama_cloud",
+    "ollama_decision",
     "opencode",
     "openrouter",
     "qwen",

@@ -414,6 +414,11 @@ for _decision_kind, _decision_label, _decision_adapter in (
         purpose="decision",
     )
 
+PROVIDER_DEFINITIONS["ollama_decision"] = ProviderDefinition(
+    kind="ollama_decision", label="Ollama Decision", adapter="systemone",
+    base_url="", fields=(_OLLAMA_URL_FIELD,), purpose="decision",
+)
+
 
 def provider_purpose(kind: str) -> str:
     definition = PROVIDER_DEFINITIONS.get(kind)
@@ -473,7 +478,7 @@ def _instance_name(inst: dict, has_dupes: bool) -> str:
     label = _KINDS.get(kind, {}).get("label", kind)
     if not has_dupes:
         return label
-    if kind == "ollama":
+    if kind in ("ollama", "ollama_decision"):
         host = _host_of(inst.get("base_url", ""))
         return f"{label} ({host})" if host else label
     if kind in ("qwen", "systemone", "classifier"):
@@ -551,7 +556,7 @@ def _normalized_provider_url(value: object) -> str:
 
 def _provider_identity(kind: str, cfg: dict) -> tuple[str, str]:
     """Return the non-secret identity used to reject exact duplicate accounts."""
-    if kind == "ollama":
+    if kind in ("ollama", "ollama_decision"):
         return kind, _normalized_provider_url(cfg.get("base_url"))
     if kind in ("qwen", "systemone", "classifier"):
         return kind, "\0".join((
@@ -4728,14 +4733,14 @@ async def _probe_config(kind: str, body: dict) -> ProviderConfig | ProbeConfigEr
     if any(field.id == "base_url" for field in definition.fields):
         base_url = str(body.get("base_url") or "").strip().rstrip("/")
         if not base_url:
-            if kind == "ollama":
+            if kind in ("ollama", "ollama_decision"):
                 return ProbeConfigError(
                     "Enter the Ollama server URL.", "ollamaUrlRequired",
                 )
             return ProbeConfigError(
                 "Enter the provider base URL.", "providerBaseUrlRequired",
             )
-        err = await _validate_base_url(base_url, allow_private=kind in ("ollama", "systemone", "classifier"))
+        err = await _validate_base_url(base_url, allow_private=kind in ("ollama", "ollama_decision", "systemone", "classifier"))
         if err:
             return err
     else:

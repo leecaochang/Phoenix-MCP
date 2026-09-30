@@ -4332,7 +4332,7 @@ async def test_decision_account_admin_catalog_isolated_and_delete_clears_binding
     assert store.resolve(chat).model == 'chat'
 
 
-@pytest.mark.parametrize('kind', ['typesafe', 'systemone', 'classifier'])
+@pytest.mark.parametrize('kind', ['typesafe', 'systemone', 'classifier', 'ollama_decision'])
 @pytest.mark.parametrize('model', ['real-model', 'abcdefg', '', None, ['real-model']])
 async def test_decision_create_requires_advertised_model(hass, kind, model):
     from custom_components.phoenix_mcp.decision_provider import DecisionProvider
@@ -4343,17 +4343,20 @@ async def test_decision_create_requires_advertised_model(hass, kind, model):
     request = _admin_request({
         'kind': kind, 'api_key': 'private-key', 'base_url': 'http://localhost:8000/v1', 'model': model,
     })
+    catalog = ({'models': [{'name': 'real-model', 'capabilities': ['decision'], 'details': {'format': 'gguf'}}]}
+               if kind == 'ollama_decision' else {'data': [{'id': 'real-model'}]})
     with (patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)),
           patch.object(agentcli, '_validate_base_url', AsyncMock(return_value=None)),
-          patch.object(DecisionProvider, '_request', AsyncMock(return_value={'data': [{'id': 'real-model'}]})) as transport):
+          patch.object(DecisionProvider, '_request', AsyncMock(return_value=catalog)) as transport):
         response = await view.post(request)
     assert response.status == (201 if model == 'real-model' else 400)
     assert bool(store.list_instances()) == (model == 'real-model')
-    assert all(call.args[1:3] == ('GET', 'models') for call in transport.await_args_list)
+    assert all(call.args[1:3] == ('GET', 'api/tags' if kind == 'ollama_decision' else 'models')
+               for call in transport.await_args_list)
     assert 'private-key' not in response.text
 
 
-@pytest.mark.parametrize('kind', ['systemone', 'classifier'])
+@pytest.mark.parametrize('kind', ['systemone', 'classifier', 'ollama_decision'])
 async def test_decision_discovery_needs_endpoint_but_not_model_or_key(hass, kind):
     from custom_components.phoenix_mcp.decision_provider import DecisionProvider
 
@@ -4361,14 +4364,16 @@ async def test_decision_discovery_needs_endpoint_but_not_model_or_key(hass, kind
     view = agentcli.PhoenixAgentCliProbeView()
     view.hass = hass
     request = _admin_request({'kind': kind, 'base_url': 'http://localhost:8000/v1'})
+    catalog = {'models': [{'name': 'local-model', 'capabilities': ['decision'], 'details': {'format': 'gguf'}}]}
     with (patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)),
           patch.object(agentcli, '_validate_base_url', AsyncMock(return_value=None)),
-          patch.object(DecisionProvider, '_request', AsyncMock(return_value={'models': [{'name': 'local-model'}]})) as transport):
+          patch.object(DecisionProvider, '_request', AsyncMock(return_value=catalog)) as transport):
         response = await view.post(request)
     body = json.loads(response.body)
     assert body['ok'] and body['models'] == ['local-model']
     assert not store.list_instances()
-    assert all(call.args[1:3] == ('GET', 'models') for call in transport.await_args_list)
+    assert all(call.args[1:3] == ('GET', 'api/tags' if kind == 'ollama_decision' else 'models')
+               for call in transport.await_args_list)
 
 
 @pytest.mark.parametrize('case', ['valid', 'unlisted', 'offline', 'deleted', 'changed'])

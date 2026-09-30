@@ -17,6 +17,9 @@ from .const import (DECISION_MAX_RESPONSE_BYTES, DECISION_MAX_ERROR_BYTES, DECIS
                     DECISION_PROBABILITY_ROUNDING, DECISION_PROBABILITY_SUM_TOLERANCE,
                     DECISION_PROBABILITY_ROUNDING_EPSILON, DECISION_BATCH_MAX_TARGETS, DECISION_MAX_CHOICE_GROUPS, DECISION_BATCH_MAX_TARGET_BYTES, DECISION_SUMMARY_COMPONENTS)
 from .const import TOOL_ROUTING_MAX_BYTES, TOOL_ROUTING_MAX_GROUPS
+from .const import (DECISION_OLLAMA_MAX_CHOICES, DECISION_OLLAMA_MAX_QUESTIONS,
+                    DECISION_OLLAMA_MAX_REQUEST_BYTES, DECISION_OLLAMA_SEQUENTIAL_GROUPS,
+                    DECISION_SEQUENTIAL_MAX_TARGETS)
 from .command_operations import numeric_operation
 from .decision_metrics import DecisionMetrics
 
@@ -116,7 +119,8 @@ class DecisionProvider:
     def __init__(self, cfg: ProviderConfig, protocol: str, *, metrics: DecisionMetrics | None = None,
                  metric_scope: str = "preview", request_budget: Any = None, request_limit: int = 0,
                  request_guard: Callable[[], None] | None = None) -> None:
-        if protocol not in ("systemone", "classifier"):
+        if (protocol not in ("systemone", "classifier")
+                or (cfg.kind == "ollama_decision" and protocol != "systemone")):
             raise ValueError("Unsupported decision protocol")
         self.cfg = cfg
         self.protocol = protocol
@@ -137,6 +141,8 @@ class DecisionProvider:
         groups: dict[str, list[str]] = {}
         page_size = choice_limit - 1 if sequential else DECISION_BATCH_MAX_TARGETS
         max_groups = DECISION_SEQUENTIAL_CHOICE_GROUPS if sequential else DECISION_MAX_CHOICE_GROUPS
+        if sequential and self.cfg.kind == "ollama_decision":
+            max_groups = DECISION_OLLAMA_SEQUENTIAL_GROUPS
         for name in ("target", "summary_scope"):
             spec = payload["questions"].get(name)
             if spec is None or len(spec["criteria"]) <= page_size + 1:
@@ -145,6 +151,8 @@ class DecisionProvider:
                 raise DecisionError("too_many_targets")
             criteria = spec["criteria"]
             keys = [key for key in criteria if key != "none"]
+            if sequential and len(keys) > DECISION_SEQUENTIAL_MAX_TARGETS:
+                raise DecisionError("too_many_targets")
             count = math.ceil(len(keys) / page_size)
             if count > max_groups:
                 raise DecisionError("too_many_targets")
@@ -211,6 +219,16 @@ class DecisionProvider:
 
     async def _request(self, session: ClientSession, method: str, path: str,
                        timeout_ms: int, payload: dict | None = None) -> dict:
+        size = len(json.dumps(payload).encode()) if payload is not None else 0
+        if self.cfg.kind == "ollama_decision" and method == "POST" and payload is not None:
+            if size > DECISION_OLLAMA_MAX_REQUEST_BYTES:
+                raise DecisionError("catalog_unavailable")
+            questions = payload.get("questions", {})
+            if not 1 <= len(questions) <= DECISION_OLLAMA_MAX_QUESTIONS:
+                raise DecisionError("catalog_unavailable")
+            if any(spec.get("type") == "choice" and not 2 <= len(spec.get("criteria", {})) <= DECISION_OLLAMA_MAX_CHOICES
+                   for spec in questions.values()):
+                raise DecisionError("too_many_targets")
         if method == 'POST' and payload is not None and self.request_budget is not None:
             from .decision_budget import DecisionBudgetError
             try:
@@ -226,7 +244,8 @@ class DecisionProvider:
         parsed = None
         from .routing_statistics import begin_decision, end_decision
         statistics = begin_decision(self.metric_scope) if method == "POST" and payload is not None else None
-        size = len(json.dumps(payload).encode()) if payload is not None else 0
+        if self.cfg.kind == "ollama_decision" and path == "systemone":
+            path = "v1/systemone"
         try:
             async with session.request(method, f"{self.cfg.base_url}/{path}", headers=headers,
                                        json=payload, allow_redirects=False,
@@ -261,7 +280,8 @@ class DecisionProvider:
                                     provider_kind=self.cfg.kind)
 
     async def list_models(self, session: ClientSession) -> list[str]:
-        body = await self._request(session, "GET", "models", DECISION_TIMEOUT_DEFAULT_MS)
+        ollama = self.cfg.kind == "ollama_decision"
+        body = await self._request(session, "GET", "api/tags" if ollama else "models", DECISION_TIMEOUT_DEFAULT_MS)
         entries = body.get("models", body.get("data"))
         if not isinstance(entries, list):
             raise DecisionError("malformed")
@@ -270,6 +290,13 @@ class DecisionProvider:
             name = item.get("name", item.get("id")) if isinstance(item, dict) else None
             if not isinstance(name, str) or not name or len(name) > 200:
                 raise DecisionError("malformed")
+            if ollama:
+                capabilities = item.get("capabilities", [])
+                details = item.get("details", {})
+                if (not isinstance(capabilities, list) or "decision" not in capabilities
+                        or not isinstance(details, dict) or details.get("format") != "gguf"
+                        or item.get("remote_host")):
+                    continue
             models.append(name)
         return sorted(set(models))
 
@@ -285,6 +312,8 @@ class DecisionProvider:
 
     async def target_choice_limit(self, session: ClientSession, timeout_ms: int) -> int:
         """Use advertised format capacity, never as evidence of model accuracy."""
+        if self.cfg.kind == "ollama_decision":
+            return DECISION_OLLAMA_MAX_CHOICES
         if self.supports_exact_percentages():
             return DECISION_BATCH_MAX_TARGETS + 1
         body = await self._request(session, "GET", "models", timeout_ms)

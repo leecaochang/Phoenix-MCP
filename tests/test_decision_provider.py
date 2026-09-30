@@ -81,6 +81,132 @@ async def test_real_http_contract(protocol, socket_enabled):
     assert set(payload['questions']['route']['criteria'])==set(DECISION_ROUTE_CHOICES)
 
 
+async def test_ollama_native_discovery_and_systemone_wire_contract(socket_enabled):
+    requests = []
+
+    async def tags(request):
+        requests.append(request.path)
+        return web.json_response({'models': [
+            {'name': 'nimble:latest', 'capabilities': ['decision', 'completion'], 'details': {'format': 'gguf'}},
+            {'name': 'tev1:4b', 'capabilities': ['decision'], 'details': {'format': 'gguf'}},
+            {'name': 'chat:latest', 'capabilities': ['completion'], 'details': {'format': 'gguf'}},
+            {'name': 'unknown:latest', 'details': {'format': 'gguf'}},
+            {'name': 'mlx:latest', 'capabilities': ['decision'], 'details': {'format': 'safetensors'}},
+            {'name': 'remote:cloud', 'capabilities': ['decision'], 'details': {'format': 'gguf'}, 'remote_host': 'cloud'},
+        ]})
+
+    async def decide(request):
+        requests.append(request.path)
+        assert 'Authorization' not in request.headers
+        payload = await request.json()
+        assert payload['model'] == 'nimble:latest'
+        assert payload['state'] == {'utterance': 'Switch the lamp on', 'language': 'en'}
+        assert set(payload['questions']['route']['criteria']) == set(DECISION_ROUTE_CHOICES)
+        body = response()
+        body['model'] = 'nimble:latest'
+        return web.json_response(body)
+
+    app = web.Application()
+    app.router.add_get('/api/tags', tags)
+    app.router.add_post('/v1/systemone', decide)
+    async with TestServer(app) as server, ClientSession() as session:
+        cfg = agentcli.ProviderConfig('ollama_decision', 'nimble:latest', str(server.make_url('')).rstrip('/'))
+        provider = DecisionProvider(cfg, 'systemone')
+        assert await provider.list_models(session) == ['nimble:latest', 'tev1:4b']
+        assert await provider.target_choice_limit(session, 1000) == 26
+        assert not provider.supports_exact_percentages()
+        answer = await provider.classify(session, 'Switch the lamp on', 1000)
+        assert answer['model'] == 'nimble:latest'
+        assert answer['choice'] == 'light_on'
+    assert requests == ['/api/tags', '/v1/systemone']
+
+
+@pytest.mark.parametrize('boundary', ['choices', 'questions', 'bytes'])
+async def test_ollama_wire_overflow_refuses_before_budget_or_network(boundary):
+    budget = MagicMock(reserve=AsyncMock())
+    session = MagicMock()
+    provider = DecisionProvider(agentcli.ProviderConfig('ollama_decision', 'nimble:latest', 'http://host:11434'),
+                                'systemone', request_budget=budget, request_limit=10)
+    payload = {'model': 'nimble:latest', 'state': 'test', 'questions': {
+        'route': {'type': 'choice', 'instructions': 'Choose', 'criteria': {'a': 'A', 'b': 'B'}}}}
+    if boundary == 'choices':
+        payload['questions']['route']['criteria'] = {str(i): None for i in range(27)}
+    elif boundary == 'questions':
+        payload['questions'] = {str(i): payload['questions']['route'] for i in range(65)}
+    else:
+        payload['state'] = 'x' * 65536
+    with pytest.raises(DecisionError, match='too_many_targets' if boundary == 'choices' else 'catalog_unavailable'):
+        await provider._request(session, 'POST', 'systemone', 1000, payload)
+    budget.reserve.assert_not_awaited()
+    session.request.assert_not_called()
+
+
+@pytest.mark.parametrize('case', ['winner', 'uncertain_decline', 'conflict', 'overflow'])
+async def test_ollama_target_groups_keep_complete_catalog_and_confident_declines(case, socket_enabled):
+    targets = {f't{i}': {'name': f'Lamp {i}', 'domain': 'light'} for i in range(393 if case == 'overflow' else 51)}
+    requests = []
+
+    async def decide(request):
+        payload = await request.json()
+        requests.append(payload)
+        assert len(payload['state']['targets']) == len(targets)
+        assert set(payload['questions']) == {'target', 'target_2', 'target_3'}
+        choices = [set(spec['criteria']) - {'none'} for spec in payload['questions'].values()]
+        assert set.union(*choices) == set(targets)
+        assert sum(map(len, choices)) == len(targets)
+        answers = {}
+        for name, spec in payload['questions'].items():
+            assert len(spec['criteria']) <= 26
+            choice = 't50' if 't50' in spec['criteria'] else 'none'
+            if case == 'conflict' and name == 'target':
+                choice = 't0'
+            probability = 0.8 if case == 'uncertain_decline' and name == 'target' else 0.95
+            answers[name] = {'type': 'choice', 'choice': choice, 'confidence': 0.5,
+                             'probabilities': {key: probability if key == choice else (1 - probability) / (len(spec['criteria']) - 1)
+                                               for key in spec['criteria']}}
+        return web.json_response({'model': 'nimble:latest', 'answers': answers})
+
+    app = web.Application()
+    app.router.add_post('/v1/systemone', decide)
+    async with TestServer(app) as server, ClientSession() as session:
+        provider = DecisionProvider(agentcli.ProviderConfig('ollama_decision', 'nimble:latest',
+                                    str(server.make_url('')).rstrip('/')), 'systemone')
+        if case == 'winner':
+            assert (await provider.select_target(session, 'Switch Lamp 50 on', 'light_on', targets, 1000))['choice'] == 't50'
+        else:
+            reason = {'conflict': 'category_mismatch', 'uncertain_decline': 'low_probability', 'overflow': 'too_many_targets'}[case]
+            with pytest.raises(DecisionError, match=reason):
+                await provider.select_target(session, 'Switch Lamp 50 on', 'light_on', targets, 1000)
+    assert len(requests) == (0 if case == 'overflow' else 1)
+
+
+async def test_ollama_account_is_keyless_isolated_and_deduplicated():
+    definition = agentcli.PROVIDER_DEFINITIONS['ollama_decision']
+    assert [field.id for field in definition.fields] == ['base_url']
+    store = agentcli.AgentCliStore(AsyncMock())
+    account = await store.add('ollama_decision', {'base_url': 'http://host:11434', 'model': 'nimble:latest'})
+    assert store.resolve(account) is None
+    cfg = store.resolve(account, purpose='decision')
+    assert cfg.api_key is None
+    with pytest.raises(ValueError):
+        agentcli.build_provider(cfg)
+    with pytest.raises(ValueError):
+        DecisionProvider(cfg, 'classifier')
+    with pytest.raises(agentcli.DuplicateProviderError):
+        await store.add('ollama_decision', {'base_url': 'http://HOST:11434/', 'model': 'tev1:4b'})
+    assert not any(row['kind'] == 'ollama_decision' for row in agentcli._provider_catalog())
+
+
+def test_ollama_can_group_existing_full_catalog_bound_without_truncation():
+    provider = DecisionProvider(agentcli.ProviderConfig('ollama_decision', 'nimble:latest', 'http://host:11434'), 'systemone')
+    choices = {**{f't{i}': None for i in range(392)}, 'none': 'Decline'}
+    payload = {'state': {}, 'questions': {'target': {'type': 'choice', 'instructions': 'Choose', 'criteria': choices}}}
+    groups = provider._group_choices(payload, sequential=True, choice_limit=26)
+    assert len(groups['target']) == 16
+    assert all(len(spec['criteria']) <= 26 for spec in payload['questions'].values())
+    assert sum(len(spec['criteria']) - 1 for spec in payload['questions'].values()) == 392
+
+
 @pytest.mark.parametrize('status,reason', [(302,'http_error'),(401,'authentication'),(403,'authentication'),
                                         (429,'rate_limited'),(529,'rate_limited'),(500,'http_error')])
 async def test_http_failures_never_follow_redirects_retry_or_echo_bodies(status,reason,socket_enabled):
@@ -142,7 +268,7 @@ async def test_decision_accounts_are_secret_free_and_cannot_resolve_for_conversa
     with pytest.raises(ValueError):agentcli.build_provider(cfg)
     assert 'test-secret' not in json.dumps(store.list_instances())
     assert not any(i['kind']=='typesafe' for i in agentcli._provider_catalog())
-    assert {i['kind'] for i in agentcli._provider_catalog('decision')}=={'typesafe','systemone','classifier'}
+    assert {i['kind'] for i in agentcli._provider_catalog('decision')}=={'typesafe','systemone','classifier','ollama_decision'}
 
 
 @pytest.mark.parametrize('field',['voice_agent_provider_id','ai_task_provider_id'])

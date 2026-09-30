@@ -145,6 +145,7 @@ const PROVIDER_KINDS = {
   typesafe: true,
   systemone: true,
   classifier: true,
+  ollama_decision: true,
 } satisfies Record<AgentCliProviderKind, true>;
 
 describe("frontend/backend agentCLI provider contract", () => {

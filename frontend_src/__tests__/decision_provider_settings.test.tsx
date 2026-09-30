@@ -19,6 +19,9 @@ const types = [
     { id: "base_url", type: "url", label_key: "settings.agentcliBaseUrl", required: true },
     { id: "api_key", type: "secret", label_key: "settings.agentcliApiKey", required: false },
   ] },
+  { kind: "ollama_decision", label: "Ollama Decision", fields: [
+    { id: "base_url", type: "url", label_key: "settings.agentcliServerUrl", required: true },
+  ] },
 ];
 const settings = { decision_provider_id: null, decision_shadow_enabled: false, decision_timeout_ms: 5000 } as GlobalSettings;
 beforeEach(() => {
@@ -26,6 +29,26 @@ beforeEach(() => {
   mocks.list.mockResolvedValue({ instances: [], provider_types: types });
   mocks.probe.mockResolvedValue({ ok: true, models: ["jev-latest"] });
   mocks.models.mockResolvedValue({ models: ["jev-latest"] });
+});
+
+it("discovers and saves an Ollama decision model without an API key", async () => {
+  const change = vi.fn();
+  mocks.probe.mockResolvedValue({ ok: true, models: ["nimble:latest", "tev1:4b"] });
+  mocks.create.mockResolvedValue({ instance: { id: "nimble" } });
+  render(<DecisionProviderSettings settings={settings} onChange={change} saving={false} />);
+  await screen.findByText("Ollama Decision");
+  fireEvent.change(screen.getByLabelText("Provider type"), { target: { value: "ollama_decision" } });
+  expect(screen.queryByLabelText("API key")).toBeNull();
+  fireEvent.change(screen.getByLabelText("Server URL"), { target: { value: "http://local:11434" } });
+  fireEvent.click(screen.getByText("Validate"));
+  await screen.findByLabelText("Select default model:");
+  expect(screen.getByRole("option", { name: "tev1:4b" })).toBeInTheDocument();
+  fireEvent.click(screen.getByText("Done"));
+  await waitFor(() => expect(mocks.create).toHaveBeenCalledWith("ollama_decision", {
+    base_url: "http://local:11434", model: "nimble:latest",
+  }));
+  expect(mocks.probe).toHaveBeenCalledWith("ollama_decision", { base_url: "http://local:11434" });
+  expect(change).toHaveBeenCalledWith("decision_provider_id", "nimble");
 });
 
 it("saves an hourly request limit and rejects empty or fractional drafts", async () => {
