@@ -884,3 +884,45 @@ async def test_count_report_correction_cannot_dispatch_or_repeat(hass, companion
     assert len(catalogs) == 3 and catalogs[-1] == []
     service.assert_not_awaited()
     assert not companion[0].agent_recovery.records(companion[1].id)
+
+
+@pytest.mark.parametrize('discovery', ['search_entities', 'get_capability_summary'])
+async def test_observe_keeps_dispatch_and_intact_private_context(hass, companion, monkeypatch, discovery):
+    from custom_components.phoenix_mcp.decision_provider import DecisionProvider
+
+    data, token, store, _ = companion
+    account = await store.add('typesafe', {'api_key': 'decision-test-key', 'model': 'jev-latest'})
+    await data.store.async_patch_settings(decision_provider_id=account, voice_agent_tool_routing_mode='observe')
+    applied = []
+
+    async def turn_on(call):
+        applied.append(call.data)
+        hass.states.async_set('light.selected', 'on', {'friendly_name': 'Selected lamp', 'brightness': 102})
+
+    hass.services.async_register('light', 'turn_on', turn_on)
+    discovery_args = {'domain': 'light'} if discovery == 'search_entities' else {}
+    scripted(monkeypatch, [[(discovery, discovery_args)],
+        [('light__HassLightSet', {'domain': ['light'], 'brightness': 40})],
+        json.dumps({'status': 'completed', 'message': 'Done.'})])
+    choose = AsyncMock(return_value={'tool': 'get_history', 'model': 'synthetic-review-model'})
+    with patch.object(DecisionProvider, 'select_tool', choose):
+        result = payload(await rpc(hass, companion, args={'request': 'Set selected lights to 40%.'}))
+
+    assert result['status'] == 'completed'
+    assert len(applied) == 1 and applied[0]['entity_id'] == ['light.selected']
+    assert applied[0]['brightness_pct'] == 40
+    assert not data.store.get_pending_approvals() and not data.agent_recovery.blocks(token.id)
+    assert choose.await_count == (2 if discovery == 'search_entities' else 1)
+    snapshot = choose.call_args.args[1]
+    assert {tool['name'] for tool in snapshot['catalog'].values()} == HOME_COMPANION_TOOLS
+    assert 'Each request is stateless.' in snapshot['constraints']
+    assert snapshot['history'][0]['content'] == 'Set selected lights to 40%.'
+    reasons = data.decision_shadow.summary()['tool_routing']['voice']['reasons']
+    if discovery == 'search_entities':
+        assert len(snapshot['history']) == 4
+        assert snapshot['pending'][0]['name'] == 'light__HassLightSet'
+        assert 'light.selected' in json.dumps(snapshot['history'][2])
+        assert reasons == {'alternative': 2}
+    else:
+        assert snapshot['pending'][0]['name'] == 'get_capability_summary'
+        assert reasons == {'alternative': 1, 'context_unavailable': 1}
