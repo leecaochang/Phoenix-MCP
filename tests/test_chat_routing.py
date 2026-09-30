@@ -521,7 +521,7 @@ async def test_chat_command_retains_recovery_through_response_delivery(hass, exe
 async def test_execution_mode_is_closed_and_default_off(hass, chat_home):
     data, _ = chat_home
     assert GlobalSettings().agentcli_routing_mode == 'off'
-    assert GlobalSettings.from_dict({'agentcli_routing_mode': 'local'}).agentcli_routing_mode == 'off'
+    assert GlobalSettings.from_dict({'agentcli_routing_mode': 'local'}).agentcli_routing_mode == 'local'
     for invalid in ('unknown', 'local_shadow', True, [], None):
         assert GlobalSettings.from_dict({'agentcli_routing_mode': invalid}).agentcli_routing_mode == 'off'
         _, error = await _validated_settings_patch({'agentcli_routing_mode': invalid}, data, hass, 'test')

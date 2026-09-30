@@ -1593,26 +1593,6 @@ async def test_wipe_agentcli_secrets_helper(hass):
     assert store.list_instances() == []
 
 
-@pytest.mark.asyncio
-async def test_secret_store_migrates_legacy_shape(hass):
-    """The pre-instances {providers: {kind: cfg}} shape migrates to instances."""
-    class _FakeHAStore:
-        def __init__(self, *a, **k):
-            self.saved = None
-        async def async_load(self):
-            return {"providers": {"claude": {"api_key": "sk-legacyabcd", "model": "claude-opus-4-8"}}}
-        async def async_save(self, d):
-            self.saved = d
-
-    with patch("custom_components.phoenix_mcp.agentcli.Store", _FakeHAStore):
-        store = await agentcli.AgentCliStore.async_create(hass)
-    listed = store.list_instances()
-    assert len(listed) == 1 and listed[0]["kind"] == "claude"
-    # The migrated instance resolves and carries the key server-side.
-    cfg = store.resolve(listed[0]["id"])
-    assert cfg is not None and cfg.api_key == "sk-legacyabcd"
-
-
 # --------------------------------------------------------------------------- #
 # The agent loop
 # --------------------------------------------------------------------------- #

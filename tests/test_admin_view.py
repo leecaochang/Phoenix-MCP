@@ -1206,8 +1206,7 @@ async def test_settings_bind_before_provider_delete_finishes_cleared():
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("field", ["unknown_field", "tool_routing_version"])
-async def test_settings_patch_rejects_unknown_fields_atomically(field):
+async def test_settings_patch_rejects_unknown_fields_atomically():
     data = _make_data()
     settings = GlobalSettings()
     data.store.async_patch_settings = AsyncMock(return_value=settings)
@@ -1216,12 +1215,12 @@ async def test_settings_patch_rejects_unknown_fields_atomically(field):
     view = PhoenixAdminSettingsView()
     view.hass = hass
 
-    body = json.dumps({"notify_on_rate_limit": True, field: 1}).encode()
+    body = json.dumps({"notify_on_rate_limit": True, "unknown_field": 1}).encode()
     request = _make_admin_request(body=body)
     resp = await view.patch(request)
 
     assert resp.status == 400
-    assert json.loads(resp.text)["message_params"] == {"fields": field}
+    assert json.loads(resp.text)["message_params"] == {"fields": "unknown_field"}
     data.store.async_patch_settings.assert_not_awaited()
 
 

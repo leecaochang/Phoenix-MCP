@@ -1760,7 +1760,6 @@ VOICE_TEMPLATES: dict[str, str] = {
 }
 
 # Auto routing follows the ingress language; legacy diagnostic modes retain their allowlist.
-COMMAND_ROUTING_SETTINGS_VERSION = 1
 COMMAND_ROUTING_MODES = frozenset({"off", "auto", "local_shadow", "local", "hybrid"})
 CHAT_COMMAND_ROUTING_MODES = frozenset({"off", "auto", "local", "hybrid"})
 CHAT_ROUTING_HISTORY_LIMIT = 128
@@ -2336,7 +2335,6 @@ UNKNOWN_ARGUMENT_MAX_NAME = 80
 UNKNOWN_ARGUMENT_MAX_ERRORS = 8
 
 # Tool advice has separate qualification from direct-command execution.
-TOOL_ROUTING_SETTINGS_VERSION = 1
 TOOL_ROUTING_MODES = frozenset({"off", "observe", "advise"})
 TOOL_ROUTING_SETTINGS = {
     "chat": "agentcli_tool_routing_mode", "voice": "voice_agent_tool_routing_mode",

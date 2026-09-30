@@ -856,8 +856,3 @@ def _remove_frontend(hass: HomeAssistant) -> None:
             remove(hass)
         except Exception:  # noqa: BLE001 - one stuck removal must not skip the rest
             _LOGGER.exception("Phoenix MCP: could not remove the %s during unload", name)
-
-
-async def async_migrate_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Config entry migration handler. Currently a no-op (single storage version)."""
-    return True

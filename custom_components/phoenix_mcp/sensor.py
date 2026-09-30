@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 import math
 from typing import TYPE_CHECKING
 
@@ -21,8 +20,6 @@ if TYPE_CHECKING:
     from .data import PhoenixData
     from .token_store import TokenRecord
 
-_LOGGER = logging.getLogger(__name__)
-
 PARALLEL_UPDATES = 0
 
 _SENSOR_TYPES = (
@@ -36,23 +33,8 @@ _SENSOR_TYPES = (
 
 
 def _unique_id(token_id: str, sensor_type: str) -> str:
-    """The stable identity of one token sensor.
-
-    Keyed on the token's UUID, never on its name. The name is mutable and the
-    slug derived from it used to BE the identity, so renaming a token deleted
-    every one of its registry entries and created six new ones under new
-    entity_ids, silently breaking any dashboard card or automation that named
-    one. The device has always been keyed on the id; the entities now agree.
-    """
+    """Key sensor identity on the token UUID so renames preserve entity IDs."""
     return f"phoenix_mcp_{token_id}_{sensor_type}"
-
-
-def _legacy_unique_id(name_slug: str, sensor_type: str) -> str:
-    """The name-derived identity used before the token id became the key.
-
-    Only _async_migrate_unique_ids reads this, and only to find the old rows.
-    """
-    return f"phoenix_mcp_{name_slug}_{sensor_type}"
 
 
 def _device_name(token_name: str) -> str:
@@ -199,7 +181,6 @@ async def async_setup_entry(
     data.async_add_entities_cb = async_add_entities
 
     tokens = data.store.list_tokens()
-    _async_migrate_unique_ids(hass, tokens)
 
     sensors: list[PhoenixTokenSensor] = []
     for token in tokens:
@@ -211,53 +192,6 @@ async def async_setup_entry(
 
     if sensors:
         async_add_entities(sensors)
-
-
-@callback
-def _async_migrate_unique_ids(hass: HomeAssistant, tokens: list[TokenRecord]) -> None:
-    """Re-key name-derived sensor unique_ids onto the token's stable id.
-
-    Without this an upgrade looks exactly like a rename: the old registry rows
-    keep their name-derived unique_ids, nothing claims them, and six new entities
-    appear beside them with _2 suffixes. Re-keying in place keeps every existing
-    entity_id, so dashboards and automations naming one keep working.
-
-    Best-effort per row. A registry problem must not stop the platform from
-    setting up, and a token whose row is already migrated (or was never in the
-    registry) is simply skipped.
-    """
-    from homeassistant.helpers import entity_registry as er  # noqa: PLC0415
-
-    try:
-        registry = er.async_get(hass)
-    except Exception:  # noqa: BLE001 - no registry yet means nothing to migrate
-        return
-    for token in tokens:
-        slug = token_name_slug(token.name)
-        for sensor_type in _SENSOR_TYPES:
-            legacy = _legacy_unique_id(slug, sensor_type)
-            current = _unique_id(token.id, sensor_type)
-            if legacy == current:
-                continue
-            # The guard covers the lookups as well as the write: every one of
-            # them touches the registry, and a row that cannot be read is exactly
-            # as unmigratable as one that cannot be written.
-            try:
-                entity_id = registry.async_get_entity_id("sensor", DOMAIN, legacy)
-                if entity_id is None:
-                    continue
-                # A row already under the new id means this token migrated
-                # earlier and the legacy row is a leftover from a rename made
-                # before the migration existed. Re-keying onto a unique_id that
-                # is already taken raises, so leave it for the operator.
-                if registry.async_get_entity_id("sensor", DOMAIN, current) is not None:
-                    continue
-                registry.async_update_entity(entity_id, new_unique_id=current)
-            except Exception:  # noqa: BLE001 - a registry problem must not fail setup
-                _LOGGER.warning(
-                    "Phoenix MCP: could not migrate the %s sensor for token %s to a "
-                    "stable unique id", sensor_type, token.id, exc_info=True,
-                )
 
 
 async def async_rename_token_sensors(

@@ -23,9 +23,8 @@ from .const import (
     AGENTCLI_SCROLLBACK_DEFAULT,
     AGENTCLI_SCROLLBACK_MAX,
     AGENTCLI_SCROLLBACK_MIN,
-    APPROVAL_REASON_FORMAT_INCOMPATIBLE,
-    COMMAND_ROUTING_SETTINGS_VERSION, COMMAND_ROUTING_MODES, COMMAND_ROUTING_LANGUAGES, COMMAND_ROUTING_DEFAULT_LANGUAGES,
-    CHAT_COMMAND_ROUTING_MODES, TOOL_ROUTING_MODES, TOOL_ROUTING_SETTINGS, TOOL_ROUTING_SETTINGS_VERSION,
+    COMMAND_ROUTING_MODES, COMMAND_ROUTING_LANGUAGES, COMMAND_ROUTING_DEFAULT_LANGUAGES,
+    CHAT_COMMAND_ROUTING_MODES, TOOL_ROUTING_MODES,
     COMMAND_ROUTING_TIMEOUT_DEFAULT_MS,
     DECISION_TIMEOUT_DEFAULT_MS, DECISION_TIMEOUT_MIN_MS, DECISION_TIMEOUT_MAX_MS,
     DECISION_REQUEST_BUDGET_MAX,
@@ -36,7 +35,6 @@ from .const import (
     DETAIL_LEVELS,
     DETAIL_LEVEL_BALANCED,
     DETAIL_LEVEL_CONCISE,
-    CAP_ALLOW,
     CAP_DENY,
     CAP_MODES,
     CAPABILITY_NAMES,
@@ -45,17 +43,14 @@ from .const import (
     DEFAULT_CONFIRM_INLINE_WAIT_SECONDS,
     DEFAULT_RATE_LIMIT_BURST,
     DEFAULT_RATE_LIMIT_REQUESTS,
-    DOMAIN,
     MAX_CONFIRM_INLINE_WAIT_SECONDS,
     MIN_CONFIRM_INLINE_WAIT_SECONDS,
     MAX_PRESETS_PER_TOKEN,
-    MESA_APPROVED_EXECUTOR,
     MESA_MODE_ADVISORY,
     MESA_MODES,
     PERSONA_CUSTOM,
     PERSONA_HOME_COMPANION,
     PERSONA_NAMES,
-    RELATIVE_VOLUME_PLAN_VERSION,
     STORAGE_KEY,
     STORAGE_VERSION,
     TOKEN_HEX_LENGTH,
@@ -307,7 +302,7 @@ class TokenRecord:
     # immediately, the unattended-agent mode, API-settable only); a positive
     # value is clamped to [MIN, MAX]_CONFIRM_INLINE_WAIT_SECONDS. The product
     # default is ON: async_create_token seeds new tokens with
-    # DEFAULT_CONFIRM_INLINE_WAIT_SECONDS and from_dict defaults a legacy record
+    # DEFAULT_CONFIRM_INLINE_WAIT_SECONDS and from_dict defaults a stored record
     # missing the field to it. This raw dataclass default stays 0 so a directly
     # constructed record (internal/tests) does not silently inherit the wait.
     confirm_inline_wait_seconds: int = 0
@@ -316,8 +311,7 @@ class TokenRecord:
     cap_automation_write: str = CAP_DENY
     cap_script_write: str = CAP_DENY
     # Authoring blueprints is separable from authoring automations: one blueprint
-    # edit reloads every automation using it. No v1 allow_* equivalent, so a
-    # migrated token defaults to deny.
+    # edit reloads every automation using it. The capability defaults to deny.
     cap_blueprint_write: str = CAP_DENY
     cap_config_read: str = CAP_DENY
     cap_template_render: str = CAP_DENY
@@ -327,11 +321,10 @@ class TokenRecord:
     cap_broadcast: str = CAP_DENY
     cap_log_read: str = CAP_DENY
     # Process-wide logger changes are deliberately separate from diagnostics.
-    # No legacy allow_* equivalent: migrated and newly created tokens fail closed.
     cap_log_control: str = CAP_DENY
     cap_search: str = CAP_DENY
     # Camera images are privacy-sensitive and require an explicit grant even
-    # for pass-through tokens. Migrated records default to deny via CAPABILITY_NAMES.
+    # for pass-through tokens. Stored records default to deny via CAPABILITY_NAMES.
     cap_camera_read: str = CAP_DENY
     cap_registry_read: str = CAP_DENY
     cap_traces: str = CAP_DENY
@@ -353,7 +346,6 @@ class TokenRecord:
     # DISJOINT from cap_filesystem (whose allowed dirs are www/themes/
     # custom_templates): device YAML embeds C++ lambdas and, in practice, inline
     # credentials, so it must not become reachable by widening a filesystem grant.
-    # No v1 allow_* equivalent, so a migrated token defaults to deny.
     cap_esphome_yaml: str = CAP_DENY
     cap_esphome_flash: str = CAP_DENY
     persona: str = PERSONA_CUSTOM
@@ -571,12 +563,6 @@ def _closed_choice(value: object, valid: frozenset[str], default: str) -> str:
     return value if isinstance(value, str) and value in valid else default
 
 
-def _tool_routing_settings_need_reset(data: dict) -> bool:
-    """Require a current storage marker for deliberate API-only review opt-ins."""
-    version = data.get("tool_routing_version")
-    return type(version) is not int or version != TOOL_ROUTING_SETTINGS_VERSION
-
-
 def valid_command_routing_languages(value: object) -> bool:
     """A closed, duplicate-free language selection; an empty list pauses routing."""
     return (isinstance(value, list) and len(value) <= len(COMMAND_ROUTING_LANGUAGES)
@@ -684,14 +670,12 @@ class GlobalSettings:
             "agentcli_conversation_style": self.agentcli_conversation_style,
             "agentcli_detail_level": self.agentcli_detail_level,
             "agentcli_home_focused": self.agentcli_home_focused,
-            "command_routing_version": COMMAND_ROUTING_SETTINGS_VERSION,
             "agentcli_routing_shadow_enabled": self.agentcli_routing_shadow_enabled,
             "agentcli_routing_mode": self.agentcli_routing_mode,
             "assist_bound_token_id": self.assist_bound_token_id,
             "voice_agent_routing_mode": self.voice_agent_routing_mode,
             "command_routing_languages": list(self.command_routing_languages),
             "command_routing_timeout_ms": self.command_routing_timeout_ms,
-            "tool_routing_version": TOOL_ROUTING_SETTINGS_VERSION,
             "agentcli_tool_routing_mode": self.agentcli_tool_routing_mode,
             "voice_agent_tool_routing_mode": self.voice_agent_tool_routing_mode,
             "ai_task_tool_routing_mode": self.ai_task_tool_routing_mode,
@@ -717,12 +701,6 @@ class GlobalSettings:
 
     @classmethod
     def from_dict(cls, data: dict) -> GlobalSettings:
-        # Old experiments must not silently opt into broader language coverage or API calls.
-        if data.get("command_routing_version") != COMMAND_ROUTING_SETTINGS_VERSION:
-            data = {**data, "voice_agent_routing_mode": "off", "agentcli_routing_mode": "off",
-                    "decision_shadow_enabled": False, "agentcli_routing_shadow_enabled": False}
-        if _tool_routing_settings_need_reset(data):
-            data = {**data, **{key: "off" for key in TOOL_ROUTING_SETTINGS.values()}}
         mesa_mode = data.get("mesa_mode", MESA_MODE_ADVISORY)
         languages = data.get("command_routing_languages", list(COMMAND_ROUTING_DEFAULT_LANGUAGES))
         return cls(
@@ -822,29 +800,15 @@ class TokenStore:
     @classmethod
     async def async_create(cls, hass: HomeAssistant) -> TokenStore:
         """Create a TokenStore and load persisted data from HA storage."""
-        store = _PhoenixStore(hass, STORAGE_VERSION, STORAGE_KEY)
+        store: Store[dict] = Store(hass, STORAGE_VERSION, STORAGE_KEY)
         instance = cls(hass, store)
         await instance.async_load()
         return instance
 
     async def async_load(self) -> None:
-        """Load token and settings data from the HA storage file.
-
-        Applies storage migrations in place when older data is detected.
-        """
+        """Load current token and settings data from the HA storage file."""
         raw = await self._store.async_load()
-        had_storage = raw is not None
         raw, normalized = _normalize_storage_root(raw)
-        migrated = _migrate_storage(raw)
-        notification_marker_present = "_invalidated_approval_notification_ids" in raw
-        raw_invalidated_notifications = raw.pop(
-            "_invalidated_approval_notification_ids", []
-        )
-        invalidated_notifications = (
-            raw_invalidated_notifications
-            if isinstance(raw_invalidated_notifications, list)
-            else []
-        )
 
         tokens: dict[str, TokenRecord] = {}
         for r in raw.get("tokens", []):
@@ -870,9 +834,7 @@ class TokenStore:
                 )
         self._archived = archived
 
-        raw_settings = raw.get("settings", {})
-        tool_routing_reset = had_storage and _tool_routing_settings_need_reset(raw_settings)
-        self._settings = GlobalSettings.from_dict(raw_settings)
+        self._settings = GlobalSettings.from_dict(raw.get("settings", {}))
         # The collection is normalized to a list above, but its MEMBERS are not:
         # a non-dict entry (string/int) would crash the startup expiry sweep,
         # which calls entry.get(...) on every member. Discard non-dict members.
@@ -883,24 +845,10 @@ class TokenStore:
             str(k): str(v) for k, v in (raw.get("entity_hints") or {}).items()
         }
 
-        if migrated:
-            _LOGGER.info(
-                "Phoenix MCP storage migrated to v%d; saving canonical form",
-                STORAGE_VERSION,
-            )
-        if migrated or normalized or approvals_cleaned or notification_marker_present or tool_routing_reset:
+        if normalized or approvals_cleaned:
             # Persist the cleaned form so a one-time corruption does not have to
             # be re-normalized on every load.
             await self.async_save()
-        if invalidated_notifications:
-            from homeassistant.components import persistent_notification  # noqa: PLC0415
-
-            for approval_id in invalidated_notifications:
-                if isinstance(approval_id, str):
-                    persistent_notification.async_dismiss(
-                        self._hass,
-                        notification_id=f"{DOMAIN}_approval_{approval_id}",
-                    )
 
     async def async_save(self) -> None:
         """Persist the current in-memory state to HA storage."""
@@ -1337,37 +1285,8 @@ def hmac_compare(stored_hash: str, presented_hash: str) -> bool:
     return hmac.compare_digest(stored_hash, presented_hash)
 
 
-_LEGACY_ALLOW_TO_CAP = {
-    "allow_automation_write": "cap_automation_write",
-    "allow_script_write": "cap_script_write",
-    "allow_config_read": "cap_config_read",
-    "allow_template_render": "cap_template_render",
-    "allow_restart": "cap_restart",
-    "allow_physical_control": "cap_physical_control",
-    "allow_service_response": "cap_service_response",
-    "allow_broadcast": "cap_broadcast",
-    "allow_log_read": "cap_log_read",
-}
-
-
-class _PhoenixStore(Store):
-    """Subclass of HA's Store that wires our migrations into the load path.
-
-    HA's Store invokes `_async_migrate_func` when the stored major version differs
-    from the constructor's version. The default implementation raises
-    NotImplementedError; we override it to migrate the stored data in place.
-    """
-
-    async def _async_migrate_func(
-        self, old_major_version: int, old_minor_version: int, old_data: dict
-    ) -> dict:
-        if old_major_version < STORAGE_VERSION:
-            _migrate_storage(old_data, source_version=old_major_version)
-        return old_data
-
-
 # Every top-level storage collection and the container type it must be. A wrong
-# type here (hand-edited or corrupted storage) would otherwise crash migration or
+# type here (hand-edited or corrupted storage) would otherwise crash loading or
 # parsing before the per-record loops can skip an individual bad entry.
 _STORAGE_COLLECTIONS: dict[str, type] = {
     "tokens": list,
@@ -1407,103 +1326,3 @@ def _normalize_storage_root(raw: object) -> tuple[dict, bool]:
             raw[key] = expected()
             changed = True
     return raw, changed
-
-
-def _migrate_storage_v1_to_v2(raw: dict) -> bool:
-    """Migrate raw storage data from v1 to v2 in place.
-
-    v1 used boolean allow_* flags. v2 uses cap_* tri-state strings
-    ("deny" / "allow" / "confirm"), introduces persona, and adds the
-    pending_approvals array. Returns True if any migration was applied.
-    """
-    if not isinstance(raw, dict) or not raw:
-        return False
-    needs_save = False
-    for token in raw.get("tokens", []) or []:
-        if not isinstance(token, dict):
-            continue  # the load loop skips and logs it
-        for old_key, new_key in _LEGACY_ALLOW_TO_CAP.items():
-            if old_key in token:
-                token[new_key] = CAP_ALLOW if token.pop(old_key) else CAP_DENY
-                needs_save = True
-        if "persona" not in token:
-            token["persona"] = PERSONA_CUSTOM
-            needs_save = True
-    # Archived records do not retain capability flags,
-    # but if a legacy archive carried them we still drop the keys.
-    for archived in raw.get("archived_tokens", []) or []:
-        if not isinstance(archived, dict):
-            continue  # the load loop skips and logs it
-        for old_key in _LEGACY_ALLOW_TO_CAP:
-            if old_key in archived:
-                archived.pop(old_key, None)
-                needs_save = True
-    if "pending_approvals" not in raw:
-        raw["pending_approvals"] = []
-        needs_save = True
-    return needs_save
-
-
-def _migrate_volume_approval_payloads(raw: dict, *, repair_v3: bool) -> bool:
-    """Cancel incompatible pending volume approvals and repair v3 history."""
-    invalidated_ids: list[str] = []
-    changed = False
-    now_iso = utcnow().isoformat()
-    for approval in raw.get("pending_approvals", []) or []:
-        if not isinstance(approval, dict):
-            continue
-        args = approval.get("args")
-        if not isinstance(args, dict):
-            continue
-        legacy_mesa_volume = (
-            approval.get("tool_name") == MESA_APPROVED_EXECUTOR
-            and args.get("domain") == "media_player"
-            and args.get("service") == "volume_set"
-        )
-        incompatible_relative_plan = (
-            approval.get("tool_name") == "HassSetVolumeRelative"
-            and args.get("_relative_volume_plan_version")
-            != RELATIVE_VOLUME_PLAN_VERSION
-        )
-        if not legacy_mesa_volume and not incompatible_relative_plan:
-            continue
-        if (
-            repair_v3
-            and approval.get("status") == "cancelled"
-            and not approval.get("rejected_reason")
-        ):
-            approval["rejected_reason"] = APPROVAL_REASON_FORMAT_INCOMPATIBLE
-            changed = True
-            continue
-        if approval.get("status") != "pending":
-            continue
-        if approval.get("execution_started_at"):
-            continue
-        approval["status"] = "cancelled"
-        approval["resolved_at"] = now_iso
-        approval["rejected_reason"] = APPROVAL_REASON_FORMAT_INCOMPATIBLE
-        changed = True
-        approval_id = approval.get("id")
-        if isinstance(approval_id, str):
-            invalidated_ids.append(approval_id)
-    if invalidated_ids:
-        raw["_invalidated_approval_notification_ids"] = invalidated_ids
-    return changed
-
-
-def _migrate_storage(raw: dict, *, source_version: int | None = None) -> bool:
-    """Migrate any non-empty storage object to the current version in place."""
-    if not isinstance(raw, dict) or not raw:
-        return False
-    stored_version = raw.get("version") if source_version is None else source_version
-    version = stored_version if isinstance(stored_version, int) else 1
-    needs_save = _migrate_storage_v1_to_v2(raw)
-    if version < 4:
-        needs_save = _migrate_volume_approval_payloads(
-            raw,
-            repair_v3=version == 3,
-        ) or needs_save
-    if raw.get("version") != STORAGE_VERSION:
-        raw["version"] = STORAGE_VERSION
-        needs_save = True
-    return needs_save

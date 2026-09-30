@@ -125,7 +125,7 @@ async def token_store(hass, mock_store):
     from custom_components.phoenix_mcp.token_store import TokenStore
 
     with patch(
-        "custom_components.phoenix_mcp.token_store._PhoenixStore",
+        "custom_components.phoenix_mcp.token_store.Store",
         return_value=mock_store,
     ):
         instance = await TokenStore.async_create(hass)

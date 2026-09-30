@@ -288,14 +288,14 @@ async def test_voice_rechecks_settings_after_loading_provider_config(hass, routi
     recognize.assert_not_called()
 
 
-async def test_routing_settings_persist_and_active_modes_fail_closed(token_store):
+async def test_routing_settings_persist_and_invalid_modes_fail_closed(token_store):
     from custom_components.phoenix_mcp.token_store import GlobalSettings
     await token_store.async_patch_settings(voice_agent_routing_mode="local_shadow", command_routing_timeout_ms=1700)
     restored = GlobalSettings.from_dict(token_store.get_settings().to_dict())
     assert restored.voice_agent_routing_mode == "local_shadow"
     assert restored.command_routing_timeout_ms == 1700
     assert GlobalSettings.from_dict({}).voice_agent_routing_mode == "off"
-    assert GlobalSettings.from_dict({"voice_agent_routing_mode": "hybrid"}).voice_agent_routing_mode == "off"
+    assert GlobalSettings.from_dict({"voice_agent_routing_mode": "hybrid"}).voice_agent_routing_mode == "hybrid"
     assert GlobalSettings.from_dict({"voice_agent_routing_mode": "future"}).voice_agent_routing_mode == "off"
 
 
@@ -424,21 +424,22 @@ async def test_auto_follows_supported_ingress_language_without_legacy_allowlist(
         assert result["reason"] == "unsupported_language"
 
 
-def test_experimental_settings_migrate_off_but_preserve_accounts_and_new_opt_in():
+def test_routing_settings_round_trip_without_version_markers():
     from custom_components.phoenix_mcp.token_store import GlobalSettings
-    from custom_components.phoenix_mcp.const import COMMAND_ROUTING_SETTINGS_VERSION
 
     restored = GlobalSettings.from_dict({
         "voice_agent_routing_mode": "local", "agentcli_routing_mode": "hybrid",
         "decision_shadow_enabled": True, "agentcli_routing_shadow_enabled": True,
         "decision_provider_id": "configured-account", "decision_timeout_ms": 12000,
     })
-    assert restored.voice_agent_routing_mode == restored.agentcli_routing_mode == "off"
-    assert not restored.decision_shadow_enabled and not restored.agentcli_routing_shadow_enabled
+    assert restored.voice_agent_routing_mode == "local"
+    assert restored.agentcli_routing_mode == "hybrid"
+    assert restored.decision_shadow_enabled and restored.agentcli_routing_shadow_enabled
     assert restored.decision_provider_id == "configured-account"
     assert restored.decision_timeout_ms == 12000
     saved = restored.to_dict()
-    assert saved["command_routing_version"] == COMMAND_ROUTING_SETTINGS_VERSION
+    assert "command_routing_version" not in saved
+    assert "tool_routing_version" not in saved
     saved.update(voice_agent_routing_mode="auto", agentcli_routing_mode="auto")
     assert GlobalSettings.from_dict(saved).to_dict() == saved
 

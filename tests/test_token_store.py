@@ -20,7 +20,6 @@ from custom_components.phoenix_mcp.const import (
     TOKEN_LENGTH,
     TOKEN_PREFIX,
     TOOL_ROUTING_SETTINGS,
-    TOOL_ROUTING_SETTINGS_VERSION,
 )
 from custom_components.phoenix_mcp.token_store import (
     ArchivedTokenRecord,
@@ -415,7 +414,7 @@ class TestTokenStoreLoad:
     async def test_load_with_existing_data(self, hass):
         now = utcnow()
         existing = {
-            "version": 1,
+            "version": STORAGE_VERSION,
             "tokens": [{
                 "id": "tok1",
                 "name": "mytoken",
@@ -430,7 +429,7 @@ class TestTokenStoreLoad:
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
 
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
+        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
             store = await TokenStore.async_create(hass)
 
         tokens = store.list_tokens()
@@ -453,7 +452,7 @@ class TestTokenStoreLoad:
             permissions={"domains": ["not-a-node-map"]},
         )
         existing = {
-            "version": 2,
+            "version": STORAGE_VERSION,
             "tokens": [nested_corrupt, "not-even-a-dict", good],
             "archived_tokens": ["garbage"],
             "settings": {},
@@ -462,7 +461,7 @@ class TestTokenStoreLoad:
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
 
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
+        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
             store = await TokenStore.async_create(hass)
 
         tokens = store.list_tokens()
@@ -488,12 +487,12 @@ class TestTokenStoreLoad:
         }
         bad = dict(good, id="tok-bad", name="bad", token_hash="h2",
                    created_at=bad_created_at)
-        existing = {"version": 2, "tokens": [bad, good], "settings": {}}
+        existing = {"version": STORAGE_VERSION, "tokens": [bad, good], "settings": {}}
         mock_store = AsyncMock()
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
 
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
+        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
             store = await TokenStore.async_create(hass)
 
         assert [t.id for t in store.list_tokens()] == ["tok-good"]
@@ -509,26 +508,26 @@ class TestTokenStoreLoad:
         archived_bad = dict(archived_good, id="arch-bad", name="b", token_hash="h2",
                             revoked_at="nonsense")
         existing = {
-            "version": 2, "tokens": [],
+            "version": STORAGE_VERSION, "tokens": [],
             "archived_tokens": [archived_bad, archived_good], "settings": {},
         }
         mock_store = AsyncMock()
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
 
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
+        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
             store = await TokenStore.async_create(hass)
 
         assert [t.id for t in store.list_archived()] == ["arch-good"]
 
     async def test_load_non_dict_root_ignored(self, hass):
         # A storage root that is not an object (corrupted file) must not crash
-        # setup: migration and every collection read assume a dict root.
+        # setup: every collection read assumes a dict root.
         for corrupt_root in ([1, 2, 3], "corrupt", 42):
             mock_store = AsyncMock()
             mock_store.async_load = AsyncMock(return_value=corrupt_root)
             mock_store.async_save = AsyncMock()
-            with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
+            with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
                 store = await TokenStore.async_create(hass)
             assert store.list_tokens() == []
             assert store.list_archived() == []
@@ -537,11 +536,11 @@ class TestTokenStoreLoad:
 
     async def test_load_wrong_typed_collections_reset(self, hass):
         # Each top-level collection of the wrong type is reset to an empty
-        # container instead of crashing (tokens:int -> TypeError in migration;
+        # container instead of crashing (tokens:int -> TypeError during loading;
         # settings/entity_hints of the wrong type -> AttributeError; a string
         # pending_approvals would silently become a list of characters).
         existing = {
-            "version": 2,
+            "version": STORAGE_VERSION,
             "tokens": 7,
             "archived_tokens": {"x": 1},
             "pending_approvals": "abc",
@@ -551,7 +550,7 @@ class TestTokenStoreLoad:
         mock_store = AsyncMock()
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
+        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
             store = await TokenStore.async_create(hass)
         assert store.list_tokens() == []
         assert store.list_archived() == []
@@ -561,7 +560,7 @@ class TestTokenStoreLoad:
 
     async def test_load_valid_collections_untouched_no_spurious_save(self, hass):
         # A well-formed current store must load verbatim with no heal-save fired by
-        # normalization (the token carries persona, so migration is a no-op too).
+        # normalization.
         now = utcnow()
         existing = {
             "version": STORAGE_VERSION,
@@ -578,42 +577,10 @@ class TestTokenStoreLoad:
         mock_store = AsyncMock()
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
+        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
             store = await TokenStore.async_create(hass)
         assert [t.id for t in store.list_tokens()] == ["tok1"]
         mock_store.async_save.assert_not_awaited()
-
-    async def test_load_dismisses_notifications_for_migrated_approvals(self, hass):
-        existing = {
-            "version": 2,
-            "tokens": [],
-            "archived_tokens": [],
-            "pending_approvals": [{
-                "id": "legacy-volume",
-                "status": "pending",
-                "tool_name": "call_service_mesa_approved",
-                "args": {"domain": "media_player", "service": "volume_set"},
-            }],
-            "settings": {},
-        }
-        mock_store = AsyncMock()
-        mock_store.async_load = AsyncMock(return_value=existing)
-        mock_store.async_save = AsyncMock()
-        with patch(
-            "custom_components.phoenix_mcp.token_store._PhoenixStore",
-            return_value=mock_store,
-        ), patch(
-            "homeassistant.components.persistent_notification.async_dismiss"
-        ) as dismiss:
-            store = await TokenStore.async_create(hass)
-
-        approval = store.get_pending_approvals()[0]
-        assert approval["status"] == "cancelled"
-        mock_store.async_save.assert_awaited_once()
-        dismiss.assert_called_once_with(
-            hass,
-            notification_id="phoenix_mcp_approval_legacy-volume",
-        )
 
     async def test_load_falsy_root_healed_but_fresh_install_not(self, hass):
         # `[]`, `""`, and `0` are corrupt roots and should heal to disk; None
@@ -622,7 +589,7 @@ class TestTokenStoreLoad:
             mock_store = AsyncMock()
             mock_store.async_load = AsyncMock(return_value=corrupt_root)
             mock_store.async_save = AsyncMock()
-            with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
+            with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
                 store = await TokenStore.async_create(hass)
             assert store.list_tokens() == []
             mock_store.async_save.assert_awaited()
@@ -630,7 +597,7 @@ class TestTokenStoreLoad:
         fresh = AsyncMock()
         fresh.async_load = AsyncMock(return_value=None)
         fresh.async_save = AsyncMock()
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=fresh):
+        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=fresh):
             store = await TokenStore.async_create(hass)
         assert store.list_tokens() == []
         fresh.async_save.assert_not_awaited()
@@ -641,7 +608,7 @@ class TestTokenStoreLoad:
         # would abort setup. Non-dict members are discarded (and healed).
         good_approval = {"id": "ap1", "token_id": "t", "status": "pending"}
         existing = {
-            "version": 2,
+            "version": STORAGE_VERSION,
             "tokens": [],
             "archived_tokens": [],
             "pending_approvals": [good_approval, "corrupt", 7, None],
@@ -650,7 +617,7 @@ class TestTokenStoreLoad:
         mock_store = AsyncMock()
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
+        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
             store = await TokenStore.async_create(hass)
         assert store.get_pending_approvals() == [good_approval]
         mock_store.async_save.assert_awaited()  # cleaned form healed
@@ -660,7 +627,7 @@ class TestTokenStoreLoad:
         # string "false") must load False, never silently enable pass-through.
         now = utcnow()
         existing = {
-            "version": 2,
+            "version": STORAGE_VERSION,
             "tokens": [{
                 "id": "tok1", "name": "t", "token_hash": "h",
                 "created_at": now.isoformat(), "created_by": "admin",
@@ -675,7 +642,7 @@ class TestTokenStoreLoad:
         mock_store = AsyncMock()
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
+        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
             store = await TokenStore.async_create(hass)
         tok = store.list_tokens()[0]
         assert tok.pass_through is False
@@ -1091,8 +1058,7 @@ class TestArchivedDeletion:
 
 
 class TestSettings:
-    @pytest.mark.parametrize("marker", [None, 0, True, 1.0, "1", [], {}])
-    async def test_review_upgrade_resets_only_review_and_persists_once(self, hass, marker):
+    async def test_routing_settings_survive_load_without_migration_markers(self, hass):
         settings = GlobalSettings(
             agentcli_tool_routing_mode="observe",
             voice_agent_tool_routing_mode="observe",
@@ -1100,22 +1066,13 @@ class TestSettings:
             agentcli_routing_mode="auto", voice_agent_routing_mode="auto",
             decision_provider_id="decision-account", mesa_mode="enforced",
         ).to_dict()
-        settings.pop("tool_routing_version")
-        if marker is not None:
-            settings["tool_routing_version"] = marker
-        expected = {**settings, "tool_routing_version": TOOL_ROUTING_SETTINGS_VERSION,
-                    **{key: "off" for key in TOOL_ROUTING_SETTINGS.values()}}
+        assert "command_routing_version" not in settings
+        assert "tool_routing_version" not in settings
         storage = AsyncMock()
         storage.async_load.return_value = {"version": STORAGE_VERSION, "settings": settings}
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=storage):
+        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=storage):
             store = await TokenStore.async_create(hass)
-            assert store.get_settings().to_dict() == expected
-            storage.async_save.assert_awaited_once()
-            persisted = storage.async_save.call_args.args[0]
-            storage.async_load.return_value = persisted
-            storage.async_save.reset_mock()
-            reloaded = await TokenStore.async_create(hass)
-        assert reloaded.get_settings().to_dict() == expected
+        assert store.get_settings().to_dict() == settings
         storage.async_save.assert_not_awaited()
 
     async def test_deliberate_review_opt_in_survives_reload(self, token_store, mock_store):

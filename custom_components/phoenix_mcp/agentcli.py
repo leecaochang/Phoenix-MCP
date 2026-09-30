@@ -577,13 +577,6 @@ class AgentCliStore:
         raw = await store.async_load() or {}
         if isinstance(raw, dict) and isinstance(raw.get("instances"), dict):
             inst._data = raw["instances"]
-        elif isinstance(raw, dict) and isinstance(raw.get("providers"), dict):
-            # Migrate the pre-instances shape (one config per kind) to instances.
-            inst._data = {
-                uuid.uuid4().hex: {"kind": kind, **cfg}
-                for kind, cfg in raw["providers"].items() if isinstance(cfg, dict)
-            }
-            await inst._save()
         else:
             inst._data = {}
         return inst
