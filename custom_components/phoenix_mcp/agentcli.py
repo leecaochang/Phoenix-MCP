@@ -3867,7 +3867,8 @@ async def _run_headless_turn(
         return _HeadlessTurnResult("", [], outcome=TURN_OUTCOME_UNKNOWN, blocked_by_prior_action=True)
 
     from .tool_routing import create_review_state, async_review_tools, withheld_results
-    review_state = create_review_state(data, token, routing_surface)
+    from .home_companion import is_companion
+    review_state = None if is_companion(token) else create_review_state(data, token, routing_surface)
     agent_tools = build_agent_tool_list(token, data, routing_surface)
     tools = provider.format_tools(agent_tools)
     messages: list[dict] = [{"role": "user", "content": seed}]
@@ -4012,14 +4013,15 @@ async def _run_headless_turn(
         # The answer is the model's LAST text (after tools resolve), not the
         # intermediate "let me check..." text before a tool round; reset it here.
         final_text = ""
-        review = await async_review_tools(hass, data, review_state, surface=routing_surface,
-            language=routing_language, messages=messages, calls=tool_calls, system=system,
-            remaining_rounds=max_iterations - iteration - 1, announced_tools=agent_tools)
-        if review.action != "continue":
-            provider.append_tool_results(messages, withheld_results(tool_calls, review))
-            if review.action == "stop":
-                return _HeadlessTurnResult("", review_urls, outcome=TURN_AUTHORITY_LOST)
-            continue
+        if review_state is not None:
+            review = await async_review_tools(hass, data, review_state, surface=routing_surface,
+                language=routing_language, messages=messages, calls=tool_calls, system=system,
+                remaining_rounds=max_iterations - iteration - 1, announced_tools=agent_tools)
+            if review.action != "continue":
+                provider.append_tool_results(messages, withheld_results(tool_calls, review))
+                if review.action == "stop":
+                    return _HeadlessTurnResult("", review_urls, outcome=TURN_AUTHORITY_LOST)
+                continue
         results: list[dict] = []
         for tc in tool_calls:
             name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]

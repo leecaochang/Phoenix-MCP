@@ -303,8 +303,8 @@
       },
       "home_companion": {
         "label": "Compagnon domestique",
-        "description": "Expérimental : un outil de tâches pour les lampes, ventilateurs et capteurs simples sélectionnés. Utilise le modèle de conversation vocale.",
-        "setup": "Choisissez un fournisseur et un modèle dans les réglages vocaux. Accordez la LECTURE ou l’ÉCRITURE aux lampes et ventilateurs via l’arbre de permissions habituel ; les capteurs sélectionnés de température, humidité, éclairement, puissance, énergie et batterie restent en lecture seule. Les autorisations de domaine, d’appareil et d’entité suivent les mêmes règles d’héritage et de refus que pour les autres personas. Le mode direct et l’annonce de tous les outils sont désactivés. Modifier les capacités n’élargit pas le catalogue interne fixe."
+        "description": "Conçu pour Agent Chat et Voice : un outil pour consulter les informations du domicile et contrôler les appareils. Utilise le modèle de conversation de Voice.",
+        "setup": "Choisissez un fournisseur et un modèle dans les paramètres vocaux. Accordez un accès en lecture ou en écriture via l’arbre habituel des permissions. Les capacités activent ou désactivent l’accès au catalogue domestique ; les outils de configuration et de création restent indisponibles. Le mode de passage direct et l’annonce de tous les outils sont désactivés."
       }
     },
     "tokens": {
@@ -2063,7 +2063,7 @@
     },
     "toolRouting": {
       "label": "Vérification du choix des outils",
-      "help": "Partage le contexte de la tâche avec le fournisseur de décisions. Observer enregistre les recommandations ; Conseiller peut demander une nouvelle planification par tour. Les permissions et approbations restent applicables.",
+      "help": "Partage le contexte de la tâche avec le fournisseur de décisions. Observer enregistre les recommandations ; Conseiller peut demander une nouvelle planification par tour. Les permissions et approbations restent applicables. Home Companion n’utilise pas la vérification du fournisseur de décisions.",
       "accountRequired": "Sélectionnez un compte de fournisseur de décisions pour activer la vérification.",
       "unqualified": "Le conseil actif reste indisponible tant que ce modèle ne réussit pas l’évaluation du choix des outils.",
       "qualified": "Le conseil actif est validé pour : {languages}. Pour les autres langues, le modèle de planification poursuit la tâche.",

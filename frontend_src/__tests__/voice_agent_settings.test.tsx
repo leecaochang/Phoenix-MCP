@@ -162,4 +162,15 @@ describe("VoiceAgentSettings", () => {
     fireEvent.click(screen.getByRole("button", { name: "Disable and remove assistant" }));
     expect(onChange).toHaveBeenCalledWith("voice_agent_enabled", false);
   });
+
+  it("hides decision review for Home Companion and restores it for ordinary tokens", async () => {
+    listTokens.mockResolvedValue([{ id: "tok-1", name: "Home token", persona: "home_companion" },
+      { id: "tok-2", name: "Ordinary token", persona: "voice_assistant" }]);
+    const { rerender } = render(<VoiceAgentSettings settings={settings({ voice_agent_token_id: "tok-1", voice_agent_tool_routing_mode: "observe" })} onChange={vi.fn()} saving={false} />);
+    await screen.findByRole("option", { name: "Home token" });
+    expect(screen.queryByLabelText("Tool selection review")).toBeNull();
+    rerender(<VoiceAgentSettings settings={settings({ voice_agent_token_id: "tok-2" })} onChange={vi.fn()} saving={false} />);
+    expect(screen.getByLabelText("Tool selection review")).toBeTruthy();
+  });
+
 });

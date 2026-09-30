@@ -1561,6 +1561,7 @@ select.input {
   box-shadow: 0 0 0 1px var(--phx-accent);
 }
 .persona-card-label { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+.persona-card-marker { width: 14px; height: 14px; margin-inline-start: 6px; vertical-align: -2px; color: var(--phx-accent); }
 .persona-card-desc { font-size: 11px; color: var(--phx-text-2); line-height: 1.4; }
 .persona-card-note { margin-top: 6px; font-size: 11px; color: var(--phx-warning); line-height: 1.4; }
 

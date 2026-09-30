@@ -897,6 +897,59 @@ def _validate_hass_fan_set_speed_args(args: dict) -> tuple[dict, str, str] | Non
     return None
 
 
+def _validate_hass_climate_temperature_args(args: dict) -> tuple[dict, str, str] | None:
+    """Validate native arguments before approval, execution or planner admission."""
+    refusal = _no_selector_refusal(args, "HassClimateSetTemperature", _BASIC_TARGET_SELECTORS)
+    if refusal is not None:
+        return refusal
+    if error := _missing_required_argument(args, "temperature"):
+        return _tool_error(error), "invalid_request", "HassClimateSetTemperature"
+    if "temperature" in args and args["temperature"] is not None:
+        error = _validate_number_range("temperature", args["temperature"], None, None)
+        if error:
+            return _tool_error(error), "invalid_request", "HassClimateSetTemperature"
+
+    return None
+
+
+def _validate_hass_volume_args(args: dict) -> tuple[dict, str, str] | None:
+    """Validate native arguments before approval, execution or planner admission."""
+    refusal = _fixed_domain_refusal(args, "HassSetVolume", "media_player")
+    if refusal is not None:
+        return refusal
+    if error := _missing_required_argument(args, "volume_level"):
+        return _tool_error(error), "invalid_request", "HassSetVolume"
+    if "volume_level" in args and args["volume_level"] is not None:
+        error = _validate_integer_range("volume_level", args["volume_level"], 0, 100)
+        if error:
+            return _tool_error(error), "invalid_request", "HassSetVolume"
+
+    return None
+
+
+def _validate_hass_volume_relative_args(args: dict) -> tuple[dict, str, str] | None:
+    """Validate native arguments before approval, execution or planner admission."""
+    refusal = _no_selector_refusal(args, "HassSetVolumeRelative", _BASIC_TARGET_SELECTORS)
+    if refusal is not None:
+        return refusal
+    if error := _missing_required_argument(args, "volume_step"):
+        return _tool_error(error), "invalid_request", "HassSetVolumeRelative"
+    if "volume_step" in args and args["volume_step"] is not None:
+        step = args["volume_step"]
+        if isinstance(step, str):
+            error = _validate_string_enum("volume_step", step, ["up", "down"])
+            if error:
+                return _tool_error(error), "invalid_request", "HassSetVolumeRelative"
+        elif isinstance(step, int):
+            error = _validate_integer_range("volume_step", step, -100, 100)
+            if error:
+                return _tool_error(error), "invalid_request", "HassSetVolumeRelative"
+        else:
+            return _tool_error(f"Input validation error: '{step}' is not of type 'string' or 'integer'"), "invalid_request", "HassSetVolumeRelative"
+
+    return None
+
+
 def validate_native_control_args(tool_name: str, args: dict) -> tuple[dict, str, str] | None:
     """Share side-effect-free native argument checks with the companion planner."""
     if tool_name == "intent__HassTurnOn":
@@ -907,21 +960,39 @@ def validate_native_control_args(tool_name: str, args: dict) -> tuple[dict, str,
         return _validate_hass_light_set_args(args)
     if tool_name == "fan__HassFanSetSpeed":
         return _validate_hass_fan_set_speed_args(args)
+    if tool_name == "climate__HassClimateSetTemperature":
+        return _validate_hass_climate_temperature_args(args)
+    if tool_name == "intent__HassSetPosition":
+        return _validate_hass_set_position_args(args)
+    if tool_name == "media_player__HassSetVolume":
+        return _validate_hass_volume_args(args)
+    if tool_name == "media_player__HassSetVolumeRelative":
+        return _validate_hass_volume_relative_args(args)
+    if tool_name.startswith("media_player__Hass"):
+        name = tool_name.split('__')[1]
+        refusal = (_no_selector_refusal(args, name, _BASIC_TARGET_SELECTORS)
+                   if name == 'HassMediaSearchAndPlay' else _fixed_domain_refusal(args, name, 'media_player'))
+        if refusal is not None:
+            return refusal
+        if name == 'HassMediaSearchAndPlay' and not str_arg(args.get('search_query')):
+            return _tool_error('Missing required argument: search_query'), 'invalid_request', name
+    if tool_name in {'vacuum__HassVacuumStart', 'vacuum__HassVacuumReturnToBase'}:
+        return _fixed_domain_refusal(args, tool_name.split('__')[1], 'vacuum', _DOMAIN_TARGET_SELECTORS)
+    if tool_name == 'vacuum__HassVacuumCleanArea' and not str_arg(args.get('area')):
+        return _tool_error('Missing required argument: area'), 'invalid_request', 'HassVacuumCleanArea'
+    if tool_name == 'intent__HassStopMoving':
+        return _fixed_domain_refusal(args, 'HassStopMoving', 'cover')
+    if tool_name == 'intent__HassCancelAllTimers' and args.get('area') is not None and not str_arg(args['area']):
+        return _tool_error('Invalid argument: area'), 'invalid_request', 'HassCancelAllTimers'
     return None
 
 
 async def _tool_hass_climate_set_temperature(
     args: dict, token: TokenRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    refusal = _no_selector_refusal(args, "HassClimateSetTemperature", _BASIC_TARGET_SELECTORS)
+    refusal = _validate_hass_climate_temperature_args(args)
     if refusal is not None:
         return refusal
-    if error := _missing_required_argument(args, "temperature"):
-        return _tool_error(error), "invalid_request", "HassClimateSetTemperature"
-    if "temperature" in args and args["temperature"] is not None:
-        error = _validate_number_range("temperature", args["temperature"], None, None)
-        if error:
-            return _tool_error(error), "invalid_request", "HassClimateSetTemperature"
 
     entities = resolve_intent_entities(
         hass, token,
@@ -1015,15 +1086,9 @@ async def _execute_hass_set_position(
 async def _tool_hass_set_volume(
     args: dict, token: TokenRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    refusal = _fixed_domain_refusal(args, "HassSetVolume", "media_player")
+    refusal = _validate_hass_volume_args(args)
     if refusal is not None:
         return refusal
-    if error := _missing_required_argument(args, "volume_level"):
-        return _tool_error(error), "invalid_request", "HassSetVolume"
-    if "volume_level" in args and args["volume_level"] is not None:
-        error = _validate_integer_range("volume_level", args["volume_level"], 0, 100)
-        if error:
-            return _tool_error(error), "invalid_request", "HassSetVolume"
 
     entities = resolve_intent_entities(
         hass, token,
@@ -1297,23 +1362,9 @@ async def _tool_hass_set_volume_relative(
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
-    refusal = _no_selector_refusal(args, "HassSetVolumeRelative", _BASIC_TARGET_SELECTORS)
+    refusal = _validate_hass_volume_relative_args(args)
     if refusal is not None:
         return refusal
-    if error := _missing_required_argument(args, "volume_step"):
-        return _tool_error(error), "invalid_request", "HassSetVolumeRelative"
-    if "volume_step" in args and args["volume_step"] is not None:
-        step = args["volume_step"]
-        if isinstance(step, str):
-            error = _validate_string_enum("volume_step", step, ["up", "down"])
-            if error:
-                return _tool_error(error), "invalid_request", "HassSetVolumeRelative"
-        elif isinstance(step, int):
-            error = _validate_integer_range("volume_step", step, -100, 100)
-            if error:
-                return _tool_error(error), "invalid_request", "HassSetVolumeRelative"
-        else:
-            return _tool_error(f"Input validation error: '{step}' is not of type 'string' or 'integer'"), "invalid_request", "HassSetVolumeRelative"
 
     entities = resolve_intent_entities(
         hass, token,

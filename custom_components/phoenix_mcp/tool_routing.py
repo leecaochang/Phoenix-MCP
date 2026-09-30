@@ -41,6 +41,9 @@ class ToolReviewState:
 
 def create_review_state(data: Any, token: Any, surface: str) -> ToolReviewState:
     """Disabled routing does not inspect tokens or change the existing loop."""
+    from .home_companion import is_companion
+    if is_companion(token):
+        return ToolReviewState()
     mode = getattr(data.store.get_settings(), TOOL_ROUTING_SETTINGS[surface], "off")
     return ToolReviewState(RoutingAuthority.capture(data, token) if mode in ("observe", "advise") else None)
 

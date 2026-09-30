@@ -30,7 +30,8 @@ from .const import (
 )
 
 PERSONA_DEFINITIONS: dict[str, dict[str, str]] = {
-    PERSONA_HOME_COMPANION: {name: CAP_ALLOW if name in {"cap_search", "cap_registry_read"} else CAP_DENY
+    PERSONA_HOME_COMPANION: {name: CAP_ALLOW if name in {"cap_search", "cap_registry_read"}
+                             else CAP_CONFIRM if name == "cap_physical_control" else CAP_DENY
                              for name in CAPABILITY_NAMES},
     PERSONA_NEW_USER: {
         "cap_config_read": CAP_ALLOW,

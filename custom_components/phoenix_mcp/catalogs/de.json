@@ -405,8 +405,8 @@
       },
       "home_companion": {
         "label": "Hausbegleiter",
-        "description": "Experimentell: ein Aufgabenwerkzeug für ausgewählte Lichter, Ventilatoren und einfache Sensoren. Nutzt das Sprachdialogmodell.",
-        "setup": "Wählen Sie Anbieter und Modell in den Spracheinstellungen. Gewähren Sie Lichtern und Ventilatoren über den normalen Berechtigungsbaum Lese- oder Schreibzugriff; ausgewählte Temperatur-, Feuchtigkeits-, Beleuchtungs-, Leistungs-, Energie- und Batteriesensoren sind nur lesbar. Für Domain-, Geräte- und Entitätsfreigaben gelten dieselben Vererbungs- und Sperrregeln wie bei anderen Personas. Durchleitung und vollständige Werkzeugankündigung sind deaktiviert. Änderungen an Fähigkeiten erweitern den festen internen Katalog nicht."
+        "description": "Für Agent Chat und Voice: ein Aufgabenwerkzeug für Informationen zum Zuhause und die Gerätesteuerung. Nutzt das Voice-Konversationsmodell.",
+        "setup": "Wählen Sie einen Anbieter und ein Modell in den Spracheinstellungen. Gewähren Sie Lese- oder Schreibzugriff über den normalen Berechtigungsbaum. Fähigkeiten aktivieren oder deaktivieren den Zugriff innerhalb des Haushaltskatalogs; Konfigurations- und Erstellungswerkzeuge bleiben nicht verfügbar. Durchleitung und die Bekanntgabe aller Werkzeuge sind deaktiviert."
       }
     },
     "wizard": {
@@ -2063,7 +2063,7 @@
     },
     "toolRouting": {
       "label": "Prüfung der Werkzeugauswahl",
-      "help": "Teilt den Aufgabenkontext mit dem Entscheidungsanbieter. Beobachten zeichnet Empfehlungen auf; Beraten kann einmal pro Runde eine neue Planung anfordern. Berechtigungen und Freigaben gelten weiterhin.",
+      "help": "Teilt den Aufgabenkontext mit dem Entscheidungsanbieter. Beobachten zeichnet Empfehlungen auf; Beraten kann einmal pro Runde eine neue Planung anfordern. Berechtigungen und Freigaben gelten weiterhin. Home Companion verwendet keine Prüfung durch den Entscheidungsanbieter.",
       "accountRequired": "Wählen Sie ein Konto beim Entscheidungsanbieter, um die Prüfung zu aktivieren.",
       "unqualified": "Aktive Beratung ist erst verfügbar, wenn dieses Modell die Prüfung der Werkzeugauswahl bestanden hat.",
       "qualified": "Aktive Beratung ist für folgende Sprachen geprüft: {languages}. Bei anderen Sprachen entscheidet weiterhin das Planungsmodell.",

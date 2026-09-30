@@ -11,7 +11,7 @@ from typing import Any
 
 from homeassistant.util.color import color_name_to_rgb
 
-from .const import HOME_COMPANION_CONTROL_TOOLS, HOME_COMPANION_MAX_REPORT_ENTITIES, HOME_COMPANION_MAX_REPORT_NAMES, HOME_COMPANION_MAX_CALLS, CONVERSATION_STYLES, DETAIL_LEVELS, HOME_COMPANION_ACCEPTED_TEMPLATES, HOME_COMPANION_COUNT_TEMPLATES, HOME_COMPANION_VERIFIED_TEMPLATES, HOME_COMPANION_COUNT_KIND_TEMPLATES, HOME_COMPANION_POWER_TEMPLATES, HOME_COMPANION_ACTION_KIND_TEMPLATES, HOME_COMPANION_EXCEPTION_TEMPLATES
+from .const import HOME_COMPANION_CONTROL_TOOLS, HOME_COMPANION_CONTROL_DOMAINS, HOME_COMPANION_MAX_REPORT_ENTITIES, HOME_COMPANION_MAX_REPORT_NAMES, HOME_COMPANION_MAX_CALLS, CONVERSATION_STYLES, DETAIL_LEVELS, HOME_COMPANION_ACCEPTED_TEMPLATES, HOME_COMPANION_COUNT_TEMPLATES, HOME_COMPANION_VERIFIED_TEMPLATES, HOME_COMPANION_COUNT_KIND_TEMPLATES, HOME_COMPANION_POWER_TEMPLATES, HOME_COMPANION_ACTION_KIND_TEMPLATES, HOME_COMPANION_EXCEPTION_TEMPLATES
 from .helpers import voice_text
 
 
@@ -23,10 +23,28 @@ def _body(result: dict | None) -> Any:
         return None
 
 
-def _expected(name: str, arguments: dict) -> dict:
+def _expected(name: str, arguments: dict, entity_id: str = 'light.unknown') -> dict:
     """Use only fixed native projections of the admitted command arguments."""
     if name in {'intent__HassTurnOn', 'intent__HassTurnOff'}:
-        return {'state': 'on' if name == 'intent__HassTurnOn' else 'off'}
+        domain = entity_id.split('.')[0]
+        if domain in {'light', 'fan', 'switch', 'input_boolean', 'humidifier'}:
+            return {'state': 'on' if name == 'intent__HassTurnOn' else 'off'}
+        if domain in {'cover', 'valve'}:
+            return {'state': 'open' if name == 'intent__HassTurnOn' else 'closed'}
+        if domain == 'climate' and name == 'intent__HassTurnOff':
+            return {'state': 'off'}
+        return {}
+    if name == 'climate__HassClimateSetTemperature':
+        return {'temperature': arguments.get('temperature')}
+    if name == 'intent__HassSetPosition':
+        return {'current_position': arguments.get('position')}
+    if name == 'media_player__HassSetVolume':
+        volume = arguments.get('volume_level')
+        return {'volume_level': volume / 100} if isinstance(volume, (int, float)) and not isinstance(volume, bool) else {}
+    if name in {'media_player__HassMediaPlayerMute', 'media_player__HassMediaPlayerUnmute'}:
+        return {'is_volume_muted': name == 'media_player__HassMediaPlayerMute'}
+    if name in {'media_player__HassMediaPause', 'media_player__HassMediaUnpause'}:
+        return {'state': 'paused' if name == 'media_player__HassMediaPause' else 'playing'}
     expected: dict[str, Any] = {}
     if name == 'fan__HassFanSetSpeed':
         expected['percentage'] = arguments.get('percentage')
@@ -61,6 +79,7 @@ class ResponseEvidence:
     readings: dict[str, str] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
     incomplete: bool = False
+    receipt_only: bool = False
     calls: int = 0
     search_totals: dict[int, int] = field(default_factory=dict)
     search_kinds: dict[int, str] = field(default_factory=dict)
@@ -91,12 +110,19 @@ class ResponseEvidence:
             if data['failed'] or body.get('not_permitted'):
                 self.refused += 1
             rows = [row for row in data['success'] if isinstance(row, dict) and row.get('type') == 'entity']
+            if name == 'intent__HassCancelAllTimers' and not data['failed'] and not body.get('not_permitted'):
+                slots = body.get('speech_slots')
+                canceled = slots.get('canceled') if isinstance(slots, dict) else None
+                if type(canceled) is int and canceled >= 0:
+                    self.accepted += 1
+                    self.receipt_only = True
+                    return
             if not rows:
                 self.incomplete = True
             accepted = False
             for row in rows:
                 eid = row.get('id')
-                if not isinstance(eid, str) or not eid.startswith(('light.', 'fan.')):
+                if not isinstance(eid, str) or eid.split('.')[0] not in HOME_COMPANION_CONTROL_DOMAINS:
                     self.incomplete = True
                     continue
                 if eid not in self.targets and len(self.targets) >= HOME_COMPANION_MAX_REPORT_ENTITIES:
@@ -104,7 +130,7 @@ class ResponseEvidence:
                     continue
                 label = row.get('name')
                 self.targets[eid] = label if isinstance(label, str) else eid
-                self.expected[eid] = _expected(name, arguments or {})
+                self.expected[eid] = _expected(name, arguments or {}, eid)
                 accepted = True
             if accepted:
                 self.accepted += 1
@@ -177,6 +203,12 @@ class ResponseEvidence:
                 elif key == 'rgb_color':
                     if not isinstance(actual, (list, tuple)) or list(actual) != value:
                         matches = False
+                elif key in {'temperature', 'current_position', 'volume_level', 'percentage'}:
+                    if type(actual) not in (int, float) or value is None or actual != value:
+                        matches = False
+                elif key == 'is_volume_muted':
+                    if type(actual) is not bool or actual != value:
+                        matches = False
                 elif actual != value:
                     matches = False
             if matches:
@@ -185,7 +217,7 @@ class ResponseEvidence:
 
     @property
     def verified(self) -> bool:
-        return bool(self.targets) and not self.incomplete and len(self.matched_targets) == len(self.targets)
+        return bool(self.targets) and not self.incomplete and not self.receipt_only and len(self.matched_targets) == len(self.targets)
 
 
 def _target_phrase(evidence: ResponseEvidence, targets: set[str], language: object) -> str:
@@ -246,6 +278,7 @@ def build_report(status: str, model_message: str, evidence: ResponseEvidence, la
         matched = evidence.matched_targets if not evidence.incomplete else set()
         power = {expected.get('state') for expected in evidence.expected.values()}
         parts.append(voice_text(language, 'companion_partial') if partial else
+                     voice_text(language, 'companion_accepted') if not labels else
                      voice_text(language, HOME_COMPANION_ACCEPTED_TEMPLATES[style],
                                 names=_target_phrase(evidence, all_targets, language) if detail == 'concise' else ', '.join(labels)))
         if evidence.verified:
@@ -263,7 +296,7 @@ def build_report(status: str, model_message: str, evidence: ResponseEvidence, la
             elif matched:
                 parts.append(voice_text(language, 'companion_verification_progress', count=len(matched), total=len(all_targets)))
             parts.extend(_verification_exceptions(evidence, all_targets - matched, language))
-            if evidence.incomplete:
+            if evidence.incomplete or evidence.receipt_only or not all_targets:
                 parts.append(voice_text(language, 'companion_unverified'))
         if partial and next_step == 'none':
             next_step = 'check_state'

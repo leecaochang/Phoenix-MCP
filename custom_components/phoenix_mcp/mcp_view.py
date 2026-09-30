@@ -7651,9 +7651,9 @@ async def _call_tool(
         if refusal:
             record_outcome(token, tool_name, "denied", arguments=arguments)
             return _tool_error(refusal), "denied", tool_name
-        if tool_name == "phoenix_request":
+        if tool_name == "home_request":
             return await run_request(arguments, token, hass, data)
-    elif tool_name == "phoenix_request":
+    elif tool_name == "home_request":
         return _tool_error("This tool requires the Home Companion persona."), "denied", tool_name
     if not finite_json_numbers(arguments):
         record_outcome(token, tool_name, "invalid_request", arguments=arguments)
@@ -7872,7 +7872,7 @@ def _build_instructions(token: TokenRecord, data: PhoenixData, base_url: str) ->
     """
     from .home_companion import is_companion
     if is_companion(token):
-        return ("This token uses Phoenix Home Companion. Only phoenix_request is exposed. "
+        return ("This token uses Phoenix Home Companion. Only home_request is exposed. "
                 "Send a complete home request with all restrictions. Each request is independent. "
                 "Read the structured status and tool_outcomes; pending approval is not execution. "
                 "Do not automatically retry an unknown action outcome.")

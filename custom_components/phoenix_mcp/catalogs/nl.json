@@ -169,8 +169,8 @@
       },
       "home_companion": {
         "label": "Huisassistent",
-        "description": "Experimenteel: één taaktool voor geselecteerde lampen, ventilatoren en basissensoren. Gebruikt het gespreksmodel voor Spraak.",
-        "setup": "Kies een provider en model in de spraakinstellingen. Geef lampen en ventilatoren lees- of schrijftoegang via de normale rechtenboom; geselecteerde temperatuur-, vochtigheids-, lichtsterkte-, vermogens-, energie- en batterijsensoren zijn alleen leesbaar. Voor domein-, apparaat- en entiteitsrechten gelden dezelfde overervings- en weigeringsregels als bij andere persona’s. Doorvoer en het aankondigen van alle tools zijn uitgeschakeld. Wijzigingen in mogelijkheden breiden de vaste interne catalogus niet uit."
+        "description": "Ontworpen voor Agent Chat en Voice: één taaktool voor informatie over het huis en apparaatbediening. Gebruikt het gespreksmodel van Voice.",
+        "setup": "Kies een provider en model in de spraakinstellingen. Verleen lees- of schrijftoegang via de normale machtigingsboom. Mogelijkheden schakelen toegang binnen de huishoudcatalogus in of uit; configuratie- en ontwerptools blijven niet beschikbaar. Doorvoer en het aankondigen van alle tools zijn uitgeschakeld."
       }
     },
     "mesaSuggestion": {
@@ -2141,7 +2141,7 @@
     },
     "toolRouting": {
       "label": "Controle van gereedschapskeuze",
-      "help": "Deelt de taakcontext met de beslissingsprovider. Observeren registreert aanbevelingen; Adviseren kan eenmaal per beurt om een nieuw plan vragen. Machtigingen en goedkeuringen blijven gelden.",
+      "help": "Deelt de taakcontext met de beslissingsprovider. Observeren registreert aanbevelingen; Adviseren kan eenmaal per beurt om een nieuw plan vragen. Machtigingen en goedkeuringen blijven gelden. Home Companion gebruikt geen beoordeling door de beslissingsprovider.",
       "accountRequired": "Selecteer een account bij de beslissingsprovider om de controle in te schakelen.",
       "unqualified": "Actief advies is pas beschikbaar nadat dit model de evaluatie van gereedschapskeuze heeft doorstaan.",
       "qualified": "Actief advies is gevalideerd voor: {languages}. Voor andere talen gaat het planningsmodel verder.",

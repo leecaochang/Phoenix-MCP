@@ -304,8 +304,8 @@
       },
       "home_companion": {
         "label": "Home Companion",
-        "description": "Experimental: one task tool for selected lights, fans and basic sensors. Uses the Voice conversation model.",
-        "setup": "Choose a provider and model in Voice settings. Grant READ or WRITE to lights and fans through the normal permission tree; selected temperature, humidity, illuminance, power, energy and battery sensors are read-only. Domain, device and entity grants use the same inheritance and denial rules as other personas. Pass-through and announce-all are disabled. Capability edits cannot expand the fixed internal catalog."
+        "description": "Designed for Agent Chat and Voice: one task tool for household reads and device control. Uses the Voice conversation model.",
+        "setup": "Choose a provider and model in Voice settings. Grant READ or WRITE through the normal permission tree. Capabilities enable or disable access within the household catalog; configuration and authoring tools stay unavailable. Pass-through and announce-all are disabled."
       }
     },
     "tokens": {
@@ -2067,7 +2067,7 @@
     },
     "toolRouting": {
       "label": "Tool selection review",
-      "help": "Shares task context with the Decision Provider. Observe records recommendations; Advise may request one replan per turn. Permissions and approvals still apply.",
+      "help": "Shares task context with the Decision Provider. Observe records recommendations; Advise may request one replan per turn. Permissions and approvals still apply. Home Companion does not use Decision Provider review.",
       "accountRequired": "Select a Decision Provider account to enable review.",
       "unqualified": "Active advice is unavailable until this model passes tool-selection qualification.",
       "qualified": "Active advice is qualified for: {languages}. Other languages continue with the planner.",

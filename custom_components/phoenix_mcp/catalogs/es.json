@@ -1977,8 +1977,8 @@
       },
       "home_companion": {
         "label": "Asistente del hogar",
-        "description": "Experimental: una herramienta de tareas para luces, ventiladores y sensores básicos seleccionados. Usa el modelo de conversación de Voz.",
-        "setup": "Elige un proveedor y un modelo en los ajustes de Voz. Concede LECTURA o ESCRITURA a luces y ventiladores mediante el árbol de permisos habitual; los sensores seleccionados de temperatura, humedad, iluminación, potencia, energía y batería son de solo lectura. Los permisos de dominio, dispositivo y entidad siguen las mismas reglas de herencia y denegación que en las demás personas. El acceso directo y el anuncio de todas las herramientas están desactivados. Cambiar capacidades no amplía el catálogo interno fijo."
+        "description": "Diseñado para Agent Chat y Voice: una herramienta para consultar información del hogar y controlar dispositivos. Usa el modelo de conversación de Voice.",
+        "setup": "Elige un proveedor y un modelo en los ajustes de voz. Concede acceso de lectura o escritura mediante el árbol de permisos habitual. Las capacidades habilitan o deshabilitan el acceso dentro del catálogo doméstico; las herramientas de configuración y creación siguen sin estar disponibles. El modo de acceso directo y el anuncio de todas las herramientas están deshabilitados."
       }
     },
     "shell": {
@@ -2063,7 +2063,7 @@
     },
     "toolRouting": {
       "label": "Revisión de selección de herramientas",
-      "help": "Comparte el contexto de la tarea con el proveedor de decisiones. Observar registra recomendaciones; Asesorar puede solicitar una nueva planificación por turno. Los permisos y las aprobaciones siguen vigentes.",
+      "help": "Comparte el contexto de la tarea con el proveedor de decisiones. Observar registra recomendaciones; Asesorar puede solicitar una nueva planificación por turno. Los permisos y las aprobaciones siguen vigentes. Home Companion no utiliza la revisión del proveedor de decisiones.",
       "accountRequired": "Selecciona una cuenta del proveedor de decisiones para activar la revisión.",
       "unqualified": "El asesoramiento activo no está disponible hasta que este modelo supere la evaluación de selección de herramientas.",
       "qualified": "El asesoramiento activo está validado para: {languages}. En otros idiomas se continúa con el modelo planificador.",

@@ -43,6 +43,7 @@ export function VoiceAgentSettings({
   const pipelineSupported = settings.voice_agent_pipeline_supported ?? true;
   const noProviders = instances.length === 0;
   const fullyConfigured = !!(enabled && tokenId && providerId && model);
+  const companion = tokens.some(token => token.id === tokenId && token.persona === "home_companion");
 
   useEffect(() => {
     api.listTokens().then(setTokens).catch(() => setTokens([]));
@@ -173,11 +174,11 @@ export function VoiceAgentSettings({
         </select>
       </div>
 
-      <CommandRoutingToggle surface="voice" mode={settings.voice_agent_routing_mode}
-        onChange={value => onChange("voice_agent_routing_mode", value)} saving={saving} />
-      <ToolRoutingControl surface="voice" mode={settings.voice_agent_tool_routing_mode}
+      {!companion && <CommandRoutingToggle surface="voice" mode={settings.voice_agent_routing_mode}
+        onChange={value => onChange("voice_agent_routing_mode", value)} saving={saving} />}
+      {!companion && <ToolRoutingControl surface="voice" mode={settings.voice_agent_tool_routing_mode}
         onChange={value => onChange("voice_agent_tool_routing_mode", value)} hasAccount={!!settings.decision_provider_id}
-        qualifiedLanguages={settings.tool_routing_qualified_languages} saving={saving} />
+        qualifiedLanguages={settings.tool_routing_qualified_languages} saving={saving} />}
       <RoutingStatistics surface="voice" />
 
       <ConversationBehaviorControls

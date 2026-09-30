@@ -923,8 +923,8 @@
       },
       "home_companion": {
         "label": "Assistente domestico",
-        "description": "Sperimentale: uno strumento per attività su luci, ventilatori e sensori di base selezionati. Usa il modello di conversazione Voce.",
-        "setup": "Scegli un fornitore e un modello nelle impostazioni Voce. Concedi LETTURA o SCRITTURA a luci e ventilatori tramite il normale albero dei permessi; i sensori selezionati di temperatura, umidità, illuminamento, potenza, energia e batteria sono di sola lettura. Le autorizzazioni per dominio, dispositivo ed entità seguono le stesse regole di ereditarietà e diniego delle altre persona. Accesso diretto e annuncio di tutti gli strumenti sono disattivati. Modificare le capacità non amplia il catalogo interno fisso."
+        "description": "Pensato per Agent Chat e Voice: uno strumento per consultare informazioni sulla casa e controllare i dispositivi. Usa il modello di conversazione di Voice.",
+        "setup": "Scegli un provider e un modello nelle impostazioni vocali. Concedi accesso in lettura o scrittura tramite il normale albero dei permessi. Le capacità abilitano o disabilitano l’accesso nel catalogo domestico; gli strumenti di configurazione e creazione restano indisponibili. Il pass-through e l’annuncio di tutti gli strumenti sono disabilitati."
       }
     },
     "inject": {
@@ -2063,7 +2063,7 @@
     },
     "toolRouting": {
       "label": "Verifica della scelta degli strumenti",
-      "help": "Condivide il contesto dell’attività con il fornitore di decisioni. Osserva registra i suggerimenti; Consiglia può richiedere una nuova pianificazione per turno. Permessi e approvazioni restano validi.",
+      "help": "Condivide il contesto dell’attività con il fornitore di decisioni. Osserva registra i suggerimenti; Consiglia può richiedere una nuova pianificazione per turno. Permessi e approvazioni restano validi. Home Companion non usa la verifica del provider di decisioni.",
       "accountRequired": "Seleziona un account del fornitore di decisioni per attivare la verifica.",
       "unqualified": "I consigli attivi non sono disponibili finché questo modello non supera la valutazione della scelta degli strumenti.",
       "qualified": "I consigli attivi sono convalidati per: {languages}. Per le altre lingue continua il modello di pianificazione.",

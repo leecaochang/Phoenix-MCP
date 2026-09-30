@@ -341,3 +341,12 @@ def test_telemetry_cannot_retain_private_values():
     result = runtime.summary()
     result['tool_routing']['chat']['reasons']['private'] = 1
     assert 'private' not in repr(runtime.summary())
+
+
+@pytest.mark.parametrize('surface', ['chat', 'voice', 'ai_task'])
+def test_companion_cannot_admit_decision_review(home, surface):
+    data, token, _, _ = home
+    token.persona = 'home_companion'
+    with patch.object(tool_routing.RoutingAuthority, 'capture', side_effect=AssertionError('Must not capture review authority')):
+        state = tool_routing.create_review_state(data, token, surface)
+    assert state.authority is None

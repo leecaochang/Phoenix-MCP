@@ -15,7 +15,6 @@ export interface PersonaDef {
 }
 
 export const PERSONAS: PersonaDef[] = [
-  { key: "home_companion", labelKey: "personas.home_companion.label", descriptionKey: "personas.home_companion.description" },
   {
     key: "read_only",
     labelKey: "personas.read_only.label",
@@ -61,6 +60,7 @@ export const PERSONAS: PersonaDef[] = [
     labelKey: "personas.esphome.label",
     descriptionKey: "personas.esphome.description",
   },
+  { key: "home_companion", labelKey: "personas.home_companion.label", descriptionKey: "personas.home_companion.description" },
   {
     key: "custom",
     labelKey: "personas.custom.label",
@@ -86,7 +86,7 @@ export const PERSONA_CAP_DEFAULTS: Record<Persona, Record<string, string> | null
     "cap_blueprint_write": "deny",
     "cap_scene_write": "deny",
     "cap_helper_write": "deny",
-    "cap_physical_control": "deny",
+    "cap_physical_control": "confirm",
     "cap_restart": "deny",
     "cap_integration_write": "deny",
     "cap_integration_reconfigure": "deny",

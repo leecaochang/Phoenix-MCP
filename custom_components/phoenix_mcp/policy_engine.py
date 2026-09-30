@@ -120,13 +120,15 @@ def resolve(entity_id: str, token: TokenRecord, hass: HomeAssistant) -> Permissi
     if entry is not None and entry.platform == DOMAIN:
         return Permission.NO_ACCESS
 
-    from .const import PERSONA_HOME_COMPANION, HOME_COMPANION_SENSOR_CLASSES
+    from .const import (PERSONA_HOME_COMPANION, HOME_COMPANION_SENSOR_CLASSES,
+                        HOME_COMPANION_CONTROL_DOMAINS, HOME_COMPANION_READ_DOMAINS)
     companion = token.persona == PERSONA_HOME_COMPANION
     if companion:
         state = hass.states.get(entity_id)
         # Restrict device types without changing the shared permission tree.
-        if (token.pass_through or state is None or (domain not in {"light", "fan"} and
-                    (domain != "sensor" or state.attributes.get("device_class") not in HOME_COMPANION_SENSOR_CLASSES))):
+        if (token.pass_through or state is None
+                or domain not in HOME_COMPANION_CONTROL_DOMAINS | HOME_COMPANION_READ_DOMAINS
+                or (domain == "sensor" and state.attributes.get("device_class") not in HOME_COMPANION_SENSOR_CLASSES)):
             return Permission.NO_ACCESS
 
     # Pass-through bypasses all entity permission resolution
@@ -150,7 +152,7 @@ def resolve(entity_id: str, token: TokenRecord, hass: HomeAssistant) -> Permissi
         if node is None:
             continue
         if node.state == "GREEN":
-            return Permission.READ if companion and domain == "sensor" else Permission.WRITE
+            return Permission.READ if companion and domain in HOME_COMPANION_READ_DOMAINS else Permission.WRITE
         if node.state == "YELLOW":
             return Permission.READ
 

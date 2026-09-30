@@ -169,8 +169,8 @@
       },
       "home_companion": {
         "label": "Asystent domowy",
-        "description": "Eksperymentalne: jedno narzędzie zadań dla wybranych świateł, wentylatorów i podstawowych czujników. Używa modelu rozmów głosowych.",
-        "setup": "Wybierz dostawcę i model w ustawieniach głosu. Nadaj ODCZYT lub ZAPIS światłom i wentylatorom za pomocą zwykłego drzewa uprawnień; wybrane czujniki temperatury, wilgotności, oświetlenia, mocy, energii i baterii pozostają tylko do odczytu. Uprawnienia domen, urządzeń i encji podlegają tym samym regułom dziedziczenia i odmowy co w innych personach. Tryb bezpośredni i udostępnianie wszystkich narzędzi są wyłączone. Zmiany możliwości nie rozszerzają stałego katalogu wewnętrznego."
+        "description": "Do Agent Chat i Voice: jedno narzędzie do odczytu informacji o domu i sterowania urządzeniami. Korzysta z modelu konwersacji Voice.",
+        "setup": "Wybierz dostawcę i model w ustawieniach głosu. Nadaj dostęp do odczytu lub zapisu przez standardowe drzewo uprawnień. Funkcje włączają lub wyłączają dostęp w katalogu domowym; narzędzia konfiguracji i tworzenia pozostają niedostępne. Tryb bezpośredni i ogłaszanie wszystkich narzędzi są wyłączone."
       }
     },
     "mesaSuggestion": {
@@ -2161,7 +2161,7 @@
     },
     "toolRouting": {
       "label": "Weryfikacja wyboru narzędzia",
-      "help": "Udostępnia kontekst zadania dostawcy decyzji. Obserwacja zapisuje zalecenia; Doradzanie może poprosić o ponowne planowanie raz na turę. Uprawnienia i zatwierdzenia nadal obowiązują.",
+      "help": "Udostępnia kontekst zadania dostawcy decyzji. Obserwacja zapisuje zalecenia; Doradzanie może poprosić o ponowne planowanie raz na turę. Uprawnienia i zatwierdzenia nadal obowiązują. Home Companion nie korzysta z oceny dostawcy decyzji.",
       "accountRequired": "Wybierz konto dostawcy decyzji, aby włączyć weryfikację.",
       "unqualified": "Aktywne doradzanie będzie dostępne dopiero po zaliczeniu przez ten model oceny wyboru narzędzi.",
       "qualified": "Aktywne doradzanie zweryfikowano dla języków: {languages}. W pozostałych językach zadanie kontynuuje model planujący.",

@@ -2340,17 +2340,42 @@ TOOL_ROUTING_REASONS = frozenset({
     "model_unverified", "too_many_targets", "category_mismatch",
 })
 
-# The experimental delegated persona has a fixed, bounded internal catalog.
+# The delegated persona has a bounded household catalog, narrowed by capabilities.
 HOME_COMPANION_TOOLS = frozenset({
     "get_capability_summary", "search_entities", "describe_entity", "describe_area",
     "get_state", "get_states", "get_history", "get_statistics", "compare_states",
-    "compare_entities", "intent__HassTurnOn", "intent__HassTurnOff",
-    "light__HassLightSet", "fan__HassFanSetSpeed",
+    "compare_entities", "get_calendar_events", "get_overview", "get_relationships",
+    "recent_activity", "list_areas", "list_floors", "list_devices", "get_device",
+    "homeassistant__GetLiveContext", "llm__GetDateTime", "intent__HassTurnOn", "intent__HassTurnOff",
+    "light__HassLightSet", "fan__HassFanSetSpeed", "climate__HassClimateSetTemperature",
+    "intent__HassSetPosition", "media_player__HassSetVolume", "media_player__HassSetVolumeRelative",
+    "media_player__HassMediaPause", "media_player__HassMediaUnpause", "media_player__HassMediaNext",
+    "media_player__HassMediaPrevious", "media_player__HassMediaSearchAndPlay",
+    "media_player__HassMediaPlayerMute", "media_player__HassMediaPlayerUnmute",
+    "intent__HassCancelAllTimers", "vacuum__HassVacuumStart", "vacuum__HassVacuumReturnToBase",
+    "vacuum__HassVacuumCleanArea", "intent__HassStopMoving",
 })
-HOME_COMPANION_CONTROL_TOOLS = frozenset({"intent__HassTurnOn", "intent__HassTurnOff", "light__HassLightSet", "fan__HassFanSetSpeed"})
+HOME_COMPANION_CONTROL_TOOLS = frozenset({
+    name for name in HOME_COMPANION_TOOLS if "__Hass" in name
+})
+HOME_COMPANION_CONTROL_DOMAINS = frozenset({
+    "light", "fan", "switch", "input_boolean", "climate", "cover", "valve",
+    "media_player", "vacuum", "humidifier", "timer",
+})
+HOME_COMPANION_READ_DOMAINS = frozenset({"sensor", "binary_sensor", "weather", "calendar", "sun"})
+HOME_COMPANION_TOOL_DOMAINS = {
+    "light__HassLightSet": ("light",), "fan__HassFanSetSpeed": ("fan",),
+    "climate__HassClimateSetTemperature": ("climate",),
+    "intent__HassSetPosition": ("cover", "valve"), "intent__HassStopMoving": ("cover",),
+    "intent__HassCancelAllTimers": ("timer",),
+    **{name: ("media_player",) for name in HOME_COMPANION_CONTROL_TOOLS if name.startswith("media_player__")},
+    **{name: ("vacuum",) for name in HOME_COMPANION_CONTROL_TOOLS if name.startswith("vacuum__")},
+}
 HOME_COMPANION_MAX_FORMAT_CORRECTIONS = 1
 HOME_COMPANION_FORMAT_ERROR_CODES = frozenset({'provider_malformed', 'bad_tool_call'})
 HOME_COMPANION_GROUP_WORDS = frozenset({
+    "switches", "thermostats", "covers", "blinds", "shades", "valves", "speakers", "players", "vacuums",
+    "humidifiers", "timers", "heaters",
     "all", "both", "every", "lights", "fans", "alle", "beide", "lichter", "lampen", "ventilatoren",
     "todos", "todas", "ambas", "ambos", "luces", "ventiladores", "tous", "toutes", "lumières", "lampes",
     "ventilateurs", "tutti", "tutte", "luci", "ventilatori", "allemaal", "lichten",
@@ -2371,6 +2396,16 @@ HOME_COMPANION_CONTEXT_PATTERNS = {
     'ko': r'그것|이것|저것|이전',
 }
 HOME_COMPANION_GENERIC_TARGET_WORDS = HOME_COMPANION_GROUP_WORDS | frozenset({
+    "climate", "thermostat", "cover", "blind", "shade", "valve", "media", "player", "speaker", "vacuum",
+    "humidifier", "timer", "heater", "input", "boolean", "temperature", "volume", "position", "set",
+    "open", "close", "stop", "start", "pause", "play", "mute", "unmute", "cancel",
+    "schalter", "thermostate", "thermostat", "rollladen", "rollläden", "ventil", "lautsprecher", "staubsauger",
+    "interruptor", "interruptores", "termostato", "termostatos", "persiana", "persianas", "válvula", "altavoz",
+    "interrupteur", "interrupteurs", "volet", "volets", "vanne", "aspirateur",
+    "interruttore", "interruttori", "tapparella", "tapparelle", "valvola", "altoparlante", "aspirapolvere",
+    "schakelaar", "schakelaars", "thermostaat", "jaloezie", "jaloezieën", "klep", "luidspreker", "stofzuiger",
+    "przełącznik", "przełączniki", "termostat", "roleta", "rolety", "zawór", "głośnik", "odkurzacz",
+    "выключатель", "выключатели", "термостат", "термостаты", "жалюзи", "клапан", "динамик", "пылесос",
     'light', 'lamp', 'lamps', 'fan', 'turn', 'switch', 'on', 'off', 'the', 'in', 'of', 'my',
     'licht', 'lampe', 'ein', 'aus', 'schalte', 'luz', 'enciende', 'apaga', 'las', 'los',
     'lumière', 'allume', 'éteins', 'les', 'la', 'luce', 'accendi', 'spegni', 'le', 'i',
@@ -2404,8 +2439,8 @@ HOME_COMPANION_CLIENT_IP = "home_companion"
 HOME_COMPANION_MAX_ROUNDS = 4
 HOME_COMPANION_MAX_CALLS = 8
 HOME_COMPANION_MAX_REQUEST_BYTES = 4096
-HOME_COMPANION_MAX_CATALOG_BYTES = 24576
-HOME_COMPANION_MAX_CONTEXT_BYTES = 16384
+HOME_COMPANION_MAX_CATALOG_BYTES = 65536
+HOME_COMPANION_MAX_CONTEXT_BYTES = 65536
 HOME_COMPANION_MAX_REPORT_ENTITIES = 128
 HOME_COMPANION_MAX_REPORT_NAMES = 8
 HOME_COMPANION_TIMEOUT_SECONDS = 120

@@ -233,3 +233,53 @@ def test_mismatch_missing_read_and_bounded_exception_names_do_not_disappear():
     report = build_report('completed', '', evidence, 'en', detail='concise')
     assert 'Not verified (11):' in report['message']
     assert 'Turned on' not in report['message'] and report['verification'] == 'not_verified'
+
+
+@pytest.mark.parametrize('tool,eid,args,device_state,attrs', [
+    ('climate__HassClimateSetTemperature', 'climate.one', {'temperature': 21}, 'heat', {'temperature': 20}),
+    ('intent__HassTurnOn', 'climate.one', {}, 'heat', {}),
+    ('intent__HassSetPosition', 'cover.one', {'position': 40}, 'open', {'current_position': 100}),
+    ('media_player__HassMediaNext', 'media_player.one', {}, 'playing', {}),
+    ('media_player__HassSetVolumeRelative', 'media_player.one', {'volume_step': 10}, 'playing', {'volume_level': .5}),
+])
+def test_household_state_alone_does_not_prove_requested_settings(tool, eid, args, device_state, attrs):
+    evidence = ResponseEvidence()
+    evidence.observe(tool, 'allowed', receipt((eid,)), args)
+    evidence.observe('get_state', 'allowed', result({'entity_id': eid, 'state': device_state, 'attributes': attrs}))
+    report = build_report('completed', 'All settings verified.', evidence, 'en')
+    assert report['execution'] == 'accepted' and report['verification'] == 'not_verified'
+    assert report['retry_policy'] == 'no_replay' and report['next_step'] == 'check_state'
+    assert 'All settings verified.' not in report['message']
+
+
+@pytest.mark.parametrize('count', [0, 2])
+def test_timer_receipt_cannot_verify_other_controls_or_accept_invented_counts(count):
+    evidence = ResponseEvidence()
+    evidence.observe('intent__HassCancelAllTimers', 'allowed', result({'response_type': 'action_done',
+        'data': {'success': [], 'failed': []}, 'speech_slots': {'canceled': count}}))
+    evidence.observe('intent__HassTurnOn', 'allowed', receipt(), {})
+    state(evidence)
+    report = build_report('completed', 'Canceled 999 timers.', evidence, 'en')
+    assert report['execution'] == 'accepted' and report['verification'] == 'not_verified'
+    assert '999' not in report['message'] and report['next_step'] == 'check_state'
+
+
+@pytest.mark.parametrize('tool,eid,args,attrs', [
+    ('climate__HassClimateSetTemperature', 'climate.one', {'temperature': 0}, {'temperature': False}),
+    ('media_player__HassSetVolume', 'media_player.one', {'volume_level': 0}, {'volume_level': False}),
+    ('media_player__HassMediaPlayerMute', 'media_player.one', {}, {'is_volume_muted': 1}),
+])
+def test_wrong_shaped_household_attributes_cannot_verify_settings(tool, eid, args, attrs):
+    evidence = ResponseEvidence()
+    evidence.observe(tool, 'allowed', receipt((eid,)), args)
+    evidence.observe('get_state', 'allowed', result({'entity_id': eid, 'state': 'on', 'attributes': attrs}))
+    assert not evidence.verified
+
+
+@pytest.mark.parametrize('slots', [None, 'bad', [], {'canceled': True}])
+def test_malformed_timer_receipt_never_claims_acceptance(slots):
+    evidence = ResponseEvidence()
+    evidence.observe('intent__HassCancelAllTimers', 'allowed', result({'response_type': 'action_done',
+        'data': {'success': [], 'failed': []}, 'speech_slots': slots}))
+    report = build_report('completed', 'Done.', evidence, 'en')
+    assert report['execution'] == 'uncertain' and report['verification'] == 'not_verified'

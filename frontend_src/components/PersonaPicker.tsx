@@ -80,7 +80,14 @@ export function PersonaPicker(props: Props) {
               disabled={saving}
               aria-pressed={active}
             >
-              <div className="persona-card-label">{t(p.labelKey)}</div>
+              <div className="persona-card-label">
+                {t(p.labelKey)}
+                {p.key === "home_companion" && (
+                  <svg className="persona-card-marker" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
+                    <path d="m12 2.5 2.94 5.96 6.58.96-4.76 4.64 1.12 6.55L12 17.52l-5.88 3.09 1.12-6.55L2.48 9.42l6.58-.96Z" />
+                  </svg>
+                )}
+              </div>
               <div className="persona-card-desc">{t(p.descriptionKey)}</div>
               {p.key === "esphome" && esphome && !esphome.integration && !esphome.builder && (
                 <div className="persona-card-note">{t("personas.noEsphome")}</div>

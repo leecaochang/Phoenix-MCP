@@ -44,7 +44,7 @@ async def companion(hass, token_store):
         data.sensor_flush_cancel()
 
 
-async def rpc(hass, companion, name='phoenix_request', args=None, method='tools/call'):
+async def rpc(hass, companion, name='home_request', args=None, method='tools/call'):
     data, token, _, _ = companion
     return await mcp_view._dispatch_mcp(method,'id',{'name':name,'arguments':args or {'request':'Read the temperature.'}},token,hass,data,'test','http://test')
 
@@ -89,15 +89,15 @@ async def test_persona_is_persisted_and_never_inferred(companion):
 
 async def test_single_external_catalog_and_no_resource_backdoor(hass,companion):
     result = await rpc(hass,companion,method='tools/list')
-    assert [t['name'] for t in result[0]['result']['tools']] == ['phoenix_request']
-    assert [t['name'] for t in agentcli.build_agent_tool_list(companion[1],companion[0],'chat')] == ['phoenix_request']
+    assert [t['name'] for t in result[0]['result']['tools']] == ['home_request']
+    assert [t['name'] for t in agentcli.build_agent_tool_list(companion[1],companion[0],'chat')] == ['home_request']
     for method in ['resources/list','prompts/list','resources/templates/list']:
         assert list((await rpc(hass,companion,method=method))[0]['result'].values()) == [[]]
     for method in ['resources/read','prompts/get']:
         assert 'error' in (await rpc(hass,companion,method=method))[0]
 
 
-@pytest.mark.parametrize('name',['get_state','read_file','call_service','HassTurnOn','intent__HassTurnOn'])
+@pytest.mark.parametrize('name',['phoenix_request','get_state','read_file','call_service','HassTurnOn','intent__HassTurnOn'])
 async def test_guessed_external_calls_never_dispatch(hass,companion,name):
     with patch.object(ServiceRegistry,'async_call',AsyncMock()) as service:
         result = await rpc(hass,companion,name,{'entity_id':'light.selected'})
@@ -228,7 +228,7 @@ async def test_failed_control_still_blocks_replacement_after_discovery(hass,comp
     service.assert_not_awaited()
 
 
-@pytest.mark.parametrize('name',['read_file','phoenix_request','call_service'])
+@pytest.mark.parametrize('name',['read_file','home_request','call_service'])
 async def test_internal_hallucinations_and_recursion_refused(hass,companion,monkeypatch,name):
     scripted(monkeypatch,[[(name,{'request':'again'})],json.dumps({'status':'refused','message':'Unavailable.'})])
     with patch.object(ServiceRegistry,'async_call',AsyncMock()) as service:
@@ -740,6 +740,44 @@ async def test_context_only_request_cannot_actuate_even_an_already_off_device(ha
     assert not data.store.get_pending_approvals() and not data.agent_recovery.records(token.id)
 
 
+@pytest.mark.parametrize('domain,noun', [
+    ('switch', 'switch'), ('climate', 'climate'), ('climate', 'thermostat'),
+    ('cover', 'cover'), ('cover', 'blind'), ('valve', 'valve'),
+    ('media_player', 'media player'), ('vacuum', 'vacuum'), ('humidifier', 'humidifier'),
+    ('input_boolean', 'input boolean'),
+])
+async def test_household_device_nouns_cannot_supply_missing_context(hass, companion, monkeypatch, domain, noun):
+    data, token, _, _ = companion
+    eid = domain + '.household'
+    hass.states.async_set(eid, 'off', {'friendly_name': 'Household ' + noun})
+    token.permissions.entities[eid] = PermissionNode('GREEN')
+    token.cap_physical_control = 'allow'
+    scripted(monkeypatch, [[('intent__HassTurnOff', {'name': eid})]])
+    with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
+        report = payload(await rpc(hass, companion, args={'request': 'Turn that ' + noun + ' off.'}))
+    assert report['status'] == 'clarification_needed' and report['execution'] == 'not_attempted'
+    service.assert_not_awaited()
+    assert not data.store.get_pending_approvals() and not data.agent_recovery.records(token.id)
+
+
+@pytest.mark.parametrize('utterance,expected', [
+    ('Open the office cover.', True), ('Open the office covers.', False),
+    ('Open those covers.', True),
+])
+async def test_plural_household_targets_do_not_invent_context_or_a_single_selection(hass, companion, utterance, expected):
+    _, token, _, _ = companion
+    token.cap_physical_control = 'allow'
+    for part in ('left', 'right'):
+        eid = 'cover.office_' + part
+        hass.states.async_set(eid, 'closed', {'friendly_name': 'Office cover ' + part})
+        token.permissions.entities[eid] = PermissionNode('GREEN')
+    context = home._turn.set(home.CompanionTurn(token.id, request=utterance))
+    try:
+        assert home.ambiguous_control(token, hass, 'intent__HassSetPosition') is expected
+    finally:
+        home._turn.reset(context)
+
+
 @pytest.mark.parametrize('utterance,alias', [('Turn this Selected lamp on.', None), ('Turn those Sunbeam lights on.', 'Sunbeam')])
 async def test_context_reference_with_explicit_scoped_name_or_alias_can_execute(hass, companion, monkeypatch, utterance, alias):
     from homeassistant.helpers import entity_registry as er
@@ -886,13 +924,14 @@ async def test_count_report_correction_cannot_dispatch_or_repeat(hass, companion
     assert not companion[0].agent_recovery.records(companion[1].id)
 
 
+@pytest.mark.parametrize('mode', ['off', 'observe', 'advise'])
 @pytest.mark.parametrize('discovery', ['search_entities', 'get_capability_summary'])
-async def test_observe_keeps_dispatch_and_intact_private_context(hass, companion, monkeypatch, discovery):
+async def test_companion_never_creates_or_calls_decision_review(hass, companion, monkeypatch, discovery, mode):
     from custom_components.phoenix_mcp.decision_provider import DecisionProvider
 
     data, token, store, _ = companion
     account = await store.add('typesafe', {'api_key': 'decision-test-key', 'model': 'jev-latest'})
-    await data.store.async_patch_settings(decision_provider_id=account, voice_agent_tool_routing_mode='observe')
+    await data.store.async_patch_settings(decision_provider_id=account, voice_agent_tool_routing_mode=mode)
     applied = []
 
     async def turn_on(call):
@@ -905,24 +944,116 @@ async def test_observe_keeps_dispatch_and_intact_private_context(hass, companion
         [('light__HassLightSet', {'domain': ['light'], 'brightness': 40})],
         json.dumps({'status': 'completed', 'message': 'Done.'})])
     choose = AsyncMock(return_value={'tool': 'get_history', 'model': 'synthetic-review-model'})
-    with patch.object(DecisionProvider, 'select_tool', choose):
+    with patch.object(DecisionProvider, 'select_tool', choose), \
+            patch('custom_components.phoenix_mcp.tool_routing.create_review_state', side_effect=AssertionError('Companion must skip review state')), \
+            patch('custom_components.phoenix_mcp.tool_routing.async_review_tools', side_effect=AssertionError('Companion must skip review')):
         result = payload(await rpc(hass, companion, args={'request': 'Set selected lights to 40%.'}))
 
     assert result['status'] == 'completed'
     assert len(applied) == 1 and applied[0]['entity_id'] == ['light.selected']
     assert applied[0]['brightness_pct'] == 40
     assert not data.store.get_pending_approvals() and not data.agent_recovery.blocks(token.id)
-    assert choose.await_count == (2 if discovery == 'search_entities' else 1)
-    snapshot = choose.call_args.args[1]
-    assert {tool['name'] for tool in snapshot['catalog'].values()} == HOME_COMPANION_TOOLS
-    assert 'Each request is stateless.' in snapshot['constraints']
-    assert snapshot['history'][0]['content'] == 'Set selected lights to 40%.'
-    reasons = data.decision_shadow.summary()['tool_routing']['voice']['reasons']
-    if discovery == 'search_entities':
-        assert len(snapshot['history']) == 4
-        assert snapshot['pending'][0]['name'] == 'light__HassLightSet'
-        assert 'light.selected' in json.dumps(snapshot['history'][2])
-        assert reasons == {'alternative': 2}
-    else:
-        assert snapshot['pending'][0]['name'] == 'get_capability_summary'
-        assert reasons == {'alternative': 1, 'context_unavailable': 1}
+    choose.assert_not_awaited()
+    assert data.decision_shadow.summary().get('tool_routing', {}) == {}
+
+
+@pytest.mark.parametrize('domain', ['switch', 'climate', 'cover', 'valve', 'media_player', 'vacuum', 'timer'])
+async def test_household_domains_follow_read_write_and_red_scope(hass, companion, domain):
+    _, token, _, _ = companion
+    eid = domain + '.household'
+    hass.states.async_set(eid, 'off')
+    token.permissions.domains[domain] = PermissionNode('YELLOW')
+    assert resolve(eid, token, hass) == Permission.READ
+    token.permissions.domains[domain] = PermissionNode('GREEN')
+    assert resolve(eid, token, hass) == Permission.WRITE
+    token.permissions.entities[eid] = PermissionNode('GREEN')
+    token.permissions.domains[domain] = PermissionNode('RED')
+    assert resolve(eid, token, hass) == Permission.DENY
+
+
+@pytest.mark.parametrize('cap', ['cap_registry_read', 'cap_search'])
+def test_household_catalog_is_capability_filtered_but_cannot_add_authoring(companion, cap):
+    data, token, _, _ = companion
+    context = home._turn.set(home.CompanionTurn(token.id))
+    try:
+        enabled = {tool['name'] for tool in agentcli.build_agent_tool_list(token, data, 'voice')}
+        setattr(token, cap, 'deny')
+        narrowed = {tool['name'] for tool in agentcli.build_agent_tool_list(token, data, 'voice')}
+        assert narrowed < enabled
+        assert enabled == HOME_COMPANION_TOOLS
+        token.cap_filesystem = token.cap_automation_write = token.cap_restart = 'allow'
+        assert {tool['name'] for tool in agentcli.build_agent_tool_list(token, data, 'voice')} == narrowed
+    finally:
+        home._turn.reset(context)
+
+
+HOUSEHOLD_ACTIONS = [
+    ('switch', 'intent__HassTurnOn', {'name': 'switch.household'}, 'homeassistant', 'turn_on', 'on', {}),
+    ('climate', 'climate__HassClimateSetTemperature', {'name': 'climate.household', 'temperature': 21}, 'climate', 'set_temperature', 'heat', {'temperature': 21}),
+    ('cover', 'intent__HassSetPosition', {'name': 'cover.household', 'position': 40}, 'cover', 'set_cover_position', 'open', {'current_position': 40}),
+    ('media_player', 'media_player__HassSetVolume', {'name': 'media_player.household', 'volume_level': 30}, 'media_player', 'volume_set', 'playing', {'volume_level': .3}),
+    ('vacuum', 'vacuum__HassVacuumStart', {'name': 'vacuum.household'}, 'vacuum', 'start', 'cleaning', {'supported_features': 8192}),
+]
+
+
+@pytest.mark.parametrize('domain,tool,args,service_domain,service_name,final_state,attrs', HOUSEHOLD_ACTIONS)
+@pytest.mark.parametrize('narration_fails', [False, True])
+async def test_household_receipts_readback_and_provider_failure_do_not_replay(hass, companion, monkeypatch,
+        domain, tool, args, service_domain, service_name, final_state, attrs, narration_fails):
+    data, token, _, _ = companion
+    await data.store.async_patch_token(token.id, cap_physical_control='allow')
+    eid = domain + '.household'
+    token.permissions.entities[eid] = PermissionNode('GREEN')
+    hass.states.async_set(eid, 'off', {'friendly_name': 'Household device', **attrs})
+    applied = []
+
+    async def operate(call):
+        applied.append(call.data)
+        hass.states.async_set(eid, final_state, {'friendly_name': 'Household device', **attrs})
+
+    hass.services.async_register(service_domain, service_name, operate)
+    ending = {'type': agentcli.EV_ERROR, 'code': 'provider_error', 'message': 'Failed.'} if narration_fails else json.dumps({'status': 'completed', 'message': 'Everything physically worked.'})
+    scripted(monkeypatch, [[(tool, args)], ending])
+    report = payload(await rpc(hass, companion, args={'request': 'Operate ' + eid + ' with the requested settings.'}))
+    assert len(applied) == 1 and applied[0]['entity_id'] == [eid]
+    assert report['execution'] == 'accepted' and report['retry_policy'] == 'no_replay'
+    assert report['verification'] == ('not_verified' if domain == 'vacuum' else 'confirmed')
+    assert 'physically' not in report['message']
+    assert not data.agent_recovery.blocks(token.id)
+
+
+@pytest.mark.parametrize('mode,expected', [('allow', 'completed'), ('confirm', 'pending_approval'), ('deny', 'refused')])
+async def test_companion_cover_capability_gate_is_preserved(hass, companion, monkeypatch, mode, expected):
+    data, token, _, _ = companion
+    await data.store.async_patch_token(token.id, cap_physical_control=mode)
+    token.permissions.entities['cover.household'] = PermissionNode('GREEN')
+    hass.states.async_set('cover.household', 'closed', {'friendly_name': 'Household cover', 'current_position': 0})
+    args = {'name': 'cover.household', 'position': 40}
+    scripted(monkeypatch, [[('intent__HassSetPosition', args)], json.dumps({'status': 'completed', 'message': 'Done.'})])
+    with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
+        report = payload(await rpc(hass, companion, args={'request': 'Set cover.household to 40 percent.'}))
+    assert report['status'] == expected
+    assert service.await_count == (mode == 'allow')
+    assert bool(data.store.get_pending_approvals()) == (mode == 'confirm')
+    assert not data.agent_recovery.blocks(token.id)
+
+
+@pytest.mark.parametrize('tool,args', [
+    ('climate__HassClimateSetTemperature', {'name': 'climate.household', 'temperature': True}),
+    ('intent__HassSetPosition', {'name': 'cover.household', 'position': 101}),
+    ('media_player__HassSetVolume', {'name': 'media_player.household', 'volume_level': -1}),
+    ('media_player__HassSetVolumeRelative', {'name': 'media_player.household', 'volume_step': True}),
+    ('media_player__HassMediaPause', {'name': 'media_player.household', 'domain': ['light']}),
+    ('media_player__HassMediaSearchAndPlay', {'name': 'media_player.household'}),
+    ('vacuum__HassVacuumCleanArea', {}),
+    ('intent__HassCancelAllTimers', {'area': []}),
+    ('intent__HassStopMoving', {'domain': ['valve']}),
+])
+async def test_invalid_household_proposals_are_withheld_before_write_journaling(hass, companion, monkeypatch, tool, args):
+    data, token, _, _ = companion
+    scripted(monkeypatch, [[(tool, args)], [(tool, args)]])
+    with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
+        report = payload(await rpc(hass, companion))
+    assert report['execution'] == 'not_attempted'
+    service.assert_not_awaited()
+    assert not data.store.get_pending_approvals() and not data.agent_recovery.records(token.id)
