@@ -203,15 +203,15 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
             "claude_bytes": 85104,
             "openai_bytes": 87859,
         },
-            "announce_all": {
-                "tool_count": 155,
-                "canonical_bytes": 156531,
-                "claude_bytes": 140534,
-                "openai_bytes": 145029,
+        "announce_all": {
+            "tool_count": 158,
+            "canonical_bytes": 159732,
+            "claude_bytes": 143426,
+            "openai_bytes": 148008,
             },
     }
-    assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 155
-    assert mcp_view.tool_catalog_counts()["total"] == 161
+    assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 158
+    assert mcp_view.tool_catalog_counts()["total"] == 164
 
 
 def test_every_public_parameter_has_a_description():

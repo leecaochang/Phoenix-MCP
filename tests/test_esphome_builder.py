@@ -15,7 +15,9 @@ import pytest
 from aiohttp import web
 
 from custom_components.phoenix_mcp import esphome_builder
-from custom_components.phoenix_mcp.const import ESPHOME_BUILDER_VERIFIED_VERSION
+from custom_components.phoenix_mcp.const import (
+    ESPHOME_BUILDER_VERIFIED_VERSION, ESPHOME_COMPILER_VERIFIED_VERSION,
+)
 from custom_components.phoenix_mcp.esphome_builder import (
     ESPHOME_BUILDER_ALLOWED_COMMANDS,
     BuilderAuthRequired,
@@ -30,7 +32,7 @@ from custom_components.phoenix_mcp.esphome_builder import (
 # appended to their errors. The mismatch case gets its own tests below.
 SERVER_INFO = {
     "server_version": ESPHOME_BUILDER_VERIFIED_VERSION,
-    "esphome_version": "2026.3.1",
+    "esphome_version": ESPHOME_COMPILER_VERIFIED_VERSION,
     "port": 6052,
     "ha_addon": True,
     "ha_ingress": False,
@@ -372,7 +374,13 @@ async def test_follow_job_speaks_the_same_output_result_envelope(hass, aiohttp_c
     the PLURAL follow_jobs and would need a different reader.
     """
     fake = FakeDeviceBuilder(replies={
-        "firmware/follow_job": stream("Compiling .pioenvs/x/src/main.cpp", "Success", code=0),
+        "firmware/follow_job": [
+            {"message_id": "1", "event": "output", "data": "Compiling .pioenvs/x/src/main.cpp"},
+            {"message_id": "1", "event": "result", "data": {
+                "status": "completed", "exit_code": 0, "error": None,
+                "queued_update_armed": False,
+            }},
+        ],
     })
     url = await connect(fake, aiohttp_client, monkeypatch)
 
@@ -384,6 +392,31 @@ async def test_follow_job_speaks_the_same_output_result_envelope(hass, aiohttp_c
     assert res.success is True
     assert res.exit_code == 0
     assert "Compiling" in res.output
+    assert res.result["queued_update_armed"] is False
+    assert res.esphome_version == ESPHOME_COMPILER_VERIFIED_VERSION
+
+
+@pytest.mark.parametrize("status,exit_code", [("failed", 1), ("cancelled", None)])
+async def test_follow_terminal_failure_shape(hass, aiohttp_client, monkeypatch, socket_enabled,
+                                            status, exit_code):
+    fake = FakeDeviceBuilder(replies={"firmware/follow_job": {
+        "message_id": "1", "event": "result", "data": {
+            "status": status, "exit_code": exit_code, "error": "ended",
+            "queued_update_armed": False,
+        },
+    }})
+    url = await connect(fake, aiohttp_client, monkeypatch)
+    res = await async_builder_command(hass, url, "firmware/follow_job", {"job_id": "a"},
+                                      timeout_seconds=5, collect_output=True)
+    assert res.success is False
+    assert res.exit_code == exit_code
+
+
+def test_version_diagnostics_keep_builder_and_compiler_separate():
+    assert version_mismatch_note("x", "1.14.9", "2026.9.1") is None
+    note = version_mismatch_note("x", "1.14.9", "2099.1.0")
+    assert "ESPHome compiler 2099.1.0" in note
+    assert "Device Builder 1.14.9" not in note
 
 
 async def test_capture_returns_what_arrived_before_the_deadline(hass, aiohttp_client, monkeypatch, socket_enabled):
@@ -526,6 +559,7 @@ def test_allowlist_is_exactly_the_reads_plus_the_firmware_job_model():
     """
     assert ESPHOME_BUILDER_ALLOWED_COMMANDS == {
         # Reads.
+        "devices/list",
         "devices/validate",
         "boards/get_board",
         "boards/get_boards",
@@ -556,7 +590,7 @@ async def test_capture_ends_the_stream_politely_when_the_addon_names_one(
     own logs with a scary line for a completely normal end of a window.
     """
     fake = FakeDeviceBuilder(keep_open=True, replies={"devices/logs": [
-        {"message_id": "1", "stream_id": "s-42", "event": "output", "data": "boot"},
+        {"message_id": "1", "event": "output", "data": "boot"},
     ]})
     url = await connect(fake, aiohttp_client, monkeypatch)
 
@@ -573,27 +607,25 @@ async def test_capture_ends_the_stream_politely_when_the_addon_names_one(
         await asyncio.sleep(0.01)
     stops = [f for f in fake.received if f["command"] == "devices/stop_stream"]
     assert stops, f"no stop_stream sent: {fake.received}"
-    assert stops[0]["args"] == {"stream_id": "s-42"}
+    assert stops[0]["args"] == {"stream_id": "1"}
+    assert stops[0]["message_id"] == "2"
 
 
-async def test_capture_without_a_stream_id_just_closes(
+async def test_capture_of_a_silent_stream_still_sends_stop(
     hass, aiohttp_client, monkeypatch, socket_enabled
 ):
-    """The id's carrier is undocumented, so absence must degrade to the old
-    behaviour rather than inventing one or failing the capture.
-    """
-    fake = FakeDeviceBuilder(keep_open=True, replies={"devices/logs": [
-        {"message_id": "1", "event": "output", "data": "boot"},
-    ]})
+    """Upstream registers even a silent stream under its request message id."""
+    fake = FakeDeviceBuilder(keep_open=True, replies={"devices/logs": []})
     url = await connect(fake, aiohttp_client, monkeypatch)
 
     res = await esphome_builder.async_builder_capture(
         hass, url, "devices/logs", {"configuration": "a.yaml"}, capture_seconds=0.3,
     )
 
-    assert res.output == "boot\n"
+    assert res.output == ""
     await asyncio.sleep(0.1)
-    assert [f for f in fake.received if f["command"] == "devices/stop_stream"] == []
+    stops = [f for f in fake.received if f["command"] == "devices/stop_stream"]
+    assert stops[0]["args"] == {"stream_id": "1"}
 
 
 async def test_a_failed_stream_stop_never_fails_the_capture(
@@ -605,7 +637,7 @@ async def test_a_failed_stream_stop_never_fails_the_capture(
     ]})
     url = await connect(fake, aiohttp_client, monkeypatch)
 
-    async def _explode(_ws, _stream_id):
+    async def _explode(_ws):
         raise RuntimeError("socket already gone")
 
     monkeypatch.setattr(esphome_builder, "_stop_stream", _explode)

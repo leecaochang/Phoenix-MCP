@@ -1776,6 +1776,110 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         },
     },
     {
+        "name": "search_esphome_yaml",
+        "requires": "esphome",
+        "description": "Search authorized local ESPHome YAML, including nested folders. Credentials and inaccessible entity references are masked before matching. Returns line numbers and bounded context, with paging after scope filtering. incomplete means a file could not be parsed or a scan budget was reached. Results are read previews; use get_esphome_yaml before editing.",
+        "cap": "cap_esphome_yaml",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Literal search text, at most 200 characters."
+                },
+                "case_sensitive": {
+                    "type": "boolean",
+                    "description": "Match case exactly (default false)."
+                },
+                "context_lines": {
+                    "type": "integer",
+                    "description": "Context lines on each side (default 1, max 3)."
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Offset into authorized matches."
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Page size (default 20, max 50)."
+                }
+            },
+            "required": [
+                "query"
+            ]
+        }
+    },
+    {
+        "name": "list_esphome_devices",
+        "requires": "esphome_builder",
+        "description": "List configured ESPHome Device Builder devices this token may read, and optionally discover importable devices. Unadopted discovery uses the ESPHome authoring capability; adopted devices retain entity scope even when unloaded. Network addresses, MACs, import URLs, keys and raw configuration are withheld. Filtering and paging apply to the authorized projection.",
+        "cap": "cap_esphome_yaml",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "Search projected metadata, at most 200 characters."
+                },
+                "state": {
+                    "type": "string",
+                    "enum": [
+                        "online",
+                        "offline",
+                        "unknown"
+                    ],
+                    "description": "Connectivity filter."
+                },
+                "include_importable": {
+                    "type": "boolean",
+                    "description": "Include unadopted discovery (default false)."
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Offset into authorized devices."
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Page size (default 20, max 50)."
+                }
+            }
+        }
+    },
+    {
+        "name": "list_esphome_jobs",
+        "requires": "esphome_builder",
+        "description": "List retained firmware jobs for authorized local ESPHome configurations, newest first. Optionally filter by file or status. Counts and paging include only visible jobs. Returns metadata; use get_esphome_job for scrubbed log output.",
+        "cap": "cap_esphome_yaml",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "file": {
+                    "type": "string",
+                    "description": "Optional device YAML filename."
+                },
+                "status": {
+                    "type": "string",
+                    "enum": [
+                        "queued",
+                        "running",
+                        "completed",
+                        "failed",
+                        "cancelled"
+                    ],
+                    "description": "Job status filter."
+                },
+                "offset": {
+                    "type": "integer",
+                    "description": "Offset into authorized jobs."
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Page size (default 20, max 50)."
+                }
+            }
+        }
+    },
+    {
         "name": "set_esphome_yaml",
         "requires": "esphome",
         "description": (
@@ -1786,10 +1890,11 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "restored automatically. A credential cannot be changed to a new literal value: "
             "to change one, replace it with a !secret reference (the key must already exist "
             "in the ESPHome secrets.yaml, see defined_secrets) and set the value there. For a "
-            "credential that does NOT exist yet (a new device needing an api encryption key or "
+            "credential that does NOT exist yet (a new device needing an API/OTA encryption key or "
             "an ota password), write !phoenix_generate as the value and a strong random one is "
             "created as the file is written: never invent a key yourself, and note you will not "
-            "be shown what was generated. Pass "
+            "be shown what was generated. If API and OTA both specify encryption keys, ESPHome "
+            "requires them to match: use one shared !secret, or let OTA inherit the API key. Pass "
             "expected_hash from get_esphome_yaml to refuse the write if the file changed."
         ),
         "cap": "cap_esphome_yaml",
@@ -1938,6 +2043,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "type": "object",
             "properties": {
                 "file": {"type": "string", "description": "Device YAML filename, e.g. living-room.yaml"},
+                "force_local": {"type": "boolean", "description": "Build on this Device Builder instead of its paired remote builder (default false)."},
             },
             "required": ["file"],
         },
@@ -2011,6 +2117,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "type": "object",
             "properties": {
                 "file": {"type": "string", "description": "Device YAML filename, e.g. living-room.yaml"},
+                "force_local": {"type": "boolean", "description": "Build on this Device Builder instead of its paired remote builder (default false); the upload remains OTA."},
             },
             "required": ["file"],
         },
@@ -3521,6 +3628,9 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "get_repairs": _annot(True, False, True),
     "get_esphome_overview": _annot(True, False, True),
     "get_esphome_yaml": _annot(True, False, True),
+    "search_esphome_yaml": _annot(True, False, True),
+    "list_esphome_devices": _annot(True, False, True),
+    "list_esphome_jobs": _annot(True, False, True),
     "set_esphome_yaml": _annot(False, True, True),
     "delete_esphome_yaml": _annot(False, True, True),
     "validate_esphome_yaml": _annot(True, False, True),

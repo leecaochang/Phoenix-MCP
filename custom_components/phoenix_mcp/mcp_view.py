@@ -45,6 +45,7 @@ from homeassistant.util.ulid import ulid_to_bytes_or_none
 from .audit import generate_request_id
 from .const import AGENTCLI_CLIENT_IP, AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, PHOENIX_VERSION, BLOCKED_DOMAINS, VOICE_AGENT_CLIENT_IP, HOME_COMPANION_CLIENT_IP, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, CAPABILITY_NAMES, DOMAIN, DOMAIN_IMPORTANT_ATTRIBUTES, DUAL_GATE_SERVICES, LEAN_ALWAYS_ATTRS, HIGH_RISK_DOMAINS, MCP_DISCOVER_TTL_MS, MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSIONS, MCP_SSE_KEEPALIVE_SECONDS, MAX_APPROVAL_RESULT_CHARS, MAX_BATCH_APPROVALS, MAX_BATCH_ITEMS, LOG_LEVELS, LOG_LEVEL_ERROR_MESSAGE, MAX_LOG_ENTRIES, MAX_LOGBOOK_HOME_DAYS, MAX_LOGBOOK_NARROWED_DAYS, MAX_LOGBOOK_RESOURCE_IDS, MAX_SEARCH_QUERY_LEN, MAX_SUBSCRIPTION_SECONDS, MAX_ENTITY_ALIASES, MAX_ENTITY_ALIAS_LENGTH, MAX_TOOL_NAME_LENGTH, MESA_APPROVED_EXECUTOR, MESA_MODE_OFF, NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS
 from .data import PhoenixData
+from .tools.esphome import _tool_search_esphome_yaml, _tool_list_esphome_jobs, _tool_list_esphome_devices
 from .template_render import TemplateRenderError, async_render_template_for_token
 from .request_authority import (AuthorityChangedError, RequestAuthority, check_request_authority, finite_json_numbers, policy_version, request_authority)
 from .device_semantics import device_registry_snapshot, update_device_registry_entry
@@ -9767,6 +9768,9 @@ _register_tool("get_system_health", _tool_get_system_health)
 _register_tool("get_repairs", _tool_get_repairs)
 _register_tool("get_esphome_overview", _tool_get_esphome_overview)
 _register_tool("get_esphome_yaml", _tool_get_esphome_yaml)
+_register_tool("search_esphome_yaml", _tool_search_esphome_yaml)
+_register_tool("list_esphome_jobs", _tool_list_esphome_jobs)
+_register_tool("list_esphome_devices", _tool_list_esphome_devices)
 _register_tool("set_esphome_yaml", _tool_set_esphome_yaml)
 _register_tool("delete_esphome_yaml", _tool_delete_esphome_yaml)
 _register_tool("validate_esphome_yaml", _tool_validate_esphome_yaml)

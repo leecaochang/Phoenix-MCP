@@ -41,18 +41,34 @@ from ..const import (
     ESPHOME_BUILDER_LOG_CAPTURE_SECONDS,
     ESPHOME_BUILDER_MAX_BACKTRACE_LINES,
     ESPHOME_BUILDER_MAX_COMPONENT_IDS,
+    ESPHOME_BUILDER_METADATA_MAX_CHARS,
+    ESPHOME_BUILDER_DEVICE_STATES,
+    ESPHOME_BUILDER_OUTPUT_MAX_CHARS,
     ESPHOME_BUILDER_PAGE_LIMIT,
     ESPHOME_BUILDER_PAGE_LIMIT_MAX,
     ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS,
     ESPHOME_BUILDER_VALIDATE_TIMEOUT_SECONDS,
+    ESPHOME_YAML_INVENTORY_MAX_ENTRIES,
+    ESPHOME_YAML_SEARCH_CONTEXT_LINES_MAX,
+    ESPHOME_YAML_SEARCH_MAX_BYTES,
+    ESPHOME_YAML_SEARCH_MAX_QUERY_CHARS,
+    ESPHOME_YAML_SEARCH_MAX_MATCHES,
+    ESPHOME_YAML_SEARCH_SNIPPET_MAX_CHARS,
     MAX_FILE_BYTES,
     VOICE_AGENT_CLIENT_IP,
 )
 from ..data import PhoenixData
 from ..tool_contracts import normalize_tool_args
 from ..mesa import entity_control_mode
-from ..helpers import diff_summary_fields as _summary, content_hash, effective_cap
-from ..policy_engine import Permission, esphome_entry_for_entity, esphome_entry_writable, resolve
+from ..helpers import (
+    diff_summary_fields as _summary, content_hash, effective_cap,
+    redact_inaccessible_entity_ids_in_text, redact_diagnostics,
+)
+from ..request_authority import check_request_authority
+from ..policy_engine import (
+    Permission, esphome_entry_for_entity, esphome_entry_writable, resolve,
+    resolve_registry_access,
+)
 from ..token_store import TokenRecord
 from ..esphome_builder import (
     BuilderAuthRequired,
@@ -211,9 +227,11 @@ def _esphome_actions_for_entity(
             "service": f"{_ESPHOME_DOMAIN}.{prefix}_{action}",
             "available": available,
             "args": [
-                {"name": getattr(arg, "name", None), "type": _esphome_arg_type(arg)}
+                {"name": getattr(arg, "name", None), "type": _esphome_arg_type(arg),
+                 **_esphome_action_metadata(arg, hass, token)}
                 for arg in (getattr(svc, "args", None) or [])
             ],
+            **_esphome_action_metadata(svc, hass, token),
         }
         if not available:
             row["reason"] = "read-only access to this device"
@@ -245,7 +263,22 @@ def _esphome_arg_type(arg: Any) -> str | None:
     return str(getattr(arg_type, "name", arg_type)).lower()
 
 
-def _esphome_declared_actions(hass: HomeAssistant, device_info: Any, runtime: Any) -> list[dict]:
+def _esphome_action_metadata(obj: Any, hass: HomeAssistant, token: TokenRecord | None) -> dict:
+    """Optional 2026.9 action descriptions/examples, bounded and scrubbed."""
+    if token is None:
+        return {}
+    metadata = {}
+    for key in ("description", "example"):
+        value = getattr(obj, key, None)
+        if isinstance(value, str) and value:
+            metadata[key] = redact_diagnostics(redact_inaccessible_entity_ids_in_text(
+                value[:ESPHOME_BUILDER_METADATA_MAX_CHARS], token, hass))
+    return metadata
+
+
+def _esphome_declared_actions(
+    hass: HomeAssistant, device_info: Any, runtime: Any, token: TokenRecord | None = None
+) -> list[dict]:
     """List a device's user-defined API actions and their HA service names.
 
     Enumerated from the entry's OWN runtime services, never by scanning
@@ -267,9 +300,11 @@ def _esphome_declared_actions(hass: HomeAssistant, device_info: Any, runtime: An
             "ha_service": f"{_ESPHOME_DOMAIN}.{ha_service}",
             "registered": bool(hass.services.has_service(_ESPHOME_DOMAIN, ha_service)),
             "args": [
-                {"name": getattr(arg, "name", None), "type": _esphome_arg_type(arg)}
+                {"name": getattr(arg, "name", None), "type": _esphome_arg_type(arg),
+                 **_esphome_action_metadata(arg, hass, token)}
                 for arg in (getattr(service, "args", None) or [])
             ],
+            **_esphome_action_metadata(service, hass, token),
         })
     actions.sort(key=lambda a: a["name"])
     return actions
@@ -297,7 +332,7 @@ def _esphome_dashboard_detail(configured: dict, device_info: Any) -> dict:
 
 
 def _esphome_runtime_detail(
-    hass: HomeAssistant, entry: Any, record: dict, dash_data: dict, mapped_names: set[str]
+    hass: HomeAssistant, entry: Any, record: dict, dash_data: dict, token: TokenRecord
 ) -> None:
     """Fill in live runtime fields for a LOADED ESPHome config entry.
 
@@ -330,12 +365,11 @@ def _esphome_runtime_detail(
             "connections_limit": getattr(bt, "ble_connections_limit", None),
         }
 
-    actions = _esphome_declared_actions(hass, device_info, runtime)
+    actions = _esphome_declared_actions(hass, device_info, runtime, token)
     if actions:
         record["actions"] = actions
 
     if name and name in dash_data:
-        mapped_names.add(name)
         record["device_builder"] = _esphome_dashboard_detail(dash_data[name], device_info)
 
 
@@ -364,7 +398,6 @@ async def _tool_get_esphome_overview(
 
     registry = er.async_get(hass)
     devices: list[dict] = []
-    mapped_names: set[str] = set()
     for entry in hass.config_entries.async_entries(_ESPHOME_DOMAIN):
         # Scope on the entity REGISTRY rather than live states so a device whose
         # entry failed to load is still counted against the token's tree; an
@@ -389,17 +422,12 @@ async def _tool_get_esphome_overview(
         # raises AttributeError. entry.data and entry.unique_id are never read at
         # all: they carry the API encryption key and the device MAC.
         if loaded:
-            _esphome_runtime_detail(hass, entry, record, dash_data, mapped_names)
+            _esphome_runtime_detail(hass, entry, record, dash_data, token)
         devices.append(record)
 
     devices.sort(key=lambda d: ((d.get("name") or d.get("title") or "").lower()))
     body: dict = {"count": len(devices), "devices": devices}
 
-    # Count only, never names: a Device Builder configuration whose device this
-    # token cannot see would otherwise make the add-on an enumeration oracle.
-    unmapped = sum(1 for name in dash_data if name not in mapped_names)
-    if unmapped:
-        body["unmapped_configurations"] = unmapped
     if warnings:
         body["warnings"] = warnings
     return _tool_success(json.dumps(body, default=str)), "allowed", "get_esphome_overview"
@@ -409,7 +437,7 @@ _ESPHOME_DIR = "esphome"
 
 
 _ESPHOME_PATH_REFUSED = (
-    "Only .yaml and .yml files directly inside the ESPHome configuration directory "
+    "Only jailed .yaml and .yml files inside the ESPHome configuration directory "
     "can be read or written; secrets.yaml, the archive folder, and hidden files are "
     "excluded."
 )
@@ -462,73 +490,179 @@ def _read_esphome_secrets(hass: HomeAssistant) -> tuple[set[str], set[str] | Non
     return secret_values_from_text(text), secret_keys_from_text(text)
 
 
-def _esphome_device_for_file(hass: HomeAssistant, rel: str) -> Any | None:
-    """The LOADED ESPHome config entry whose device this file configures, or None.
+def _esphome_entries_for_file(hass: HomeAssistant, rel: str) -> list[Any]:
+    """Find adopted owners, including entries without live runtime data.
 
-    Prefers the Device Builder's own configuration filename, falling back to a
-    device-name stem match when the add-on is not available. A file that maps to
-    no live device is an orphan (a config authored but never adopted), which the
-    capability alone governs since nothing running is affected.
+    HA persists device_name independently of the connection state. Use that
+    identity as well as runtime metadata so unloading never turns an adopted
+    configuration into an orphan governed by the capability alone.
     """
     dashboard = _esphome_dashboard(hass)
     dash_data = getattr(dashboard, "data", None) or {} if dashboard is not None else {}
     stem = os.path.splitext(os.path.basename(rel))[0]
+    matches: list[Any] = []
     for entry in hass.config_entries.async_entries(_ESPHOME_DOMAIN):
-        if entry.state is not ConfigEntryState.LOADED:
-            continue
-        name = getattr(getattr(entry, "runtime_data", None), "device_info", None)
-        name = getattr(name, "name", None)
-        if not name:
-            continue
-        configured = dash_data.get(name) or {}
-        if configured.get("configuration") == rel or name == stem:
-            return entry
-    return None
+        persisted = getattr(entry, "data", {}).get("device_name")
+        info = getattr(getattr(entry, "runtime_data", None), "device_info", None)
+        names = {persisted, getattr(info, "name", None)}
+        if any(
+            isinstance(name, str) and name and (
+                (dash_data.get(name) or {}).get("configuration") == rel or name == stem
+            )
+            for name in names
+        ):
+            matches.append(entry)
+    return matches
+
+
+def _esphome_device_for_file(hass: HomeAssistant, rel: str) -> Any | None:
+    """Return the sole adopted owner for display; ambiguous owners stay unnamed."""
+    entries = _esphome_entries_for_file(hass, rel)
+    return entries[0] if len(entries) == 1 else None
 
 
 def _esphome_file_in_scope(hass: HomeAssistant, token: TokenRecord, rel: str, *, write: bool) -> bool:
     """Whether the token may read (or write) the device YAML at rel.
 
-    A file mapped to a live device follows that device's entity scope; an orphan
-    file follows the capability alone.
+    Every adopted owner must be in scope, even when unloaded. Orphan files
+    follow the capability alone.
     """
-    entry = _esphome_device_for_file(hass, rel)
-    if entry is None:
-        return True
-    if write:
-        return esphome_entry_writable(hass, entry, token)
+    entries = _esphome_entries_for_file(hass, rel)
     registry = er.async_get(hass)
-    return any(
-        resolve(reg_entry.entity_id, token, hass) in (Permission.READ, Permission.WRITE)
-        for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id)
+    required = (Permission.WRITE,) if write else (Permission.READ, Permission.WRITE)
+    return all(
+        any(
+            resolve_registry_access(reg_entry.entity_id, token, hass) in required
+            for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id)
+        )
+        for entry in entries
     )
 
 
 def _esphome_listing(hass: HomeAssistant, token: TokenRecord) -> list[dict]:
-    """Device YAML files this token may read, with their mapped device."""
+    """Recursively list jailed device YAML, without following directory symlinks."""
     root = os.path.join(hass.config.config_dir, _ESPHOME_DIR)
     try:
-        names = os.listdir(root)
+        names: list[str] = []
+        visited = 0
+        for directory, dirs, files in os.walk(root, followlinks=False):
+            visited += len(dirs) + len(files)
+            if visited > ESPHOME_YAML_INVENTORY_MAX_ENTRIES:
+                raise ValueError("ESPHome configuration inventory exceeds the scan budget.")
+            dirs[:] = sorted(d for d in dirs if not d.startswith(".") and d.lower() != "archive")
+            names.extend(os.path.relpath(os.path.join(directory, f), root) for f in sorted(files))
     except OSError:
         return []
     rows: list[dict] = []
     for name in names:
         if not esphome_rel_path_ok(name):
             continue
-        full = os.path.join(root, name)
+        resolved = _resolve_esphome_path(hass, name)
+        if resolved is None:
+            continue
+        full, name = resolved
         if not os.path.isfile(full):
             continue
         if not _esphome_file_in_scope(hass, token, name, write=False):
             continue
         entry = _esphome_device_for_file(hass, name)
         device = getattr(getattr(entry, "runtime_data", None), "device_info", None)
+        try:
+            size = os.path.getsize(full)
+        except OSError:
+            continue
         rows.append({
             "file": name,
-            "bytes": os.path.getsize(full),
+            "bytes": size,
             "device": getattr(device, "name", None),
         })
     rows.sort(key=lambda r: r["file"])
     return rows
+
+
+def _esphome_search(
+    hass: HomeAssistant, token: TokenRecord, query: str, case_sensitive: bool, context: int
+) -> dict:
+    """Search only masked, authorized files within a total byte budget."""
+    values, _keys = _read_esphome_secrets(hass)
+    needle = query if case_sensitive else query.casefold()
+    matches = []
+    scanned = 0
+    incomplete = False
+    for row in _esphome_listing(hass, token):
+        resolved = _resolve_esphome_path(hass, row["file"])
+        if resolved is None:
+            continue
+        if scanned + row["bytes"] > ESPHOME_YAML_SEARCH_MAX_BYTES:
+            incomplete = True
+            break
+        try:
+            raw = _read_text_capped(resolved[0])
+            scanned += len(raw.encode("utf-8"))
+            masked, _paths = redact_esphome_text(raw, values)
+            masked = redact_inaccessible_entity_ids_in_text(masked, token, hass)
+        except (OSError, ValueError, yaml_includes.YamlParseError):
+            incomplete = True
+            continue
+        lines = masked.splitlines()
+        for index, line in enumerate(lines):
+            if needle not in (line if case_sensitive else line.casefold()):
+                continue
+            start = max(0, index - context)
+            snippet = "\n".join(lines[start:index + context + 1])
+            matches.append({
+                "file": row["file"], "line": index + 1, "context_start_line": start + 1,
+                "text": snippet[:ESPHOME_YAML_SEARCH_SNIPPET_MAX_CHARS],
+                "text_truncated": len(snippet) > ESPHOME_YAML_SEARCH_SNIPPET_MAX_CHARS,
+            })
+            if len(matches) >= ESPHOME_YAML_SEARCH_MAX_MATCHES:
+                return {"matches": matches, "incomplete": True}
+    return {"matches": matches, "incomplete": incomplete}
+
+
+def _esphome_paged(rows: list[dict], args: dict, key: str) -> dict:
+    """Page an already scoped result; counts never describe upstream inventory."""
+    offset = args.get("offset", 0)
+    offset = offset if isinstance(offset, int) and not isinstance(offset, bool) and offset >= 0 else 0
+    limit = _esphome_page_limit(args)
+    page = []
+    size = 0
+    for row in rows[offset:offset + limit]:
+        size += len(json.dumps(row))
+        if size > ESPHOME_BUILDER_OUTPUT_MAX_CHARS:
+            break
+        page.append(row)
+    end = offset + len(page)
+    return {key: page, "count": len(rows), "offset": offset,
+            "next_offset": end if end < len(rows) else None}
+
+
+async def _tool_search_esphome_yaml(
+    args: dict, token: TokenRecord, hass: HomeAssistant
+) -> tuple[dict, str, str]:
+    """Search masked local device configurations under the authoring capability."""
+    resource = "search_esphome_yaml"
+    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", resource
+    query = args.get("query")
+    sensitive = args.get("case_sensitive", False)
+    context = args.get("context_lines", 1)
+    if (not isinstance(query, str) or not query.strip()
+            or len(query) > ESPHOME_YAML_SEARCH_MAX_QUERY_CHARS
+            or not isinstance(sensitive, bool)
+            or not isinstance(context, int) or isinstance(context, bool)
+            or not 0 <= context <= ESPHOME_YAML_SEARCH_CONTEXT_LINES_MAX):
+        return _tool_error("Provide a nonempty query of at most 200 characters, a boolean "
+                           "case_sensitive, and context_lines between 0 and 3."), "invalid_request", resource
+    try:
+        result = await hass.async_add_executor_job(_esphome_search, hass, token, query, sensitive, context)
+    except (OSError, ValueError):
+        return _tool_error("ESPHome configuration search could not complete."), "invalid_request", resource
+    rows = [row for row in result["matches"]
+            if _esphome_file_in_scope(hass, token, row["file"], write=False)]
+    body = _esphome_paged(rows, args, "matches")
+    body["incomplete"] = result["incomplete"]
+    return _tool_success(json.dumps(body)), "allowed", resource
 
 
 async def _tool_get_esphome_yaml(
@@ -542,7 +676,10 @@ async def _tool_get_esphome_yaml(
     secret_values, secret_keys = await hass.async_add_executor_job(_read_esphome_secrets, hass)
 
     if file_arg is None or (isinstance(file_arg, str) and not file_arg.strip()):
-        rows = await hass.async_add_executor_job(_esphome_listing, hass, token)
+        try:
+            rows = await hass.async_add_executor_job(_esphome_listing, hass, token)
+        except ValueError:
+            return _tool_error("ESPHome configuration inventory exceeds the scan budget."), "invalid_request", "get_esphome_yaml"
         body: dict = {"count": len(rows), "files": rows}
         if secret_keys is not None:
             body["defined_secrets"] = sorted(secret_keys)
@@ -1321,6 +1458,117 @@ def _esphome_job_list(result: Any) -> list[dict]:
     return [row for row in rows if isinstance(row, dict)]
 
 
+async def _tool_list_esphome_jobs(
+    args: dict, token: TokenRecord, hass: HomeAssistant
+) -> tuple[dict, str, str]:
+    """List scoped firmware job metadata, with paging after authorization."""
+    resource = "list_esphome_jobs"
+    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", resource
+    status = args.get("status")
+    if status is not None and (not isinstance(status, str)
+                              or status not in _ESPHOME_JOB_ACTIVE | _ESPHOME_JOB_TERMINAL):
+        return _tool_error("Invalid firmware job status."), "invalid_request", resource
+    url = _esphome_builder_url(hass)
+    if url is None:
+        return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", resource
+    payload = {}
+    if "file" in args:
+        refusal, _path, rel = _esphome_file_precheck(hass, token, args, resource)
+        if refusal is not None:
+            return refusal
+        payload["configuration"] = rel
+    try:
+        result = await async_builder_command(hass, url, "firmware/get_jobs", payload,
+                                            timeout_seconds=ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS)
+    except BuilderError as err:
+        return _builder_refusal(err, resource)
+    rows = []
+    for job in _esphome_job_list(result.result):
+        resolved = _resolve_esphome_path(hass, job.get("configuration"))
+        if resolved is None or not os.path.isfile(resolved[0]):
+            continue
+        rel = resolved[1]
+        if (not _esphome_file_in_scope(hass, token, rel, write=False)
+                or (payload and rel != payload["configuration"])
+                or (status is not None and status != job.get("status"))):
+            continue
+        row = {"file": rel}
+        for key in ("job_id", "status", "type", "created_at", "started_at", "finished_at"):
+            value = job.get(key)
+            if isinstance(value, str):
+                row[key] = redact_diagnostics(
+                    redact_inaccessible_entity_ids_in_text(value[:ESPHOME_BUILDER_METADATA_MAX_CHARS], token, hass))
+        rows.append(row)
+    rows.sort(key=lambda row: (row.get("created_at", ""), row.get("job_id", "")), reverse=True)
+    return _tool_success(json.dumps(_esphome_paged(rows, args, "jobs"))), "allowed", resource
+
+
+async def _tool_list_esphome_devices(
+    args: dict, token: TokenRecord, hass: HomeAssistant
+) -> tuple[dict, str, str]:
+    """Project configured and opt-in importable Builder inventory without network identity."""
+    resource = "list_esphome_devices"
+    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", resource
+    query = args.get("query", "")
+    include = args.get("include_importable", False)
+    state = args.get("state")
+    if (not isinstance(query, str) or len(query) > ESPHOME_YAML_SEARCH_MAX_QUERY_CHARS
+            or not isinstance(include, bool) or (state is not None and (
+                not isinstance(state, str) or state not in ESPHOME_BUILDER_DEVICE_STATES))):
+        return _tool_error("Invalid device query, state, or include_importable flag."), "invalid_request", resource
+    url = _esphome_builder_url(hass)
+    if url is None:
+        return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", resource
+    try:
+        result = await async_builder_command(hass, url, "devices/list", {},
+                                            timeout_seconds=ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS)
+    except BuilderError as err:
+        return _builder_refusal(err, resource)
+    if not isinstance(result.result, dict):
+        return _tool_error("The Device Builder returned an unexpected device inventory."), "invalid_request", resource
+    rows = []
+    for kind in ("configured", "importable") if include else ("configured",):
+        candidates = result.result.get(kind)
+        for device in candidates if isinstance(candidates, list) else []:
+            if not isinstance(device, dict):
+                continue
+            name = device.get("name")
+            if not isinstance(name, str) or not _ESPHOME_NAME_RE.fullmatch(name):
+                continue
+            row = {"kind": kind, "name": name}
+            if kind == "configured":
+                resolved = _resolve_esphome_path(hass, device.get("configuration"))
+                if resolved is None or not os.path.isfile(resolved[0]):
+                    continue
+                rel = resolved[1]
+                if not _esphome_file_in_scope(hass, token, rel, write=False):
+                    continue
+                if not _esphome_file_in_scope(hass, token, name + ".yaml", write=False):
+                    continue
+                row["file"] = rel
+            elif not _esphome_file_in_scope(hass, token, name + ".yaml", write=False):
+                # Discovery does not make an adopted but unloaded device an orphan.
+                continue
+            runtime = device.get("runtime_state")
+            observed = runtime.get("state") if isinstance(runtime, dict) else device.get("state")
+            row["state"] = observed.lower() if isinstance(observed, str) else "unknown"
+            if state is not None and state != row["state"]:
+                continue
+            for key in ("friendly_name", "board_id", "target_platform", "current_version",
+                        "project_name", "project_version"):
+                value = device.get(key)
+                if isinstance(value, str):
+                    row[key] = redact_diagnostics(
+                        redact_inaccessible_entity_ids_in_text(value[:ESPHOME_BUILDER_METADATA_MAX_CHARS], token, hass))
+            if query.casefold() not in json.dumps(row).casefold():
+                continue
+            rows.append(row)
+    rows.sort(key=lambda row: (row["name"], row["kind"]))
+    return _tool_success(json.dumps(_esphome_paged(rows, args, "devices"))), "allowed", resource
+
+
 def _esphome_job_id(value: Any) -> str | None:
     """A job id out of either a bare id or a whole job record.
 
@@ -1540,6 +1788,8 @@ async def _tool_compile_esphome_firmware(
     """
     if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "compile_esphome_firmware"
+    if "force_local" in args and not isinstance(args["force_local"], bool):
+        return _tool_error("force_local must be a boolean."), "invalid_request", "compile_esphome_firmware"
 
     url = _esphome_builder_url(hass)
     if url is None:
@@ -1555,9 +1805,17 @@ async def _tool_compile_esphome_firmware(
     if inflight is not None:
         return inflight
 
+    check_request_authority()
+    refusal, _path, rel = _esphome_file_precheck(
+        hass, token, args, "compile_esphome_firmware", write=True)
+    if refusal is not None:
+        return refusal
+    payload = {"configuration": rel}
+    if "force_local" in args:
+        payload["force_local"] = args["force_local"]
     try:
         res = await async_builder_command(
-            hass, url, "firmware/compile", {"configuration": rel},
+            hass, url, "firmware/compile", payload,
             timeout_seconds=ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS,
         )
     except BuilderError as err:
@@ -1822,7 +2080,7 @@ async def _execute_rename_esphome_device(
     # chain ran on the device: the operator is told the opposite of what is
     # happening to their hardware, which is the worst failure available here.
     if raw_job is not None and job_id is None:
-        note = version_mismatch_note("devices/rename", res.server_version)
+        note = version_mismatch_note("devices/rename", res.server_version, res.esphome_version)
         return _tool_error(
             "The ESPHome Device Builder replied with a rename job this version of "
             "Phoenix MCP cannot read, so it is not possible to say whether the "
@@ -1978,6 +2236,9 @@ async def _install_esphome_precheck(
     approval window (the file going away, the token losing the device, another
     build starting meanwhile) is caught at apply time too.
     """
+    if "force_local" in args and not isinstance(args["force_local"], bool):
+        return ((_tool_error("force_local must be a boolean."), "invalid_request",
+                 "install_esphome_firmware"), "", "")
     url = _esphome_builder_url(hass)
     if url is None:
         return (
@@ -1992,6 +2253,11 @@ async def _install_esphome_precheck(
     inflight = await _esphome_inflight_refusal(hass, url, rel, f"esphome:{rel}")
     if inflight is not None:
         return inflight, url, rel
+    check_request_authority()
+    refusal, _path, rel = _esphome_file_precheck(
+        hass, token, args, "install_esphome_firmware", write=True)
+    if refusal is not None:
+        return refusal, url, rel
     return None, url, rel
 
 
@@ -2031,10 +2297,13 @@ async def _execute_install_esphome_firmware(
     if pre is not None:
         return pre
 
+    payload = {"configuration": rel, "port": _ESPHOME_OTA_PORT}
+    if "force_local" in args:
+        payload["force_local"] = args["force_local"]
     try:
         res = await async_builder_command(
             hass, url, "firmware/install",
-            {"configuration": rel, "port": _ESPHOME_OTA_PORT},
+            payload,
             timeout_seconds=ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS,
         )
     except BuilderError as err:
@@ -2091,6 +2360,8 @@ def _build_diff_install_esphome_firmware(
     """
     rel = args.get("file") if isinstance(args.get("file"), str) else ""
     preview: dict[str, Any] = {"file": rel}
+    if isinstance(args.get("force_local"), bool):
+        preview["force_local"] = args["force_local"]
     label = rel or "an ESPHome device"
     target_id = rel
 

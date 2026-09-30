@@ -46,6 +46,7 @@ from .const import (
     ESPHOME_BUILDER_OUTPUT_MAX_CHARS,
     ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS,
     ESPHOME_BUILDER_VERIFIED_VERSION,
+    ESPHOME_COMPILER_VERIFIED_VERSION,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -74,6 +75,7 @@ _LOGGER = logging.getLogger(__name__)
 # version history first and a mistaken delete stays recoverable.
 ESPHOME_BUILDER_ALLOWED_COMMANDS = frozenset({
     # Reads.
+    "devices/list",
     "devices/validate",
     "boards/get_board",
     "boards/get_boards",
@@ -162,9 +164,12 @@ class BuilderResult:
     success: bool | None = None
     exit_code: int | None = None
     server_version: str = ""
+    esphome_version: str = ""
 
 
-def version_mismatch_note(command: str, server_version: str) -> str | None:
+def version_mismatch_note(
+    command: str, server_version: str, esphome_version: str = ""
+) -> str | None:
     """Explain a failure in terms of an unverified add-on version, or None.
 
     Returns None when the versions agree, because blaming the version for a
@@ -172,13 +177,20 @@ def version_mismatch_note(command: str, server_version: str) -> str | None:
     never the problem. Only ever appended to an ERROR; a version difference on
     its own is not worth saying out loud.
     """
-    if not server_version or server_version == ESPHOME_BUILDER_VERIFIED_VERSION:
+    differences = []
+    if server_version and server_version != ESPHOME_BUILDER_VERIFIED_VERSION:
+        differences.append(
+            f"Device Builder {server_version} (protocol target {ESPHOME_BUILDER_VERIFIED_VERSION})"
+        )
+    if esphome_version and esphome_version != ESPHOME_COMPILER_VERIFIED_VERSION:
+        differences.append(
+            f"ESPHome compiler {esphome_version} (target {ESPHOME_COMPILER_VERIFIED_VERSION})"
+        )
+    if not differences:
         return None
     return (
-        f"Note: this ESPHome Device Builder reports version {server_version}, while "
-        f"Phoenix MCP's ESPHome tools were verified against "
-        f"{ESPHOME_BUILDER_VERIFIED_VERSION}. If '{command}' worked before, the "
-        "add-on's API may have changed in an upgrade."
+        f"Note: this connection reports {', '.join(differences)}. "
+        f"If '{command}' worked before, an upgrade may have changed its behavior."
     )
 
 
@@ -250,12 +262,11 @@ def _raise_for_error(frame: dict[str, Any]) -> None:
     raise BuilderCommandError(code, details if isinstance(details, str) else None)
 
 
-async def _await_handshake(ws: aiohttp.ClientWebSocketResponse) -> str:
+async def _await_handshake(ws: aiohttp.ClientWebSocketResponse) -> tuple[str, str]:
     """Consume frames until the server's opening ServerInfoMessage.
 
-    Returns the announced `server_version` (empty when it is missing or an
-    unexpected type). It arrives free on every connection, and keeping it is
-    what lets a failure say WHICH add-on produced it.
+    Returns the independent Builder and compiler versions, with empty strings
+    for absent or malformed values.
 
     The server speaks first, so nothing may be sent before this returns. A
     Device Builder configured with credentials is refused here, before the
@@ -277,8 +288,12 @@ async def _await_handshake(ws: aiohttp.ClientWebSocketResponse) -> str:
             raise BuilderAuthRequired(
                 "The ESPHome Device Builder requires authentication."
             )
-        version = frame.get("server_version")
-        return str(version) if isinstance(version, (str, int, float)) else ""
+        builder = frame.get("server_version")
+        compiler = frame.get("esphome_version")
+        return (
+            builder if isinstance(builder, str) else "",
+            compiler if isinstance(compiler, str) else "",
+        )
     raise BuilderUnavailable(
         "The ESPHome Device Builder closed the connection before the handshake."
     )
@@ -312,12 +327,16 @@ async def _read_reply(
             payload = data if isinstance(data, dict) else {}
             output, truncated = collector.finish() if collector else ("", False)
             success = payload.get("success")
-            code = payload.get("code")
+            status = payload.get("status")
+            if not isinstance(success, bool) and status in ("completed", "failed", "cancelled"):
+                success = status == "completed"
+            code = payload.get("code", payload.get("exit_code"))
             return BuilderResult(
+                result=payload,
                 output=output,
                 output_truncated=truncated,
                 success=success if isinstance(success, bool) else None,
-                exit_code=code if isinstance(code, int) else None,
+                exit_code=code if isinstance(code, int) and not isinstance(code, bool) else None,
             )
         if "result" in frame:
             return BuilderResult(result=frame["result"])
@@ -358,7 +377,7 @@ async def async_builder_command(
         async with asyncio.timeout(timeout_seconds):
             ws = await session.ws_connect(endpoint)
             try:
-                version = await _await_handshake(ws)
+                version, compiler_version = await _await_handshake(ws)
                 await ws.send_str(
                     json.dumps({
                         "command": command,
@@ -372,13 +391,13 @@ async def async_builder_command(
                     # A refused command is where the version earns its keep: an
                     # add-on that no longer has this command says so in its own
                     # words, which read as a Phoenix bug without this context.
-                    note = version_mismatch_note(command, version)
+                    note = version_mismatch_note(command, version, compiler_version)
                     if note is None:
                         raise
                     raise BuilderCommandError(
                         err.error_code, f"{err.details} {note}".strip()
                     ) from err
-                return replace(reply, server_version=version)
+                return replace(reply, server_version=version, esphome_version=compiler_version)
             finally:
                 await ws.close()
     except TimeoutError as err:
@@ -412,7 +431,7 @@ async def _collect_until(
     ws: aiohttp.ClientWebSocketResponse,
     collector: _OutputCollector,
     seconds: float,
-) -> str | None:
+) -> None:
     """Read output frames until the capture window closes.
 
     Reaching the deadline is the normal, successful end of a capture rather than
@@ -420,34 +439,27 @@ async def _collect_until(
     raises: a stream the add-on refused outright is not the same as a quiet
     device that simply had nothing to say.
 
-    Returns the stream id if the add-on named one, so the caller can end the
-    stream politely instead of yanking the socket.
+    Streams are registered under the originating request's message_id in the
+    Device Builder, including captures that never produce an output frame.
     """
-    stream_id: str | None = None
     try:
         async with asyncio.timeout(seconds):
             async for msg in ws:
                 if msg.type is not aiohttp.WSMsgType.TEXT:
-                    return stream_id
+                    return
                 frame = _as_frame(msg.data)
                 if frame is None or frame.get("message_id") != _MESSAGE_ID:
                     continue
                 _raise_for_error(frame)
-                # The id can ride on any frame and its exact carrier is not
-                # documented, so take it from whichever frame offers one first.
-                found = frame.get("stream_id")
-                if stream_id is None and isinstance(found, (str, int)):
-                    stream_id = str(found)
                 if frame.get("event") == "output":
                     data = frame.get("data")
                     if isinstance(data, str):
                         collector.add(data)
     except TimeoutError:
-        return stream_id
-    return stream_id
+        return
 
 
-async def _stop_stream(ws: aiohttp.ClientWebSocketResponse, stream_id: str | None) -> None:
+async def _stop_stream(ws: aiohttp.ClientWebSocketResponse) -> None:
     """End the stream server-side before the socket goes away.
 
     Closing the socket alone does end it, but the add-on tears the subprocess
@@ -457,14 +469,12 @@ async def _stop_stream(ws: aiohttp.ClientWebSocketResponse, stream_id: str | Non
     capture already succeeded by this point, so nothing here may turn it into a
     failure.
     """
-    if stream_id is None:
-        return
     try:
         await ws.send_str(
             json.dumps({
                 "command": "devices/stop_stream",
-                "message_id": _MESSAGE_ID,
-                "args": {"stream_id": stream_id},
+                "message_id": "2",
+                "args": {"stream_id": _MESSAGE_ID},
             })
         )
     except (aiohttp.ClientError, OSError, RuntimeError):
@@ -484,9 +494,8 @@ async def async_builder_capture(
 
     devices/logs runs until it is killed and never sends a `result` frame, so
     there is nothing to wait for and async_builder_command would hang: the capture
-    window IS the request. The window is ended with devices/stop_stream when the
-    add-on named a stream id, falling back to simply closing the socket, which
-    also ends it but makes the DEVICE log a CONNECTION_CLOSED warning every time.
+    window IS the request. The window is ended with devices/stop_stream using
+    the originating message id before closing the socket.
 
     Returns whatever arrived before the deadline. An empty capture is a normal
     outcome (a device with nothing to log), not an error.
@@ -505,7 +514,7 @@ async def async_builder_capture(
         async with asyncio.timeout(ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS + capture_seconds):
             ws = await session.ws_connect(f"{url.rstrip('/')}/ws")
             try:
-                version = await _await_handshake(ws)
+                version, compiler_version = await _await_handshake(ws)
                 await ws.send_str(
                     json.dumps({
                         "command": command,
@@ -514,15 +523,15 @@ async def async_builder_capture(
                     })
                 )
                 try:
-                    stream_id = await _collect_until(ws, collector, capture_seconds)
+                    await _collect_until(ws, collector, capture_seconds)
                 except BuilderCommandError as err:
-                    note = version_mismatch_note(command, version)
+                    note = version_mismatch_note(command, version, compiler_version)
                     if note is None:
                         raise
                     raise BuilderCommandError(
                         err.error_code, f"{err.details} {note}".strip()
                     ) from err
-                await _stop_stream(ws, stream_id)
+                await _stop_stream(ws)
             finally:
                 await ws.close()
     except TimeoutError as err:
@@ -534,4 +543,7 @@ async def async_builder_capture(
         raise BuilderUnavailable("The ESPHome Device Builder could not be reached.") from err
 
     output, truncated = collector.finish()
-    return BuilderResult(output=output, output_truncated=truncated, server_version=version)
+    return BuilderResult(
+        output=output, output_truncated=truncated,
+        server_version=version, esphome_version=compiler_version,
+    )

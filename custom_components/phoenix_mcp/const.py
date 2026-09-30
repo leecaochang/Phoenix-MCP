@@ -820,14 +820,11 @@ Z2M_DEVICE_OPTIONS_RESPONSE_TIMEOUT_SECONDS = 5.0
 # the firmware job model (compile, install, poll, cancel).
 # Version-sensitive surface: the frame shapes and command names are the add-on's,
 # with no stability promise, so re-verify them on add-on upgrades.
-# The add-on version every command here was live-verified against. Its OWN
-# documentation has been wrong five separate times, so this records what was
-# checked on the wire rather than what was read. Used ONLY to explain a failure
-# (a refused command, a reply we cannot parse); a mismatch is never warned about
-# on its own, because a warning whose consequence never arrives teaches operators
-# to click past it, exactly as the install diff refuses to flag a patch bump.
-# Bump it after re-verifying against a new add-on, not merely after upgrading.
-ESPHOME_BUILDER_VERIFIED_VERSION = "2026.7.3"
+# Source-qualified protocol targets. The compiler and Device Builder use
+# independent version families; ESPHome 2026.9.1 bundles Device Builder 1.14.9.
+# Used only to add context to failures, never as an upgrade warning on success.
+ESPHOME_BUILDER_VERIFIED_VERSION = "1.14.9"
+ESPHOME_COMPILER_VERIFIED_VERSION = "2026.9.1"
 ESPHOME_BUILDER_REQUEST_TIMEOUT_SECONDS = 10.0
 # Validation runs the config through ESPHome itself (no compile), which is
 # seconds on a small file but can pull external_components on a large one.
@@ -836,6 +833,14 @@ ESPHOME_BUILDER_OUTPUT_MAX_CHARS = 65_536
 ESPHOME_BUILDER_PAGE_LIMIT = 20
 ESPHOME_BUILDER_PAGE_LIMIT_MAX = 50
 ESPHOME_BUILDER_MAX_COMPONENT_IDS = 10
+ESPHOME_YAML_SEARCH_MAX_QUERY_CHARS = 200
+ESPHOME_YAML_SEARCH_MAX_BYTES = 2_097_152
+ESPHOME_YAML_SEARCH_CONTEXT_LINES_MAX = 3
+ESPHOME_YAML_SEARCH_SNIPPET_MAX_CHARS = 1_000
+ESPHOME_YAML_SEARCH_MAX_MATCHES = 1_000
+ESPHOME_YAML_INVENTORY_MAX_ENTRIES = 1_000
+ESPHOME_BUILDER_METADATA_MAX_CHARS = 512
+ESPHOME_BUILDER_DEVICE_STATES = frozenset({"online", "offline", "unknown"})
 
 # Firmware jobs. Compile and install ENQUEUE and return a job record, so those
 # calls use the normal request timeout above; only the log replay of a finished

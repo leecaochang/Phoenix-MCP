@@ -261,16 +261,55 @@ class TestCompile:
         assert builder.calls == []
 
 
+@pytest.mark.parametrize("tool,command", [("compile_esphome_firmware", "firmware/compile"),
+                                         ("install_esphome_firmware", "firmware/install")])
+@pytest.mark.parametrize("value", [True, False])
+async def test_force_local_is_forwarded_under_existing_scope(hass, esphome_dir, tool, command, value):
+    builder = FakeBuilder(**{command: {"job_id": JOB, "status": "queued"}})
+    _, outcome, _ = await _run(tool, {"file": FILE, "force_local": value}, _flash_token(), hass, builder)
+    assert outcome == "allowed"
+    assert builder.args_for(command)["force_local"] is value
+    if command == "firmware/install":
+        assert builder.args_for(command)["port"] == "OTA"
+
+
+@pytest.mark.parametrize("tool", ["compile_esphome_firmware", "install_esphome_firmware"])
+@pytest.mark.parametrize("value", ["true", 1, [], None])
+async def test_force_local_wrong_shapes_refuse_before_network(hass, esphome_dir, tool, value):
+    builder = FakeBuilder()
+    _, outcome, _ = await _run(tool, {"file": FILE, "force_local": value}, _flash_token(), hass, builder)
+    assert outcome == "invalid_request"
+    assert builder.calls == []
+
+
+@pytest.mark.parametrize("tool,command", [("compile_esphome_firmware", "firmware/compile"),
+                                         ("install_esphome_firmware", "firmware/install")])
+async def test_job_start_rechecks_scope_after_inflight_lookup(hass, esphome_dir, esphome_entries, tool, command):
+    _esphome_entry(hass, esphome_entries, runtime=_runtime())
+    token = _flash_token()
+
+    def revoke(_args):
+        token.permissions.domains["sensor"].state = "RED"
+        return []
+
+    builder = FakeBuilder(**{"firmware/get_jobs": revoke})
+    _, outcome, _ = await _run(tool, {"file": FILE}, token, hass, builder)
+    assert outcome == "denied"
+    assert command not in builder.commands
+
+
 class TestInstall:
     async def test_confirm_queues_an_approval_and_flashes_nothing(self, hass, esphome_dir):
         store = _ApprStore()
         data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
         builder = FakeBuilder()
         _content, outcome, _ = await _run(
-            "install_esphome_firmware", {"file": FILE},
+            "install_esphome_firmware", {"file": FILE, "force_local": True},
             _flash_token(cap_esphome_flash="confirm"), hass, builder, data)
 
         assert outcome == "pending_approval"
+        assert store._p[0]["args"]["force_local"] is True
+        assert store._p[0]["diff"]["preview"]["force_local"] is True
         assert len(store._p) == 1
         assert store._p[0]["tool_name"] == "install_esphome_firmware"
         assert store._p[0]["cap_name"] == "cap_esphome_flash"

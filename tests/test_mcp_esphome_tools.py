@@ -286,7 +286,7 @@ class TestOverviewDashboard:
             content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
         assert _json(content)["devices"][0]["device_builder"]["update_available"] is False
 
-    async def test_unmapped_configurations_reported_as_count_without_names(self, hass, esphome_entries):
+    async def test_hidden_configurations_do_not_affect_visible_counts(self, hass, esphome_entries):
         _esphome_entry(hass, esphome_entries, runtime=_runtime())
         dash = _dashboard({
             "rf-blaster1": {"configuration": "rf-blaster1.yaml", "current_version": "2026.7.0"},
@@ -296,7 +296,8 @@ class TestOverviewDashboard:
         with patch(_DASHBOARD_PATCH, return_value=dash):
             content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
         raw = content["content"][0]["text"]
-        assert _json(content)["unmapped_configurations"] == 2
+        assert "unmapped_configurations" not in _json(content)
+        assert _json(content)["count"] == 1
         assert "rf-blaster3" not in raw
         assert "esphome-web-31fca4.yaml" not in raw
 
@@ -613,6 +614,35 @@ class TestDeviceYamlRead:
         assert missing["content"][0]["text"] == scoped["content"][0]["text"]
 
 
+@pytest.mark.parametrize("state", [ConfigEntryState.NOT_LOADED, ConfigEntryState.SETUP_ERROR])
+@pytest.mark.parametrize("write", [False, True])
+async def test_unloaded_yaml_owner_preserves_entity_scope(hass, esphome_entries, state, write):
+    from custom_components.phoenix_mcp.tools.esphome import _esphome_file_in_scope
+
+    entry = _esphome_entry(hass, esphome_entries, entity_ids=("light.private_device",),
+                           state=state, runtime=None)
+    entry.data = {"device_name": "private-device"}
+    dash = _dashboard({"private-device": {"configuration": "other-filename.yaml"}})
+    with patch(_DASHBOARD_PATCH, return_value=dash):
+        assert not _esphome_file_in_scope(hass, _yaml_token(), "other-filename.yaml", write=write)
+        permitted = _yaml_token(permissions=PermissionTree(
+            domains={"light": PermissionNode(state="GREEN")}))
+        assert _esphome_file_in_scope(hass, permitted, "other-filename.yaml", write=write)
+    with patch(_DASHBOARD_PATCH, return_value=None):
+        assert not _esphome_file_in_scope(hass, _yaml_token(), "private-device.yaml", write=write)
+
+
+async def test_ambiguous_yaml_owners_require_all_scopes(hass, esphome_entries):
+    from custom_components.phoenix_mcp.tools.esphome import _esphome_file_in_scope
+
+    _esphome_entry(hass, esphome_entries, runtime=_runtime(_device_info(name="same")))
+    entry = _esphome_entry(hass, esphome_entries, entity_ids=("light.private_device",),
+                           state=ConfigEntryState.NOT_LOADED, runtime=None)
+    entry.data = {"device_name": "same"}
+    assert not _esphome_file_in_scope(hass, _yaml_token(), "same.yaml", write=False)
+    assert not _esphome_file_in_scope(hass, _yaml_token(), "same.yaml", write=True)
+
+
 class TestDeviceYamlDelete:
     """Phoenix MCP owns the delete rather than allowlisting the add-on's
     devices/delete, for one reason: the add-on's delete bypasses version capture,
@@ -906,6 +936,146 @@ class TestDeviceYamlApprovalFlow:
              "expected_hash": masked["content_hash"]},
             _yaml_token(), hass, MagicMock())
         assert outcome == "invalid_request"
+
+
+async def _inventory_call(hass, name, args, result, token=None):
+    from custom_components.phoenix_mcp.esphome_builder import BuilderResult
+
+    builder = AsyncMock(return_value=BuilderResult(result=result))
+    dashboard = SimpleNamespace(url="http://127.0.0.1:6052", data={}, last_update_success=True)
+    with patch(_DASHBOARD_PATCH, return_value=dashboard), patch(
+        "custom_components.phoenix_mcp.tools.esphome.async_builder_command", builder
+    ):
+        reply = await _call(name, args, token or _yaml_token(), hass)
+    return reply, builder
+
+
+class TestScopedEsphomeInventory:
+    async def test_action_metadata_is_optional_bounded_and_scrubbed(self, hass, esphome_entries):
+        arg = SimpleNamespace(name="message", type="string", description="Target light.private",
+                              example="password=example-secret")
+        service = SimpleNamespace(name="announce", args=[arg], description="Announce " + "x" * 1000)
+        _esphome_entry(hass, esphome_entries, runtime=_runtime(services={1: service}))
+        content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
+        action = _json(content)["devices"][0]["actions"][0]
+        assert len(action["description"]) <= 512
+        assert "light.private" not in action["args"][0]["description"]
+        assert "example-secret" not in action["args"][0]["example"]
+
+    async def test_registry_only_file_owner_needs_inherited_scope(self, hass, esphome_entries):
+        entry = _esphome_entry(hass, esphome_entries, entity_ids=("light.private",),
+                               state=ConfigEntryState.NOT_LOADED, runtime=None)
+        entry.data = {"device_name": "private"}
+        token = _yaml_token(permissions=PermissionTree(
+            entities={"light.private": PermissionNode(state="GREEN")}))
+        assert not esphome._esphome_file_in_scope(hass, token, "private.yaml", write=True)
+        assert not esphome._esphome_file_in_scope(hass, token, "private.yaml", write=False)
+
+    @pytest.mark.parametrize("name", ["search_esphome_yaml", "list_esphome_jobs", "list_esphome_devices"])
+    async def test_denied_capability_precedes_bad_arguments_and_io(self, hass, name):
+        with patch("custom_components.phoenix_mcp.tools.esphome.async_builder_command",
+                   side_effect=AssertionError("no network for denied tokens")):
+            content, outcome, _ = await _call(name, {"query": [], "status": []},
+                                             _yaml_token(cap_esphome_yaml="deny"), hass)
+        assert outcome == "denied"
+        assert content["isError"] is True
+
+    async def test_search_masks_before_matching_and_lists_nested_files(self, hass, esphome_dir):
+        nested = esphome_dir / "nested"
+        nested.mkdir()
+        (nested / "visible.yaml").write_text("esphome:\n  name: visible\n# Needle\n# context\n")
+        content, outcome, _ = await _call("search_esphome_yaml", {"query": "needle"}, _yaml_token(), hass)
+        assert outcome == "allowed"
+        row = _json(content)["matches"][0]
+        assert row["file"] == "nested/visible.yaml"
+        assert row["line"] == 3
+        assert "context" in row["text"]
+        content, _, _ = await _call("search_esphome_yaml", {"query": "REALAPIKEY123456="}, _yaml_token(), hass)
+        assert _json(content)["count"] == 0
+        content, _, _ = await _call("get_esphome_yaml", {}, _yaml_token(), hass)
+        assert "nested/visible.yaml" in [row["file"] for row in _json(content)["files"]]
+
+    async def test_search_case_paging_and_hidden_unloaded_owner(self, hass, esphome_dir, esphome_entries):
+        (esphome_dir / "private.yaml").write_text("esphome:\n  name: private\n# needle\n")
+        (esphome_dir / "a.yaml").write_text("# Needle\n# needle\n")
+        entry = _esphome_entry(hass, esphome_entries, entity_ids=("light.private",),
+                               state=ConfigEntryState.NOT_LOADED, runtime=None)
+        entry.data = {"device_name": "private"}
+        content, _, _ = await _call("search_esphome_yaml", {"query": "needle", "limit": 1}, _yaml_token(), hass)
+        body = _json(content)
+        assert body["count"] == 2
+        assert body["next_offset"] == 1
+        assert body["matches"][0]["file"] == "a.yaml"
+        content, _, _ = await _call("search_esphome_yaml", {"query": "needle", "case_sensitive": True}, _yaml_token(), hass)
+        assert _json(content)["count"] == 1
+
+    async def test_search_scope_text_and_jail_before_matching(self, hass, esphome_dir, tmp_path):
+        (esphome_dir / "a.yaml").write_text("# light.secret_hidden\n")
+        outside = tmp_path / "outside.yaml"
+        outside.write_text("# hiddenneedle\n")
+        (esphome_dir / "alias.yaml").symlink_to(outside)
+        (esphome_dir / "secret-alias.yaml").symlink_to(esphome_dir / "secrets.yaml")
+        for query in ("secret_hidden", "hiddenneedle", "housepassword1"):
+            content, _, _ = await _call("search_esphome_yaml", {"query": query}, _yaml_token(), hass)
+            assert _json(content)["count"] == 0
+
+    async def test_search_bad_yaml_fails_closed_and_budget_reports_incomplete(self, hass, esphome_dir):
+        (esphome_dir / "broken.yaml").write_text("api: [unclosed\n")
+        content, _, _ = await _call("search_esphome_yaml", {"query": "unclosed"}, _yaml_token(), hass)
+        assert _json(content)["count"] == 0
+        assert _json(content)["incomplete"] is True
+        with patch("custom_components.phoenix_mcp.tools.esphome.ESPHOME_YAML_SEARCH_MAX_BYTES", 1):
+            content, _, _ = await _call("search_esphome_yaml", {"query": "api"}, _yaml_token(), hass)
+        assert _json(content)["incomplete"] is True
+
+    @pytest.mark.parametrize("args", [{"query": []}, {"query": "x", "context_lines": True},
+                                      {"query": "x", "case_sensitive": "false"}, {"query": "x" * 201}])
+    async def test_search_rejects_malformed_arguments(self, hass, args):
+        _, outcome, _ = await _call("search_esphome_yaml", args, _yaml_token(), hass)
+        assert outcome == "invalid_request"
+
+    async def test_jobs_scope_before_count_filter_and_page(self, hass, esphome_dir, esphome_entries):
+        (esphome_dir / "private.yaml").write_text("esphome:\n  name: private\n")
+        entry = _esphome_entry(hass, esphome_entries, entity_ids=("light.private",),
+                               state=ConfigEntryState.SETUP_ERROR, runtime=None)
+        entry.data = {"device_name": "private"}
+        jobs = [
+            {"job_id": "hidden", "configuration": "private.yaml", "status": "failed"},
+            {"job_id": "old", "configuration": "rf-blaster1.yaml", "status": "completed", "created_at": "2026-09-01"},
+            {"job_id": "new", "configuration": "rf-blaster1.yaml", "status": "failed", "created_at": "2026-09-02",
+             "output": ["REALAPIKEY123456="], "error": "housepassword1", "port": "192.168.1.10"},
+            {"job_id": "escape", "configuration": "../private.yaml", "status": "failed"},
+        ]
+        (content, outcome, _), builder = await _inventory_call(hass, "list_esphome_jobs", {"limit": 1}, jobs)
+        assert outcome == "allowed"
+        body = _json(content)
+        assert body["count"] == 2
+        assert body["jobs"][0]["job_id"] == "new"
+        assert body["next_offset"] == 1
+        assert "error" not in body["jobs"][0]
+        assert builder.await_args.args[2] == "firmware/get_jobs"
+        (content, _, _), _builder = await _inventory_call(hass, "list_esphome_jobs", {"status": "completed"}, jobs)
+        assert _json(content)["count"] == 1
+
+    async def test_device_projection_importable_scope_and_network_confidentiality(self, hass, esphome_dir, esphome_entries):
+        entry = _esphome_entry(hass, esphome_entries, entity_ids=("light.private",),
+                               state=ConfigEntryState.NOT_LOADED, runtime=None)
+        entry.data = {"device_name": "private"}
+        result = {"configured": [{"name": "rf-blaster1", "configuration": "rf-blaster1.yaml",
+                                   "runtime_state": {"state": "Online", "ip_addresses": ["192.168.1.10"]},
+                                   "api_key": "PRIVATE", "mac_address": "PRIVATE"}],
+                  "importable": [{"name": "new", "friendly_name": "New", "package_import_url": "PRIVATE", "network": "PRIVATE"},
+                                 {"name": "private", "friendly_name": "PRIVATE"}]}
+        (content, outcome, _), builder = await _inventory_call(hass, "list_esphome_devices",
+                                                              {"include_importable": True}, result)
+        assert outcome == "allowed"
+        body = _json(content)
+        assert body["count"] == 2
+        assert "PRIVATE" not in json.dumps(body)
+        assert "192.168.1.10" not in json.dumps(body)
+        assert builder.await_args.args[2] == "devices/list"
+        (content, _, _), _builder = await _inventory_call(hass, "list_esphome_devices", {"state": "online"}, result)
+        assert _json(content)["count"] == 1
 
 
 class TestWsAllowlistGuard:

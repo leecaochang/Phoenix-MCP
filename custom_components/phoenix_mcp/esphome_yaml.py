@@ -58,6 +58,8 @@ ESPHOME_SECRET_PATHS: tuple[tuple[str, ...], ...] = (
     ("wifi", "networks", "[]", "password"),
     ("ota", "password"),
     ("ota", "[]", "password"),
+    ("ota", "encryption", "key"),
+    ("ota", "[]", "encryption", "key"),
     ("web_server", "auth", "password"),
     ("mqtt", "password"),
 )
@@ -316,11 +318,16 @@ def _placeholder_at(node: yaml.ScalarNode) -> str | None:
 def _generated_value(path: tuple[str, ...]) -> str:
     """Fresh randomness for one credential path.
 
-    ESPHome's API encryption key must be exactly 32 base64-encoded bytes and
+    ESPHome's API and OTA encryption keys must be 32 base64-encoded bytes and
     nothing else is accepted. Passwords are free-form, so a URL-safe token keeps
     them clear of every YAML quoting corner case.
     """
-    if _normalized_path(path) == ("api", "encryption", "key"):
+    normalized = _normalized_path(path)
+    if normalized in {
+        ("api", "encryption", "key"),
+        ("ota", "encryption", "key"),
+        ("ota", "[]", "encryption", "key"),
+    }:
         return base64.b64encode(secrets_module.token_bytes(32)).decode("ascii")
     return secrets_module.token_urlsafe(24)
 

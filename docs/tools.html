@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script>(function(){try{var t=localStorage.getItem("phx-docs-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
   <title>Tools reference &middot; Phoenix MCP docs</title>
-  <meta name="description" content="Every Phoenix MCP tool: the 23 native HA MCP tools plus 138 Phoenix MCP tools, each scoped to the token's permission tree and capabilities." />
+  <meta name="description" content="Every Phoenix MCP tool: the 23 native HA MCP tools plus 141 Phoenix MCP tools, each scoped to the token's permission tree and capabilities." />
   <link rel="icon" href="assets/phoenix-logo.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -25,13 +25,13 @@
         <header class="page-head">
           <p class="breadcrumb"><a href="index.html">Docs</a> / Reference / Tools</p>
           <h1>Tools reference</h1>
-          <p class="lede">Search all 161 tools by name, task, or required capability. Phoenix includes Home Assistant's 23 native MCP tools plus 138 scoped tools for configuration, diagnostics, and control. Home Companion instead exposes the persona-specific <a href="#home-request"><code>home_request</code></a> task interface.</p>
+          <p class="lede">Search all 164 tools by name, task, or required capability. Phoenix includes Home Assistant's 23 native MCP tools plus 141 scoped tools for configuration, diagnostics, and control. Home Companion instead exposes the persona-specific <a href="#home-request"><code>home_request</code></a> task interface.</p>
         </header>
 
         <div class="tool-toolbar" role="search">
           <label class="tool-search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-            <input type="text" id="tool-search-input" placeholder="Search all 161 tools by name or keyword..." aria-label="Search tools" autocomplete="off" />
+            <input type="text" id="tool-search-input" placeholder="Search all 164 tools by name or keyword..." aria-label="Search tools" autocomplete="off" />
           </label>
           <button class="filter-chip" data-cap="all" aria-pressed="true">All</button>
           <button class="filter-chip" data-cap="read" aria-pressed="false">Reads</button>
@@ -334,14 +334,28 @@
           <article class="tool" data-cap="system" data-search="get_esphome_yaml set_esphome_yaml esphome device yaml config secrets redacted placeholder">
             <div class="tool-head"><span class="tool-name">get_esphome_yaml</span><span class="tool-name">set_esphome_yaml</span><span class="badge badge-cap">ESPHome device YAML</span></div>
             <p class="tool-desc">Read and edit ESPHome device files inside the isolated <code>esphome/</code> directory. This uses a separate capability from general filesystem access because device YAML can contain C++ lambdas and inline credentials. Call <code>get_esphome_yaml</code> without <code>file</code> to list accessible files, or supply <code>file</code> to read one.</p>
-            <p class="tool-desc">Credentials are masked with <code>__PHOENIX_REDACTED__&lt;path&gt;__</code> placeholders. This includes API keys, Wi-Fi, OTA, and MQTT passwords, credential-shaped fields, and values also found in ESPHome's <code>secrets.yaml</code>.</p>
+            <p class="tool-desc">Credentials are masked with <code>__PHOENIX_REDACTED__&lt;path&gt;__</code> placeholders. This includes API and OTA encryption keys, Wi-Fi, OTA, and MQTT passwords, credential-shaped fields, and values also found in ESPHome's <code>secrets.yaml</code>. Adopted devices retain their scope when unloaded or failed; registry-only entities require inherited device or domain permission.</p>
             <p class="tool-desc">Leave each placeholder in place. Phoenix restores the real value during the write without placing it in the agent request, approval record, or diff. Comments and formatting outside redacted spans remain byte-for-byte unchanged.</p>
             <p class="tool-desc">A credential cannot be changed to a new literal value. You may replace it with a <code>!secret</code> reference when that key appears in <code>defined_secrets</code>. No tool can read or write ESPHome's <code>secrets.yaml</code>.</p>
             <p class="tool-desc">This restriction also protects connectivity. An API encryption key must match the value stored by Home Assistant, and the OTA password controls the next upload. Changing either blindly can make the device unreachable without a wired reflash.</p>
             <p class="tool-desc">Writing never flashes anything. The file lands on disk and the device keeps running its current firmware until a build is installed, which is a separate tool behind a separate capability. <code>content_hash</code> is taken over the real file, so <code>expected_hash</code> still guards against a change during an approval window, and every write is versioned for rollback in the Changes tab.</p>
-            <p class="tool-desc"><strong>Generating a new credential.</strong> Use <code>!phoenix_generate</code> for a missing API encryption key or OTA password. Phoenix replaces the tag with a cryptographically random value during the write. The generated value exists only on disk and remains masked in later reads, approvals, and diffs.</p>
+            <p class="tool-desc"><strong>Generating a new credential.</strong> Use <code>!phoenix_generate</code> for a missing API or OTA encryption key or OTA password. Phoenix creates encryption keys from 32 random bytes encoded in base64. If API and OTA both specify keys, ESPHome requires them to match: use a shared <code>!secret</code> reference or let OTA inherit the API key. The generated value remains masked in later reads, approvals, and diffs.</p>
             <p class="tool-desc">Read the generated value from the ESPHome dashboard when Home Assistant requests it. Phoenix refuses the tag for an existing credential because an uncoordinated rotation can disconnect the device. It also refuses the tag for Wi-Fi SSIDs and passwords.</p>
             <dl><dt>params</dt><dd><code>get_esphome_yaml</code>: <code>file</code> (omit to list); <code>set_esphome_yaml</code>: <code>file</code>, <code>content</code>, <code>expected_hash</code></dd></dl>
+          </article>
+
+          <article class="tool" data-cap="system" data-search="search_esphome_yaml esphome yaml search fleet context">
+            <div class="tool-head"><span class="tool-name">search_esphome_yaml</span><span class="badge badge-cap">ESPHome device YAML</span></div>
+            <p class="tool-desc">Find configuration text across authorized local device YAML, including nested folders. Credentials and inaccessible entity references are masked before matching; secret values therefore cannot be searched. Results include line numbers and bounded context. Use <code>get_esphome_yaml</code> before editing, since search previews may omit or mask content.</p>
+            <p class="tool-desc">The scan excludes secrets.yaml, hidden paths, archives and symlink escapes. It scans at most 2 MiB and retains at most 1,000 matches; <code>incomplete</code> means a scan budget was reached or a file was unreadable or unparseable. Each context snippet is capped at 1,000 characters. Counts and pagination describe visible matches only.</p>
+            <dl><dt>params</dt><dd><code>query</code> (required; literal text, up to 200 characters), <code>case_sensitive</code> (default false), <code>context_lines</code> (default 1, max 3), <code>offset</code>, <code>limit</code> (default 20, max 50).</dd></dl>
+          </article>
+
+          <article class="tool" data-cap="system" data-search="list_esphome_devices list_esphome_jobs esphome device builder discovery importable fleet jobs history">
+            <div class="tool-head"><span class="tool-name">list_esphome_devices</span><span class="tool-name">list_esphome_jobs</span><span class="badge badge-cap">ESPHome device YAML</span></div>
+            <p class="tool-desc"><code>list_esphome_devices</code> returns configured Builder devices whose local configuration files are readable by this token. Set <code>include_importable</code> to discover unadopted devices under the authoring capability. Known adopted devices retain entity scope even when unloaded. Network addresses, MACs, import URLs, raw YAML and keys are withheld.</p>
+            <p class="tool-desc"><code>list_esphome_jobs</code> returns retained job metadata for authorized local configurations, newest first. Use <code>get_esphome_job</code> for scrubbed output. Missing or deleted configurations are omitted. Filters, counts and pagination apply after authorization.</p>
+            <dl><dt>params</dt><dd><code>list_esphome_devices</code>: <code>query</code>, <code>state</code> (<code>online</code>, <code>offline</code>, <code>unknown</code>), <code>include_importable</code> (default false). <code>list_esphome_jobs</code>: <code>file</code>, <code>status</code> (<code>queued</code>, <code>running</code>, <code>completed</code>, <code>failed</code>, <code>cancelled</code>). Both: <code>offset</code>, <code>limit</code> (default 20, max 50).</dd></dl>
           </article>
 
           <article class="tool" data-cap="system" data-search="validate_esphome_yaml get_esphome_board get_esphome_component get_esphome_automations esphome device builder validate board pins component schema">
@@ -361,7 +375,8 @@
             <p class="tool-desc">An install runs a compile followed by an upload. <code>get_esphome_job</code> reports <code>flashed: true</code> only after the upload completes. If an offline device is configured to update on its next wake, the result reports that pending state instead of success. Phoenix installs over the air and ignores caller-supplied ports.</p>
             <p class="tool-desc"><code>wait_for_esphome_job</code> waits up to five minutes and returns when the job finishes. It follows both compile and upload stages for an install and emits progress such as <code>Compiling living-room: 70%</code>. Agent Chat shows these updates live. External clients receive them only when they request and render MCP progress notifications.</p>
             <p class="tool-desc">Phoenix refuses a second build for a file that is already building and returns the active job instead. Job IDs remain scoped to accessible files; missing and inaccessible jobs return the same response. Build logs are bounded and scrubbed of known credentials.</p>
-            <dl><dt>params</dt><dd><code>compile_esphome_firmware</code>, <code>install_esphome_firmware</code>: <code>file</code> (required). <code>get_esphome_job</code>: <code>lookup</code> (required; <code>{kind: job|file, id}</code>) for a job ID or a file's newest job. <code>cancel_esphome_job</code>: <code>job_id</code> (required). <code>wait_for_esphome_job</code>: <code>job_id</code> (required), <code>timeout</code>.</dd></dl>
+            <p class="tool-desc">Set <code>force_local</code> to true on compile or install to bypass the Builder's paired remote compiler. Installation still uses OTA and its normal flash approval. Without the override, Builder chooses its configured build source.</p>
+            <dl><dt>params</dt><dd><code>compile_esphome_firmware</code>, <code>install_esphome_firmware</code>: <code>file</code> (required), <code>force_local</code> (optional boolean). <code>get_esphome_job</code>: <code>lookup</code> (required; <code>{kind: job|file, id}</code>) for a job ID or a file's newest job. <code>cancel_esphome_job</code>: <code>job_id</code> (required). <code>wait_for_esphome_job</code>: <code>job_id</code> (required), <code>timeout</code>.</dd></dl>
           </article>
 
           <article class="tool" data-cap="system" data-search="delete_esphome_yaml clean_esphome_build rename_esphome_device esphome delete remove clean cache rebuild rename hostname lifecycle">

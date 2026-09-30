@@ -108,6 +108,32 @@ class TestLayer1CuratedPaths:
         assert red == text
 
 
+@pytest.mark.parametrize("prefix,dotted", [
+    ("ota:\n  encryption:\n    key: ", "ota.encryption.key"),
+    ("ota:\n  - platform: esphome\n    encryption:\n      key: ", "ota[0].encryption.key"),
+])
+def test_ota_encryption_keys_are_masked_frozen_scrubbed_and_generated(prefix, dotted):
+    import base64
+    import yaml
+
+    key = base64.b64encode(bytes(range(32))).decode("ascii")
+    disk = prefix + key + "\n"
+    masked, paths = redact_esphome_text(disk)
+    assert key not in masked
+    assert dotted in paths
+    assert splice_esphome_text(masked, disk) == disk
+    assert key in inline_secret_values(disk)
+    assert key not in scrub_secret_values("compiler reports " + key, inline_secret_values(disk))
+    with pytest.raises(EsphomeSecretViolation):
+        splice_esphome_text(disk, "")
+    with pytest.raises(EsphomeSecretViolation):
+        splice_esphome_text(disk.replace(key, "other-literal-key"), disk)
+    generated = yaml.safe_load(splice_esphome_text(prefix + "!phoenix_generate\n", ""))["ota"]
+    if isinstance(generated, list):
+        generated = generated[0]
+    assert len(base64.b64decode(generated["encryption"]["key"], validate=True)) == 32
+
+
 class TestLayer2KeyNameHeuristic:
     def test_credential_key_at_an_uncurated_path(self):
         text = "ble_client:\n  - mac_address: AA\n    bindkey: abcdef0123456789\n"
