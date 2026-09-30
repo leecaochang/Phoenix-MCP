@@ -653,11 +653,19 @@ def test_every_voice_template_is_reachable_from_the_modules_that_speak():
     import pathlib
 
     from custom_components.phoenix_mcp import agentcli as _agentcli
-    from custom_components.phoenix_mcp import chat_routing, command_clarification, command_display, command_execution, command_summary
-    from custom_components.phoenix_mcp.const import VOICE_TEMPLATES
+    from custom_components.phoenix_mcp import chat_routing, command_clarification, command_display, command_execution, command_summary, home_companion_response
+    from custom_components.phoenix_mcp.const import (
+        VOICE_TEMPLATES, HOME_COMPANION_ACCEPTED_TEMPLATES,
+        HOME_COMPANION_COUNT_TEMPLATES, HOME_COMPANION_VERIFIED_TEMPLATES, HOME_COMPANION_COUNT_KIND_TEMPLATES, HOME_COMPANION_POWER_TEMPLATES, HOME_COMPANION_ACTION_KIND_TEMPLATES, HOME_COMPANION_EXCEPTION_TEMPLATES,
+    )
 
-    used: set[str] = set()
-    for mod in (voice_agent, _agentcli, command_clarification, command_display, command_execution, chat_routing, command_summary):
+    # The report selects localized variants from fixed maps rather than model text.
+    used: set[str] = (set(HOME_COMPANION_ACCEPTED_TEMPLATES.values()) |
+                      set(HOME_COMPANION_COUNT_TEMPLATES.values()) |
+                      set(HOME_COMPANION_VERIFIED_TEMPLATES.values()) | set(HOME_COMPANION_COUNT_KIND_TEMPLATES.values()) |
+                      set(HOME_COMPANION_POWER_TEMPLATES.values()) | set(HOME_COMPANION_ACTION_KIND_TEMPLATES.values()) |
+                      set(HOME_COMPANION_EXCEPTION_TEMPLATES.values()))
+    for mod in (voice_agent, _agentcli, command_clarification, command_display, command_execution, chat_routing, command_summary, home_companion_response):
         src = pathlib.Path(mod.__file__).read_text(encoding="utf-8")
         for call in ast.walk(ast.parse(src)):
             if (isinstance(call, ast.Call) and isinstance(call.func, ast.Name)

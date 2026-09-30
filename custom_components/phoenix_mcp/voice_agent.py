@@ -151,7 +151,8 @@ async def async_voice_answer(
     if cfg is None or not cfg.model:
         return voice_text(language, "not_configured")
 
-    if authority is not None:
+    from .home_companion import is_companion
+    if authority is not None and not is_companion(token):
         if authority.current(hass) is None:
             return voice_text(language, "token_unavailable")
         from .voice_context import capture_voice_origin

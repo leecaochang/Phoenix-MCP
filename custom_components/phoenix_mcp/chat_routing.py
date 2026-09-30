@@ -21,6 +21,9 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
                                    cancel: asyncio.Event, *, base_url: str, client_ip: str,
                                    emit: Callable[[str, dict], Awaitable[None]]) -> bool:
     """True continues the provider; False means this turn has already finished."""
+    from .home_companion import is_companion
+    if is_companion(token):
+        return True
     settings = data.store.get_settings()
     mode = effective_routing_mode(settings, "chat")
     execute = mode in ("local", "hybrid")

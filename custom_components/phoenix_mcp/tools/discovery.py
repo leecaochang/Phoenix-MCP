@@ -1497,7 +1497,7 @@ async def _tool_search_entities(
         for row in results:
             row.update(_search_membership(row["entity_id"], token, hass, expose, budget))
 
-    body = {"count": len(results), "truncated": truncated, "entities": results}
+    body = {"count": len(results), "total": len(matches), "truncated": truncated, "entities": results}
     if fuzzy_fallback:
         # Signal that these are approximate (typo-tolerant) matches, not exact,
         # so the agent knows the query did not match any entity literally.

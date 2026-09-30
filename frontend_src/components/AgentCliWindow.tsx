@@ -998,12 +998,20 @@ export function AgentCliWindow({
     setPendingContinue(null);
     cancelledRef.current = false;
     lastQueryRef.current = mode === "continue" ? "" : text;
-    usageBaseRef.current = { input: usageRef.current.input, output: usageRef.current.output };
+    const stateless = tokens.find((token) => token.id === tokenId)?.persona === "home_companion";
+    if (stateless) {
+      setTurns([]);
+      setSessionTurns([]);
+      setAnnouncement("");
+      resetUsage();
+    }
+    usageBaseRef.current = stateless ? { input: 0, output: 0 }
+      : { input: usageRef.current.input, output: usageRef.current.output };
     turnSawUsageRef.current = false;
     setLive(mode === "continue" ? [] : [{ kind: "user", text, ts: Date.now() }]);
     setSending(true);
 
-    const sentMessages = memoryOverride ?? memoryMessages(turns, scrollbackLines);
+    const sentMessages = stateless ? [] : memoryOverride ?? memoryMessages(turns, scrollbackLines);
     const sentLen = sentMessages.length;
     let newMessages: unknown[] = [];
     let focusDeclined = false;
@@ -1204,7 +1212,7 @@ export function AgentCliWindow({
         if (finalText) setAnnouncement(finalText);
       }
     }
-  }, [sending, turns, scrollbackLines, tokenId, instanceId, kind, model, options, caps]);
+  }, [sending, turns, scrollbackLines, tokenId, tokens, instanceId, kind, model, options, caps, resetUsage]);
 
   const answerAnyway = useCallback((prompt: string) => {
     if (sending || !prompt) return;

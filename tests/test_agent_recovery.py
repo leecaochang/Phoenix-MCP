@@ -224,3 +224,40 @@ async def test_successful_turn_clears_receipts_after_multiple_writes(hass):
     await run(hass=hass, data=data)
     assert dispatch.await_count == 2
     assert recovery.records("token") == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('save_fails', [False, True])
+async def test_report_finalizes_only_received_records_from_its_own_finished_turn(hass, save_fails):
+    from custom_components.phoenix_mcp.agent_recovery import recovery_turn
+    disk = Disk()
+    recovery = AgentRecovery(disk)
+    data = SimpleNamespace(agent_recovery=recovery, store=SimpleNamespace(get_pending_approvals=lambda: []))
+    token = SimpleNamespace(id='token')
+    dispatch = AsyncMock(side_effect=[
+        ({'result': {'content': []}}, 'call_service', 'call_service', 'allowed'),
+        OSError('Connection interrupted after dispatch'),
+    ])
+    @recovery_turn
+    async def run(*, hass, data):
+        for rid in ('received', 'unknown'):
+            try:
+                await dispatch_agent_tool(dispatch, hass=hass, data=data, token=token, name='call_service',
+                    arguments={}, tool_id=rid, request_id=rid, client_ip='voice', base_url='http://example')
+            except RecoveryRequired:
+                pass
+        return SimpleNamespace(outcome='provider_error', recovery_turn_id='')
+    result = await run(hass=hass, data=data)
+    await recovery.begin('other', 'call_service', 'unrelated')
+    recovery.interrupted('unrelated')
+    disk.fail = save_fails
+    if save_fails:
+        with pytest.raises(OSError):
+            await recovery.complete_received_turn(hass, result.recovery_turn_id)
+    else:
+        await recovery.complete_received_turn(hass, result.recovery_turn_id)
+    assert {r['request_id'] for r in recovery.records('token')} == (
+        {'received', 'unknown'} if save_fails else {'unknown'})
+    assert recovery.blocks('token')
+    assert {r['request_id'] for r in recovery.records('other')} == {'unrelated'}
+    assert dispatch.await_count == 2

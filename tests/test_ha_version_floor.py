@@ -230,6 +230,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     "homeassistant.util.color": {
         # Named-color catalog verified in 2024.5.0 util/color.py.
         "COLORS": "0.0.0",
+        "color_name_to_rgb": "2024.5.0",
     },
     "homeassistant.util.dt": {
         "as_utc": "0.0.0",

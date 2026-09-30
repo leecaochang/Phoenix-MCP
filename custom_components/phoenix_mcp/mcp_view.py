@@ -43,7 +43,7 @@ from homeassistant.util.dt import utcnow
 from homeassistant.util.ulid import ulid_to_bytes_or_none
 
 from .audit import generate_request_id
-from .const import AGENTCLI_CLIENT_IP, AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, PHOENIX_VERSION, BLOCKED_DOMAINS, VOICE_AGENT_CLIENT_IP, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, CAPABILITY_NAMES, DOMAIN, DOMAIN_IMPORTANT_ATTRIBUTES, DUAL_GATE_SERVICES, LEAN_ALWAYS_ATTRS, HIGH_RISK_DOMAINS, MCP_DISCOVER_TTL_MS, MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSIONS, MCP_SSE_KEEPALIVE_SECONDS, MAX_APPROVAL_RESULT_CHARS, MAX_BATCH_APPROVALS, MAX_BATCH_ITEMS, LOG_LEVELS, LOG_LEVEL_ERROR_MESSAGE, MAX_LOG_ENTRIES, MAX_LOGBOOK_HOME_DAYS, MAX_LOGBOOK_NARROWED_DAYS, MAX_LOGBOOK_RESOURCE_IDS, MAX_SEARCH_QUERY_LEN, MAX_SUBSCRIPTION_SECONDS, MAX_ENTITY_ALIASES, MAX_ENTITY_ALIAS_LENGTH, MAX_TOOL_NAME_LENGTH, MESA_APPROVED_EXECUTOR, MESA_MODE_OFF, NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS
+from .const import AGENTCLI_CLIENT_IP, AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, PHOENIX_VERSION, BLOCKED_DOMAINS, VOICE_AGENT_CLIENT_IP, HOME_COMPANION_CLIENT_IP, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, CAPABILITY_NAMES, DOMAIN, DOMAIN_IMPORTANT_ATTRIBUTES, DUAL_GATE_SERVICES, LEAN_ALWAYS_ATTRS, HIGH_RISK_DOMAINS, MCP_DISCOVER_TTL_MS, MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSIONS, MCP_SSE_KEEPALIVE_SECONDS, MAX_APPROVAL_RESULT_CHARS, MAX_BATCH_APPROVALS, MAX_BATCH_ITEMS, LOG_LEVELS, LOG_LEVEL_ERROR_MESSAGE, MAX_LOG_ENTRIES, MAX_LOGBOOK_HOME_DAYS, MAX_LOGBOOK_NARROWED_DAYS, MAX_LOGBOOK_RESOURCE_IDS, MAX_SEARCH_QUERY_LEN, MAX_SUBSCRIPTION_SECONDS, MAX_ENTITY_ALIASES, MAX_ENTITY_ALIAS_LENGTH, MAX_TOOL_NAME_LENGTH, MESA_APPROVED_EXECUTOR, MESA_MODE_OFF, NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS
 from .data import PhoenixData
 from .template_render import TemplateRenderError, async_render_template_for_token
 from .request_authority import (AuthorityChangedError, RequestAuthority, check_request_authority, finite_json_numbers, policy_version, request_authority)
@@ -7649,13 +7649,14 @@ async def _call_tool(
     if is_companion(token):
         refusal = authorize_call(token, tool_name, arguments)
         if refusal:
-            record_outcome(token, tool_name, "denied")
+            record_outcome(token, tool_name, "denied", arguments=arguments)
             return _tool_error(refusal), "denied", tool_name
         if tool_name == "phoenix_request":
             return await run_request(arguments, token, hass, data)
     elif tool_name == "phoenix_request":
         return _tool_error("This tool requires the Home Companion persona."), "denied", tool_name
     if not finite_json_numbers(arguments):
+        record_outcome(token, tool_name, "invalid_request", arguments=arguments)
         return _tool_error("Non-finite numbers are not allowed."), "invalid_request", tool_name
     internal_name = _NATIVE_TOOL_PUBLIC_TO_INTERNAL.get(tool_name, tool_name)
     entry = _TOOL_HANDLERS.get(internal_name)
@@ -7672,7 +7673,7 @@ async def _call_tool(
     finally:
         dispatch_request_id.reset(request_context)
     check_request_authority()
-    record_outcome(token, tool_name, result[1])
+    record_outcome(token, tool_name, result[1], result[0], arguments, hass)
     return result
 
 
@@ -7963,7 +7964,7 @@ def _maybe_append_stale_advisory(
     token still gets advised.
     """
     internal = client_ip in (
-        AGENTCLI_CLIENT_IP, ASSIST_CLIENT_IP, VOICE_AGENT_CLIENT_IP, AI_TASK_CLIENT_IP)
+        AGENTCLI_CLIENT_IP, ASSIST_CLIENT_IP, VOICE_AGENT_CLIENT_IP, AI_TASK_CLIENT_IP, HOME_COMPANION_CLIENT_IP)
     notices: list[str] = []
     if not internal:
         if token.settings_version > token.tools_list_version:

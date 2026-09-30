@@ -1,0 +1,35 @@
+input_boolean:
+  phoenix_companion_acceptance_doorway:
+    name: Acceptance Doorway Power
+    initial: false
+  phoenix_companion_acceptance_desk:
+    name: Acceptance Desk Power
+    initial: false
+  phoenix_companion_acceptance_desk_available:
+    name: Acceptance Desk Availability
+    initial: true
+template:
+  - light:
+      - name: Alex Office Lights Doorway
+        unique_id: phoenix_companion_acceptance_doorway
+        state: "{{ is_state('input_boolean.phoenix_companion_acceptance_doorway', 'on') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.phoenix_companion_acceptance_doorway
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.phoenix_companion_acceptance_doorway
+      - name: Alex Office Lights Desk
+        unique_id: phoenix_companion_acceptance_desk
+        availability: "{{ is_state('input_boolean.phoenix_companion_acceptance_desk_available', 'on') }}"
+        state: "{{ is_state('input_boolean.phoenix_companion_acceptance_desk', 'on') }}"
+        turn_on:
+          action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.phoenix_companion_acceptance_desk
+        turn_off:
+          action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.phoenix_companion_acceptance_desk

@@ -2131,7 +2131,7 @@ class OpenAICompatProvider:
     @_total_provider_response
     async def _parse(self, resp: Any, show_thinking: bool) -> AsyncIterator[dict]:
         text_parts: list[str] = []
-        # Z.ai, MiMo, and TokenHub retain reasoning_content verbatim with the
+        # DeepSeek, Z.ai, MiMo, and TokenHub retain reasoning_content verbatim with the
         # assistant tool call on the next round. Other compatible providers use
         # this field for display only, so retention is profile-controlled.
         replay_reasoning_parts: list[str] = []
@@ -2192,13 +2192,12 @@ class OpenAICompatProvider:
                 raise _ProviderResponseError()
             if delta.get("refusal") or choice.get("finish_reason") == "content_filter":
                 raise _ProviderResponseError("provider_blocked", retryable=False)
-            # DeepSeek uses reasoning_content; Ollama's OpenAI-compatible path
-            # uses reasoning. Both are display-only and never enter the assistant
-            # message that Phoenix sends back on the next round.
+            # Retain protocol-required reasoning even when its display is hidden.
+            # Ollama's reasoning field remains display-only.
             reasoning = delta.get("reasoning_content") or delta.get("reasoning")
             if reasoning is not None and not isinstance(reasoning, str):
                 raise _ProviderResponseError()
-            if reasoning and self.kind in ("zai", "mimo", "tencent"):
+            if reasoning and self.kind in ("deepseek", "zai", "mimo", "tencent"):
                 replay_reasoning_parts.append(str(reasoning))
             if reasoning and show_thinking:
                 yield _norm(EV_THINKING, text=reasoning)
@@ -2350,7 +2349,7 @@ class OpenAICompatProvider:
                 retryable = True
                 message = "The model produced an invalid tool call."
             yield _norm(EV_ERROR, status=0, code=code,
-                        message=message, retryable=retryable)
+                        message=message, retryable=retryable, diagnostic={'category': code})
             return
         if not saw_finish:
             raise _ProviderResponseError("provider_incomplete")
@@ -3547,6 +3546,48 @@ async def async_run_agent_turn(
                                            base_url=base_url, client_ip=client_ip, emit=emit):
         return messages
 
+    from .home_companion import is_companion, async_delegate
+    from .const import HOME_COMPANION_REPORT_STATUSES
+    if is_companion(token):
+        request = messages[-1].get("content") if messages and messages[-1].get("role") == "user" else None
+        if not isinstance(request, str) or cancel.is_set():
+            await emit("error", {"code": "cancelled" if cancel.is_set() else "invalid_request",
+                                 "message": voice_text(routing_language, "companion_clarify")})
+            await emit("messages", {"messages": messages})
+            await emit("done", {"stop_reason": "error"})
+            return messages
+        task = asyncio.create_task(async_delegate(hass, data, token, request, routing_language, base_url,
+                                                   style=conversation_style, detail=detail_level))
+        stopped = asyncio.create_task(cancel.wait())
+        try:
+            done, _ = await asyncio.wait({task, stopped}, return_when=asyncio.FIRST_COMPLETED)
+            if stopped in done:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+                await emit("error", {"code": "cancelled", "message": voice_text(routing_language, "local_cancelled") + " " + voice_text(routing_language, "companion_unverified")})
+            else:
+                report = await task
+                messages.append({"role": "assistant", "content": report["message"]})
+                if report["status"] in HOME_COMPANION_REPORT_STATUSES:
+                    await emit("assistant_delta", {"text": report["message"]})
+                for url in report["review_urls"]:
+                    record = get_approval(data.store, url.rsplit("/", 1)[-1])
+                    if record is not None and record.token_id == token.id:
+                        await emit("approval_required", {
+                            "approval_id": record.id, "review_url": url, "tool_name": record.tool_name,
+                            "expires_at": record.expires_at, "diff": record.diff,
+                        })
+                if report["status"] not in HOME_COMPANION_REPORT_STATUSES:
+                    await emit("error", {"code": report["status"], "message": report["message"], "retryable": False})
+        finally:
+            for waiter in (task, stopped):
+                if not waiter.done():
+                    waiter.cancel()
+            await asyncio.gather(task, stopped, return_exceptions=True)
+        await emit("messages", {"messages": messages})
+        await emit("done", {"stop_reason": "end_turn"})
+        return messages
+
     from .tool_routing import create_review_state, async_review_tools, withheld_results
     review_state = create_review_state(data, token, "chat")
 
@@ -3777,6 +3818,7 @@ class _HeadlessTurnResult:
     detail: str = ""
     focus_declined: bool = False
     blocked_by_prior_action: bool = False
+    recovery_turn_id: str = ""
 
 
 @recovery_turn
@@ -3796,6 +3838,7 @@ async def _run_headless_turn(
     routing_surface: str = "voice",
     routing_language: object = None,
     reserve_final_round: bool = False,
+    response_only: bool = False,
 ) -> _HeadlessTurnResult:
     """Run one headless model/tool turn to completion.
 
@@ -3851,9 +3894,12 @@ async def _run_headless_turn(
     dispatch_started = False
     write_started = False
 
+    format_corrections = 0
+    count_report_only = False
+    from .const import HOME_COMPANION_MAX_FORMAT_CORRECTIONS, HOME_COMPANION_FORMAT_ERROR_CODES
     for iteration in range(max_iterations):
-        from .home_companion import check_turn_context
-        final_round = reserve_final_round and iteration == max_iterations - 1
+        from .home_companion import check_turn_context, internal_turn, ambiguous_control, count_source
+        final_round = response_only or count_report_only or (reserve_final_round and iteration == max_iterations - 1)
         round_system = system
         if final_round:
             round_system += (
@@ -3869,6 +3915,7 @@ async def _run_headless_turn(
         assistant_msg: dict | None = None
         stop_reason = "end_turn"
         call_text = ""
+        correct_format = False
         async for ev in _stream_turn_resilient(
             provider, session, system_prompt=round_system, messages=messages,
             tools=[] if final_round else tools, options={}, cancel=cancel, dispatch_started=dispatch_started,
@@ -3883,12 +3930,26 @@ async def _run_headless_turn(
                 stop_reason = ev["stop_reason"]
                 assistant_msg = ev["assistant_msg"]
             elif etype == EV_ERROR:
+                if (internal_turn(token) and not write_started and not tool_calls
+                        and (ev.get('code') in HOME_COMPANION_FORMAT_ERROR_CODES
+                             or (ev.get('diagnostic') or {}).get('category') in HOME_COMPANION_FORMAT_ERROR_CODES)
+                        and format_corrections < HOME_COMPANION_MAX_FORMAT_CORRECTIONS
+                        and iteration < max_iterations - 1):
+                    format_corrections += 1
+                    messages.append({'role': 'user', 'content': (
+                        'Your previous response was malformed and none of the tools in that response ran. '
+                        'Use valid JSON objects for tool arguments, including quoted string values. '
+                        'Keep the original task and restrictions unchanged.')})
+                    correct_format = True
+                    break
                 return _HeadlessTurnResult(
                     final_text, review_urls,
                     outcome=TURN_OUTCOME_UNKNOWN if write_started else TURN_PROVIDER_ERROR,
                     detail=str(ev.get("message") or _HEADLESS_PROVIDER_ERROR),
                     focus_declined=focus_declined,
                 )
+        if correct_format:
+            continue
         if detect_focus_refusal:
             call_text, text_declined = _strip_focus_marker_text(call_text)
             focus_declined = focus_declined or text_declined
@@ -3910,6 +3971,19 @@ async def _run_headless_turn(
             # another batch and leave no round for reporting its outcome.
             return _HeadlessTurnResult("", review_urls, outcome=TURN_EXHAUSTED)
         if stop_reason != "tool_use":
+            from .home_companion import invalid_count_report
+            if (not write_started and invalid_count_report(token, final_text)
+                    and format_corrections < HOME_COMPANION_MAX_FORMAT_CORRECTIONS
+                    and iteration < max_iterations - 1):
+                format_corrections += 1
+                count_report_only = True
+                messages.append({'role': 'user', 'content': (
+                    'Your final report did not pass validation. Return exactly one JSON object '
+                    'with status and a nonempty message. For a count, copy the unchanged server-provided read_answer reference '
+                    'from the received search result. Do not invent a count or source index. '
+                    'Do not repeat discovery or run a control. Keep the original task and restrictions unchanged.')})
+                final_text = ''
+                continue
             exhausted = False
             break
         if authority_lost:
@@ -3921,6 +3995,19 @@ async def _run_headless_turn(
             # allows the one intervening round so the model can say what happened.
             exhausted = False
             break
+
+        from .home_companion import preflight_control_calls, incomplete_proposal
+        if validation_results := preflight_control_calls(token, tool_calls):
+            if write_started:
+                incomplete_proposal(token)
+                return _HeadlessTurnResult(json.dumps({'status': 'refused', 'message': 'A later control proposal was invalid and was not run.'}), review_urls)
+            if (format_corrections >= HOME_COMPANION_MAX_FORMAT_CORRECTIONS
+                    or iteration >= max_iterations - 2):
+                return _HeadlessTurnResult('', review_urls, outcome=TURN_PROVIDER_ERROR)
+            format_corrections += 1
+            provider.append_tool_results(messages, validation_results)
+            final_text = ''
+            continue
 
         # The answer is the model's LAST text (after tools resolve), not the
         # intermediate "let me check..." text before a tool round; reset it here.
@@ -3946,6 +4033,8 @@ async def _run_headless_turn(
                 })
                 continue
             dispatch_request_id = generate_request_id()
+            if ambiguous_control(dispatch_token, hass, name):
+                return _HeadlessTurnResult(json.dumps({'status': 'clarification_needed', 'message': 'Ambiguous target.'}), review_urls)
             dispatch_started = True
             write_started = write_started or not tool_is_read_only(name)
             try:
@@ -3983,9 +4072,20 @@ async def _run_headless_turn(
                     return _HeadlessTurnResult("", review_urls)
                 continue
             content = result.get("content", [])
+            result_text = _flatten_text(content)
+            reference = count_source(dispatch_token, name)
+            if reference is not None:
+                try:
+                    body = json.loads(result_text)
+                except (ValueError, TypeError):
+                    body = None
+                if isinstance(body, dict):
+                    result_text = json.dumps({**body, 'read_answer': reference}, ensure_ascii=False)
+                else:
+                    result_text += '\nread_answer: ' + json.dumps(reference)
             results.append({
                 "tool_use_id": tc.get("id"), "tool_name": name,
-                "result_text": _flatten_text(content),
+                "result_text": result_text,
                 "images": _extract_image_blocks(content),
                 "is_error": bool(result.get("isError")),
             })
@@ -4089,6 +4189,17 @@ async def async_run_voice_turn(
     until the turn-outcome split, so a Chinese pipeline heard a translated decline
     and then an English apology the moment a turn failed. None falls back to English.
     """
+    from .home_companion import is_companion, internal_turn, async_delegate
+    from .const import HOME_COMPANION_REPORT_STATUSES
+    if is_companion(token) and not internal_turn(token):
+        report = await async_delegate(hass, data, token, user_text, language, base_url)
+        voice_result("ok" if report["status"] in HOME_COMPANION_REPORT_STATUSES
+                     else report["status"], bool(report["review_urls"]), bool(report["message"]))
+        answer = report["message"]
+        if include_review_links and report["review_urls"]:
+            answer += "\n\n" + " ".join(f"{base_url}{url}" for url in report["review_urls"])
+        return answer
+
     from .mcp_view import _build_instructions  # noqa: PLC0415
 
     settings = data.store.get_settings()
@@ -4209,6 +4320,22 @@ async def async_run_ai_task(
     structure), the model is instructed to emit only matching JSON; the caller parses
     the returned text.
     """
+    from .home_companion import is_companion, async_delegate
+    companion_authority = None
+    if is_companion(token):
+        from .command_routing import RoutingAuthority
+        companion_authority = RoutingAuthority.capture(data, token)
+        settings = data.store.get_settings()
+        report = await async_delegate(hass, data, token, instructions, hass.config.language, base_url,
+                                      style=settings.ai_task_conversation_style, detail=settings.ai_task_detail_level)
+        if companion_authority.current(hass) is None:
+            raise AiTaskError(voice_text(hass.config.language, "token_unavailable"))
+        if report["status"] != "completed":
+            raise AiTaskError(report["message"])
+        if structure_json is None:
+            return report["message"]
+        instructions = json.dumps({"task": instructions, "phoenix_report": report}, ensure_ascii=False)
+
     from .mcp_view import _build_instructions  # noqa: PLC0415
 
     settings = data.store.get_settings()
@@ -4230,8 +4357,11 @@ async def async_run_ai_task(
     turn = await _run_headless_turn(
         hass, data, token, provider, session, base_url,
         system=system, seed=instructions, client_ip=AI_TASK_CLIENT_IP,
-        max_iterations=max_iterations, routing_surface="ai_task", routing_language=hass.config.language,
+        max_iterations=1 if companion_authority is not None else max_iterations, routing_surface="ai_task", routing_language=hass.config.language,
+        response_only=companion_authority is not None,
     )
+    if companion_authority is not None and companion_authority.current(hass) is None:
+        raise AiTaskError(voice_text(hass.config.language, "token_unavailable"))
     # Unlike the voice surface there is no one listening to an apology: an
     # automation asked for data, so every non-OK ending is an error the caller
     # wraps as a HomeAssistantError. These messages are operator-facing and

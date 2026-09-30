@@ -193,6 +193,41 @@ async def test_real_native_write_resolves_only_selected_light(hass,companion,mon
     assert not companion[0].agent_recovery.blocks(companion[1].id)
 
 
+@pytest.mark.parametrize('miss', ['get_state', 'describe_area'])
+async def test_discovery_miss_then_grounded_room_control(hass,companion,monkeypatch,miss):
+    from homeassistant.helpers import area_registry as ar, entity_registry as er
+    area = ar.async_get(hass).async_create('Steve Office')
+    registry = er.async_get(hass)
+    for part in ('doorway', 'desk'):
+        entity = registry.async_get_or_create('light','test',part,suggested_object_id='office_'+part)
+        registry.async_update_entity(entity.entity_id,area_id=area.id)
+        hass.states.async_set(entity.entity_id,'on',{'friendly_name':'Steve Office Lights '+part.title()})
+        companion[1].permissions.entities[entity.entity_id] = PermissionNode('GREEN')
+    calls = []
+    async def turn_off(call):
+        calls.append(call.data)
+    hass.services.async_register('homeassistant','turn_off',turn_off)
+    failed = {'entity_id':'light.absent'} if miss == 'get_state' else {'area':"Steve's office"}
+    scripted(monkeypatch, [[(miss,failed)], [('search_entities',{'area':'Steve Office','domain':'light'})],
+        [('intent__HassTurnOff',{'area':'Steve Office','domain':['light']})],
+        json.dumps({'status':'completed','message':'Done.'})])
+    result = payload(await rpc(hass,companion,args={'request':"tuen off all of steve's office lights"}))
+    assert len(calls) == 1, result
+    assert set(calls[0]['entity_id']) == {'light.office_doorway','light.office_desk'}
+    assert result['status'] == 'completed'
+
+
+async def test_failed_control_still_blocks_replacement_after_discovery(hass,companion,monkeypatch):
+    scripted(monkeypatch, [[('light__HassLightSet',{'name':'light.other','brightness':40})],
+        [('search_entities',{'domain':'light'})],
+        [('light__HassLightSet',{'name':'light.selected','brightness':40})],
+        json.dumps({'status':'completed','message':'Done.'})])
+    with patch.object(ServiceRegistry,'async_call',AsyncMock()) as service:
+        result = payload(await rpc(hass,companion))
+    assert result['status'] == 'refused'
+    service.assert_not_awaited()
+
+
 @pytest.mark.parametrize('name',['read_file','phoenix_request','call_service'])
 async def test_internal_hallucinations_and_recursion_refused(hass,companion,monkeypatch,name):
     scripted(monkeypatch,[[(name,{'request':'again'})],json.dumps({'status':'refused','message':'Unavailable.'})])
@@ -291,7 +326,8 @@ async def test_repeated_write_never_reexecutes(hass,companion,monkeypatch):
     scripted(monkeypatch,[[action],[action],json.dumps({'status':'completed','message':'Done.'})])
     result=payload(await rpc(hass,companion))
     assert len(calls)==1
-    assert result['status']=='refused'
+    assert result['status']=='partial'
+    assert result['execution']=='partial'
 
 
 @pytest.mark.parametrize('answer,expected', [
@@ -304,7 +340,7 @@ async def test_repeated_write_never_reexecutes(hass,companion,monkeypatch):
     ('not JSON', 'invalid_output'),
 ])
 async def test_final_envelope_accepts_fences_but_rejects_wrong_shapes(hass,companion,monkeypatch,answer,expected):
-    scripted(monkeypatch,[answer])
+    scripted(monkeypatch,[[('get_state',{'entity_id':'sensor.temperature','projection':{'kind':'compact'}})],answer])
     assert payload(await rpc(hass,companion))['status']==expected
 
 
@@ -317,12 +353,13 @@ async def test_invalid_final_reply_after_control_reports_possible_effects_withou
     scripted(monkeypatch, [[('light__HassLightSet',{'name':'light.selected','brightness':40})],
                           'Malformed final reply.'])
     result = payload(await rpc(hass,companion,args={'request':'Set the selected lamp to 40%.'}))
-    assert result['status'] == 'invalid_output'
+    assert result['status'] == 'completed'
+    assert result['execution'] == 'accepted' and result['verification'] == 'not_verified'
     assert len(calls) == 1 and hass.states.get('light.selected').state == 'on'
-    assert result['tool_outcomes'] == [{'tool':'light__HassLightSet','outcome':'allowed'}]
-    assert 'may already have changed' in result['message']
-    assert 'Check its current state in Home Assistant' in result['message']
-    assert 'Do not resend' in result['message']
+    assert result['tool_outcomes'] == [{'tool':'light__HassLightSet','outcome':'allowed'}, {'tool':'get_states','outcome':'allowed'}]
+    assert 'accepted' in result['message']
+    assert 'Check in Home Assistant' in result['message']
+    assert 'do not resend' in result['message']
     assert not companion[0].agent_recovery.blocks(companion[1].id)
 
 
@@ -347,8 +384,7 @@ async def test_failed_reads_explain_name_or_access_without_revealing_hidden_enti
                           json.dumps({'status':'completed','message':'Unsupported claim.'})])
     result = payload(await rpc(hass,companion))
     assert result['status'] == 'refused'
-    assert 'name or search filters' in result['message']
-    assert 'may not have access' in result['message']
+    assert 'name, filters or permissions' in result['message']
     assert 'try again with the complete request' in result['message']
     assert entity not in result['message']
 
@@ -382,17 +418,17 @@ async def test_final_round_ignoring_no_tools_cannot_act_and_reports_prior_effect
         [('light__HassLightSet', {'name':'light.selected','brightness':70})],
     ])
     result = payload(await rpc(hass,companion))
-    assert result['status'] == 'exhausted'
+    assert result['status'] == ('completed' if write_first else 'exhausted')
     assert len(catalogs) == 4 and catalogs[-1] == []
-    assert len(result['tool_outcomes']) == 3
+    assert len(result['tool_outcomes']) == (4 if write_first else 3)
     assert len(calls) == int(write_first)
-    assert companion[0].agent_recovery.blocks(companion[1].id) is write_first
+    assert not companion[0].agent_recovery.blocks(companion[1].id)
     if write_first:
-        assert 'may already have changed' in result['message']
-        assert 'Do not repeat' in result['message']
+        assert result['next_step'] == 'check_state'
+        assert result['retry_policy'] == 'no_replay'
     else:
-        assert 'too many steps' in result['message']
-        assert 'try again with one complete request' in result['message']
+        assert 'step limit' in result['message']
+        assert 'same complete request' in result['message']
     assert not companion[0].store.get_pending_approvals()
 
 
@@ -408,12 +444,443 @@ async def test_provider_error_after_reads_preserves_only_real_write_uncertainty(
         rounds.insert(0, [('light__HassLightSet', {'name':'light.selected','brightness':40})])
     catalogs = scripted(monkeypatch, rounds)
     result = payload(await rpc(hass,companion))
-    assert result['status'] == ('outcome_unknown' if write_first else 'provider_error')
+    assert result['status'] == ('completed' if write_first else 'provider_error')
     if not write_first:
-        assert 'No device action started' in result['message']
-    assert result['tool_outcomes'][-1] == {'tool':'get_state','outcome':'allowed'}
+        assert 'No device command was attempted' in result['message']
+    assert result['tool_outcomes'][-1] == {'tool':'get_states' if write_first else 'get_state','outcome':'allowed'}
     assert len(catalogs) == (3 if write_first else 2)
     assert len(calls) == int(write_first)
-    assert companion[0].agent_recovery.blocks(companion[1].id) is write_first
+    assert not companion[0].agent_recovery.blocks(companion[1].id)
     assert not companion[0].store.get_pending_approvals()
     assert not companion[0].home_companion_active
+
+
+@pytest.mark.parametrize('surface',['voice','chat','ai_text','ai_structured'])
+async def test_owned_ingresses_delegate_original_request_once_without_report_reinterpretation(hass,companion,monkeypatch,surface):
+    data,token,_,_=companion
+    catalogs=scripted(monkeypatch,[
+        [('get_state',{'entity_id':'sensor.temperature','projection':{'kind':'full'}})],
+        json.dumps({'status':'completed','message':'Invented success: lights changed.'}),
+    ] + ([json.dumps({'temperature':23})] if surface=='ai_structured' else []))
+    provider=agentcli.build_provider(None)
+    request="Read the temperature in Alex's office. Do not change devices."
+    if surface=='voice':
+        answer=await agentcli.async_run_voice_turn(hass,data,token,provider,None,'http://test',request)
+    elif surface=='chat':
+        events=[]
+        async def emit(name,value):events.append((name,value))
+        messages=await agentcli.async_run_agent_turn(hass=hass,data=data,token=token,provider=provider,
+            session=None,messages=[{'role':'user','content':request}],options={},client_ip='test',base_url='',
+            emit=emit,cancel=asyncio.Event())
+        answer=messages[-1]['content']
+        assert sum(name=='assistant_delta' for name,_ in events)==1
+    else:
+        answer=await agentcli.async_run_ai_task(hass,data,token,provider,None,'',request,
+            structure_json={'type':'object','properties':{'temperature':{'type':'number'}}} if surface=='ai_structured' else None)
+    if surface=='ai_structured':
+        assert json.loads(answer)=={'temperature':23}
+        assert catalogs[-1]==[] and len(catalogs)==3
+    else:
+        assert '23' in answer and 'Invented success' not in answer
+        assert len(catalogs)==2
+    assert all(len(catalog)!=1 for catalog in catalogs)
+
+
+async def test_code_readback_confirms_receipt_even_when_final_model_json_is_bad(hass,companion,monkeypatch):
+    async def turn_on(call):
+        hass.states.async_set('light.selected','on',{'brightness':102,'friendly_name':'Selected lamp'})
+    hass.services.async_register('light','turn_on',turn_on)
+    scripted(monkeypatch,[[('light__HassLightSet',{'name':'light.selected','brightness':40})],'Bad JSON'])
+    report=payload(await rpc(hass,companion))
+    assert report['status']=='completed' and report['verification']=='confirmed'
+    assert report['next_step']=='none' and report['retry_policy']=='no_replay'
+    assert not companion[0].agent_recovery.blocks(companion[1].id)
+
+
+async def test_chat_cancellation_stops_inner_planner(hass,companion,monkeypatch):
+    data,token,_,_=companion
+    cancel=asyncio.Event()
+    entered=asyncio.Event()
+    async def wait(_):
+        entered.set()
+        await asyncio.Event().wait()
+    catalogs=scripted(monkeypatch,[],before=wait)
+    events=[]
+    async def emit(name,value):events.append((name,value))
+    task=asyncio.create_task(agentcli.async_run_agent_turn(hass=hass,data=data,token=token,
+        provider=agentcli.build_provider(None),session=None,messages=[{'role':'user','content':'Read temperature'}],
+        options={},client_ip='test',base_url='',emit=emit,cancel=cancel))
+    await entered.wait()
+    cancel.set()
+    await task
+    assert not data.home_companion_active and len(catalogs)==1
+    assert any(name=='error' and value['code']=='cancelled' for name,value in events)
+
+
+@pytest.mark.parametrize('surface',['voice','chat'])
+async def test_companion_uses_wrapper_under_auto_routing_without_announcing_guessed_tools(hass,companion,monkeypatch,surface):
+    from custom_components.phoenix_mcp.voice_agent import async_voice_answer
+    data,token,_,_=companion
+    await data.store.async_patch_settings(voice_agent_enabled=True,voice_agent_token_id=token.id,
+        voice_agent_routing_mode='auto',agentcli_routing_mode='auto')
+    monkeypatch.setattr('custom_components.phoenix_mcp.command_routing.async_evaluate_command',
+                        AsyncMock(side_effect=AssertionError('Wrapper persona must not use direct dispatch')))
+    monkeypatch.setattr('custom_components.phoenix_mcp.chat_routing.async_evaluate_command',
+                        AsyncMock(side_effect=AssertionError('Wrapper persona must not use direct dispatch')))
+    catalogs=scripted(monkeypatch,[[('get_state',{'entity_id':'sensor.temperature','projection':{'kind':'compact'}})],
+        json.dumps({'status':'completed','message':'23 degrees.'})])
+    if surface=='voice':
+        answer=await async_voice_answer(hass,data,'Read temperature.',language='en')
+        assert '23' in answer
+    else:
+        events=[]
+        async def emit(name,value):events.append((name,value))
+        messages=await agentcli.async_run_agent_turn(hass=hass,data=data,token=token,provider=agentcli.build_provider(None),
+            session=None,messages=[{'role':'user','content':'Read temperature.'}],options={},client_ip='test',base_url='',
+            emit=emit,cancel=asyncio.Event(),routing_language='en')
+        assert '23' in messages[-1]['content']
+    assert len(catalogs)==2
+
+
+async def test_house_count_uses_scoped_total_without_enumerating_states(hass, companion, monkeypatch):
+    _, token, _, _ = companion
+    token.permissions.domains['light'] = PermissionNode('YELLOW')
+    for i in range(150):
+        hass.states.async_set(f'light.count_{i}', 'off')
+    token.permissions.entities['light.other'] = PermissionNode('RED')
+    transcripts = []
+    scripted(monkeypatch, [
+        [('search_entities', {'domain':'light', 'limit':1})],
+        json.dumps({'status':'completed','message':'999 lights!', 'read_answer':{'kind':'count','source':0}}),
+    ], transcripts=transcripts)
+    report = payload(await rpc(hass, companion, args={'request':'how many lights in my house?'}))
+    assert report['status']=='completed' and report['execution']=='not_attempted'
+    assert '151' in report['message'] and '999' not in report['message']
+    assert 'permitted scope' in report['message']
+    body, _ = json.JSONDecoder().raw_decode(transcripts[1][-1]['content'][0]['content'][0]['text'])
+    assert len(body['entities'])==1 and body['total']==151 and body['truncated']
+    assert body['read_answer'] == {'kind': 'count', 'source': 0}
+    assert report['tool_outcomes']==[{'tool':'search_entities','outcome':'allowed'}]
+
+
+@pytest.mark.parametrize('source', [-1, 4, True, '0'])
+async def test_count_source_must_reference_received_evidence(hass, companion, monkeypatch, source):
+    scripted(monkeypatch, [
+        [('search_entities', {'domain':'light', 'limit':1})],
+        json.dumps({'status':'completed','message':'999 lights!', 'read_answer':{'kind':'count','source':source}}),
+        json.dumps({'status':'completed','message':'999 lights!', 'read_answer':{'kind':'count','source':source}}),
+    ])
+    report = payload(await rpc(hass, companion))
+    assert report['status']=='invalid_output' and '999' not in report['message']
+
+
+async def test_voice_report_uses_current_style_and_detail(hass, companion, monkeypatch):
+    from custom_components.phoenix_mcp.voice_agent import async_voice_answer
+    data, token, _, account = companion
+    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=token.id,
+        voice_agent_provider_id=account, voice_agent_routing_mode='off')
+    async def turn_on(call):
+        hass.states.async_set('light.selected','on', {'friendly_name':'Selected lamp'})
+    hass.services.async_register('homeassistant','turn_on',turn_on)
+    answers = []
+    for style, detail in [('direct','concise'), ('warm','balanced'), ('technical','detailed')]:
+        await data.store.async_patch_settings(voice_agent_conversation_style=style, voice_agent_detail_level=detail)
+        scripted(monkeypatch, [[('intent__HassTurnOn', {'name':'light.selected','domain':['light']})],
+            json.dumps({'status':'completed','message':'invented'})])
+        answers.append(await async_voice_answer(hass,data,'Turn on Selected lamp.',language='en'))
+    assert len(set(answers))==3
+    assert all('Selected lamp' in a for a in answers)
+    assert answers[0] == 'Turned on Selected lamp.'
+    assert all('accepted' in a for a in answers[1:])
+    assert len(answers[0]) < len(answers[1]) < len(answers[2])
+    assert 'physical proof' in answers[2]
+
+
+def test_internal_companion_does_not_receive_external_catalog_reconnect_advice(companion):
+    data, token, _, _ = companion
+    assert token.settings_version > token.tools_list_version
+    response = {'content':[{'type':'text','text':'Area not found.'}]}
+    assert not mcp_view._maybe_append_stale_advisory(response,token,data,'home_companion')
+    assert response['content']==[{'type':'text','text':'Area not found.'}]
+    assert mcp_view._maybe_append_stale_advisory(response,token,data,'external-client')
+    assert any('reconnect' in row['text'] for row in response['content'])
+
+
+async def test_chat_lookup_failure_is_displayed_once_and_does_not_create_repairs(hass, companion, monkeypatch):
+    data, token, _, _ = companion
+    scripted(monkeypatch, [{'type': agentcli.EV_ERROR, 'code': 'network', 'retryable': True}])
+    events = []
+    async def emit(name, value):
+        events.append((name, value))
+    await agentcli.async_run_agent_turn(
+        hass=hass, data=data, token=token, provider=agentcli.build_provider(None), session=None,
+        messages=[{'role': 'user', 'content': 'turn on steve lights in the the office doorway'}],
+        options={}, client_ip='test', base_url='', emit=emit, cancel=asyncio.Event())
+    errors = [value for name, value in events if name == 'error']
+    assert len(errors) == 1 and errors[0]['code'] == 'provider_error'
+    assert 'No device command was attempted' in errors[0]['message']
+    assert not any(name == 'assistant_delta' for name, _ in events)
+    assert data.agent_recovery.records(token.id) == []
+
+
+async def test_actual_dispatch_failure_retains_repairs_without_replaying(hass, companion, monkeypatch):
+    calls = []
+    async def failed_after_effect(call):
+        calls.append(call.data)
+        hass.states.async_set('light.selected', 'on')
+        raise RuntimeError('Uncertain service outcome')
+    hass.services.async_register('light', 'turn_on', failed_after_effect)
+    scripted(monkeypatch, [[('light__HassLightSet', {'name': 'light.selected', 'brightness': 40})]])
+    result = payload(await rpc(hass, companion))
+    assert result['status'] == 'outcome_unknown'
+    assert len(calls) == 1 and hass.states.get('light.selected').state == 'on'
+    assert companion[0].agent_recovery.blocks(companion[1].id)
+    assert result['next_step'] == 'resolve_recovery'
+
+
+@pytest.mark.parametrize('after_read', [False, True])
+@pytest.mark.parametrize('code', ['provider_malformed', 'bad_tool_call', 'provider_retry_exhausted'])
+async def test_malformed_planner_correction_preserves_reads_without_replaying(hass, companion, monkeypatch, after_read, code):
+    rounds = [[('get_state', {'entity_id': 'sensor.temperature', 'projection': {'kind': 'full'}})]] if after_read else []
+    rounds += [{'type': agentcli.EV_ERROR, 'code': code, 'retryable': False, 'diagnostic': {'category': 'bad_tool_call'}}]
+    if not after_read:
+        rounds += [[('get_state', {'entity_id': 'sensor.temperature', 'projection': {'kind': 'full'}})]]
+    rounds += [json.dumps({'status': 'completed', 'message': '23 degrees.'})]
+    transcripts = []
+    catalogs = scripted(monkeypatch, rounds, transcripts=transcripts)
+    report = payload(await rpc(hass, companion))
+    assert report['status'] == 'completed'
+    assert len(catalogs) == 3
+    corrected = transcripts[2 if after_read else 1]
+    assert 'malformed' in corrected[-1]['content']
+    assert corrected[0]['content'] == 'Read the temperature.'
+    assert report['tool_outcomes'] == [{'tool': 'get_state', 'outcome': 'allowed'}]
+    assert companion[0].agent_recovery.records(companion[1].id) == []
+
+
+async def test_repeated_malformed_planner_does_not_loop(hass, companion, monkeypatch):
+    failure = {'type': agentcli.EV_ERROR, 'code': 'provider_malformed', 'retryable': False}
+    catalogs = scripted(monkeypatch, [failure, failure])
+    report = payload(await rpc(hass, companion))
+    assert report['status'] == 'provider_error' and len(catalogs) == 2
+    assert report['execution'] == 'not_attempted'
+
+
+@pytest.mark.parametrize('invalid', [
+    ('intent__HassTurnOff', {'entity_id': 'light.selected'}),
+    ('light__HassLightSet', {'name': 'light.selected', 'brightness': 101}),
+    ('fan__HassFanSetSpeed', {'name': 'fan.selected', 'percentage': 'fast'}),
+])
+async def test_invalid_native_proposal_is_corrected_before_claiming_any_write(hass, companion, monkeypatch, invalid):
+    data, token, _, _ = companion
+    calls, transcripts = [], []
+    async def turn_on(call):
+        calls.append(call.data)
+        hass.states.async_set('light.selected', 'on', {'friendly_name': 'Selected lamp'})
+    hass.services.async_register('homeassistant', 'turn_on', turn_on)
+    original = 'Turn on Selected lamp.'
+    scripted(monkeypatch, [
+        [invalid, ('intent__HassTurnOn', {'name': 'light.selected'})],
+        [('intent__HassTurnOn', {'name': 'light.selected'})],
+        json.dumps({'status': 'completed', 'message': 'Finished.'}),
+    ], transcripts=transcripts)
+    with patch.object(data.agent_recovery, 'begin', wraps=data.agent_recovery.begin) as claim:
+        report = payload(await rpc(hass, companion, args={'request': original}))
+    assert report['status'] == 'completed' and report['verification'] == 'confirmed'
+    assert len(calls) == 1 and claim.call_count == 1
+    assert transcripts[1][0]['content'] == original
+    errors = transcripts[1][-1]['content']
+    assert len(errors) == 2 and all(row['is_error'] for row in errors)
+    assert all('None of the tools in this batch ran' in json.dumps(row['content']) for row in errors)
+    assert data.agent_recovery.records(token.id) == []
+
+
+async def test_repeated_invalid_native_proposals_never_claim_or_attempt_a_write(hass, companion, monkeypatch):
+    catalogs = scripted(monkeypatch, [[('intent__HassTurnOff', {'entity_id': 'light.selected'})]] * 2)
+    with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
+        report = payload(await rpc(hass, companion))
+    assert len(catalogs) == 2 and report['execution'] == 'not_attempted'
+    assert report['status'] == 'provider_error'
+    service.assert_not_awaited()
+    assert companion[0].agent_recovery.records(companion[1].id) == []
+
+
+async def test_invalid_proposal_after_received_control_keeps_receipt_without_repairs(hass, companion, monkeypatch):
+    calls = []
+    async def turn_on(call):
+        calls.append(call.data)
+        hass.states.async_set('light.selected', 'on', {'friendly_name': 'Selected lamp'})
+    hass.services.async_register('homeassistant', 'turn_on', turn_on)
+    catalogs = scripted(monkeypatch, [
+        [('intent__HassTurnOn', {'name': 'light.selected'})],
+        [('intent__HassTurnOff', {'entity_id': 'light.selected'})],
+    ])
+    report = payload(await rpc(hass, companion))
+    assert len(catalogs) == 2 and len(calls) == 1
+    assert report['execution'] == 'partial' and report['status'] == 'partial'
+    assert companion[0].agent_recovery.records(companion[1].id) == []
+
+
+@pytest.mark.parametrize('language,utterance', [
+    ('en', 'Turn those lights off.'), ('en', 'Switch it off.'),
+    ('de', 'Schalte diese Lampen aus.'), ('es', 'Apaga esas luces.'),
+    ('fr', 'Éteins ces lumières.'), ('it', 'Spegni quelle luci.'),
+    ('nl', 'Zet die lichten uit.'), ('pl', 'Wyłącz te światła.'),
+    ('ru', 'Выключи эти светильники.'), ('zh-Hans', '关掉那些灯。'),
+    ('zh-Hant', '關掉那些燈。'), ('ja', 'それらのライトを消して。'), ('ko', '그것들을 꺼 주세요.'),
+])
+async def test_context_only_request_cannot_actuate_even_an_already_off_device(hass, companion, monkeypatch, language, utterance):
+    catalogs = scripted(monkeypatch, [[('intent__HassTurnOff', {'domain': ['light']})]])
+    data, token, _, _ = companion
+    with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
+        report = payload(await rpc(hass, companion, args={'request': utterance, 'language': language}))
+    assert len(catalogs) == 1
+    assert report['status'] == 'clarification_needed' and report['execution'] == 'not_attempted'
+    service.assert_not_awaited()
+    assert not data.store.get_pending_approvals() and not data.agent_recovery.records(token.id)
+
+
+@pytest.mark.parametrize('utterance,alias', [('Turn this Selected lamp on.', None), ('Turn those Sunbeam lights on.', 'Sunbeam')])
+async def test_context_reference_with_explicit_scoped_name_or_alias_can_execute(hass, companion, monkeypatch, utterance, alias):
+    from homeassistant.helpers import entity_registry as er
+    if alias:
+        hass.states.async_remove('light.selected')
+        entry = er.async_get(hass).async_get_or_create('light', 'test', 'selected', suggested_object_id='selected')
+        assert entry.entity_id == 'light.selected'
+        hass.states.async_set('light.selected', 'off', {'friendly_name': 'Selected lamp'})
+        er.async_get(hass).async_update_entity(entry.entity_id, aliases=[alias])
+    async def turn_on(call):
+        hass.states.async_set('light.selected', 'on', {'friendly_name': 'Selected lamp'})
+    hass.services.async_register('homeassistant', 'turn_on', turn_on)
+    scripted(monkeypatch, [[('intent__HassTurnOn', {'name': 'light.selected'})], json.dumps({'status': 'completed', 'message': 'Finished.'})])
+    assert payload(await rpc(hass, companion, args={'request': utterance}))['status'] == 'completed'
+
+
+@pytest.mark.parametrize('code', ['bad_tool_call', 'provider_malformed'])
+async def test_malformed_planning_after_control_never_requests_correction(hass, companion, monkeypatch, code):
+    calls = []
+    async def turn_on(call):
+        calls.append(call.data)
+        hass.states.async_set('light.selected', 'on', {'brightness': 102, 'friendly_name': 'Selected lamp'})
+    hass.services.async_register('light', 'turn_on', turn_on)
+    catalogs = scripted(monkeypatch, [
+        [('light__HassLightSet', {'name': 'light.selected', 'brightness': 40})],
+        {'type': agentcli.EV_ERROR, 'code': code, 'retryable': False},
+    ])
+    report = payload(await rpc(hass, companion))
+    assert len(catalogs) == 2 and len(calls) == 1
+    assert report['status'] == 'completed' and report['verification'] == 'confirmed'
+    assert report['retry_policy'] == 'no_replay'
+    assert companion[0].agent_recovery.records(companion[1].id) == []
+
+
+@pytest.mark.parametrize('utterance,expected', [
+    ("tuen on steve's office light", 'clarification_needed'),
+    ('turn on steve lights in the the office doorway', 'completed'),
+    ("tuen on all of steve's office lights", 'completed'),
+])
+async def test_tied_natural_target_evidence_cannot_be_replaced_with_one_candidate(hass, companion, monkeypatch, utterance, expected):
+    from homeassistant.helpers import area_registry as ar
+    from homeassistant.helpers import entity_registry as er
+    data, token, _, _ = companion
+    area = ar.async_get(hass).async_create('Steve Office')
+    targets = []
+    for part in ('doorway', 'desk'):
+        entry = er.async_get(hass).async_get_or_create('light', 'test', part, suggested_object_id='steve_office_lights_'+part)
+        er.async_get(hass).async_update_entity(entry.entity_id, area_id=area.id)
+        hass.states.async_set(entry.entity_id, 'off', {'friendly_name': 'Steve Office Lights '+part.title()})
+        token.permissions.entities[entry.entity_id] = PermissionNode('GREEN')
+        targets.append(entry.entity_id)
+    calls = []
+    async def turn_on(call):
+        calls.append(call.data)
+        for eid in call.data['entity_id']:
+            hass.states.async_set(eid, 'on', hass.states.get(eid).attributes)
+    hass.services.async_register('homeassistant', 'turn_on', turn_on)
+    group = 'all of' in utterance
+    proposed = {'area': 'Steve Office', 'domain': ['light']} if group else {'name': targets[0]}
+    scripted(monkeypatch, [
+        [('search_entities', {'domain': 'light', 'query': 'steve office'})],
+        [('intent__HassTurnOn', proposed)],
+        json.dumps({'status': 'completed', 'message': 'Accepted.'}),
+    ])
+    report = payload(await rpc(hass, companion, args={'request': utterance}))
+    assert report['status'] == expected
+    assert len(calls) == int(expected == 'completed')
+    if calls:
+        assert set(calls[0]['entity_id']) == set(targets if group else targets[:1])
+        assert all(hass.states.get(eid).state == 'on' for eid in calls[0]['entity_id'])
+    if expected == 'clarification_needed':
+        assert report['execution'] == 'not_attempted' and 'complete request' in report['message']
+        assert not data.store.get_pending_approvals()
+    assert not data.agent_recovery.records(token.id)
+
+
+async def test_room_targets_follow_registry_area_even_when_names_suggest_other_rooms(hass, companion, monkeypatch):
+    from homeassistant.helpers import area_registry as ar, device_registry as dr, entity_registry as er
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    config = MockConfigEntry(domain='test')
+    config.add_to_hass(hass)
+    area = ar.async_get(hass).async_create('Steve Office')
+    device = dr.async_get(hass).async_get_or_create(config_entry_id=config.entry_id, identifiers={('test', 'office')})
+    dr.async_get(hass).async_update_device(device.id, area_id=area.id)
+    targets = []
+    for key, label, in_room in [('desk', 'Steve Office Lights Desk', True),
+                                ('stairs', 'Stairs Hallway', True),
+                                ('garage', 'Garage Switch Qwerty Lights', True),
+                                ('unassigned', 'Steve Office LED 1', False)]:
+        entry = er.async_get(hass).async_get_or_create('light', 'test', key, suggested_object_id=key,
+                                                       device_id=device.id if in_room else None)
+        hass.states.async_set(entry.entity_id, 'unavailable' if key == 'garage' else 'on', {'friendly_name': label})
+        companion[1].permissions.entities[entry.entity_id] = PermissionNode('GREEN')
+        if in_room:
+            targets.append(entry.entity_id)
+    calls = []
+    async def turn_off(call):
+        calls.append(call.data)
+        for eid in call.data['entity_id']:
+            previous = hass.states.get(eid)
+            if previous.state != 'unavailable':
+                hass.states.async_set(eid, 'off', previous.attributes)
+    hass.services.async_register('homeassistant', 'turn_off', turn_off)
+    await companion[0].store.async_patch_settings(voice_agent_detail_level='concise')
+    scripted(monkeypatch, [
+        [('intent__HassTurnOff', {'area': area.name, 'domain': ['light']})],
+        [('get_states', {'entity_ids': targets})],
+        json.dumps({'status': 'completed', 'message': 'All done.'}),
+    ])
+    report = payload(await rpc(hass, companion, args={'request': 'turn off lights in steve office'}))
+    assert len(calls) == 1 and set(calls[0]['entity_id']) == set(targets)
+    assert report['message'].startswith('Turned off 2 lights in Steve Office.')
+    assert 'Unavailable (1): Garage Switch Qwerty Lights.' in report['message']
+    assert report['verification'] == 'not_verified'
+    assert not companion[0].agent_recovery.records(companion[1].id)
+
+
+@pytest.mark.parametrize('malformed', ['not JSON', '{"status":"completed","message":"","read_answer":{"kind":"count","source":0}}',
+                                       '{"status":"completed","message":"Two lights","read_answer":{"kind":"count","source":999}}'])
+async def test_invalid_count_report_gets_one_tools_free_correction(hass, companion, monkeypatch, malformed):
+    transcripts = []
+    catalogs = scripted(monkeypatch, [[('search_entities', {'domain': 'light', 'limit': 1})], malformed,
+                        json.dumps({'status': 'completed', 'message': 'Invented 999.', 'read_answer': {'kind': 'count', 'source': 0}})],
+                        transcripts=transcripts)
+    with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
+        report = payload(await rpc(hass, companion, args={'request': 'How many lights in my house?'}))
+    assert report['status'] == 'completed' and '1 matching light entities' in report['message']
+    assert '999' not in report['message'] and report['execution'] == 'not_attempted'
+    assert len(catalogs) == 3 and catalogs[-1] == []
+    assert 'did not pass validation' in json.dumps(transcripts[-1])
+    service.assert_not_awaited()
+    assert not companion[0].agent_recovery.records(companion[1].id)
+
+
+@pytest.mark.parametrize('second', ['malformed again', [('intent__HassTurnOn', {'name': 'light.selected'})]])
+async def test_count_report_correction_cannot_dispatch_or_repeat(hass, companion, monkeypatch, second):
+    catalogs = scripted(monkeypatch, [[('search_entities', {'domain': 'light', 'limit': 1})], 'malformed', second])
+    with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
+        report = payload(await rpc(hass, companion, args={'request': 'How many lights in my house?'}))
+    assert report['status'] in {'invalid_output', 'exhausted'}
+    assert report['execution'] == 'not_attempted'
+    assert len(catalogs) == 3 and catalogs[-1] == []
+    service.assert_not_awaited()
+    assert not companion[0].agent_recovery.records(companion[1].id)

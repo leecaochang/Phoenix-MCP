@@ -1688,6 +1688,47 @@ VOICE_TEMPLATES: dict[str, str] = {
     "provider_error": "Sorry, {reason}.",
     "outcome_unknown": 'Actions may have run. Check Home Assistant and approval results before retrying. Resolve uncertain actions in Settings > System > Repairs.',
     "prior_action_unresolved": "This new request was not executed because an earlier action has an unresolved outcome. Check the earlier action in Home Assistant and resolve it in Settings > System > Repairs before trying again.",
+    'companion_accepted_direct': 'Home Assistant accepted the command for {names}.',
+    'companion_accepted_warm': 'Your command for {names} has been accepted by Home Assistant.',
+    'companion_accepted_calm_guide': 'Home Assistant confirms it accepted the command for {names}.',
+    'companion_accepted_lively': 'Command accepted for {names}.',
+    'companion_accepted_technical': 'Command receipt: accepted. Targets: {names}.',
+    'companion_verified_short': 'It reports the requested settings.',
+    'companion_receipt_limit': 'A command receipt confirms acceptance; the state check shows what Home Assistant reports, not physical proof.',
+    'companion_group_targets': '{count} {kind} in {area}',
+    'companion_action_lights': 'lights',
+    'companion_action_fans': 'fans',
+    'companion_action_devices': 'devices',
+    'companion_verification_progress': 'Home Assistant reports the requested settings for {count} of {total} targets.',
+    'companion_unavailable_targets': 'Unavailable ({count}): {names}. Check in Home Assistant; do not resend commands.',
+    'companion_unverified_targets': 'Not verified ({count}): {names}. Check in Home Assistant; do not resend commands.',
+    'companion_count_direct': 'I can see {count} matching {kind} in your permitted scope.',
+    'companion_count_warm': "I can see {count} matching {kind} within Phoenix's permitted scope.",
+    'companion_count_calm_guide': 'Phoenix can access {count} matching {kind}; this count covers your permitted scope.',
+    'companion_count_lively': '{count} matching {kind} are visible to Phoenix.',
+    'companion_count_technical': "Count: {count} matching {kind} within Phoenix's permitted scope.",
+    'companion_kind_light': 'light entities',
+    'companion_kind_fan': 'fan entities',
+    'companion_kind_sensor': 'sensor entities',
+    'companion_kind_other': 'entities',
+    'companion_count_groups': 'This counts Home Assistant entities, which may include groups.',
+    'companion_count_scope': 'Only matching entities this assistant can access are counted; this does not establish the number of physical devices.',
+    'companion_power_on': 'Turned on {names}.',
+    'companion_power_off': 'Turned off {names}.',
+    "companion_readings": "Home Assistant reports: {readings}.",
+    "companion_clarify": "Please try again with the complete request: what to do, which device or room, and any restrictions. Do not reply with only a device name.",
+    "companion_candidates": "Matches include: {names}.",
+    "companion_accepted": "Home Assistant accepted the device commands.",
+    "companion_partial": "Some device commands were accepted, but other commands were refused or could not be confirmed.",
+    "companion_targets": "Devices: {names}.",
+    "companion_verified": "Home Assistant reports the accepted devices at their commanded settings.",
+    "companion_unverified": "The final device states were not verified. Check them in Home Assistant; do not resend commands just because confirmation is missing.",
+    "companion_refused": "The requested operation was refused or could not be confirmed. Check the device state and this assistant's permissions before deciding what to do next.",
+    "companion_read_failed": "The lookup did not finish. No device command was attempted. Please try again with the complete request.",
+    "companion_limit": "Phoenix reached an information limit before finishing. No device command was attempted. Keep the same requested scope when trying again; if this repeats, ask the administrator to review the request limits.",
+    "companion_steps": "Phoenix reached its step limit before finishing. No device command was attempted. Please try again with the same complete request.",
+    "companion_busy": "Another request is still running. This request did not start; wait for the earlier result before sending a complete new request.",
+    "companion_no_match": "No accessible device matched the lookup. This does not establish whether the name, filters or permissions caused it. Check those details and try again with the complete request. No device command was attempted.",
     "output_limit": "Sorry, the model produced too much output, so I stopped.",
     "out_of_steps": "Sorry, I ran out of steps before finishing that.",
     "focus_declined": (
@@ -2307,12 +2348,64 @@ HOME_COMPANION_TOOLS = frozenset({
     "light__HassLightSet", "fan__HassFanSetSpeed",
 })
 HOME_COMPANION_CONTROL_TOOLS = frozenset({"intent__HassTurnOn", "intent__HassTurnOff", "light__HassLightSet", "fan__HassFanSetSpeed"})
+HOME_COMPANION_MAX_FORMAT_CORRECTIONS = 1
+HOME_COMPANION_FORMAT_ERROR_CODES = frozenset({'provider_malformed', 'bad_tool_call'})
+HOME_COMPANION_GROUP_WORDS = frozenset({
+    "all", "both", "every", "lights", "fans", "alle", "beide", "lichter", "lampen", "ventilatoren",
+    "todos", "todas", "ambas", "ambos", "luces", "ventiladores", "tous", "toutes", "lumières", "lampes",
+    "ventilateurs", "tutti", "tutte", "luci", "ventilatori", "allemaal", "lichten",
+    "wszystkie", "oba", "obie", "światła", "wentylatory", "все", "оба", "обе", "светильники", "вентиляторы",
+})
+HOME_COMPANION_GROUP_PHRASES = ("所有", "全部", "すべて", "全て", "모든", "전부")
+HOME_COMPANION_CONTEXT_PATTERNS = {
+    'en': r'\b(those|these|them|it|that|this|same|previous)\b',
+    'de': r'\b(diese|diesen|jene|jenen|das|es|vorherigen)\b',
+    'es': r'\b(esas|esos|estas|estos|aquellas|aquellos|eso|esto|anteriores)\b',
+    'fr': r'\b(ces|ceux|celles|ça|cela|précédents)\b',
+    'it': r'\b(queste|questi|quelle|quelli|questo|quello|precedenti)\b',
+    'nl': r'\b(die|deze|dat|dit|vorige)\b',
+    'pl': r'\b(te|tamte|to|poprzednie)\b',
+    'ru': r'\b(эти|те|их|это|тот|та|предыдущие)\b',
+    'zh': r'那些|这些|它们|那个|这个|之前',
+    'ja': r'それら|あれら|それ|あれ|これ|前の',
+    'ko': r'그것|이것|저것|이전',
+}
+HOME_COMPANION_GENERIC_TARGET_WORDS = HOME_COMPANION_GROUP_WORDS | frozenset({
+    'light', 'lamp', 'lamps', 'fan', 'turn', 'switch', 'on', 'off', 'the', 'in', 'of', 'my',
+    'licht', 'lampe', 'ein', 'aus', 'schalte', 'luz', 'enciende', 'apaga', 'las', 'los',
+    'lumière', 'allume', 'éteins', 'les', 'la', 'luce', 'accendi', 'spegni', 'le', 'i',
+    'zet', 'aan', 'uit', 'włącz', 'wyłącz', 'światło', 'включи', 'выключи', 'свет',
+})
 HOME_COMPANION_SENSOR_CLASSES = frozenset({
     "temperature", "humidity", "illuminance", "power", "energy", "battery",
 })
+HOME_COMPANION_REPORT_STATUSES = frozenset({"completed", "partial", "clarification_needed", "pending_approval", "refused"})
+HOME_COMPANION_ACCEPTED_TEMPLATES = {
+    "direct": "companion_accepted_direct", "warm": "companion_accepted_warm",
+    "calm_guide": "companion_accepted_calm_guide", "lively": "companion_accepted_lively",
+    "technical": "companion_accepted_technical",
+}
+HOME_COMPANION_POWER_TEMPLATES = {"on": "companion_power_on", "off": "companion_power_off"}
+HOME_COMPANION_ACTION_KIND_TEMPLATES = {'light': 'companion_action_lights', 'fan': 'companion_action_fans', 'other': 'companion_action_devices'}
+HOME_COMPANION_EXCEPTION_TEMPLATES = {'unavailable': 'companion_unavailable_targets', 'unverified': 'companion_unverified_targets'}
+HOME_COMPANION_COUNT_TEMPLATES = {
+    "direct": "companion_count_direct", "warm": "companion_count_warm",
+    "calm_guide": "companion_count_calm_guide", "lively": "companion_count_lively",
+    "technical": "companion_count_technical",
+}
+HOME_COMPANION_COUNT_KIND_TEMPLATES = {
+    "light": "companion_kind_light", "fan": "companion_kind_fan",
+    "sensor": "companion_kind_sensor", "other": "companion_kind_other",
+}
+HOME_COMPANION_VERIFIED_TEMPLATES = {
+    "concise": "companion_verified_short", "balanced": "companion_verified", "detailed": "companion_verified",
+}
+HOME_COMPANION_CLIENT_IP = "home_companion"
 HOME_COMPANION_MAX_ROUNDS = 4
 HOME_COMPANION_MAX_CALLS = 8
 HOME_COMPANION_MAX_REQUEST_BYTES = 4096
 HOME_COMPANION_MAX_CATALOG_BYTES = 24576
 HOME_COMPANION_MAX_CONTEXT_BYTES = 16384
+HOME_COMPANION_MAX_REPORT_ENTITIES = 128
+HOME_COMPANION_MAX_REPORT_NAMES = 8
 HOME_COMPANION_TIMEOUT_SECONDS = 120

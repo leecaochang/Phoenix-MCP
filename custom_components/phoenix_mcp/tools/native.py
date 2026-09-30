@@ -815,23 +815,9 @@ async def _execute_hass_turn_off(
 async def _tool_hass_light_set(
     args: dict, token: TokenRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    refusal = _no_selector_refusal(args, "HassLightSet", _DOMAIN_TARGET_SELECTORS)
+    refusal = _validate_hass_light_set_args(args)
     if refusal is not None:
         return refusal
-    if not any(args.get(name) is not None for name in ("brightness", "color", "temperature")):
-        return (
-            _tool_error("Missing required argument: brightness, color or temperature"),
-            "invalid_request",
-            "HassLightSet",
-        )
-    if "brightness" in args and args["brightness"] is not None:
-        error = _validate_integer_range("brightness", args["brightness"], 0, 100)
-        if error:
-            return _tool_error(error), "invalid_request", "HassLightSet"
-    if "temperature" in args and args["temperature"] is not None:
-        error = _validate_integer_range("temperature", args["temperature"], 0, None)
-        if error:
-            return _tool_error(error), "invalid_request", "HassLightSet"
 
     domains = args.get("domain") or ["light"]
     entities = resolve_intent_entities(
@@ -851,20 +837,35 @@ async def _tool_hass_light_set(
     return await _tool_intent_action("HassLightSet", "light", "turn_on", service_data, entities, hass, token, args=args)
 
 
+def _validate_hass_light_set_args(args: dict) -> tuple[dict, str, str] | None:
+    """Validate existing light parameters without claiming or executing a write."""
+    refusal = _no_selector_refusal(args, "HassLightSet", _DOMAIN_TARGET_SELECTORS)
+    if refusal is not None:
+        return refusal
+    if not any(args.get(name) is not None for name in ("brightness", "color", "temperature")):
+        return (
+            _tool_error("Missing required argument: brightness, color or temperature"),
+            "invalid_request",
+            "HassLightSet",
+        )
+    if "brightness" in args and args["brightness"] is not None:
+        error = _validate_integer_range("brightness", args["brightness"], 0, 100)
+        if error:
+            return _tool_error(error), "invalid_request", "HassLightSet"
+    if "temperature" in args and args["temperature"] is not None:
+        error = _validate_integer_range("temperature", args["temperature"], 0, None)
+        if error:
+            return _tool_error(error), "invalid_request", "HassLightSet"
+
+    return None
+
+
 async def _tool_hass_fan_set_speed(
     args: dict, token: TokenRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    refusal = _fixed_domain_refusal(
-        args, "HassFanSetSpeed", "fan", _DOMAIN_TARGET_SELECTORS
-    )
+    refusal = _validate_hass_fan_set_speed_args(args)
     if refusal is not None:
         return refusal
-    if error := _missing_required_argument(args, "percentage"):
-        return _tool_error(error), "invalid_request", "HassFanSetSpeed"
-    if "percentage" in args and args["percentage"] is not None:
-        error = _validate_integer_range("percentage", args["percentage"], 0, 100)
-        if error:
-            return _tool_error(error), "invalid_request", "HassFanSetSpeed"
 
     entities = resolve_intent_entities(
         hass, token,
@@ -877,6 +878,36 @@ async def _tool_hass_fan_set_speed(
     if "percentage" in args and args["percentage"] is not None:
         service_data["percentage"] = args["percentage"]
     return await _tool_intent_action("HassFanSetSpeed", "fan", "set_percentage", service_data, entities, hass, token, args=args)
+
+
+def _validate_hass_fan_set_speed_args(args: dict) -> tuple[dict, str, str] | None:
+    """Validate existing fan parameters without claiming or executing a write."""
+    refusal = _fixed_domain_refusal(
+        args, "HassFanSetSpeed", "fan", _DOMAIN_TARGET_SELECTORS
+    )
+    if refusal is not None:
+        return refusal
+    if error := _missing_required_argument(args, "percentage"):
+        return _tool_error(error), "invalid_request", "HassFanSetSpeed"
+    if "percentage" in args and args["percentage"] is not None:
+        error = _validate_integer_range("percentage", args["percentage"], 0, 100)
+        if error:
+            return _tool_error(error), "invalid_request", "HassFanSetSpeed"
+
+    return None
+
+
+def validate_native_control_args(tool_name: str, args: dict) -> tuple[dict, str, str] | None:
+    """Share side-effect-free native argument checks with the companion planner."""
+    if tool_name == "intent__HassTurnOn":
+        return _no_selector_refusal(args, "HassTurnOn")
+    if tool_name == "intent__HassTurnOff":
+        return _no_selector_refusal(args, "HassTurnOff")
+    if tool_name == "light__HassLightSet":
+        return _validate_hass_light_set_args(args)
+    if tool_name == "fan__HassFanSetSpeed":
+        return _validate_hass_fan_set_speed_args(args)
+    return None
 
 
 async def _tool_hass_climate_set_temperature(

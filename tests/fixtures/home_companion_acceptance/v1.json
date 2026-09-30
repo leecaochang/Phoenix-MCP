@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "purpose": "Home Companion execution and feedback contracts. Scripted provider answers test runtime boundaries; they do not qualify a real model's interpretation of user prompts.",
+  "profiles": {
+    "execution": [
+      "tests/test_home_companion.py",
+      "tests/test_agent_recovery.py"
+    ],
+    "feedback": [
+      "tests/test_home_companion_response.py",
+      "tests/test_voice_agent.py"
+    ],
+    "scope": [
+      "tests/test_request_authority.py",
+      "tests/test_mcp_tool_catalog.py"
+    ]
+  },
+  "live_qualification": {
+    "required": [
+      "natural singular device wording",
+      "repeated irregular word-order request",
+      "provider failure after a received command does not require Repairs",
+      "read failure displays one error and creates no recovery issue",
+      "typos and possessive room wording",
+      "whole-room control",
+      "ambiguous target produces no control attempt",
+      "missing context produces no control attempt and requests a complete request",
+      "discovery miss permits scoped refinement",
+      "count total before row limit",
+      "all conversation styles and detail levels",
+      "approval before effect",
+      "malformed narrative after actual execution",
+      "Voice, Agent Chat and AI Task ingress",
+      "mixed-availability room feedback separates confirmed and unavailable targets",
+      "invalid read report receives one tools-free formatting correction"
+    ],
+    "record": [
+      "configured provider and model",
+      "original prompt",
+      "current settings",
+      "scoped tool arguments and outcomes",
+      "state before and after",
+      "reply accuracy",
+      "one delegation",
+      "latency",
+      "fixture and settings cleanup"
+    ],
+    "gate": "Every expected target, forbidden effect and feedback check must pass. Preserve failed runs; do not qualify a model solely from simulated replies or a single successful prompt."
+  }
+}

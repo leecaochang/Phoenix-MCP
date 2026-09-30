@@ -1,0 +1,793 @@
+{
+  "schema_version": 1,
+  "purpose": "Real-provider fixture-only Voice qualification, evaluated without a model grader. Agent Chat, AI Task and fault injection require the separate ingress gate.",
+  "cases": [
+    {
+      "id": "natural_singular",
+      "prompt": "Turn on {area} doorway light.",
+      "style": "direct",
+      "detail": "concise",
+      "targets": [
+        "doorway"
+      ],
+      "before": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "on",
+        "desk": "off"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "reply_required": [
+        "{doorway}",
+        "turned on|accepted"
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to retry",
+        "safe to repeat"
+      ],
+      "service": "turn_on"
+    },
+    {
+      "id": "irregular_first",
+      "prompt": "Turn on lights in the the {area} doorway.",
+      "style": "direct",
+      "detail": "concise",
+      "targets": [
+        "doorway"
+      ],
+      "before": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "on",
+        "desk": "off"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "reply_required": [
+        "{doorway}",
+        "turned on|accepted"
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to retry",
+        "safe to repeat"
+      ],
+      "service": "turn_on"
+    },
+    {
+      "id": "irregular_repeat",
+      "prompt": "Turn on lights in the the {area} doorway.",
+      "style": "direct",
+      "detail": "concise",
+      "targets": [
+        "doorway"
+      ],
+      "before": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "on",
+        "desk": "off"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "reply_required": [
+        "{doorway}",
+        "turned on|accepted"
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to retry",
+        "safe to repeat"
+      ],
+      "service": "turn_on"
+    },
+    {
+      "id": "room_group",
+      "prompt": "Turn on all the lights in {area}.",
+      "style": "direct",
+      "detail": "concise",
+      "targets": [
+        "doorway",
+        "desk"
+      ],
+      "before": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "on",
+        "desk": "on"
+      },
+      "control_attempts": [
+        1,
+        2
+      ],
+      "reply_required": [
+        "2 lights in {area}",
+        "turned on|accepted"
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to retry",
+        "safe to repeat"
+      ],
+      "service": "turn_on"
+    },
+    {
+      "id": "ambiguous",
+      "prompt": "Turn on the {area} light.",
+      "style": "direct",
+      "detail": "concise",
+      "targets": [],
+      "before": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "control_attempts": [
+        0,
+        0
+      ],
+      "reply_required": [
+        "complete request",
+        "restrictions"
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to retry",
+        "safe to repeat"
+      ]
+    },
+    {
+      "id": "missing_context",
+      "prompt": "Turn those lights off.",
+      "style": "direct",
+      "detail": "concise",
+      "targets": [],
+      "before": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "control_attempts": [
+        0,
+        0
+      ],
+      "reply_required": [
+        "complete request",
+        "restrictions"
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to retry",
+        "safe to repeat"
+      ]
+    },
+    {
+      "id": "count",
+      "prompt": "How many lights in my house?",
+      "style": "direct",
+      "detail": "concise",
+      "targets": [],
+      "before": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "control_attempts": [
+        0,
+        0
+      ],
+      "reply_required": [
+        "light",
+        "scope|visible|access"
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to retry",
+        "safe to repeat"
+      ],
+      "count": 2
+    },
+    {
+      "id": "direct_concise",
+      "prompt": "Turn off the {area} doorway light.",
+      "style": "direct",
+      "detail": "concise",
+      "targets": [
+        "doorway"
+      ],
+      "before": {
+        "doorway": "on",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "reply_required": [
+        "{doorway}",
+        "turned off|accepted"
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to repeat",
+        "MESA",
+        "advisory",
+        "enforced mode"
+      ],
+      "service": "turn_off",
+      "reply_exact": "Turned off {doorway}."
+    },
+    {
+      "id": "direct_balanced",
+      "prompt": "Turn off the {area} doorway light.",
+      "style": "direct",
+      "detail": "balanced",
+      "targets": [
+        "doorway"
+      ],
+      "before": {
+        "doorway": "on",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "reply_required": [
+        "{doorway}",
+        "turned off|accepted",
+        "^Home Assistant accepted the command for {doorway}\\.",
+        "Home Assistant reports the accepted devices at their commanded settings\\."
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to repeat",
+        "physical proof"
+      ],
+      "service": "turn_off"
+    },
+    {
+      "id": "direct_detailed",
+      "prompt": "Turn off the {area} doorway light.",
+      "style": "direct",
+      "detail": "detailed",
+      "targets": [
+        "doorway"
+      ],
+      "before": {
+        "doorway": "on",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "reply_required": [
+        "{doorway}",
+        "turned off|accepted",
+        "^Home Assistant accepted the command for {doorway}\\.",
+        "Home Assistant reports the accepted devices at their commanded settings\\.",
+        "not physical proof"
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to repeat"
+      ],
+      "service": "turn_off"
+    },
+    {
+      "id": "warm_concise",
+      "prompt": "Turn off the {area} doorway light.",
+      "style": "warm",
+      "detail": "concise",
+      "targets": [
+        "doorway"
+      ],
+      "before": {
+        "doorway": "on",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "reply_required": [
+        "{doorway}",
+        "turned off|accepted"
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to repeat",
+        "MESA",
+        "advisory",
+        "enforced mode"
+      ],
+      "service": "turn_off",
+      "reply_exact": "Turned off {doorway}."
+    },
+    {
+      "id": "warm_balanced",
+      "prompt": "Turn off the {area} doorway light.",
+      "style": "warm",
+      "detail": "balanced",
+      "targets": [
+        "doorway"
+      ],
+      "before": {
+        "doorway": "on",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "reply_required": [
+        "{doorway}",
+        "turned off|accepted",
+        "^Your command for {doorway} has been accepted by Home Assistant\\.",
+        "Home Assistant reports the accepted devices at their commanded settings\\."
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to repeat",
+        "physical proof"
+      ],
+      "service": "turn_off"
+    },
+    {
+      "id": "warm_detailed",
+      "prompt": "Turn off the {area} doorway light.",
+      "style": "warm",
+      "detail": "detailed",
+      "targets": [
+        "doorway"
+      ],
+      "before": {
+        "doorway": "on",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "reply_required": [
+        "{doorway}",
+        "turned off|accepted",
+        "^Your command for {doorway} has been accepted by Home Assistant\\.",
+        "Home Assistant reports the accepted devices at their commanded settings\\.",
+        "not physical proof"
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to repeat"
+      ],
+      "service": "turn_off"
+    },
+    {
+      "id": "calm_guide_concise",
+      "prompt": "Turn off the {area} doorway light.",
+      "style": "calm_guide",
+      "detail": "concise",
+      "targets": [
+        "doorway"
+      ],
+      "before": {
+        "doorway": "on",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "reply_required": [
+        "{doorway}",
+        "turned off|accepted"
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to repeat",
+        "MESA",
+        "advisory",
+        "enforced mode"
+      ],
+      "service": "turn_off",
+      "reply_exact": "Turned off {doorway}."
+    },
+    {
+      "id": "calm_guide_balanced",
+      "prompt": "Turn off the {area} doorway light.",
+      "style": "calm_guide",
+      "detail": "balanced",
+      "targets": [
+        "doorway"
+      ],
+      "before": {
+        "doorway": "on",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "reply_required": [
+        "{doorway}",
+        "turned off|accepted",
+        "^Home Assistant confirms it accepted the command for {doorway}\\.",
+        "Home Assistant reports the accepted devices at their commanded settings\\."
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to repeat",
+        "physical proof"
+      ],
+      "service": "turn_off"
+    },
+    {
+      "id": "calm_guide_detailed",
+      "prompt": "Turn off the {area} doorway light.",
+      "style": "calm_guide",
+      "detail": "detailed",
+      "targets": [
+        "doorway"
+      ],
+      "before": {
+        "doorway": "on",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "reply_required": [
+        "{doorway}",
+        "turned off|accepted",
+        "^Home Assistant confirms it accepted the command for {doorway}\\.",
+        "Home Assistant reports the accepted devices at their commanded settings\\.",
+        "not physical proof"
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to repeat"
+      ],
+      "service": "turn_off"
+    },
+    {
+      "id": "lively_concise",
+      "prompt": "Turn off the {area} doorway light.",
+      "style": "lively",
+      "detail": "concise",
+      "targets": [
+        "doorway"
+      ],
+      "before": {
+        "doorway": "on",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "reply_required": [
+        "{doorway}",
+        "turned off|accepted"
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to repeat",
+        "MESA",
+        "advisory",
+        "enforced mode"
+      ],
+      "service": "turn_off",
+      "reply_exact": "Turned off {doorway}."
+    },
+    {
+      "id": "lively_balanced",
+      "prompt": "Turn off the {area} doorway light.",
+      "style": "lively",
+      "detail": "balanced",
+      "targets": [
+        "doorway"
+      ],
+      "before": {
+        "doorway": "on",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "reply_required": [
+        "{doorway}",
+        "turned off|accepted",
+        "^Command accepted for {doorway}\\.",
+        "Home Assistant reports the accepted devices at their commanded settings\\."
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to repeat",
+        "physical proof"
+      ],
+      "service": "turn_off"
+    },
+    {
+      "id": "lively_detailed",
+      "prompt": "Turn off the {area} doorway light.",
+      "style": "lively",
+      "detail": "detailed",
+      "targets": [
+        "doorway"
+      ],
+      "before": {
+        "doorway": "on",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "reply_required": [
+        "{doorway}",
+        "turned off|accepted",
+        "^Command accepted for {doorway}\\.",
+        "Home Assistant reports the accepted devices at their commanded settings\\.",
+        "not physical proof"
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to repeat"
+      ],
+      "service": "turn_off"
+    },
+    {
+      "id": "technical_concise",
+      "prompt": "Turn off the {area} doorway light.",
+      "style": "technical",
+      "detail": "concise",
+      "targets": [
+        "doorway"
+      ],
+      "before": {
+        "doorway": "on",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "reply_required": [
+        "{doorway}",
+        "turned off|accepted"
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to repeat",
+        "MESA",
+        "advisory",
+        "enforced mode"
+      ],
+      "service": "turn_off",
+      "reply_exact": "Turned off {doorway}."
+    },
+    {
+      "id": "technical_balanced",
+      "prompt": "Turn off the {area} doorway light.",
+      "style": "technical",
+      "detail": "balanced",
+      "targets": [
+        "doorway"
+      ],
+      "before": {
+        "doorway": "on",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "reply_required": [
+        "{doorway}",
+        "turned off|accepted",
+        "^Command receipt: accepted\\. Targets: {doorway}\\.",
+        "Home Assistant reports the accepted devices at their commanded settings\\."
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to repeat",
+        "physical proof"
+      ],
+      "service": "turn_off"
+    },
+    {
+      "id": "technical_detailed",
+      "prompt": "Turn off the {area} doorway light.",
+      "style": "technical",
+      "detail": "detailed",
+      "targets": [
+        "doorway"
+      ],
+      "before": {
+        "doorway": "on",
+        "desk": "off"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "off"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "reply_required": [
+        "{doorway}",
+        "turned off|accepted",
+        "^Command receipt: accepted\\. Targets: {doorway}\\.",
+        "Home Assistant reports the accepted devices at their commanded settings\\.",
+        "not physical proof"
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "safe to repeat"
+      ],
+      "service": "turn_off"
+    },
+    {
+      "id": "room_unavailable_concise",
+      "prompt": "Turn off all the lights in {area}.",
+      "style": "warm",
+      "detail": "concise",
+      "targets": [
+        "doorway",
+        "desk"
+      ],
+      "availability": {
+        "desk": "off"
+      },
+      "before": {
+        "doorway": "on",
+        "desk": "unavailable"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "unavailable"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "service": "turn_off",
+      "reply_required": [
+        "{doorway}",
+        "Unavailable \\(1\\): {desk}",
+        "do not resend",
+        "^Turned off {doorway}\\."
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "final device states were not verified",
+        "all.*turned off",
+        "MESA",
+        "advisory"
+      ]
+    },
+    {
+      "id": "room_unavailable_detailed",
+      "prompt": "Turn off all the lights in {area}.",
+      "style": "technical",
+      "detail": "detailed",
+      "targets": [
+        "doorway",
+        "desk"
+      ],
+      "availability": {
+        "desk": "off"
+      },
+      "before": {
+        "doorway": "on",
+        "desk": "unavailable"
+      },
+      "after": {
+        "doorway": "off",
+        "desk": "unavailable"
+      },
+      "control_attempts": [
+        1,
+        1
+      ],
+      "service": "turn_off",
+      "reply_required": [
+        "{doorway}",
+        "Unavailable \\(1\\): {desk}",
+        "do not resend",
+        "requested settings for 1 of 2 targets",
+        "not physical proof"
+      ],
+      "reply_forbidden": [
+        "Repairs",
+        "final device states were not verified",
+        "all.*turned off"
+      ]
+    }
+  ]
+}

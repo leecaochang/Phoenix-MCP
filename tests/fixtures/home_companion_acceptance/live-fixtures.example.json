@@ -1,0 +1,19 @@
+{
+  "fixture_prefix": "phoenix_companion_acceptance_",
+  "area": "Alex Office",
+  "lights": {
+    "doorway": {
+      "entity_id": "light.alex_office_lights_doorway",
+      "label": "Alex Office Lights Doorway",
+      "helper_id": "input_boolean.phoenix_companion_acceptance_doorway"
+    },
+    "desk": {
+      "entity_id": "light.alex_office_lights_desk",
+      "label": "Alex Office Lights Desk",
+      "helper_id": "input_boolean.phoenix_companion_acceptance_desk"
+    }
+  },
+  "availability_helpers": {
+    "desk": "input_boolean.phoenix_companion_acceptance_desk_available"
+  }
+}

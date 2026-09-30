@@ -95,6 +95,26 @@ class AgentRecovery:
                 self._records.update(removed)
                 raise
 
+    async def complete_received_turn(self, hass: HomeAssistant, turn: str) -> None:
+        """Finalize only this turn's received receipts after a code-owned report."""
+        from homeassistant.helpers import issue_registry as ir
+
+        async with self._lock:
+            removed = {rid: r for rid, r in self._records.items()
+                       if r.get("turn_id") == turn and r.get("dispatch_result") == "received"
+                       and rid not in self._active and turn not in self._live_turns}
+            if not removed:
+                return
+            for rid in removed:
+                del self._records[rid]
+            try:
+                await self._save()
+            except BaseException:
+                self._records.update(removed)
+                raise
+            for rid in removed:
+                ir.async_delete_issue(hass, DOMAIN, f"agent_recovery_{rid}")
+
     async def _save(self) -> None:
         if self._store is not None:
             await self._store.async_save({"records": self._records})
@@ -206,6 +226,8 @@ def recovery_turn(run: Callable) -> Callable:
             kwargs["emit"] = observe
         try:
             result = await run(*args, **kwargs)
+            if hasattr(result, "recovery_turn_id"):
+                result.recovery_turn_id = turn
             cancel = kwargs.get("cancel")
             if not failed and not (cancel is not None and cancel.is_set()) and getattr(result, "outcome", "ok") == "ok":
                 await data.agent_recovery.complete_turn(turn)

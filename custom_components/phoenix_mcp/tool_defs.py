@@ -1578,7 +1578,9 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "list (entity_id, state, friendly_name, domain, area); each "
             "result also carries control_mode when its MESA nature is non-default (read_only, confirm, prohibited), "
             "so you can spot restricted entities without a follow-up describe_entity call, and entity_category "
-            "(config or diagnostic) when the entity is a setup/health entity rather than a primary control."
+            "(config or diagnostic) when the entity is a setup/health entity rather than a primary control. "
+            "total counts all scoped matching entities before the row limit; count is the number returned. "
+            "For counts alone, use limit=1 to avoid enumerating the full list."
         ),
         "cap": "cap_search",
         "inputSchema": {

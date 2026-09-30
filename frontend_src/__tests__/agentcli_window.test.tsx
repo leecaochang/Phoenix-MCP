@@ -34,6 +34,7 @@ import {
   AGENTCLI_TEXT_SIZE_MAX_PT,
   AGENTCLI_TEXT_SIZE_MIN_PT,
   getDurable,
+  getSessionTurns,
   normalizeAgentCliTextSize,
   patchDurable,
   setSessionTurns,
@@ -782,6 +783,35 @@ describe("AgentCliWindow streaming", () => {
     );
     expect(screen.getByRole("dialog", { name: "Agent Chat" }).style
       .getPropertyValue("--phx-agentcli-text-size")).toBe("10.25pt");
+  });
+
+  it.each(["home_companion", "custom"])("keeps visible and sent history consistent for %s", async (persona) => {
+    agentCliChat.mockImplementation(async (body, onEvent: (n: string, p: unknown) => void) => {
+      onEvent("assistant_delta", { text: `Reply to ${body.user}` });
+      onEvent("messages", { messages: [{ role: "user", content: body.user }, { role: "assistant", content: "reply" }] });
+      onEvent("done", { stop_reason: "end_turn" });
+    });
+    render(<AgentCliWindow tokens={[{ ...TOKENS[0], persona } as TokenRecord]} instances={INSTANCES}
+                           scrollbackLines={500} initialTokenId="t1" onClose={() => {}} />);
+    await waitFor(() => expect(getAgentCliModels).toHaveBeenCalled());
+    const textarea = screen.getByLabelText("Message Agent Chat");
+    for (const prompt of ["first request", "second request"]) {
+      fireEvent.change(textarea, { target: { value: prompt } });
+      fireEvent.keyDown(textarea, { key: "Enter" });
+      await waitFor(() => expect(screen.getAllByText(`Reply to ${prompt}`).length).toBeGreaterThan(0));
+      await waitFor(() => expect(textarea).not.toBeDisabled());
+    }
+    const second = agentCliChat.mock.calls[1][0];
+    if (persona === "home_companion") {
+      expect(second.messages).toEqual([]);
+      expect(screen.queryByText("first request")).toBeNull();
+      expect(screen.queryByText("Reply to first request")).toBeNull();
+      expect(JSON.stringify(getSessionTurns())).not.toContain("first request");
+    } else {
+      expect(second.messages).toHaveLength(2);
+      expect(screen.getByText("first request")).toBeInTheDocument();
+    }
+    expect(screen.getByText("second request")).toBeInTheDocument();
   });
 
   it("streams a turn: user, assistant text, tool call/result, and approval flow", async () => {

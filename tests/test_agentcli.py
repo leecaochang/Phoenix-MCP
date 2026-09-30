@@ -1062,6 +1062,7 @@ def test_claude_show_thinking_controls_display():
 @pytest.mark.asyncio
 async def test_ollama_malformed_tool_args_is_bad_tool_call():
     body = _sse(
+        'data: {"choices":[{"delta":{"tool_calls":[{"index":1,"id":"c2","function":{"name":"get_capability_summary","arguments":"{}"}}]},"finish_reason":null}]}',
         'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"get_state","arguments":"{not json"}}]},"finish_reason":null}]}',
         'data: {"choices":[{"delta":{},"finish_reason":"tool_calls"}]}',
         "data: [DONE]",
@@ -1073,10 +1074,11 @@ async def test_ollama_malformed_tool_args_is_bad_tool_call():
         session, system_prompt="s", messages=[], tools=[], options={}))
     err = next(e for e in events if e["type"] == agentcli.EV_ERROR)
     assert err["code"] == "bad_tool_call"
+    assert err['diagnostic'] == {'category': 'bad_tool_call'}
     # Malformed JSON is eligible only for the shared, pre-dispatch retry budget.
     assert err["message"] == "The model produced an invalid tool call."
     assert err["retryable"] is True
-    # No tool_use is emitted for the unparseable call.
+    # The entire malformed batch is withheld, including its valid call.
     assert not any(e["type"] == agentcli.EV_TOOL for e in events)
     assert not any(e["type"] == agentcli.EV_DONE for e in events)
 
@@ -4223,6 +4225,32 @@ async def test_new_provider_catalog_excludes_non_chat_and_offline_models(kind):
             {"id": "retiring", "status": "pre-offline"},
         ]}))
         assert await provider.list_models(session) == ["hy3"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('thinking', [True, False])
+async def test_deepseek_hidden_reasoning_survives_tool_and_text_rounds(thinking):
+    provider = OpenAICompatProvider(ProviderConfig('deepseek','deepseek-flash','https://d','key'))
+    messages = []
+    for tool_round in [True, False]:
+        delta = {'reasoning_content':'protocol reasoning'}
+        if tool_round:
+            delta['tool_calls'] = [{'index':0,'id':'read','function':{'name':'get_state','arguments':'{}'}}]
+        else:
+            delta['content'] = 'answer'
+        frame = {'choices':[{'delta':delta,'finish_reason':'tool_calls' if tool_round else 'stop'}]}
+        session = _FakeSession(_FakeResp(body=_sse('data: '+json.dumps(frame), 'data: [DONE]')))
+        events = await _collect(provider.stream_turn(session,system_prompt='s',messages=messages,
+                                                     tools=[],options={'show_thinking':thinking}))
+        done = next(e for e in events if e['type']==agentcli.EV_DONE)
+        provider.append_assistant(messages,done['assistant_msg'])
+        assert messages[-1]['reasoning_content']=='protocol reasoning'
+        if tool_round:
+            provider.append_tool_results(messages,[{'tool_use_id':'read','tool_name':'get_state','content':'ok'}])
+        else:
+            replayed = session.calls[-1][1]['json']['messages']
+            assert replayed[1]['reasoning_content']=='protocol reasoning'
+        assert any(e['type']==agentcli.EV_THINKING for e in events) is thinking
 
 
 @pytest.mark.asyncio
