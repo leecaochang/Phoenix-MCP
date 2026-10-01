@@ -28,7 +28,7 @@ pytest-homeassistant-custom-component==0.13.360
 # manifest for the pinned HA version. Re-verify on HA bumps.
 gazetteer-matcher==1.1.0
 hassil==3.12.0
-home-assistant-intents==2026.8.28
+home-assistant-intents==2026.9.17
 voluptuous-openapi==0.3.0
 
 # Standalone lint tool used by the dev workflow (not pulled in by PHACC).
