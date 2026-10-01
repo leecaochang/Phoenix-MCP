@@ -153,7 +153,8 @@ async def test_service_preparation_wait_rechecks_before_side_effect(hass, change
     sink = AsyncMock()
     hass.services.async_register('light', 'turn_on', sink)
     prepares = 0
-    async def prepare(*args):
+    async def prepare(*args, domain, service):
+        assert (domain, service) == ('light', 'turn_on')
         nonlocal prepares
         prepares += 1
         if prepares == 2:
@@ -332,7 +333,8 @@ async def test_internal_service_rechecks_before_side_effect(hass, ingress, chang
     sink = AsyncMock()
     hass.services.async_register('light', 'turn_on', sink)
     calls = 0
-    async def prepare(*args):
+    async def prepare(*args, domain, service):
+        assert (domain, service) == ('light', 'turn_on')
         nonlocal calls
         calls += 1
         if calls == 2:

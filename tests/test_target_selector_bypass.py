@@ -297,7 +297,7 @@ async def test_runtime_service_description_adds_secondary_target_guard(hass):
         AsyncMock(return_value=descriptions),
     ):
         blocked = await unsupported_secondary_targets(
-            hass, {"destination": ["light.denied"]}
+            hass, {"destination": ["light.denied"]}, domain="example", service="route"
         )
 
     assert blocked == ("destination",)
@@ -458,3 +458,130 @@ def test_native_clean_area_argument_is_not_a_target_selector():
     keys = {c for c in source if isinstance(c, str)}
     assert "cleaning_area_id" in keys
     assert not (keys & TARGET_SELECTOR_KEYS)
+
+
+@pytest.fixture
+def remote_service_descriptions():
+    """Use installed HA remote metadata plus a colliding third-party selector."""
+    from pathlib import Path
+
+    import homeassistant
+    import yaml
+
+    remote = yaml.safe_load(
+        (Path(homeassistant.__file__).parent / 'components/remote/services.yaml').read_text()
+    )
+    return {
+        'remote': remote,
+        'example': {'route': {'fields': {'device': {'selector': {'device': {}}}}}},
+    }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('service', ['send_command', 'learn_command', 'delete_command'])
+@pytest.mark.parametrize('surface', ['preview', 'request', 'executor'])
+async def test_remote_text_device_reaches_scoped_boundary(
+    service, surface, remote_service_descriptions
+):
+    """A vendor command-group string survives all three service boundaries."""
+    import json
+
+    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp.tools import discovery
+
+    token, _ = _make_token(cap_search='allow', cap_physical_control='allow')
+    data = _make_data(token)
+    hass = _hass_with(data)
+    service_data = {'device': 'test_command_group', 'command': 'not_sent'}
+    public_args = {
+        'service': {'domain': 'remote', 'name': service, 'data': service_data},
+        'targets': [{'kind': 'entity', 'ids': ['remote.test']}],
+    }
+    with (
+        patch('custom_components.phoenix_mcp.service_targets.async_get_all_descriptions',
+              AsyncMock(return_value=remote_service_descriptions)),
+        patch.object(mcp_view, 'resolve_service_targets', return_value=(['remote.test'], 1)),
+        patch.object(discovery, 'resolve_service_targets', return_value=(['remote.test'], 1)),
+    ):
+        if surface == 'preview':
+            content, outcome, _ = await discovery._tool_dry_run_service(public_args, token, hass, data)
+            assert outcome == 'allowed'
+            body = json.loads(content['content'][0]['text'])
+            assert body['resolved_entities'] == ['remote.test']
+            assert body['predicted_outcome'] == 'allowed'
+            hass.services.async_call.assert_not_called()
+        else:
+            if surface == 'request':
+                content, outcome, _ = await mcp_view._tool_call_service(public_args, token, hass, data)
+            else:
+                content, outcome, _ = await mcp_view._execute_call_service(
+                    {'domain': 'remote', 'service': service, 'entity_id': 'remote.test',
+                     'service_data': service_data}, token, hass, data
+                )
+            assert outcome == 'allowed', content
+            assert _call_data(hass) == {**service_data, 'entity_id': ['remote.test']}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('metadata', [None, {}, {'text': {}, 'device': {}},
+                                     {'device': {}}, {'object': {'fields': {'to': {'entity': {}}}}},
+                                     {'text': True}, {'text': {'nested': {'device': {}}}}])
+async def test_ambiguous_device_metadata_remains_refused(hass, remote_service_descriptions, metadata):
+    remote_service_descriptions['remote']['send_command']['fields']['device']['selector'] = metadata
+    with patch('custom_components.phoenix_mcp.service_targets.async_get_all_descriptions',
+               AsyncMock(return_value=remote_service_descriptions)):
+        assert await unsupported_secondary_targets(
+            hass, {'device': 'group'}, domain='remote', service='send_command'
+        ) == ('device',)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('value', [None, True, 123, ['group'], {'entity_id': 'remote.denied'}])
+async def test_remote_text_metadata_does_not_admit_structured_values(hass, remote_service_descriptions, value):
+    with patch('custom_components.phoenix_mcp.service_targets.async_get_all_descriptions',
+               AsyncMock(return_value=remote_service_descriptions)):
+        assert await unsupported_secondary_targets(
+            hass, {'device': value}, domain='remote', service='send_command'
+        ) == ('device',)
+
+
+@pytest.mark.asyncio
+async def test_text_exception_never_overrides_static_selector_keys(hass):
+    descriptions = {'example': {'route': {'fields': {'media_player_entity_id': {'selector': {'text': {}}}}}}}
+    with patch('custom_components.phoenix_mcp.service_targets.async_get_all_descriptions',
+               AsyncMock(return_value=descriptions)):
+        assert await unsupported_secondary_targets(
+            hass, {'media_player_entity_id': 'media_player.denied'}, domain='example', service='route'
+        ) == ('media_player_entity_id',)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('descriptions', [{}, {'remote': {}}, {'remote': {'send_command': {}}}])
+async def test_missing_requested_description_keeps_dynamic_fallback(hass, remote_service_descriptions, descriptions):
+    descriptions['example'] = remote_service_descriptions['example']
+    with patch('custom_components.phoenix_mcp.service_targets.async_get_all_descriptions',
+               AsyncMock(return_value=descriptions)):
+        assert await unsupported_secondary_targets(
+            hass, {'device': 'group'}, domain='remote', service='send_command'
+        ) == ('device',)
+
+
+@pytest.mark.asyncio
+async def test_description_change_is_rechecked_by_executor(remote_service_descriptions):
+    """Approval cannot preserve a text exception after metadata becomes a target."""
+    from custom_components.phoenix_mcp import mcp_view
+
+    token, _ = _make_token(cap_physical_control='allow')
+    data = _make_data(token)
+    hass = _hass_with(data)
+    remote_service_descriptions['remote']['send_command']['fields']['device']['selector'] = {'device': {}}
+    with patch('custom_components.phoenix_mcp.service_targets.async_get_all_descriptions',
+               AsyncMock(return_value=remote_service_descriptions)):
+        content, outcome, _ = await mcp_view._execute_call_service(
+            {'domain': 'remote', 'service': 'send_command', 'entity_id': 'remote.test',
+             'service_data': {'device': 'group', 'command': 'not_sent'}}, token, hass, data,
+            mesa_approved=True,
+        )
+    assert outcome == 'invalid_request'
+    assert content['isError'] is True
+    hass.services.async_call.assert_not_called()

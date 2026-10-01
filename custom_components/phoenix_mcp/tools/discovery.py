@@ -2750,7 +2750,7 @@ async def _tool_dry_run_service(
     if not domain or not service:
         return _tool_error("Missing required arguments: domain and service"), "invalid_request", "dry_run_service"
     secondary_targets = await unsupported_secondary_targets(
-        hass, args.get("service_data")
+        hass, args.get("service_data"), domain=domain, service=service
     )
     if secondary_targets:
         return (

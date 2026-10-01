@@ -1196,7 +1196,7 @@ async def _tool_call_service(
         return _tool_error("Missing required arguments: domain and service"), "denied", "call_service"
 
     secondary_targets = await unsupported_secondary_targets(
-        hass, args.get("service_data")
+        hass, args.get("service_data"), domain=domain, service=service
     )
     if secondary_targets:
         return (
@@ -1339,7 +1339,7 @@ async def _execute_call_service(
     # service can register or change its description while approval is pending,
     # so the request-time precheck alone is not an authorization boundary.
     secondary_targets = await unsupported_secondary_targets(
-        hass, args.get("service_data")
+        hass, args.get("service_data"), domain=domain, service=service
     )
     if secondary_targets:
         return (

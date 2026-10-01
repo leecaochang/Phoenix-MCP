@@ -27,10 +27,9 @@ def _contains_target_selector(value: object) -> bool:
 def secondary_target_fields(descriptions: object) -> frozenset[str]:
     """Collect non-primary target field names from HA service descriptions.
 
-    This intentionally scans every registered service, not only the requested
-    one. A field name that acts as a target anywhere is unsafe as opaque service
-    data everywhere: otherwise a missing or late-loaded description would turn
-    the same key from refused into accepted.
+    Scan every registered service to retain a conservative fallback when the
+    requested description is missing or late-loaded. The caller may disambiguate
+    a discovered name only with explicit text metadata on the requested service.
     """
     found = set(SECONDARY_TARGET_SELECTOR_KEYS)
     if not isinstance(descriptions, Mapping):
@@ -55,7 +54,7 @@ def secondary_target_fields(descriptions: object) -> frozenset[str]:
 
 
 async def unsupported_secondary_targets(
-    hass: HomeAssistant, service_data: object
+    hass: HomeAssistant, service_data: object, *, domain: str, service: str
 ) -> tuple[str, ...]:
     """Return caller fields that could select targets Phoenix did not resolve.
 
@@ -69,7 +68,25 @@ async def unsupported_secondary_targets(
         descriptions: Any = await async_get_all_descriptions(hass)
     except Exception:  # noqa: BLE001 - the static fallback is the safe degradation
         descriptions = {}
-    unsafe = secondary_target_fields(descriptions)
+    unsafe = set(secondary_target_fields(descriptions))
+    # Only an explicit text selector on this service can disambiguate a name
+    # discovered on another service. Keep build-time refusals and missing or
+    # malformed metadata conservative, and never admit structured text values.
+    services = descriptions.get(domain) if isinstance(descriptions, Mapping) else None
+    description = services.get(service) if isinstance(services, Mapping) else None
+    fields = description.get("fields") if isinstance(description, Mapping) else None
+    if isinstance(fields, Mapping):
+        for name, field in fields.items():
+            selector = field.get("selector") if isinstance(field, Mapping) else None
+            if (
+                name not in SECONDARY_TARGET_SELECTOR_KEYS
+                and isinstance(service_data.get(name), str)
+                and isinstance(selector, Mapping)
+                and set(selector) == {"text"}
+                and (selector["text"] is None or isinstance(selector["text"], Mapping))
+                and not _contains_target_selector(selector)
+            ):
+                unsafe.discard(name)
     return tuple(sorted(str(key) for key in service_data if str(key) in unsafe))
 
 
