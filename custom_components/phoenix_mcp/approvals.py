@@ -548,6 +548,7 @@ def fire_approval_requested_event(hass: HomeAssistant, approval: PendingApproval
             "token_name": approval.token_name,
             "tool_name": approval.tool_name,
             "cap_name": approval.cap_name,
+            "review_url": f"/phoenix-mcp/approvals/{approval.id}",
             "expires_at": approval.expires_at.isoformat() if approval.expires_at else None,
             "timestamp": utcnow().isoformat(),
         },

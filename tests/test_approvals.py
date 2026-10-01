@@ -4,9 +4,16 @@ from __future__ import annotations
 
 import asyncio
 from datetime import timedelta
+from html import unescape
+import json
+from pathlib import Path
+import re
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import yaml
+from homeassistant.core import callback
+from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.approvals import (
@@ -23,6 +30,7 @@ from custom_components.phoenix_mcp.approvals import (
     async_create_pending_approval,
     async_expire_overdue_approval_records,
     get_approval,
+    fire_approval_requested_event,
     list_approvals,
     REASON_EXECUTION_INTERRUPTED,
     async_mark_execution_started,
@@ -587,6 +595,108 @@ class TestNotificationGating:
             create_approval_notification(hass, self._approval())
             m.assert_called_once()
             assert "/phoenix-mcp/approvals/appr_x" in m.call_args.kwargs["message"]
+
+
+@pytest.mark.parametrize("notify", [False, True])
+async def test_requested_event_has_bound_review_link_without_configuration(hass, store, notify):
+    data = MagicMock()
+    data.store.get_settings.return_value = GlobalSettings(notify_on_approval=notify)
+    hass.data[DOMAIN] = data
+    secret = "sensitive-configuration-" + "x" * 100_000
+    approval = await async_create_pending_approval(
+        store, token_id="t1", token_name="Notification test", tool_name="write_file",
+        cap_name="cap_filesystem",
+        args={"content": secret, "review_url": "https://untrusted.example/approve"},
+        diff={"before": secret, "after": secret, "targets": ["sensor.hidden"]},
+        request_id="private-request", client_ip="192.0.2.1",
+    )
+    events = []
+
+    @callback
+    def capture(event):
+        events.append(event.data)
+
+    unsubscribe = hass.bus.async_listen(f"{DOMAIN}_approval_requested", capture)
+    try:
+        with patch("homeassistant.components.persistent_notification.async_create") as notification:
+            create_approval_notification(hass, approval)
+            fire_approval_requested_event(hass, approval)
+            await hass.async_block_till_done()
+        assert notification.call_count == int(notify)
+        assert len(events) == 1
+        event = events[0]
+        assert event["approval_id"] == approval.id
+        assert event["review_url"] == f"/phoenix-mcp/approvals/{approval.id}"
+        assert set(event) == {
+            "approval_id", "token_id", "token_name", "tool_name", "cap_name",
+            "review_url", "expires_at", "timestamp",
+        }
+        encoded = json.dumps(event)
+        assert len(encoded) < 1_024
+        assert "sensitive-configuration" not in encoded
+        assert "sensor.hidden" not in encoded and "untrusted.example" not in encoded
+        assert get_approval(store, approval.id).status == STATUS_PENDING
+    finally:
+        unsubscribe()
+
+
+async def test_requested_events_keep_identical_requests_separate(hass, store):
+    approvals = [await async_create_pending_approval(
+        store, token_id="t1", token_name="Notification test", tool_name="restart_ha",
+        cap_name="cap_restart", args={}, diff={}, request_id=f"request-{number}",
+    ) for number in range(2)]
+    events = []
+
+    @callback
+    def capture(event):
+        events.append(event.data)
+
+    unsubscribe = hass.bus.async_listen(f"{DOMAIN}_approval_requested", capture)
+    try:
+        for approval in approvals:
+            fire_approval_requested_event(hass, approval)
+        await hass.async_block_till_done()
+        assert [event["approval_id"] for event in events] == [approval.id for approval in approvals]
+        assert len({event["review_url"] for event in events}) == 2
+        assert all(event["review_url"].endswith(event["approval_id"]) for event in events)
+        assert all(get_approval(store, approval.id).status == STATUS_PENDING for approval in approvals)
+    finally:
+        unsubscribe()
+
+
+async def test_documented_notification_automation_only_opens_bound_review(hass, store):
+    page = (Path(__file__).resolve().parents[1] / "docs/panel.html").read_text()
+    example = re.search(r'<code id="approval-notification-example">(.*?)</code>', page, re.DOTALL)
+    assert example is not None
+    config = yaml.safe_load(unescape(example.group(1)))
+    notifications = []
+
+    @callback
+    def notify(call):
+        notifications.append(call.data)
+
+    hass.services.async_register("notify", "mobile_app_your_device", notify)
+    assert await async_setup_component(hass, "automation", {"automation": [config]})
+    approvals = [await async_create_pending_approval(
+        store, token_id="t1", token_name="Notification test", tool_name="restart_ha",
+        cap_name="cap_restart", args={}, diff={}, request_id=f"request-{number}",
+    ) for number in range(2)]
+    for approval in approvals:
+        fire_approval_requested_event(hass, approval)
+    await hass.async_block_till_done()
+    assert len(notifications) == 2
+    for notification, approval in zip(notifications, approvals, strict=True):
+        data = notification["data"]
+        assert data["url"] == data["clickAction"] == f"/phoenix-mcp/approvals/{approval.id}"
+        assert data["tag"] == f"phoenix_approval_{approval.id}"
+        assert get_approval(store, approval.id).status == STATUS_PENDING
+    for wrong_url in ("https://untrusted.example/approve", f"/phoenix-mcp/approvals/{approvals[1].id}"):
+        hass.bus.async_fire(f"{DOMAIN}_approval_requested", {
+            "approval_id": approvals[0].id, "review_url": wrong_url,
+        })
+    await hass.async_block_till_done()
+    assert len(notifications) == 2
+    assert all(get_approval(store, approval.id).status == STATUS_PENDING for approval in approvals)
 
 
 class TestArgsRedaction:
