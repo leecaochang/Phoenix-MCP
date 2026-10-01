@@ -8,13 +8,19 @@ degradations.
 from __future__ import annotations
 
 import hashlib
+import ast
 import secrets
 import uuid
+from copy import deepcopy
 from datetime import timedelta
+from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
+from jsonschema import Draft202012Validator
+from probatio import Invalid, to_openapi
 
 from custom_components.phoenix_mcp import assist_api
 from custom_components.phoenix_mcp.assist_api import (
@@ -64,7 +70,7 @@ def _make_data(token: TokenRecord | None, *, kill_switch: bool = False, bound_id
 # --------------------------------------------------------------------------- #
 
 def test_assist_api_supported_in_test_env():
-    # The pinned HA test env ships helpers.llm and the legacy converter.
+    # The pinned HA test env ships helpers.llm and the Probatio converter.
     assert assist_api_supported() is True
 
 
@@ -83,6 +89,7 @@ async def test_schema_converter_probe_runs_off_the_event_loop(hass):
 
 def test_schema_converter_falls_back_to_probatio_when_legacy_module_is_absent(monkeypatch):
     assist_api._schema_converter.cache_clear()
+    monkeypatch.setattr(assist_api, "vol", SimpleNamespace(Schema=type("LegacySchema", (), {})))
     legacy_error = ModuleNotFoundError(
         "No module named 'voluptuous_openapi'", name="voluptuous_openapi"
     )
@@ -103,6 +110,7 @@ def test_schema_converter_falls_back_to_probatio_when_legacy_module_is_absent(mo
 
 def test_schema_converter_preserves_nested_module_not_found(monkeypatch):
     assist_api._schema_converter.cache_clear()
+    monkeypatch.setattr(assist_api, "vol", SimpleNamespace(Schema=type("LegacySchema", (), {})))
 
     def _import_module(name):
         assert name == "voluptuous_openapi"
@@ -113,6 +121,208 @@ def test_schema_converter_preserves_nested_module_not_found(monkeypatch):
         assist_api._convert_to_voluptuous({"type": "object"})
     assist_api._schema_converter.cache_clear()
 
+
+def test_schema_converter_matches_probatio_engine_when_legacy_is_also_installed(monkeypatch):
+    import probatio
+
+    assist_api._schema_converter.cache_clear()
+    imported = MagicMock(return_value=probatio)
+    monkeypatch.setattr(assist_api.importlib, "import_module", imported)
+    assert assist_api._schema_converter() is probatio.from_openapi
+    imported.assert_called_once_with("probatio")
+    assist_api._schema_converter.cache_clear()
+
+
+def test_schema_converter_uses_legacy_on_original_voluptuous_engine(monkeypatch):
+    import voluptuous_openapi
+
+    assist_api._schema_converter.cache_clear()
+    monkeypatch.setattr(assist_api, "vol", SimpleNamespace(Schema=type("LegacySchema", (), {})))
+    imported = MagicMock(return_value=voluptuous_openapi)
+    monkeypatch.setattr(assist_api.importlib, "import_module", imported)
+    assert assist_api._schema_converter() is voluptuous_openapi.convert_to_voluptuous
+    imported.assert_called_once_with("voluptuous_openapi")
+    assist_api._schema_converter.cache_clear()
+
+
+@pytest.mark.parametrize(
+    ("schema", "accepted", "refused"),
+    [
+        ({"type": "integer", "minimum": 1, "maximum": 3},
+         [1, 2, 3, 2.0], [True, False, 0, 4, 1.5, "2", None]),
+        ({"type": "number", "exclusiveMinimum": 0, "exclusiveMaximum": 3},
+         [1, 1.5], [True, False, 0, 3, -1, "1", None]),
+        ({"anyOf": [{"type": "string", "enum": ["up", "down"]},
+                    {"type": "integer", "minimum": -2, "maximum": 2}]},
+         ["up", "down", -2, 2], ["sideways", True, 2.5, 3, None, {}]),
+        ({"oneOf": [{"type": "integer"}, {"type": "number"}]},
+         [1.5], [1, 1.0, True, "1", None]),
+        ({"type": "object", "additionalProperties": False,
+          "properties": {"rows": {"type": "array", "minItems": 1, "maxItems": 2,
+                                  "items": {"type": "object", "additionalProperties": False,
+                                            "properties": {"value": {"type": "integer", "minimum": 0}},
+                                            "required": ["value"]}}}, "required": ["rows"]},
+         [{"rows": [{"value": 0}]}, {"rows": [{"value": 1}, {"value": 2}]}],
+         [{}, {"rows": []}, {"rows": [{"value": 1.5}]}, {"rows": [{}]},
+          {"rows": [{"value": 0, "extra": 1}]}, {"rows": [{"value": 0}], "extra": 1},
+          {"rows": [{"value": 0}] * 3}]),
+        ({"type": "object", "properties": {"name": {"type": ["string", "null"]}},
+          "additionalProperties": {"type": ["string", "null"]}},
+         [{}, {"name": None}, {"name": "x", "other": None}],
+         [{"name": 1}, {"other": True}, None]),
+        ({"type": "object", "properties": {"name": {"type": "string"},
+                                            "area": {"type": "string"},
+                                            "value": {"type": "integer"}},
+          "allOf": [{"anyOf": [{"required": ["name"]}, {"required": ["area"]}]},
+                    {"required": ["value"]}]},
+         [{"name": "x", "value": 1}, {"area": "x", "value": 1}],
+         [{"name": "x"}, {"value": 1}, {}]),
+    ],
+    ids=["integer-bounds", "exclusive-bounds", "union-enum", "exact-one-union",
+         "nested-array", "null-and-typed-extra", "required-composition"],
+)
+def test_installed_assist_converter_preserves_json_schema_validation(schema, accepted, refused):
+    """Compare real HA validation with an independent Draft 2020-12 oracle."""
+    Draft202012Validator.check_schema(schema)
+    oracle = Draft202012Validator(schema)
+    parameters = assist_api._convert_to_voluptuous(deepcopy(schema))
+    for value in accepted:
+        assert oracle.is_valid(value), value
+        parameters(deepcopy(value))
+    for value in refused:
+        assert not oracle.is_valid(value), value
+        with pytest.raises(Invalid):
+            parameters(deepcopy(value))
+
+
+@pytest.mark.asyncio
+async def test_assist_provider_schemas_preserve_complete_catalog(hass):
+    """Exercise HA's serializer hook for the whole native, Phoenix and MESA catalog."""
+    from custom_components.phoenix_mcp.agentcli import build_mcp_tool_list
+
+    token = _make_token(announce_all=True)
+    data = _make_data(token, bound_id=token.id)
+    data.mesa = MagicMock()
+    definitions = {d["name"]: deepcopy(d["inputSchema"]) for d in build_mcp_tool_list(token, data)}
+    instance = await PhoenixAssistAPI(hass, data).async_get_api_instance(_ctx())
+    assert {tool.name for tool in instance.tools} == set(definitions)
+    assert instance.custom_serializer is not None
+    for tool in instance.tools:
+        public = to_openapi(tool.parameters, custom_serializer=instance.custom_serializer)
+        Draft202012Validator.check_schema(public)
+        assert public == definitions[tool.name], tool.name
+
+
+@pytest.mark.asyncio
+async def test_assist_serializer_preserves_extensions_and_isolates_mutation(hass):
+    schema = {"type": "object", "properties": {"value": {"type": ["integer", "null"],
+              "exclusiveMinimum": 0, "description": "A positive integer or null."}},
+              "x-provider": {"type": "example", "notes": "Retained extension."}, "required": ["value"]}
+    original = deepcopy(schema)
+    token = _make_token()
+    data = _make_data(token, bound_id=token.id)
+    definition = {"name": "fixture", "description": "Schema fixture.", "inputSchema": schema}
+    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[definition]):
+        instance = await PhoenixAssistAPI(hass, data).async_get_api_instance(_ctx())
+    schema["properties"].clear()
+    tool = instance.tools[0]
+    public = to_openapi(tool.parameters, custom_serializer=instance.custom_serializer)
+    Draft202012Validator.check_schema(public)
+    assert public == original
+    public["properties"].clear()
+    assert to_openapi(tool.parameters, custom_serializer=instance.custom_serializer) == original
+
+
+@pytest.mark.asyncio
+async def test_assist_serializer_survives_ha_merged_api_and_native_selectors(hass):
+    from homeassistant.helpers import llm, selector
+
+    token = _make_token()
+    data = _make_data(token, bound_id=token.id)
+    api = PhoenixAssistAPI(hass, data)
+    instance = await llm.MergedAPI([api]).async_get_api_instance(_ctx())
+    for tool in instance.tools:
+        public = to_openapi(tool.parameters, custom_serializer=instance.custom_serializer)
+        Draft202012Validator.check_schema(public)
+    native = selector.NumberSelector(selector.NumberSelectorConfig(min=1, max=3))
+    assert to_openapi(native, custom_serializer=instance.custom_serializer) == {
+        "type": "number", "minimum": 1, "maximum": 3,
+    }
+
+
+@pytest.mark.asyncio
+async def test_assist_schema_snapshots_are_isolated_between_turns(hass):
+    token = _make_token()
+    data = _make_data(token, bound_id=token.id)
+    first_schema = {"type": "object", "properties": {"value": {"type": "integer", "maximum": 3}}}
+    second_schema = {"type": "object", "properties": {"value": {"type": "integer", "maximum": 1}}}
+    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[
+        {"name": "fixture", "inputSchema": first_schema},
+    ]):
+        first = await PhoenixAssistAPI(hass, data).async_get_api_instance(_ctx())
+    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[
+        {"name": "fixture", "inputSchema": second_schema},
+    ]):
+        second = await PhoenixAssistAPI(hass, data).async_get_api_instance(_ctx())
+    for instance, expected in [(first, first_schema), (second, second_schema)]:
+        assert to_openapi(instance.tools[0].parameters, custom_serializer=instance.custom_serializer) == expected
+
+
+@pytest.mark.asyncio
+async def test_assist_safely_omits_schemas_incompatible_with_installed_gemini_formatter(hass, caplog):
+    """Run HA's pure formatter without requiring the optional Google SDK."""
+    from homeassistant.helpers import llm
+    from custom_components.phoenix_mcp.agentcli import build_mcp_tool_list
+
+    source = Path(llm.__file__).parents[1] / "components/google_generative_ai_conversation/entity.py"
+    tree = ast.parse(source.read_text())
+    nodes = [node for node in tree.body if (
+        isinstance(node, ast.FunctionDef) and node.name in {"_camel_to_snake", "_format_schema"}
+    ) or (
+        isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "SUPPORTED_SCHEMA_KEYS"
+                                           for t in node.targets)
+    )]
+    assert len(nodes) == 3
+    namespace = {"Schema": dict, "Any": Any, "cast": cast}
+    exec(compile(ast.Module(body=nodes, type_ignores=[]), str(source), "exec"), namespace)
+    format_schema = namespace["_format_schema"]
+    with pytest.raises(AttributeError, match="upper"):
+        format_schema({"type": ["string", "null"]})
+    assert format_schema({"anyOf": [{"type": "string"}, {"type": "integer"}]}) == {}
+
+    token = _make_token(announce_all=True)
+    data = _make_data(token, bound_id=token.id)
+    data.mesa = MagicMock()
+    definitions = {d["name"]: deepcopy(d["inputSchema"]) for d in build_mcp_tool_list(token, data)}
+    context = _ctx()
+    context.platform = "google_generative_ai_conversation"
+    instance = await PhoenixAssistAPI(hass, data).async_get_api_instance(context)
+    tools = {tool.name: tool for tool in instance.tools}
+    assert "get_capability_summary" in tools
+    assert "set_entity" not in tools
+    assert "media_player__HassSetVolumeRelative" not in tools
+    assert "skipping tool set_entity" in caplog.text
+    assert set(tools) < set(definitions)
+    for name, tool in tools.items():
+        public = to_openapi(tool.parameters, custom_serializer=instance.custom_serializer)
+        assert public == definitions[name]
+        Draft202012Validator.check_schema(public)
+        format_schema(public)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("keyword", ["unevaluatedProperties", "$dynamicRef"])
+async def test_assist_omits_real_incompatible_schema_without_breaking_other_tools(hass, caplog, keyword):
+    token = _make_token()
+    data = _make_data(token, bound_id=token.id)
+    unsupported = {"type": "object", "properties": {"nested": {"type": "object",
+                   keyword: False if keyword == "unevaluatedProperties" else "#anchor"}}}
+    definitions = [{"name": "unsupported", "inputSchema": unsupported},
+                   {"name": "supported", "inputSchema": {"type": "object"}}]
+    with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=definitions):
+        instance = await PhoenixAssistAPI(hass, data).async_get_api_instance(_ctx())
+    assert [tool.name for tool in instance.tools] == ["supported"]
+    assert "skipping tool unsupported" in caplog.text
 
 @pytest.mark.asyncio
 async def test_register_and_unregister_lifecycle(hass):

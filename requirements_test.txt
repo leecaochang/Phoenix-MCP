@@ -31,6 +31,9 @@ hassil==3.12.1
 home-assistant-intents==2026.8.28
 voluptuous-openapi==0.3.0
 
+# Independent Draft 2020-12 schema and validation checks for the Assist bridge.
+jsonschema==4.26.0
+
 # Native camera service-schema checks; matches the pinned HA camera manifest.
 PyTurboJPEG==1.8.3
 

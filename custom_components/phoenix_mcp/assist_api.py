@@ -16,8 +16,10 @@ HA-COUPLING POINT (re-verify on HA upgrades, same posture as ws_dispatch):
 under active refactoring, and Home Assistant's schema converter translates each
 tool's JSON-Schema parameters into the voluptuous schema ``llm.Tool`` advertises
 (HA's own ``mcp`` client integration uses the same call). Stable releases expose
-``voluptuous_openapi.convert_to_voluptuous``; HA 2026.9 exposes
-``probatio.from_openapi`` instead. Both are feature-detected and the converter
+``voluptuous_openapi.convert_to_voluptuous``; Probatio-based HA exposes
+``probatio.from_openapi`` instead. The active HA validation engine selects the
+converter, even when both packages are installed. The original JSON Schema is
+retained through HA's custom serializer hook to avoid a lossy round trip. The converter
 is resolved once on the executor before registration; when either dependency is
 missing the bridge simply never registers (``assist_api_supported()`` is False)
 and the panel shows a "requires HA X+" hint, decoupled from MIN_HA_VERSION like
@@ -29,10 +31,12 @@ import importlib
 import json
 import logging
 from collections.abc import Callable
+from copy import deepcopy
 from functools import cache
 from typing import Any, cast
 
 from homeassistant.core import HomeAssistant
+import voluptuous as vol
 
 from .const import ASSIST_CLIENT_IP, DOMAIN
 
@@ -50,6 +54,9 @@ except ImportError:  # pragma: no cover - depends on HA version
 @cache
 def _schema_converter() -> Callable[[Any], Any]:
     """Resolve Home Assistant's schema converter once for this process."""
+    if vol.Schema.__module__.startswith("probatio."):
+        probatio = importlib.import_module("probatio")
+        return cast(Callable[[Any], Any], probatio.from_openapi)
     try:
         legacy = importlib.import_module("voluptuous_openapi")
     except ModuleNotFoundError as err:
@@ -63,6 +70,20 @@ def _schema_converter() -> Callable[[Any], Any]:
 def _convert_to_voluptuous(schema: Any) -> Any:
     """Convert an OpenAPI schema on stable and Probatio-based HA Core."""
     return _schema_converter()(schema)
+
+
+def _gemini_schema_compatible(schema: Any) -> bool:
+    """Refuse shapes HA's Gemini formatter cannot represent without loss."""
+    if not isinstance(schema, dict):
+        return False
+    if isinstance(schema.get("type"), list) or any(
+        key in schema for key in ("anyOf", "oneOf", "allOf")
+    ):
+        return False
+    children = list(schema.get("properties", {}).values())
+    if "items" in schema:
+        children.append(schema["items"])
+    return all(_gemini_schema_compatible(child) for child in children)
 
 
 async def async_probe_assist_api(hass: HomeAssistant) -> bool:
@@ -231,10 +252,20 @@ if _ASSIST_API_SUPPORTED:
             from .mcp_view import _build_instructions  # noqa: PLC0415
 
             tools: list[Any] = []
+            public_schemas: dict[int, tuple[Any, dict[str, Any]]] = {}
             for tool_def in build_mcp_tool_list(token, data):
                 name = tool_def.get("name")
                 try:
-                    parameters = _convert_to_voluptuous(tool_def.get("inputSchema") or {})
+                    schema = deepcopy(tool_def.get("inputSchema") or {})
+                    if (llm_context.platform == "google_generative_ai_conversation"
+                            and not _gemini_schema_compatible(schema)):
+                        raise ValueError("Home Assistant's Gemini formatter cannot represent this schema")
+                    parameters = _convert_to_voluptuous(deepcopy(schema))
+                    # HA serializers unwrap Schema before invoking the hook.
+                    node = parameters
+                    while isinstance(node, vol.Schema):
+                        node = node.schema
+                    public_schemas[id(node)] = (node, schema)
                 except Exception as err:  # noqa: BLE001 - one bad schema must not
                     # take down the whole voice assistant; skip just that tool.
                     _LOGGER.warning(
@@ -252,12 +283,19 @@ if _ASSIST_API_SUPPORTED:
                     )
                 )
 
+            def serialize_schema(node: Any) -> Any:
+                """Advertise the original schema, scoped to this API instance."""
+                if (entry := public_schemas.get(id(node))) is not None and entry[0] is node:
+                    return deepcopy(entry[1])
+                return _llm.selector_serializer(node)
+
             api_prompt = _build_instructions(token, data, _base_url(self.hass)) + "\n\n" + _ASSIST_ADDENDUM
             return _llm.APIInstance(
                 api=self,
                 api_prompt=api_prompt,
                 llm_context=llm_context,
                 tools=tools,
+                custom_serializer=serialize_schema,
             )
 
 else:  # pragma: no cover - exercised only on HA versions lacking the seam
