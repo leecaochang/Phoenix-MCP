@@ -557,7 +557,10 @@
       "configuration_recovery.restore.title": "Ripristina la configurazione salvata per {resource}",
       "configuration_recovery.restore.body": "Non è stato possibile verificare una modifica precedente. Approva ripristina la configurazione salvata mostrata in Dettagli. Rifiuta mantiene la configurazione attuale. Il comando originale non verrà ripetuto.",
       "configuration_recovery.acknowledge.title": "Controlla la configurazione dopo una modifica interrotta a {resource}",
-      "configuration_recovery.acknowledge.body": "Non è stato possibile verificare una modifica precedente e non è possibile ripristinarla qui in sicurezza. Controlla questa risorsa in Home Assistant, poi approva per accettarne lo stato attuale e sbloccare le modifiche. Rifiuta mantiene le modifiche bloccate. Il comando originale non verrà ripetuto."
+      "configuration_recovery.acknowledge.body": "Non è stato possibile verificare una modifica precedente e non è possibile ripristinarla qui in sicurezza. Controlla questa risorsa in Home Assistant, poi approva per accettarne lo stato attuale e sbloccare le modifiche. Rifiuta mantiene le modifiche bloccate. Il comando originale non verrà ripetuto.",
+      "targets.exact": "Questa approvazione riguarda le entità elencate in Dettagli. Se le destinazioni cambiano, è necessaria una nuova richiesta.",
+      "targets.futureNative": "Home Assistant determina le destinazioni future quando questa configurazione viene eseguita. I membri possono cambiare e l’esecuzione successiva avviene al di fuori dei controlli dei permessi di Phoenix e di MESA.",
+      "targets.dynamicAccessible": "I dispositivi accessibili vengono determinati di nuovo al momento dell’esecuzione e potrebbero essere cambiati."
     },
     "mesaSuggestion": {
       "baseline_note": " Proibito corrisponde alla base predefinita integrata per questo dominio, quindi il profilo creato rende esplicita tale intenzione; scegli conferma in Revisione per consentire invece il controllo dell'agente dietro approvazioni.",

@@ -1606,6 +1606,7 @@ async def async_evaluate_capability(
     request_id: str,
     diff: DiffSource = None,
     client_ip: str | None = None,
+    target_entities: list[str] | None = None,
 ) -> CapabilityResult:
     """Resolve a capability check into Allow / Deny / Pending(approval).
 
@@ -1628,7 +1629,12 @@ async def async_evaluate_capability(
         return CapabilityResult(CAP_DENY)
     # Only now is the diff actually needed, so a deferred builder runs here and
     # nowhere else. Both early returns above leave it untouched.
+    if target_entities is not None:
+        from .approval_targets import bind_targets, bound_preview
+        args = bind_targets(args, target_entities, hass)
     resolved_diff = await _resolve_diff(diff)
+    if target_entities is not None:
+        resolved_diff = bound_preview(resolved_diff, args)
     async with data.store.async_lock:
         check_request_authority()
         approval = await async_create_pending_approval(

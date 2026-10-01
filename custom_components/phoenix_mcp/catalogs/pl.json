@@ -2102,7 +2102,10 @@
       "configuration_recovery.restore.title": "Przywróć zapisaną konfigurację dla {resource}",
       "configuration_recovery.restore.body": "Nie udało się zweryfikować wcześniejszej zmiany. Zatwierdzenie przywraca zapisaną konfigurację widoczną w Szczegółach. Odrzucenie zachowuje bieżącą konfigurację. Oryginalne polecenie nie zostanie powtórzone.",
       "configuration_recovery.acknowledge.title": "Sprawdź konfigurację po przerwanej zmianie w {resource}",
-      "configuration_recovery.acknowledge.body": "Nie udało się zweryfikować wcześniejszej zmiany i nie można jej tutaj bezpiecznie przywrócić. Sprawdź ten zasób w Home Assistant, a następnie zatwierdź, aby zaakceptować jego bieżący stan i odblokować zmiany. Odrzucenie pozostawia zmiany zablokowane. Oryginalne polecenie nie zostanie powtórzone."
+      "configuration_recovery.acknowledge.body": "Nie udało się zweryfikować wcześniejszej zmiany i nie można jej tutaj bezpiecznie przywrócić. Sprawdź ten zasób w Home Assistant, a następnie zatwierdź, aby zaakceptować jego bieżący stan i odblokować zmiany. Odrzucenie pozostawia zmiany zablokowane. Oryginalne polecenie nie zostanie powtórzone.",
+      "targets.exact": "Ta akceptacja obejmuje encje wymienione w Szczegółach. Zmiana celów wymaga nowego żądania.",
+      "targets.futureNative": "Home Assistant określa przyszłe cele podczas wykonywania tej konfiguracji. Skład grup może się zmieniać, a późniejsze wykonanie odbywa się bez kontroli uprawnień Phoenix i kontroli MESA.",
+      "targets.dynamicAccessible": "Dostępne urządzenia są ponownie określane przy wykonaniu i mogły się zmienić."
     },
     "routing": {
       "providerOptions": "Dostawcy decyzji używają stałych opcji routingu, bez opcji czatu takich jak poziomy rozumowania. Odświeżenie modeli sprawdza dostępność bez wykonywania poleceń; nie testuje dokładności routingu.",

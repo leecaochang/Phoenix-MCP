@@ -658,6 +658,8 @@ class TestScanZigbeeTopology:
         assert approval["tool_name"] == "scan_zigbee_topology"
         assert approval["cap_name"] == "cap_radio_write"
         assert approval["diff"]["preview"]["routes"] is False
+        assert approval["diff"]["preview"]["target_semantics"] == "dynamic_accessible_devices"
+        assert approval["diff"]["preview"]["target_membership"] == "may_change"
         assert "less responsive" in approval["diff"]["preview"]["warning"]
 
     async def test_z2m_scan_is_transaction_correlated_and_scope_projected(

@@ -2004,7 +2004,10 @@
       "configuration_recovery.restore.title": "Restaurer la configuration enregistrée de {resource}",
       "configuration_recovery.restore.body": "Une modification précédente n’a pas pu être vérifiée. Approuver restaure la configuration enregistrée affichée dans Détails. Rejeter conserve la configuration actuelle. La commande initiale ne sera pas répétée.",
       "configuration_recovery.acknowledge.title": "Vérifier la configuration après une modification interrompue de {resource}",
-      "configuration_recovery.acknowledge.body": "Une modification précédente n’a pas pu être vérifiée et ne peut pas être restaurée ici en toute sécurité. Vérifiez cette ressource dans Home Assistant, puis approuvez pour accepter son état actuel et débloquer les modifications. Rejeter maintient les modifications bloquées. La commande initiale ne sera pas répétée."
+      "configuration_recovery.acknowledge.body": "Une modification précédente n’a pas pu être vérifiée et ne peut pas être restaurée ici en toute sécurité. Vérifiez cette ressource dans Home Assistant, puis approuvez pour accepter son état actuel et débloquer les modifications. Rejeter maintient les modifications bloquées. La commande initiale ne sera pas répétée.",
+      "targets.exact": "Cette approbation couvre les entités indiquées dans Détails. Toute modification des cibles nécessite une nouvelle demande.",
+      "targets.futureNative": "Home Assistant détermine les futures cibles lors de l’exécution de cette configuration. Les membres peuvent changer et l’exécution ultérieure se déroule sans les vérifications des permissions de Phoenix et de MESA.",
+      "targets.dynamicAccessible": "Les appareils accessibles sont déterminés à nouveau lors de l’exécution et peuvent avoir changé."
     },
     "routing": {
       "providerOptions": "Les fournisseurs de décisions utilisent des choix de routage fixes, sans options de Chat telles que les niveaux de raisonnement. Actualiser les modèles vérifie leur disponibilité sans exécuter de commande et ne teste pas la précision du routage.",

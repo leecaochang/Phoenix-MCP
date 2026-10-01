@@ -2004,7 +2004,10 @@
       "configuration_recovery.restore.title": "{resource} の保存済み設定を復元",
       "configuration_recovery.restore.body": "以前の変更を検証できませんでした。「承認」すると「詳細」に表示された保存済み設定を復元します。「拒否」すると現在の設定を維持します。元のコマンドは再実行しません。",
       "configuration_recovery.acknowledge.title": "{resource} の変更中断後の設定を確認",
-      "configuration_recovery.acknowledge.body": "以前の変更を検証できず、ここでは安全に復元できません。Home Assistant でこのリソースを確認してから「承認」すると、現在の状態を受け入れ、変更のブロックを解除します。「拒否」すると変更はブロックされたままです。元のコマンドは再実行しません。"
+      "configuration_recovery.acknowledge.body": "以前の変更を検証できず、ここでは安全に復元できません。Home Assistant でこのリソースを確認してから「承認」すると、現在の状態を受け入れ、変更のブロックを解除します。「拒否」すると変更はブロックされたままです。元のコマンドは再実行しません。",
+      "targets.exact": "この承認は「詳細」に記載されたエンティティを対象とします。対象が変更された場合は、新しいリクエストが必要です。",
+      "targets.futureNative": "Home Assistantは、この設定が実行されるときに将来の対象を決定します。構成メンバーは変わる可能性があり、後の実行にはPhoenixの権限確認とMESAのチェックは適用されません。",
+      "targets.dynamicAccessible": "アクセス可能なデバイスは実行時に再確認されるため、変更されている可能性があります。"
     },
     "routing": {
       "providerOptions": "判断プロバイダーは固定のルーティング選択肢を使い、思考レベルなどのチャット設定は使いません。モデルの更新ではコマンドを実行せずに利用可能か確認します。ルーティングの正確さはテストしません。",

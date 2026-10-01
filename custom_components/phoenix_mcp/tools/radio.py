@@ -1463,6 +1463,8 @@ async def _build_diff_scan_zigbee_topology(
         "preview": {
             "backend": resolved.backend,
             "visible_device_count": len(resolved.visible_map),
+            "target_semantics": "dynamic_accessible_devices",
+            "target_membership": "may_change",
             "routes": False,
             "warning": (
                 "This actively queries Zigbee routers. The mesh may be less responsive "

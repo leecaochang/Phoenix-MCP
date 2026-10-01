@@ -410,8 +410,17 @@ async def _tool_intent_action(
     if not entities:
         return _tool_error("No accessible entities matched your request."), "denied", tool_name
 
+    from ..const import APPROVAL_TARGETS_KEY
+    exact = args is not None and APPROVAL_TARGETS_KEY in args
+    if exact and args is not None and not _native_targets_current(tool_name, args, token, hass):
+        from ..approval_targets import TARGETS_CHANGED
+        return _tool_error(TARGETS_CHANGED), "denied", tool_name
     gate = await _mesa_gate_native(
-        tool_name, service_domain, service_name, service_data, entities, hass, token)
+        tool_name, service_domain, service_name, service_data, entities, hass, token,
+        require_all=exact)
+    if exact and args is not None and not _native_targets_current(tool_name, args, token, hass):
+        from ..approval_targets import TARGETS_CHANGED
+        return _tool_error(TARGETS_CHANGED), "denied", tool_name
     if gate.response is not None:
         return gate.response
     entities, mesa_warnings = gate.entities, gate.warnings
@@ -476,6 +485,22 @@ def _resolve_turn_entities(args: dict, token: TokenRecord, hass: HomeAssistant) 
         area=args.get("area"),
         floor=args.get("floor"),
     )
+
+
+def _native_targets_current(tool_name: str, args: dict, token: TokenRecord, hass: HomeAssistant) -> bool:
+    """Re-resolve the complete reviewed selection before every native service subgroup."""
+    from ..approval_targets import targets_current
+
+    if tool_name in ("HassTurnOn", "HassTurnOff"):
+        entities = _resolve_turn_entities(args, token, hass)
+    else:
+        defaults = list(_POSITION_DOMAIN_SERVICES) if tool_name == "HassSetPosition" else ["cover"]
+        entities = resolve_intent_entities(
+            hass, token, domains=args.get("domain") or defaults,
+            device_classes=args.get("device_class"), name=args.get("name"),
+            area=args.get("area"), floor=args.get("floor"),
+        )
+    return targets_current(args, entities, hass)
 
 
 _BASIC_TARGET_SELECTORS = ("name", "area", "floor")
@@ -605,6 +630,7 @@ async def _hass_turn_gate(
             "cap_physical_control", token, hass, data,
             tool_name=tool_name, args=args, request_id=request_id,
             client_ip=client_ip, diff=lambda: _build_diff_hass_turn(service, physical, args, token, hass),
+            target_entities=entities,
         )
         if blocked is not None:
             return blocked
@@ -654,6 +680,9 @@ async def _hass_turn_execute(
     if refusal is not None:
         return refusal
     entities = _resolve_turn_entities(args, token, hass)
+    from ..approval_targets import TARGETS_CHANGED, targets_current
+    if not targets_current(args, entities, hass):
+        return _tool_error(TARGETS_CHANGED), "denied", tool_name
     # Drop physical entities only when cap_physical_control is deny. Under allow
     # (direct) or confirm (reached here only after admin approval) they are kept.
     declined: list[str] = []
@@ -721,6 +750,16 @@ async def _merge_action_calls(
     token: TokenRecord,
 ) -> tuple[dict, str, str]:
     """Run native service calls and merge their action_done responses."""
+    from ..const import APPROVAL_TARGETS_KEY
+    exact = APPROVAL_TARGETS_KEY in args
+    if exact:
+        # Check every reviewed subgroup before the first effect. Execution still
+        # repeats this gate before each subgroup, since earlier calls can suspend.
+        for domain, svc, service_data, ents in calls:
+            gate = await _mesa_gate_native(
+                tool_name, domain, svc, service_data, ents, hass, token, require_all=True)
+            if gate.response is not None:
+                return gate.response
     success: list[dict] = []
     seen: set[tuple] = set()
     speech_parts: list[str] = []
@@ -732,6 +771,14 @@ async def _merge_action_calls(
         if outcome == "pending_approval":
             return resp, outcome, resource
         if outcome != "allowed":
+            if exact:
+                if not any_ok:
+                    return resp, outcome, resource
+                return _tool_error(json.dumps({
+                    "speech": {}, "response_type": "action_done",
+                    "data": {"success": success, "failed": []}, "partial": True,
+                    "message": "Reviewed targets changed or an action failed. Remaining actions were not dispatched; inspect prior effects before retrying.",
+                })), outcome, resource
             continue
         any_ok = True
         payload = json.loads(resp["content"][0]["text"])
@@ -1022,6 +1069,11 @@ async def _tool_hass_set_position(
         "cap_physical_control", token, hass, data,
         tool_name="HassSetPosition", args=args, request_id=request_id,
         client_ip=client_ip, diff=lambda: _build_diff_hass_set_position(args, token, hass),
+        target_entities=(resolve_intent_entities(
+            hass, token, domains=args.get("domain") or list(_POSITION_DOMAIN_SERVICES),
+            device_classes=args.get("device_class"), name=args.get("name"),
+            area=args.get("area"), floor=args.get("floor"))
+            if effective_cap(token, "cap_physical_control") == CAP_CONFIRM else None),
     )
     if blocked is not None:
         return blocked
@@ -1068,6 +1120,9 @@ async def _execute_hass_set_position(
         area=args.get("area"),
         floor=args.get("floor"),
     )
+    from ..approval_targets import TARGETS_CHANGED, targets_current
+    if not targets_current(args, entities, hass):
+        return _tool_error(TARGETS_CHANGED), "denied", "HassSetPosition"
     service_data: dict[str, Any] = {"position": args["position"]}
 
     grouped: dict[tuple[str, str], list[str]] = {}
@@ -1189,6 +1244,9 @@ async def _execute_hass_set_volume_relative(
             "denied",
             "HassSetVolumeRelative",
         )
+    from ..approval_targets import TARGETS_CHANGED, targets_current
+    if not targets_current(args, entities, hass):
+        return _tool_error(TARGETS_CHANGED), "denied", "HassSetVolumeRelative"
     service_data_by_entity = {
         entity_id: {"volume_level": level}
         for entity_id, level in plan
@@ -1239,6 +1297,9 @@ async def _execute_hass_set_volume_relative(
             call_results[index] = _RELATIVE_VOLUME_DISPATCHED
             try:
                 check_request_authority()
+                if (not targets_current(args, entities, hass)
+                        or any(resolve(entity, token, hass) != Permission.WRITE for entity in entities)):
+                    raise HomeAssistantError(TARGETS_CHANGED)
                 await hass.services.async_call(
                     "media_player",
                     "volume_set",
@@ -1616,6 +1677,11 @@ async def _tool_hass_stop_moving(
         "cap_physical_control", token, hass, data,
         tool_name="HassStopMoving", args=args, request_id=request_id,
         client_ip=client_ip, diff=lambda: _build_diff_hass_stop_moving(args, token, hass),
+        target_entities=(resolve_intent_entities(
+            hass, token, domains=args.get("domain") or ["cover"],
+            device_classes=args.get("device_class"), name=args.get("name"),
+            area=args.get("area"), floor=args.get("floor"))
+            if effective_cap(token, "cap_physical_control") == CAP_CONFIRM else None),
     )
     if blocked is not None:
         return blocked
@@ -1636,6 +1702,9 @@ async def _execute_hass_stop_moving(
         area=args.get("area"),
         floor=args.get("floor"),
     )
+    from ..approval_targets import TARGETS_CHANGED, targets_current
+    if not targets_current(args, entities, hass):
+        return _tool_error(TARGETS_CHANGED), "denied", "HassStopMoving"
     return await _tool_intent_action("HassStopMoving", "cover", "stop_cover", {}, entities, hass, token, args=args)
 
 

@@ -204,7 +204,7 @@ async def test_admin_approval_satisfies_mesa_confirm_in_one_step(hass: HomeAssis
     # The admin-approved re-execution completes in one step: the service fires
     # and no follow-on MESA approval is created.
     _result, outcome, _resource = await async_execute_approved_tool(
-        "call_service", args, token, hass, data,
+        "call_service", data.store._pending[-1]["args"], token, hass, data,
     )
     assert outcome == "allowed"
     assert len(calls) == 1

@@ -7,6 +7,26 @@ import {
 
 describe("friendly approval summary", () => {
   it.each([
+    ["exact", "This approval covers the entities listed in Details. Changed targets require a new request."],
+    ["future_native_execution", "Home Assistant resolves future targets when this configuration runs. Membership may change, and later execution is outside Phoenix permission and MESA checks."],
+    ["dynamic_accessible_devices", "Accessible devices are resolved again at execution and may have changed."],
+  ])("explains %s target semantics on named script summaries", (semantics, explanation) => {
+    const summary = friendlyApprovalSummary({
+      summary_key: "diff.create_script", summary_params: { script_id: "future_room" },
+      target: { type: "script", id: "future_room", label: "Future room action" },
+      preview: { target_semantics: semantics },
+    });
+    expect(summary.title).toBe("Create script 'Future room action'");
+    expect(summary.body).toContain(explanation);
+  });
+
+  it("ignores unknown target semantics without inferring them from authored text", () => {
+    const ordinary = { summary_key: "diff.call_service", summary_params: { domain: "cover", service: "open_cover" } };
+    expect(friendlyApprovalSummary({ ...ordinary, preview: { target_semantics: "future", warning: "exact" } }))
+      .toEqual(friendlyApprovalSummary(ordinary));
+  });
+
+  it.each([
     [
       "diff.zigbee_reconfigure.device",
       { label: "Fitness PIR ZB" },

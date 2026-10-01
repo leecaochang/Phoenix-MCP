@@ -316,7 +316,14 @@ async def test_approved_reexecution_strips_selectors(hass, token_store):
 
     token, _ = _make_token()
     data = _make_data(token)
-    hass = _hass_with(data)
+    from homeassistant.helpers import entity_registry as er
+    from custom_components.phoenix_mcp.approval_targets import bind_targets
+    er.async_get(hass).async_get_or_create("light", "test", "kitchen", suggested_object_id="kitchen")
+    hass.states.async_set("light.kitchen", "off")
+    hass.data[DOMAIN] = data
+    from pytest_homeassistant_custom_component.common import async_mock_service
+    calls = async_mock_service(hass, "light", "turn_on")
+    token.pass_through = True
 
     saved_args = {
         "domain": "light",
@@ -324,13 +331,12 @@ async def test_approved_reexecution_strips_selectors(hass, token_store):
         "entity_id": "light.kitchen",
         "service_data": dict(_ALL_SELECTORS),
     }
-    with patch(
-        "custom_components.phoenix_mcp.mcp_view.resolve_service_targets",
-        return_value=(["light.kitchen"], 1),
-    ):
-        await async_execute_approved_tool("call_service", saved_args, token, hass, data)
+    saved_args = bind_targets(saved_args, ["light.kitchen"], hass)
+    result, outcome, _ = await async_execute_approved_tool("call_service", saved_args, token, hass, data)
+    assert outcome == "allowed", result
 
-    _assert_no_selectors_but_entity_list(_call_data(hass), ["light.kitchen"])
+    assert len(calls) == 1
+    _assert_no_selectors_but_entity_list(calls[0].data, ["light.kitchen"])
 
 
 @pytest.mark.asyncio

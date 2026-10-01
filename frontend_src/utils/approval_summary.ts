@@ -107,7 +107,7 @@ function namedResource(key: string, diff: ApprovalDiff, label: string | null): F
 }
 
 /** Resolve operator copy without interpreting rendered YAML or generating text. */
-export function friendlyApprovalSummary(diff: ApprovalDiff | undefined): FriendlyApprovalSummary {
+function baseApprovalSummary(diff: ApprovalDiff | undefined): FriendlyApprovalSummary {
   const summaryKey = diff?.summary_key;
   if (diff && summaryKey?.startsWith("diff.")) {
     const key = summaryKey.slice("diff.".length);
@@ -183,4 +183,14 @@ export function friendlyApprovalSummary(diff: ApprovalDiff | undefined): Friendl
     title: t("approvalSummary.fallback.unknown.title"),
     body: t("approvalSummary.fallback.body"),
   };
+}
+
+/** Explain server-declared target semantics without interpreting saved configuration. */
+export function friendlyApprovalSummary(diff: ApprovalDiff | undefined): FriendlyApprovalSummary {
+  const summary = baseApprovalSummary(diff);
+  const semantics = diff?.preview?.target_semantics;
+  const message = semantics === "exact" ? "targets.exact"
+    : semantics === "future_native_execution" ? "targets.futureNative"
+    : semantics === "dynamic_accessible_devices" ? "targets.dynamicAccessible" : null;
+  return message ? { ...summary, body: `${summary.body} ${t(`approvalSummary.${message}`)}` } : summary;
 }

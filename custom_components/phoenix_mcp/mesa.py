@@ -1154,17 +1154,19 @@ async def async_apply_mesa_to_call(
             preview = dict(diff.get("preview") or {})
             preview["mesa"] = mesa_diff["preview"]["mesa"]
             diff["preview"] = preview
+        from .approval_targets import bind_targets, bound_preview
+        saved_args = (dict(approval_args) if approval_args is not None else _mesa_call_args(
+            domain, service, service_data, verdict.confirm + verdict.allowed))
+        from .const import APPROVAL_TARGETS_KEY
+        if approval_tool_name in (MESA_APPROVED_EXECUTOR, "HassSetVolumeRelative"):
+            if APPROVAL_TARGETS_KEY not in saved_args:
+                saved_args = bind_targets(saved_args, verdict.confirm + verdict.allowed, hass)
+            diff = bound_preview(diff, saved_args)
         approval = await async_create_mesa_approval(
             hass,
             data,
             token,
-            args=(
-                dict(approval_args)
-                if approval_args is not None
-                else _mesa_call_args(
-                    domain, service, service_data, verdict.confirm + verdict.allowed
-                )
-            ),
+            args=saved_args,
             diff=diff,
             request_id=request_id,
             client_ip=client_ip,

@@ -199,6 +199,11 @@ def test_each_entity_is_evaluated_against_its_exact_service_data():
 async def test_one_mesa_approval_preserves_every_entity_specific_value(
     hass: HomeAssistant, monkeypatch
 ):
+    from custom_components.phoenix_mcp.const import APPROVAL_TARGETS_KEY
+    from homeassistant.helpers import entity_registry as er
+    for name in ("one", "two"):
+        er.async_get(hass).async_get_or_create("media_player", "test", name, suggested_object_id=name)
+        hass.states.async_set("media_player." + name, "on")
     runtime = await async_setup_mesa(hass, "enforced")
     _set_profile(runtime, "media_player.one", "confirm")
     _set_profile(runtime, "media_player.two", "autonomous")
@@ -240,7 +245,9 @@ async def test_one_mesa_approval_preserves_every_entity_specific_value(
     create.assert_awaited_once()
     kwargs = create.await_args.kwargs
     assert kwargs["tool_name"] == "HassSetVolumeRelative"
-    assert kwargs["args"] == plan
+    assert {key: value for key, value in kwargs["args"].items() if key != APPROVAL_TARGETS_KEY} == plan
+    assert kwargs["args"][APPROVAL_TARGETS_KEY]["entity_ids"] == ["media_player.one", "media_player.two"]
+    assert isinstance(kwargs["args"][APPROVAL_TARGETS_KEY]["fingerprint"], str)
     assert kwargs["diff"]["preview"]["service_data_by_entity"] == mapping
     assert kwargs["diff"]["preview"]["mesa"] == {
         "confirm_entities": ["media_player.one"],

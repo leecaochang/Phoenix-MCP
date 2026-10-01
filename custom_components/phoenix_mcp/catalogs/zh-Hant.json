@@ -522,7 +522,10 @@
       "configuration_recovery.restore.title": "還原 {resource} 的已儲存設定",
       "configuration_recovery.restore.body": "無法驗證先前的變更。核准將還原「詳細資訊」中顯示的已儲存設定。拒絕將保留目前的設定。不會重複執行原始命令。",
       "configuration_recovery.acknowledge.title": "檢查 {resource} 的變更中斷後的設定",
-      "configuration_recovery.acknowledge.body": "無法驗證先前的變更，也無法在此安全還原。請在 Home Assistant 中檢查此資源，然後核准以接受其目前狀態並解除變更限制。拒絕將繼續阻止變更。不會重複執行原始命令。"
+      "configuration_recovery.acknowledge.body": "無法驗證先前的變更，也無法在此安全還原。請在 Home Assistant 中檢查此資源，然後核准以接受其目前狀態並解除變更限制。拒絕將繼續阻止變更。不會重複執行原始命令。",
+      "targets.exact": "此核准僅涵蓋「詳細資料」中列出的實體。目標發生變化時，需要提交新請求。",
+      "targets.futureNative": "Home Assistant 會在此設定執行時解析未來的目標。成員可能改變，後續執行不會經過 Phoenix 權限和 MESA 檢查。",
+      "targets.dynamicAccessible": "可存取的裝置會在執行時重新解析，其成員可能已發生變化。"
     },
     "approvals": {
       "approve": "核准並執行",

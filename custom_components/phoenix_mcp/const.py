@@ -1024,6 +1024,13 @@ PHYSICAL_GATE_DOMAINS = frozenset({"lock", "alarm_control_panel", "cover", "valv
 # here rather than silently widening what a call can reach.
 TARGET_SELECTOR_KEYS = frozenset({"entity_id", "device_id", "area_id", "floor_id", "label_id"})
 
+# Server-owned exact control bindings, persisted with approval executor arguments.
+APPROVAL_TARGETS_KEY = "_phoenix_approval_targets"
+APPROVAL_TARGETS_VERSION = 1
+APPROVAL_TARGET_LIMIT = 1024
+APPROVAL_TARGET_DEPTH = 16
+APPROVAL_TARGET_ID_CHARS = 255
+
 # Service fields whose selectors name additional HA entities, devices, or areas
 # outside the service's ordinary target block. Home Assistant integrations use
 # these for destinations, group members, source players, rooms, and similar
@@ -1601,6 +1608,9 @@ APPROVAL_SUMMARY_UI: dict[str, str] = {
     "fallback.service.title": "Run {label}",
     "fallback.unknown.title": "Review proposed action",
     "fallback.body": "Open Details to review the exact proposed change.",
+    "targets.exact": "This approval covers the entities listed in Details. Changed targets require a new request.",
+    "targets.futureNative": "Home Assistant resolves future targets when this configuration runs. Membership may change, and later execution is outside Phoenix permission and MESA checks.",
+    "targets.dynamicAccessible": "Accessible devices are resolved again at execution and may have changed.",
     "named.editAutomation.title": "Edit automation '{label}'",
     "named.removeDevice.title": "Remove {device} from {integration}",
     "named.removeDevice.body": "This will ask the {integration} integration to remove {device}. You may need to add the device again, and this action cannot be undone from Phoenix MCP.",

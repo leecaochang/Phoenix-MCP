@@ -143,8 +143,16 @@ async def test_mesa_denial_refuses_the_whole_plan_before_dispatch():
     hass.services.async_call.assert_not_awaited()
 
 
-async def test_approved_execution_reuses_levels_instead_of_recomputing_state():
-    hass = _hass({"media_player.one": 0.8, "media_player.two": 0.1})
+async def test_approved_execution_reuses_levels_instead_of_recomputing_state(hass):
+    from homeassistant.helpers import entity_registry as er
+    from custom_components.phoenix_mcp.approval_targets import bind_targets
+
+    for name, level in (("one", 0.8), ("two", 0.1)):
+        er.async_get(hass).async_get_or_create("media_player", "test", name, suggested_object_id=name)
+        hass.states.async_set(f"media_player.{name}", "playing", {"volume_level": level})
+    from pytest_homeassistant_custom_component.common import async_mock_service
+    recorded = async_mock_service(hass, "media_player", "volume_set")
+    saved_args = bind_targets(_plan(), ["media_player.one", "media_player.two"], hass)
     data = _data(with_mesa=True)
     gate_result = _mesa_outcome(
         "allow", entities=["media_player.one", "media_player.two"]
@@ -154,12 +162,12 @@ async def test_approved_execution_reuses_levels_instead_of_recomputing_state():
         AsyncMock(return_value=gate_result),
     ) as mesa_gate:
         _response, outcome, _resource = await async_execute_approved_tool(
-            "HassSetVolumeRelative", _plan(), _token(), hass, data,
+            "HassSetVolumeRelative", saved_args, _token(), hass, data,
         )
 
     assert outcome == "allowed"
     assert mesa_gate.await_args.kwargs["confirm_approved"] is True
-    calls = [call.args[2] for call in hass.services.async_call.await_args_list]
+    calls = [call.data for call in recorded]
     assert calls == [
         {"volume_level": 0.45, "entity_id": ["media_player.one"]},
         {"volume_level": 1.0, "entity_id": ["media_player.two"]},

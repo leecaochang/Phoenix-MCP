@@ -1614,7 +1614,10 @@
       "configuration_recovery.restore.title": "{resource}의 저장된 구성 복원",
       "configuration_recovery.restore.body": "이전 변경을 검증할 수 없었습니다. 승인하면 상세 정보에 표시된 저장된 구성을 복원합니다. 거부하면 현재 구성을 유지합니다. 원래 명령은 다시 실행하지 않습니다.",
       "configuration_recovery.acknowledge.title": "{resource}의 변경 중단 후 구성 확인",
-      "configuration_recovery.acknowledge.body": "이전 변경을 검증할 수 없었으며 여기서는 안전하게 복원할 수 없습니다. Home Assistant에서 이 리소스를 확인한 다음 승인하여 현재 상태를 수락하고 변경 차단을 해제하세요. 거부하면 변경이 차단된 상태로 유지됩니다. 원래 명령은 다시 실행하지 않습니다."
+      "configuration_recovery.acknowledge.body": "이전 변경을 검증할 수 없었으며 여기서는 안전하게 복원할 수 없습니다. Home Assistant에서 이 리소스를 확인한 다음 승인하여 현재 상태를 수락하고 변경 차단을 해제하세요. 거부하면 변경이 차단된 상태로 유지됩니다. 원래 명령은 다시 실행하지 않습니다.",
+      "targets.exact": "이 승인은 세부 정보에 나열된 엔티티에 적용됩니다. 대상이 변경되면 새 요청이 필요합니다.",
+      "targets.futureNative": "Home Assistant는 이 구성이 실행될 때 이후의 대상을 결정합니다. 구성원이 변경될 수 있으며, 이후 실행에는 Phoenix 권한 검사와 MESA 검사가 적용되지 않습니다.",
+      "targets.dynamicAccessible": "접근 가능한 기기는 실행 시 다시 확인되므로 변경되었을 수 있습니다."
     },
     "approvals": {
       "approve": "승인 및 실행",

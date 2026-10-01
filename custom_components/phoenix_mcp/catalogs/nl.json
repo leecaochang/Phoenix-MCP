@@ -2082,7 +2082,10 @@
       "configuration_recovery.restore.title": "Opgeslagen configuratie voor {resource} herstellen",
       "configuration_recovery.restore.body": "Een eerdere wijziging kon niet worden geverifieerd. Goedkeuren herstelt de opgeslagen configuratie die in Details wordt getoond. Afwijzen behoudt de huidige configuratie. De oorspronkelijke opdracht wordt niet herhaald.",
       "configuration_recovery.acknowledge.title": "Configuratie controleren na een onderbroken wijziging aan {resource}",
-      "configuration_recovery.acknowledge.body": "Een eerdere wijziging kon niet worden geverifieerd en kan hier niet veilig worden hersteld. Controleer deze bron in Home Assistant en keur daarna goed om de huidige toestand te accepteren en wijzigingen vrij te geven. Afwijzen houdt wijzigingen geblokkeerd. De oorspronkelijke opdracht wordt niet herhaald."
+      "configuration_recovery.acknowledge.body": "Een eerdere wijziging kon niet worden geverifieerd en kan hier niet veilig worden hersteld. Controleer deze bron in Home Assistant en keur daarna goed om de huidige toestand te accepteren en wijzigingen vrij te geven. Afwijzen houdt wijzigingen geblokkeerd. De oorspronkelijke opdracht wordt niet herhaald.",
+      "targets.exact": "Deze goedkeuring geldt voor de entiteiten die in Details staan. Gewijzigde doelen vereisen een nieuw verzoek.",
+      "targets.futureNative": "Home Assistant bepaalt toekomstige doelen wanneer deze configuratie wordt uitgevoerd. De samenstelling kan veranderen en latere uitvoering vindt plaats buiten de controles van Phoenix voor machtigingen en MESA.",
+      "targets.dynamicAccessible": "Toegankelijke apparaten worden bij uitvoering opnieuw bepaald en kunnen zijn gewijzigd."
     },
     "routing": {
       "providerOptions": "Beslissingsproviders gebruiken vaste routeringskeuzes, zonder Chat-opties zoals denkniveaus. Modellen vernieuwen controleert de beschikbaarheid zonder een opdracht uit te voeren; het test niet de nauwkeurigheid van de routering.",

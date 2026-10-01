@@ -1241,6 +1241,7 @@ async def _tool_call_service(
             "cap_physical_control", token, hass, data,
             tool_name="call_service", args=args, request_id=request_id,
             client_ip=client_ip, diff=lambda: _build_diff_call_service(args, token, hass),
+            target_entities=targets if effective_cap(token, "cap_physical_control") != CAP_DENY else None,
         )
         if blocked is not None:
             return blocked
@@ -1331,6 +1332,8 @@ async def _execute_call_service(
     service = str_arg(args.get("service"))
     if not domain or not service:
         return _tool_error("Missing required arguments: domain and service"), "denied", "call_service"
+
+    from .approval_targets import TARGETS_CHANGED, targets_current
 
     resource = f"service:{domain}/{service}"
     service_key = f"{domain}/{service}"
@@ -1431,11 +1434,18 @@ async def _execute_call_service(
     if not service_plan_is_current(args, hass, data, token, permitted_entities):
         return _tool_error("Command targets or configuration changed."), "denied", resource
 
+    if not targets_current(args, permitted_entities, hass):
+        return _tool_error(TARGETS_CHANGED), "denied", resource
+
     # MESA enforcement runs last, on the flattened entity list Phoenix MCP already
     # permitted (rule 15: never pass device_id/area_id/"all" to HA). MESA never
     # sees entities Phoenix MCP denied; it can drop entities, gate the whole call for
     # confirmation, or block outright.
-    local_constraints: dict[str, Any] = {"require_all": True, "approval_args": args} if local_plan else {}
+    from .const import APPROVAL_TARGETS_KEY
+    exact_approval = APPROVAL_TARGETS_KEY in args or _approved_exec_ctx.get()
+    local_constraints: dict[str, Any] = {"require_all": True} if local_plan or exact_approval else {}
+    if local_plan:
+        local_constraints["approval_args"] = args
     mesa_outcome = await async_apply_mesa_to_call(
         hass, data, token,
         domain=domain, service=service, service_data=service_data,
@@ -1456,6 +1466,9 @@ async def _execute_call_service(
     permitted_entities = mesa_outcome.entities
     if not service_plan_is_current(args, hass, data, token, permitted_entities):
         return _tool_error("Command targets or configuration changed."), "denied", resource
+
+    if not targets_current(args, permitted_entities, hass):
+        return _tool_error(TARGETS_CHANGED), "denied", resource
 
     if domain in HIGH_RISK_DOMAINS:
         _LOGGER.info(
@@ -5496,6 +5509,14 @@ async def async_execute_approved_tool(
     fn = _EXECUTOR_REGISTRY.get(tool_name)
     if fn is None:
         raise ExecutorNotRegistered(f"No executor registered for tool {tool_name!r}")
+    from .approval_targets import TARGETS_CHANGED, targets_current
+    from .const import APPROVAL_TARGETS_KEY
+    if APPROVAL_TARGETS_KEY in args:
+        binding = args[APPROVAL_TARGETS_KEY]
+        entities = binding.get("entity_ids") if isinstance(binding, dict) else None
+        if (not isinstance(entities, list) or any(not isinstance(entity, str) for entity in entities)
+                or not targets_current(args, entities, hass)):
+            return _tool_error(TARGETS_CHANGED), "denied", tool_name
     # The admin's approval covers the whole action, so the MESA gate inside the
     # executor runs under confirm-approved semantics (see _approved_exec_ctx).
     ctx = _approved_exec_ctx.set(True)
@@ -7646,6 +7667,9 @@ async def _call_tool(
     is enforced by an adversarial sweep over the whole surface instead.
     """
     check_request_authority()
+    from .const import APPROVAL_TARGETS_KEY
+    if APPROVAL_TARGETS_KEY in arguments:
+        return _tool_error("Approval target bindings are server-owned."), "invalid_request", tool_name
     from .home_companion import is_companion, authorize_call, run_request, record_outcome
     if is_companion(token):
         refusal = authorize_call(token, tool_name, arguments)

@@ -1697,7 +1697,10 @@
       "configuration_recovery.restore.title": "Gespeicherte Konfiguration für {resource} wiederherstellen",
       "configuration_recovery.restore.body": "Eine vorherige Änderung konnte nicht überprüft werden. Genehmigen stellt die unter Details gezeigte gespeicherte Konfiguration wieder her. Ablehnen behält die aktuelle Konfiguration bei. Der ursprüngliche Befehl wird nicht wiederholt.",
       "configuration_recovery.acknowledge.title": "Konfiguration nach einer unterbrochenen Änderung an {resource} prüfen",
-      "configuration_recovery.acknowledge.body": "Eine vorherige Änderung konnte nicht überprüft werden und lässt sich hier nicht sicher wiederherstellen. Prüfen Sie diese Ressource in Home Assistant und genehmigen Sie anschließend, um den aktuellen Zustand zu akzeptieren und Änderungen freizugeben. Ablehnen lässt Änderungen gesperrt. Der ursprüngliche Befehl wird nicht wiederholt."
+      "configuration_recovery.acknowledge.body": "Eine vorherige Änderung konnte nicht überprüft werden und lässt sich hier nicht sicher wiederherstellen. Prüfen Sie diese Ressource in Home Assistant und genehmigen Sie anschließend, um den aktuellen Zustand zu akzeptieren und Änderungen freizugeben. Ablehnen lässt Änderungen gesperrt. Der ursprüngliche Befehl wird nicht wiederholt.",
+      "targets.exact": "Diese Genehmigung gilt für die in Details aufgeführten Entitäten. Geänderte Ziele erfordern eine neue Anfrage.",
+      "targets.futureNative": "Home Assistant bestimmt zukünftige Ziele, wenn diese Konfiguration ausgeführt wird. Die Zugehörigkeit kann sich ändern, und die spätere Ausführung erfolgt außerhalb der Berechtigungsprüfungen von Phoenix und der MESA Prüfungen.",
+      "targets.dynamicAccessible": "Zugängliche Geräte werden bei der Ausführung erneut bestimmt und können sich geändert haben."
     },
     "common": {
       "after": "Nachher",

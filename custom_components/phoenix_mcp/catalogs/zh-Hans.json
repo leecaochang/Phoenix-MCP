@@ -2004,7 +2004,10 @@
       "configuration_recovery.restore.title": "恢复 {resource} 的已保存配置",
       "configuration_recovery.restore.body": "无法验证之前的更改。批准将恢复“详细信息”中显示的已保存配置。拒绝将保留当前配置。不会重复执行原始命令。",
       "configuration_recovery.acknowledge.title": "检查 {resource} 的更改中断后的配置",
-      "configuration_recovery.acknowledge.body": "无法验证之前的更改，也无法在此安全恢复。请在 Home Assistant 中检查此资源，然后批准以接受其当前状态并解除更改限制。拒绝将继续阻止更改。不会重复执行原始命令。"
+      "configuration_recovery.acknowledge.body": "无法验证之前的更改，也无法在此安全恢复。请在 Home Assistant 中检查此资源，然后批准以接受其当前状态并解除更改限制。拒绝将继续阻止更改。不会重复执行原始命令。",
+      "targets.exact": "此批准仅涵盖“详情”中列出的实体。目标发生变化时，需要提交新请求。",
+      "targets.futureNative": "Home Assistant 会在此配置运行时解析未来的目标。成员可能变化，后续执行不经过 Phoenix 权限和 MESA 检查。",
+      "targets.dynamicAccessible": "可访问设备会在执行时重新解析，其成员可能已发生变化。"
     },
     "routing": {
       "providerOptions": "决策提供商使用固定的路由选项，不使用思考级别等聊天选项。“刷新模型”会检查模型是否可用，不会执行命令，也不会测试路由准确性。",

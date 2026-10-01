@@ -307,6 +307,7 @@ async def _gate(
     request_id: str,
     client_ip: str | None,
     diff: DiffSource,
+    target_entities: list[str] | None = None,
 ) -> tuple[dict, str, str] | None:
     """Run capability gating. Returns a response tuple for deny/pending, or None for allow.
 
@@ -322,7 +323,7 @@ async def _gate(
     result = await async_evaluate_capability(
         cap_name, token, hass, data,
         tool_name=tool_name, args=args, request_id=request_id,
-        client_ip=client_ip, diff=diff,
+        client_ip=client_ip, diff=diff, target_entities=target_entities,
     )
     if result.is_deny:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name

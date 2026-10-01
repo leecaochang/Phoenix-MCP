@@ -1388,7 +1388,9 @@ def _build_diff_create_automation(args: dict, token: TokenRecord, hass: HomeAssi
         "target": {"type": "automation", "id": args.get("automation_id"), "label": config.get("alias")},
         "before": None,
         "after": _truncate(json.dumps(config, indent=2, default=str)),
-        "preview": {"alias": config.get("alias"), "mode": config.get("mode")},
+        "preview": {"alias": config.get("alias"), "mode": config.get("mode"),
+                    "target_semantics": "future_native_execution",
+                    "target_membership": "may_change", "runtime_authority": "Home Assistant"},
     }
 
 
@@ -1420,7 +1422,9 @@ async def _build_diff_edit_automation(args: dict, token: TokenRecord, hass: Home
         "target": {"type": "automation", "id": automation_id, "label": config.get("alias")},
         "before": before,
         "after": _truncate(json.dumps(config, indent=2, default=str)),
-        "preview": {"alias": config.get("alias"), "mode": config.get("mode")},
+        "preview": {"alias": config.get("alias"), "mode": config.get("mode"),
+                    "target_semantics": "future_native_execution",
+                    "target_membership": "may_change", "runtime_authority": "Home Assistant"},
     }
 
 
@@ -1539,7 +1543,9 @@ def _build_diff_create_script(args: dict, token: TokenRecord, hass: HomeAssistan
         "target": {"type": "script", "id": script_id, "label": config.get("alias")},
         "before": None,
         "after": _truncate(json.dumps({script_id: config}, indent=2, default=str)),
-        "preview": {"alias": config.get("alias"), "mode": config.get("mode")},
+        "preview": {"alias": config.get("alias"), "mode": config.get("mode"),
+                    "target_semantics": "future_native_execution",
+                    "target_membership": "may_change", "runtime_authority": "Home Assistant"},
     }
 
 
@@ -1553,7 +1559,9 @@ async def _build_diff_edit_script(args: dict, token: TokenRecord, hass: HomeAssi
         "target": {"type": "script", "id": script_id, "label": config.get("alias")},
         "before": before,
         "after": _truncate(json.dumps({script_id: config}, indent=2, default=str)),
-        "preview": {"alias": config.get("alias"), "mode": config.get("mode")},
+        "preview": {"alias": config.get("alias"), "mode": config.get("mode"),
+                    "target_semantics": "future_native_execution",
+                    "target_membership": "may_change", "runtime_authority": "Home Assistant"},
     }
 
 

@@ -2855,6 +2855,8 @@ async def test_turn_on_confirm_creates_real_approval_then_executor_actuates(hass
         async_execute_approved_tool,
     )
     from custom_components.phoenix_mcp.data import PhoenixData
+    from custom_components.phoenix_mcp.const import APPROVAL_TARGETS_KEY
+    from homeassistant.helpers import entity_registry as er
 
     class _ApprStore:
         def __init__(self) -> None:
@@ -2873,6 +2875,7 @@ async def test_turn_on_confirm_creates_real_approval_then_executor_actuates(hass
     # mesa=None and no hass.data[DOMAIN] entry -> the MESA gate degrades to allow-all.
     data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
 
+    er.async_get(hass).async_get_or_create("lock", "test", "front_door", suggested_object_id="front_door")
     hass.states.async_set("lock.front_door", "unlocked", {})
     lock_calls: list = []
 
@@ -2899,7 +2902,9 @@ async def test_turn_on_confirm_creates_real_approval_then_executor_actuates(hass
         appr = store._p[0]
         assert appr["tool_name"] == "HassTurnOn"
         assert appr["cap_name"] == "cap_physical_control"
-        assert appr["args"] == {"area": "Hall"}
+        assert appr["args"]["area"] == "Hall"
+        assert appr["args"][APPROVAL_TARGETS_KEY]["entity_ids"] == ["lock.front_door"]
+        assert isinstance(appr["args"][APPROVAL_TARGETS_KEY]["fingerprint"], str)
 
         # Approving re-runs from the SAVED args and actuates lock.lock for real.
         out = await async_execute_approved_tool("HassTurnOn", appr["args"], token, hass, data)

@@ -1915,7 +1915,10 @@
       "configuration_recovery.restore.title": "Restaurar la configuración guardada de {resource}",
       "configuration_recovery.restore.body": "No se pudo verificar un cambio anterior. Aprobar restaura la configuración guardada que se muestra en Detalles. Rechazar conserva la configuración actual. El comando original no se repetirá.",
       "configuration_recovery.acknowledge.title": "Comprobar la configuración tras un cambio interrumpido en {resource}",
-      "configuration_recovery.acknowledge.body": "No se pudo verificar un cambio anterior y no se puede restaurar de forma segura aquí. Compruebe este recurso en Home Assistant y luego apruebe para aceptar su estado actual y desbloquear los cambios. Rechazar mantiene los cambios bloqueados. El comando original no se repetirá."
+      "configuration_recovery.acknowledge.body": "No se pudo verificar un cambio anterior y no se puede restaurar de forma segura aquí. Compruebe este recurso en Home Assistant y luego apruebe para aceptar su estado actual y desbloquear los cambios. Rechazar mantiene los cambios bloqueados. El comando original no se repetirá.",
+      "targets.exact": "Esta aprobación cubre las entidades enumeradas en Detalles. Si los destinos cambian, se necesita una nueva solicitud.",
+      "targets.futureNative": "Home Assistant determina los destinos futuros cuando se ejecuta esta configuración. Los miembros pueden cambiar y la ejecución posterior queda fuera de las comprobaciones de permisos de Phoenix y de MESA.",
+      "targets.dynamicAccessible": "Los dispositivos accesibles se determinan de nuevo al ejecutar y pueden haber cambiado."
     },
     "common": {
       "after": "Después",
