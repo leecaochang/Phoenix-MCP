@@ -1,6 +1,9 @@
 """Bounded tool-selection advice shared by Phoenix-owned agent loops."""
 from __future__ import annotations
 
+import logging
+from .helpers import log_internal_failure
+
 import asyncio
 from copy import deepcopy
 from dataclasses import dataclass
@@ -19,6 +22,8 @@ from .const import (
 from .decision_history import pending_context_history, history_texts
 from .decision_provider import DecisionError, DecisionProvider
 from .helpers import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -206,7 +211,8 @@ async def async_review_tools(hass: Any, data: Any, turn: ToolReviewState, *, sur
             return failure(str(error))
         except TimeoutError:
             return failure("timeout")
-        except Exception:
+        except Exception as exc:
+            log_internal_failure(_LOGGER, "tool_routing", exc)
             return failure("unavailable")
 
     task = hass.async_create_background_task(evaluate(), "phoenix_tool_review")

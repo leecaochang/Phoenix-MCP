@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import math
+from datetime import datetime
 from typing import TYPE_CHECKING
 
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfTime
+from homeassistant.const import EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -59,6 +60,7 @@ class PhoenixTokenSensor(SensorEntity):
 
     _attr_should_poll = False
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     _NUMERIC_TYPES = frozenset({"request_count", "denied_count", "rate_limit_hits", "expires_in"})
     _COUNT_TYPES = frozenset({"request_count", "denied_count", "rate_limit_hits"})
@@ -72,6 +74,11 @@ class PhoenixTokenSensor(SensorEntity):
         self._token = token
         self._sensor_type = sensor_type
         self._data = data
+        if sensor_type == "last_access":
+            self._attr_device_class = SensorDeviceClass.TIMESTAMP
+        elif sensor_type == "status":
+            self._attr_device_class = SensorDeviceClass.ENUM
+            self._attr_options = ["active", "expired", "revoked"]
         self._attr_unique_id = _unique_id(token.id, sensor_type)
         # HA resolves the display name from translations/<lang>.json's entity
         # section. The English there is byte-identical to the old .title() output,
@@ -131,7 +138,7 @@ class PhoenixTokenSensor(SensorEntity):
         return self._device_info
 
     @property
-    def native_value(self) -> str | int | None:
+    def native_value(self) -> str | int | datetime | None:
         token = self._token
         sensor_type = self._sensor_type
 
@@ -154,7 +161,7 @@ class PhoenixTokenSensor(SensorEntity):
         if sensor_type == "last_access":
             if token.last_used_at is None:
                 return None
-            return token.last_used_at.isoformat()
+            return token.last_used_at.replace(second=0, microsecond=0)
 
         if sensor_type == "expires_in":
             # None, not a sentence. A token with no expiry used to report the

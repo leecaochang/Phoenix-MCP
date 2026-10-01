@@ -1832,7 +1832,8 @@ def _admin_view_handlers() -> list[tuple[type, str]]:
     decorator checks auth before the wrapped method (and its path kwargs) ever run.
     """
     handlers = []
-    for view_cls in ALL_ADMIN_VIEWS:
+    from custom_components.phoenix_mcp.agentcli import ALL_AGENTCLI_ADMIN_VIEWS, ALL_AGENTCLI_CHAT_VIEWS
+    for view_cls in ALL_ADMIN_VIEWS + ALL_AGENTCLI_ADMIN_VIEWS + ALL_AGENTCLI_CHAT_VIEWS:
         for name in _ADMIN_HTTP_METHODS:
             fn = getattr(view_cls, name, None)
             if fn is not None and inspect.iscoroutinefunction(fn):

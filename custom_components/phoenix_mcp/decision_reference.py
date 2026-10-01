@@ -1,6 +1,9 @@
 """Review singular references anchored by an earlier local intent, without effects."""
 from __future__ import annotations
 
+import logging
+from .helpers import log_internal_failure
+
 import asyncio
 import json
 from time import monotonic
@@ -18,6 +21,8 @@ from .decision_context import context_history
 from .decision_history import history_texts
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 from .helpers import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def reference_execution_eligible(hass: Any, data: Any, language: object) -> bool:
@@ -170,7 +175,8 @@ async def _async_review_reference(hass: Any, data: Any, token: Any, sentence: st
             return result("timeout")
         except (ValueError, RecursionError):
             return result("context_unavailable")
-        except Exception:
+        except Exception as exc:
+            log_internal_failure(_LOGGER, "decision_reference", exc)
             return result("unavailable")
 
     task = hass.async_create_background_task(evaluate(), "phoenix_reference_preview")

@@ -224,14 +224,14 @@ def _build_live_context(token: TokenRecord, hass: HomeAssistant) -> str:
             if resolve(s.entity_id, token, hass) in (Permission.READ, Permission.WRITE)
         ]
 
-    accessible.sort(key=lambda s: s.attributes.get("friendly_name") or s.entity_id)
+    accessible.sort(key=lambda s: str_arg(s.attributes.get("friendly_name")) or s.entity_id)
 
     lines = [
         _UNTRUSTED_DATA_BOUNDARY,
         "Live Context: An overview of the areas and the devices in this smart home:",
     ]
     for state in accessible:
-        friendly_name = state.attributes.get("friendly_name") or state.entity_id
+        friendly_name = str_arg(state.attributes.get("friendly_name")) or state.entity_id
         domain = state.entity_id.split(".")[0]
         lines.append(f"- names: {_yaml_scalar(friendly_name)}")
         lines.append(f"  domain: {domain}")
@@ -866,7 +866,7 @@ async def _tool_hass_light_set(
     if refusal is not None:
         return refusal
 
-    domains = args.get("domain") or ["light"]
+    domains = ["light"]
     entities = resolve_intent_entities(
         hass, token,
         domains=domains,
@@ -889,6 +889,8 @@ def _validate_hass_light_set_args(args: dict) -> tuple[dict, str, str] | None:
     refusal = _no_selector_refusal(args, "HassLightSet", _DOMAIN_TARGET_SELECTORS)
     if refusal is not None:
         return refusal
+    if args.get("domain") is not None and args["domain"] != ["light"]:
+        return _tool_error("HassLightSet requires light targets."), "invalid_request", "HassLightSet"
     if not any(args.get(name) is not None for name in ("brightness", "color", "temperature")):
         return (
             _tool_error("Missing required argument: brightness, color or temperature"),

@@ -261,7 +261,7 @@ async def _rollback_failed_setup(
     if data is not None:
         data.ready = False
         data.shutting_down = True
-        data.decision_shadow.cancel()
+        await data.decision_shadow.async_cancel()
         try:
             from .assist_api import async_unregister_assist_api  # noqa: PLC0415
 
@@ -277,7 +277,8 @@ async def _rollback_failed_setup(
 
     _remove_frontend(hass)
     try:
-        await hass.config_entries.async_unload_platforms(entry, _entry_platforms())
+        if data is not None and data.forwarded_platforms:
+            await hass.config_entries.async_unload_platforms(entry, sorted(data.forwarded_platforms))
     except Exception:  # noqa: BLE001 - preserve the original setup exception
         _LOGGER.exception("Phoenix MCP: failed to unload platforms during setup rollback")
     if data is not None and hass.data.get(DOMAIN) is data:
@@ -322,7 +323,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     from .config_recovery import ConfigurationRecovery, ConfigurationRecoveryError
     from .const import CONFIG_RECOVERY_STORAGE_KEY
     config_recovery = ConfigurationRecovery(Store(
-        hass, 1, CONFIG_RECOVERY_STORAGE_KEY, private=True, atomic_writes=True,
+        hass, 1, CONFIG_RECOVERY_STORAGE_KEY, private=True, atomic_writes=True, serialize_in_event_loop=False,
     ))
     try:
         await config_recovery.async_load()
@@ -360,6 +361,12 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     # is always at most one entry. Keying by entry ID would add complexity for no benefit.
     hass.data[DOMAIN] = data
     agent_recovery.publish_issues(hass)
+    from .tools.calendar import CalendarWriteJournal
+    data.calendar_writes = CalendarWriteJournal(hass)
+    async with data.calendar_writes.lock:
+        await data.calendar_writes.load()
+    data.calendar_writes.publish_issues()
+
 
     from .logger_control import async_get_logger_override_manager
     data.logger_control = await async_get_logger_override_manager(hass)
@@ -461,7 +468,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         async_unregister_assist_api,
     )
     assist_supported = await async_probe_assist_api(hass)
-    if not settings.kill_switch and assist_supported:
+    if assist_supported:
         async_register_assist_api(hass, data)
     entry.async_on_unload(lambda: async_unregister_assist_api(data))
 
@@ -495,6 +502,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     data.async_on_token_archived = _on_token_archived
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    data.forwarded_platforms.update(PLATFORMS)
 
     # The AI Task entity (ai_task.py) is optional; forward it separately and guarded
     # so a failure setting up that platform never aborts Phoenix MCP's core setup.
@@ -502,6 +510,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     if ai_task_supported():
         try:
             await hass.config_entries.async_forward_entry_setups(entry, ["ai_task"])
+            data.forwarded_platforms.add("ai_task")
         except Exception:  # noqa: BLE001
             _LOGGER.warning("Could not set up the Phoenix MCP AI Task entity", exc_info=True)
 
@@ -600,6 +609,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         from .approvals import (  # noqa: PLC0415
             dismiss_approval_notification,
             async_expire_overdue_approval_records,
+            async_prune_terminal_approvals,
             fire_approval_resolved_event,
         )
 
@@ -615,6 +625,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
                 store,
                 skip_ids=data.approvals_in_progress,
             )
+            await async_prune_terminal_approvals(store, skip_ids=data.approvals_in_progress)
         for approval in expired:
             dismiss_approval_notification(hass, approval.id)
             fire_approval_resolved_event(hass, approval)
@@ -672,7 +683,10 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     entry.async_on_unload(cancel_approval_sweep)
 
     async def _on_stop(event: Event) -> None:
-        data.decision_shadow.cancel()
+        data.ready = False
+        data.shutting_down = True
+        hass.data[RUNTIME_READY_KEY] = False
+        await data.decision_shadow.async_cancel()
         try:
             await data.routing_statistics.async_save()
         except Exception:
@@ -801,6 +815,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if data is not None:
         data.ready = False
         data.shutting_down = True
+        await data.decision_shadow.async_cancel()
         try:
             await data.routing_statistics.async_save()
         except Exception:
@@ -820,6 +835,12 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, _entry_platforms())
 
     if unload_ok:
+        if data is not None:
+            for label, save in (("usage", data.store.async_flush_last_used), ("audit", data.audit.async_save)):
+                try:
+                    await save()
+                except Exception:
+                    _LOGGER.exception("Phoenix MCP final %s persistence failed", label)
         _remove_frontend(hass)
         hass.data.pop(DOMAIN, None)
     elif data is not None:
@@ -830,6 +851,26 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[RUNTIME_READY_KEY] = True
 
     return unload_ok
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Delete credentials while preserving configuration and recovery evidence."""
+    from .agentcli import async_wipe_agentcli_secrets
+    from .approvals import async_cancel_approvals_for_token, dismiss_approval_notification, fire_approval_resolved_event
+
+    store = await TokenStore.async_create(hass)
+    changed = []
+    async with store.async_lock:
+        for token in store.list_tokens():
+            changed.extend(await async_cancel_approvals_for_token(store, token.id, reason="integration_removed"))
+            await store.async_archive_token(token.id, revoked=True)
+        await store.async_patch_settings(assist_token_id=None, voice_agent_token_id=None,
+            voice_agent_provider_id=None, voice_agent_model=None, ai_task_token_id=None,
+            ai_task_provider_id=None, ai_task_model=None, decision_provider_id=None)
+    for record in changed:
+        dismiss_approval_notification(hass, record.id)
+        fire_approval_resolved_event(hass, record)
+    await async_wipe_agentcli_secrets(hass)
 
 
 @callback

@@ -499,4 +499,5 @@ class TestDiagnostics:
             content, _, _ = await _call("check_ha_config", {}, _token(cap_diagnostics="allow"), hass)
         body = _json(content)
         assert body["valid"] is False
-        assert body["errors"][0]["message"] == "bad yaml"
+        assert body["errors"][0]["message"].startswith("Configuration validation failed")
+        assert "bad yaml" not in json.dumps(body)

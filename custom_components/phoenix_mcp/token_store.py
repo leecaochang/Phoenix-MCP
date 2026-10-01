@@ -812,6 +812,8 @@ class TokenStore:
     def __init__(self, hass: HomeAssistant, store: Store) -> None:
         self._hass = hass
         self._store = store
+        self._usage_version = 0
+        self._saved_usage_version = 0
         self._tokens: dict[str, TokenRecord] = {}
         self._archived: dict[str, ArchivedTokenRecord] = {}
         self._pending_approvals: list[dict] = []
@@ -876,6 +878,7 @@ class TokenStore:
 
     async def async_save(self) -> None:
         """Persist the current in-memory state to HA storage."""
+        usage_version = self._usage_version
         await self._store.async_save({
             "version": STORAGE_VERSION,
             "tokens": [t.to_storage_dict() for t in self._tokens.values()],
@@ -884,6 +887,7 @@ class TokenStore:
             "settings": self._settings.to_dict(),
             "entity_hints": self._entity_hints,
         })
+        self._saved_usage_version = usage_version
 
     def get_pending_approvals(self) -> list[dict]:
         """Return the pending-approvals array. Mutations require async_lock."""
@@ -1224,12 +1228,15 @@ class TokenStore:
         and immediately on HA shutdown.
         """
         token = self._tokens.get(token_id)
-        if token is not None:
+        if token is not None and token.last_used_at != timestamp:
             token.last_used_at = timestamp
+            self._usage_version += 1
 
     async def async_flush_last_used(self) -> None:
-        """Flush in-memory last_used_at timestamps to storage."""
-        await self.async_save()
+        """Persist changed telemetry without rewriting a clean token store."""
+        async with self.async_lock:
+            if self._usage_version != self._saved_usage_version:
+                await self.async_save()
 
     async def async_delete_archived(self, token_id: str) -> bool:
         """Permanently delete an archived token record. Returns False if not found."""

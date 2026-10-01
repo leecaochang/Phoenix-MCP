@@ -1,6 +1,9 @@
 """Bounded context reviews; only the internal Chat path can prepare execution plans."""
 from __future__ import annotations
 
+import logging
+from .helpers import log_internal_failure
+
 import asyncio
 import json
 from time import monotonic
@@ -19,6 +22,8 @@ from .const import (
 from .decision_history import history_texts, structured_context_history
 from .decision_provider import DecisionError, DecisionProvider, confident_choice
 from .helpers import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def context_history(messages: Any, *, structured: bool = False) -> list[dict] | None:
@@ -252,7 +257,8 @@ async def _async_review_context(hass: Any, data: Any, token: Any, sentence: str,
             return result(str(error))
         except TimeoutError:
             return result("timeout")
-        except Exception:
+        except Exception as exc:
+            log_internal_failure(_LOGGER, "decision_context", exc)
             return result("unavailable")
 
     task = hass.async_create_background_task(evaluate(), "phoenix_context_preview")
@@ -376,5 +382,6 @@ async def _async_review_decision_context(hass: Any, data: Any, token: Any, sente
         return result("timeout")
     except (ValueError, RecursionError):
         return result("context_unavailable")
-    except Exception:
+    except Exception as exc:
+        log_internal_failure(_LOGGER, "decision_context", exc)
         return result("unavailable")

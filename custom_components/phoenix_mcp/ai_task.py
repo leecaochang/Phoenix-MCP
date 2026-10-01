@@ -307,8 +307,10 @@ def _structure_to_json(structure: Any) -> dict | None:
     try:
         if selector_schema := _selector_structure_to_json(structure):
             return selector_schema
-        from voluptuous_openapi import convert  # noqa: PLC0415
-
+        if vol.Schema.__module__.startswith("probatio."):
+            from probatio import to_openapi
+            return to_openapi(structure)
+        from voluptuous_openapi import convert
         return convert(structure)
     except Exception as err:  # noqa: BLE001 - unavailable/unconvertible schema
         raise HomeAssistantError(

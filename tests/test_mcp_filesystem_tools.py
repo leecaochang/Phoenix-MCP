@@ -235,3 +235,24 @@ class TestListFiles:
         assert outcome == "allowed"
         names = [e["name"] for e in _json(content)["entries"]]
         assert "hello.txt" in names
+
+
+@pytest.mark.parametrize("name,args", [
+    ("read_file", {"path": "www/escape/secret.txt"}),
+    ("write_file", {"path": "www/escape/secret.txt", "content": "changed"}),
+    ("list_files", {"path": "www/escape"}),
+])
+async def test_symlink_below_allowed_root_cannot_escape_config_jail(hass, fs_env, tmp_path, name, args):
+    outside = tmp_path.parent / f"outside-{uuid.uuid4().hex}"
+    outside.mkdir()
+    path = outside / "secret.txt"
+    path.write_text("outside-secret")
+    os.symlink(outside, hass.config.path("www/escape"), target_is_directory=True)
+    try:
+        result, outcome, _ = await _call(name, args, _token(), hass)
+        assert outcome != "allowed"
+        assert "outside-secret" not in str(result)
+        assert path.read_text() == "outside-secret"
+    finally:
+        path.unlink()
+        outside.rmdir()

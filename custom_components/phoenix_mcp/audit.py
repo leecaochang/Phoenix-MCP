@@ -186,6 +186,8 @@ class AuditLog:
         from .household_authority import household_authority
 
         household = household_authority.get()
+        if ha_user_id is None and token_id == "admin" and token_name.startswith("admin:"):
+            ha_user_id = token_name.removeprefix("admin:")
         self._log.append(AuditEntry(
             request_id=request_id,
             timestamp=timestamp or utcnow(),

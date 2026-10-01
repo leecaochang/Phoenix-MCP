@@ -899,3 +899,43 @@ class TestInterruptedExecution:
         assert PendingApproval.from_dict(
             reloaded.to_dict(redact_args=False)
         ).execution_started_at == reloaded.execution_started_at
+
+
+async def test_terminal_retention_bounds_history_but_preserves_uncertain_and_pending(store):
+    from custom_components.phoenix_mcp.approvals import async_prune_terminal_approvals
+    from custom_components.phoenix_mcp.const import APPROVAL_HISTORY_LIMIT
+    now = utcnow()
+    old = (now - timedelta(hours=2)).isoformat()
+    rows = [{"id": str(i), "status": STATUS_APPROVED, "resolved_at": old,
+             "args": {"content": "private"}, "diff": {"before": "private"}, "result": "private"}
+            for i in range(APPROVAL_HISTORY_LIMIT + 30)]
+    protected = [
+        {"id": "pending", "status": STATUS_PENDING, "args": {"content": "retain"}},
+        {"id": "interrupted", "status": STATUS_FAILED, "rejected_reason": REASON_EXECUTION_INTERRUPTED, "args": {"content": "retain"}},
+        {"id": "marker", "status": STATUS_APPROVED, "execution_started_at": old},
+        {"id": "claimed", "status": STATUS_APPROVED, "resolved_at": old},
+        {"id": "corrupt-time", "status": STATUS_APPROVED, "resolved_at": 123},
+    ]
+    rows += protected + [{"id": "too-old", "status": STATUS_REJECTED,
+                          "resolved_at": (now - timedelta(days=8)).isoformat()}]
+    store.set_pending_approvals(rows)
+    await async_prune_terminal_approvals(store, skip_ids={"claimed"})
+    retained = store.get_pending_approvals()
+    assert len(retained) == APPROVAL_HISTORY_LIMIT + len(protected)
+    assert retained[:len(protected)] == protected
+    assert all(row["args"] == {} and row["diff"] == {} and row["result"] is None for row in retained[len(protected):])
+    assert not any(row["id"] == "too-old" for row in retained)
+    store.async_save.reset_mock()
+    await async_prune_terminal_approvals(store, skip_ids={"claimed"})
+    store.async_save.assert_not_awaited()
+
+
+async def test_failed_retention_persistence_restores_original_payloads(store):
+    from custom_components.phoenix_mcp.approvals import async_prune_terminal_approvals
+    original = [{"id": "old", "status": STATUS_APPROVED, "args": {"content": "retain"},
+                 "resolved_at": (utcnow() - timedelta(hours=2)).isoformat()}]
+    store.set_pending_approvals(original)
+    store.async_save.side_effect = OSError("unwritable")
+    with pytest.raises(OSError):
+        await async_prune_terminal_approvals(store)
+    assert store.get_pending_approvals() == original

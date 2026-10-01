@@ -390,8 +390,9 @@ async def test_internal_dispatch_preserves_zero_inline_wait_and_cleans_context(h
         assert request_authority.get() is not None
         raise RuntimeError('failure before return')
     with patch.object(mcp_view, '_dispatch_mcp_authorized', execute):
-        with pytest.raises(RuntimeError, match='failure before return'):
-            await mcp_view._dispatch_mcp('ping', 1, {}, _current_dispatch_token(data, token.id), hass, data, 'assist', '')
+        result = await mcp_view._dispatch_mcp('ping', 1, {}, _current_dispatch_token(data, token.id), hass, data, 'assist', '')
+    assert result[0]['id'] == 1 and result[0]['error']['code'] == -32603
+    assert result[3] == 'invalid_request'
     assert captured == [0]
     assert token.confirm_inline_wait_seconds == 60
     assert request_authority.get() is None

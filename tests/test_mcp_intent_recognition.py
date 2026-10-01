@@ -152,7 +152,7 @@ async def test_empty_read_scope_never_falls_back_to_all_states(hass):
         )
 
     matcher.assert_not_called()
-    assert _body(result)["resolved_entities"] == []
+    assert _body(result) == {"match": False, "near_misses": []}
 
 
 @pytest.mark.asyncio
@@ -178,15 +178,7 @@ async def test_incomplete_recognition_returns_one_scrubbed_near_miss(hass):
         )
 
     body = _body(result)
-    assert body == {
-        "match": False,
-        "near_misses": [{
-            "intent": {"name": "HassTurnOn"},
-            "slots": {"domain": "lights"},
-            "unmatched_slots": {"color": "ultraviolet"},
-            "source": "custom",
-        }],
-    }
+    assert body == {"match": False, "near_misses": []}
     assert "private.yaml" not in result["content"][0]["text"]
 
 

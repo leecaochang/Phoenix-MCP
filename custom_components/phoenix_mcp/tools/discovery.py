@@ -52,7 +52,7 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 
-from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_FUZZY_MATCH_CUTOFF
+from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_FUZZY_MATCH_CUTOFF
 from ..data import PhoenixData
 from ..device_semantics import (
     DeviceRegistrySnapshot,
@@ -69,7 +69,7 @@ from .authoring import _AUTOMATION_YAML, _read_automations_yaml
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
 from ..tool_common import _resolve_area_id, _tool_error, _tool_success
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
-from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_token, filter_service_response, physical_gate_applies, resolve, resolve_device_registry_access, resolve_esphome_user_service, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
+from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_token, filter_service_response, physical_gate_applies, resolve, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
 from ..request_authority import check_request_authority
 from ..token_store import TokenRecord
 from .. import yaml_includes
@@ -328,6 +328,22 @@ def _dangling_report(value: str, holders: list[dict]) -> dict:
             entry["truncated"] = len(paths) > MAX_DANGLING_PATHS
         out.append(entry)
     return {"entity_id": value, "referenced_by": out}
+
+
+def _consumer_visible(consumer: dict, token: TokenRecord, hass: HomeAssistant) -> bool:
+    """A reference never grants visibility of the consumer's identity."""
+    kind, identity = consumer.get("kind"), str(consumer.get("id", ""))
+    if kind == "dashboard":
+        return effective_cap(token, "cap_lovelace_write") != CAP_DENY
+    if kind == "config_entry":
+        return resolve_config_entry_registry_access(identity, token, hass) in (Permission.READ, Permission.WRITE)
+    if kind not in _GRAPH_CONSUMER_KINDS:
+        return False
+    candidates = {f"{kind}.{identity}"}
+    candidates.update(entry.entity_id for entry in er.async_get(hass).entities.values()
+                      if entry.domain == kind and entry.unique_id == identity)
+    return any(resolve_registry_access(eid, token, hass) in (Permission.READ, Permission.WRITE)
+               for eid in candidates)
 
 
 def _consumer(kind: str, cid: str, name: Any) -> dict:
@@ -867,24 +883,20 @@ async def _tool_recognize_intent(
             "not_implemented", "recognize_intent",
         )
 
-    if result is None:
+    targets = _recognized_targets(result, token, hass) if result is not None else []
+    has_selector = result is not None and any(
+        _recognized_entity_value(result, key) is not None
+        for key in ("name", "area", "floor", "domain", "device_class", "state")
+    )
+    if (result is None or getattr(result, "unmatched_entities", {})
+            or (has_selector and not targets)):
         body = {"match": False, "near_misses": []}
-    elif getattr(result, "unmatched_entities", {}):
-        body = {
-            "match": False,
-            "near_misses": [{
-                "intent": {"name": getattr(result.intent, "name", "")},
-                "slots": _intent_slots(result),
-                "unmatched_slots": _intent_unmatched_slots(result),
-                "source": _intent_source(result),
-            }],
-        }
     else:
         body = {
             "match": True,
             "intent": {"name": getattr(result.intent, "name", "")},
             "slots": _intent_slots(result),
-            "resolved_entities": _recognized_targets(result, token, hass),
+            "resolved_entities": targets,
             "source": _intent_source(result),
         }
     return (
@@ -1917,9 +1929,15 @@ async def _tool_check_config(
         _LOGGER.warning("MCP check_config failed", exc_info=True)
         return _tool_error("Config check failed."), "invalid_request", "check_ha_config"
 
-    errors = [{"message": e.message, "domain": e.domain} for e in result.errors]
-    warnings = [{"message": e.message, "domain": e.domain} for e in result.warnings]
-    body = {"valid": not errors, "errors": errors, "warnings": warnings}
+    def project(messages: list, label: str) -> list[dict]:
+        return [{"message": label, "domain": e.domain if isinstance(e.domain, str)
+                 and e.domain in hass.config.components else None}
+                for e in messages[:MAX_CONFIG_CHECK_MESSAGES]]
+
+    errors = project(result.errors, "Configuration validation failed; review the Home Assistant configuration check.")
+    warnings = project(result.warnings, "Configuration warning; review the Home Assistant configuration check.")
+    body = {"valid": not result.errors, "errors": errors, "warnings": warnings,
+            "truncated": len(result.errors) > MAX_CONFIG_CHECK_MESSAGES or len(result.warnings) > MAX_CONFIG_CHECK_MESSAGES}
     return _tool_success(json.dumps(body, default=str)), "allowed", "check_ha_config"
 
 
@@ -2166,11 +2184,11 @@ async def _tool_get_relationships(
     # A YAML branch this cannot read is the same class of gap as a capability it
     # does not hold, so it lands in the same field rather than a second one.
     not_searched.extend(unreadable)
-    # Free, because the walk already visited every consumer: an id referenced by
-    # something but present in neither hass.states nor the registry is rule 8's
-    # ghost, i.e. a reference that can never resolve again for anyone. Reported
-    # for the whole walk rather than for the scope, since a dead reference is
-    # worth surfacing wherever it was found.
+    consumers = [c for c in consumers if _consumer_visible(c, token, hass)]
+    refs = {eid: visible for eid, holders in refs.items()
+            if (visible := [h for h in holders if _consumer_visible(h, token, hass)])}
+    # Missing targets are evidence from readable consumer configuration only.
+    # Hidden holders cannot reveal their identities or unrelated broken references.
     registry = er.async_get(hass)
     dangling = [
         _dangling_report(eid, holders)
@@ -2228,6 +2246,7 @@ async def _tool_describe_entity(
     referenced_by, referenced_by_not_searched = await hass.async_add_executor_job(
         _references_for_entity_details, hass, entity_id,
     )
+    referenced_by = [c for c in referenced_by if _consumer_visible(c, token, hass)]
     body: dict = {
         "entity_id": entity_id,
         "domain": domain,
@@ -2245,7 +2264,7 @@ async def _tool_describe_entity(
         # does, which is the confident wrong answer get_relationships exists to
         # avoid. Naming the limit costs a line; the mesa_note precedent below.
         "referenced_by_note": (
-            "Automations, scripts and scenes only. Call get_relationships for the "
+            "Readable automations, scripts and scenes only. Hidden consumers are omitted. Call get_relationships for the "
             "full picture, including dashboards and config entries such as helpers "
             "built on this entity, and for entity IDs that no longer resolve."
         ),
@@ -2396,7 +2415,8 @@ async def _tool_whatif(
     candidates: list[dict] = []
     expand = build_expand_target(hass)
     for cfg in automations:
-        if not isinstance(cfg, dict):
+        if (not isinstance(cfg, dict) or not _consumer_visible(
+                {"kind": "automation", "id": cfg.get("id", "")}, token, hass)):
             continue
         triggers = cfg.get("trigger") or cfg.get("triggers") or []
         if isinstance(triggers, dict):

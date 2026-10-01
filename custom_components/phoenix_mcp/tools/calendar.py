@@ -17,7 +17,7 @@ from homeassistant.util import dt as dt_util
 
 from ..approval_targets import bind_targets, target_binding, targets_current
 from ..const import (
-    CAP_DENY, CALENDAR_MAX_EVENTS, CALENDAR_MAX_WINDOW_DAYS,
+    DOMAIN, CAP_DENY, CALENDAR_MAX_EVENTS, CALENDAR_MAX_WINDOW_DAYS,
     CALENDAR_RECEIPT_LIMIT, CALENDAR_TIMEOUT_SECONDS, CALENDAR_EVENT_MAX_BYTES,
     CALENDAR_RESULT_MAX_BYTES,
 )
@@ -43,7 +43,9 @@ class CalendarWriteJournal:
     """Save intent before dispatch; an interrupted record remains outcome_unknown."""
 
     def __init__(self, hass: HomeAssistant) -> None:
-        self.store: Store[dict] = Store(hass, 1, "phoenix_mcp_calendar_writes")
+        self.hass = hass
+        self.active: set[str] = set()
+        self.store: Store[dict] = Store(hass, 1, "phoenix_mcp_calendar_writes", private=True, serialize_in_event_loop=False)
         self.lock = asyncio.Lock()
         self.records: list[dict] | None = None
 
@@ -57,6 +59,41 @@ class CalendarWriteJournal:
     async def save(self) -> None:
         """Persist snapshots before acknowledging a transition."""
         await self.store.async_save({"records": self.records})
+
+
+    def publish_issues(self) -> None:
+        """Expose unresolved receipts through HA's existing administrator Repair flow."""
+        from homeassistant.helpers import issue_registry as ir
+        for row in self.records or []:
+            rid = row.get("receipt_id")
+            if row.get("status") != "outcome_unknown" or not isinstance(rid, str) or rid in self.active:
+                continue
+            operation = row.get("operation")
+            tool = f"{operation}_calendar_event" if operation in ("create", "update", "delete") else "calendar_write"
+            ir.async_create_issue(self.hass, DOMAIN, f"calendar_recovery_{rid}", is_fixable=True,
+                severity=ir.IssueSeverity.ERROR, translation_key="agent_recovery",
+                translation_placeholders={"tool": tool, "request_id": rid}, data={"calendar_receipt_id": rid})
+
+    async def reviewed(self, rid: str) -> bool:
+        """Acknowledge manual reconciliation without replay, rollback, or eviction."""
+        if rid in self.active:
+            return False
+        async with self.lock:
+            rows = await self.load()
+            row = next((r for r in rows if r.get("receipt_id") == rid), None)
+            if row is None or row.get("status") != "outcome_unknown" or rid in self.active:
+                return False
+            original = dict(row)
+            row.update(status="reviewed", reviewed_at=dt_util.utcnow().isoformat())
+            try:
+                await self.save()
+            except BaseException:
+                row.clear()
+                row.update(original)
+                raise
+            from homeassistant.helpers import issue_registry as ir
+            ir.async_delete_issue(self.hass, DOMAIN, f"calendar_recovery_{rid}")
+            return True
 
 
 def _calendar_journal(data: PhoenixData, hass: HomeAssistant) -> CalendarWriteJournal:
@@ -307,6 +344,7 @@ async def _execute_calendar_write(args: dict, token: TokenRecord, hass: HomeAssi
     if mesa.decision != "allow":
         return _tool_error("Forbidden."), "denied", entity_id
     async with journal.lock:
+        receipt = None
         try:
             check_request_authority()
             entity = _calendar_entity(entity_id, token, hass, write=True)
@@ -319,7 +357,7 @@ async def _execute_calendar_write(args: dict, token: TokenRecord, hass: HomeAssi
                 raise ValueError("Calendar event or readback context changed. Submit a new request.")
             records = await journal.load()
             while len(records) >= CALENDAR_RECEIPT_LIMIT:
-                removable = next((row for row in records if row.get("status") == "applied"), None)
+                removable = next((row for row in records if row.get("status") in {"applied", "reviewed", "not_applied"}), None)
                 if removable is None:
                     raise ValueError("Calendar recovery storage is full. No write was dispatched.")
                 records.remove(removable)
@@ -356,14 +394,24 @@ async def _execute_calendar_write(args: dict, token: TokenRecord, hass: HomeAssi
             if effective_cap(token, "cap_calendar_write") == CAP_DENY or not targets_current(args, [entity_id], hass):
                 raise PermissionError
         except AuthorityChangedError:
+            if receipt is not None:
+                receipt["status"] = "not_applied"
+                await journal.save()
             raise
         except PermissionError:
+            if receipt is not None:
+                receipt["status"] = "not_applied"
+                await journal.save()
             return _tool_error("Calendar not found or its identity changed."), "denied", entity_id
         except ValueError as exc:
+            if receipt is not None:
+                receipt["status"] = "not_applied"
+                await journal.save()
             return _tool_error(_safe_calendar_data(str(exc), token, hass)), "invalid_request", entity_id
         except Exception:
             _LOGGER.exception("Calendar write preparation failed")
             return _tool_error("Calendar write preparation failed. No write was dispatched."), "invalid_request", entity_id
+        journal.active.add(receipt["receipt_id"])
         try:
             async with asyncio.timeout(CALENDAR_TIMEOUT_SECONDS):
                 if operation == "create":
@@ -398,6 +446,9 @@ async def _execute_calendar_write(args: dict, token: TokenRecord, hass: HomeAssi
             _LOGGER.exception("Calendar dispatch or readback failed")
             # A saved applied receipt distinguishes a readback failure from uncertain dispatch.
             return _calendar_result(receipt, token, hass, error=True)
+        finally:
+            journal.active.discard(receipt["receipt_id"])
+            journal.publish_issues()
         return _calendar_result(receipt, token, hass)
 
 

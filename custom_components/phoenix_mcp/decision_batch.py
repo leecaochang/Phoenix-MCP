@@ -1,6 +1,9 @@
 """Joint-decision previews and qualified plans through the existing command executor."""
 from __future__ import annotations
 
+import logging
+from .helpers import log_internal_failure
+
 import asyncio
 import json
 from time import monotonic
@@ -24,6 +27,8 @@ from .decision_targets import catalog_state, capture_targets, CatalogLimitError,
 from .device_semantics import device_registry_snapshot
 from .helpers import redact_secrets_in_text, redact_inaccessible_entity_ids_in_text
 from .numeric_evidence import read_explicit_percentage, compare_percentage, has_percentage_unit, read_explicit_scalar, explicit_unit_matches
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = False, extended: bool = False, temporal: bool = False
@@ -427,7 +432,8 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
             return result(str(error))
         except TimeoutError:
             return result("timeout")
-        except Exception:
+        except Exception as exc:
+            log_internal_failure(_LOGGER, "decision_batch", exc)
             return result("unavailable")
 
     task = hass.async_create_background_task(evaluate(), "phoenix_batch_preview")

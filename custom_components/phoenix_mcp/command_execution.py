@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+from .helpers import log_internal_failure
+
 import asyncio
 from contextvars import ContextVar
 from dataclasses import dataclass, replace
@@ -23,6 +26,8 @@ from .const import (
 from .device_semantics import DeviceRegistrySnapshot, device_registry_snapshot
 from .helpers import voice_text
 from .policy_engine import Permission, resolve
+
+_LOGGER = logging.getLogger(__name__)
 
 # Only a server-owned command turn can attach a plan to initial service dispatch.
 _local_plan: ContextVar[dict | None] = ContextVar("phoenix_local_command_plan", default=None)
@@ -455,7 +460,8 @@ async def async_execute_chat_command(hass: Any, data: Any, token: Any, proposal:
     """Reuse the outer Chat recovery turn; None permits pre-dispatch fallback."""
     try:
         plan = _capture_plan(hass, data, token, proposal, ingress="chat")
-    except Exception:
+    except Exception as exc:
+        log_internal_failure(_LOGGER, "command_execution", exc)
         return None
     if plan is None:
         return None
@@ -471,7 +477,8 @@ async def async_execute_chat_plan(hass: Any, data: Any, token: Any, plan: dict,
     try:
         return await _dispatch_command(hass, data, token, plan, authority, base_url, True,
                                        client_ip=client_ip, cancel=cancel, language=language)
-    except Exception:
+    except Exception as exc:
+        log_internal_failure(_LOGGER, "command_execution", exc)
         return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
 
 
@@ -481,7 +488,8 @@ async def async_execute_local_command(hass: Any, data: Any, token: Any, proposal
     """None allows provider fallback only before any local dispatch is attempted."""
     try:
         plan = _capture_plan(hass, data, token, proposal)
-    except Exception:
+    except Exception as exc:
+        log_internal_failure(_LOGGER, "command_execution", exc)
         return None
     if plan is None:
         return None
@@ -497,6 +505,7 @@ async def async_execute_command_plan(hass: Any, data: Any, token: Any, plan: dic
         from .routing_statistics import local_result
         local_result(reply, "decision" if plan.get("decision_category") else "local")
         return reply.text
-    except Exception:
+    except Exception as exc:
+        log_internal_failure(_LOGGER, "command_execution", exc)
         # A failed dispatch or receipt save must never cause provider replay.
         return voice_text(language, "outcome_unknown")

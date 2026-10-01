@@ -228,14 +228,14 @@ def test_last_access_never_when_none():
     assert sensor.native_value is None
 
 
-def test_last_access_returns_iso_string():
+def test_last_access_returns_timestamp_at_minute_resolution():
     from homeassistant.util.dt import utcnow
 
     ts = utcnow()
     token = _make_token(last_used_at=ts)
     data = _make_data()
     sensor = PhoenixTokenSensor(token, "last_access", data)
-    assert sensor.native_value == ts.isoformat()
+    assert sensor.native_value == ts.replace(second=0, microsecond=0)
 
 
 # --- expires_in sensor ---

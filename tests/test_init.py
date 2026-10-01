@@ -143,7 +143,7 @@ async def test_mandatory_platform_failure_rolls_back_every_published_surface(
     panel.assert_called_once()
     mesa_inject.assert_called_once()
     chat_inject.assert_called_once()
-    unload.assert_awaited_once()
+    unload.assert_not_awaited()
 
     # HA cannot unregister aiohttp routes. They survive the rollback by design,
     # but the process-wide readiness marker makes them refuse every request.

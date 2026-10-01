@@ -64,7 +64,7 @@ from .mesa import (
 from .ws_dispatch import WsDispatchError, async_ws_command
 from .agent_recovery import tool_is_read_only
 from .mesa_tools import MESA_TOOL_NAMES, async_call_mesa_tool, mesa_tool_defs
-from .helpers import build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_token as _async_get_authenticated_token, get_client_ip as _get_client_ip, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, token_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
+from .helpers import build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_token as _async_get_authenticated_token, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, token_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
 from .recorder_queries import (
     MAX_SIGNIFICANT_STATES_RANGE,
     STATISTIC_PERIOD_LIMITS,
@@ -576,6 +576,8 @@ def _is_modern_request(body: dict, request: web.Request) -> bool:
     if meta is not None and _MCP_PROTOCOL_META in meta:
         return True
     header_version = request.headers.get("MCP-Protocol-Version")
+    if body.get("method") == "initialize":
+        return header_version == _MCP_MODERN_VERSION
     return bool(header_version and header_version not in MCP_LEGACY_PROTOCOL_VERSIONS)
 
 
@@ -660,6 +662,9 @@ def _modernize_response(response_msg: dict | None, method: str) -> dict | None:
     """Add wire-only 2026-07-28 result fields without touching legacy replies."""
     if response_msg is None:
         return None
+    error = response_msg.get("error")
+    if isinstance(error, dict) and error.get("code") == -32002:
+        error["code"] = -32602
     result = response_msg.get("result")
     if not isinstance(result, dict):
         return response_msg
@@ -7797,6 +7802,10 @@ def _build_server_info(token: TokenRecord, hass: HomeAssistant, base_url: str) -
 
 def _build_context_plain(token: TokenRecord, hass: HomeAssistant) -> str:
     """Build the plain-text context document listing accessible entities and capabilities."""
+    from .home_companion import is_companion
+    if is_companion(token):
+        return "Use home_companion for scoped household requests; installation context is unavailable."
+
     lines: list[str] = []
 
     if token.pass_through:
@@ -7863,6 +7872,10 @@ def _build_context_plain(token: TokenRecord, hass: HomeAssistant) -> str:
 
 def _build_context_json(token: TokenRecord, hass: HomeAssistant) -> dict:
     """Build the structured JSON context document for the ?format=json context endpoint."""
+    from .home_companion import is_companion
+    if is_companion(token):
+        return {"token_name": token.name, "persona": token.persona, "entities": [],
+                "capability_flags": effective_caps(token), "message": "Use home_companion for scoped household requests."}
     registry = er.async_get(hass)
     dev_registry = dr.async_get(hass)
 
@@ -8056,7 +8069,12 @@ async def _dispatch_tools_call(
     # syntax) can send garbage as the "name" field; every real tool name is a
     # short identifier, so a generous cap only ever clips pathological input and
     # keeps the audit log (method and resource both derive from it) readable.
-    tool_name = str(params.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
+    raw_name = params.get("name")
+    tool_name = raw_name[:MAX_TOOL_NAME_LENGTH] if isinstance(raw_name, str) else ""
+    if tool_name != "home_request" and _NATIVE_TOOL_PUBLIC_TO_INTERNAL.get(tool_name, tool_name) not in _TOOL_HANDLERS:
+        _log(data, token, request_id=request_id, method="tools/call", resource="unknown_tool",
+             outcome="invalid_request", client_ip=client_ip)
+        return _jsonrpc_error(msg_id, -32602, "Unknown tool."), "tools/call", "unknown_tool", "invalid_request"
     arguments = params.get("arguments") or {}
     _mesa_advisory_ctx.set(False)
     try:
@@ -8190,6 +8208,11 @@ async def _dispatch_mcp(
         _log(data, token, request_id=request_id, method=method, resource="/api/phoenix-mcp",
              outcome="denied", client_ip=client_ip)
         return _jsonrpc_error(msg_id, -32000, "Request authority changed. Check earlier actions before resubmitting with current permissions."), method, "/api/phoenix-mcp", "denied"
+    except Exception as exc:
+        log_internal_failure(_LOGGER, "mcp_dispatch", exc)
+        _log(data, token, request_id=request_id, method=method, resource="/api/phoenix-mcp",
+             outcome="invalid_request", client_ip=client_ip)
+        return _jsonrpc_error(msg_id, -32603, "Internal error."), method, "/api/phoenix-mcp", "invalid_request"
     finally:
         if context is not None:
             policy_version.reset(context)
@@ -8350,7 +8373,7 @@ async def _dispatch_mcp_authorized(
             if msg_id is not None:
                 _log(data, token, request_id=request_id, method="resources/read",
                      resource=uri or "/api/phoenix-mcp", outcome="denied", client_ip=client_ip)
-                return _jsonrpc_error(msg_id, -32602, "Unknown resource URI."), "resources/read", uri, "denied"
+                return _jsonrpc_error(msg_id, -32002, "Unknown resource URI."), "resources/read", uri, "invalid_request"
             return None, "resources/read", uri, "denied"
         server_info = _build_server_info(token, hass, base_url)
         resp = _jsonrpc_result(msg_id, {
@@ -8570,6 +8593,11 @@ async def _dispatch_streamable_batch(
                 return None
             return _jsonrpc_error(msg_id, *payload)
         method, params = payload
+        if is_notification and method in _MCP_METHODS and method not in {"notifications/initialized", "initialized"}:
+            _audit_mcp_transport(data, token, request_id or generate_request_id(), client_ip,
+                                 body=item, resource="mcp:notification")
+            return None
+
         if data.enforce_mcp_lifecycle and method not in _MCP_LEGACY_METHODS:
             _audit_mcp_transport(
                 data, token, request_id or generate_request_id(), client_ip,
@@ -8738,6 +8766,7 @@ async def _mcp_sse_response(
     dispatch: Any,
     *,
     cancel_on_disconnect: bool,
+    msg_id: Any = None,
 ) -> web.StreamResponse:
     """Run `dispatch` and deliver its JSON-RPC result as a single SSE message.
 
@@ -8804,7 +8833,7 @@ async def _mcp_sse_response(
             # Defense in depth: _dispatch_mcp already nets tools/call exceptions, and
             # the batch path isolates per item. Never surface the text to the client.
             _LOGGER.exception("Unhandled exception on the MCP SSE path rid=%s", request_id)
-            response_msg = _jsonrpc_error(None, -32603, "Internal error.")
+            response_msg = _jsonrpc_error(msg_id, -32603, "Internal error.")
 
         if writable and response_msg is not None:
             try:
@@ -9226,10 +9255,22 @@ class PhoenixMcpView(PhoenixView):
                         outcome=session_outcome,
                         resource="mcp:batch",
                     )
+                if not session.get("initialized") and parsed:
+                    first = parsed[0]
+                    if (isinstance(first, dict) and first.get("jsonrpc") == "2.0" and "id" not in first
+                            and first.get("method") in {"notifications/initialized", "initialized"}
+                            and _classify_jsonrpc_message(first)[0] == "dispatch"):
+                        session["initialized"] = True
                 if not session.get("initialized"):
                     return audited_transport_response(_protocol_error_response(
                         None, -32000, "Legacy MCP initialization is not complete.", request_id
                     ), body=parsed, resource="mcp:batch")
+            if len(parsed) > MAX_BATCH_ITEMS or (token.rate_limit_requests > 0 and (
+                    (token.rate_limit_burst > 0 and len(parsed) > token.rate_limit_burst)
+                    or len(parsed) > token.rate_limit_requests)):
+                return audited_transport_response(_protocol_error_response(None, -32600,
+                    "Batch exceeds the configured request capacity; split it into smaller requests.", request_id),
+                    body=parsed, resource="mcp:batch")
             # A batch is ONE HTTP request carrying up to MAX_BATCH_ITEMS calls,
             # and the auth check above charged it as one, so a token on the
             # default 60/min could issue 3,000 tool calls a minute by batching.
@@ -9270,7 +9311,12 @@ class PhoenixMcpView(PhoenixView):
                     ),
                     cancel_on_disconnect=False,
                 ))
-            return await _handle_streamable_batch(parsed, token, batch_rl, hass, data, request_id, client_ip, base_url=base_url)
+            batch_dispatch = _handle_streamable_batch(parsed, token, batch_rl, hass, data, request_id, client_ip, base_url=base_url)
+            if data.enforce_mcp_lifecycle:
+                batch_task = asyncio.create_task(batch_dispatch)
+                batch_task.add_done_callback(_log_dispatch_task_error)
+                return await asyncio.shield(batch_task)
+            return await batch_dispatch
 
         if not isinstance(parsed, dict):
             return audited_transport_response(web.Response(
@@ -9330,6 +9376,9 @@ class PhoenixMcpView(PhoenixView):
             ), body=body)
         method, params = payload
 
+        if is_notification and method in _MCP_METHODS and method not in {"notifications/initialized", "initialized"}:
+            return audited_transport_response(web.Response(status=400,
+                headers={"X-Phoenix-Request-ID": request_id}), body=body)
         modern = False
         legacy_session_id: str | None = None
         if data.enforce_mcp_lifecycle:
@@ -9414,7 +9463,7 @@ class PhoenixMcpView(PhoenixView):
             if is_notification or response_msg is None:
                 return web.Response(status=202, headers={"X-Phoenix-Request-ID": request_id})
             return web.Response(
-                status=404,
+                status=404 if modern else 200,
                 content_type="application/json",
                 text=json.dumps(response_msg),
                 headers={"X-Phoenix-Request-ID": request_id},
@@ -9443,13 +9492,17 @@ class PhoenixMcpView(PhoenixView):
                 request, hass, request_id, rl_headers, bus,
                 dispatch,
                 cancel_on_disconnect=modern,
+                msg_id=msg_id,
             ))
 
-        response_msg, _log_method, _log_resource, _outcome = await _dispatch_mcp(
-            method, msg_id, params, token, hass, data, client_ip,
-            base_url=base_url,
-            request_id=request_id,
-        )
+        inline_dispatch = _dispatch_mcp(method, msg_id, params, token, hass, data, client_ip,
+                                 base_url=base_url, request_id=request_id)
+        if not modern:
+            task = asyncio.create_task(inline_dispatch)
+            task.add_done_callback(_log_dispatch_task_error)
+            response_msg, _log_method, _log_resource, _outcome = await asyncio.shield(task)
+        else:
+            response_msg, _log_method, _log_resource, _outcome = await inline_dispatch
         if modern:
             response_msg = _modernize_response(response_msg, method)
 

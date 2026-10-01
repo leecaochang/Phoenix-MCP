@@ -101,8 +101,13 @@ async def test_single_external_catalog_and_no_resource_backdoor(hass,companion):
 async def test_guessed_external_calls_never_dispatch(hass,companion,name):
     with patch.object(ServiceRegistry,'async_call',AsyncMock()) as service:
         result = await rpc(hass,companion,name,{'entity_id':'light.selected'})
-    assert result[3] == 'denied'
-    assert result[0]['result']['isError']
+    internal = mcp_view._NATIVE_TOOL_PUBLIC_TO_INTERNAL.get(name, name)
+    if internal not in mcp_view._TOOL_HANDLERS:
+        assert result[3] == 'invalid_request'
+        assert result[0]['error']['code'] == -32602
+    else:
+        assert result[3] == 'denied'
+        assert result[0]['result']['isError']
     service.assert_not_awaited()
     assert not companion[0].store.get_pending_approvals()
 

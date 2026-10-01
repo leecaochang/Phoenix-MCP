@@ -2567,3 +2567,11 @@ LOCATION_REGISTRY_BINDING = "_location_registry_binding"
 LOCATION_REGISTRY_FIELDS = frozenset({
     "name", "icon", "aliases", "floor_id", "level", "labels", "add_labels", "remove_labels",
 })
+
+# Bound public configuration-check summaries; raw validation prose stays in HA.
+MAX_CONFIG_CHECK_MESSAGES = 50
+
+# Resolved approval history is bounded; unresolved effects retain their evidence.
+APPROVAL_HISTORY_LIMIT = 500
+APPROVAL_HISTORY_DAYS = 7
+APPROVAL_PAYLOAD_RETENTION_SECONDS = 3600

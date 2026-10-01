@@ -629,15 +629,15 @@ _UNKNOWN = {"jsonrpc": "2.0", "id": 1, "method": "resources/subscribe"}
 
 
 class TestUnknownMethod:
-    async def test_returns_http_404_with_method_not_found(self):
+    async def test_legacy_unknown_method_preserves_session_with_rpc_error(self):
         # 404 + a -32601 body is what tells a client this IS an MCP endpoint
         # that lacks the method, versus a 404 from a server hosting none.
         _token, raw, _data, hass = _env()
         resp = await _view(hass).post(_make_request(_UNKNOWN, "application/json", raw))
-        assert resp.status == 404
+        assert resp.status == 200
         assert json.loads(resp.text)["error"]["code"] == -32601
 
-    async def test_is_404_for_an_sse_client_too(self):
+    async def test_legacy_unknown_method_uses_json_error_for_sse_clients(self):
         # The whole reason the check sits ahead of the framing choice: preparing
         # a stream puts a 200 on the wire and the status can no longer be set.
         _token, raw, _data, hass = _env()
@@ -646,7 +646,7 @@ class TestUnknownMethod:
             resp = await _view(hass).post(_make_request(
                 _UNKNOWN, "application/json, text/event-stream", raw))
         assert not stream.prepared
-        assert resp.status == 404
+        assert resp.status == 200
         assert json.loads(resp.text)["error"]["code"] == -32601
 
     async def test_unknown_notification_is_accepted(self):
@@ -750,7 +750,7 @@ async def test_legacy_batch_and_single_reject_same_modern_only_method():
         discover, {'jsonrpc': '2.0', 'id': 2, 'method': 'ping'},
         {'jsonrpc': '2.0', 'method': 'server/discover'},
     ], 'application/json', raw, headers))
-    assert single.status == 404
+    assert single.status == 200
     rows = json.loads(mixed.text)
     assert rows[0] == json.loads(single.text)
     assert rows[1] == {'jsonrpc': '2.0', 'id': 2, 'result': {}}

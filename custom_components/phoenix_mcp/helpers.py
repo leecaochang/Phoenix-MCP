@@ -198,13 +198,12 @@ def log_request(
 
 
 def fire_rate_limit_events(hass: HomeAssistant, data: PhoenixData, token: TokenRecord) -> None:
-    """Fire the phoenix_mcp_rate_limited bus event and optional persistent notification.
-
-    The event fires on every 429, unthrottled.
-    The persistent notification is throttled to at most once per token per minute
-    to prevent notification flooding during sustained abuse.
-    """
-    # Event fires on every 429 - not throttled.
+    """Bound bus and notification notices to one per token per minute."""
+    now_mono = time.monotonic()
+    last = data.rate_limit_notified.get(token.id)
+    if last is not None and now_mono - last < 60.0:
+        return
+    data.rate_limit_notified[token.id] = now_mono
     hass.bus.async_fire("phoenix_mcp_rate_limited", {
         "token_id": token.id,
         "token_name": token.name,
@@ -213,22 +212,18 @@ def fire_rate_limit_events(hass: HomeAssistant, data: PhoenixData, token: TokenR
     # Notification is throttled.
     settings = data.store.get_settings()
     if settings.notify_on_rate_limit:
-        now_mono = time.monotonic()
-        last = data.rate_limit_notified.get(token.id, 0.0)
-        if now_mono - last >= 60.0:
-            data.rate_limit_notified[token.id] = now_mono
-            hass.async_create_task(
-                hass.services.async_call(
-                    "persistent_notification",
-                    "create",
-                    {
-                        "message": notification_text(
-                            hass, "rate_limit.message", token=token.name),
-                        "title": notification_text(hass, "rate_limit.title"),
-                        "notification_id": f"phoenix_mcp_rate_limit_{token.id}",
-                    },
-                )
+        hass.async_create_task(
+            hass.services.async_call(
+                "persistent_notification",
+                "create",
+                {
+                    "message": notification_text(
+                        hass, "rate_limit.message", token=token.name),
+                    "title": notification_text(hass, "rate_limit.title"),
+                    "notification_id": f"phoenix_mcp_rate_limit_{token.id}",
+                },
             )
+        )
 
 
 def content_hash(content: str | bytes | dict | list) -> str:
@@ -1861,3 +1856,17 @@ def panel_catalog(language: str) -> dict[str, str]:
             continue
         merged[key] = value
     return merged
+
+
+def log_internal_failure(logger: logging.Logger, phase: str, exc: Exception) -> None:
+    """Log fixed failure metadata and Phoenix frame locations, never error text or locals."""
+    from .request_authority import dispatch_request_id
+    frames = []
+    traceback = exc.__traceback__
+    while traceback is not None:
+        code = traceback.tb_frame.f_code
+        if "/custom_components/phoenix_mcp/" in code.co_filename:
+            frames.append(f"{code.co_filename.rsplit('/', 1)[-1]}:{traceback.tb_lineno}:{code.co_name}")
+        traceback = traceback.tb_next
+    logger.warning("Phoenix internal failure phase=%s type=%s rid=%s frames=%s",
+                   phase, type(exc).__name__, dispatch_request_id.get() or "-", ",".join(frames[-8:]))

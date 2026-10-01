@@ -106,3 +106,76 @@ async def test_delete_refuses_foreign_origin(http_authority):
     assert response.status == 200
     headers = _headers(raw, **{"Mcp-Session-Id": response.headers["Mcp-Session-Id"], "Origin": "https://foreign.example"})
     assert (await client.delete("/api/phoenix-mcp", headers=headers)).status == 403
+
+
+async def test_request_notification_refused_before_dispatch_and_session_allocation(http_authority, monkeypatch):
+    from unittest.mock import AsyncMock
+    from custom_components.phoenix_mcp import mcp_view
+    client, data = http_authority
+    _, raw = await data.store.async_create_token("notifications", "admin", rate_limit_requests=0)
+    dispatch = AsyncMock()
+    monkeypatch.setattr(mcp_view, "_dispatch_mcp", dispatch)
+    response = await client.post("/api/phoenix-mcp", headers=_headers(raw),
+                                 json={"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "GetDateTime"}})
+    assert response.status == 400 and await response.read() == b""
+    dispatch.assert_not_awaited()
+    assert data.mcp_sessions == {}
+
+
+async def test_legacy_initialized_first_batch_unknown_method_and_resource_preserve_session(http_authority):
+    client, data = http_authority
+    _, raw = await data.store.async_create_token("legacy", "admin", rate_limit_requests=0)
+    response = await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())
+    session = response.headers["Mcp-Session-Id"]
+    headers = _headers(raw, **{"Mcp-Session-Id": session})
+    response = await client.post("/api/phoenix-mcp", headers=headers, json=[
+        {"jsonrpc": "2.0", "method": "notifications/initialized"},
+        {"jsonrpc": "2.0", "id": "ping", "method": "ping"},
+    ])
+    assert response.status == 200 and (await response.json())[0]["id"] == "ping"
+    response = await client.post("/api/phoenix-mcp", headers=headers,
+                                 json={"jsonrpc": "2.0", "id": "unknown", "method": "unknown/method"})
+    assert response.status == 200 and (await response.json())["error"]["code"] == -32601
+    response = await client.post("/api/phoenix-mcp", headers=headers,
+                                 json={"jsonrpc": "2.0", "id": "resource", "method": "resources/read", "params": {"uri": "missing://resource"}})
+    assert response.status == 200 and (await response.json())["error"]["code"] == -32002
+    assert session in data.mcp_sessions
+
+
+async def test_non_tool_exception_is_scrubbed_and_retains_rpc_id(http_authority, monkeypatch, caplog):
+    from custom_components.phoenix_mcp import mcp_view
+    client, data = http_authority
+    _, raw = await data.store.async_create_token("exception", "admin", rate_limit_requests=0)
+    async def broken(*args, **kwargs):
+        raise RuntimeError("private-value-and-path")
+    monkeypatch.setattr(mcp_view, "_dispatch_mcp_authorized", broken)
+    response = await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())
+    value = await response.json()
+    assert response.status == 200 and value["id"] == 1 and value["error"]["code"] == -32603
+    assert "private-value-and-path" not in str(value) and "private-value-and-path" not in caplog.text
+    assert "RuntimeError" in caplog.text
+
+
+async def test_all_admin_routes_reject_real_read_only_ha_identity(hass, hass_client, hass_read_only_access_token):
+    import inspect
+    import re
+    from custom_components.phoenix_mcp.admin_view import ALL_ADMIN_VIEWS
+    from custom_components.phoenix_mcp.agentcli import ALL_AGENTCLI_ADMIN_VIEWS, ALL_AGENTCLI_CHAT_VIEWS
+    assert await async_setup_component(hass, "http", {})
+    store = await TokenStore.async_create(hass)
+    hass.data[DOMAIN] = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
+    views = ALL_ADMIN_VIEWS + ALL_AGENTCLI_ADMIN_VIEWS + ALL_AGENTCLI_CHAT_VIEWS
+    for view_cls in views:
+        view = view_cls()
+        view.hass = hass
+        hass.http.register_view(view)
+    client = await hass_client(hass_read_only_access_token)
+    for view_cls in views:
+        path = re.sub(r"\{[^}]+\}", "sample", view_cls.url)
+        for method in ("get", "post", "put", "patch", "delete"):
+            if not inspect.iscoroutinefunction(getattr(view_cls, method, None)):
+                continue
+            response = await client.request(method, path, json={})
+            assert response.status == 403, (method, path, await response.text())
+            assert (await response.json())["error"] == "forbidden"
+    assert store.list_tokens() == []

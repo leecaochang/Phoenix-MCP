@@ -1,0 +1,36 @@
+"""Real HA entry setup, reload, route ownership, unload and credential deletion."""
+
+from homeassistant.config_entries import ConfigEntryState
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.phoenix_mcp.agentcli import _get_secret_store
+from custom_components.phoenix_mcp.const import DOMAIN
+from custom_components.phoenix_mcp.token_store import TokenStore
+
+
+async def test_real_entry_reload_has_stable_routes_and_deletion_retires_credentials(hass, enable_custom_integrations, caplog):
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, title="Phoenix MCP")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+    data = hass.data[DOMAIN]
+    assert data.ready and not data.mesa_setup_failed
+    token, _raw = await data.store.async_create_token("lifecycle", "admin")
+    secrets = await _get_secret_store(hass)
+    await secrets.add("openai", {"api_key": "synthetic-example-key", "model": "example"})
+    resources = len(list(hass.http.app.router.resources()))
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert len(list(hass.http.app.router.resources())) == resources
+    assert hass.data[DOMAIN] is not data
+    assert hass.data[DOMAIN].store.get_token_by_id(token.id) is not None
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert DOMAIN not in hass.data
+    assert not any("UrlManager" in record.message or "setup rollback" in record.message for record in caplog.records if record.levelno >= 40)
+    assert (await hass.config_entries.async_remove(entry.entry_id))["require_restart"] is False
+    restored = await TokenStore.async_create(hass)
+    assert restored.get_token_by_id(token.id) is None
+    assert restored.list_archived()[0].revoked
+    assert (await _get_secret_store(hass)).list_instances() == []

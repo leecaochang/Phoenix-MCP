@@ -14,7 +14,7 @@ from .helpers import notification_text
 from .const import (
     APPROVAL_DEFAULT_TTL_SECONDS,
     DOMAIN,
-    MAX_PENDING_APPROVALS_PER_TOKEN,
+    MAX_PENDING_APPROVALS_PER_TOKEN, APPROVAL_HISTORY_LIMIT, APPROVAL_HISTORY_DAYS, APPROVAL_PAYLOAD_RETENTION_SECONDS,
 )
 
 if TYPE_CHECKING:
@@ -651,3 +651,39 @@ def dismiss_approval_notification(hass: HomeAssistant, approval_id: str) -> None
         hass,
         notification_id=notification_id_for_approval(approval_id),
     )
+
+
+async def async_prune_terminal_approvals(store: TokenStore, *, skip_ids: set[str] | None = None) -> None:
+    """Bound resolved history and retire raw payloads; caller holds the store lock."""
+    now = utcnow()
+    protected, resolved = [], []
+    original = store.get_pending_approvals()
+    skipped = skip_ids or set()
+    for row in original:
+        if (row.get("status") not in TERMINAL_STATUSES or row.get("execution_started_at")
+                or row.get("rejected_reason") == REASON_EXECUTION_INTERRUPTED
+                or row.get("id") in skipped):
+            protected.append(row)
+            continue
+        try:
+            at = parse_datetime(row.get("resolved_at") or row.get("created_at") or "")
+        except (TypeError, ValueError):
+            at = None
+        if at is None or at.tzinfo is None:
+            protected.append(row)
+            continue
+        if now - at > timedelta(days=APPROVAL_HISTORY_DAYS):
+            continue
+        clean = dict(row)
+        if (now - at).total_seconds() >= APPROVAL_PAYLOAD_RETENTION_SECONDS:
+            clean.update(args={}, diff={}, result=None)
+        resolved.append((at, clean))
+    resolved.sort(key=lambda pair: pair[0], reverse=True)
+    retained = protected + [row for _, row in resolved[:APPROVAL_HISTORY_LIMIT]]
+    if retained != original:
+        store.set_pending_approvals(retained)
+        try:
+            await store.async_save()
+        except BaseException:
+            store.set_pending_approvals(original)
+            raise

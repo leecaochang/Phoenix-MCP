@@ -22,7 +22,8 @@ class AgentRecoveryFlow(RepairsFlow):
 
     async def async_step_confirm(self, user_input: dict[str, Any] | None = None) -> RepairsFlowResult:
         data = self.hass.data.get(DOMAIN)
-        rid = str((self.data or {}).get("request_id") or "")
+        receipt_id = (self.data or {}).get("calendar_receipt_id")
+        rid = str(receipt_id or (self.data or {}).get("request_id") or "")
         if data is None:
             return self.async_abort(reason="not_ready")
         from homeassistant.helpers import issue_registry as ir
@@ -33,7 +34,8 @@ class AgentRecoveryFlow(RepairsFlow):
         if user_input is not None:
             if user_input.get("checked_home_assistant") is not True:
                 errors["base"] = "check_required"
-            elif await data.agent_recovery.reviewed(rid):
+            elif await (data.calendar_writes.reviewed(rid) if receipt_id and data.calendar_writes is not None
+                        else data.agent_recovery.reviewed(rid)):
                 return self.async_create_entry(data={})
             else:
                 errors["base"] = "operation_active"

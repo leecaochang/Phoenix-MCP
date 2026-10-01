@@ -1,6 +1,9 @@
 """Single-flight decision evaluation with no dispatch authority."""
 from __future__ import annotations
 
+import logging
+from .helpers import log_internal_failure
+
 import asyncio
 from dataclasses import dataclass, field
 from time import monotonic
@@ -17,6 +20,8 @@ from .decision_metrics import DecisionMetrics
 from copy import deepcopy
 from .decision_identity import explicit_write_target
 from .numeric_evidence import read_explicit_percentage, compare_percentage
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -77,6 +82,13 @@ class DecisionShadow:
     def cancel(self) -> None:
         if self.task is not None:
             self.task.cancel()
+
+    async def async_cancel(self) -> None:
+        """Wait for owned provider work and budget persistence to stop."""
+        task = self.task
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     def start(self, hass: Any, data: Any, token: Any, sentence: object,
               language: object, *, observe: bool = False, targets: bool = False,
@@ -199,7 +211,8 @@ class DecisionShadow:
             return result(str(error))
         except TimeoutError:
             return result("timeout")
-        except Exception:
+        except Exception as exc:
+            log_internal_failure(_LOGGER, "decision_shadow", exc)
             # Provider errors must not leak prompts, credentials or response bodies.
             return result("unavailable")
 

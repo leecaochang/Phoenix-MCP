@@ -566,14 +566,14 @@ async def test_mcp_post_rejects_non_finite_numbers():
 
 @pytest.mark.asyncio
 async def test_mcp_notification_gets_no_response():
-    # A JSON-RPC notification omits `id` and must receive no response body (202).
+    # A JSON-RPC notification omits `id` and must not dispatch a request method without an ID.
     token, raw = _make_token()
     data = _make_data(token)
     view = _make_mcp_view(data)
     body = json.dumps({"jsonrpc": "2.0", "method": "ping"}).encode()  # no id
     request = _make_request(method="POST", headers={"Authorization": f"Bearer {raw}"}, body=body)
     result = await view.post(request)
-    assert result.status == 202
+    assert result.status == 400
     assert not result.text
 
     # A request WITH id: null is not a notification, but MCP rejects that ID.
@@ -726,8 +726,8 @@ async def test_mcp_batch_over_the_rate_limit_is_refused_before_any_item_runs():
     with patch("custom_components.phoenix_mcp.mcp_view._call_tool") as call_tool:
         result = await view.post(request)
 
-    assert result.status == 429
-    assert result.headers.get("Retry-After")
+    assert result.status == 400
+    assert not result.headers.get("Retry-After")
     call_tool.assert_not_called()
 
 
@@ -749,7 +749,7 @@ async def test_mcp_batch_over_the_burst_ceiling_is_refused():
     with patch("custom_components.phoenix_mcp.mcp_view._call_tool") as call_tool:
         result = await view.post(request)
 
-    assert result.status == 429
+    assert result.status == 400
     call_tool.assert_not_called()
 
 
@@ -2227,7 +2227,8 @@ async def test_tools_call_garbled_tool_name_is_capped_before_dispatch_and_loggin
         base_url="http://homeassistant.local"
     )
 
-    assert outcome == "denied"  # unknown tool
+    assert outcome == "invalid_request"  # unknown tool uses a protocol error
+    assert result["error"]["code"] == -32602
     assert len(resource) <= MAX_TOOL_NAME_LENGTH
     logged_method = data.audit.record.call_args.kwargs["method"]
     logged_resource = data.audit.record.call_args.kwargs["resource"]
@@ -2308,8 +2309,8 @@ async def test_resources_read_unknown_uri_returns_error():
         base_url="http://homeassistant.local"
     )
 
-    assert outcome == "denied"
-    assert "error" in result
+    assert outcome == "invalid_request"
+    assert result["id"] == 11 and result["error"]["code"] == -32002
 
 
 # --- unknown method ---

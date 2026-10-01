@@ -208,7 +208,8 @@ class _OutputCollector:
         # build in progress wants: the newest lines say where it has got to, and
         # the banner at the top is identical on every poll.
         self._head_ratio = head_ratio
-        self._chunks: list[str] = []
+        self._head = ""
+        self._tail = ""
         self._length = 0
 
     def add(self, chunk: str) -> None:
@@ -219,17 +220,17 @@ class _OutputCollector:
         # bring its own, which leaves a server that does send them untouched.
         if cleaned and not cleaned.endswith("\n"):
             cleaned += "\n"
-        self._chunks.append(cleaned)
         self._length += len(cleaned)
+        head_len = int(self._max_chars * self._head_ratio)
+        if len(self._head) < head_len:
+            self._head += cleaned[:head_len - len(self._head)]
+        self._tail = (self._tail + cleaned[-self._max_chars:])[-self._max_chars:]
 
     def finish(self) -> tuple[str, bool]:
-        text = "".join(self._chunks)
-        if len(text) <= self._max_chars:
-            return text, False
-        head_len = int(self._max_chars * self._head_ratio)
-        tail_len = self._max_chars - head_len
-        head = text[:head_len] if head_len else ""
-        return head + _TRUNCATION_MARKER + text[-tail_len:], True
+        if self._length <= self._max_chars:
+            return self._tail, False
+        tail_len = self._max_chars - int(self._max_chars * self._head_ratio)
+        return self._head + _TRUNCATION_MARKER + (self._tail[-tail_len:] if tail_len else ""), True
 
 
 def _max_chars(override: int | None) -> int:

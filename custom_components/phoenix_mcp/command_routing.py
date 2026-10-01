@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from .helpers import log_internal_failure
 from dataclasses import dataclass, field
 from time import monotonic
 from typing import Any, TYPE_CHECKING
@@ -330,7 +331,8 @@ async def async_evaluate_command(
         return outcome("sentence_trigger")
     except RecognitionUnavailable:
         return outcome("unavailable")
-    except Exception:
+    except Exception as exc:
+        log_internal_failure(_LOGGER, "command_routing", exc)
         # Do not log recognizer exception text: it can contain the sentence.
         _LOGGER.debug("Local command recognition failed")
         return outcome("unavailable")
@@ -343,7 +345,8 @@ async def async_evaluate_command(
             return outcome('authority_changed')
     try:
         reason, proposal = _proposal(recognized, current, hass)
-    except Exception:
+    except Exception as exc:
+        log_internal_failure(_LOGGER, "command_routing", exc)
         _LOGGER.debug("Local command projection failed")
         return outcome("unavailable")
     if proposal is not None and voice_origin is not None:

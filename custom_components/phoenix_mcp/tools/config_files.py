@@ -59,6 +59,7 @@ import json
 import logging
 import os
 
+from homeassistant.util.file import WriteError
 from homeassistant.core import HomeAssistant
 
 from ..const import CAP_DENY, DOMAIN, FILESYSTEM_ALLOWED_DIRS, MAX_FILE_BYTES, REDACTION_SENTINEL, YAML_PROTECTED_SUBTREES
@@ -148,7 +149,21 @@ async def _recoverable_file_write(
                     await recovery.mark(rid, "not_applied")
                     return _tool_error("The file changed while preparing its recovery snapshot; nothing was dispatched."), "invalid_request", operation
                 check_request_authority()
-                await hass.async_add_executor_job(_write_text_atomic, path, content)
+                try:
+                    await hass.async_add_executor_job(_write_text_atomic, path, content)
+                except (WriteError, OSError):
+                    # Atomic-writer failure can follow replacement (directory fsync).
+                    # Only verified unchanged state proves that no write landed.
+                    unchanged = False
+                    try:
+                        exists = await hass.async_add_executor_job(os.path.isfile, path)
+                        actual = await hass.async_add_executor_job(_read_text_capped, path) if exists else None
+                        unchanged = exists == before_exists and actual == before_content
+                    except (OSError, ValueError):
+                        pass
+                    await recovery.mark(rid, "not_applied" if unchanged else "unknown", error="file_write_failed")
+                    return _tool_error("The file write failed; nothing changed." if unchanged else
+                        "The file write outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", operation
                 observed = await hass.async_add_executor_job(_read_text_capped, path)
                 if observed != content:
                     await recovery.mark(rid, "partial", observed_hash=content_hash(observed))
@@ -167,7 +182,7 @@ async def _recoverable_file_write(
                 recovery.leave(rid)
     except ConfigurationRecoveryError as err:
         return _tool_error(str(err)), "invalid_request", operation
-    except OSError:
+    except (OSError, WriteError):
         _LOGGER.exception("%s recovery write failed for %s", operation, rel)
         return _tool_error("The file write or its recovery readback failed; inspect configuration recovery before retrying."), "invalid_request", operation
     return None

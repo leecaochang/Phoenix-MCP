@@ -134,6 +134,7 @@ class PhoenixData:
     # Direct constructions are ready by default for isolated tests. Real setup
     # passes False and publishes readiness only after every mandatory step has
     # completed. Permanent aiohttp routes refuse while this is false.
+    forwarded_platforms: set[str] = field(default_factory=set)
     ready: bool = True
     # Legacy Streamable HTTP sessions, keyed by the cryptographically random
     # Mcp-Session-Id returned from initialize. Direct unit constructions leave

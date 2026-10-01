@@ -1,6 +1,9 @@
 """Bounded single-tool delegation for an explicitly scoped home persona."""
 from __future__ import annotations
 
+import logging
+from .helpers import log_internal_failure
+
 import asyncio
 from contextvars import ContextVar
 from copy import deepcopy
@@ -22,6 +25,8 @@ from .const import (
 )
 from .home_companion_response import ResponseEvidence, build_report
 from .request_authority import AuthorityChangedError, check_request_authority, execution_guard
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -389,7 +394,8 @@ async def run_request(arguments: dict, token: Any, hass: Any, data: Any) -> tupl
                     )
             except AuthorityChangedError:
                 raise
-            except Exception:
+            except Exception as exc:
+                log_internal_failure(_LOGGER, "home_companion", exc)
                 # A readback failure does not invalidate a received control receipt.
                 turn.evidence.observed.clear()
             guard()
@@ -407,7 +413,8 @@ async def run_request(arguments: dict, token: Any, hass: Any, data: Any) -> tupl
         return _result(answer["status"], answer["message"], outcomes=turn.outcomes)
     except AuthorityChangedError:
         return _result(TURN_AUTHORITY_LOST)
-    except Exception:
+    except Exception as exc:
+        log_internal_failure(_LOGGER, "home_companion", exc)
         return _result("outcome_unknown" if turn.write_started else "provider_error", outcomes=turn.outcomes,
                        recovery_required=data.agent_recovery.blocks(token.id))
     finally:

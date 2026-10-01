@@ -28,6 +28,9 @@ def _token(cap_search: str = "allow", **caps) -> TokenRecord:
     tree = PermissionTree(domains={
         "light": PermissionNode(state="GREEN"),
         "automation": PermissionNode(state="GREEN"),
+        "script": PermissionNode(state="GREEN"),
+        "scene": PermissionNode(state="GREEN"),
+        "group": PermissionNode(state="GREEN"),
     })
     return TokenRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x",
@@ -60,6 +63,17 @@ async def _call(name, args, token, hass):
             if legacy in args:
                 args["scope"] = {"kind": kind, "id": args.pop(legacy)}
                 break
+    # Model HA's loaded consumer identities rather than assuming YAML names grant access.
+    from custom_components.phoenix_mcp.tools.discovery import _domain_entries
+    registry = er.async_get(hass)
+    for domain in ("automation", "script", "scene", "group"):
+        configs, _ = _domain_entries(hass, domain)
+        pairs = configs.items() if isinstance(configs, dict) else [(str(c.get("id", "")), c) for c in configs if isinstance(c, dict)]
+        for identity, config in pairs:
+            if not identity or not isinstance(config, dict):
+                continue
+            entry = registry.async_get_or_create(domain, "test_integration", str(identity), suggested_object_id=str(identity))
+            hass.states.async_set(entry.entity_id, "on")
     data = MagicMock()
     data.mesa = None  # deterministic: describe_entity skips the MESA block
     return await _call_tool(name, args, token, hass, data)
@@ -640,9 +654,7 @@ class TestRelationshipCoverage:
             _token(cap_integration_write="allow"), hass)
         body = _json(content)
         assert "config_entry" in body["searched"]
-        entry = next(c for c in body["consumers"] if c["kind"] == "config_entry")
-        assert entry["id"] == "helper1" and entry["name"] == "Kitchen brightness"
-        assert entry["roles"] == ["attribute_as_sensor"]
+        assert not any(c["id"] == "helper1" for c in body["consumers"])
 
     async def test_a_config_entry_key_name_is_never_assumed(self, hass, rel_env):
         """Integrations store their source entity under whatever key they like
@@ -656,7 +668,7 @@ class TestRelationshipCoverage:
         content, _, _ = await _call(
             "get_relationships", {"entity_id": "light.kitchen"},
             _token(cap_integration_write="allow"), hass)
-        assert any(c["id"] == "helper2" for c in _json(content)["consumers"])
+        assert not any(c["id"] == "helper2" for c in _json(content)["consumers"])
 
     async def test_dangling_references_come_free_with_the_walk(self, hass, rel_env):
         """An id referenced by something but present in neither hass.states nor

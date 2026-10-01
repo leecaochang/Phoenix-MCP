@@ -42,6 +42,9 @@ _CURSOR_SIGNALS = {"has_more", "next_cursor"}
 # there is no follow-up question a truncation flag would enable. Each entry needs
 # a written reason; the point of the list is that adding one is a decision.
 _NOT_PAGINATION = {
+    # A background retention policy deletes resolved storage history. It returns
+    # no caller page; approval-list pagination has its own completion contract.
+    "approvals.py:async_prune_terminal_approvals",
     # Clips an over-long card name/description harvested from third-party card
     # code to a bound. The value is a string, not a page of rows.
     "card_catalog.py:_clean_str",

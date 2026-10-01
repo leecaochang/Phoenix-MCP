@@ -47,6 +47,15 @@ def _data(mesa=None) -> MagicMock:
 
 
 async def _call(name, args, token, hass, data=None):
+    if name == "whatif":
+        from custom_components.phoenix_mcp.tools.discovery import _domain_entries
+        configs, _ = _domain_entries(hass, "automation")
+        registry = er.async_get(hass)
+        for config in configs:
+            identity = config.get("id")
+            if identity:
+                entry = registry.async_get_or_create("automation", "test_integration", str(identity), suggested_object_id=str(identity))
+                hass.states.async_set(entry.entity_id, "on")
     args = dict(args)
     name = {
         "validate_config": "validate_automation_or_script",

@@ -324,3 +324,14 @@ async def test_inherited_area_mesa_identity_actions(hass, location_env, mode):
         saved = data.store.get_pending_approvals()[0]["args"]
         _body(await view.async_execute_approved_tool("set_area_or_floor", saved, token, hass, data))
     assert ar.async_get(hass).async_get_area(area_id).name == ("Renamed area" if mode == "confirm" else "Location area")
+
+
+async def test_location_write_refuses_failed_mesa_runtime(hass, location_env):
+    _token, data, _floor_id, area_id, *_ = location_env
+    data.store.get_settings.return_value.mesa_mode = "advisory"
+    data.mesa = None
+    data.mesa_setup_failed = True
+    before = ar.async_get(hass).async_get_area(area_id).name
+    result = await _call(hass, location_env, changes={"name": "Must not apply"})
+    assert result[1] == "denied"
+    assert ar.async_get(hass).async_get_area(area_id).name == before

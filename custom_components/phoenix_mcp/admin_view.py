@@ -8,7 +8,7 @@ import logging
 import re
 import uuid
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 from aiohttp import web
 from homeassistant.core import HomeAssistant
@@ -1278,7 +1278,7 @@ class PhoenixAdminTokenPresetApplyView(PhoenixView):
             preset = next((p for p in token.presets if p.id == preset_id), None)
             if preset is None:
                 return _err("not_found", "Preset not found.", 404, rid, key="presetNotFound")
-            if preset.pass_through and not token.pass_through and not body.get("confirm_pass_through"):
+            if preset.pass_through and not token.pass_through and body.get("confirm_pass_through") is not True:
                 return _err(
                     "invalid_request",
                     "confirm_pass_through: true is required when the preset enables pass_through.",
@@ -2307,13 +2307,9 @@ async def _apply_settings_side_effects(
             data.routes_registered = True
 
     if "kill_switch" in patchable:
-        # The Assist bridge is agent activity, so it follows the kill switch too.
-        # Unlike aiohttp routes we can unregister an llm.API, so toggle it live.
-        from .assist_api import async_register_assist_api, async_unregister_assist_api  # noqa: PLC0415
-        if updated.kill_switch:
-            async_unregister_assist_api(data)
-        else:
-            async_register_assist_api(hass, data)
+        # Keep the selected API available with zero tools while agent work is disabled.
+        from .assist_api import async_register_assist_api
+        async_register_assist_api(hass, data)
 
     # Re-sync the Phoenix MCP voice conversation agent when its config or the kill switch
     # changed; the closure reads current settings and registers/unregisters to match.
@@ -2567,6 +2563,7 @@ class PhoenixAdminVoiceAgentPipelineView(PhoenixView):
                 "invalid_request", str(err), 400, rid,
                 key="assistPipelineFailed",
             )
+        _audit_admin(self.hass, request, rid, "voice_agent_pipeline")
         return _ok(result, request_id=rid)
 
     @require_admin
@@ -2576,6 +2573,7 @@ class PhoenixAdminVoiceAgentPipelineView(PhoenixView):
         from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
         async with data.settings_update_lock:
             await async_remove_assist_pipeline(self.hass, data)
+        _audit_admin(self.hass, request, rid, "voice_agent_pipeline")
         return _ok({"ok": True}, request_id=rid)
 
 
@@ -2617,7 +2615,9 @@ class PhoenixAdminAiTaskPreferredView(PhoenixView):
                 key="setupMissing",
             )
         try:
-            return _ok(set_ai_task_preferred(self.hass, entry), request_id=rid)
+            result = set_ai_task_preferred(self.hass, entry)
+            _audit_admin(self.hass, request, rid, "ai_task_preferred")
+            return _ok(result, request_id=rid)
         except AiTaskSetupError as err:
             _LOGGER.warning("AI Task preferred setup failed", exc_info=True)
             return _err(
@@ -2635,7 +2635,9 @@ class PhoenixAdminAiTaskPreferredView(PhoenixView):
                 "invalid_request", "Phoenix MCP is not set up.", 400, rid,
                 key="setupMissing",
             )
-        return _ok(clear_ai_task_preferred(self.hass, entry), request_id=rid)
+        result = clear_ai_task_preferred(self.hass, entry)
+        _audit_admin(self.hass, request, rid, "ai_task_preferred")
+        return _ok(result, request_id=rid)
 
 
 def _wipe_flag(value: Any, default: bool) -> bool:
@@ -3634,6 +3636,7 @@ def _audit_admin(hass, request, rid, resource) -> None:
         token_name=f"admin:{user.id}",
         method=request.method,
         resource=resource,
+        ha_user_id=user.id,
         outcome="allowed",
         client_ip=request.remote or "",
         settings=data.store.get_settings(),
@@ -4577,11 +4580,13 @@ class PhoenixAdminVersionRestoreView(PhoenixView):
         is_error = bool(tool_result.get("isError"))
         data.audit.record(
             request_id=rid,
-            token_id=record.token_id or "admin",
-            token_name=record.token_name or f"admin:{user.id}",
+            token_id="admin",
+            token_name=f"admin:{user.id}",
+            ha_user_id=user.id,
+            payload={"originating_token_id": record.token_id},
             method="version/restore",
             resource=f"version_restore:{record.resource_type}:{record.resource_id}",
-            outcome="denied" if is_error else "allowed",
+            outcome=cast(Outcome, _outcome),
             client_ip="",
             settings=data.store.get_settings(),
         )

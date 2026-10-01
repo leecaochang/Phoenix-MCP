@@ -131,6 +131,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "async_validate_config_item": "0.0.0",
     },
     "homeassistant.components.sensor": {
+        "SensorDeviceClass": "2026.7.0",
         "SensorEntity": "0.0.0",
         "SensorStateClass": "0.0.0",
     },
@@ -153,6 +154,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "support_entry_unload": "0.0.0",
     },
     "homeassistant.const": {
+        "EntityCategory": "2026.7.0",
         "EVENT_HOMEASSISTANT_STARTED": "0.0.0",
         "EVENT_HOMEASSISTANT_STOP": "0.0.0",
         "MATCH_ALL": "0.0.0",
@@ -241,7 +243,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "parse_datetime": "0.0.0",
         "utcnow": "0.0.0",
     },
-    "homeassistant.util.file": {
+    "homeassistant.util.file": {"WriteError": "2026.7.0",
         "write_utf8_file_atomic": "0.0.0",
     },
     "homeassistant.util.ulid": {

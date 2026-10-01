@@ -1022,6 +1022,8 @@ class TestLastUsed:
         token_store.update_last_used("no-such-id", utcnow())
 
     async def test_flush_last_used_calls_save(self, token_store, mock_store):
+        record, _ = await token_store.async_create_token(name="usage-token", created_by="u")
+        token_store.update_last_used(record.id, utcnow())
         mock_store.async_save.reset_mock()
         await token_store.async_flush_last_used()
         mock_store.async_save.assert_called_once()

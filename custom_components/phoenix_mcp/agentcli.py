@@ -47,7 +47,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 from homeassistant.util.dt import parse_datetime, utcnow
 
-from .admin_view import _err, _ok, _read_body, require_admin
+from .admin_view import _audit_admin, _err, _ok, _read_body, require_admin
 from .audit import generate_request_id
 from .agent_recovery import RecoveryRequired, dispatch_agent_tool, recovery_turn, tool_is_read_only
 from .approvals import (
@@ -572,7 +572,7 @@ class AgentCliStore:
 
     @classmethod
     async def async_create(cls, hass: HomeAssistant) -> AgentCliStore:
-        store: Store[dict] = Store(hass, AGENTCLI_SECRETS_STORAGE_VERSION, AGENTCLI_SECRETS_STORAGE_KEY)
+        store: Store[dict] = Store(hass, AGENTCLI_SECRETS_STORAGE_VERSION, AGENTCLI_SECRETS_STORAGE_KEY, private=True)
         inst = cls(store)
         raw = await store.async_load() or {}
         if isinstance(raw, dict) and isinstance(raw.get("instances"), dict):
@@ -4623,19 +4623,12 @@ def _ip_is_blocked(
 async def _validate_base_url(
     url: str, *, allow_private: bool = True,
 ) -> ProbeConfigError | None:
-    """Validate an admin-supplied provider base URL.
+    """Check URL shape and resolved addresses at setup time.
 
-    Phoenix MCP makes server-side requests to this URL, so an admin with a stolen session
-    could otherwise use it as an SSRF pivot from the HA host. Constrain it:
-    http/https only, no embedded credentials or fragment, and no host that
-    IS or RESOLVES TO a link-local / cloud-metadata address (169.254.169.254 and
-    the fe80::/10 range, incl. DNS names like metadata.google.internal or a
-    *.nip.io that points there). Loopback and private addresses are deliberately
-    allowed, a local Ollama lives on one. The provider requests also run with
-    redirects disabled, so an accepted host cannot 302 to metadata. This is a
-    validation-time check, not connection-time, so it does not defeat DNS
-    rebinding, which is out of scope for an admin-only config surface. Returns an
-    localized error contract, or None when acceptable.
+    This administrator-only guard cannot pin future DNS resolution. Ollama may
+    use private HTTP endpoints; other providers require HTTPS. Redirect behavior
+    depends on the provider adapter, so this check is not a connection-time SSRF
+    guarantee.
     """
     try:
         parts = urlparse(url)
@@ -4714,7 +4707,10 @@ async def _probe_config(kind: str, body: dict) -> ProviderConfig | ProbeConfigEr
         return ProbeConfigError("Unknown provider.", "providerUnknown")
     api_key: str | None = None
     if any(field.id == "api_key" for field in definition.fields):
-        api_key = str(body.get("api_key") or "").strip()
+        raw_key = body.get("api_key", "")
+        if not isinstance(raw_key, str) or any(ord(char) < 32 or ord(char) == 127 for char in raw_key):
+            return ProbeConfigError("Enter your API key.", "providerApiKeyRequired")
+        api_key = raw_key.strip()
         if not api_key and any(field.id == "api_key" and field.required for field in definition.fields):
             return ProbeConfigError("Enter your API key.", "providerApiKeyRequired")
 
@@ -4860,6 +4856,8 @@ class PhoenixAgentCliProvidersView(PhoenixView):
                 "already_exists", str(err), 409, rid,
                 key="providerAlreadyConfigured",
             )
+        if self.hass.data.get(DOMAIN) is not None:
+            _audit_admin(self.hass, request, rid, f"provider:{instance_id}")
         # Initial setup must establish the same declared model capabilities as
         # the explicit Refresh models action. This is metadata-only (no model
         # completion calls), but it may be one /api/show request per model for
@@ -4923,12 +4921,13 @@ class PhoenixAgentCliProviderView(PhoenixView):
                 if not await store.set_model(instance_id, model):
                     return _err("not_found", "Provider account not found.", 404, rid,
                                 key="providerAccountNotFound")
-            return _ok({"instance": {"id": instance_id, "model": model}}, request_id=rid)
-        if not await store.set_model(instance_id, model):
+        elif not await store.set_model(instance_id, model):
             return _err(
                 "not_found", "Provider account not found.", 404, rid,
                 key="providerAccountNotFound",
             )
+        if self.hass.data.get(DOMAIN) is not None:
+            _audit_admin(self.hass, request, rid, f"provider:{instance_id}")
         return _ok({"instance": {"id": instance_id, "model": model}}, request_id=rid)
 
     @require_admin
@@ -4981,6 +4980,7 @@ class PhoenixAgentCliProviderView(PhoenixView):
                 # The AI Task is no longer fully configured; remove its entity
                 # from Home Assistant and the AI Task picker.
                 data.async_sync_ai_task()
+        _audit_admin(self.hass, request, rid, f"provider:{instance_id}")
         return _ok({"deleted": instance_id}, request_id=rid)
 
 
@@ -5054,6 +5054,8 @@ class PhoenixAgentCliRefreshView(PhoenixView):
                 "not_found", "Provider account not found.", 404, rid,
                 key="providerAccountNotFound",
             )
+        if self.hass.data.get(DOMAIN) is not None:
+            _audit_admin(self.hass, request, rid, f"provider_refresh:{instance_id}")
         # `declared` tells the panel whether this provider reports capabilities at
         # all, so it can say "this provider does not publish them" instead of
         # showing an empty result that reads like a failed refresh.
@@ -5117,6 +5119,8 @@ class PhoenixAgentCliProbeCapsView(PhoenixView):
                 "not_found", "Provider account not found.", 404, rid,
                 key="providerAccountNotFound",
             )
+        if self.hass.data.get(DOMAIN) is not None:
+            _audit_admin(self.hass, request, rid, f"provider_probe:{instance_id}")
         return _ok({
             "model": cfg.model,
             "probed": probed,

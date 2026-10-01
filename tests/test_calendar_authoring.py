@@ -384,3 +384,39 @@ async def test_recurrence_rule_removal_is_refused(calendar_env):
         assert result[1] == 'invalid_request'
         assert 'no validated recurrence-rule clear value' in result[0]['content'][0]['text']
     assert not calendar_env[3].calls
+
+
+async def test_unknown_receipt_capacity_requires_explicit_review_without_replay(calendar_env):
+    from custom_components.phoenix_mcp.const import CALENDAR_RECEIPT_LIMIT
+    hass, data, _token, entity = calendar_env
+    journal = tools.CalendarWriteJournal(hass)
+    data.calendar_writes = journal
+    journal.records = [{"receipt_id": f"r-{i}", "entity_id": entity.entity_id,
+                        "status": "outcome_unknown", "operation": "create"}
+                       for i in range(CALENDAR_RECEIPT_LIMIT)]
+    await journal.save()
+    journal.publish_issues()
+    blocked = await call(calendar_env, 'create_calendar_event', CREATE)
+    assert blocked[1] == "invalid_request" and entity.calls == []
+    assert len(journal.records) == CALENDAR_RECEIPT_LIMIT
+    journal.active.add("r-0")
+    assert await journal.reviewed("r-0") is False
+    journal.active.clear()
+    assert await journal.reviewed("r-0") is True
+    assert entity.calls == []
+    persisted = tools.CalendarWriteJournal(hass)
+    assert (await persisted.load())[0]["status"] == "reviewed"
+    assert await journal.reviewed("r-0") is False
+    result = await call(calendar_env, 'create_calendar_event', CREATE)
+    assert result[1] == "allowed" and len(entity.calls) == 1
+    assert not any(row["receipt_id"] == "r-0" for row in journal.records)
+    assert all(any(row["receipt_id"] == f"r-{i}" for row in journal.records) for i in range(1, CALENDAR_RECEIPT_LIMIT))
+
+
+async def test_calendar_review_persistence_failure_keeps_unknown_receipt(hass):
+    journal = tools.CalendarWriteJournal(hass)
+    journal.records = [{"receipt_id": "r", "status": "outcome_unknown"}]
+    journal.save = AsyncMock(side_effect=OSError("unwritable"))
+    with pytest.raises(OSError):
+        await journal.reviewed("r")
+    assert journal.records == [{"receipt_id": "r", "status": "outcome_unknown"}]

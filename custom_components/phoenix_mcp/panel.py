@@ -24,6 +24,7 @@ _JS_FILE = _FRONTEND_DIR / "phoenix-mcp-panel.js"
 _PANEL_URL = "/local/phoenix-mcp"
 _JS_URL = f"{_PANEL_URL}/phoenix-mcp-panel.js"
 _PANEL_KEY = "phoenix-mcp"
+_STATIC_REGISTERED_KEY = "phoenix_mcp_static_registered"
 _PANEL_REGISTERED_KEY = "phoenix_mcp_panel_registered"
 
 # Optional in-context profile injector (mesa_inject_enabled). Served from the same
@@ -63,16 +64,11 @@ async def async_register_phoenix_panel(hass: HomeAssistant) -> None:
     Safe to call on re-setup: removes any stale panel entry before registering.
     Static path registration is skipped silently if already registered.
     """
-    try:
+    if not hass.data.get(_STATIC_REGISTERED_KEY):
         await hass.http.async_register_static_paths([
-            StaticPathConfig(
-                url_path=_PANEL_URL,
-                path=str(_FRONTEND_DIR),
-                cache_headers=False,
-            )
+            StaticPathConfig(url_path=_PANEL_URL, path=str(_FRONTEND_DIR), cache_headers=False)
         ])
-    except RuntimeError as exc:
-        _LOGGER.warning("Phoenix MCP: failed to register static path %s: %s", _PANEL_URL, exc)
+        hass.data[_STATIC_REGISTERED_KEY] = True
 
     if hass.data.get(_PANEL_REGISTERED_KEY):
         async_remove_panel(hass, _PANEL_KEY)
@@ -205,7 +201,7 @@ def _remove_all_inject_urls(hass: HomeAssistant) -> None:
         if not registered:
             return
         stale = [
-            u for u in list(registered)  # type: ignore[call-overload]  # UrlManager is iterable at runtime, not declared so
+            u for u in registered.urls
             if u == _INJECT_JS_URL or u.startswith(f"{_INJECT_JS_URL}?")
         ]
         for u in stale:
@@ -231,7 +227,7 @@ def _remove_all_agentchat_urls(hass: HomeAssistant) -> None:
         if not registered:
             return
         stale = [
-            u for u in list(registered)  # type: ignore[call-overload]  # UrlManager is iterable at runtime, not declared so
+            u for u in registered.urls
             if u == _AGENTCHAT_JS_URL or u.startswith(f"{_AGENTCHAT_JS_URL}?")
         ]
         for u in stale:
