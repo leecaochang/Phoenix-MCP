@@ -497,7 +497,10 @@ mode: single
 ### Entity registry metadata
 
 - `set_entity` can clear name, icon, area, and device-class overrides with an
-  explicit null; omitting a field leaves it unchanged. Labels are edited with
+  explicit null; omitting a field leaves it unchanged. Use `changes.name: null`
+  to restore the integration-provided name. Non-empty names containing only
+  single/double quotes and whitespace are refused before any fields change.
+  Names containing quotes alongside other text are allowed. Labels are edited with
   `add_labels` / `remove_labels`, while `categories` is a scope-keyed patch whose
   null value removes that scope.
 - `enabled` and `hidden` change only user-controlled state. If an integration,
@@ -562,8 +565,13 @@ mode: single
   state, or labels. It always needs an explicit device WRITE grant; access
   inherited from a child entity or domain is enough to read the device but never
   to mutate the whole device.
-- Clear the name or area override with null. Add and remove labels rather than
-  replacing the label set. A label-only edit does not change child authorization.
+- Use `changes.name: null` to clear the user override and restore the
+  integration-provided device name. Omitting name preserves the override; an
+  empty string also clears it. Non-empty names containing only single/double
+  quotes and whitespace are refused before any fields change, including after
+  approval. Names containing quotes alongside other text are allowed. Clear the
+  area override with null. Add and remove labels rather than replacing the
+  label set. A label-only edit does not change child authorization.
 - Name, area, and enabled-state edits require every attached registry entity to
   remain writable. A RED or YELLOW entity restriction blocks the whole update;
   do not retry by omitting that child.

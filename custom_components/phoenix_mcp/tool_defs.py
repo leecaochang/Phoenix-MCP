@@ -1153,7 +1153,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "properties": {
                 "entity_id": {"type": "string", "description": "Entity registry ID to update."},
                 "changes": {"type": "object", "minProperties": 1, "description": "User-controlled metadata changes.", "additionalProperties": False, "properties": {
-                "name": {"type": ["string", "null"], "description": "New friendly-name override, or null to clear it."},
+                "name": {"type": ["string", "null"], "description": "Friendly-name override; null restores the integration-provided name. Non-empty names cannot contain only quotes and whitespace."},
                 "icon": {"type": ["string", "null"], "description": "New icon, or null to clear it."},
                 "area_id": {"type": ["string", "null"], "description": "Area assignment, or null to clear it."},
                 "device_class": {"type": ["string", "null"], "description": "User device-class override, or null to clear it."},
@@ -1214,7 +1214,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "Update one device's user-controlled registry metadata: display-name override, area, enabled state, "
             "and labels. Requires cap_registry_write plus an explicit WRITE grant on the device; attached entity "
-            "or domain grants cannot authorize a whole-device mutation. Use null to clear name or area_id. Only "
+            "or domain grants cannot authorize a whole-device mutation. Use changes.name: null to restore the integration-provided name, or area_id: null to clear placement. Only "
             "user-disabled devices may be toggled, and a disabled owning config entry prevents enable. Name, area, "
             "and enabled-state changes require every attached registry entity to remain writable; label-only edits "
             "do not. Device rename and enable/disable are evaluated against every attached entity's fully inherited "
@@ -1225,7 +1225,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "type": "object",
             "properties": {
                 "device_id": {"type": "string", "description": "The device registry id."},
-                "changes": {"type": "object", "minProperties": 1, "description": "User-controlled device metadata changes.", "additionalProperties": False, "properties": {"name": {"type": ["string", "null"], "description": "Display-name override."}, "area_id": {"type": ["string", "null"], "description": "Area assignment."}, "enabled": {"type": "boolean", "description": "Enabled state."}, "add_labels": {"type": "array", "items": {"type": "string"}, "description": "Label IDs to add."}, "remove_labels": {"type": "array", "items": {"type": "string"}, "description": "Label IDs to remove."}}},
+                "changes": {"type": "object", "minProperties": 1, "description": "User-controlled device metadata changes.", "additionalProperties": False, "properties": {"name": {"type": ["string", "null"], "description": "Display-name override; null restores the integration-provided name. Non-empty names cannot contain only quotes and whitespace."}, "area_id": {"type": ["string", "null"], "description": "Area assignment."}, "enabled": {"type": "boolean", "description": "Enabled state."}, "add_labels": {"type": "array", "items": {"type": "string"}, "description": "Label IDs to add."}, "remove_labels": {"type": "array", "items": {"type": "string"}, "description": "Label IDs to remove."}}},
             },
             "required": ["device_id", "changes"],
         },

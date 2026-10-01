@@ -2456,6 +2456,18 @@ def _apply_registry_id_edits(
     return result, sorted(result - current), sorted(current - result)
 
 
+def _registry_name_error(value: Any) -> str | None:
+    """Validate a name override without confusing literal quotes with clearing."""
+    if value is not None and not isinstance(value, str):
+        return "name must be a string or null."
+    if value and all(char.isspace() or char in "\"'" for char in value):
+        return (
+            "name must contain more than quotes and whitespace. "
+            "Use changes.name: null to clear the name override."
+        )
+    return None
+
+
 def _set_entity_value_error(
     args: dict,
     hass: HomeAssistant,
@@ -2464,7 +2476,10 @@ def _set_entity_value_error(
     restoring: bool,
 ) -> str | None:
     """Validate set_entity values and references without changing the registry."""
-    for field in ("name", "icon", "device_class"):
+    name_error = _registry_name_error(args.get("name"))
+    if name_error is not None:
+        return name_error
+    for field in ("icon", "device_class"):
         if field in args and args[field] is not None and not isinstance(args[field], str):
             return f"{field} must be a string or null."
     for field in ("enabled", "hidden"):
@@ -2857,10 +2872,9 @@ def _set_device_value_error(
     restoring: bool,
 ) -> str | None:
     """Validate set_device values and registry references without mutation."""
-    if "name" in args and args["name"] is not None and not isinstance(
-        args["name"], str
-    ):
-        return "name must be a string or null."
+    name_error = _registry_name_error(args.get("name"))
+    if name_error is not None:
+        return name_error
     if "area_id" in args:
         area_id = args["area_id"]
         if area_id is not None and not isinstance(area_id, str):
