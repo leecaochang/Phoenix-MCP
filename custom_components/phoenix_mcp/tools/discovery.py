@@ -52,7 +52,7 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 
-from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, SEARCH_FUZZY_MATCH_CUTOFF
+from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_FUZZY_MATCH_CUTOFF
 from ..data import PhoenixData
 from ..device_semantics import (
     DeviceRegistrySnapshot,
@@ -69,7 +69,7 @@ from .authoring import _AUTOMATION_YAML, _read_automations_yaml
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
 from ..tool_common import _resolve_area_id, _tool_error, _tool_success
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
-from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_token, filter_service_response, physical_gate_applies, resolve, resolve_device_registry_access, resolve_esphome_user_service, resolve_registry_access, resolve_service_targets, scrub_sensitive_attributes
+from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_token, filter_service_response, physical_gate_applies, resolve, resolve_device_registry_access, resolve_esphome_user_service, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
 from ..request_authority import check_request_authority
 from ..token_store import TokenRecord
 from .. import yaml_includes
@@ -1630,6 +1630,8 @@ async def _tool_find_available_actions(
     actions: list[dict] = []
     for svc in sorted(hass.services.async_services().get(domain, {}).keys()):
         key = f"{domain}/{svc}"
+        if key not in NO_TARGET_SERVICES and not service_target_binding_valid(domain, svc, [entity_id], hass):
+            continue
         available = writable
         reason: str | None = None
         # No-target reload services gate on cap_yaml_edit, not the entity's WRITE
@@ -1644,6 +1646,10 @@ async def _tool_find_available_actions(
         elif key in DUAL_GATE_SERVICES and not restart_ok:
             available, reason = False, "requires restart capability"
         entry = {"service": f"{domain}.{svc}", "available": available}
+        if guidance := RUNTIME_SERVICE_GUIDANCE.get(key):
+            entry["description"] = guidance
+        elif domain == "script" and svc not in SCRIPT_ENTITY_SERVICES and key not in NO_TARGET_SERVICES:
+            entry["description"] = "Run this script and wait for completion; pass inputs directly in service data. Target this exact entity."
         if reason:
             entry["reason"] = reason
         actions.append(entry)
@@ -2811,6 +2817,9 @@ async def _tool_dry_run_service(
         )
     except EntityCreationNotPermitted:
         permitted, requested = [], 0
+
+    if not service_target_binding_valid(domain, service, permitted, hass):
+        permitted = []
 
     # Predict the outcome in the same order call_service applies its gates: the
     # physical-control cap gate runs first (before target resolution and MESA),

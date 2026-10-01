@@ -666,6 +666,18 @@ DUAL_GATE_SERVICES = frozenset({
     "homeassistant/stop",
 })
 
+SCRIPT_ENTITY_SERVICES = frozenset({"turn_on", "turn_off", "toggle"})
+RUNTIME_SERVICE_GUIDANCE = {
+    "automation/trigger": "Run actions now; skip_condition defaults to true. Does not enable future triggers.",
+    "automation/turn_on": "Enable future triggers without running actions now.",
+    "automation/turn_off": "Disable future triggers; stop_actions defaults to true and also stops running actions.",
+    "automation/toggle": "Toggle whether future triggers are enabled.",
+    "script/turn_on": "Start the script without waiting for its sequence to finish; pass inputs in variables.",
+    "script/turn_off": "Stop all running executions. The script remains available to run again.",
+    "script/toggle": "Start an idle script or stop its running executions.",
+    "scene/turn_on": "Activate the scene; later member effects run under Home Assistant.",
+}
+
 # Services that require cap_physical_control even when pass_through is True.
 # These represent irreversible or safety-relevant physical actions.
 PHYSICAL_GATE_SERVICES = frozenset({

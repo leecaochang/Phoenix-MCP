@@ -18,6 +18,7 @@ from .const import (
     DOMAIN,
     ESPHOME_DOMAIN,
     PHYSICAL_GATE_DOMAINS,
+    SCRIPT_ENTITY_SERVICES,
     SENSITIVE_ATTRIBUTES,
     SENSITIVE_KEY_SUBSTRINGS,
 )
@@ -711,6 +712,24 @@ def resolve_service_targets(
             permitted.append(eid)
 
     return permitted, raw_count
+
+
+def service_target_binding_valid(
+    domain: str, service: str, targets: list[str], hass: HomeAssistant,
+) -> bool:
+    """Bind named script services to the registry entity they actually execute.
+
+    HA's script.<stored_id> handler ignores target selectors and accepts them as
+    variables instead. Ordinary script controls select entities; named handlers
+    must match exactly one authorized, enabled script, including after renames.
+    Reload is handled separately through the no-target capability branch.
+    """
+    if domain != "script" or service in SCRIPT_ENTITY_SERVICES:
+        return True
+    registry = er.async_get(hass)
+    entity_id = registry.async_get_entity_id("script", "script", service)
+    entry = registry.async_get(entity_id) if entity_id else None
+    return bool(entry is not None and not entry.disabled_by and targets == [entity_id])
 
 
 def physical_gate_applies(domain: str, service: str, targets: list[str]) -> bool:

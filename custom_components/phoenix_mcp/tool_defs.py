@@ -226,7 +226,13 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "device_id, or 'all') are resolved and flattened to the entities this token can write; "
             "out-of-scope targets are dropped silently. The call passes the capability gate and "
             "per-entity MESA policy, so it may return pending_approval or be refused. Preview a risky "
-            "call first with dry_run_service (and whatif to see which automations it would trigger)."
+            "call first with dry_run_service (and whatif to see which automations it would trigger). "
+            "For runtime controls use automation.trigger (run actions, skip_condition defaults true), "
+            "automation.turn_on/turn_off (enable/disable future triggers; turn_off also stops actions "
+            "unless stop_actions=false), script.turn_on (start, inputs in data.variables), "
+            "script.turn_off (stop all runs), or scene.turn_on (activate). Named script services "
+            "require the exact script entity target and wait for completion; their inputs go directly "
+            "in data. Use create/edit tools for configuration and set_entity for registry disabling."
         ),
         "inputSchema": {
             "type": "object",
@@ -971,7 +977,9 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "than by replacing the list, so an entity never loses the ability to answer to its own name; "
             "describe_entity reports the names it currently matches. new_entity_id renames within the same "
             "domain only after checking Phoenix identity blockers and showing known relationship consumers. "
-            "Rename is governed by the fully inherited MESA profile. Captured in version history."
+            "Rename is governed by the fully inherited MESA profile. Captured in version history. "
+            "Registry disabling unloads an entity; to stop running script executions use call_service "
+            "with script.turn_off. To disable future automation triggers use automation.turn_off."
         ),
         "cap": "cap_registry_write",
         "inputSchema": {
@@ -1676,7 +1684,9 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "entity's purpose-built automation triggers and conditions ('semantic_moments'), each with "
             "a ready-to-use config example where the shape is non-obvious, so you can author the exact "
             "native trigger/condition rather than a generic equivalent. Includes the entity's MESA "
-            "control_mode when MESA is active. Returns 'not found' if the entity is not accessible."
+            "control_mode when MESA is active. Runtime controls include descriptions explaining start, "
+            "stop, enable and trigger behavior. Named script services are listed only for this entity. "
+            "Returns 'not found' if the entity is not accessible."
         ),
         "cap": "cap_search",
         "inputSchema": {

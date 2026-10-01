@@ -423,6 +423,9 @@ mode: single
 
 ### Scripts and scenes
 
+- Use `call_service` for runtime actions with an explicit entity target: `automation.trigger` runs actions now (`skip_condition` defaults to true); `automation.turn_on` enables future triggers; `automation.turn_off` disables future triggers and stops running actions unless `stop_actions=false`. `script.turn_on` starts without waiting for completion, with inputs in `service.data.variables`; `script.turn_off` stops all current runs without disabling the script. `scene.turn_on` activates a scene, including integration scenes that the authoring tools cannot edit. `set_entity(changes={"enabled":false})` disables the registry entity, which is a separate operation.
+- Named `script.<stored_id>` services wait for completion and take inputs directly in `service.data`. Target that exact script's current entity ID, even after a rename; `find_available_actions` lists its matching service. An unrelated target cannot authorize a named script. A service timeout may leave effects in progress; inspect before retrying.
+- Author configuration with the existing create/edit tools, then make a separate runtime call after a successful response. Authoring awaits blocking reload; script/scene receipts additionally report `reload_status` and scoped `registration`. On reload failure or registration timeout, inspect the saved configuration or retry entity lookup instead of repeating creation. Runtime WRITE and MESA checks apply to the automation/script/scene itself; HA-native downstream actions do not receive recursive Phoenix checks.
 - A script runs a `sequence` of steps (service calls, `delay`, `wait_template`,
   `wait_for_trigger`, `choose`). Use `fields` to make it callable with parameters
   and `variables` for values reused across steps; `mode` works as in automations.
