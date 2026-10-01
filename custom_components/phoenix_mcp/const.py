@@ -120,6 +120,53 @@ TEMPLATE_RECOVERY_TYPES = frozenset({
     "event", "fan", "image", "light", "lock", "number", "select", "sensor",
     "switch", "update", "vacuum", "weather",
 })
+# Static authoring analysis never renders against HA. Unknown syntax/functions
+# refuse rather than guessing their dependencies.
+HELPER_TEMPLATE_MAX_CHARS = 8192
+HELPER_TEMPLATE_MAX_NODES = 512
+HELPER_TEMPLATE_MAX_DEPTH = 32
+HELPER_TEMPLATE_STATE_FUNCTIONS = frozenset({
+    "states", "state_attr", "is_state", "is_state_attr", "has_value",
+})
+HELPER_TEMPLATE_STATE_PROPERTIES = frozenset({
+    "entity_id", "state", "name", "domain", "object_id", "state_with_unit",
+    "last_changed", "last_updated", "last_reported",
+})
+HELPER_TEMPLATE_PURE_FUNCTIONS = frozenset({
+    "float", "int", "bool", "str", "min", "max", "abs", "round",
+    "sin", "cos", "tan", "asin", "acos", "atan", "atan2", "sqrt",
+    "log", "average", "median", "clamp", "wrap", "remap",
+    "now", "utcnow", "today_at", "as_datetime", "as_local", "as_timestamp",
+    "timedelta", "strptime",
+})
+HELPER_TEMPLATE_TIME_FUNCTIONS = frozenset({
+    "now", "utcnow", "today_at", "as_datetime", "as_local", "timedelta", "strptime",
+})
+HELPER_TEMPLATE_TIME_METHODS = frozenset({
+    "replace", "strftime", "isoformat", "timestamp", "date", "time",
+    "weekday", "isoweekday", "total_seconds",
+})
+HELPER_TEMPLATE_TIME_ATTRIBUTES = frozenset({
+    "year", "month", "day", "hour", "minute", "second", "microsecond", "days", "seconds",
+})
+HELPER_TEMPLATE_PURE_FILTERS = frozenset({
+    "float", "int", "bool", "string", "abs", "round", "min", "max",
+    "sum", "average", "median", "sqrt", "log", "sin", "cos", "tan",
+    "lower", "upper", "title", "capitalize", "trim", "replace",
+    "default", "d", "length", "count", "first", "last", "list", "join",
+    "to_json", "from_json",
+})
+HELPER_TEMPLATE_PURE_TESTS = frozenset({
+    "defined", "undefined", "none", "boolean", "true", "false", "number",
+    "integer", "float", "string", "mapping", "sequence", "iterable",
+    "even", "odd", "divisibleby", "equalto", "eq", "ne", "lt", "le", "gt", "ge", "in",
+})
+HELPER_TEMPLATE_NODE_TYPES = frozenset({
+    "Template", "Output", "TemplateData", "Const", "List", "Tuple", "Dict", "Pair",
+    "Add", "Sub", "Mul", "Div", "FloorDiv", "Mod", "Pow", "Neg", "Pos",
+    "And", "Or", "Not", "Compare", "Operand", "CondExpr", "Concat", "Keyword",
+    "Call", "Filter", "Test", "Name", "Getattr", "Getitem", "If",
+})
 # Per-resource FIFO retention: the newest N versions per (resource_type,
 # resource_id) are kept; older ones are evicted on write.
 MAX_VERSIONS_PER_RESOURCE = 20

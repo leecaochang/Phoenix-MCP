@@ -112,7 +112,7 @@ def validate_restore_scope(snapshot: dict, token, hass) -> None:
         node = token.permissions.entities.get(entity_id)
         if not token.pass_through and node is not None and node.state in ("RED", "YELLOW"):
             allowed = False
-    if not allowed or _unwritable_option_entities(snapshot["options"], token, hass):
+    if not allowed or _unwritable_option_entities(snapshot["options"], token, hass, template_type=snapshot["options"]["template_type"]):
         raise PermissionError("Forbidden.")
 
 
@@ -192,7 +192,7 @@ async def restore_template(
                 await _record_version(data, token, resource_type="config_entry", resource_id=original_id,
                                       action="edit", before=existing, after=template_snapshot(hass, current), alias=current.title)
                 return result
-        if _unwritable_option_entities(options, token, hass):
+        if _unwritable_option_entities(options, token, hass, template_type=options["template_type"]):
             raise ConfigurationRecoveryError("Template references are outside current write authority.")
         mesa = _helper_mesa_context(data, token, [expected["entity_id"]], action="create",
                                    service_data={"helper_type": "template"}, session_id=tool)

@@ -71,6 +71,7 @@ from ..policy_engine import (
     resolve_registry_access,
 )
 from ..token_store import TokenRecord
+from ..template_scope import HelperScopeError, template_entities, validate_template_selectors
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -632,7 +633,10 @@ async def _prepare_config_flow_helper(
                 )
             if menu_error := _creation_menu_error(body, supplied):
                 return "error", menu_error
-            denied = _unwritable_option_entities(supplied["data"], token, hass)
+            denied = _unwritable_option_entities(
+                supplied["data"], token, hass,
+                template_type=supplied["step_id"] if helper_type == "template" and supplied["step_id"] != "user" else None,
+            )
             if denied:
                 return "denied", denied
 
@@ -681,6 +685,8 @@ async def _prepare_config_flow_helper(
         if body is None:
             return "error", "This helper's creation flow is not a supported form flow."
         return "form", body
+    except HelperScopeError as exc:
+        return "scope_error", str(exc)
     except Exception:  # noqa: BLE001 - integration flow failures become clean tool errors
         _LOGGER.exception("Could not preflight helper creation flow for %s", helper_type)
         return "error", "Could not open or validate this helper's creation flow."
@@ -1170,6 +1176,8 @@ async def _tool_create_helper(
                 _tool_success(json.dumps(detail, default=str)),
                 "allowed", f"helper_flow:{helper_type}",
             )
+        if status == "scope_error":
+            return _tool_error(str(detail)), "denied", "create_helper"
         if status == "denied":
             return (
                 _tool_error(
@@ -1262,6 +1270,8 @@ async def _execute_create_helper(
         status, detail = await _prepare_config_flow_helper(
             hass, str(helper_type), flow_steps, token
         )
+        if status == "scope_error":
+            return _tool_error(str(detail)), "denied", "create_helper"
         if status == "denied":
             return (
                 _tool_error(
@@ -1514,7 +1524,10 @@ async def _execute_config_flow_helper(
             terminal = body["step"]["last_step"]
             if terminal is not (index == len(steps) - 1):
                 return _tool_error("The helper flow's final boundary changed; nothing was submitted."), "invalid_request", "create_helper"
-            denied = _unwritable_option_entities(supplied["data"], token, hass)
+            denied = _unwritable_option_entities(
+                supplied["data"], token, hass,
+                template_type=supplied["step_id"] if helper_type == "template" and supplied["step_id"] != "user" else None,
+            )
             if denied:
                 return (
                     _tool_error(
@@ -1570,6 +1583,8 @@ async def _execute_config_flow_helper(
                 _tool_error("The approved steps did not create a helper."),
                 "invalid_request", "create_helper",
             )
+    except HelperScopeError as exc:
+        return _tool_error(str(exc)), "denied", "create_helper"
     except vol.Invalid as err:
         return (
             _tool_error(f"The helper form was rejected: {err}. Nothing was created."),
@@ -2478,7 +2493,7 @@ async def _tool_get_config_entry_options(
 
 
 def _entities_in_options(options: Any) -> set[str]:
-    """Every entity-id-shaped string value anywhere in an options payload.
+    """Whole entity IDs and statically established template dependencies.
 
     Matched by VALUE, never by key name, for the reason the relationship walk
     learned the hard way: each helper names its source differently (`entity_id`
@@ -2496,16 +2511,28 @@ def _entities_in_options(options: Any) -> set[str]:
         elif isinstance(node, list):
             for value in node:
                 _walk(value)
-        elif (isinstance(node, str) and _ENTITY_ID_RE.fullmatch(node)
-              and not all(part.isdecimal() for part in node.split("."))):
-            found.add(node)
+        elif isinstance(node, str):
+            found.update(template_entities(node))
+            if (_ENTITY_ID_RE.fullmatch(node)
+                    and not all(part.isdecimal() for part in node.split("."))):
+                found.add(node)
 
     _walk(options)
     return found
 
 
+def _template_options_after_form(options: dict, payload: dict, schema: vol.Schema) -> dict:
+    """Match HA's options merge and explicit optional clears for scope checks."""
+    merged = {**options, **payload}
+    for marker, validator in schema.schema.items():
+        if (isinstance(marker, vol.Optional) and marker.schema not in payload
+                and not getattr(validator, "config", {}).get("read_only")):
+            merged.pop(marker.schema, None)
+    return merged
+
+
 def _unwritable_option_entities(
-    options: Any, token: TokenRecord, hass: HomeAssistant
+    options: Any, token: TokenRecord, hass: HomeAssistant, *, template_type: str | None = None,
 ) -> list[str]:
     """Entities in an options payload the token may not WRITE.
 
@@ -2517,6 +2544,8 @@ def _unwritable_option_entities(
     schema says which of the two a given field does. The failure direction is
     refusing a legitimate edit rather than handing over a scope escape.
     """
+    if template_type is not None:
+        validate_template_selectors(options, template_type)
     return sorted(
         eid for eid in _entities_in_options(options)
         if resolve(eid, token, hass) != Permission.WRITE
@@ -2535,7 +2564,13 @@ def _config_entry_settings_precheck(
             _tool_error("This helper exposes no way to change its settings, so they cannot be changed here."),
             "invalid_request", tool,
         )
-    denied = _unwritable_option_entities(settings, token, hass)
+    try:
+        denied = _unwritable_option_entities(
+            settings, token, hass,
+            template_type=entry.options.get("template_type") if entry.domain == "template" else None,
+        )
+    except HelperScopeError as exc:
+        return _tool_error(str(exc)), "denied", tool
     if denied:
         return (
             _tool_error(
@@ -2574,7 +2609,7 @@ async def _build_diff_set_config_entry_options(
     }
 
 
-async def _preflight_template_settings(hass, entry, settings, *, intended=None):
+async def _preflight_template_settings(hass, entry, settings, token, *, intended=None):
     """Validate an options form without submitting or creating a recovery barrier."""
     from ..template_recovery import template_snapshot
 
@@ -2590,15 +2625,15 @@ async def _preflight_template_settings(hass, entry, settings, *, intended=None):
         if result.get("type") != FlowResultType.FORM or not isinstance(schema, vol.Schema):
             return _tool_error("This Template helper has no supported settings form."), "invalid_request", "set_helper_settings"
         payload = schema(_settings_form_payload(result, settings))
+        # Check retained values too, after HA has built the complete form.
+        options = _template_options_after_form(before["options"], payload, schema)
+        denied = _unwritable_option_entities(options, token, hass, template_type=entry.options["template_type"])
+        if denied:
+            return _tool_error("Template references are outside this token's write scope."), "denied", "set_helper_settings"
         if intended is not None:
-            # The installed schema flow merges submitted values and removes
-            # omitted optional fields, including explicit clears by omission.
-            options = {**before["options"], **payload}
-            for marker, validator in schema.schema.items():
-                if (isinstance(marker, vol.Optional) and marker.schema not in payload
-                        and not getattr(validator, "config", {}).get("read_only")):
-                    options.pop(marker.schema, None)
             intended.update(before, options=options)
+    except HelperScopeError as exc:
+        return _tool_error(str(exc)), "denied", "set_helper_settings"
     except vol.Invalid as err:
         return _tool_error(f"The settings were rejected: {err}. Nothing was changed."), "invalid_request", "set_helper_settings"
     finally:
@@ -2640,7 +2675,7 @@ async def _tool_set_config_entry_options(
     if conflict is not None:
         return conflict
     if entry.domain == "template":
-        refusal = await _preflight_template_settings(hass, entry, args["settings"])
+        refusal = await _preflight_template_settings(hass, entry, args["settings"], token)
         if refusal is not None:
             return refusal
     entity_ids = _config_entry_helper_mesa_entities(hass, entry, data)
@@ -2696,7 +2731,7 @@ async def _execute_set_config_entry_options(
     if isinstance(mesa, tuple):
         return mesa
     wanted: dict = {}
-    refusal = await _preflight_template_settings(hass, entry, args["settings"], intended=wanted)
+    refusal = await _preflight_template_settings(hass, entry, args["settings"], token, intended=wanted)
     if refusal is not None:
         return refusal
     rid = None
@@ -2706,6 +2741,10 @@ async def _execute_set_config_entry_options(
             assert saved is not None
             result = await _apply_config_entry_options(args, token, hass, data, recovery_before=saved["before"])
             current = hass.config_entries.async_get_entry(entry.entry_id)
+            if result[1] == "denied":
+                # The apply driver only returns policy refusals before submission.
+                await data.config_recovery.mark(rid, "not_applied")
+                return result
             if result[0].get("isError") or current is not entry:
                 await data.config_recovery.mark(rid, "unknown")
                 return _tool_error(json.dumps({"status": "unknown", "recovery_id": rid,
@@ -2783,14 +2822,23 @@ async def _apply_config_entry_options(
             if isinstance(fresh_mesa, tuple):
                 await _abort_flow(hass, mechanism, flow_id)
                 return fresh_mesa
+        payload = _settings_form_payload(result, settings) if isinstance(settings, dict) else {}
+        if entry.domain == "template":
+            payload = result["data_schema"](payload)
+            options = _template_options_after_form(dict(entry.options), payload, result["data_schema"])
+            denied = _unwritable_option_entities(options, token, hass, template_type=entry.options["template_type"])
+            if denied:
+                await _abort_flow(hass, mechanism, flow_id)
+                return _tool_error("Template references are outside this token's write scope."), "denied", tool
         result = await _configure_settings_flow(
             hass,
             mechanism,
             flow_id,
-            _settings_form_payload(result, settings)
-            if isinstance(settings, dict)
-            else {},
+            payload,
         )
+    except HelperScopeError as exc:
+        await _abort_flow(hass, mechanism, flow_id)
+        return _tool_error(str(exc)), "denied", tool
     except vol.Invalid as err:
         await _abort_flow(hass, mechanism, flow_id)
         return _tool_error(f"The settings were rejected: {err}"), "invalid_request", tool
