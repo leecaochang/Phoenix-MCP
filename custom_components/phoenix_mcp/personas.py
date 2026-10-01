@@ -101,7 +101,7 @@ PERSONA_DEFINITIONS: dict[str, dict[str, str]] = {
         "cap_config_read": CAP_ALLOW,
         "cap_camera_read": CAP_DENY,
         "cap_template_render": CAP_ALLOW,
-        "cap_log_read": CAP_ALLOW,
+        "cap_log_read": CAP_DENY,
         "cap_log_control": CAP_DENY,
         "cap_search": CAP_ALLOW,
         "cap_registry_read": CAP_ALLOW,

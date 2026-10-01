@@ -273,7 +273,10 @@ async def _internal_ingress(kind, hass, data, token, name, arguments):
 
     if kind == 'assist':
         tool = PhoenixAssistTool(name, '', MagicMock(), token.id)
-        return await tool.async_call(hass, SimpleNamespace(id='call', tool_args=arguments), None)
+        from homeassistant.auth.const import GROUP_ID_ADMIN
+        from homeassistant.core import Context
+        user = await hass.auth.async_create_user('authority-test-admin', group_ids=[GROUP_ID_ADMIN])
+        return await tool.async_call(hass, SimpleNamespace(id='call', tool_args=arguments), SimpleNamespace(context=Context(user_id=user.id)))
     call = {'id': 'call', 'name': name, 'input': arguments}
     if kind == 'interactive':
         result = await agentcli._run_tool_batch(

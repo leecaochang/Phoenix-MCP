@@ -27,7 +27,7 @@ import re
 from typing import Any, Literal
 
 from homeassistant.const import MATCH_ALL
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import intent
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -96,8 +96,29 @@ def _base_url(hass: HomeAssistant) -> str:
 from .routing_statistics import tracked_turn
 
 
-@tracked_turn("voice")
 async def async_voice_answer(
+    hass: HomeAssistant, data: Any, user_text: str, *,
+    include_review_links: bool = False, language: object = None,
+    satellite_id: object = None, device_id: object = None,
+    conversation_id: object = None, context: Context | None = None,
+) -> str:
+    """Keep the requesting HA user's authority around the whole voice turn."""
+    from .household_authority import household_scope
+    from .request_authority import AuthorityChangedError
+
+    try:
+        async with household_scope(hass, context):
+            return await _async_voice_answer(
+                hass, data, user_text, include_review_links=include_review_links,
+                language=language, satellite_id=satellite_id, device_id=device_id,
+                conversation_id=conversation_id,
+            )
+    except AuthorityChangedError:
+        return voice_text(language, "token_unavailable")
+
+
+@tracked_turn("voice")
+async def _async_voice_answer(
     hass: HomeAssistant,
     data: Any,
     user_text: str,
@@ -271,6 +292,7 @@ if _CONVERSATION_AVAILABLE:
                 satellite_id=satellite_id,
                 device_id=getattr(user_input, 'device_id', None),
                 conversation_id=conversation_id,
+                context=getattr(user_input, "context", None),
             )
             response = intent.IntentResponse(language=user_input.language)
             response.async_set_speech(_spoken_text(text))

@@ -868,6 +868,12 @@ PASS_THROUGH_EXEMPT_CAPS = frozenset({
     "cap_esphome_flash",
 })
 
+# Non-administrator and unidentified household ingress cannot use admin tools.
+# These capabilities still require the bound token's ordinary gates.
+HOUSEHOLD_CAPABILITIES = frozenset({
+    "cap_search", "cap_physical_control", "cap_broadcast", "cap_service_response",
+})
+
 # Zigbee2MQTT bridge API. Phoenix MCP talks to Z2M over its MQTT request/response
 # topics (<base>/bridge/request/... answered on <base>/bridge/response/...)
 # and retained state topics (<base>/bridge/info, <base>/bridge/devices).

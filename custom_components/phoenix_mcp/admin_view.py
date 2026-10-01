@@ -3244,6 +3244,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 client_ip="",
                 settings=settings,
                 payload={"reason": reason} if reason else None,
+                ha_user_id=user.id,
             )
 
         if record.is_terminal():
@@ -3403,9 +3404,19 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 if recovery_request:
                     tool_result, outcome, _resource = await execute_recovery_approval(record, user, hass, data)
                 else:
-                    tool_result, outcome, _resource = await async_execute_approved_tool(
-                        record.tool_name, record.args, token, hass, data,
-                    )
+                    if record.household_request:
+                        from .household_authority import household_scope
+                        from .request_authority import check_request_authority
+
+                        async with household_scope(hass, user_id=record.ha_user_id):
+                            check_request_authority()
+                            tool_result, outcome, _resource = await async_execute_approved_tool(
+                                record.tool_name, record.args, token, hass, data,
+                            )
+                    else:
+                        tool_result, outcome, _resource = await async_execute_approved_tool(
+                            record.tool_name, record.args, token, hass, data,
+                        )
             finally:
                 policy_version.reset(policy_ctx)
                 request_authority.reset(authority_ctx)
@@ -3509,6 +3520,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 client_ip="",
                 settings=settings,
                 payload=payload,
+                ha_user_id=record.ha_user_id,
             )
 
         async with data.store.async_lock:

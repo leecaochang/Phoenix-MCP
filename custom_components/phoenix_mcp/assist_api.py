@@ -39,6 +39,7 @@ from homeassistant.core import HomeAssistant
 import voluptuous as vol
 
 from .const import ASSIST_CLIENT_IP, DOMAIN
+from .household_authority import household_scope
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -174,47 +175,48 @@ if _ASSIST_API_SUPPORTED:
             from .audit import generate_request_id  # noqa: PLC0415
             from .mcp_view import _dispatch_mcp  # noqa: PLC0415
 
-            data = hass.data[DOMAIN]
-            # Re-resolve the bound token per call: it may have been revoked,
-            # expired, narrowed, or the kill switch flipped since the conversation
-            # started. _current_dispatch_token also zeroes confirm_inline_wait so a
-            # voice turn never blocks on an approval; instead the gate returns
-            # pending and we report it as queued below.
-            token = _current_dispatch_token(data, self._token_id)
-            if token is None:
-                return {"error": "This Phoenix MCP token is no longer available."}
+            async with household_scope(hass, getattr(llm_context, "context", None)):
+                data = hass.data[DOMAIN]
+                # Re-resolve the bound token per call: it may have been revoked,
+                # expired, narrowed, or the kill switch flipped since the conversation
+                # started. _current_dispatch_token also zeroes confirm_inline_wait so a
+                # voice turn never blocks on an approval; instead the gate returns
+                # pending and we report it as queued below.
+                token = _current_dispatch_token(data, self._token_id)
+                if token is None:
+                    return {"error": "This Phoenix MCP token is no longer available."}
 
-            request_id = generate_request_id()
-            resp_msg, _m, _r, outcome = await _dispatch_mcp(
-                "tools/call",
-                tool_input.id,
-                {"name": self.name, "arguments": tool_input.tool_args or {}},
-                token,
-                hass,
-                data,
-                ASSIST_CLIENT_IP,
-                _base_url(hass),
-                request_id=request_id,
-            )
-            result = dispatch_tool_result(resp_msg)
-            pending = _parse_pending(
-                result,
-                outcome=outcome,
-                data=data,
-                token_id=self._token_id,
-                tool_name=self.name,
-                request_id=request_id,
-            )
-            if pending:
-                return {
-                    "status": "queued_for_approval",
-                    "approval_id": pending["approval_id"],
-                    "message": (
-                        "This action is queued for approval. An administrator must "
-                        "approve it in the Phoenix MCP panel before it takes effect."
-                    ),
-                }
-            return _unwrap_result(result)
+                request_id = generate_request_id()
+                resp_msg, _m, _r, outcome = await _dispatch_mcp(
+                    "tools/call",
+                    tool_input.id,
+                    {"name": self.name, "arguments": tool_input.tool_args or {}},
+                    token,
+                    hass,
+                    data,
+                    ASSIST_CLIENT_IP,
+                    _base_url(hass),
+                    request_id=request_id,
+                )
+                result = dispatch_tool_result(resp_msg)
+                pending = _parse_pending(
+                    result,
+                    outcome=outcome,
+                    data=data,
+                    token_id=self._token_id,
+                    tool_name=self.name,
+                    request_id=request_id,
+                )
+                if pending:
+                    return {
+                        "status": "queued_for_approval",
+                        "approval_id": pending["approval_id"],
+                        "message": (
+                            "This action is queued for approval. An administrator must "
+                            "approve it in the Phoenix MCP panel before it takes effect."
+                        ),
+                    }
+                return _unwrap_result(result)
 
     class PhoenixAssistAPI(_llm.API):
         """An llm.API whose tools are the bound Phoenix MCP token's scoped tool surface."""
@@ -248,55 +250,56 @@ if _ASSIST_API_SUPPORTED:
                     tools=[],
                 )
 
-            from .agentcli import build_mcp_tool_list  # noqa: PLC0415
-            from .mcp_view import _build_instructions  # noqa: PLC0415
+            async with household_scope(self.hass, llm_context.context):
+                from .agentcli import build_mcp_tool_list  # noqa: PLC0415
+                from .mcp_view import _build_instructions  # noqa: PLC0415
 
-            tools: list[Any] = []
-            public_schemas: dict[int, tuple[Any, dict[str, Any]]] = {}
-            for tool_def in build_mcp_tool_list(token, data):
-                name = tool_def.get("name")
-                try:
-                    schema = deepcopy(tool_def.get("inputSchema") or {})
-                    if (llm_context.platform == "google_generative_ai_conversation"
-                            and not _gemini_schema_compatible(schema)):
-                        raise ValueError("Home Assistant's Gemini formatter cannot represent this schema")
-                    parameters = _convert_to_voluptuous(deepcopy(schema))
-                    # HA serializers unwrap Schema before invoking the hook.
-                    node = parameters
-                    while isinstance(node, vol.Schema):
-                        node = node.schema
-                    public_schemas[id(node)] = (node, schema)
-                except Exception as err:  # noqa: BLE001 - one bad schema must not
-                    # take down the whole voice assistant; skip just that tool.
-                    _LOGGER.warning(
-                        "Assist bridge: skipping tool %s (schema conversion failed: %s)",
-                        name,
-                        err,
+                tools: list[Any] = []
+                public_schemas: dict[int, tuple[Any, dict[str, Any]]] = {}
+                for tool_def in build_mcp_tool_list(token, data):
+                    name = tool_def.get("name")
+                    try:
+                        schema = deepcopy(tool_def.get("inputSchema") or {})
+                        if (llm_context.platform == "google_generative_ai_conversation"
+                                and not _gemini_schema_compatible(schema)):
+                            raise ValueError("Home Assistant's Gemini formatter cannot represent this schema")
+                        parameters = _convert_to_voluptuous(deepcopy(schema))
+                        # HA serializers unwrap Schema before invoking the hook.
+                        node = parameters
+                        while isinstance(node, vol.Schema):
+                            node = node.schema
+                        public_schemas[id(node)] = (node, schema)
+                    except Exception as err:  # noqa: BLE001 - one bad schema must not
+                        # take down the whole voice assistant; skip just that tool.
+                        _LOGGER.warning(
+                            "Assist bridge: skipping tool %s (schema conversion failed: %s)",
+                            name,
+                            err,
+                        )
+                        continue
+                    # name/description come from a tool def dict, so they are Any to
+                    # the checker; the def lists always carry both (test_mcp_tool_catalog
+                    # pins it), and a missing name would fail far earlier at tools/list.
+                    tools.append(
+                        PhoenixAssistTool(
+                            str(name), tool_def.get("description"), parameters, token.id,
+                        )
                     )
-                    continue
-                # name/description come from a tool def dict, so they are Any to
-                # the checker; the def lists always carry both (test_mcp_tool_catalog
-                # pins it), and a missing name would fail far earlier at tools/list.
-                tools.append(
-                    PhoenixAssistTool(
-                        str(name), tool_def.get("description"), parameters, token.id,
-                    )
+
+                def serialize_schema(node: Any) -> Any:
+                    """Advertise the original schema, scoped to this API instance."""
+                    if (entry := public_schemas.get(id(node))) is not None and entry[0] is node:
+                        return deepcopy(entry[1])
+                    return _llm.selector_serializer(node)
+
+                api_prompt = _build_instructions(token, data, _base_url(self.hass)) + "\n\n" + _ASSIST_ADDENDUM
+                return _llm.APIInstance(
+                    api=self,
+                    api_prompt=api_prompt,
+                    llm_context=llm_context,
+                    tools=tools,
+                    custom_serializer=serialize_schema,
                 )
-
-            def serialize_schema(node: Any) -> Any:
-                """Advertise the original schema, scoped to this API instance."""
-                if (entry := public_schemas.get(id(node))) is not None and entry[0] is node:
-                    return deepcopy(entry[1])
-                return _llm.selector_serializer(node)
-
-            api_prompt = _build_instructions(token, data, _base_url(self.hass)) + "\n\n" + _ASSIST_ADDENDUM
-            return _llm.APIInstance(
-                api=self,
-                api_prompt=api_prompt,
-                llm_context=llm_context,
-                tools=tools,
-                custom_serializer=serialize_schema,
-            )
 
 else:  # pragma: no cover - exercised only on HA versions lacking the seam
     PhoenixAssistTool = None  # type: ignore[assignment,misc]

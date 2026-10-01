@@ -82,6 +82,24 @@ def canonical_entity_id(entity_id: str, hass: HomeAssistant) -> str:
 
 
 def resolve(entity_id: str, token: TokenRecord, hass: HomeAssistant) -> Permission:
+    """Intersect Phoenix entity grants with the admitted household user's grants."""
+    permission = _resolve_token_access(entity_id, token, hass)
+    if permission not in (Permission.READ, Permission.WRITE):
+        return permission
+    from .household_authority import household_authority
+
+    household = household_authority.get()
+    if household is None:
+        return permission
+    can_read, can_control = household.entity_access(canonical_entity_id(entity_id, hass))
+    if not can_read:
+        return Permission.NO_ACCESS
+    if permission == Permission.WRITE and not can_control:
+        return Permission.READ
+    return permission
+
+
+def _resolve_token_access(entity_id: str, token: TokenRecord, hass: HomeAssistant) -> Permission:
     """Resolve effective permission for entity_id against a token.
 
     Return values:

@@ -334,6 +334,20 @@ def _parse_structured(text: str) -> Any:
 
 
 async def async_generate_ai_task_data(
+    hass: HomeAssistant, data: Any, instructions: str, structure: Any,
+) -> Any:
+    """Apply household-only authority when HA exposes no per-task identity hook."""
+    from .household_authority import household_scope
+    from .request_authority import AuthorityChangedError
+
+    try:
+        async with household_scope(hass):
+            return await _async_generate_ai_task_data(hass, data, instructions, structure)
+    except AuthorityChangedError as err:
+        raise HomeAssistantError("The AI Task's authority changed; check any earlier actions.") from err
+
+
+async def _async_generate_ai_task_data(
     hass: HomeAssistant, data: Any, instructions: str, structure: Any
 ) -> Any:
     """Resolve config + token + provider, run the gated AI Task loop, return the data.

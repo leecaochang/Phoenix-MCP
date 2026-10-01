@@ -159,7 +159,11 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "UnitOfTime": "0.0.0",
         "__version__": "0.0.0",
     },
+    # Household identity exports verified present in upstream's 2024.5.0 tag.
+    "homeassistant.auth": {"EVENT_USER_REMOVED": "2024.5.0", "EVENT_USER_UPDATED": "2024.5.0"},
+    "homeassistant.auth.permissions.const": {"POLICY_CONTROL": "2024.5.0", "POLICY_READ": "2024.5.0"},
     "homeassistant.core": {
+        "Context": "2024.5.0",
         "CoreState": "0.0.0",
         # Re-exported into core from homeassistant.util.event_type. Verified
         # present in 2024.7.0, so it predates the floor rather than setting it.

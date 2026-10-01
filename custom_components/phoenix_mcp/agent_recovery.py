@@ -30,6 +30,14 @@ class RecoveryRequired(RuntimeError):
     """A dispatch cannot safely start or its outcome cannot be established."""
 
 
+def _journal_tool_name(tool: str) -> str:
+    """Persist only server catalog names, never an unbounded caller label."""
+    from .tool_defs import _TOOL_ANNOTATIONS, _NATIVE_TOOL_NAMES
+    from .mesa_tools import MESA_TOOL_NAMES
+
+    return tool if tool in _TOOL_ANNOTATIONS or tool in _NATIVE_TOOL_NAMES or tool in MESA_TOOL_NAMES else "unknown_tool"
+
+
 class AgentRecovery:
     """Serialize durable claims before dispatch, fail closed on storage failure."""
 
@@ -123,10 +131,7 @@ class AgentRecovery:
         async with self._lock:
             if self.blocks(token_id) or len(self._records) >= MAX_RECORDS:
                 raise RecoveryRequired("Reconcile the previous agent operation in Home Assistant Repairs before retrying.")
-            from .tool_defs import _TOOL_ANNOTATIONS, _NATIVE_TOOL_NAMES
-            from .mesa_tools import MESA_TOOL_NAMES
-            if tool not in _TOOL_ANNOTATIONS and tool not in _NATIVE_TOOL_NAMES and tool not in MESA_TOOL_NAMES:
-                tool = "unknown_tool"
+            tool = _journal_tool_name(tool)
             self._records[rid] = {"token_id": token_id, "tool": tool, "started_at": utcnow().isoformat(), "turn_id": _turn_id.get()}
             try:
                 await self._save()
@@ -135,6 +140,17 @@ class AgentRecovery:
                 # have committed, and continuing would make that ambiguous.
                 raise RecoveryRequired("Could not persist the dispatch barrier; nothing was dispatched.") from None
             self._active.add(rid)
+
+    async def retain_unknown(self, token_id: str, tool: str, rid: str) -> None:
+        """Retain a write whose authority was lost after entering dispatch."""
+        async with self._lock:
+            if rid not in self._records:
+                self._records[rid] = {
+                    "token_id": token_id, "tool": _journal_tool_name(tool),
+                    "started_at": utcnow().isoformat(), "turn_id": _turn_id.get(),
+                }
+            await self._save()
+            self._active.discard(rid)
 
     async def finish(self, rid: str) -> None:
         async with self._lock:
@@ -277,7 +293,8 @@ async def dispatch_agent_tool(
                 await recovery.received(request_id)
             elif isinstance(result, dict) and outcome in ("denied", "not_found"):
                 await recovery.received(request_id)
-            elif isinstance(msg, dict) and isinstance(msg.get("error"), dict) and outcome == "denied":
+            elif (isinstance(msg, dict) and isinstance(msg.get("error"), dict)
+                  and msg["error"].get("code") == -32000):
                 msg["error"]["message"] = "Authority changed during dispatch. The action outcome is unknown; reconcile Home Assistant before retrying."
             else:
                 raise RecoveryRequired("The action outcome is unknown. Check Home Assistant Repairs before retrying.")

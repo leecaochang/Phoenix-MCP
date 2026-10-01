@@ -11,11 +11,14 @@ from .const import DOMAIN
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from .data import PhoenixData
+    from .audit import Outcome
     from .token_store import TokenRecord
 
 
 class AuthorityChangedError(PermissionError):
     """The request's credential, runtime, or policy is no longer current."""
+
+    receipt: tuple[Outcome, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -49,6 +52,11 @@ execution_guard: ContextVar[Callable[[], None] | None] = ContextVar("phoenix_exe
 
 def check_request_authority() -> None:
     """Refuse further dispatch/disclosure if authority changed during a wait."""
+    from .household_authority import household_authority
+
+    household = household_authority.get()
+    if household is not None:
+        household.check()
     guard = execution_guard.get()
     if guard is not None:
         guard()

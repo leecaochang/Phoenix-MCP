@@ -1545,6 +1545,12 @@ def effective_cap(token: TokenRecord, cap_name: str) -> str:
     pass_through, "deny" becomes "allow" but "confirm" is preserved
     (the admin's intent to gate is honored).
     """
+    from .const import HOUSEHOLD_CAPABILITIES
+    from .household_authority import household_authority
+
+    household = household_authority.get()
+    if household is not None and not household.is_admin() and cap_name not in HOUSEHOLD_CAPABILITIES:
+        return CAP_DENY
     raw = getattr(token, cap_name, CAP_DENY)
     if cap_name in PASS_THROUGH_EXEMPT_CAPS:
         return raw

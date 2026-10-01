@@ -76,6 +76,7 @@ class AuditEntry:
     preset: str | None = None
     # True when the stale-tool-list notice was injected into this response.
     stale_tools_advisory: bool = False
+    ha_user_id: str | None = None
 
     def to_dict(self) -> dict:
         d = {
@@ -97,6 +98,8 @@ class AuditEntry:
             d["preset"] = self.preset
         if self.stale_tools_advisory:
             d["stale_tools_advisory"] = True
+        if self.ha_user_id is not None:
+            d["ha_user_id"] = self.ha_user_id
         return d
 
 
@@ -133,6 +136,7 @@ class AuditLog:
         preset: str | None = None,
         stale_tools_advisory: bool = False,
         timestamp: datetime | None = None,
+        ha_user_id: str | None = None,
     ) -> None:
         """Append an audit entry, subject to the current logging settings.
 
@@ -179,6 +183,9 @@ class AuditLog:
             except (TypeError, ValueError):
                 logged_payload = None
 
+        from .household_authority import household_authority
+
+        household = household_authority.get()
         self._log.append(AuditEntry(
             request_id=request_id,
             timestamp=timestamp or utcnow(),
@@ -193,6 +200,7 @@ class AuditLog:
             mesa_advisory=mesa_advisory,
             preset=preset,
             stale_tools_advisory=stale_tools_advisory,
+            ha_user_id=ha_user_id if ha_user_id is not None else household.user_id if household else None,
         ))
 
     _VALID_OUTCOMES = frozenset({"allowed", "denied", "not_found", "rate_limited", "not_implemented", "invalid_request", "pending_approval"})
@@ -347,6 +355,7 @@ class AuditLog:
                     mesa_advisory=r.get("mesa_advisory", False),
                     preset=r.get("preset"),
                     stale_tools_advisory=r.get("stale_tools_advisory", False),
+                    ha_user_id=r.get("ha_user_id"),
                 ))
             except (KeyError, TypeError, ValueError) as exc:
                 _LOGGER.warning("Skipping corrupt audit entry: %s", exc)

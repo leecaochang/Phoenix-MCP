@@ -93,6 +93,8 @@ class PendingApproval:
     # dies with the process, so a crash mid-execution left a still-pending record
     # that an admin could approve again and apply twice.
     execution_started_at: datetime | None = None
+    household_request: bool = False
+    ha_user_id: str | None = None
 
     def to_dict(self, redact_args: bool = True) -> dict:
         """Serialise the approval.
@@ -133,6 +135,8 @@ class PendingApproval:
             "result": self.result,
             "request_id": self.request_id,
             "client_ip": self.client_ip,
+            "household_request": self.household_request,
+            "ha_user_id": self.ha_user_id,
             "execution_started_at": (
                 self.execution_started_at.isoformat() if self.execution_started_at else None
             ),
@@ -161,6 +165,8 @@ class PendingApproval:
             result=data.get("result"),
             request_id=data.get("request_id", ""),
             client_ip=data.get("client_ip"),
+            household_request=data.get("household_request", data.get("client_ip") in {"assist", "voice", "voice_agent", "ai_task"}),
+            ha_user_id=data.get("ha_user_id"),
             execution_started_at=(
                 parse_datetime(data["execution_started_at"])
                 if data.get("execution_started_at") else None
@@ -202,6 +208,9 @@ async def async_create_pending_approval(
         raise PendingApprovalCapacityError(
             f"token {token_id} already has {pending_for_token} pending approvals"
         )
+    from .household_authority import household_authority
+
+    household = household_authority.get()
     now = utcnow()
     approval = PendingApproval(
         id=_new_approval_id(),
@@ -216,6 +225,8 @@ async def async_create_pending_approval(
         expires_at=now + timedelta(seconds=ttl_seconds),
         request_id=request_id,
         client_ip=client_ip,
+        household_request=household is not None,
+        ha_user_id=household.user_id if household else None,
     )
     raw.append(approval.to_dict(redact_args=False))
     store.set_pending_approvals(raw)

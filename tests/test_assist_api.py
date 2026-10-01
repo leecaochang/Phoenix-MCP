@@ -365,13 +365,13 @@ async def test_kill_switch_yields_no_tools(hass):
 
 
 @pytest.mark.asyncio
-async def test_bound_instance_tools_mirror_tools_list_gating(hass):
+async def test_bound_instance_tools_mirror_tools_list_gating(hass, hass_admin_user):
     from custom_components.phoenix_mcp.agentcli import build_mcp_tool_list
 
     token = _make_token(cap_config_read="allow")
     data = _make_data(token, bound_id=token.id)
     api = PhoenixAssistAPI(hass, data)
-    instance = await api.async_get_api_instance(_ctx())
+    instance = await api.async_get_api_instance(_ctx(hass_admin_user.id))
 
     expected = {d["name"] for d in build_mcp_tool_list(token, data)}
     assert {t.name for t in instance.tools} == expected
@@ -391,7 +391,7 @@ async def test_announce_all_widens_the_tool_set(hass):
 
 
 @pytest.mark.asyncio
-async def test_one_unconvertible_schema_is_skipped_not_fatal(hass):
+async def test_one_unconvertible_schema_is_skipped_not_fatal(hass, hass_admin_user):
     from custom_components.phoenix_mcp.agentcli import build_mcp_tool_list
 
     token = _make_token()
@@ -415,7 +415,7 @@ async def test_one_unconvertible_schema_is_skipped_not_fatal(hass):
 
     with patch.object(assist_api, "_convert_to_voluptuous", side_effect=flaky), \
          patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", side_effect=tagged_list):
-        instance = await PhoenixAssistAPI(hass, data).async_get_api_instance(_ctx())
+        instance = await PhoenixAssistAPI(hass, data).async_get_api_instance(_ctx(hass_admin_user.id))
 
     got = {t.name for t in instance.tools}
     assert victim not in got
@@ -510,8 +510,9 @@ async def test_error_result_is_surfaced_not_raised(hass):
 # Helpers
 # --------------------------------------------------------------------------- #
 
-def _ctx():
-    return SimpleNamespace(platform="conversation", context=None, language="en", assistant="conversation", device_id=None)
+def _ctx(user_id=None):
+    from homeassistant.core import Context
+    return SimpleNamespace(platform="conversation", context=Context(user_id=user_id), language="en", assistant="conversation", device_id=None)
 
 
 def _tool_input(args):

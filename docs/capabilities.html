@@ -103,7 +103,7 @@
             <thead><tr><th scope="col">Persona</th><th scope="col">What it sets up</th></tr></thead>
             <tbody>
               <tr><td>Read-only observer</td><td>Reads state, history, logs, and templates. No actions, no broadcast.</td></tr>
-              <tr><td>Voice assistant</td><td>Reads, service calls, and broadcast. Locks, alarms, covers, and valves require admin confirmation.</td></tr>
+              <tr><td>Voice assistant</td><td>Reads, service calls, and broadcast. Log read defaults to Deny. Locks, alarms, covers, and valves require admin confirmation. Privileged tools on Assist and Voice also require an active Home Assistant administrator.</td></tr>
               <tr><td>Dashboard designer</td><td>Reads and discovers entities and builds Lovelace dashboards. Filesystem access (theme and custom-card assets) requires confirmation. No device control or config authoring.</td></tr>
               <tr><td>Maintenance / backups</td><td>Full reads and diagnostics, creates backups. Restart requires confirmation. No device control, config authoring, or dashboards.</td></tr>
               <tr><td>ESPHome devices</td><td>ESPHome status, diagnostics, and logs, device-YAML edits, and firmware builds; flashing a device requires confirmation each time. No device control, config authoring, or dashboards. Scope the entity tree to your ESPHome devices after applying.</td></tr>

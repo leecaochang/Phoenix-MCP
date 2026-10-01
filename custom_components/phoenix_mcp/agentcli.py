@@ -2827,6 +2827,30 @@ async def _dispatch_with_progress(emit: Any, tool_id: Any, coro: Any) -> Any:
                 })
     finally:
         _progress_ctx.set(None)
+        if not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+
+async def _cancel_agent_approval(hass: HomeAssistant, data: PhoenixData, approval_id: str) -> Any:
+    """Cancel only abandoned pending work whose executor has never been claimed."""
+    async with data.store.async_lock:
+        record = get_approval(data.store, approval_id)
+        if (record is None or record.status != STATUS_PENDING
+                or record.execution_started_at is not None
+                or approval_id in data.approvals_in_progress):
+            return None
+        resolved = await async_update_approval_status(
+            data.store, approval_id, status=STATUS_CANCELLED,
+            rejected_reason=REASON_AGENT_CHAT_ENDED,
+        )
+    if resolved is not None and resolved.status == STATUS_CANCELLED:
+        dismiss_approval_notification(hass, approval_id)
+        fire_approval_resolved_event(hass, resolved)
+    return resolved
 
 
 async def _await_agent_approval(
@@ -2852,6 +2876,9 @@ async def _await_agent_approval(
     try:
         await asyncio.wait({future, cancel_task}, timeout=timeout,
                            return_when=asyncio.FIRST_COMPLETED)
+    except BaseException:
+        await _cancel_agent_approval(hass, data, approval_id)
+        raise
     finally:
         unsub()
         if not cancel_task.done():
@@ -2861,29 +2888,8 @@ async def _await_agent_approval(
     if latest is None:
         return _resolved_result(STATUS_PENDING, None)
     if latest.status == STATUS_PENDING:
-        # The interactive turn ended (operator cancelled/closed the chat, or the
-        # wait timed out) with no decision. Cancel the orphaned approval so an
-        # admin cannot later approve and execute an action the operator already
-        # abandoned. BUT never cancel an approval an admin is mid-executing: the
-        # admin approve path claims the id in data.approvals_in_progress, releases
-        # the lock, and runs the side effect while the record is still pending, so
-        # cancelling it here would flip a record whose side effect already ran (the
-        # executor would then fail to finalize). Skip those exactly like the expiry
-        # sweep does; the executor owns finalization and we re-read the true
-        # outcome. async_update_approval_status is itself a no-op on a non-pending record,
-        # so a race where an admin resolved it fully is also handled.
-        async with data.store.async_lock:
-            if approval_id in data.approvals_in_progress:
-                resolved = None
-            else:
-                resolved = await async_update_approval_status(
-                    data.store, approval_id,
-                    status=STATUS_CANCELLED,
-                    rejected_reason=REASON_AGENT_CHAT_ENDED,
-                )
+        resolved = await _cancel_agent_approval(hass, data, approval_id)
         if resolved is not None and resolved.status == STATUS_CANCELLED:
-            dismiss_approval_notification(hass, approval_id)
-            fire_approval_resolved_event(hass, resolved)
             return _resolved_result(STATUS_CANCELLED, None, resolved)
         # In-progress, or an admin resolved it in the race: re-read the true outcome.
         latest = get_approval(data.store, approval_id) or latest
@@ -3415,16 +3421,23 @@ async def _run_tool_batch(
             continue
         dispatch_request_id = generate_request_id()
         write_started = write_started or not tool_is_read_only(name)
-        resp_msg, _m, _r, outcome = await _dispatch_with_progress(
-            emit, tc.get("id"),
-            dispatch_agent_tool(
-                _dispatch_mcp, hass=hass, data=data, token=dispatch_token,
-                name=name, arguments=args, tool_id=tc.get("id"),
-                client_ip=client_ip, base_url=base_url, request_id=dispatch_request_id,
-            ),
-        )
+        try:
+            resp_msg, _m, _r, outcome = await _dispatch_with_progress(
+                emit, tc.get("id"),
+                dispatch_agent_tool(
+                    _dispatch_mcp, hass=hass, data=data, token=dispatch_token,
+                    name=name, arguments=args, tool_id=tc.get("id"),
+                    client_ip=client_ip, base_url=base_url, request_id=dispatch_request_id,
+                ),
+            )
+        except BaseException:
+            # Creation may have saved a queue entry before dispatch was interrupted.
+            for saved in data.store.get_pending_approvals():
+                if saved.get("token_id") == token_id and saved.get("request_id") == dispatch_request_id:
+                    await _cancel_agent_approval(hass, data, saved["id"])
+            raise
         result = dispatch_tool_result(resp_msg)
-        if outcome == "denied" and (resp_msg or {}).get("error"):
+        if outcome in ("denied", "invalid_request") and (resp_msg or {}).get("error"):
             authority_lost = stop_turn = True
         pending = _parse_pending(
             result,
@@ -3436,16 +3449,19 @@ async def _run_tool_batch(
         )
         if pending:
             record = pending["record"]
-            await emit("approval_required", {
-                "approval_id": pending["approval_id"],
-                "tool_name": name,
-                "review_url": pending.get("review_url"),
-                "expires_at": pending.get("expires_at"),
-                "diff": record.diff,
-            })
-            result = await _await_agent_approval(
-                hass, data, pending["approval_id"], cancel, AGENTCLI_APPROVAL_WAIT_SECONDS,
-            )
+            try:
+                await emit("approval_required", {
+                    "approval_id": pending["approval_id"],
+                    "tool_name": name,
+                    "review_url": pending.get("review_url"),
+                    "expires_at": pending.get("expires_at"),
+                    "diff": record.diff,
+                })
+                result = await _await_agent_approval(
+                    hass, data, pending["approval_id"], cancel, AGENTCLI_APPROVAL_WAIT_SECONDS,
+                )
+            finally:
+                await _cancel_agent_approval(hass, data, pending["approval_id"])
             status = _status_of(result)
             # The transcript shows WHY, not just the status: the admin's
             # typed rejection reason, or the executor's error when an
@@ -4033,7 +4049,7 @@ async def _run_headless_turn(
             except RecoveryRequired:
                 return _HeadlessTurnResult("", review_urls, outcome=TURN_OUTCOME_UNKNOWN)
             result = dispatch_tool_result(resp_msg)
-            if outcome == "denied" and (resp_msg or {}).get("error"):
+            if outcome in ("denied", "invalid_request") and (resp_msg or {}).get("error"):
                 authority_lost = True
             pending = _parse_pending(
                 result,

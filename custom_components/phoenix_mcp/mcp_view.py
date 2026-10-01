@@ -7719,7 +7719,21 @@ async def _call_tool(
         )
     finally:
         dispatch_request_id.reset(request_context)
-    check_request_authority()
+    try:
+        check_request_authority()
+    except AuthorityChangedError as exc:
+        if not tool_is_read_only(tool_name):
+            exc.receipt = (result[1], result[2])
+            if result[1] == "pending_approval" and result[2].startswith("approval:"):
+                # The record is server-owned; model text cannot supply a receipt.
+                from .approvals import get_approval, STATUS_APPROVED
+
+                saved = get_approval(data.store, result[2].rsplit(":", 1)[-1])
+                if (saved is not None and saved.token_id == token.id
+                        and saved.request_id == request_id and saved.status == STATUS_APPROVED
+                        and isinstance(saved.result, dict) and saved.result.get("outcome") == "allowed"):
+                    exc.receipt = ("allowed", result[2])
+        raise
     record_outcome(token, tool_name, result[1], result[0], arguments, hass)
     return result
 
@@ -8050,7 +8064,12 @@ async def _dispatch_tools_call(
             tool_name, arguments, token, hass, data,
             request_id=request_id, client_ip=client_ip,
         )
-    except AuthorityChangedError:
+    except AuthorityChangedError as exc:
+        if exc.receipt is not None:
+            receipt_outcome, receipt_resource = exc.receipt
+            _log(data, token, request_id=request_id, method=tool_name,
+                 resource=receipt_resource, outcome=receipt_outcome, client_ip=client_ip,
+                 payload={"name": tool_name, "arguments": arguments, "result_withheld": True})
         raise
     except Exception:
         # _call_tool is a bare dispatcher with no exception handling of its own,
@@ -8131,6 +8150,8 @@ async def _dispatch_mcp(
         authority = RequestAuthority(hass, data, token.id, token.token_hash)
         admitted_context = request_authority.set(authority)
     context = None
+    write_entered = False
+    result = None
     try:
         current = authority.current_token()
         # Internal surfaces deliberately disable inline approval waiting. Refresh
@@ -8149,13 +8170,26 @@ async def _dispatch_mcp(
                      outcome="denied", client_ip=client_ip)
                 recovery_error = _tool_error("This new request was not executed because an earlier agent action has an unresolved outcome. Check the earlier action in Home Assistant and resolve it in Settings > System > Repairs before trying again. Direct read-only tools remain available where this token exposes them; delegated requests are blocked.")
                 return _jsonrpc_result(msg_id, recovery_error), method, params["name"], "denied"
+        check_request_authority()
+        write_entered = method == "tools/call" and isinstance(params.get("name"), str) and not tool_is_read_only(params["name"])
         result = await _dispatch_mcp_authorized(method, msg_id, params, token, hass, data, client_ip, base_url, request_id)
         check_request_authority()
         return result
-    except AuthorityChangedError:
+    except AuthorityChangedError as exc:
+        if write_entered:
+            completed = (result is not None and result[3] == "allowed") or (exc.receipt is not None and exc.receipt[0] == "allowed")
+            name = params["name"]
+            _log(data, token, request_id=request_id, method="authority/changed", resource=name,
+                 outcome="invalid_request", client_ip=client_ip)
+            if completed:
+                receipt = _tool_success("Action dispatch completed, but authority changed before its response could be delivered. Response details were withheld. Do not repeat the action; verify its outcome in Home Assistant.")
+                return _jsonrpc_result(msg_id, receipt), method, name, "allowed"
+            await data.agent_recovery.retain_unknown(token.id, name, request_id)
+            data.agent_recovery.publish_issues(hass)
+            return _jsonrpc_error(msg_id, -32000, "Authority changed during dispatch. The action may already have executed. Do not repeat it. Check Home Assistant and resolve the associated Repair before submitting another write."), method, name, "invalid_request"
         _log(data, token, request_id=request_id, method=method, resource="/api/phoenix-mcp",
              outcome="denied", client_ip=client_ip)
-        return _jsonrpc_error(msg_id, -32000, "Request authority changed. Retry with current permissions."), method, "/api/phoenix-mcp", "denied"
+        return _jsonrpc_error(msg_id, -32000, "Request authority changed. Check earlier actions before resubmitting with current permissions."), method, "/api/phoenix-mcp", "denied"
     finally:
         if context is not None:
             policy_version.reset(context)
@@ -8505,6 +8539,8 @@ async def _dispatch_streamable_batch(
     bus = _progress_ctx.get()
     batch_policy_version = token.settings_version
 
+    write_receipts: dict[int, str] = {}
+
     async def _dispatch_one(item: Any) -> dict | None:
         if not isinstance(item, dict) or item.get("jsonrpc") != "2.0":
             _audit_mcp_transport(
@@ -8545,7 +8581,7 @@ async def _dispatch_streamable_batch(
             # token; items run one at a time, so one field is enough.
             bus.token = _progress_token(method, params)
         try:
-            response_msg, _, _, _ = await _dispatch_mcp(
+            response_msg, _, _, outcome = await _dispatch_mcp(
                 method, msg_id, params, token, hass, data, client_ip,
                 base_url=base_url,
                 request_id=request_id,
@@ -8554,6 +8590,9 @@ async def _dispatch_streamable_batch(
             if bus is not None:
                 bus.token = None
                 bus.status = None
+        if (not is_notification and response_msg is not None and method == "tools/call"
+                and isinstance(params.get("name"), str) and not tool_is_read_only(params["name"])):
+            write_receipts[id(response_msg)] = outcome
         return None if is_notification else response_msg
 
     responses: list[dict] = []
@@ -8577,12 +8616,21 @@ async def _dispatch_streamable_batch(
         except AuthorityChangedError:
             _audit_mcp_transport(
                 data, token, request_id or generate_request_id(), client_ip,
-                outcome="denied", resource="mcp:batch",
+                outcome="invalid_request", resource="mcp:batch",
             )
-            return [
-                _jsonrpc_error(row.get("id"), -32000, "Request authority changed. Retry with current permissions.")
-                for row in responses
-            ]
+            withheld = []
+            for row in responses:
+                if write_receipts.get(id(row)) == "allowed":
+                    withheld.append(_jsonrpc_result(row.get("id"), _tool_success(
+                        "Action dispatch completed. Result withheld because authority changed. Do not repeat the action; verify its outcome in Home Assistant."
+                    )))
+                elif id(row) in write_receipts:
+                    withheld.append(_jsonrpc_error(row.get("id"), -32000,
+                        "Authority changed. Check earlier actions before resubmitting; do not repeat any dispatched action."))
+                else:
+                    withheld.append(_jsonrpc_error(row.get("id"), -32000,
+                        "Request authority changed. Resubmit reads with current permissions."))
+            return withheld
     return responses
 
 
