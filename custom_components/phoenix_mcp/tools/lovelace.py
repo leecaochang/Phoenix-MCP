@@ -36,6 +36,7 @@ from ..helpers import (
     dict_arg,
     diff_summary_fields as _summary,
     effective_cap,
+    redact_inaccessible_entity_ids_in_text,
     str_arg,
     version_summary_fields as _version_summary,
 )
@@ -223,7 +224,7 @@ async def _tool_list_dashboards(
     return _tool_success(json.dumps({"dashboards": result}, default=str)), "allowed", "list_dashboards"
 
 
-def _card_row(entry: CardEntry, *, detailed: bool) -> dict:
+def _card_row(entry: CardEntry, *, detailed: bool, token: TokenRecord, hass: HomeAssistant) -> dict:
     """Project one catalog entry. Lean by default, with the example only on request.
 
     The lean row carries what picking a card needs (type, what it is, whether it
@@ -249,7 +250,10 @@ def _card_row(entry: CardEntry, *, detailed: bool) -> dict:
     if detailed:
         row["has_visual_editor"] = entry.has_visual_editor
         if entry.stub_config is not None:
-            row["example_config"] = entry.stub_config
+            scoped = filter_service_response(entry.stub_config, token, hass)
+            row["example_config"] = json.loads(redact_inaccessible_entity_ids_in_text(
+                json.dumps(scoped), token, hass,
+            ))
     return row
 
 
@@ -289,8 +293,7 @@ async def _tool_list_dashboard_cards(
     if wanted:
         entry = data.card_catalog.get(wanted)
         if entry is None:
-            # Not an oracle: the catalog is instance-wide deployment metadata,
-            # not entity state, and this token already holds cap_lovelace_write.
+            # Card types are deployment metadata; examples are separately scoped.
             return _tool_success(json.dumps({
                 "harvested": True,
                 "found": False,
@@ -300,10 +303,10 @@ async def _tool_list_dashboard_cards(
         return _tool_success(json.dumps({
             "harvested": True,
             "found": True,
-            "card": _card_row(entry, detailed=True),
+            "card": _card_row(entry, detailed=True, token=token, hass=hass),
         }, default=str)), "allowed", tool
 
-    rows = [_card_row(e, detailed=detailed) for e in catalog.entries]
+    rows = [_card_row(e, detailed=detailed, token=token, hass=hass) for e in catalog.entries]
     body: dict[str, Any] = {
         "harvested": True,
         "harvested_at": catalog.harvested_at,

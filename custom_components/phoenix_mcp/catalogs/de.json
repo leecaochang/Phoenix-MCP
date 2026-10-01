@@ -1836,6 +1836,8 @@
       "viewMesaProfile": "MESA-Profil anzeigen"
     },
     "changes": {
+      "added": "Hinzugefügt",
+      "removed": "Entfernt",
       "actionCreate": "Erstellen",
       "actionDelete": "Löschen",
       "actionEdit": "Bearbeiten",
@@ -1977,7 +1979,7 @@
       "stateRemoveGrant": "Berechtigung entfernen",
       "stateWrite": "Schreiben",
       "title": "Nach Bereich, Label oder Integration auswählen",
-      "willSetIntegration": "Dies wendet {state} auf {devices} Geräteknoten und {entities} aktive gerätlose Entitätsknoten an.",
+      "willSetIntegration": "Berechtigung: {state}. Geräteknoten: {devices}; aktive Entitätsknoten ohne Gerät: {entities}.",
       "willSet": {
         "one": "Dies wendet {state} auf {count} Entität an.",
         "other": "Dies wendet {state} auf {count} Entitäten an."

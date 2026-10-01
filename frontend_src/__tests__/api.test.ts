@@ -558,3 +558,31 @@ describe("complete MESA profile catalog", () => {
     expect(request.mock.calls[1][1].headers["If-None-Match"]).toBeUndefined();
   });
 });
+
+it("serializes permission edits per token and continues after a failed edit", async () => {
+  let first!: (response: unknown) => void;
+  const requests = vi.fn().mockImplementationOnce(() => new Promise((resolve) => { first = resolve; }))
+    .mockResolvedValue({ ok: true, status: 200, json: async () => ({ entities: { "light.second": {} } }) });
+  setHass({ user: { id: "admin" }, fetchWithAuth: requests });
+  const a = api.patchEntityPermission("queue-token", "light.first", { state: "GREEN" });
+  const b = api.patchEntityPermission("queue-token", "light.second", { state: "YELLOW" });
+  await vi.waitFor(() => expect(requests).toHaveBeenCalledOnce());
+  first({ ok: false, status: 409, json: async () => ({ error: "conflict", message: "Conflict" }) });
+  await expect(a).rejects.toThrow("Conflict");
+  await expect(b).resolves.toMatchObject({ entities: { "light.second": {} } });
+  expect(requests).toHaveBeenCalledTimes(2);
+});
+
+it("does not dispatch a queued permission edit under a different HA user", async () => {
+  let first!: (response: unknown) => void;
+  const requests = vi.fn(() => new Promise((resolve) => { first = resolve; }));
+  setHass({ user: { id: "first" }, fetchWithAuth: requests });
+  const a = api.patchDomainPermission("identity-token", "light", { state: "GREEN" });
+  const b = api.patchDomainPermission("identity-token", "sensor", { state: "YELLOW" });
+  const refusal = expect(b).rejects.toMatchObject({ status: 401 });
+  await vi.waitFor(() => expect(requests).toHaveBeenCalledOnce());
+  setHass({ user: { id: "second" }, fetchWithAuth: requests });
+  first({ ok: true, status: 200, json: async () => ({}) });
+  await a; await refusal;
+  expect(requests).toHaveBeenCalledOnce();
+});

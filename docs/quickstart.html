@@ -25,7 +25,7 @@
         <header class="page-head">
           <p class="breadcrumb"><a href="index.html">Docs</a> / Getting started / Quick start</p>
           <h1>Quick start</h1>
-          <p class="lede">Use the guided setup to create a scoped token, grant one device, and run a test. Choose Agent Chat inside Home Assistant or connect an external client. Allow about five minutes.</p>
+          <p class="lede">Use the guided setup to create a scoped token, grant one entity, and run a test. Choose Agent Chat inside Home Assistant or connect an external client. Allow about five minutes.</p>
         </header>
 
         <div class="callout note">
@@ -57,11 +57,11 @@
           </div></div>
 
           <div class="step"><div class="step-body">
-            <h3>Grant access to one device</h3>
-            <p>The wizard highlights your <code>light</code> domain. Expand it, find a light you can physically see, and click the <strong>W</strong> button on that row to grant full read and write access; its badge changes to "WRITE". Granting one device is enough to prove the connection; you can grant more later from the token's detail page.</p>
+            <h3>Grant access to one entity</h3>
+            <p>The wizard highlights your <code>light</code> domain. Expand it, find a light you can physically see, and click the <strong>W</strong> button on that row to grant full read and write access; its badge changes to "WRITE". Granting one entity is enough to prove the connection; you can grant more later from the token's detail page.</p>
             <figure class="screenshot">
-              <img src="assets/wizard3.png" alt="The wizard's access step, granting WRITE to a single light in the entity tree" loading="lazy" />
-              <figcaption>The entity tree, granting WRITE to a single light.</figcaption>
+              <img src="assets/wizard3.png" alt="The wizard access step showing WRITE on the light domain" loading="lazy" />
+              <figcaption>Illustrative permission tree. Grant only the single light you intend to test.</figcaption>
             </figure>
           </div></div>
 
@@ -90,7 +90,7 @@
             <h3>Set up your model provider</h3>
             <p>Pick a provider you have already added, or add a new one: choose from the dropdown and click <strong>Add new provider&hellip;</strong>. Paste an API key (or, for a local Ollama server, its URL) and click <strong>Validate</strong>. Validating only tests the connection and lists its models; nothing is saved until you continue. Once validated, pick a default model.</p>
             <figure class="screenshot">
-              <img src="assets/wizard5-cli.png" alt="The wizard's next step validates the prover's API key and selects a default model." loading="lazy" />
+              <img src="assets/wizard5-cli.png" alt="The wizard's next step validates the provider's API key and selects a default model." loading="lazy" />
               <figcaption>Enter your provider's API key and validate it.</figcaption>
             </figure>
           </div></div>
@@ -99,7 +99,7 @@
             <h3>Try it</h3>
             <p>Click <strong>Try now</strong>. The wizard opens the Agent Chat window with your new token and the provider and model you just set up already selected, and a test question typed in for you: <em>"How many lights are in my home?"</em> Press <strong>Send</strong>. The wizard closes as soon as you send your first prompt, so you land in a normal chat with your new agent.</p>
             <figure class="screenshot">
-              <img src="assets/agent-chat.png" style="width: 50%; margin: 0 auto;" alt="The wizard's final step confirms that everything is setup correctly." loading="lazy" />
+              <img src="assets/agent-chat.png" style="width: 50%; margin: 0 auto;" alt="The Agent Chat window with a token, provider and model selected" loading="lazy" />
               <figcaption>You can now chat with your provider about your home</figcaption>
             </figure>
           </div></div>

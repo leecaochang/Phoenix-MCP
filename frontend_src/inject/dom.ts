@@ -85,7 +85,8 @@ export const SUBPAGE_SURFACES: {
  * left/right "swap"). Refusing here makes a later scan retry once the icon is in.
  */
 export function nameInsertionPoint(row: HTMLElement): { parent: HTMLElement; before: Node | null } | null {
-  const icon = row.querySelector<HTMLElement>("ha-state-icon, ha-icon, ha-entity-id-icon, ha-svg-icon");
+  const firstCell = row.querySelector<HTMLElement>('[role="cell"]');
+  const icon = firstCell?.querySelector<HTMLElement>("ha-state-icon, ha-icon, ha-entity-id-icon, ha-domain-icon, ha-svg-icon");
   const iconCell = icon ? icon.closest<HTMLElement>('[role="cell"]') : null;
   if (icon && iconCell) {
     // Automation icons have a wrapper containing state badges. insertBefore

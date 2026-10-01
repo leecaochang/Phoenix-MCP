@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, waitFor } from "@testing-library/react";
-import { patchDurable as patchAgentCliDurable } from "../utils/agentcli_state";
+import { setAgentCliOwner, patchDurable as patchAgentCliDurable } from "../utils/agentcli_state";
 
 // Companion to panel_shell.test.tsx. That test stubs react-dom/client to isolate
 // the custom-element shell; this one lets the REAL PhoenixApp tree render (with a
@@ -41,30 +41,22 @@ const { apiMock } = vi.hoisted(() => {
     audit_flush_interval: 15, audit_log_maxlen: 10000, mesa_mode: "advisory",
     agentcli_global: true,
   };
-  // Specific returns for the app-mount calls; everything else gets a permissive
-  // empty shape so any child effect resolves without throwing.
-  const overrides: Record<string, (...a: unknown[]) => Promise<unknown>> = {
+  const apiMock = {
     listTokens: async () => [token],
     getSettings: async () => settings,
     listApprovals: async () => ({ approvals: [], total: 3 }),
     getApproval: async () => approval,
     getEntityHints: async () => ({ entity_hints: {} }),
+    getAgentCliProviders: async () => ({ instances: [], default_instance_id: null }),
+    listArchivedTokens: async () => [],
   };
-  const permissive = {
-    approvals: [], tokens: [], items: [], versions: [], total: 0,
-    entity_hints: {}, count: 0,
-  };
-  const apiMock = new Proxy({}, {
-    get: (_t, prop: string) => overrides[prop] ?? (async () => permissive),
-  });
   return { apiMock };
 });
 
-vi.mock("../api", () => ({
-  api: apiMock,
-  setHass: () => {},
-  ApiError: class extends Error {},
-}));
+vi.mock("../api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../api")>();
+  return { ...actual, api: { ...actual.api, ...apiMock } };
+});
 
 await import("../index");
 
@@ -77,6 +69,7 @@ function mountPanel(): HTMLElement & { hass: unknown; narrow: boolean } {
 
 describe("phoenix-mcp-panel full app shell", () => {
   beforeEach(() => {
+    setAgentCliOwner("u1");
     try { localStorage.clear(); } catch { /* ignore */ }
     window.history.replaceState(null, "", "/phoenix-mcp");
   });

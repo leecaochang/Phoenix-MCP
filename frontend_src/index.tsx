@@ -766,6 +766,7 @@ class PhoenixPanelElement extends HTMLElement {
     if (this._root && this._hass && isI18nReady()) {
       this._root.render(
         <PhoenixApp
+          key={this._prevUserId ?? "unidentified"}
           hass={this._hass}
           narrow={this._narrow}
           theme={this._theme}

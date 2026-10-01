@@ -65,8 +65,9 @@ describe("an approval claimed for execution", () => {
 
     // The accessible name reports why the stable visible button is locked.
     const approve = await findByRole("button", { name: "Approving..." });
-    expect(approve).toBeDisabled();
-    expect(await findByRole("button", { name: "Reject" })).toBeDisabled();
+    expect(approve).toHaveAttribute("aria-disabled", "true");
+    expect(await findByRole("button", { name: "Reject" })).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(approve);
     expect(api.approveApproval).not.toHaveBeenCalled();
   });
 
@@ -80,8 +81,8 @@ describe("an approval claimed for execution", () => {
     );
     fireEvent.click(await findByText("Restart Home Assistant"));
 
-    expect(await findByRole("button", { name: "Approving..." })).toBeDisabled();
-    expect(await findByRole("button", { name: "Reject" })).toBeDisabled();
+    expect(await findByRole("button", { name: "Approving..." })).toHaveAttribute("aria-disabled", "true");
+    expect(await findByRole("button", { name: "Reject" })).toHaveAttribute("aria-disabled", "true");
   });
 
   it("leaves an unclaimed approval fully actionable", async () => {
@@ -98,7 +99,7 @@ describe("an approval claimed for execution", () => {
     fireEvent.click(await findByText("Restart Home Assistant"));
 
     const approve = await findByRole("button", { name: "Approve and execute" });
-    expect(approve).not.toBeDisabled();
+    expect(approve).not.toHaveAttribute("aria-disabled", "true");
     fireEvent.click(approve);
     await waitFor(() => expect(api.approveApproval).toHaveBeenCalledWith("appr_1"));
   });

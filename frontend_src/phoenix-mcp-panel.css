@@ -20,16 +20,16 @@
   --phx-accent-lt:    #faf3e8;
   --phx-accent-fg:    #ffffff;
   --phx-text:         #18181b;
-  --phx-text-2:       #63636b;
+  --phx-text-2:       #52525b;
   --phx-border:       #e4e4e7;
   --phx-divider:      #f1f1f2;
-  --phx-success:      #15803d;
+  --phx-success:      #0d5228;
   --phx-success-bg:   rgba(22,163,74,0.1);
-  --phx-error:        #dc2626;
+  --phx-error:        #991b1b;
   --phx-error-bg:     rgba(220,38,38,0.1);
-  --phx-warning:      #b45309;
+  --phx-warning:      #92400e;
   --phx-warning-bg:   rgba(217,119,6,0.1);
-  --phx-info:         #63636b;
+  --phx-info:         #52525b;
   --phx-info-bg:      rgba(113,113,122,0.10);
   --phx-shadow:       0 1px 3px rgba(24,24,27,0.08), 0 1px 2px rgba(24,24,27,0.05);
   --phx-shadow-md:    0 4px 16px rgba(24,24,27,0.1), 0 2px 6px rgba(24,24,27,0.06);
@@ -45,7 +45,7 @@
   --phx-z-agentcli:   200;
   --phx-grey-tint:    rgba(0,0,0,0.07);
   --phx-hover:        #eeeef1;
-  --phx-purple:       #63636b;
+  --phx-purple:       #52525b;
   --phx-purple-bg:    rgba(113,113,122,0.10);
   /* Agent Chat window: a shade darker than --phx-surface so the floating
      window reads as a distinct layer over the Phoenix MCP panel behind it, not a
@@ -66,7 +66,7 @@
   touch-action: pan-y;
   background: var(--phx-bg);
   color: var(--phx-text);
-  font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif);
+  font-family: var(--ha-font-family-body, Roboto, Noto, sans-serif);
   font-size: 14px;
   line-height: 1.5;
 }
@@ -427,28 +427,28 @@
   line-height: 1;
   font-family: inherit;
 }
-.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:disabled, .btn[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 /* Swaps a button's label for a shorter one on narrow screens (see the
    max-width: 600px block), same full/short pattern as .audit-time-full. */
 .btn-label-short { display: none; }
 .btn-label-full  { display: inline; }
 .btn-primary { background: var(--phx-accent); color: var(--phx-accent-fg); }
-.btn-primary:hover:not(:disabled) { background: var(--phx-accent-hov); box-shadow: var(--phx-shadow-md); }
+.btn-primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-accent-hov); box-shadow: var(--phx-shadow-md); }
 .btn-danger { background: var(--phx-error); color: #fff; }
-.btn-danger:hover:not(:disabled) { opacity: 0.85; box-shadow: var(--phx-shadow-md); }
+.btn-danger:hover:not(:disabled):not([aria-disabled="true"]) { opacity: 0.85; box-shadow: var(--phx-shadow-md); }
 .btn-outline {
   background: transparent;
   color: var(--phx-accent);
   border: 1.5px solid var(--phx-accent);
 }
-.btn-outline:hover:not(:disabled) { background: var(--phx-accent-lt); }
+.btn-outline:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-accent-lt); }
 .btn-text {
   background: transparent;
   color: var(--phx-accent);
   padding: 6px 10px;
   border-radius: var(--phx-radius-xs);
 }
-.btn-text:hover:not(:disabled) { background: var(--phx-accent-lt); }
+.btn-text:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-accent-lt); }
 .btn-ghost {
   background: transparent;
   color: var(--phx-text-2);
@@ -456,15 +456,15 @@
   border-radius: var(--phx-radius-xs);
   border: 1px solid var(--phx-border);
 }
-.btn-ghost:hover:not(:disabled) { background: var(--phx-surface-2); color: var(--phx-text); }
+.btn-ghost:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-surface-2); color: var(--phx-text); }
 .btn-sm { padding: 6px 12px; font-size: 12px; }
 .btn-icon { padding: 6px 8px; }
 .btn-warning { background: var(--phx-warning); color: var(--phx-accent-fg); }
-.btn-warning:hover:not(:disabled) { background: var(--phx-accent-hov); }
+.btn-warning:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-accent-hov); }
 .btn-text-danger { color: var(--phx-error); }
 .btn-text-warning { color: var(--phx-warning); }
-.btn-text-danger:hover:not(:disabled) { background: var(--phx-error-bg); }
-.btn-text-warning:hover:not(:disabled) { background: var(--phx-warning-bg); }
+.btn-text-danger:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-error-bg); }
+.btn-text-warning:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-warning-bg); }
 
 /* Header action buttons - slightly larger, matched height */
 .btn-header-create,
@@ -1324,7 +1324,7 @@ select.input {
   font-family: inherit;
   cursor: text;
 }
-.token-name-input:hover:not(:disabled):not(:focus) { border-color: var(--phx-border); }
+.token-name-input:hover:not(:disabled):not([aria-disabled="true"]):not(:focus) { border-color: var(--phx-border); }
 .token-name-input:focus { outline: none; border-color: var(--phx-accent); background: var(--phx-surface); }
 .token-name-input:disabled { opacity: 0.65; cursor: default; }
 .token-name-error { font-size: 11px; font-weight: 400; color: var(--phx-error); padding: 0 6px; }
@@ -1351,7 +1351,7 @@ select.input {
   font-size: 13px;
   cursor: text;
 }
-.preset-name-input:hover:not(:disabled):not(:focus) { border-color: var(--phx-border); }
+.preset-name-input:hover:not(:disabled):not([aria-disabled="true"]):not(:focus) { border-color: var(--phx-border); }
 .preset-name-input:focus { outline: none; border-color: var(--phx-accent); background: var(--phx-surface); }
 .preset-name-input:disabled { opacity: 0.65; cursor: default; }
 .preset-row-actions { display: flex; gap: 6px; flex-shrink: 0; margin-left: auto; }
@@ -1554,7 +1554,7 @@ select.input {
      content vertically, so force a top-aligned column instead. */
   display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
 }
-.persona-card:hover:not(:disabled) { background: var(--phx-surface-2); }
+.persona-card:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-surface-2); }
 .persona-card:disabled { cursor: default; opacity: 0.7; }
 .persona-card-active {
   border-color: var(--phx-accent); background: var(--phx-surface-2);
@@ -2663,7 +2663,7 @@ hui-card { display: block; min-width: 0; }
   border-top: 1px solid var(--phx-border);
   background: var(--phx-accent-wash, rgba(217, 119, 6, 0.08));
 }
-.agentcli-continue-text { flex: 1; font-size: 13px; color: var(--phx-text-muted); }
+.agentcli-continue-text { flex: 1; font-size: 13px; color: var(--phx-text-2); }
 .agentcli-cancel-btn:hover { background: var(--phx-error); color: var(--phx-accent-fg); }
 .agentcli-input textarea {
   flex: 1;
@@ -2767,7 +2767,7 @@ hui-card { display: block; min-width: 0; }
   background: var(--phx-surface); color: var(--phx-text);
 }
 .agentcli-settings-field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
-.agentcli-settings-field > span { color: var(--phx-text-muted); font-weight: 600; }
+.agentcli-settings-field > span { color: var(--phx-text-2); font-weight: 600; }
 .agentcli-settings-field > input,
 .agentcli-settings-field > select { width: 100%; min-width: 0; }
 .agentcli-settings-form-actions { display: flex; gap: 6px; }
@@ -2804,13 +2804,13 @@ hui-card { display: block; min-width: 0; }
   border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm);
   background: var(--phx-surface); color: var(--phx-text-2);
 }
-.agentcli-account-btn:hover:not(:disabled) { color: var(--phx-text); border-color: var(--phx-text-2); }
+.agentcli-account-btn:hover:not(:disabled):not([aria-disabled="true"]) { color: var(--phx-text); border-color: var(--phx-text-2); }
 .agentcli-account-btn:disabled { opacity: 0.4; cursor: default; }
 /* Destructive, so it reads as different BEFORE it is hovered: an icon row is
    scanned, and a delete that looks like its neighbours is a delete that gets
    clicked by mistake. */
 .agentcli-account-btn.is-danger { color: var(--phx-error); border-color: var(--phx-error); }
-.agentcli-account-btn.is-danger:hover:not(:disabled) { background: var(--phx-error-bg); color: var(--phx-error); }
+.agentcli-account-btn.is-danger:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-error-bg); color: var(--phx-error); }
 .agentcli-account-btn.is-busy { opacity: 0.6; }
 .agentcli-settings-probe-opt {
   display: flex; align-items: center; gap: 8px; min-width: 0;
@@ -2855,7 +2855,7 @@ hui-card { display: block; min-width: 0; }
   display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
   font-size: 13px;
 }
-.agentcli-settings-model-row > span { color: var(--phx-text-muted); font-weight: 600; }
+.agentcli-settings-model-row > span { color: var(--phx-text-2); font-weight: 600; }
 @media (max-width: 900px) {
   .agentcli-settings-model-edit > select,
   .agentcli-settings-model-row select { width: 100%; }
@@ -2909,12 +2909,12 @@ hui-card { display: block; min-width: 0; }
 }
 
 .routing-statistics { margin-top: 16px; }
-.routing-statistics > summary { cursor: pointer; color: var(--phx-text-muted); }
+.routing-statistics > summary { cursor: pointer; color: var(--phx-text-2); }
 .routing-statistics-content { padding-top: 8px; }
 .routing-statistics-values { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 16px; margin: 16px 0; }
 .routing-statistics-values dt { overflow-wrap: anywhere; }
 .routing-statistics-values dd { margin: 0; text-align: end; font-variant-numeric: tabular-nums; }
-.routing-statistics-values dd small { display: block; max-width: 22ch; color: var(--phx-text-muted); font-size: 12px; }
+.routing-statistics-values dd small { display: block; max-width: 22ch; color: var(--phx-text-2); font-size: 12px; }
 .routing-statistics-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
 .dash-preview-config {
@@ -2928,3 +2928,5 @@ hui-card { display: block; min-width: 0; }
   border-radius: 8px;
   font-size: 12px;
 }
+
+.diff-line-marker { display: inline-block; width: 1.25em; user-select: none; }

@@ -230,6 +230,8 @@
       "selectLabel": "-- Wybierz etykietę --",
       "sharedDeviceWarning": {
         "one": "{count} wybrane urządzenie jest współdzielone. Jego uprawnienie urządzenia wpływa na każdą encję na tym urządzeniu, w tym encje należące do innych wpisów konfiguracji.",
+        "few": "{count} wybrane urządzenia są współdzielone. Ich uprawnienia urządzeń wpływają na każdą encję na tych urządzeniach, w tym encje należące do innych wpisów konfiguracji.",
+        "many": "{count} wybranych urządzeń jest współdzielonych. Ich uprawnienia urządzeń wpływają na każdą encję na tych urządzeniach, w tym encje należące do innych wpisów konfiguracji.",
         "other": "{count} wybranych urządzeń jest współdzielonych. Ich uprawnienia urządzeń wpływają na każdą encję na tych urządzeniach, w tym encje należące do innych wpisów konfiguracji."
       },
       "stateDeny": "Odmów",
@@ -239,9 +241,11 @@
       "title": "Wybierz według obszaru, etykiety lub integracji",
       "willSet": {
         "one": "Spowoduje to zastosowanie {state} do {count} encji.",
+        "few": "Spowoduje to zastosowanie {state} do {count} encji.",
+        "many": "Spowoduje to zastosowanie {state} do {count} encji.",
         "other": "Spowoduje to zastosowanie {state} do {count} encji."
       },
-      "willSetIntegration": "Spowoduje to zastosowanie {state} do {devices} węzłów urządzeń i {entities} aktywnych węzłów encji bez urządzenia."
+      "willSetIntegration": "Uprawnienie: {state}. Węzły urządzeń: {devices}; aktywne węzły encji bez urządzenia: {entities}."
     },
     "version": {
       "card.added": "dodano {subject} ({where})",
@@ -271,6 +275,8 @@
       "size.was": "{size} (było {before})"
     },
     "changes": {
+      "added": "Dodano",
+      "removed": "Usunięto",
       "actionCreate": "Utwórz",
       "actionDelete": "Usuń",
       "actionEdit": "Edytuj",

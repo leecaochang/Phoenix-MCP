@@ -587,6 +587,8 @@
       "viewMesaProfile": "Voir le profil MESA"
     },
     "changes": {
+      "added": "Ajouté",
+      "removed": "Supprimé",
       "actionCreate": "Créer",
       "actionDelete": "Supprimer",
       "actionEdit": "Modifier",
@@ -1072,7 +1074,7 @@
       "stateRemoveGrant": "Supprimer l'autorisation",
       "stateWrite": "Écriture",
       "title": "Sélectionner par pièce, étiquette ou intégration",
-      "willSetIntegration": "Cela appliquera {state} à {devices} nœuds d'appareil et {entities} nœuds d'entité active sans appareil.",
+      "willSetIntegration": "Autorisation : {state}. Nœuds d’appareil : {devices} ; nœuds d’entité actifs sans appareil : {entities}.",
       "willSet": {
         "one": "Cela appliquera {state} à {count} entité.",
         "other": "Cela appliquera {state} à {count} entités."

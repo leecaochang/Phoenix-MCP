@@ -84,7 +84,7 @@ export const PermissionSelector = React.memo(function PermissionSelector({ value
           }}
           disabled={disabled}
           aria-pressed={value === state}
-          aria-label={value === state ? t("perms.selSelected", { title }) : title}
+          aria-label={`${label}: ${value === state ? t("perms.selSelected", { title }) : title}`}
         >
           {label}
         </button>

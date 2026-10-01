@@ -8,3 +8,7 @@ import { primeTranslations } from "../i18n";
 // English text keep working untouched, and a key that is missing from en.json
 // fails loudly in whichever test renders it.
 primeTranslations(en.panel);
+
+import { beforeEach } from "vitest";
+import { setAgentCliOwner } from "../utils/agentcli_state";
+beforeEach(() => setAgentCliOwner("test-admin"));

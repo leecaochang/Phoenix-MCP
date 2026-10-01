@@ -239,6 +239,8 @@ export function RawDiffPane({ rows, tone }: { rows: DiffLine[]; tone: "remove" |
     <pre className="yaml-pre raw-diff">
       {rows.map((r, idx) => (
         <div key={idx} className={r.changed ? `diff-line diff-${tone}` : "diff-line"}>
+          <span className="diff-line-marker" aria-hidden="true">{r.changed ? (tone === "add" ? "+" : "-") : " "}</span>
+          {r.changed && <span className="sr-only">{t(tone === "add" ? "changes.added" : "changes.removed")}: </span>}
           {r.text === "" ? " " : r.text}
         </div>
       ))}

@@ -181,3 +181,20 @@ describe("accessibility regressions", () => {
     expect(container.querySelector(".spinner")).toHaveAttribute("aria-hidden", "true");
   });
 });
+
+it("lets Tab leave a tag query without committing or trapping focus", () => {
+  const changed = () => { throw new Error("Tab must not commit a tag"); };
+  const { getByRole } = render(<TagInput value={[]} onChange={changed} canonicalTags={["lighting.task"]} />);
+  const combo = getByRole("combobox");
+  fireEvent.change(combo, { target: { value: "no-match" } });
+  expect(fireEvent.keyDown(combo, { key: "Tab" })).toBe(true);
+});
+
+it("labels raw diff additions and removals without relying on color", async () => {
+  const { RawDiffPane } = await import("../components/DiffView");
+  const { container } = render(<><RawDiffPane rows={[{ text: "new value", changed: true }]} tone="add" />
+    <RawDiffPane rows={[{ text: "old value", changed: true }]} tone="remove" /></>);
+  expect(container.textContent).toContain("Added: new value");
+  expect(container.textContent).toContain("Removed: old value");
+  expect([...container.querySelectorAll(".diff-line-marker")].map((el) => el.textContent)).toEqual(["+", "-"]);
+});

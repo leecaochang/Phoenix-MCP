@@ -398,6 +398,8 @@
       "viewMesaProfile": "MESA プロファイルを表示"
     },
     "changes": {
+      "added": "追加",
+      "removed": "削除",
       "actionCreate": "作成",
       "actionDelete": "削除",
       "actionEdit": "編集",
@@ -841,7 +843,7 @@
       "stateRemoveGrant": "権限を削除",
       "stateWrite": "書き込み",
       "title": "エリア、ラベル、インテグレーションで選択",
-      "willSetIntegration": "{devices} 個のデバイスノードと {entities} 個のデバイスのないライブエンティティノードに {state} を適用します。",
+      "willSetIntegration": "権限: {state}。デバイスノード: {devices}、デバイスに属さない有効なエンティティノード: {entities}。",
       "willSet": {
         "one": "{count} 個のエンティティに {state} を適用します。",
         "other": "{count} 個のエンティティに {state} を適用します。"

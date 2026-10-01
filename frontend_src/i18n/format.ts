@@ -29,6 +29,7 @@ let timeZone: string | undefined;
 let compactFormatter: Intl.NumberFormat | null = null;
 let collator: Intl.Collator | null = null;
 let pluralRules: Intl.PluralRules | null = null;
+let preferenceSignature: string | null = null;
 const dateFormatters = new Map<string, Intl.DateTimeFormat>();
 
 /** Keep regional/script tags even when Phoenix has no matching translation. */
@@ -76,6 +77,9 @@ function validTimeZone(value: unknown): string | undefined {
 export function setFormatLocale(hass: unknown, language?: string, catalogLanguage?: string): boolean {
   const h = (hass ?? {}) as HassLike;
   const locale = h.locale ?? {};
+  const inputSignature = JSON.stringify([language, catalogLanguage, h.language, locale.language, locale.number_format, locale.time_format, locale.date_format, locale.time_zone, h.config?.time_zone]);
+  if (inputSignature === preferenceSignature) return false;
+  preferenceSignature = inputSignature;
   const before = signature();
   dateLocale = validFormatLocale(language) ?? validFormatLocale(locale.language) ?? validFormatLocale(h.language);
   pluralLocale = validFormatLocale(catalogLanguage) ?? dateLocale;

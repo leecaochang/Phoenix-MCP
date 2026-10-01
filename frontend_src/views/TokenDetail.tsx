@@ -1057,7 +1057,7 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
                   tokenId={tokenId}
                   permissions={token.permissions}
                   onPermissionsChange={(tree) => {
-                    setToken({ ...token, permissions: tree });
+                    setToken((current) => current?.id === token.id ? { ...current, permissions: tree } : current);
                     setPermissionsVersion((v) => v + 1);
                   }}
                   onEntityClick={revealNode}

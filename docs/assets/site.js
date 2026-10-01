@@ -301,7 +301,7 @@
       }
       used[id] = true;
       h.classList.add("anchor");
-      if (!h.querySelector(".anchor-link")) {
+      if (!h.closest("a, button") && !h.querySelector(".anchor-link")) {
         var a = document.createElement("a");
         a.className = "anchor-link";
         a.href = "#" + id;
@@ -349,8 +349,19 @@
   }
 
   /* ---- mobile nav drawer ---- */
+  function syncNavAccess() {
+    var sidebar = document.getElementById("sidebar");
+    if (!sidebar) return;
+    var drawer = document.body.hasAttribute("data-home") || window.innerWidth <= 1000;
+    var hidden = drawer && !document.body.classList.contains("nav-open");
+    sidebar.inert = hidden;
+    sidebar.setAttribute("aria-hidden", String(hidden));
+    if (hidden && sidebar.contains(document.activeElement)) document.getElementById("menu-btn")?.focus();
+  }
+  window.addEventListener("resize", syncNavAccess);
   function toggleNav() {
     var open = document.body.classList.toggle("nav-open");
+    syncNavAccess();
     var btn = document.getElementById("menu-btn");
     if (btn) {
       btn.setAttribute("aria-expanded", String(open));
@@ -361,6 +372,7 @@
   function closeNav() {
     if (!document.body.classList.contains("nav-open")) return;
     document.body.classList.remove("nav-open");
+    syncNavAccess();
     var btn = document.getElementById("menu-btn");
     if (btn) {
       btn.setAttribute("aria-expanded", "false");
@@ -549,6 +561,7 @@
     buildHeader();
     buildSearchDialog();
     buildSidebar();
+    syncNavAccess();
     buildFooter();
     buildPager();
     buildToc();

@@ -237,7 +237,7 @@
         "one": "Dit past {state} toe op {count} entiteit.",
         "other": "Dit past {state} toe op {count} entiteiten."
       },
-      "willSetIntegration": "Dit past {state} toe op {devices} apparaatknooppunten en {entities} actieve entiteitknooppunten zonder apparaat."
+      "willSetIntegration": "Machtiging: {state}. Apparaatknooppunten: {devices}; actieve entiteitsknooppunten zonder apparaat: {entities}."
     },
     "version": {
       "card.added": "toegevoegd {subject} ({where})",
@@ -267,6 +267,8 @@
       "size.was": "{size} (was {before})"
     },
     "changes": {
+      "added": "Toegevoegd",
+      "removed": "Verwijderd",
       "actionCreate": "Maken",
       "actionDelete": "Verwijderen",
       "actionEdit": "Bewerken",

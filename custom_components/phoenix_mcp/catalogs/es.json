@@ -262,6 +262,8 @@
       "viewMesaProfile": "Ver perfil MESA"
     },
     "changes": {
+      "added": "Añadido",
+      "removed": "Eliminado",
       "actionCreate": "Crear",
       "actionDelete": "Eliminar",
       "actionEdit": "Editar",
@@ -363,7 +365,7 @@
       "stateRemoveGrant": "Eliminar permiso",
       "stateWrite": "Escritura",
       "title": "Seleccionar por área, etiqueta o integración",
-      "willSetIntegration": "Esto aplicará {state} a {devices} nodos de dispositivo y {entities} nodos de entidad sin dispositivo activos.",
+      "willSetIntegration": "Permiso: {state}. Nodos de dispositivo: {devices}; nodos de entidad activos sin dispositivo: {entities}.",
       "willSet": {
         "one": "Esto aplicará {state} a {count} entidad.",
         "other": "Esto aplicará {state} a {count} entidades."

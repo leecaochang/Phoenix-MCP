@@ -61,8 +61,8 @@ function inline(s: string): string {
     // Absolute http(s), or a root-relative path that is NOT scheme-relative:
     // "//evil.example" starts with "/" but browsers resolve it as an external
     // https:// host, so a bare "/" allow-rule would let it through. Require a
-    // single leading slash not followed by another.
-    if (/^(https?:\/\/|\/(?!\/))/i.test(url)) {
+    // single leading slash not followed by a slash or backslash.
+    if (/^(https?:\/\/|\/(?![\/\\]))/i.test(url)) {
       const safe = url.replace(/"/g, "%22");
       return `<a href="${safe}" target="_blank" rel="noopener noreferrer">${text}</a>`;
     }

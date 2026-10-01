@@ -589,6 +589,8 @@
       "viewMesaProfile": "View MESA profile"
     },
     "changes": {
+      "added": "Added",
+      "removed": "Removed",
       "actionCreate": "Create",
       "actionDelete": "Delete",
       "actionEdit": "Edit",
@@ -1075,7 +1077,7 @@
       "stateRemoveGrant": "Remove grant",
       "stateWrite": "Write",
       "title": "Select by area, label, or integration",
-      "willSetIntegration": "This will apply {state} to {devices} device nodes and {entities} live deviceless entity nodes.",
+      "willSetIntegration": "Permission: {state}. Device nodes: {devices}; live entity nodes without a device: {entities}.",
       "willSet": {
         "one": "This will apply {state} to {count} entity.",
         "other": "This will apply {state} to {count} entities."

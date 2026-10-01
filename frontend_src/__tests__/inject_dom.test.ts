@@ -311,3 +311,11 @@ describe("deepQueryAll", () => {
     expect(deepQueryAll("ha-nonexistent-table-xyz")).toEqual([]);
   });
 });
+
+it("anchors HA 2026.7 state-less rows to their domain icon and ignores status icons", () => {
+  const row = document.createElement("div");
+  row.innerHTML = '<div role="cell"><ha-domain-icon></ha-domain-icon></div><div role="cell">Disabled</div><div role="cell"><ha-svg-icon></ha-svg-icon></div>';
+  expect(nameInsertionPoint(row)?.parent).toBe(row.firstElementChild);
+  row.firstElementChild!.replaceChildren();
+  expect(nameInsertionPoint(row)).toBeNull();
+});

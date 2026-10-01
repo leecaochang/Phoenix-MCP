@@ -18,7 +18,7 @@ import {
   __resetAgentCliState, __reloadFromStorage,
 } from "../utils/agentcli_state";
 
-const CONV_KEY = "phx-agentcli-conversation";
+const CONV_KEY = "phx-agentcli-conversation:test-admin";
 
 beforeEach(() => __resetAgentCliState());
 afterEach(() => vi.restoreAllMocks());
@@ -169,5 +169,43 @@ describe("degrades safely", () => {
     expect(() => setSessionDraft("no storage here")).not.toThrow();
     // Still readable in memory for this page load.
     expect(getSessionDraft()).toBe("no storage here");
+  });
+});
+
+describe("HA user isolation", () => {
+  it("keeps each user's transcript and durable choices separate and drops stale writers", async () => {
+    const { setAgentCliOwner } = await import("../utils/agentcli_state");
+    setAgentCliOwner("first");
+    setSessionTurns([{ text: "first private reply" }]);
+    patchDurable({ tokenId: "first-token" });
+    setAgentCliOwner("second");
+    expect(getSessionTurns()).toEqual([]);
+    expect(getDurable().tokenId).toBe("");
+    setSessionTurns([{ text: "late first reply" }], "first");
+    patchDurable({ tokenId: "late-first-token" }, "first");
+    expect(getSessionTurns()).toEqual([]);
+    expect(getDurable().tokenId).toBe("");
+    setSessionTurns([{ text: "second private reply" }]);
+    setAgentCliOwner("first");
+    expect(getSessionTurns()).toEqual([{ text: "first private reply" }]);
+    expect(getDurable().tokenId).toBe("first-token");
+    setAgentCliOwner(null);
+    expect(getSessionTurns()).toEqual([]);
+    setSessionTurns([{ text: "anonymous" }]);
+    expect(localStorage.getItem("phx-agentcli-conversation")).toBeNull();
+  });
+
+  it("coalesces draft typing and flushes the latest text on pagehide", () => {
+    vi.useFakeTimers();
+    const writes = vi.spyOn(Storage.prototype, "setItem");
+    setSessionDraft("a"); setSessionDraft("ab"); setSessionDraft("abc");
+    expect(writes).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(300);
+    expect(writes).toHaveBeenCalledOnce();
+    setSessionDraft("abcd");
+    window.dispatchEvent(new Event("pagehide"));
+    expect(writes).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(localStorage.getItem(CONV_KEY)!)).toMatchObject({ draft: "abcd" });
+    vi.useRealTimers();
   });
 });

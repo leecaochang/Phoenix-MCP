@@ -39,6 +39,31 @@ export interface AgentCliDurable {
 }
 
 const LS_KEY = "phx-agentcli";
+let ownerId: string | null = null;
+let draftTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Browser persistence belongs to one authenticated HA user. */
+export function getAgentCliOwner(): string | null { return ownerId; }
+
+export function setAgentCliOwner(userId: string | null): void {
+  if (userId === ownerId) return;
+  flushSessionDraft(ownerId);
+  ownerId = userId;
+  conversation = defaultConversation();
+  loaded = false;
+  try {
+    // Unscoped state has no trustworthy owner and must not cross accounts.
+    localStorage.removeItem(LS_KEY);
+    localStorage.removeItem(CONV_KEY);
+  } catch { /* storage unavailable */ }
+}
+
+function storageKey(base: string): string | null {
+  return ownerId ? `${base}:${encodeURIComponent(ownerId)}` : null;
+}
+
+function ownsSession(owner: string | null): boolean { return owner !== null && owner === ownerId; }
+
 
 export const AGENTCLI_TEXT_SIZE_DEFAULT_PT = 9.75;
 export const AGENTCLI_TEXT_SIZE_MIN_PT = 8.25;
@@ -78,7 +103,8 @@ export function defaultDurable(): AgentCliDurable {
 
 export function getDurable(): AgentCliDurable {
   try {
-    const raw = localStorage.getItem(LS_KEY);
+    const key = storageKey(LS_KEY);
+    const raw = key ? localStorage.getItem(key) : null;
     if (!raw) return defaultDurable();
     const p = JSON.parse(raw) as Partial<AgentCliDurable> & { showUsage?: unknown };
     // showUsage was the pre-1.0.163 name, when the setting hid only the token
@@ -129,9 +155,10 @@ export function agentCliOpenPatch(
   return patch;
 }
 
-export function patchDurable(patch: Partial<AgentCliDurable>): void {
+export function patchDurable(patch: Partial<AgentCliDurable>, owner = ownerId): void {
+  if (!ownsSession(owner)) return;
   try {
-    localStorage.setItem(LS_KEY, JSON.stringify({ ...getDurable(), ...patch }));
+    localStorage.setItem(storageKey(LS_KEY)!, JSON.stringify({ ...getDurable(), ...patch }));
   } catch {
     /* storage blocked: window state simply won't persist */
   }
@@ -207,7 +234,8 @@ function load(): Conversation {
   if (loaded) return conversation;
   loaded = true;
   try {
-    const raw = localStorage.getItem(CONV_KEY);
+    const key = storageKey(CONV_KEY);
+    const raw = key ? localStorage.getItem(key) : null;
     if (raw) {
       const p = JSON.parse(raw) as Partial<Conversation>;
       const d = defaultConversation();
@@ -225,6 +253,8 @@ function load(): Conversation {
 }
 
 function save(): void {
+  const key = storageKey(CONV_KEY);
+  if (!key) return;
   try {
     // Drop oldest turns until the payload fits. A single turn can be large on
     // its own (a tool result with many entities), so give up rather than loop
@@ -236,12 +266,12 @@ function save(): void {
         turns: sanitizeForPersistence(turns),
       });
       if (payload.length <= MAX_CONV_BYTES) {
-        localStorage.setItem(CONV_KEY, payload);
+        localStorage.setItem(key, payload);
         return;
       }
       if (turns.length === 0) {
         // Keep the draft and usage even when no transcript fits.
-        localStorage.setItem(CONV_KEY, JSON.stringify({ ...conversation, turns: [] }));
+        localStorage.setItem(key, JSON.stringify({ ...conversation, turns: [] }));
         return;
       }
       turns = turns.slice(1);
@@ -254,7 +284,8 @@ function save(): void {
 export function getSessionTurns(): unknown[] {
   return load().turns;
 }
-export function setSessionTurns(turns: unknown[]): void {
+export function setSessionTurns(turns: unknown[], owner = ownerId): void {
+  if (!ownsSession(owner)) return;
   load().turns = turns;
   save();
 }
@@ -264,10 +295,23 @@ export function setSessionTurns(turns: unknown[]): void {
 export function getSessionDraft(): string {
   return load().draft;
 }
-export function setSessionDraft(draft: string): void {
+export function setSessionDraft(draft: string, owner = ownerId): void {
+  if (!ownsSession(owner)) return;
   load().draft = draft;
-  save();
+  if (draftTimer !== null) clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => flushSessionDraft(owner), 300);
 }
+
+export function flushSessionDraft(owner = ownerId): void {
+  if (owner !== ownerId) return;
+  const pending = draftTimer !== null;
+  if (draftTimer !== null) clearTimeout(draftTimer);
+  draftTimer = null;
+  if (pending && ownsSession(owner) && loaded) save();
+}
+
+if (typeof window !== "undefined") window.addEventListener("pagehide", () => flushSessionDraft());
+
 
 // Token usage, provider-reported. Same lifecycle as the transcript it belongs
 // to, so the footer totals stay coherent with the restored conversation.
@@ -283,7 +327,8 @@ export interface SessionUsage {
 export function getSessionUsage(): SessionUsage {
   return load().usage;
 }
-export function setSessionUsage(usage: SessionUsage): void {
+export function setSessionUsage(usage: SessionUsage, owner = ownerId): void {
+  if (!ownsSession(owner)) return;
   load().usage = usage;
   save();
 }
@@ -292,17 +337,22 @@ export function setSessionUsage(usage: SessionUsage): void {
 // leaves localStorage alone, so the next read comes back off disk exactly as
 // it would after F5.
 export function __reloadFromStorage(): void {
+  flushSessionDraft();
   conversation = defaultConversation();
   loaded = false;
 }
 
 // Test helper: reset both tiers between tests.
 export function __resetAgentCliState(): void {
+  if (draftTimer !== null) clearTimeout(draftTimer);
+  draftTimer = null;
   conversation = defaultConversation();
   loaded = true;
   try {
-    localStorage.removeItem(CONV_KEY);
-    localStorage.removeItem(LS_KEY);
+    const convKey = storageKey(CONV_KEY);
+    const durableKey = storageKey(LS_KEY);
+    if (convKey) localStorage.removeItem(convKey);
+    if (durableKey) localStorage.removeItem(durableKey);
   } catch {
     /* ignore */
   }

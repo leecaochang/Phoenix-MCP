@@ -66,7 +66,7 @@ export function TagInput({
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setActive((a) => Math.min(a + 1, matches.length - 1)); }
     else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
-    else if (e.key === "Enter" || e.key === "Tab" || e.key === ",") {
+    else if (e.key === "Enter" || e.key === ",") {
       if (query.trim() || matches.length) { e.preventDefault(); commit(); }
     }
     else if (e.key === "Escape") { setOpen(false); setQuery(""); }

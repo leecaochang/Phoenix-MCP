@@ -92,7 +92,7 @@ describe("harvestCards", () => {
 
     const { entries } = await harvestCards(FAST);
 
-    expect(entries[0].stub_config).toEqual({ type: "custom:harv-stub", entity: "light.kitchen" });
+    expect(entries[0].stub_config).toEqual({ type: "custom:harv-stub", entity: "light.example" });
     expect(entries[0].has_visual_editor).toBe(true);
   });
 
@@ -311,4 +311,32 @@ describe("syncCardCatalog", () => {
     // suppressed for the whole interval.
     expect(window.localStorage.getItem(LAST_KEY)).toBeNull();
   });
+});
+
+it("shares an in-flight harvest across independently imported bundle copies", async () => {
+  let resources!: (value: unknown[]) => void;
+  const live = hass({ connection: { sendMessagePromise: vi.fn(() => new Promise((resolve) => { resources = resolve; })) } });
+  vi.mocked(currentHass).mockReturnValue(live);
+  defineCard("harv-shared");
+  (window as unknown as { customCards: unknown[] }).customCards = [{ type: "harv-shared" }];
+  const first = syncCardCatalog(true, FAST);
+  vi.resetModules();
+  const other = await import("../utils/card_harvest");
+  const second = other.syncCardCatalog(true, FAST);
+  resources([]);
+  await Promise.all([first, second]);
+  expect(live.connection.sendMessagePromise).toHaveBeenCalledOnce();
+  expect(api.postCardCatalog).toHaveBeenCalledOnce();
+});
+
+it("does not post a harvest after the HA user changes", async () => {
+  let resources!: (value: unknown[]) => void;
+  vi.mocked(currentHass).mockReturnValue(hass({ user: { id: "first", is_admin: true }, connection: { sendMessagePromise: vi.fn(() => new Promise((resolve) => { resources = resolve; })) } }));
+  defineCard("harv-stale");
+  (window as unknown as { customCards: unknown[] }).customCards = [{ type: "harv-stale" }];
+  const pending = syncCardCatalog(true, FAST);
+  vi.mocked(currentHass).mockReturnValue(hass({ user: { id: "second", is_admin: true } }));
+  resources([]);
+  await pending;
+  expect(api.postCardCatalog).not.toHaveBeenCalled();
 });

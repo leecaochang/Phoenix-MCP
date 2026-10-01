@@ -51,15 +51,10 @@ describe("ApprovalsView pending pagination", () => {
   });
 
   it("Load more appends the next page at the accumulated offset", async () => {
-    vi.mocked(api.listApprovals)
-      .mockResolvedValueOnce({
-        approvals: [record({ id: "appr_1", diff: { summary: "First pending" } })],
-        total: 2, limit: 50, offset: 0,
-      })
-      .mockResolvedValueOnce({
-        approvals: [record({ id: "appr_2", diff: { summary: "Second pending" } })],
-        total: 2, limit: 50, offset: 1,
-      });
+    vi.mocked(api.listApprovals).mockImplementation(async ({ offset = 0 } = {}) => ({
+      approvals: [record({ id: offset ? "appr_2" : "appr_1", diff: { summary: offset ? "Second pending" : "First pending" } })],
+      total: 2, limit: 50, offset,
+    }));
 
     const { findByText, getByText, queryByText } = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
     await findByText("First pending");
@@ -122,4 +117,23 @@ describe("ApprovalsView pending pagination", () => {
     await waitFor(() => expect(container.querySelector("#approval-detail-tab-diff")).toBeNull());
     expect(api.getApproval).toHaveBeenCalledWith("appr_1");
   });
+});
+
+it("refreshes every loaded pending page on the polling callback", async () => {
+  const timer = vi.spyOn(globalThis, "setInterval");
+  vi.mocked(api.listApprovals).mockImplementation(async ({ offset = 0 } = {}) => ({
+    approvals: Array.from({ length: 50 }, (_, i) => record({ id: `page-${offset + i}`, diff: { summary: `Pending ${offset + i}` } })),
+    total: 100, limit: 50, offset,
+  }));
+  const view = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
+  await view.findByText("Pending 0");
+  fireEvent.click(view.getByText("Load more"));
+  await view.findByText("Pending 99");
+  const poll = timer.mock.calls.find(([, delay]) => delay === 10_000)![0] as () => Promise<void>;
+  const { act } = await import("@testing-library/react");
+  await act(async () => { await poll(); });
+  expect(view.getByText("Pending 99")).toBeInTheDocument();
+  expect(view.queryByText("Load more")).toBeNull();
+  view.unmount();
+  timer.mockRestore();
 });

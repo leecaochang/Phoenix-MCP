@@ -819,6 +819,8 @@
       }
     },
     "changes": {
+      "added": "已新增",
+      "removed": "已刪除",
       "actionCreate": "建立",
       "actionDelete": "刪除",
       "actionEdit": "編輯",
@@ -1431,7 +1433,7 @@
         "one": "這將對 {count} 個實體套用 {state}。",
         "other": "這將對 {count} 個實體套用 {state}。"
       },
-      "willSetIntegration": "這將對 {devices} 個裝置節點和 {entities} 個線上無裝置實體節點套用 {state}。"
+      "willSetIntegration": "權限：{state}。裝置節點：{devices}；無所屬裝置的活動實體節點：{entities}。"
     },
     "settings": {
       "addProviderFirst": "請先在「智慧體對話」中新增提供者帳戶。",

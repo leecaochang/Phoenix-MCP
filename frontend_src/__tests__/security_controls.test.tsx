@@ -13,7 +13,7 @@ import { CapabilityMatrix } from "../components/CapabilityMatrix";
 it("activates entity permissions through keyboard clicks and assistive clicks", async () => {
   const onChange = vi.fn();
   render(<PermissionSelector value="GREY" onChange={onChange} />);
-  const write = screen.getByRole("button", { name: "Read and write" });
+  const write = screen.getByRole("button", { name: "W: Read and write" });
   write.focus();
   const user = userEvent.setup();
   await user.keyboard("{Enter}");

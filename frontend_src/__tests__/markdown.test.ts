@@ -116,3 +116,9 @@ describe("renderMarkdown", () => {
     expect(html).not.toContain("<table>");
   });
 });
+
+it("rejects slash-backslash network paths while retaining local and HTTPS links", () => {
+  expect(renderMarkdown("[bad](/\\evil.example/login)")).not.toContain("href=");
+  expect(renderMarkdown("[local](/config/entities)")).toContain('href="/config/entities"');
+  expect(renderMarkdown("[remote](https://example.com/path)")).toContain('href="https://example.com/path"');
+});

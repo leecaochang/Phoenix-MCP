@@ -27,6 +27,7 @@
 
 import { api, currentHass } from "../api";
 import { JS_BUILD } from "../version";
+import { compareBuilds } from "../inject/ownership";
 
 const LOG = "[Phoenix MCP cards]";
 
@@ -202,10 +203,21 @@ async function stubFor(el: any, hass: any): Promise<unknown> {
   if (typeof el?.getStubConfig !== "function") return null;
   const ids = Object.keys(hass?.states ?? {});
   try {
-    return (await el.getStubConfig(hass, ids.slice(0, 40), ids.slice(40, 80))) ?? null;
+    const stub = (await el.getStubConfig(hass, ids.slice(0, 40), ids.slice(40, 80))) ?? null;
+    return scrubStubEntities(stub, new Set(ids));
   } catch {
     return null;
   }
+}
+
+/** Examples use placeholders rather than entities from the administrator's home. */
+function scrubStubEntities(value: unknown, ids: Set<string>): unknown {
+  if (typeof value === "string") return value.replace(/[a-z_]+\.[a-z0-9_]+/g,
+    (entity) => ids.has(entity) ? `${entity.split(".")[0]}.example` : entity);
+  if (Array.isArray(value)) return value.map((item) => scrubStubEntities(item, ids));
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value)
+    .map(([key, item]) => [key, scrubStubEntities(item, ids)]));
+  return value;
 }
 
 /** Candidate element names for cards that deliberately skip the picker. */
@@ -315,11 +327,35 @@ function markHarvested(): void {
  *
  * `force` skips the interval check, for an explicit operator-triggered rescan.
  */
+const HARVEST_KEY = "__phxCardCatalogHarvest";
+type HarvestOwner = { build: string; userId: unknown; promise: Promise<void> | null };
+const harvestHost = window as unknown as Record<string, unknown>;
+
 export async function syncCardCatalog(force = false, opts: HarvestOptions = {}): Promise<void> {
+  const hass = currentHass() as any;
+  if (!hass?.user?.is_admin) return;
+  const previous = harvestHost[HARVEST_KEY] as HarvestOwner | undefined;
+  if (previous && compareBuilds(previous.build, JS_BUILD) > 0) return;
+  if (previous?.promise && previous.build === JS_BUILD && previous.userId === hass.user.id) {
+    await previous.promise;
+    return;
+  }
+  if (!force && harvestedRecently()) return;
+  const owner: HarvestOwner = { build: JS_BUILD, userId: hass.user.id, promise: null };
+  harvestHost[HARVEST_KEY] = owner;
+  const ownsHarvest = () => {
+    const live = currentHass() as any;
+    return harvestHost[HARVEST_KEY] === owner && live?.user?.is_admin && live.user.id === owner.userId;
+  };
+  owner.promise = runHarvest(opts, ownsHarvest);
+  await owner.promise;
+  owner.promise = null;
+}
+
+async function runHarvest(opts: HarvestOptions, ownsHarvest: () => boolean): Promise<void> {
   try {
     const hass = currentHass() as any;
     if (!hass?.user?.is_admin) return;
-    if (!force && harvestedRecently()) return;
     const result = await harvestCards(opts);
     // A harvest that saw no resources at all is more likely a page that could
     // not reach the WS connection than an instance with nothing installed.
@@ -328,10 +364,11 @@ export async function syncCardCatalog(force = false, opts: HarvestOptions = {}):
       log("nothing to report; leaving the stored catalog alone");
       return;
     }
+    if (!ownsHarvest()) return;
     await api.postCardCatalog(result);
     markHarvested();
     log(`reported ${result.entries.length} cards from ${result.resource_count} resources`);
-    scheduleFollowUps(result.entries.length, opts);
+    scheduleFollowUps(result.entries.length, opts, ownsHarvest);
   } catch (err) {
     log("harvest failed", err);
   }
@@ -353,16 +390,17 @@ export async function syncCardCatalog(force = false, opts: HarvestOptions = {}):
  * wholesale replacement precisely because of that. Posting only on growth keeps
  * a steady instance to exactly one write per visit.
  */
-function scheduleFollowUps(bestSoFar: number, opts: HarvestOptions): void {
+function scheduleFollowUps(bestSoFar: number, opts: HarvestOptions, ownsHarvest: () => boolean): void {
   const delays = opts.followUpMs ?? SETTLE_DEFAULTS.followUpMs;
   let best = bestSoFar;
   for (const delay of delays) {
     window.setTimeout(() => {
       void (async () => {
         try {
+          if (!ownsHarvest()) return;
           // No settle wait: we are already well past page load, so read now.
           const later = await harvestCards({ ...opts, minWaitMs: 0, settleTimeoutMs: 0 });
-          if (later.entries.length <= best) return;
+          if (!ownsHarvest() || later.entries.length <= best) return;
           await api.postCardCatalog(later);
           log(`re-reported ${later.entries.length} cards (was ${best}; ${later.entries.length - best} registered late)`);
           best = later.entries.length;

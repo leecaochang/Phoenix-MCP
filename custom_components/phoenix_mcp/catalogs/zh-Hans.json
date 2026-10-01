@@ -503,7 +503,7 @@
       },
       "stateRemoveGrant": "移除授权",
       "title": "按区域、标签或集成选择",
-      "willSetIntegration": "这将对 {devices} 个设备节点和 {entities} 个在线无设备实体节点应用 {state}。",
+      "willSetIntegration": "权限：{state}。设备节点：{devices}；无所属设备的活动实体节点：{entities}。",
       "willSet": {
         "one": "这将对 {count} 个实体应用 {state}。",
         "other": "这将对 {count} 个实体应用 {state}。"
@@ -688,6 +688,8 @@
       "rowToken": "令牌"
     },
     "changes": {
+      "added": "已添加",
+      "removed": "已删除",
       "backToChanges": "返回变更列表",
       "byWho": "由 {who}",
       "colAction": "操作",

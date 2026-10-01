@@ -44,6 +44,8 @@ import type {
 
 import { hasMessage, resolveLanguage, t } from "./i18n";
 
+import { setAgentCliOwner } from "./utils/agentcli_state";
+
 const BASE = "/api/phoenix-mcp/admin";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -52,6 +54,7 @@ let hassInstance: any = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function setHass(hass: any) {
   hassInstance = hass;
+  setAgentCliOwner(typeof hass?.user?.id === "string" ? hass.user.id : null);
 }
 
 // The hass to authenticate with. Normally the one passed to setHass, but the
@@ -121,8 +124,20 @@ async function _doReq<T>(method: string, path: string, body?: unknown, extraHead
   return json as T;
 }
 
+const tokenMutations = new Map<string, Promise<unknown>>();
+
 async function req<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
-  return _doReq<T>(method, path, body, extraHeaders);
+  const token = method === "GET" ? undefined : /^\/tokens\/([^/]+)(?:\/|$)/.exec(path)?.[1];
+  if (!token) return _doReq<T>(method, path, body, extraHeaders);
+  const owner = authHass()?.user?.id;
+  const previous = tokenMutations.get(token);
+  const result = (previous ?? Promise.resolve()).catch(() => {}).then(() => {
+    if (authHass()?.user?.id !== owner) throw new ApiError(401, "unauthorized", t("common.noSession"));
+    return _doReq<T>(method, path, body, extraHeaders);
+  });
+  tokenMutations.set(token, result);
+  try { return await result; }
+  finally { if (tokenMutations.get(token) === result) tokenMutations.delete(token); }
 }
 
 function buildQuery(params?: AuditQueryParams): string {

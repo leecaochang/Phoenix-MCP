@@ -71,13 +71,13 @@ describe("Agent Chat text size bounds", () => {
   });
 
   it("migrates the former token-usage visibility choice to footer visibility", () => {
-    localStorage.setItem("phx-agentcli", JSON.stringify({ showUsage: false }));
+    localStorage.setItem("phx-agentcli:test-admin", JSON.stringify({ showUsage: false }));
     expect(getDurable().showFooter).toBe(false);
     patchDurable({ open: true });
-    const persisted = JSON.parse(localStorage.getItem("phx-agentcli") || "{}") as Record<string, unknown>;
+    const persisted = JSON.parse(localStorage.getItem("phx-agentcli:test-admin") || "{}") as Record<string, unknown>;
     expect(persisted.showFooter).toBe(false);
     expect(persisted).not.toHaveProperty("showUsage");
-    localStorage.removeItem("phx-agentcli");
+    localStorage.removeItem("phx-agentcli:test-admin");
   });
 });
 

@@ -224,16 +224,29 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
   // putting the previous filter's rows back on screen.
   const beginLoad = useLatestRequest();
 
+  const pendingWindow = useRef(HISTORY_PAGE);
   const loadPending = useCallback(async (offset = 0) => {
+    if (offset > 0) pendingWindow.current = Math.max(pendingWindow.current, offset + HISTORY_PAGE);
     const isLatest = beginLoad();
     setError(null);
     try {
-      const resp = await api.listApprovals({ status: "pending", limit: HISTORY_PAGE, offset });
-      if (!isLatest()) return;
-      setRecords((prev) => (offset === 0 ? resp.approvals : [...prev, ...resp.approvals]));
-      setRawOffset(offset + resp.approvals.length);
-      setPendingTotal(resp.total);
-      setHasMore(offset + resp.approvals.length < resp.total);
+      const approvals: ApprovalRecord[] = [];
+      let nextOffset = 0;
+      let total = 0;
+      let pages = 0;
+      do {
+        const resp = await api.listApprovals({ status: "pending", limit: HISTORY_PAGE, offset: nextOffset });
+        if (!isLatest()) return;
+        approvals.push(...resp.approvals);
+        total = resp.total;
+        pages += 1;
+        nextOffset += resp.approvals.length;
+        if (!resp.approvals.length) break;
+      } while (nextOffset < total && pages < Math.ceil(pendingWindow.current / HISTORY_PAGE));
+      setRecords([...new Map(approvals.map((record) => [record.id, record])).values()]);
+      setRawOffset(nextOffset);
+      setPendingTotal(total);
+      setHasMore(nextOffset < total);
     } catch (e: unknown) {
       if (!isLatest()) return;
       setError(e instanceof Error ? e.message : t("approvals.loadFailed"));
@@ -279,6 +292,7 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
   // (Re)load when the tab or the history filter changes.
   useEffect(() => {
     setLoading(true);
+    pendingWindow.current = HISTORY_PAGE;
     setRecords([]);
     if (tab === "pending") loadPending();
     else loadHistory(0);
@@ -462,7 +476,7 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
   async function runBatchApprove() {
     // Send in the order shown, so "stopped at" names the row the operator can see.
     const ids = selectableIds.filter((id) => picked.has(id));
-    if (ids.length === 0) return;
+    if (ids.length === 0 || batchBusy) return;
     setBatchBusy(true);
     setBatchResult(null);
     try {
@@ -480,7 +494,6 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
     }
   }
 
-  if (loading) return <Loading />;
 
   return (
     <div className="approvals-view">
@@ -543,6 +556,7 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
         </div>
       )}
 
+      {loading && <Loading />}
       {error && <ErrorMsg msg={error} />}
 
       {shown.length === 0 && !error && (
@@ -570,7 +584,8 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
               <button
                 type="button"
                 className="btn btn-primary"
-                disabled={pickedCount === 0 || batchBusy}
+                disabled={pickedCount === 0 && !batchBusy}
+                aria-disabled={batchBusy}
                 onClick={runBatchApprove}
               >
                 {batchBusy ? t("approvals.batchRunning") : t("approvals.approveSelected", { count: pickedCount })}
@@ -604,8 +619,8 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
 
       {hasMore && !search.trim() && (
         <div className="approval-history-more">
-          <button className="btn btn-ghost btn-sm" disabled={loadingMore}
-            onClick={() => { setLoadingMore(true); if (tab === "pending") loadPending(rawOffset); else loadHistory(rawOffset); }}>
+          <button className="btn btn-ghost btn-sm" aria-disabled={loadingMore}
+            onClick={() => { if (loadingMore) return; setLoadingMore(true); if (tab === "pending") loadPending(rawOffset); else loadHistory(rawOffset); }}>
             {loadingMore ? t("common.loading") : t("common.loadMore")}
           </button>
         </div>
@@ -871,6 +886,7 @@ function ApprovalDetailModal({ record, defaultView, claimed, onClose, onResolved
   const locked = busy !== null || Boolean(claimed);
 
   async function approve() {
+    if (locked) return;
     setBusy("approve");
     setError(null);
     try {
@@ -886,6 +902,7 @@ function ApprovalDetailModal({ record, defaultView, claimed, onClose, onResolved
   }
 
   async function rejectWith(reasonText: string) {
+    if (locked) return;
     setBusy("reject");
     setError(null);
     try {
@@ -964,21 +981,21 @@ function ApprovalDetailModal({ record, defaultView, claimed, onClose, onResolved
                 </button>
                 {summaryRejectOpen ? (
                   <>
-                    <button className="btn" onClick={() => setSummaryRejectOpen(false)} disabled={locked}>
+                    <button className="btn" onClick={() => { if (!locked) setSummaryRejectOpen(false); }} aria-disabled={locked}>
                       {t("approvalSummary.action.cancelReject")}
                     </button>
-                    <button className="btn" onClick={reject} disabled={locked}>
+                    <button className="btn" onClick={reject} aria-disabled={locked}>
                       {busy === "reject" ? t("approvalSummary.action.rejecting") : t("approvalSummary.action.reject")}
                     </button>
                   </>
                 ) : (
-                  <button className="btn" onClick={() => setSummaryRejectOpen(true)} disabled={locked}>
+                  <button className="btn" onClick={() => { if (!locked) setSummaryRejectOpen(true); }} aria-disabled={locked}>
                     {t("approvalSummary.action.reject")}
                   </button>
                 )}
                 {!summaryRejectOpen && (
                   <button className="btn btn-primary approval-approve-btn" onClick={approve}
-                    disabled={locked} aria-busy={busy === "approve" || claimed}
+                    aria-disabled={locked} aria-busy={busy === "approve" || claimed}
                     aria-label={busy === "approve" || claimed ? t("approvalSummary.action.approving") : undefined}>
                     {t("approvalSummary.action.approve")}
                   </button>
@@ -1078,22 +1095,22 @@ function ApprovalDetailModal({ record, defaultView, claimed, onClose, onResolved
               </div>
               <div className={`modal-actions approval-modal-actions${previewErrors.length === 0 ? " approval-modal-actions-compact" : ""}`}>
                 <button className="btn btn-primary approval-approve-btn" onClick={approve}
-                  disabled={locked} aria-busy={busy === "approve" || claimed}
+                  aria-disabled={locked} aria-busy={busy === "approve" || claimed}
                   aria-label={busy === "approve" || claimed ? t("approvals.approving") : t("approvals.approve")}>
                   <span className="btn-label-full approval-action-label">{t("approvals.approve")}</span>
                   <span className="btn-label-short approval-action-label">{t("agentchat.approve")}</span>
                 </button>
-                <button className="btn" onClick={reject} disabled={locked}
+                <button className="btn" onClick={reject} aria-disabled={locked}
                   aria-busy={busy === "reject"}
                   aria-label={busy === "reject" ? t("approvals.rejecting") : t("approvals.reject")}>
                   <span className="approval-action-label">{t("approvals.reject")}</span>
                 </button>
                 {previewErrors.length > 0 && (
-                  <button className="btn btn-outline" onClick={rejectWithConfigErrors} disabled={locked} title={t("approvals.rejectWithErrorTitle")}>
+                  <button className="btn btn-outline" onClick={rejectWithConfigErrors} aria-disabled={locked} title={t("approvals.rejectWithErrorTitle")}>
                     {t("approvals.rejectWithError")}
                   </button>
                 )}
-                <button className="btn btn-text" onClick={onClose} disabled={busy !== null}>
+                <button className="btn btn-text" onClick={() => { if (!busy) onClose(); }} aria-disabled={busy !== null}>
                   <span className="approval-action-label">{t("common.close")}</span>
                 </button>
               </div>

@@ -14,8 +14,7 @@
 // English is dropped in favour of English, which is why the interpolation syntax
 // here is Python format style rather than something else.
 //
-// This module must never import from api.ts. 17 test files mock "../api" with
-// exhaustive factory objects, so an import edge would break all of them at once.
+// Keep catalog loading independent from the admin API and its import graph.
 
 import { localeNumber, localePluralCategory, setFormatLocale, validFormatLocale } from "./format";
 
@@ -152,6 +151,8 @@ let ready = false;
 let loaded: string | null = null;
 let requested: string | null = null;
 let requestGeneration = 0;
+const retryAfter = new Map<string, number>();
+const CATALOG_RETRY_MS = 30_000;
 const catalogRequests = new Map<string, Promise<Record<string, string> | null>>();
 
 // The injected bundles can outlive one <home-assistant> root while HA replaces
@@ -189,6 +190,7 @@ export function flattenCatalog(obj: unknown, prefix = ""): Record<string, string
 /** Install a nested catalog synchronously. Used by tests and any sync path. */
 export function primeTranslations(catalog: unknown, language = "en"): void {
   const resolved = canonicalLanguage(language);
+  retryAfter.clear();
   strings = flattenCatalog(catalog);
   loaded = resolved;
   requested = resolved;
@@ -206,6 +208,7 @@ export function primeTranslations(catalog: unknown, language = "en"): void {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function loadTranslations(hass: any, language: string): Promise<boolean> {
   const resolved = canonicalLanguage(language || "en");
+  if (Date.now() < (retryAfter.get(resolved) ?? 0)) return false;
   requested = resolved;
   const generation = ++requestGeneration;
   const formattingLocale = formatLanguage(hass, resolved);
@@ -230,11 +233,14 @@ export async function loadTranslations(hass: any, language: string): Promise<boo
   }
   try {
     const next = await request;
+    if (next) retryAfter.delete(resolved);
+    else retryAfter.set(resolved, Date.now() + CATALOG_RETRY_MS);
     if (generation === requestGeneration && next) {
       strings = next;
       loaded = resolved;
     }
   } catch (e) {
+    retryAfter.set(resolved, Date.now() + CATALOG_RETRY_MS);
     if (generation === requestGeneration) {
       console.error("Phoenix MCP: could not load panel translations", e);
     }

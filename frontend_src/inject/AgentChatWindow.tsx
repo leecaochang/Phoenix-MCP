@@ -12,7 +12,7 @@ import { loadTranslations, resolveLanguage, syncTranslations } from "../i18n";
 import { AgentCliWindow, focusAgentCliPopup } from "../components/AgentCliWindow";
 import type { AgentCliInstance, TokenRecord } from "../types";
 import { JS_BUILD } from "../version";
-import { patchDurable as patchAgentCliDurable } from "../utils/agentcli_state";
+import { getAgentCliOwner, patchDurable as patchAgentCliDurable } from "../utils/agentcli_state";
 import {
   AGENTCHAT_REVIEW_CLOSED_EVENT,
   AGENTCHAT_REVIEW_DECIDED_EVENT,
@@ -98,6 +98,7 @@ function Boot({
 }
 
 let host: HTMLDivElement | null = null;
+let persistenceOwner: string | null = null;
 let reloadStrings: (() => void) | null = null;
 let root: Root | null = null;
 let themeObserver: MutationObserver | null = null;
@@ -147,6 +148,7 @@ function unwatchApprovalReview(): void {
 function paintAgentChat(): void {
   root?.render(
     <Boot
+      key={persistenceOwner}
       tokenId={activeTokenId}
       onClose={hideAgentChat}
       summonVersion={summonVersion}
@@ -216,7 +218,7 @@ export function hideAgentChat(): void {
   // place that clears the flag for THIS window. Without it, closing here left
   // open:true stuck in storage, and a later reload reopened the window right
   // back up (the panel's own restore-on-mount reads that same flag).
-  patchAgentCliDurable({ open: false });
+  patchAgentCliDurable({ open: false }, persistenceOwner);
   unwatchApprovalReview();
   unwatchTheme();
   if (reloadStrings) {
@@ -243,6 +245,7 @@ export function showAgentChat(tokenId?: string): void {
   }
   const hass = getHass();
   setHass(hass);
+  persistenceOwner = getAgentCliOwner();
   // This bundle loads on any HA page, so it fetches its own catalog. The window
   // opens right away and repaints a round trip later with the strings in place;
   // paintAgentChat() no-ops if it was closed before then.

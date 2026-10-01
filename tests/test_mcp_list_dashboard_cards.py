@@ -19,7 +19,7 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp.card_catalog import CardCatalogStore
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool
-from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
 
 
 def _token(**caps) -> TokenRecord:
@@ -129,7 +129,7 @@ async def test_single_type_lookup_returns_the_example(hass: HomeAssistant) -> No
 
     assert outcome == "allowed"
     assert body["found"] is True
-    assert body["card"]["example_config"]["entity"] == "light.kitchen"
+    assert body["card"]["example_config"]["entity"] == "<redacted>"
     assert body["card"]["has_visual_editor"] is True
 
 
@@ -155,7 +155,7 @@ async def test_detailed_includes_every_example(hass: HomeAssistant) -> None:
     content, _, _ = await _call({"detailed": True}, _token(), hass, _data(await _harvested()))
     cards = {c["type"]: c for c in _json(content)["cards"]}
 
-    assert cards["custom:mushroom-light-card"]["example_config"]["entity"] == "light.kitchen"
+    assert cards["custom:mushroom-light-card"]["example_config"]["entity"] == "<redacted>"
     # A card with no stub simply carries no example rather than a null.
     assert "example_config" not in cards["custom:broken-card"]
 
@@ -170,3 +170,25 @@ async def test_wrong_shaped_type_arg_degrades_to_a_listing(hass: HomeAssistant) 
     assert outcome == "allowed"
     assert body["count"] == 2
     assert "found" not in body
+
+
+async def test_examples_filter_existing_and_embedded_out_of_scope_entities(hass: HomeAssistant) -> None:
+    """Old saved stubs obey current entity authority in both read projections."""
+    hass.states.async_set("light.kitchen", "on")
+    hass.states.async_set("lock.private_door", "locked")
+    token = _token()
+    token.permissions.domains["light"] = PermissionNode(state="YELLOW")
+    catalog = await _harvested(entries=[{
+        "type": "scope-card",
+        "stub_config": {"entity": "light.kitchen", "nested": ["lock.private_door"],
+                        "template": "{{ states('lock.private_door') }}", "password": "private"},
+    }])
+    for args in ({"type": "scope-card"}, {"detailed": True}):
+        content, outcome, _ = await _call(args, token, hass, _data(catalog))
+        body = _json(content)
+        example = (body["card"] if "card" in body else body["cards"][0])["example_config"]
+        assert outcome == "allowed"
+        assert example["entity"] == "light.kitchen"
+        assert "lock.private_door" not in json.dumps(example)
+        assert "private" not in json.dumps(example)
+        assert catalog.get("scope-card").stub_config["nested"] == ["lock.private_door"]

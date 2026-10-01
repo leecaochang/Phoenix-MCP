@@ -1233,7 +1233,7 @@
         "one": "Questa azione applicherà {state} a {count} entità.",
         "other": "Questa azione applicherà {state} a {count} entità."
       },
-      "willSetIntegration": "Questa azione applicherà {state} a {devices} nodi dispositivo e {entities} nodi entità senza dispositivo attivi."
+      "willSetIntegration": "Permesso: {state}. Nodi dispositivo: {devices}; nodi entità attivi senza dispositivo: {entities}."
     },
     "settings": {
       "addProviderFirst": "Aggiungi prima un account provider in Agent Chat.",
@@ -1525,6 +1525,8 @@
       "size.was": "{size} (prima {before})"
     },
     "changes": {
+      "added": "Aggiunto",
+      "removed": "Rimosso",
       "actionCreate": "Crea",
       "actionDelete": "Elimina",
       "actionEdit": "Modifica",

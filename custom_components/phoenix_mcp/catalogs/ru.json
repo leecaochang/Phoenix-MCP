@@ -894,6 +894,8 @@
       }
     },
     "changes": {
+      "added": "Добавлено",
+      "removed": "Удалено",
       "actionCreate": "Создать",
       "actionDelete": "Удалить",
       "actionEdit": "Изменить",
@@ -1524,7 +1526,7 @@
         "many": "{state} будет применено к объектам: {count}.",
         "other": "{state} будет применено к объектам: {count}."
       },
-      "willSetIntegration": "{state} будет применено к узлам устройств ({devices}) и узлам активных объектов без устройств ({entities})."
+      "willSetIntegration": "Разрешение: {state}. Узлы устройств: {devices}; активные узлы сущностей без устройства: {entities}."
     },
     "settings": {
       "addProviderFirst": "Сначала добавьте учётную запись провайдера в чате с агентом.",

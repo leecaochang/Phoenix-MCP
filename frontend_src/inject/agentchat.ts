@@ -19,7 +19,7 @@ import { JS_BUILD } from "../version";
 import { registerAgentChatShortcut } from "../utils/agentchat_shortcut";
 import { claimInjectController, type InjectController } from "./ownership";
 import {
-  agentCliOpenPatch,
+  setAgentCliOwner, agentCliOpenPatch,
   getDurable as getAgentCliDurable,
   patchDurable as patchAgentCliDurable,
 } from "../utils/agentcli_state";
@@ -32,6 +32,7 @@ function getHass(): any {
 
 let winMod: typeof import("./AgentChatWindow") | null = null;
 let disposed = false;
+let identityGeneration = 0;
 const timeouts = new Set<number>();
 let unregisterShortcut: (() => void) | null = null;
 let bridge: {
@@ -59,8 +60,9 @@ async function ensureMod(): Promise<typeof import("./AgentChatWindow")> {
 
 async function open(tokenId?: string): Promise<void> {
   try {
+    const generation = identityGeneration;
     const module = await ensureMod();
-    if (!disposed) module.showAgentChat(tokenId);
+    if (!disposed && generation === identityGeneration && getHass()?.user?.is_admin) module.showAgentChat(tokenId);
   } catch (e) {
     // eslint-disable-next-line no-console
     console.debug(LOG, "open failed", e);
@@ -112,7 +114,22 @@ function start(): void {
     trackedTimeout(start, 250);
     return;
   }
-  if (!hass.user.is_admin) return; // non-admins get nothing
+  setAgentCliOwner(typeof hass.user.id === "string" ? hass.user.id : null);
+  if (!hass.user.is_admin) { trackedTimeout(start, 2000); return; }
+  const owner = hass.user.id;
+  const watchIdentity = () => {
+    const current = getHass();
+    if (!current?.user?.is_admin || current.user.id !== owner) {
+      controller.dispose();
+      identityGeneration += 1;
+      disposed = false;
+      controllerHost[FLAG] = controller;
+      start();
+      return;
+    }
+    trackedTimeout(watchIdentity, 1000);
+  };
+  trackedTimeout(watchIdentity, 1000);
   bridge = {
     ready: true,
     open: summon,

@@ -133,7 +133,7 @@ describe("permission tree search and device cleanup", () => {
     expect(screen.getByText(GHOST_DEVICE_ID)).toBeInTheDocument();
     const selector = screen.getByRole("group", { name: `Permission for device ${GHOST_DEVICE_ID}` });
     const clearButton = within(selector).getByRole("button", {
-      name: "No explicit grant (inherits from parent)",
+      name: "N: No explicit grant (inherits from parent)",
     });
     clearButton.releasePointerCapture = vi.fn();
     fireEvent.pointerDown(clearButton, { pointerId: 1 });

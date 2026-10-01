@@ -382,3 +382,26 @@ describe("diffSummary", () => {
     expect(diffSummary(undefined)).toBe("");
   });
 });
+
+it("backs off failed catalog requests across repeated HA updates, then retries", async () => {
+  const { syncTranslations } = await import("../i18n");
+  vi.useFakeTimers();
+  const request = vi.fn().mockRejectedValue(new Error("offline"));
+  const hass = { language: "de", fetchWithAuth: request };
+  await loadTranslations(hass, "de");
+  for (let i = 0; i < 20; i++) await syncTranslations(hass);
+  expect(request).toHaveBeenCalledOnce();
+  vi.advanceTimersByTime(30_000);
+  request.mockResolvedValue({ ok: true, json: async () => ({ resources: { recovered: "Recovered" } }) });
+  await syncTranslations(hass);
+  expect(request).toHaveBeenCalledTimes(2);
+  expect(t("recovered")).toBe("Recovered");
+  vi.useRealTimers();
+});
+
+it("covers Polish few and many categories in selection warnings", () => {
+  primeTranslations(pl.panel, "pl");
+  expect(tn("selectBy.sharedDeviceWarning", 2)).toContain("2 wybrane urządzenia są współdzielone");
+  expect(tn("selectBy.sharedDeviceWarning", 5)).toContain("5 wybranych urządzeń jest współdzielonych");
+  expect(tn("selectBy.willSet", 3, { state: "Odczyt" })).not.toContain("selectBy");
+});

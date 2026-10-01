@@ -19,9 +19,11 @@
   /* ink */
   --ink:           #18181b;
   --ink-2:         #52525b;   /* muted body text, 7:1 on the page bg */
-  --ink-3:         #71717a;   /* labels / decoration only */
+  --ink-3:         #63636b;   /* labels / decoration only */
 
   /* amber accent */
+  --button-bg:     #b45309;
+  --button-ink:    #ffffff;
   --accent:        #d97706;
   --accent-deep:   #b45309;   /* inline links / text, 4.7:1 on the page bg */
   --accent-hover:  #92400e;
@@ -34,15 +36,15 @@
   --divider:       #ececee;
 
   /* signals */
-  --success:       #15803d;  --success-bg: rgba(22, 163, 74, 0.12);
+  --success:       #116b33;  --success-bg: rgba(22, 163, 74, 0.12);
   --error:         #b91c1c;  --error-bg:   rgba(220, 38, 38, 0.10);
   --info:          #52525b;  --info-bg:    rgba(113, 113, 122, 0.10);
-  --warn:          #b45309;  --warn-bg:    rgba(217, 119, 6, 0.12);
+  --warn:          #92400e;  --warn-bg:    rgba(217, 119, 6, 0.12);
 
   /* permission states (color is never the sole signal; labels always accompany) */
   --st-grey:   #71717a;  --st-grey-bg:   rgba(113, 113, 122, 0.14);
-  --st-yellow: #a16207;  --st-yellow-bg: rgba(202, 138, 4, 0.16);
-  --st-green:  #15803d;  --st-green-bg:  rgba(22, 163, 74, 0.14);
+  --st-yellow: #854d0e;  --st-yellow-bg: rgba(202, 138, 4, 0.16);
+  --st-green:  #116b33;  --st-green-bg:  rgba(22, 163, 74, 0.14);
   --st-red:    #b91c1c;  --st-red-bg:    rgba(220, 38, 38, 0.12);
 
   /* deep zinc panel for the drenched hero */
@@ -102,9 +104,11 @@
     --sidebar-bg:    #1c1c1f;
 
     --ink:           #fafafa;
-    --ink-2:         #b0b0b8;
-    --ink-3:         #85858e;
+    --ink-2:         #c4c4cc;
+    --ink-3:         #a1a1aa;
 
+    --button-bg:     #f59e0b;
+    --button-ink:    #18181b;
     --accent:        #f59e0b;
     --accent-deep:   #fbbf24;
     --accent-hover:  #fcd34d;
@@ -116,14 +120,14 @@
     --divider:       #2c2c31;
 
     --success:       #4ade80;  --success-bg: rgba(74, 222, 128, 0.14);
-    --error:         #f87171;  --error-bg:   rgba(248, 113, 113, 0.14);
+    --error:         #fca5a5;  --error-bg:   rgba(248, 113, 113, 0.14);
     --info:          #a1a1aa;  --info-bg:    rgba(161, 161, 170, 0.14);
     --warn:          #fbbf24;  --warn-bg:    rgba(251, 191, 36, 0.14);
 
     --st-grey:   #a1a1aa;  --st-grey-bg:   rgba(161, 161, 170, 0.16);
     --st-yellow: #eab308;  --st-yellow-bg: rgba(234, 179, 8, 0.16);
     --st-green:  #4ade80;  --st-green-bg:  rgba(74, 222, 128, 0.15);
-    --st-red:    #f87171;  --st-red-bg:    rgba(248, 113, 113, 0.15);
+    --st-red:    #fca5a5;  --st-red-bg:    rgba(248, 113, 113, 0.15);
 
     --hero:       #101013;
     --hero-2:     #1d1d21;
@@ -146,10 +150,12 @@
   --sidebar-bg:    #1c1c1f;
 
   --ink:           #fafafa;
-  --ink-2:         #b0b0b8;
-  --ink-3:         #85858e;
+  --ink-2:         #c4c4cc;
+  --ink-3:         #a1a1aa;
 
-  --accent:        #f59e0b;
+  --button-bg:     #f59e0b;
+    --button-ink:    #18181b;
+    --accent:        #f59e0b;
   --accent-deep:   #fbbf24;
   --accent-hover:  #fcd34d;
   --accent-tint:   #3d2806;
@@ -160,14 +166,14 @@
   --divider:       #2c2c31;
 
   --success:       #4ade80;  --success-bg: rgba(74, 222, 128, 0.14);
-  --error:         #f87171;  --error-bg:   rgba(248, 113, 113, 0.14);
+  --error:         #fca5a5;  --error-bg:   rgba(248, 113, 113, 0.14);
   --info:          #a1a1aa;  --info-bg:    rgba(161, 161, 170, 0.14);
   --warn:          #fbbf24;  --warn-bg:    rgba(251, 191, 36, 0.14);
 
   --st-grey:   #a1a1aa;  --st-grey-bg:   rgba(161, 161, 170, 0.16);
   --st-yellow: #eab308;  --st-yellow-bg: rgba(234, 179, 8, 0.16);
   --st-green:  #4ade80;  --st-green-bg:  rgba(74, 222, 128, 0.15);
-  --st-red:    #f87171;  --st-red-bg:    rgba(248, 113, 113, 0.15);
+  --st-red:    #fca5a5;  --st-red-bg:    rgba(248, 113, 113, 0.15);
 
   --hero:       #101013;
   --hero-2:     #1d1d21;
@@ -216,7 +222,8 @@ a {
 a:hover { color: var(--accent-hover); text-decoration-color: currentColor; }
 
 :focus-visible {
-  outline: none;
+  outline: 3px solid var(--accent-deep);
+  outline-offset: 3px;
   box-shadow: var(--ring);
   border-radius: var(--radius-xs);
 }
@@ -227,15 +234,15 @@ a:hover { color: var(--accent-hover); text-decoration-color: currentColor; }
   position: fixed;
   top: 10px; left: 10px;
   z-index: 200;
-  background: var(--accent);
-  color: #fff;
+  background: var(--button-bg);
+  color: var(--button-ink);
   padding: 10px 16px;
   border-radius: var(--radius-sm);
   font-weight: 600;
   transform: translateY(-150%);
   transition: transform 0.2s var(--ease-out);
 }
-.skip-link:focus { transform: translateY(0); color: #fff; }
+.skip-link:focus { transform: translateY(0); color: var(--button-ink); }
 
 .sr-only {
   position: absolute; width: 1px; height: 1px;
@@ -658,11 +665,12 @@ body[data-home] .layout { grid-template-columns: 1fr; }
     width: min(82vw, 320px); height: 100%;
     z-index: 120;
     transform: translateX(-100%);
+    visibility: hidden;
     transition: transform 0.28s var(--ease-out);
     box-shadow: var(--shadow-lg);
     border-right: 1px solid var(--border);
   }
-  body[data-home].nav-open .sidebar { transform: translateX(0); }
+  body[data-home].nav-open .sidebar { transform: translateX(0); visibility: visible; }
   body[data-home].nav-open .sidebar-backdrop {
     display: block; position: fixed; inset: 0; z-index: 110;
     background: rgba(0, 0, 0, 0.45); backdrop-filter: blur(2px);
@@ -740,8 +748,8 @@ body[data-home] .content { max-width: 1120px; }
               box-shadow 0.16s ease, color 0.16s ease, border-color 0.16s ease;
 }
 .btn svg { width: 17px; height: 17px; }
-.btn-primary { background: var(--accent); color: #fff; box-shadow: var(--shadow-sm); }
-.btn-primary:hover { background: var(--accent-hover); color: #fff; transform: translateY(-1px); box-shadow: var(--shadow-md); }
+.btn-primary { background: var(--button-bg); color: var(--button-ink); box-shadow: var(--shadow-sm); }
+.btn-primary:hover { background: var(--accent-hover); color: var(--button-ink); transform: translateY(-1px); box-shadow: var(--shadow-md); }
 .btn-ghost {
   background: color-mix(in srgb, var(--hero-ink) 8%, transparent);
   color: var(--hero-ink);
@@ -1384,10 +1392,11 @@ td .no  { color: var(--ink-3); }
     z-index: 120;
     padding-top: 22px;
     transform: translateX(-100%);
+    visibility: hidden;
     transition: transform 0.28s var(--ease-out);
     box-shadow: var(--shadow-lg);
   }
-  body.nav-open .sidebar { transform: translateX(0); }
+  body.nav-open .sidebar { transform: translateX(0); visibility: visible; }
   body.nav-open .sidebar-backdrop {
     display: block;
     position: fixed; inset: 0; z-index: 110;

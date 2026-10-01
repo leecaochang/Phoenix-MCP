@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { agentCliChat, api } from "../api";
 import { renderMarkdown, flagsUnsafeContent } from "../utils/markdown";
 import {
-  getDurable, patchDurable, getSessionTurns, setSessionTurns,
+  getAgentCliOwner, flushSessionDraft, getDurable, patchDurable, getSessionTurns, setSessionTurns,
   getSessionDraft, setSessionDraft,
   getSessionUsage, setSessionUsage, type SessionUsage,
   AGENTCLI_TEXT_SIZE_MIN_PT, AGENTCLI_TEXT_SIZE_MAX_PT, AGENTCLI_TEXT_SIZE_STEP_PT,
@@ -594,6 +594,7 @@ export function AgentCliWindow({
   summonVersion,
 }: Props) {
   // Restore persisted window state (survives navigation away/back and reopen).
+  const persistenceOwner = useRef(getAgentCliOwner()).current;
   const saved = useRef(getDurable()).current;
   const firstInstance = (instances.some((i) => i.id === saved.instanceId) && saved.instanceId)
     || instances[0]?.id || "";
@@ -764,24 +765,24 @@ export function AgentCliWindow({
                        [kind, model, options.thinking, declaredCaps]);
 
   // Persist the selections, options, and geometry so they survive reopen/reload.
-  useEffect(() => { patchDurable({ tokenId }); }, [tokenId]);
-  useEffect(() => { patchDurable({ instanceId }); }, [instanceId]);
-  useEffect(() => { patchDurable({ model }); }, [model]);
-  useEffect(() => { patchDurable({ options }); }, [options]);
-  useEffect(() => { patchDurable({ showFooter }); }, [showFooter]);
-  useEffect(() => { patchDurable({ showTimestamps }); }, [showTimestamps]);
-  useEffect(() => { patchDurable({ textSizePt }); }, [textSizePt]);
-  useEffect(() => { patchDurable({ minimized, maximized }); }, [minimized, maximized]);
+  useEffect(() => { patchDurable({ tokenId }, persistenceOwner); }, [tokenId]);
+  useEffect(() => { patchDurable({ instanceId }, persistenceOwner); }, [instanceId]);
+  useEffect(() => { patchDurable({ model }, persistenceOwner); }, [model]);
+  useEffect(() => { patchDurable({ options }, persistenceOwner); }, [options]);
+  useEffect(() => { patchDurable({ showFooter }, persistenceOwner); }, [showFooter]);
+  useEffect(() => { patchDurable({ showTimestamps }, persistenceOwner); }, [showTimestamps]);
+  useEffect(() => { patchDurable({ textSizePt }, persistenceOwner); }, [textSizePt]);
+  useEffect(() => { patchDurable({ minimized, maximized }, persistenceOwner); }, [minimized, maximized]);
   // The prefill is one-shot: consumed into the input above, then cleared so it
   // does not reappear on a later open.
-  useEffect(() => { if (saved.prefill) patchDurable({ prefill: "" }); }, [saved.prefill]);
+  useEffect(() => { if (saved.prefill) patchDurable({ prefill: "" }, persistenceOwner); }, [saved.prefill]);
   // The transcript is session-only (survives remount within a page load).
-  useEffect(() => { setSessionTurns(turns); }, [turns]);
+  useEffect(() => { setSessionTurns(turns, persistenceOwner); }, [turns]);
   // Mirror the unsent message box into the same session tier. Done as an effect
   // rather than at each setInput call site so every path stays in sync: typing,
   // send and /clear (which set it to ""), and the cancel path that restores the
   // last query.
-  useEffect(() => { setSessionDraft(input); }, [input]);
+  useEffect(() => { setSessionDraft(input, persistenceOwner); }, [input]);
 
   useEffect(() => {
     if (inputRef.current) fitComposerTextarea(inputRef.current);
@@ -829,7 +830,7 @@ export function AgentCliWindow({
 
   const resetUsage = useCallback(() => {
     const zero = { input: 0, output: 0, context: 0, noData: false };
-    setSessionUsage(zero);
+    setSessionUsage(zero, persistenceOwner);
     setUsage(zero);
   }, []);
 
@@ -934,6 +935,7 @@ export function AgentCliWindow({
   }, [onClose]);
 
   useEffect(() => () => {
+    flushSessionDraft(persistenceOwner);
     turnGenerationRef.current += 1;
     cancelledRef.current = true;
     abortRef.current?.abort();
@@ -1001,7 +1003,7 @@ export function AgentCliWindow({
     const stateless = tokens.find((token) => token.id === tokenId)?.persona === "home_companion";
     if (stateless) {
       setTurns([]);
-      setSessionTurns([]);
+      setSessionTurns([], persistenceOwner);
       setAnnouncement("");
       resetUsage();
     }
@@ -1140,7 +1142,7 @@ export function AgentCliWindow({
                 context: Number(p.context_tokens ?? 0) || usageRef.current.context,
                 noData: false,
               };
-              setSessionUsage(next);
+              setSessionUsage(next, persistenceOwner);
               setUsage(next);
               break;
             }
@@ -1197,7 +1199,7 @@ export function AgentCliWindow({
             && usageBaseRef.current.input + usageBaseRef.current.output === 0
             && !usageRef.current.noData) {
           const marked: SessionUsage = { ...usageRef.current, noData: true };
-          setSessionUsage(marked);
+          setSessionUsage(marked, persistenceOwner);
           setUsage(marked);
         }
         // Finalize the turn: fold live entries into the turn history, then trim.
@@ -1427,7 +1429,7 @@ export function AgentCliWindow({
         final = { x, y };
         setActive(final);
       }
-      patchDurable({ [persistKey]: final });  // persist only when the drag settles
+      patchDurable({ [persistKey]: final }, persistenceOwner);  // persist only when the drag settles
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -1454,7 +1456,7 @@ export function AgentCliWindow({
     const up = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", up);
-      patchDurable({ size: latestSize, pos: latestPos });
+      patchDurable({ size: latestSize, pos: latestPos }, persistenceOwner);
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
@@ -1479,7 +1481,7 @@ export function AgentCliWindow({
       agentCliTopMargin(rootRef.current),
     );
     setPillPos(np);
-    patchDurable({ pillPos: np });
+    patchDurable({ pillPos: np }, persistenceOwner);
     setMode("min");
   }, [pillPos, pos]);
 
@@ -1530,7 +1532,7 @@ export function AgentCliWindow({
         const np = clampPosToViewport(base, pillSize, vw, vh, topMargin);
         if (np.x !== pillPos.x || np.y !== pillPos.y) {
           setPillPos(np);
-          patchDurable({ pillPos: np });
+          patchDurable({ pillPos: np }, persistenceOwner);
         }
       } else if (mode === "normal") {
         const ns = {
@@ -1541,7 +1543,7 @@ export function AgentCliWindow({
         if (ns.w !== size.w || ns.h !== size.h || np.x !== pos.x || np.y !== pos.y) {
           setSize(ns);
           setPos(np);
-          patchDurable({ size: ns, pos: np });
+          patchDurable({ size: ns, pos: np }, persistenceOwner);
         }
       }
     };
@@ -1564,7 +1566,7 @@ export function AgentCliWindow({
     const np = clampPosToViewport(pos, ns, vw, vh, topMargin);
     setSize(ns);
     setPos(np);
-    patchDurable({ size: ns, pos: np });
+    patchDurable({ size: ns, pos: np }, persistenceOwner);
     setMode("normal");
   }, [pos, size]);
 
@@ -1841,7 +1843,9 @@ export function AgentCliWindow({
               value={input}
               aria-label={t("agentchat.messageAria")}
               placeholder={noInstances ? t("agentchat.configureFirst") : t("agentchat.messagePlaceholder")}
-              disabled={sending || noInstances}
+              disabled={noInstances}
+              readOnly={sending}
+              aria-disabled={sending}
               rows={2}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
@@ -1851,7 +1855,7 @@ export function AgentCliWindow({
                 {t("common.cancel")}
               </button>
             ) : (
-              <button className="btn btn-primary btn-sm" disabled={noInstances || !input.trim()} onClick={() => void send()}>
+              <button className="btn btn-primary btn-sm" aria-disabled={noInstances || !input.trim()} onClick={() => { if (!noInstances) void send(); }}>
                 {t("agentchat.send")}
               </button>
             )}
