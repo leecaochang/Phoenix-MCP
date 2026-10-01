@@ -173,7 +173,11 @@
       "tierIrreversible": "高风险",
       "tierRead": "读取",
       "tierSystem": "系统操作",
-      "updateFailed": "更新能力失败。"
+      "updateFailed": "更新能力失败。",
+      "cap_calendar_write": {
+        "label": "日历写入",
+        "description": "在具有写入权限的日历中创建、更新和删除事件。"
+      }
     },
     "personas": {
       "automation_builder": {
@@ -943,7 +947,10 @@
       "set_yaml_config.removing_entry": "替换 {file}，移除 1 个条目",
       "set_yaml_config.removing_entries": "替换 {file}，移除 {count} 个条目",
       "configuration_recovery.restore": "恢复 {resource} 的已保存配置",
-      "configuration_recovery.acknowledge": "检查 {resource} 的更改中断后的配置"
+      "configuration_recovery.acknowledge": "检查 {resource} 的更改中断后的配置",
+      "create_calendar_event": "创建日历事件",
+      "update_calendar_event": "更新日历事件",
+      "delete_calendar_event": "删除日历事件"
     },
     "approvals": {
       "approve": "批准并执行",
@@ -2007,7 +2014,13 @@
       "configuration_recovery.acknowledge.body": "无法验证之前的更改，也无法在此安全恢复。请在 Home Assistant 中检查此资源，然后批准以接受其当前状态并解除更改限制。拒绝将继续阻止更改。不会重复执行原始命令。",
       "targets.exact": "此批准仅涵盖“详情”中列出的实体。目标发生变化时，需要提交新请求。",
       "targets.futureNative": "Home Assistant 会在此配置运行时解析未来的目标。成员可能变化，后续执行不经过 Phoenix 权限和 MESA 检查。",
-      "targets.dynamicAccessible": "可访问设备会在执行时重新解析，其成员可能已发生变化。"
+      "targets.dynamicAccessible": "可访问设备会在执行时重新解析，其成员可能已发生变化。",
+      "create_calendar_event.title": "创建日历事件",
+      "create_calendar_event.body": "这将应用建议的配置更改。打开详细信息可查看具体更改内容。",
+      "update_calendar_event.title": "更新日历事件",
+      "update_calendar_event.body": "这将应用建议的操作。打开详细信息可查看具体更改内容。",
+      "delete_calendar_event.title": "删除日历事件",
+      "delete_calendar_event.body": "此操作将移除所选项目。更改可能无法撤销。"
     },
     "routing": {
       "providerOptions": "决策提供商使用固定的路由选项，不使用思考级别等聊天选项。“刷新模型”会检查模型是否可用，不会执行命令，也不会测试路由准确性。",

@@ -37,6 +37,9 @@ jsonschema==4.26.0
 # Native camera service-schema checks; matches the pinned HA camera manifest.
 PyTurboJPEG==1.8.3
 
+# Native Local Calendar update and recurrence regression tests; matches pinned HA.
+ical==14.1.1
+
 # Standalone lint tool used by the dev workflow (not pulled in by PHACC).
 pyflakes==3.4.0
 

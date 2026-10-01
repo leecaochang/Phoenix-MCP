@@ -133,7 +133,11 @@
       "updateFailed": "No se pudo actualizar la capacidad.",
       "passThroughNotice": "<strong>El paso directo está habilitado.</strong> Las lecturas y las acciones cotidianas se tratan como Permitir. Los cambios de configuración, las acciones del sistema, las capacidades de alto riesgo y el acceso al registro del sistema siguen usando la configuración siguiente. Confirmar siempre requiere aprobación.",
       "esphomeBadgeTitle": "Las herramientas de ESPHome permanecen ocultas para este token hasta que el complemento esté disponible. La capacidad puede configurarse ahora.",
-      "confirmUnavailable": "Esta capacidad no puede requerir aprobación."
+      "confirmUnavailable": "Esta capacidad no puede requerir aprobación.",
+      "cap_calendar_write": {
+        "label": "Escritura de calendario",
+        "description": "Crear, actualizar y eliminar eventos en calendarios con permiso de escritura."
+      }
     },
     "inject": {
       "profileSet": "Perfil MESA establecido para {key} - clic para editar",
@@ -834,7 +838,10 @@
       "zigbee_topology": "Escanear la topología Zigbee",
       "zigbee_topology.backend": "Escanear las tablas de vecinos de {backend} para el mapa Zigbee del ámbito",
       "configuration_recovery.restore": "Restaurar la configuración guardada de {resource}",
-      "configuration_recovery.acknowledge": "Comprobar la configuración tras un cambio interrumpido en {resource}"
+      "configuration_recovery.acknowledge": "Comprobar la configuración tras un cambio interrumpido en {resource}",
+      "create_calendar_event": "Crear evento del calendario",
+      "update_calendar_event": "Actualizar evento del calendario",
+      "delete_calendar_event": "Eliminar evento del calendario"
     },
     "adminError": {
       "authRequired": "Se requiere autenticación.",
@@ -1918,7 +1925,13 @@
       "configuration_recovery.acknowledge.body": "No se pudo verificar un cambio anterior y no se puede restaurar de forma segura aquí. Compruebe este recurso en Home Assistant y luego apruebe para aceptar su estado actual y desbloquear los cambios. Rechazar mantiene los cambios bloqueados. El comando original no se repetirá.",
       "targets.exact": "Esta aprobación cubre las entidades enumeradas en Detalles. Si los destinos cambian, se necesita una nueva solicitud.",
       "targets.futureNative": "Home Assistant determina los destinos futuros cuando se ejecuta esta configuración. Los miembros pueden cambiar y la ejecución posterior queda fuera de las comprobaciones de permisos de Phoenix y de MESA.",
-      "targets.dynamicAccessible": "Los dispositivos accesibles se determinan de nuevo al ejecutar y pueden haber cambiado."
+      "targets.dynamicAccessible": "Los dispositivos accesibles se determinan de nuevo al ejecutar y pueden haber cambiado.",
+      "create_calendar_event.title": "Crear evento del calendario",
+      "create_calendar_event.body": "Se aplicará el cambio de configuración propuesto. Abra Detalles para revisar el cambio exacto propuesto.",
+      "update_calendar_event.title": "Actualizar evento del calendario",
+      "update_calendar_event.body": "Se aplicará la acción propuesta. Abra Detalles para revisar el cambio exacto propuesto.",
+      "delete_calendar_event.title": "Eliminar evento del calendario",
+      "delete_calendar_event.body": "Se eliminará el elemento seleccionado. Es posible que el cambio no se pueda deshacer."
     },
     "common": {
       "after": "Después",

@@ -50,6 +50,7 @@ const TOKEN_RECORD_KEYS = {
   cap_blueprint_write: true,
   cap_scene_write: true,
   cap_helper_write: true,
+  cap_calendar_write: true,
   cap_physical_control: true,
   cap_restart: true,
   cap_integration_write: true,

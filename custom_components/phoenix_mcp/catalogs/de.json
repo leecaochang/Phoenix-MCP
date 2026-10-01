@@ -358,7 +358,11 @@
       "updateFailed": "Fähigkeit konnte nicht aktualisiert werden.",
       "passThroughNotice": "<strong>Durchreichen ist aktiviert.</strong> Lesezugriffe und alltägliche Aktionen werden als Erlauben behandelt. Konfigurationsänderungen, Systemaktionen, Hochrisiko-Fähigkeiten und der Zugriff auf das Systemprotokoll verwenden weiterhin die Einstellungen unten. Bestätigen erfordert immer eine Genehmigung.",
       "esphomeBadgeTitle": "Die ESPHome-Werkzeuge bleiben für dieses Token ausgeblendet, bis das Add-on verfügbar ist. Die Fähigkeit kann trotzdem schon jetzt festgelegt werden.",
-      "confirmUnavailable": "Diese Fähigkeit kann keine Genehmigung erfordern."
+      "confirmUnavailable": "Diese Fähigkeit kann keine Genehmigung erfordern.",
+      "cap_calendar_write": {
+        "label": "Kalender schreiben",
+        "description": "Termine in beschreibbaren Kalendern erstellen, aktualisieren und löschen."
+      }
     },
     "personas": {
       "automation_builder": {
@@ -1298,7 +1302,10 @@
       "zigbee_topology": "Zigbee-Topologie scannen",
       "zigbee_topology.backend": "Nachbartabellen von {backend} für die eingeschränkte Zigbee-Karte scannen",
       "configuration_recovery.restore": "Gespeicherte Konfiguration für {resource} wiederherstellen",
-      "configuration_recovery.acknowledge": "Konfiguration nach einer unterbrochenen Änderung an {resource} prüfen"
+      "configuration_recovery.acknowledge": "Konfiguration nach einer unterbrochenen Änderung an {resource} prüfen",
+      "create_calendar_event": "Kalendertermin erstellen",
+      "update_calendar_event": "Kalendertermin aktualisieren",
+      "delete_calendar_event": "Kalendertermin löschen"
     },
     "adminError": {
       "authRequired": "Authentifizierung erforderlich.",
@@ -1700,7 +1707,13 @@
       "configuration_recovery.acknowledge.body": "Eine vorherige Änderung konnte nicht überprüft werden und lässt sich hier nicht sicher wiederherstellen. Prüfen Sie diese Ressource in Home Assistant und genehmigen Sie anschließend, um den aktuellen Zustand zu akzeptieren und Änderungen freizugeben. Ablehnen lässt Änderungen gesperrt. Der ursprüngliche Befehl wird nicht wiederholt.",
       "targets.exact": "Diese Genehmigung gilt für die in Details aufgeführten Entitäten. Geänderte Ziele erfordern eine neue Anfrage.",
       "targets.futureNative": "Home Assistant bestimmt zukünftige Ziele, wenn diese Konfiguration ausgeführt wird. Die Zugehörigkeit kann sich ändern, und die spätere Ausführung erfolgt außerhalb der Berechtigungsprüfungen von Phoenix und der MESA Prüfungen.",
-      "targets.dynamicAccessible": "Zugängliche Geräte werden bei der Ausführung erneut bestimmt und können sich geändert haben."
+      "targets.dynamicAccessible": "Zugängliche Geräte werden bei der Ausführung erneut bestimmt und können sich geändert haben.",
+      "create_calendar_event.title": "Kalendertermin erstellen",
+      "create_calendar_event.body": "Dadurch wird die vorgeschlagene Konfigurationsänderung übernommen. Öffnen Sie Details, um die genaue vorgeschlagene Änderung zu prüfen.",
+      "update_calendar_event.title": "Kalendertermin aktualisieren",
+      "update_calendar_event.body": "Dadurch wird die vorgeschlagene Aktion übernommen. Öffnen Sie Details, um die genaue vorgeschlagene Änderung zu prüfen.",
+      "delete_calendar_event.title": "Kalendertermin löschen",
+      "delete_calendar_event.body": "Das ausgewählte Element wird entfernt. Die Änderung lässt sich möglicherweise nicht rückgängig machen."
     },
     "common": {
       "after": "Nachher",

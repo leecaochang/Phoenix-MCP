@@ -257,7 +257,11 @@
       "updateFailed": "Failed to update capability.",
       "passThroughNotice": "<strong>Pass-through is enabled.</strong> Reads and everyday actions are treated as Allow. Configuration changes, system actions, high-risk capabilities, and system log access still use the settings below. Confirm always requires approval.",
       "esphomeBadgeTitle": "The ESPHome tools stay hidden from this token until the add-on is available. The capability can still be set now.",
-      "confirmUnavailable": "This capability cannot require approval."
+      "confirmUnavailable": "This capability cannot require approval.",
+      "cap_calendar_write": {
+        "label": "Calendar write",
+        "description": "Create, update and delete events on writable calendars."
+      }
     },
     "personas": {
       "automation_builder": {
@@ -1476,6 +1480,7 @@
       "create_automation": "Create automation '{alias}'",
       "create_backup": "Create backup",
       "create_backup.named": "Create backup \"{name}\"",
+      "create_calendar_event": "Create calendar event",
       "create_helper": "Create {helper_type} helper '{name}'",
       "create_scene": "Create scene '{name}'",
       "create_script": "Create script '{script_id}'",
@@ -1489,6 +1494,7 @@
       "dashboard_card.edit": "Replace card {card_index} on dashboard '{label}' (view {view_index})",
       "dashboard_card.edit.section": "Replace card {card_index} on dashboard '{label}' (view {view_index}, section {section_index})",
       "delete_automation": "Delete automation '{automation_id}'",
+      "delete_calendar_event": "Delete calendar event",
       "delete_entity": "Delete the registry entry for {entity_id}",
       "delete_esphome_yaml": "Delete ESPHome device configuration {rel}. The device itself is not touched.",
       "delete_esphome_yaml.device": "Delete ESPHome device configuration {rel} ({device}). The device itself is not touched.",
@@ -1543,6 +1549,7 @@
       "set_yaml_config.removing": "Replace {file}, removing the top-level {keys}",
       "set_yaml_config.removing_entries": "Replace {file}, removing {count} entries",
       "set_yaml_config.removing_entry": "Replace {file}, removing 1 entry",
+      "update_calendar_event": "Update calendar event",
       "write_file": "Write file '{path}'",
       "zigbee_binding": "Change a Zigbee device binding",
       "zigbee_binding.devices": "{operation} Zigbee binding from {source} to {target}",
@@ -1779,6 +1786,8 @@
       "create_backup.named.body": "This will apply the proposed configuration change. Open Details to review the exact proposed change.",
       "create_backup.named.title": "Create backup \"{name}\"",
       "create_backup.title": "Create backup",
+      "create_calendar_event.body": "This will apply the proposed configuration change. Open Details to review the exact proposed change.",
+      "create_calendar_event.title": "Create calendar event",
       "create_helper.body": "This will apply the proposed configuration change. Open Details to review the exact proposed change.",
       "create_helper.title": "Create {helper_type} helper '{name}'",
       "create_scene.body": "This will apply the proposed configuration change. Open Details to review the exact proposed change.",
@@ -1805,6 +1814,8 @@
       "dashboard_card.edit.title": "Update a card on dashboard '{label}'",
       "delete_automation.body": "This will permanently delete automation {automation_id}.",
       "delete_automation.title": "Delete automation '{automation_id}'",
+      "delete_calendar_event.body": "This will remove the selected item. The change may not be reversible.",
+      "delete_calendar_event.title": "Delete calendar event",
       "delete_entity.body": "This will delete the registry entry for {entity_id}. The entity may be recreated later by its integration.",
       "delete_entity.title": "Delete the registry entry for {entity_id}",
       "delete_esphome_yaml.body": "This will permanently delete {rel}. The ESPHome device itself will not be changed.",
@@ -1969,6 +1980,8 @@
       "targets.dynamicAccessible": "Accessible devices are resolved again at execution and may have changed.",
       "targets.exact": "This approval covers the entities listed in Details. Changed targets require a new request.",
       "targets.futureNative": "Home Assistant resolves future targets when this configuration runs. Membership may change, and later execution is outside Phoenix permission and MESA checks.",
+      "update_calendar_event.body": "This will apply the proposed action. Open Details to review the exact proposed change.",
+      "update_calendar_event.title": "Update calendar event",
       "view.defaultAria": "Default approval view",
       "view.details": "Details",
       "view.summary": "Summary",

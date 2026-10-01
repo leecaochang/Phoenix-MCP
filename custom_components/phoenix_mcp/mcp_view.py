@@ -39,6 +39,7 @@ from homeassistant.config_entries import (
 )
 from homeassistant.core import HomeAssistant, callback, valid_entity_id
 from homeassistant.helpers.event import async_track_state_change_event
+from homeassistant.util import dt as dt_util
 from homeassistant.util.dt import utcnow
 from homeassistant.util.ulid import ulid_to_bytes_or_none
 
@@ -176,6 +177,10 @@ from .tools.native import (
     _tool_hass_vacuum_start,
     _tool_hass_turn_off,
     _tool_hass_turn_on,
+)
+from .tools.calendar import (
+    _tool_calendar_write, _tool_get_calendar_write,
+    _execute_create_calendar_event, _execute_update_calendar_event, _execute_delete_calendar_event,
 )
 from .tools.blueprint import (
     _execute_create_blueprint,
@@ -1106,55 +1111,34 @@ async def _tool_get_statistics(
 async def _tool_get_calendar_events(
     args: dict, token: TokenRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """MCP tool: list events from one accessible calendar entity (entity-scoped)."""
+    """Read full integration events including UID and occurrence identity."""
+    from .tools.calendar import _calendar_entity, _calendar_events, _safe_calendar_data, _calendar_window
     args, error = normalize_tool_args("get_calendar_events", args)
     if error:
         return _tool_error(error), "invalid_request", "get_calendar_events"
-    calendar_id = str(args.get("entity_id") or "").strip()
-    if not calendar_id:
-        return _tool_error("Missing required argument: entity_id"), "invalid_request", "get_calendar_events"
-
-    perm = resolve(calendar_id, token, hass)
-    if perm == Permission.NOT_FOUND:
-        return _tool_error("Calendar not found."), "not_found", calendar_id
-    if perm in (Permission.NO_ACCESS, Permission.DENY):
-        return _tool_error("Calendar not found."), "denied", calendar_id
-    if not calendar_id.startswith("calendar."):
-        return _tool_error("Not a calendar entity."), "invalid_request", calendar_id
-
-    start_time = utcnow()
-    if args.get("start_time"):
-        try:
-            start_time = _parse_time_param(args["start_time"])
-        except ValueError:
-            return _tool_error("Invalid start_time format."), "invalid_request", calendar_id
-    if args.get("end_time"):
-        try:
-            end_time = _parse_time_param(args["end_time"])
-        except ValueError:
-            return _tool_error("Invalid end_time format."), "invalid_request", calendar_id
-    else:
-        end_time = start_time + timedelta(days=7)
-    if end_time <= start_time:
-        return _tool_error("end_time must be after start_time."), "invalid_request", calendar_id
-
     try:
-        # calendar.get_events is SupportsResponse.ONLY, so return_response=True is
-        # required here (the usual Phoenix MCP rule against it is for response-less services).
-        resp = await hass.services.async_call(
-            "calendar", "get_events",
-            {"entity_id": calendar_id,
-             "start_date_time": start_time.isoformat(),
-             "end_date_time": end_time.isoformat()},
-            blocking=True, return_response=True,
-        )
+        entity = _calendar_entity(args.get("entity_id"), token, hass)
+        # Preserve the existing relative-time argument contract.
+        for key in ("start_time", "end_time"):
+            if key in args:
+                if not isinstance(args[key], str):
+                    raise ValueError("Calendar times must be strings.")
+                args[key] = dt_util.as_local(_parse_time_param(args[key])).isoformat()
+        start, end = _calendar_window(args, defaults=True)
+        events = await _calendar_events(entity, hass, start, end)
+        _calendar_entity(args.get("entity_id"), token, hass)
+        body = {"calendar_id": args["entity_id"], "events": [
+            {**event, "content_hash": content_hash(event)} for event in events]}
+        return _tool_success(json.dumps(_safe_calendar_data(body, token, hass))), "allowed", args["entity_id"]
+    except AuthorityChangedError:
+        raise
+    except PermissionError:
+        return _tool_error("Calendar not found."), "denied", "get_calendar_events"
+    except ValueError as exc:
+        return _tool_error(_safe_calendar_data(str(exc), token, hass)), "invalid_request", "get_calendar_events"
     except Exception:
-        _LOGGER.debug("calendar get_events failed for %s", calendar_id, exc_info=True)
-        return _tool_error("Failed to read calendar events."), "invalid_request", calendar_id
-
-    entry = resp.get(calendar_id, {}) if isinstance(resp, dict) else {}
-    events = entry.get("events", []) if isinstance(entry, dict) else []
-    return _tool_success(json.dumps({"calendar_id": calendar_id, "events": events}, default=str)), "allowed", calendar_id
+        _LOGGER.exception("Calendar read failed")
+        return _tool_error("Failed to read calendar events."), "invalid_request", "get_calendar_events"
 
 
 async def _tool_call_service(
@@ -1175,7 +1159,9 @@ async def _tool_call_service(
         service = str_arg(service_arg.get("name")) if isinstance(service_arg, dict) else str_arg(service_arg)
         service_key = f"{domain}/{service}"
         cap = None
-        if service_key in DUAL_GATE_SERVICES:
+        if domain == "calendar" and service != "get_events":
+            cap = "cap_calendar_write"
+        elif service_key in DUAL_GATE_SERVICES:
             cap = "cap_restart"
         elif call_needs_physical_gate(
             domain=domain, service=service,
@@ -1195,6 +1181,11 @@ async def _tool_call_service(
     service = str_arg(args.get("service"))
     if not domain or not service:
         return _tool_error("Missing required arguments: domain and service"), "denied", "call_service"
+
+    if domain == "calendar" and service != "get_events":
+        if effective_cap(token, "cap_calendar_write") == CAP_DENY:
+            return _tool_error("Forbidden."), "denied", "call_service"
+        return _tool_error("Use the dedicated calendar event authoring tools for calendar writes."), "invalid_request", "call_service"
 
     secondary_targets = await unsupported_secondary_targets(
         hass, args.get("service_data"), domain=domain, service=service
@@ -1333,6 +1324,11 @@ async def _execute_call_service(
     service = str_arg(args.get("service"))
     if not domain or not service:
         return _tool_error("Missing required arguments: domain and service"), "denied", "call_service"
+
+    if domain == "calendar" and service != "get_events":
+        if effective_cap(token, "cap_calendar_write") == CAP_DENY:
+            return _tool_error("Forbidden."), "denied", "call_service"
+        return _tool_error("Use the dedicated calendar event authoring tools for calendar writes."), "invalid_request", "call_service"
 
     from .approval_targets import TARGETS_CHANGED, targets_current
 
@@ -9866,3 +9862,11 @@ _register_tool("patch_dashboard", _tool_patch_dashboard)
 # The mesa_* tools take (tool_name, args, ...) and are scoped by mesa_tools.
 for _mesa_tool_name in sorted(MESA_TOOL_NAMES):
     _register_tool(_mesa_tool_name, _tool_mesa, mesa_tool_name=_mesa_tool_name)
+
+_register_tool("create_calendar_event", _tool_calendar_write, operation="create", tool_name="create_calendar_event")
+_register_tool("update_calendar_event", _tool_calendar_write, operation="update", tool_name="update_calendar_event")
+_register_tool("delete_calendar_event", _tool_calendar_write, operation="delete", tool_name="delete_calendar_event")
+_register_executor("create_calendar_event", _execute_create_calendar_event)
+_register_executor("update_calendar_event", _execute_update_calendar_event)
+_register_executor("delete_calendar_event", _execute_delete_calendar_event)
+_register_tool("get_calendar_write", _tool_get_calendar_write)

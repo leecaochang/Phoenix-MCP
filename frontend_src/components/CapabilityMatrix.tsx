@@ -140,6 +140,13 @@ const CAPS: CapDef[] = [
     confirmAvailable: true,
   },
   {
+    key: "cap_calendar_write",
+    labelKey: "caps.cap_calendar_write.label",
+    descriptionKey: "caps.cap_calendar_write.description",
+    tier: "config_write",
+    confirmAvailable: true,
+  },
+  {
     key: "cap_physical_control",
     labelKey: "caps.cap_physical_control.label",
     descriptionKey: "caps.cap_physical_control.description",

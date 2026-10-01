@@ -1639,6 +1639,8 @@ async def _tool_find_available_actions(
         if key in NO_TARGET_SERVICES:
             available = yaml_edit_ok
             reason = None if yaml_edit_ok else "requires yaml edit capability"
+        elif domain == "calendar" and svc != "get_events":
+            available, reason = False, "use dedicated calendar event authoring tools"
         elif not writable:
             reason = "read-only access to this entity"
         elif domain in PHYSICAL_GATE_DOMAINS and not physical_ok:
@@ -2755,6 +2757,8 @@ async def _tool_dry_run_service(
     service = str_arg(args.get("service"))
     if not domain or not service:
         return _tool_error("Missing required arguments: domain and service"), "invalid_request", "dry_run_service"
+    if domain == "calendar" and service != "get_events":
+        return _tool_error("Use the dedicated calendar event authoring tools for calendar writes."), "invalid_request", "dry_run_service"
     secondary_targets = await unsupported_secondary_targets(
         hass, args.get("service_data"), domain=domain, service=service
     )

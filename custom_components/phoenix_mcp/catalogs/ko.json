@@ -279,7 +279,11 @@
       "updateFailed": "기능을 업데이트하지 못했습니다.",
       "passThroughNotice": "<strong>패스스루가 활성화되었습니다.</strong> 읽기 및 일상 작업은 허용으로 처리됩니다. 구성 변경, 시스템 작업, 고위험 기능 및 시스템 로그 접근은 여전히 아래 설정을 사용합니다. 확인은 항상 승인이 필요합니다.",
       "esphomeBadgeTitle": "애드온을 사용할 수 있을 때까지 ESPHome 도구는 이 토큰에 숨겨진 상태로 유지됩니다. 기능은 지금도 설정할 수 있습니다.",
-      "confirmUnavailable": "이 기능은 승인을 요구할 수 없습니다."
+      "confirmUnavailable": "이 기능은 승인을 요구할 수 없습니다.",
+      "cap_calendar_write": {
+        "label": "캘린더 쓰기",
+        "description": "쓰기 권한이 있는 캘린더에서 일정을 생성, 수정 및 삭제합니다."
+      }
     },
     "audit": {
       "allOutcomes": "모든 결과",
@@ -722,7 +726,10 @@
       "zigbee_topology": "Zigbee 토폴로지 스캔",
       "zigbee_topology.backend": "{backend} 이웃 테이블을 스캔하여 범위 내 Zigbee 맵 생성",
       "configuration_recovery.restore": "{resource}의 저장된 구성 복원",
-      "configuration_recovery.acknowledge": "{resource}의 변경 중단 후 구성 확인"
+      "configuration_recovery.acknowledge": "{resource}의 변경 중단 후 구성 확인",
+      "create_calendar_event": "캘린더 일정 생성",
+      "update_calendar_event": "캘린더 일정 수정",
+      "delete_calendar_event": "캘린더 일정 삭제"
     },
     "adminError": {
       "activeTokenRequired": "{field}은(는) 활성 토큰을 참조해야 합니다.",
@@ -1617,7 +1624,13 @@
       "configuration_recovery.acknowledge.body": "이전 변경을 검증할 수 없었으며 여기서는 안전하게 복원할 수 없습니다. Home Assistant에서 이 리소스를 확인한 다음 승인하여 현재 상태를 수락하고 변경 차단을 해제하세요. 거부하면 변경이 차단된 상태로 유지됩니다. 원래 명령은 다시 실행하지 않습니다.",
       "targets.exact": "이 승인은 세부 정보에 나열된 엔티티에 적용됩니다. 대상이 변경되면 새 요청이 필요합니다.",
       "targets.futureNative": "Home Assistant는 이 구성이 실행될 때 이후의 대상을 결정합니다. 구성원이 변경될 수 있으며, 이후 실행에는 Phoenix 권한 검사와 MESA 검사가 적용되지 않습니다.",
-      "targets.dynamicAccessible": "접근 가능한 기기는 실행 시 다시 확인되므로 변경되었을 수 있습니다."
+      "targets.dynamicAccessible": "접근 가능한 기기는 실행 시 다시 확인되므로 변경되었을 수 있습니다.",
+      "create_calendar_event.title": "캘린더 일정 생성",
+      "create_calendar_event.body": "제안된 구성 변경 사항이 적용됩니다. 정확한 변경 내용을 확인하려면 세부 정보를 열어 주십시오.",
+      "update_calendar_event.title": "캘린더 일정 수정",
+      "update_calendar_event.body": "제안된 작업이 적용됩니다. 정확한 변경 내용을 확인하려면 세부 정보를 열어 주십시오.",
+      "delete_calendar_event.title": "캘린더 일정 삭제",
+      "delete_calendar_event.body": "선택한 항목을 삭제합니다. 변경 사항을 되돌리지 못할 수 있습니다."
     },
     "approvals": {
       "approve": "승인 및 실행",

@@ -256,7 +256,11 @@
       "updateFailed": "Échec de la mise à jour de la capacité.",
       "passThroughNotice": "<strong>La transmission directe est activée.</strong> Les lectures et les actions quotidiennes sont traitées comme Autoriser. Les modifications de configuration, les actions système, les capacités à risque élevé et l'accès au journal système utilisent toujours les paramètres ci-dessous. Confirmer nécessite toujours une approbation.",
       "esphomeBadgeTitle": "Les outils ESPHome restent masqués pour ce jeton tant que le module complémentaire n'est pas disponible. La capacité peut néanmoins être définie dès maintenant.",
-      "confirmUnavailable": "Cette capacité ne peut pas nécessiter d'approbation."
+      "confirmUnavailable": "Cette capacité ne peut pas nécessiter d'approbation.",
+      "cap_calendar_write": {
+        "label": "Écriture du calendrier",
+        "description": "Créer, modifier et supprimer des événements dans les calendriers accessibles en écriture."
+      }
     },
     "personas": {
       "automation_builder": {
@@ -1559,7 +1563,10 @@
       "zigbee_topology": "Analyser la topologie Zigbee",
       "zigbee_topology.backend": "Analyser les tables de voisinage {backend} pour la carte Zigbee limitée",
       "configuration_recovery.restore": "Restaurer la configuration enregistrée de {resource}",
-      "configuration_recovery.acknowledge": "Vérifier la configuration après une modification interrompue de {resource}"
+      "configuration_recovery.acknowledge": "Vérifier la configuration après une modification interrompue de {resource}",
+      "create_calendar_event": "Créer un événement du calendrier",
+      "update_calendar_event": "Modifier un événement du calendrier",
+      "delete_calendar_event": "Supprimer un événement du calendrier"
     },
     "version": {
       "card.added": "ajouté {subject} ({where})",
@@ -2007,7 +2014,13 @@
       "configuration_recovery.acknowledge.body": "Une modification précédente n’a pas pu être vérifiée et ne peut pas être restaurée ici en toute sécurité. Vérifiez cette ressource dans Home Assistant, puis approuvez pour accepter son état actuel et débloquer les modifications. Rejeter maintient les modifications bloquées. La commande initiale ne sera pas répétée.",
       "targets.exact": "Cette approbation couvre les entités indiquées dans Détails. Toute modification des cibles nécessite une nouvelle demande.",
       "targets.futureNative": "Home Assistant détermine les futures cibles lors de l’exécution de cette configuration. Les membres peuvent changer et l’exécution ultérieure se déroule sans les vérifications des permissions de Phoenix et de MESA.",
-      "targets.dynamicAccessible": "Les appareils accessibles sont déterminés à nouveau lors de l’exécution et peuvent avoir changé."
+      "targets.dynamicAccessible": "Les appareils accessibles sont déterminés à nouveau lors de l’exécution et peuvent avoir changé.",
+      "create_calendar_event.title": "Créer un événement du calendrier",
+      "create_calendar_event.body": "Cela appliquera la modification de configuration proposée. Ouvrez Détails pour réviser la modification proposée exacte.",
+      "update_calendar_event.title": "Modifier un événement du calendrier",
+      "update_calendar_event.body": "Cela appliquera la modification de configuration proposée. Ouvrez Détails pour réviser la modification proposée exacte.",
+      "delete_calendar_event.title": "Supprimer un événement du calendrier",
+      "delete_calendar_event.body": "Cette action supprimera l’élément sélectionné. La modification peut être irréversible."
     },
     "routing": {
       "providerOptions": "Les fournisseurs de décisions utilisent des choix de routage fixes, sans options de Chat telles que les niveaux de raisonnement. Actualiser les modèles vérifie leur disponibilité sans exécuter de commande et ne teste pas la précision du routage.",

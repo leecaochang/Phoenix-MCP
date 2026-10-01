@@ -503,7 +503,11 @@
       "tierIrreversible": "Hoog risico",
       "tierRead": "Lezen",
       "tierSystem": "Systeemacties",
-      "updateFailed": "Mogelijkheid bijwerken is mislukt."
+      "updateFailed": "Mogelijkheid bijwerken is mislukt.",
+      "cap_calendar_write": {
+        "label": "Kalender schrijven",
+        "description": "Afspraken maken, bijwerken en verwijderen in kalenders met schrijftoegang."
+      }
     },
     "perms": {
       "addHint": "Hint toevoegen",
@@ -675,7 +679,10 @@
       "zigbee_topology": "Zigbee-topologie scannen",
       "zigbee_topology.backend": "Buurtabellen van {backend} scannen voor de afgebakende Zigbee-kaart",
       "configuration_recovery.restore": "Opgeslagen configuratie voor {resource} herstellen",
-      "configuration_recovery.acknowledge": "Configuratie controleren na een onderbroken wijziging aan {resource}"
+      "configuration_recovery.acknowledge": "Configuratie controleren na een onderbroken wijziging aan {resource}",
+      "create_calendar_event": "Kalenderafspraak maken",
+      "update_calendar_event": "Kalenderafspraak bijwerken",
+      "delete_calendar_event": "Kalenderafspraak verwijderen"
     },
     "approvals": {
       "approve": "Goedkeuren en uitvoeren",
@@ -2085,7 +2092,13 @@
       "configuration_recovery.acknowledge.body": "Een eerdere wijziging kon niet worden geverifieerd en kan hier niet veilig worden hersteld. Controleer deze bron in Home Assistant en keur daarna goed om de huidige toestand te accepteren en wijzigingen vrij te geven. Afwijzen houdt wijzigingen geblokkeerd. De oorspronkelijke opdracht wordt niet herhaald.",
       "targets.exact": "Deze goedkeuring geldt voor de entiteiten die in Details staan. Gewijzigde doelen vereisen een nieuw verzoek.",
       "targets.futureNative": "Home Assistant bepaalt toekomstige doelen wanneer deze configuratie wordt uitgevoerd. De samenstelling kan veranderen en latere uitvoering vindt plaats buiten de controles van Phoenix voor machtigingen en MESA.",
-      "targets.dynamicAccessible": "Toegankelijke apparaten worden bij uitvoering opnieuw bepaald en kunnen zijn gewijzigd."
+      "targets.dynamicAccessible": "Toegankelijke apparaten worden bij uitvoering opnieuw bepaald en kunnen zijn gewijzigd.",
+      "create_calendar_event.title": "Kalenderafspraak maken",
+      "create_calendar_event.body": "Hiermee wordt de voorgestelde configuratiewijziging toegepast. Open Details om de exacte voorgestelde wijziging te bekijken.",
+      "update_calendar_event.title": "Kalenderafspraak bijwerken",
+      "update_calendar_event.body": "Hiermee wordt de voorgestelde actie toegepast. Open Details om de exacte voorgestelde wijziging te bekijken.",
+      "delete_calendar_event.title": "Kalenderafspraak verwijderen",
+      "delete_calendar_event.body": "Het geselecteerde item wordt verwijderd. De wijziging kan mogelijk niet worden teruggedraaid."
     },
     "routing": {
       "providerOptions": "Beslissingsproviders gebruiken vaste routeringskeuzes, zonder Chat-opties zoals denkniveaus. Modellen vernieuwen controleert de beschikbaarheid zonder een opdracht uit te voeren; het test niet de nauwkeurigheid van de routering.",

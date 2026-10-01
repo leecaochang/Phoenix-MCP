@@ -187,7 +187,6 @@ class TestBroadcast:
 #   - notifications Phoenix itself raises
 MESA_EXEMPT_ACTUATORS = {
     "helpers.py::fire_rate_limit_events": "persistent_notification Phoenix raises about itself",
-    "mcp_view.py::_tool_get_calendar_events": "calendar.get_events is a read with return_response",
     "mcp_view.py::_dispatch_no_target_tool_call": "NO_TARGET_SERVICES take no entity (rule 15)",
     "mcp_view.py::_execute_restart_ha": "homeassistant.restart has no entity target",
     "tools/native.py::_relative_volume_worker": (
@@ -208,7 +207,7 @@ MESA_MARKERS = ("async_apply_mesa_to_call", "_mesa_gate_native", "_mesa_gate")
 
 
 def _actuation_sites() -> dict[str, bool]:
-    """{module::function: gates_on_mesa} for every hass.services.async_call site."""
+    """Map service dispatch and public calendar writes to their MESA guard."""
     out: dict[str, bool] = {}
     for path in sorted(PKG.rglob("*.py")):
         if "mesa_core" in path.parts or "fastmcp" in path.parts:
@@ -217,7 +216,7 @@ def _actuation_sites() -> dict[str, bool]:
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             body = ast.unparse(node)
-            if "services.async_call(" not in body:
+            if not any(call in body for call in ("services.async_call(", ".async_create_event(", ".async_update_event(", ".async_delete_event(")):
                 continue
             key = f"{path.relative_to(PKG)}::{node.name}"
             out[key] = any(m in body for m in MESA_MARKERS)

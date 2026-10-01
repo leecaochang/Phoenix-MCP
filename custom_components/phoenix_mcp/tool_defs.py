@@ -197,11 +197,177 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "required": ["entity_id"],
         },
     },
+    {'name': 'create_calendar_event',
+     'cap': 'cap_calendar_write',
+     'description': 'Create one writable calendar event using integration feature checks, MESA, exact '
+                    'approval binding and a durable recovery receipt. Updates and deletes require '
+                    'current UID and content_hash. Recurring writes select an explicit occurrence, '
+                    'optionally THISANDFUTURE. No automatic retry, rollback, deleted-UID restoration '
+                    'or full-series backup. Read get_calendar_write to reconcile an interrupted or '
+                    'uncertain write.',
+     'inputSchema': {'type': 'object',
+                     'properties': {'entity_id': {'type': 'string',
+                                                  'description': 'A calendar.* entity ID.'},
+                                    'event': {'description': 'Event fields for creation or the chosen update mode.',
+                                                 'type': 'object',
+                                              'additionalProperties': False,
+                                              'properties': {'summary': {'type': 'string',
+                                                                         'description': 'Event title.'},
+                                                             'start': {'type': 'string',
+                                                                       'description': 'ISO date for '
+                                                                                      'all-day events '
+                                                                                      'or ISO '
+                                                                                      'timestamp with '
+                                                                                      'timezone.'},
+                                                             'end': {'type': 'string',
+                                                                     'description': 'Exclusive end; '
+                                                                                    'same date/time '
+                                                                                    'type as start.'},
+                                                             'description': {'type': 'string',
+                                                                             'description': 'Event '
+                                                                                            'description.'},
+                                                             'location': {'type': 'string',
+                                                                          'description': 'Event '
+                                                                                         'location.'},
+                                                             'rrule': {'type': 'string',
+                                                                       'description': 'HA-supported '
+                                                                                      'daily, weekly, '
+                                                                                      'monthly or '
+                                                                                      'yearly '
+                                                                                      'recurrence '
+                                                                                      'rule.'}},
+                                              'required': ['summary', 'start', 'end']}},
+                     'required': ['entity_id', 'event']}},
+    {'name': 'update_calendar_event',
+     'cap': 'cap_calendar_write',
+     'description': 'Update one writable calendar event using integration feature checks, MESA, exact '
+                    'approval binding and a durable recovery receipt. Updates and deletes require '
+                    'current UID and content_hash. Recurring writes select an explicit occurrence, '
+                    'optionally THISANDFUTURE. No automatic retry, rollback, deleted-UID restoration '
+                    'or full-series backup. Read get_calendar_write to reconcile an interrupted or '
+                    'uncertain write.',
+     'inputSchema': {'type': 'object',
+                     'properties': {'entity_id': {'type': 'string',
+                                                  'description': 'A calendar.* entity ID.'},
+                                    'uid': {'type': 'string',
+                                            'description': 'Exact integration UID from '
+                                                           'get_calendar_events.'},
+                                    'start_time': {'type': 'string',
+                                                   'description': 'ISO date or timestamp locating the '
+                                                                  'current occurrence; window at most '
+                                                                  '31 days.'},
+                                    'end_time': {'type': 'string',
+                                                 'description': 'Exclusive end of current occurrence '
+                                                                'lookup window.'},
+                                    'expected_hash': {'type': 'string',
+                                                      'description': 'Current occurrence content_hash '
+                                                                     'from get_calendar_events.'},
+                                    'recurrence_id': {'type': 'string',
+                                                      'description': 'Exact occurrence ID from '
+                                                                     'readback; required for recurring '
+                                                                     'writes.'},
+                                    'recurrence_range': {'type': 'string',
+                                                         'enum': ['THISANDFUTURE'],
+                                                         'description': 'Apply to this and future '
+                                                                        'occurrences. Requires '
+                                                                        'recurrence_id and a visible rrule; edited exceptions are refused. Prior snapshot '
+                                                                        'does not cover the whole '
+                                                                        'series.'},
+                                    'event': {'description': 'Event fields for creation or the chosen update mode.',
+                                                 'type': 'object',
+                                              'additionalProperties': False,
+                                              'properties': {'summary': {'type': 'string',
+                                                                         'description': 'Event title.'},
+                                                             'start': {'type': 'string',
+                                                                       'description': 'ISO date for '
+                                                                                      'all-day events '
+                                                                                      'or ISO '
+                                                                                      'timestamp with '
+                                                                                      'timezone.'},
+                                                             'end': {'type': 'string',
+                                                                     'description': 'Exclusive end; '
+                                                                                    'same date/time '
+                                                                                    'type as start.'},
+                                                             'description': {'type': ['string', 'null'],
+                                                                             'description': 'Event '
+                                                                                            'description.'},
+                                                             'location': {'type': ['string', 'null'],
+                                                                          'description': 'Event '
+                                                                                         'location.'},
+                                                             'rrule': {'type': 'string',
+                                                                       'description': 'HA-supported '
+                                                                                      'daily, weekly, '
+                                                                                      'monthly or '
+                                                                                      'yearly '
+                                                                                      'recurrence '
+                                                                                      'rule.'}}},
+                                    'mode': {'type': 'string',
+                                             'enum': ['replace', 'patch'],
+                                             'description': 'replace requires summary/start/end and '
+                                                            'clears omitted optional fields; patch '
+                                                            'preserves omissions and accepts null to '
+                                                            'clear description/location/rrule.'}},
+                     'required': ['entity_id',
+                                  'uid',
+                                  'start_time',
+                                  'end_time',
+                                  'expected_hash',
+                                  'event',
+                                  'mode']}},
+    {'name': 'delete_calendar_event',
+     'cap': 'cap_calendar_write',
+     'description': 'Delete one writable calendar event using integration feature checks, MESA, exact '
+                    'approval binding and a durable recovery receipt. Updates and deletes require '
+                    'current UID and content_hash. Recurring writes select an explicit occurrence, '
+                    'optionally THISANDFUTURE. No automatic retry, rollback, deleted-UID restoration '
+                    'or full-series backup. Read get_calendar_write to reconcile an interrupted or '
+                    'uncertain write.',
+     'inputSchema': {'type': 'object',
+                     'properties': {'entity_id': {'type': 'string',
+                                                  'description': 'A calendar.* entity ID.'},
+                                    'uid': {'type': 'string',
+                                            'description': 'Exact integration UID from '
+                                                           'get_calendar_events.'},
+                                    'start_time': {'type': 'string',
+                                                   'description': 'ISO date or timestamp locating the '
+                                                                  'current occurrence; window at most '
+                                                                  '31 days.'},
+                                    'end_time': {'type': 'string',
+                                                 'description': 'Exclusive end of current occurrence '
+                                                                'lookup window.'},
+                                    'expected_hash': {'type': 'string',
+                                                      'description': 'Current occurrence content_hash '
+                                                                     'from get_calendar_events.'},
+                                    'recurrence_id': {'type': 'string',
+                                                      'description': 'Exact occurrence ID from '
+                                                                     'readback; required for recurring '
+                                                                     'writes.'},
+                                    'recurrence_range': {'type': 'string',
+                                                         'enum': ['THISANDFUTURE'],
+                                                         'description': 'Apply to this and future '
+                                                                        'occurrences. Requires '
+                                                                        'recurrence_id and a visible rrule; edited exceptions are refused. Prior snapshot '
+                                                                        'does not cover the whole '
+                                                                        'series.'}},
+                     'required': ['entity_id', 'uid', 'start_time', 'end_time', 'expected_hash']}},
+    {'name': 'get_calendar_write',
+     'description': "Read this token's durable calendar write receipts and UID-bearing before/after "
+                    'snapshots. READ scope and unchanged calendar identity required. Omit receipt_id '
+                    'to list retained receipts after an interrupted call. outcome_unknown means '
+                    'effects may have occurred; never automatically replay. Occurrence snapshots do '
+                    'not restore deleted UIDs or full recurring series.',
+     'inputSchema': {'type': 'object',
+                     'properties': {'entity_id': {'type': 'string',
+                                                  'description': 'A calendar.* entity ID.'},
+                                    'receipt_id': {'type': 'string',
+                                                   'description': 'Optional receipt ID returned by a '
+                                                                  'calendar write.'}},
+                     'required': ['entity_id']}},
     {
         "name": "get_calendar_events",
         "description": (
             "List events from an accessible calendar entity within a time window (defaults to the next 7 "
-            "days). Requires READ access to the calendar entity, scoped like get_state."
+            "days, maximum window 31 days). Includes integration-provided uid, recurrence_id and rrule, plus content_hash for writes. Requires READ access to the calendar entity."
         ),
         "inputSchema": {
             "type": "object",
@@ -3609,6 +3775,10 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "get_history": _annot(True, False, True),
     "get_statistics": _annot(True, False, True),
     "get_calendar_events": _annot(True, False, True),
+    "get_calendar_write": _annot(True, False, True),
+    "create_calendar_event": _annot(False, False, False),
+    "update_calendar_event": _annot(False, True, False),
+    "delete_calendar_event": _annot(False, True, False),
     "call_service": _annot(False, True, False),
     "get_approval_status": _annot(True, False, True),
     "wait_for_approval": _annot(True, False, True),

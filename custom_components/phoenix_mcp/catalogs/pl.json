@@ -507,7 +507,11 @@
       "tierIrreversible": "Wysokie ryzyko",
       "tierRead": "Odczyt",
       "tierSystem": "Akcje systemowe",
-      "updateFailed": "Nie udało się zaktualizować możliwości."
+      "updateFailed": "Nie udało się zaktualizować możliwości.",
+      "cap_calendar_write": {
+        "label": "Zapis kalendarza",
+        "description": "Tworzenie, aktualizowanie i usuwanie wydarzeń w kalendarzach z prawem zapisu."
+      }
     },
     "perms": {
       "addHint": "Dodaj podpowiedź",
@@ -679,7 +683,10 @@
       "zigbee_topology": "Skanuj topologię Zigbee",
       "zigbee_topology.backend": "Skanuj tabele sąsiedztwa {backend} dla ograniczonej mapy Zigbee",
       "configuration_recovery.restore": "Przywróć zapisaną konfigurację dla {resource}",
-      "configuration_recovery.acknowledge": "Sprawdź konfigurację po przerwanej zmianie w {resource}"
+      "configuration_recovery.acknowledge": "Sprawdź konfigurację po przerwanej zmianie w {resource}",
+      "create_calendar_event": "Utwórz wydarzenie w kalendarzu",
+      "update_calendar_event": "Zaktualizuj wydarzenie w kalendarzu",
+      "delete_calendar_event": "Usuń wydarzenie z kalendarza"
     },
     "approvals": {
       "approve": "Zatwierdź i wykonaj",
@@ -2105,7 +2112,13 @@
       "configuration_recovery.acknowledge.body": "Nie udało się zweryfikować wcześniejszej zmiany i nie można jej tutaj bezpiecznie przywrócić. Sprawdź ten zasób w Home Assistant, a następnie zatwierdź, aby zaakceptować jego bieżący stan i odblokować zmiany. Odrzucenie pozostawia zmiany zablokowane. Oryginalne polecenie nie zostanie powtórzone.",
       "targets.exact": "Ta akceptacja obejmuje encje wymienione w Szczegółach. Zmiana celów wymaga nowego żądania.",
       "targets.futureNative": "Home Assistant określa przyszłe cele podczas wykonywania tej konfiguracji. Skład grup może się zmieniać, a późniejsze wykonanie odbywa się bez kontroli uprawnień Phoenix i kontroli MESA.",
-      "targets.dynamicAccessible": "Dostępne urządzenia są ponownie określane przy wykonaniu i mogły się zmienić."
+      "targets.dynamicAccessible": "Dostępne urządzenia są ponownie określane przy wykonaniu i mogły się zmienić.",
+      "create_calendar_event.title": "Utwórz wydarzenie w kalendarzu",
+      "create_calendar_event.body": "Spowoduje to zastosowanie proponowanej zmiany konfiguracji. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
+      "update_calendar_event.title": "Zaktualizuj wydarzenie w kalendarzu",
+      "update_calendar_event.body": "Spowoduje to zastosowanie proponowanej akcji. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
+      "delete_calendar_event.title": "Usuń wydarzenie z kalendarza",
+      "delete_calendar_event.body": "Wybrany element zostanie usunięty. Zmiana może być nieodwracalna."
     },
     "routing": {
       "providerOptions": "Dostawcy decyzji używają stałych opcji routingu, bez opcji czatu takich jak poziomy rozumowania. Odświeżenie modeli sprawdza dostępność bez wykonywania poleceń; nie testuje dokładności routingu.",

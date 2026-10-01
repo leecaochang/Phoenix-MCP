@@ -1503,9 +1503,14 @@ async def test_get_calendar_events_returns_events_for_accessible_calendar():
     token, _ = _make_token()
     data = _make_data(token)
     hass = _make_hass(data)
-    hass.services.async_call = AsyncMock(return_value={"calendar.fam": {"events": [{"summary": "Dentist"}]}})
+    from datetime import date
+    from homeassistant.components.calendar import CalendarEntity, CalendarEvent, DATA_COMPONENT
+    entity = MagicMock(spec=CalendarEntity)
+    entity.async_get_events = AsyncMock(return_value=[CalendarEvent(start=date(2026, 10, 2), end=date(2026, 10, 3), summary="Dentist", uid="event-uid")])
+    hass.data[DATA_COMPONENT] = MagicMock()
+    hass.data[DATA_COMPONENT].get_entity.return_value = entity
     from custom_components.phoenix_mcp.policy_engine import Permission
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve", return_value=Permission.READ):
+    with patch("custom_components.phoenix_mcp.tools.calendar.resolve", return_value=Permission.READ), patch("custom_components.phoenix_mcp.helpers.resolve", return_value=Permission.READ):
         res, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 3,
             {"name": "get_calendar_events", "arguments": {"entity_id": "calendar.fam"}},
@@ -1523,7 +1528,7 @@ async def test_get_calendar_events_rejects_non_calendar_entity():
     data = _make_data(token)
     hass = _make_hass(data)
     from custom_components.phoenix_mcp.policy_engine import Permission
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve", return_value=Permission.READ):
+    with patch("custom_components.phoenix_mcp.tools.calendar.resolve", return_value=Permission.READ), patch("custom_components.phoenix_mcp.helpers.resolve", return_value=Permission.READ):
         res, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 3,
             {"name": "get_calendar_events", "arguments": {"entity_id": "light.kitchen"}},
@@ -1538,7 +1543,7 @@ async def test_get_calendar_events_not_found_when_inaccessible():
     data = _make_data(token)
     hass = _make_hass(data)
     from custom_components.phoenix_mcp.policy_engine import Permission
-    with patch("custom_components.phoenix_mcp.mcp_view.resolve", return_value=Permission.NO_ACCESS):
+    with patch("custom_components.phoenix_mcp.tools.calendar.resolve", return_value=Permission.NO_ACCESS):
         res, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 3,
             {"name": "get_calendar_events", "arguments": {"entity_id": "calendar.fam"}},

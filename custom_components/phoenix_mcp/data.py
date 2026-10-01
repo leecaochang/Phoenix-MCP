@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
     from .mesa import MesaRuntime
     from .logger_control import LoggerOverrideManager
+    from .tools.calendar import CalendarWriteJournal
 
 
 @dataclass
@@ -50,6 +51,7 @@ class PhoenixData:
     routing_statistics: RoutingStatistics = field(default_factory=RoutingStatistics)
     config_recovery: ConfigurationRecovery = field(default_factory=ConfigurationRecovery)
     agent_recovery: AgentRecovery = field(default_factory=AgentRecovery)
+    calendar_writes: CalendarWriteJournal | None = None
     # Which Lovelace cards this instance can render, harvested by the panel
     # frontend. Always present: __init__ supplies a persistent store; direct
     # constructions (tests) get an in-memory default that reads as never-harvested.

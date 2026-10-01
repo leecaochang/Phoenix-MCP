@@ -11,6 +11,7 @@
     "cap_diagnostics",
     "cap_filesystem",
     "cap_helper_write",
+    "cap_calendar_write",
     "cap_integration_write",
     "cap_integration_reconfigure",
     "cap_log_control",

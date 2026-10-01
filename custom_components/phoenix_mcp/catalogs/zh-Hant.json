@@ -525,7 +525,13 @@
       "configuration_recovery.acknowledge.body": "無法驗證先前的變更，也無法在此安全還原。請在 Home Assistant 中檢查此資源，然後核准以接受其目前狀態並解除變更限制。拒絕將繼續阻止變更。不會重複執行原始命令。",
       "targets.exact": "此核准僅涵蓋「詳細資料」中列出的實體。目標發生變化時，需要提交新請求。",
       "targets.futureNative": "Home Assistant 會在此設定執行時解析未來的目標。成員可能改變，後續執行不會經過 Phoenix 權限和 MESA 檢查。",
-      "targets.dynamicAccessible": "可存取的裝置會在執行時重新解析，其成員可能已發生變化。"
+      "targets.dynamicAccessible": "可存取的裝置會在執行時重新解析，其成員可能已發生變化。",
+      "create_calendar_event.title": "建立行事曆事件",
+      "create_calendar_event.body": "這將套用建議的設定更改。開啟詳細資訊可檢視具體更改內容。",
+      "update_calendar_event.title": "更新行事曆事件",
+      "update_calendar_event.body": "這將套用建議的操作。開啟詳細資訊可檢視具體更改內容。",
+      "delete_calendar_event.title": "刪除行事曆事件",
+      "delete_calendar_event.body": "此操作將移除所選項目。變更可能無法復原。"
     },
     "approvals": {
       "approve": "核准並執行",
@@ -799,7 +805,11 @@
       "tierIrreversible": "高風險",
       "tierRead": "讀取",
       "tierSystem": "系統操作",
-      "updateFailed": "更新能力失敗。"
+      "updateFailed": "更新能力失敗。",
+      "cap_calendar_write": {
+        "label": "行事曆寫入",
+        "description": "在具有寫入權限的行事曆中建立、更新和刪除事件。"
+      }
     },
     "changes": {
       "actionCreate": "建立",
@@ -989,7 +999,10 @@
       "zigbee_topology": "掃描 Zigbee 拓撲",
       "zigbee_topology.backend": "掃描 {backend} 鄰居表以生成權限範圍內的 Zigbee 拓撲圖",
       "configuration_recovery.restore": "還原 {resource} 的已儲存設定",
-      "configuration_recovery.acknowledge": "檢查 {resource} 的變更中斷後的設定"
+      "configuration_recovery.acknowledge": "檢查 {resource} 的變更中斷後的設定",
+      "create_calendar_event": "建立行事曆事件",
+      "update_calendar_event": "更新行事曆事件",
+      "delete_calendar_event": "刪除行事曆事件"
     },
     "inject": {
       "mesaProfile": "MESA 策略",

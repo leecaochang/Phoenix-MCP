@@ -560,7 +560,13 @@
       "configuration_recovery.acknowledge.body": "Non è stato possibile verificare una modifica precedente e non è possibile ripristinarla qui in sicurezza. Controlla questa risorsa in Home Assistant, poi approva per accettarne lo stato attuale e sbloccare le modifiche. Rifiuta mantiene le modifiche bloccate. Il comando originale non verrà ripetuto.",
       "targets.exact": "Questa approvazione riguarda le entità elencate in Dettagli. Se le destinazioni cambiano, è necessaria una nuova richiesta.",
       "targets.futureNative": "Home Assistant determina le destinazioni future quando questa configurazione viene eseguita. I membri possono cambiare e l’esecuzione successiva avviene al di fuori dei controlli dei permessi di Phoenix e di MESA.",
-      "targets.dynamicAccessible": "I dispositivi accessibili vengono determinati di nuovo al momento dell’esecuzione e potrebbero essere cambiati."
+      "targets.dynamicAccessible": "I dispositivi accessibili vengono determinati di nuovo al momento dell’esecuzione e potrebbero essere cambiati.",
+      "create_calendar_event.title": "Creare un evento del calendario",
+      "create_calendar_event.body": "Verrà applicata la modifica di configurazione proposta. Apri Dettagli per rivedere la modifica esatta proposta.",
+      "update_calendar_event.title": "Aggiornare un evento del calendario",
+      "update_calendar_event.body": "Verrà applicata l'azione proposta. Apri Dettagli per rivedere la modifica esatta proposta.",
+      "delete_calendar_event.title": "Eliminare un evento del calendario",
+      "delete_calendar_event.body": "Verrà rimosso l’elemento selezionato. La modifica potrebbe non essere reversibile."
     },
     "mesaSuggestion": {
       "baseline_note": " Proibito corrisponde alla base predefinita integrata per questo dominio, quindi il profilo creato rende esplicita tale intenzione; scegli conferma in Revisione per consentire invece il controllo dell'agente dietro approvazioni.",
@@ -813,7 +819,11 @@
       "tierIrreversible": "Alto rischio",
       "tierRead": "Letture",
       "tierSystem": "Azioni di sistema",
-      "updateFailed": "Impossibile aggiornare la capacità."
+      "updateFailed": "Impossibile aggiornare la capacità.",
+      "cap_calendar_write": {
+        "label": "Scrittura del calendario",
+        "description": "Creare, aggiornare ed eliminare eventi nei calendari con accesso in scrittura."
+      }
     },
     "perms": {
       "addHint": "Aggiungi suggerimento",
@@ -1900,7 +1910,10 @@
       "zigbee_topology": "Scansiona la topologia Zigbee",
       "zigbee_topology.backend": "Scansiona le tabelle dei vicini di {backend} per la mappa Zigbee dell'ambito",
       "configuration_recovery.restore": "Ripristina la configurazione salvata per {resource}",
-      "configuration_recovery.acknowledge": "Controlla la configurazione dopo una modifica interrotta a {resource}"
+      "configuration_recovery.acknowledge": "Controlla la configurazione dopo una modifica interrotta a {resource}",
+      "create_calendar_event": "Creare un evento del calendario",
+      "update_calendar_event": "Aggiornare un evento del calendario",
+      "delete_calendar_event": "Eliminare un evento del calendario"
     },
     "wizard": {
       "accessSub": "Espandi il gruppo <code>light</code> e scegli una luce che puoi verificare. Seleziona <strong>W</strong> per concedere l'accesso in lettura e scrittura. Concedi un intero dispositivo o espandilo per scegliere una sola entità. Puoi aggiungere altre autorizzazioni in seguito.",

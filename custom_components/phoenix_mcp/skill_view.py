@@ -343,6 +343,14 @@ The advertised tool list reflects this token's capabilities. If a tool is absent
 cannot use it. Do not attempt unadvertised tools; ask the operator to grant the
 capability instead. A `forbidden` result means the same thing.
 
+## Calendar event authoring
+
+Use `get_calendar_events` to read an accessible calendar and its integration-provided `uid`, `recurrence_id`, `rrule` and `content_hash`. Reads are bounded to 31 days and 500 events. `create_calendar_event`, `update_calendar_event` and `delete_calendar_event` require `cap_calendar_write`, WRITE scope, integration feature support and MESA. Generic calendar writes through `call_service` are refused.
+
+Creation supplies `event` with `summary`, `start` and exclusive `end`, using all-day ISO dates or timestamps with timezones. Updates and deletes supply the current `uid`, `expected_hash`, `start_time` and `end_time` lookup window. Updates explicitly select `mode`: `replace` requires summary/start/end and clears omitted optional fields; `patch` preserves omissions and accepts null to clear description/location. Recurrence-rule removal is refused because Home Assistant has no validated clear value; an existing rule must be retained or explicitly replaced. Recurring writes require the exact `recurrence_id`; the optional range is spelled `THISANDFUTURE` and requires a visible recurrence rule; edited exceptions are refused.
+
+Writes save a durable receipt before dispatch. Use `get_calendar_write(entity_id=...)` to find this token's receipts after interruption, then supply `receipt_id` for the prior occurrence, requested fields and readback. `outcome_unknown` means effects may have occurred. Do not automatically repeat the write. Snapshots preserve occurrence identity but cannot exactly restore deleted UIDs or complete recurring series. No automatic rollback is offered; recovery is an explicitly reviewed new request after checking current Home Assistant data.
+
 ## Home Assistant authoring best practices
 
 General, for automations, scripts, and scenes:

@@ -33,6 +33,13 @@ RUNTIME_READY_KEY = "phoenix_mcp_runtime_ready"
 STORAGE_KEY = "phoenix_mcp"
 STORAGE_VERSION = 4
 
+CALENDAR_MAX_WINDOW_DAYS = 31
+CALENDAR_MAX_EVENTS = 500
+CALENDAR_RECEIPT_LIMIT = 200
+CALENDAR_TIMEOUT_SECONDS = 30
+CALENDAR_EVENT_MAX_BYTES = 32768
+CALENDAR_RESULT_MAX_BYTES = 1048576
+
 PROXY_TIMEOUT_SECONDS = 30
 AUTHORING_REGISTRATION_TIMEOUT_SECONDS = 5.0
 AUTHORING_REGISTRATION_POLL_SECONDS = 0.1
@@ -759,6 +766,7 @@ CAPABILITY_NAMES = (
     "cap_blueprint_write",
     "cap_scene_write",
     "cap_helper_write",
+    "cap_calendar_write",
     "cap_physical_control",
     "cap_restart",
     "cap_integration_write",
@@ -793,6 +801,7 @@ CAPABILITY_TIERS: dict[str, str] = {
     "cap_blueprint_write": "config_write",
     "cap_scene_write": "config_write",
     "cap_helper_write": "config_write",
+    "cap_calendar_write": "config_write",
     "cap_physical_control": "system",
     "cap_restart": "system",
     "cap_integration_write": "system",
@@ -823,6 +832,7 @@ CONFIRM_AVAILABLE_CAPS = frozenset({
     "cap_blueprint_write",
     "cap_scene_write",
     "cap_helper_write",
+    "cap_calendar_write",
     "cap_physical_control",
     "cap_restart",
     "cap_integration_write",
@@ -854,6 +864,7 @@ PASS_THROUGH_EXEMPT_CAPS = frozenset({
     "cap_log_control",
     "cap_scene_write",
     "cap_helper_write",
+    "cap_calendar_write",
     "cap_integration_write",
     "cap_integration_reconfigure",
     "cap_lovelace_write",
@@ -1365,6 +1376,9 @@ YAML_PROTECTED_SUBTREES: dict[str, tuple[str, ...]] = {
 # SEPARATE key rather than a runtime concatenation, because a translator has to
 # be able to move the clause.
 DIFF_SUMMARY_TEMPLATES: dict[str, str] = {
+    "create_calendar_event": "Create calendar event",
+    "update_calendar_event": "Update calendar event",
+    "delete_calendar_event": "Delete calendar event",
     "configuration_recovery.restore": "Restore saved configuration for {resource}",
     "configuration_recovery.acknowledge": "Check configuration after an interrupted change to {resource}",
     # Blueprints. Create never reports consumers (nothing uses it yet).

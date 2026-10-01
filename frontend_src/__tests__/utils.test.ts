@@ -37,6 +37,7 @@ function makeToken(overrides: Partial<TokenRecord> = {}): TokenRecord {
     cap_diagnostics: "deny",
     cap_scene_write: "deny",
     cap_helper_write: "deny",
+    cap_calendar_write: "deny",
     cap_integration_write: "deny",
     cap_integration_reconfigure: "deny",
     cap_lovelace_write: "deny",

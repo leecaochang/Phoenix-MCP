@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script>(function(){try{var t=localStorage.getItem("phx-docs-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
   <title>Tools reference &middot; Phoenix MCP docs</title>
-  <meta name="description" content="Every Phoenix MCP tool: the 23 native HA MCP tools plus 141 Phoenix MCP tools, each scoped to the token's permission tree and capabilities." />
+  <meta name="description" content="Every Phoenix MCP tool: the 23 native HA MCP tools plus 145 Phoenix MCP tools, each scoped to the token's permission tree and capabilities." />
   <link rel="icon" href="assets/phoenix-logo.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -25,13 +25,13 @@
         <header class="page-head">
           <p class="breadcrumb"><a href="index.html">Docs</a> / Reference / Tools</p>
           <h1>Tools reference</h1>
-          <p class="lede">Search all 164 tools by name, task, or required capability. Phoenix includes Home Assistant's 23 native MCP tools plus 141 scoped tools for configuration, diagnostics, and control. The Home Companion persona instead exposes a single <a href="#home-request"><code>home_request</code></a> tool.</p>
+          <p class="lede">Search all 168 tools by name, task, or required capability. Phoenix includes Home Assistant's 23 native MCP tools plus 145 scoped tools for configuration, diagnostics, and control. The Home Companion persona instead exposes a single <a href="#home-request"><code>home_request</code></a> tool.</p>
         </header>
 
         <div class="tool-toolbar" role="search">
           <label class="tool-search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-            <input type="text" id="tool-search-input" placeholder="Search all 164 tools by name or keyword..." aria-label="Search tools" autocomplete="off" />
+            <input type="text" id="tool-search-input" placeholder="Search all 168 tools by name or keyword..." aria-label="Search tools" autocomplete="off" />
           </label>
           <button class="filter-chip" data-cap="all" aria-pressed="true">All</button>
           <button class="filter-chip" data-cap="read" aria-pressed="false">Reads</button>
@@ -674,9 +674,32 @@
             <dl><dt>params</dt><dd><code>entity_id</code> (required), <code>start_time</code> (default 30 days before the end), <code>end_time</code> (default now), <code>period</code> (<code>5minute</code>, <code>hour</code> the default, <code>day</code>, <code>week</code>, <code>month</code>, <code>year</code>), <code>statistic_types</code> (subset of <code>mean</code>, <code>min</code>, <code>max</code>, <code>sum</code>, <code>state</code>, <code>change</code>, <code>last_reset</code>), <code>limit</code> (default 100, max 1000), <code>cursor</code> (the previous <code>next_cursor</code>)</dd><dt>returns</dt><dd>the common range, retention, warning, and cursor envelope plus a <code>statistics</code> page; safe period caps are reported as <code>effective_limit</code></dd></dl>
           </article>
 
+          <article class="tool" data-cap="cap_calendar_write" data-search="create_calendar_event calendar events appointments">
+            <div class="tool-head"><span class="tool-name">create_calendar_event</span><span class="badge badge-cap">Calendar write</span></div>
+            <p class="tool-desc">Create an event with required summary, start and end, plus optional description, location and recurrence rule. All-day dates use an exclusive end date; timed events require timezone-bearing timestamps. Requires WRITE on the calendar, Calendar Write capability and integration support. MESA and confirmation apply. Creation does not accept an existing UID or occurrence selector. Readback returns the new integration UID when one matching event can be identified; otherwise inspect <code>get_calendar_events</code> before another write.</p>
+            <dl><dt>params</dt><dd><code>entity_id</code> (required), <code>event</code> (required)</dd></dl>
+            <p>Each dispatched write has a durable receipt with the prior occurrence and requested fields. Check <code>get_calendar_write</code> after interruption. An unknown outcome may have taken effect; do not automatically repeat it. Snapshots cover one occurrence and cannot exactly restore a deleted UID or a whole series. Generic calendar writes through <code>call_service</code> are refused; use these tools.</p>
+          </article>
+          <article class="tool" data-cap="cap_calendar_write" data-search="update_calendar_event calendar events appointments">
+            <div class="tool-head"><span class="tool-name">update_calendar_event</span><span class="badge badge-cap">Calendar write</span></div>
+            <p class="tool-desc">Update an event by UID. Choose replace to require summary/start/end and clear omitted optional fields, or patch to preserve omissions. A patch accepts null to clear description or location. Recurrence-rule removal is refused because Home Assistant has no validated clear value. Requires WRITE on the calendar, Calendar Write capability and integration support. MESA and confirmation apply. Read <code>get_calendar_events</code> first for the UID, occurrence ID and content hash. A lookup window may span at most 31 days. Recurring writes require an explicit occurrence; <code>THISANDFUTURE</code> includes later occurrences and requires a visible recurrence rule; edited exceptions are refused.</p>
+            <dl><dt>params</dt><dd><code>entity_id</code> (required), <code>uid</code> (required), <code>start_time</code> (required), <code>end_time</code> (required), <code>expected_hash</code> (required), <code>event</code> (required), <code>mode</code> (required: replace or patch), <code>recurrence_id</code> (required for recurring events), <code>recurrence_range</code> (optional: THISANDFUTURE)</dd></dl>
+            <p>Each dispatched write has a durable receipt with the prior occurrence and requested fields. Check <code>get_calendar_write</code> after interruption. An unknown outcome may have taken effect; do not automatically repeat it. Snapshots cover one occurrence and cannot exactly restore a deleted UID or a whole series. Generic calendar writes through <code>call_service</code> are refused; use these tools.</p>
+          </article>
+          <article class="tool" data-cap="cap_calendar_write" data-search="delete_calendar_event calendar events appointments">
+            <div class="tool-head"><span class="tool-name">delete_calendar_event</span><span class="badge badge-cap">Calendar write</span></div>
+            <p class="tool-desc">Delete the selected event or recurring occurrence by UID. Requires WRITE on the calendar, Calendar Write capability and integration support. MESA and confirmation apply. Read <code>get_calendar_events</code> first for the UID, occurrence ID and content hash. A lookup window may span at most 31 days. Recurring writes require an explicit occurrence; <code>THISANDFUTURE</code> includes later occurrences and requires a visible recurrence rule; edited exceptions are refused.</p>
+            <dl><dt>params</dt><dd><code>entity_id</code> (required), <code>uid</code> (required), <code>start_time</code> (required), <code>end_time</code> (required), <code>expected_hash</code> (required), <code>recurrence_id</code> (required for recurring events), <code>recurrence_range</code> (optional: THISANDFUTURE)</dd></dl>
+            <p>Each dispatched write has a durable receipt with the prior occurrence and requested fields. Check <code>get_calendar_write</code> after interruption. An unknown outcome may have taken effect; do not automatically repeat it. Snapshots cover one occurrence and cannot exactly restore a deleted UID or a whole series. Generic calendar writes through <code>call_service</code> are refused; use these tools.</p>
+          </article>
+          <article class="tool" data-cap="read" data-search="get_calendar_write calendar receipt recovery">
+            <div class="tool-head"><span class="tool-name">get_calendar_write</span><span class="badge badge-neutral">tree-scoped</span></div>
+            <p class="tool-desc">Read your token's retained calendar write receipts. Requires READ on the same calendar identity. Omit receipt_id to list receipt IDs, operations and outcomes, or supply one for UID-bearing before/after snapshots. Applied means the integration returned successfully; readback may still be unavailable. Outcome unknown requires verification in Home Assistant. No automatic replay or rollback is offered. Storage retains up to 200 receipts, evicting the oldest applied records and preserving uncertain records; a full uncertain journal refuses new writes.</p>
+            <dl><dt>params</dt><dd><code>entity_id</code> (required), <code>receipt_id</code> (optional)</dd></dl>
+          </article>
           <article class="tool" data-cap="read" data-search="get_calendar_events calendar appointments">
             <div class="tool-head"><span class="tool-name">get_calendar_events</span><span class="badge badge-neutral">tree-scoped</span></div>
-            <p class="tool-desc">Events from an accessible <code>calendar.*</code> entity within a time window (defaults to the next 7 days). Requires READ access to the calendar entity.</p>
+            <p class="tool-desc">Events from an accessible <code>calendar.*</code> entity within a time window (defaults to the next 7 days). Requires READ access to the calendar entity. The window is limited to 31 days and 500 events. Readback includes integration-provided UID, recurrence_id, rrule and a content_hash for update/delete checks; integrations may omit identity fields. Event data is scrubbed before disclosure.</p>
             <dl><dt>params</dt><dd><code>entity_id</code> (required; the calendar entity), <code>start_time</code> (default now), <code>end_time</code> (default start + 7 days)</dd></dl>
           </article>
 

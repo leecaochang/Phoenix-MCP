@@ -54,6 +54,7 @@ PACKAGE = pathlib.Path(__file__).resolve().parent.parent / "custom_components" /
 
 # (module filename, argument) -> why it is read but not published.
 UNPUBLISHED_ARGS = {
+    ("calendar.py", "_calendar_plan"): "INTERNAL server-created calendar identity, exact event fields and snapshot binding; public inputs are rebuilt before gating.",
     ("mcp_view.py", "aliases"): (
         "INTERNAL, not an alias. set_entity edits aliases by add/remove and has "
         "no absolute set-the-list form on purpose: Home Assistant builds its "
