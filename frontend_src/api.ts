@@ -99,12 +99,12 @@ class ApiError extends Error {
   }
 }
 
-async function _doReq<T>(method: string, path: string, body?: unknown): Promise<T> {
+async function _doReq<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
   const hass = authHass();
   if (typeof hass?.fetchWithAuth !== "function") {
     throw new ApiError(401, "unauthorized", t("common.noSession"));
   }
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = { "Content-Type": "application/json", ...extraHeaders };
   const opts: RequestInit = { method, headers };
   if (body !== undefined) opts.body = JSON.stringify(body);
 
@@ -121,8 +121,8 @@ async function _doReq<T>(method: string, path: string, body?: unknown): Promise<
   return json as T;
 }
 
-async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
-  return _doReq<T>(method, path, body);
+async function req<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
+  return _doReq<T>(method, path, body, extraHeaders);
 }
 
 function buildQuery(params?: AuditQueryParams): string {
@@ -248,21 +248,34 @@ export const api = {
     const q = p.toString();
     return req<ApprovalListResponse>("GET", `/approvals${q ? `?${q}` : ""}`);
   },
-  listMesaProfiles: (params?: { domain?: string; tag?: string; area?: string; origin?: string; limit?: number; cursor?: string }) => {
+  listMesaProfiles: async (params?: { domain?: string; tag?: string; area?: string; origin?: string; limit?: number; cursor?: string; all?: boolean }): Promise<MesaProfilesResponse> => {
     const p = new URLSearchParams();
     if (params?.domain) p.set("domain", params.domain);
     if (params?.tag) p.set("tag", params.tag);
     if (params?.area) p.set("area", params.area);
     if (params?.origin) p.set("origin", params.origin);
-    if (params?.limit !== undefined) p.set("limit", String(params.limit));
-    if (params?.cursor) p.set("cursor", params.cursor);
-    const q = p.toString();
-    return req<MesaProfilesResponse>("GET", `/mesa/profiles${q ? `?${q}` : ""}`);
+    if (params?.all) p.set("limit", "200");
+    else if (params?.limit !== undefined) p.set("limit", String(params.limit));
+    if (!params?.all && params?.cursor) p.set("cursor", params.cursor);
+    const pages: MesaProfilesResponse["profiles"] = [];
+    const seen = new Set<string>();
+    for (;;) {
+      const q = p.toString();
+      const page = await req<MesaProfilesResponse>("GET", `/mesa/profiles${q ? `?${q}` : ""}`);
+      if (!params?.all) return page;
+      pages.push(...page.profiles);
+      if (!page.has_more) return { ...page, profiles: pages, has_more: false, next_cursor: null };
+      if (!page.next_cursor || seen.has(page.next_cursor) || page.profiles.length === 0) {
+        throw new ApiError(502, "invalid_response", t("mesa.loadFailed"));
+      }
+      seen.add(page.next_cursor);
+      p.set("cursor", page.next_cursor);
+    }
   },
   getMesaProfile: (entityId: string) =>
     req<MesaProfileDetail>("GET", `/mesa/profiles/${encodeURIComponent(entityId)}`),
-  putMesaProfile: (entityId: string, doc: MesaProfileDocument) =>
-    req<MesaPutResponse>("PUT", `/mesa/profiles/${encodeURIComponent(entityId)}`, doc),
+  putMesaProfile: (entityId: string, doc: MesaProfileDocument, createOnly = false) =>
+    req<MesaPutResponse>("PUT", `/mesa/profiles/${encodeURIComponent(entityId)}`, doc, createOnly ? { "If-None-Match": "*" } : undefined),
   deleteMesaProfile: (entityId: string) =>
     req<{ entity_id: string; deleted: boolean }>("DELETE", `/mesa/profiles/${encodeURIComponent(entityId)}`),
 
@@ -270,8 +283,8 @@ export const api = {
     req<{ domains: { domain: string; document: MesaProfileDocument }[] }>("GET", "/mesa/domains"),
   getMesaDomain: (domain: string) =>
     req<{ domain: string; stored: MesaProfileDocument | null }>("GET", `/mesa/domains/${encodeURIComponent(domain)}`),
-  putMesaDomain: (domain: string, doc: MesaProfileDocument) =>
-    req<{ domain: string; stored: MesaProfileDocument }>("PUT", `/mesa/domains/${encodeURIComponent(domain)}`, doc),
+  putMesaDomain: (domain: string, doc: MesaProfileDocument, createOnly = false) =>
+    req<{ domain: string; stored: MesaProfileDocument }>("PUT", `/mesa/domains/${encodeURIComponent(domain)}`, doc, createOnly ? { "If-None-Match": "*" } : undefined),
   deleteMesaDomain: (domain: string) =>
     req<{ domain: string; deleted: boolean }>("DELETE", `/mesa/domains/${encodeURIComponent(domain)}`),
 
@@ -279,16 +292,16 @@ export const api = {
     req<{ integrations: { integration: string; document: MesaProfileDocument }[] }>("GET", "/mesa/integrations"),
   getMesaIntegration: (integration: string) =>
     req<{ integration: string; stored: MesaProfileDocument | null }>("GET", `/mesa/integrations/${encodeURIComponent(integration)}`),
-  putMesaIntegration: (integration: string, doc: MesaProfileDocument) =>
-    req<{ integration: string; stored: MesaProfileDocument }>("PUT", `/mesa/integrations/${encodeURIComponent(integration)}`, doc),
+  putMesaIntegration: (integration: string, doc: MesaProfileDocument, createOnly = false) =>
+    req<{ integration: string; stored: MesaProfileDocument }>("PUT", `/mesa/integrations/${encodeURIComponent(integration)}`, doc, createOnly ? { "If-None-Match": "*" } : undefined),
   deleteMesaIntegration: (integration: string) =>
     req<{ integration: string; deleted: boolean }>("DELETE", `/mesa/integrations/${encodeURIComponent(integration)}`),
   listMesaDevices: () =>
     req<{ devices: { device_id: string; document: MesaProfileDocument }[] }>("GET", "/mesa/devices"),
   getMesaDevice: (deviceId: string) =>
     req<{ device_id: string; stored: MesaProfileDocument | null }>("GET", `/mesa/devices/${encodeURIComponent(deviceId)}`),
-  putMesaDevice: (deviceId: string, doc: MesaProfileDocument) =>
-    req<{ device_id: string; stored: MesaProfileDocument }>("PUT", `/mesa/devices/${encodeURIComponent(deviceId)}`, doc),
+  putMesaDevice: (deviceId: string, doc: MesaProfileDocument, createOnly = false) =>
+    req<{ device_id: string; stored: MesaProfileDocument }>("PUT", `/mesa/devices/${encodeURIComponent(deviceId)}`, doc, createOnly ? { "If-None-Match": "*" } : undefined),
   deleteMesaDevice: (deviceId: string) =>
     req<{ device_id: string; deleted: boolean }>("DELETE", `/mesa/devices/${encodeURIComponent(deviceId)}`),
   // A device id is an opaque registry id, so unlike areas the picker cannot show
@@ -303,8 +316,8 @@ export const api = {
     req<{ areas: { area_id: string; document: MesaProfileDocument }[] }>("GET", "/mesa/areas"),
   getMesaArea: (areaId: string) =>
     req<{ area_id: string; stored: MesaProfileDocument | null }>("GET", `/mesa/areas/${encodeURIComponent(areaId)}`),
-  putMesaArea: (areaId: string, doc: MesaProfileDocument) =>
-    req<{ area_id: string; stored: MesaProfileDocument }>("PUT", `/mesa/areas/${encodeURIComponent(areaId)}`, doc),
+  putMesaArea: (areaId: string, doc: MesaProfileDocument, createOnly = false) =>
+    req<{ area_id: string; stored: MesaProfileDocument }>("PUT", `/mesa/areas/${encodeURIComponent(areaId)}`, doc, createOnly ? { "If-None-Match": "*" } : undefined),
   deleteMesaArea: (areaId: string) =>
     req<{ area_id: string; deleted: boolean }>("DELETE", `/mesa/areas/${encodeURIComponent(areaId)}`),
 

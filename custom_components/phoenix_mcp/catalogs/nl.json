@@ -953,6 +953,7 @@
       "killSwitchEngaged": "Noodstop ingeschakeld.",
       "maximumRequired": "{field} mag {max} niet overschrijden.",
       "mesaArchiveRequired": "archive is vereist.",
+      "mesaProfileExists": "Er bestaat al een profiel. Open het in de bewerkingsmodus.",
       "mesaConflictModeInvalid": "on_conflict moet skip of overwrite zijn.",
       "mesaUnavailable": "MESA is niet beschikbaar.",
       "nameRequired": "name is vereist.",

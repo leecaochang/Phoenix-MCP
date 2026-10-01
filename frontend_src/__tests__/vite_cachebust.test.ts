@@ -21,7 +21,7 @@ function runPlugin(bundle: Record<string, Chunk>) {
   const plugin = chunkQueryCacheBust();
   // generateBundle is declared as a plain function in the plugin object.
   (plugin.generateBundle as unknown as (o: unknown, b: unknown) => void).call(
-    plugin,
+    { emitFile: () => undefined },
     {},
     bundle,
   );
@@ -64,11 +64,28 @@ describe("chunkQueryCacheBust", () => {
     expect(a).not.toBe(b);
   });
 
-  it("leaves entry chunks unhashed (panel.py cache-busts those by mtime)", () => {
+  it("revisions reciprocal entry imports with the complete graph", () => {
     const bundle = {
       "entry.js": { type: "chunk" as const, isEntry: true, code: 'import("./entry.js")' },
     };
     const out = runPlugin(bundle);
-    expect(out["entry.js"].code).not.toContain("?v=");
+    expect(out["entry.js"].code).toMatch(/entry\.js\?v=[a-f0-9]{10}/);
   });
+});
+
+it("invalidates static, lazy and reciprocal imports when a transitive dependency changes", () => {
+  function graph(value: number) {
+    return {
+      "entry.js": { type: "chunk" as const, isEntry: true, code: 'import("./lazy.js")' },
+      "lazy.js": { type: "chunk" as const, isEntry: false, code: 'export { x } from "./shared.js"; import "./entry.js";' },
+      "shared.js": { type: "chunk" as const, isEntry: false, code: `export const x = ${value};` },
+    };
+  }
+  const first = runPlugin(graph(1));
+  const second = runPlugin(graph(2));
+  expect(first["entry.js"].code).not.toBe(second["entry.js"].code);
+  expect(first["lazy.js"].code).not.toBe(second["lazy.js"].code);
+  const revision = second["entry.js"].code.match(/v=([a-f0-9]{10})/)![1];
+  expect(second["lazy.js"].code).toContain(`./entry.js?v=${revision}`);
+  expect(second["lazy.js"].code).toContain(`./shared.js?v=${revision}`);
 });

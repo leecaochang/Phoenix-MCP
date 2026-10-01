@@ -1089,3 +1089,48 @@ async def test_an_unparseable_version_does_not_become_a_500(hass: HomeAssistant)
     resp = await view.put(_admin_request(body=body), entity_id="light.kitchen")
 
     assert resp.status in (200, 400), "must be answered, never raised"
+
+
+@pytest.mark.parametrize("view_type,key_name,key,getter", [
+    (PhoenixAdminMesaProfileView, "entity_id", "light.create_only", "get"),
+    (PhoenixAdminMesaDomainView, "domain", "light", "get_domain_profile"),
+    (PhoenixAdminMesaAreaView, "area_id", "bedroom", "get_area_profile"),
+    (PhoenixAdminMesaDeviceView, "device_id", "a" * 32, "get_device_profile"),
+    (PhoenixAdminMesaIntegrationView, "integration", "light", "get_integration_profile"),
+])
+async def test_create_only_profiles_preserve_existing_and_allow_explicit_edit(hass, view_type, key_name, key, getter):
+    data = await _setup(hass)
+    view = view_type()
+    view.hass = hass
+    original = json.dumps({"semantic_profile": {"operational_boundaries": {"control_mode": "read_only"}}}).encode()
+    replacement = json.dumps({"semantic_profile": {"operational_boundaries": {"control_mode": "autonomous"}}}).encode()
+    create = _admin_request(body=original)
+    create.headers = {"If-None-Match": "*"}
+    assert (await view.put(create, **{key_name: key})).status == 200
+    before = getattr(data.mesa.store, getter)(key).to_dict()
+    repeated = _admin_request(body=replacement)
+    repeated.headers = {"If-None-Match": "*"}
+    response = await view.put(repeated, **{key_name: key})
+    assert response.status == 412
+    assert _body(response)["message_key"] == "adminError.mesaProfileExists"
+    assert getattr(data.mesa.store, getter)(key).to_dict() == before
+    edit = _admin_request(body=replacement)
+    edit.headers = {}
+    assert (await view.put(edit, **{key_name: key})).status == 200
+    assert getattr(data.mesa.store, getter)(key).to_dict() != before
+
+
+async def test_concurrent_create_only_profile_requests_have_one_winner(hass):
+    import asyncio
+    data = await _setup(hass)
+    view = PhoenixAdminMesaProfileView()
+    view.hass = hass
+    requests = []
+    for mode in ("read_only", "prohibited"):
+        request = _admin_request(body=json.dumps({"semantic_profile": {"operational_boundaries": {"control_mode": mode}}}).encode())
+        request.headers = {"If-None-Match": "*"}
+        requests.append(request)
+    responses = await asyncio.gather(*(view.put(request, entity_id="light.create_only") for request in requests))
+    assert sorted(response.status for response in responses) == [200, 412]
+    winner = next(response for response in responses if response.status == 200)
+    assert data.mesa.store.get("light.create_only").to_dict() == _body(winner)["stored"]

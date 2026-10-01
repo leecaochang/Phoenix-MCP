@@ -781,6 +781,7 @@
       "killSwitchEngaged": "킬 스위치가 작동 중입니다.",
       "maximumRequired": "{field}은(는) {max}를 초과할 수 없습니다.",
       "mesaArchiveRequired": "archive는 필수입니다.",
+      "mesaProfileExists": "프로필이 이미 있습니다. 편집 모드에서 여세요.",
       "mesaConflictModeInvalid": "on_conflict는 skip 또는 overwrite여야 합니다.",
       "mesaUnavailable": "MESA를 사용할 수 없습니다.",
       "nameRequired": "name은 필수입니다.",

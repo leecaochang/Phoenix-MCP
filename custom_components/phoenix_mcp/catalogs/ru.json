@@ -128,6 +128,7 @@
       "killSwitchEngaged": "Аварийный выключатель включён.",
       "maximumRequired": "{field} не должен превышать {max}.",
       "mesaArchiveRequired": "требуется archive.",
+      "mesaProfileExists": "Профиль уже существует. Откройте его в режиме редактирования.",
       "mesaConflictModeInvalid": "on_conflict должен быть skip или overwrite.",
       "mesaUnavailable": "MESA недоступна.",
       "nameRequired": "требуется name.",

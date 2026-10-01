@@ -105,16 +105,23 @@ def remove_phoenix_panel(hass: HomeAssistant) -> None:
         async_remove_panel(hass, _PANEL_KEY)
 
 
-def _inject_url_with_cache_bust() -> str:
-    """The injector module URL with the bundle mtime appended (cache-bust).
-
-    Runs in the executor (touches the filesystem). Falls back to the bare URL if
-    the file is missing.
-    """
+def _module_url_with_cache_bust(path: Path, url: str) -> str:
+    """Match the build's module graph revision; old bundles fall back to mtime."""
     try:
-        return f"{_INJECT_JS_URL}?v={int(_INJECT_JS_FILE.stat().st_mtime)}"
+        revision = path.with_name(f"{path.name}.version").read_text(encoding="ascii").strip()
+        if len(revision) == 10 and all(char in "0123456789abcdef" for char in revision):
+            return f"{url}?v={revision}"
+    except (OSError, UnicodeError):
+        pass
+    try:
+        return f"{url}?v={int(path.stat().st_mtime)}"
     except OSError:
-        return _INJECT_JS_URL
+        return url
+
+
+def _inject_url_with_cache_bust() -> str:
+    """Return the injector entry URL used by all imports in its build graph."""
+    return _module_url_with_cache_bust(_INJECT_JS_FILE, _INJECT_JS_URL)
 
 
 def _inject_version_ok() -> bool:
@@ -211,11 +218,8 @@ def _remove_all_inject_urls(hass: HomeAssistant) -> None:
 
 
 def _agentchat_url_with_cache_bust() -> str:
-    """The Agent Chat module URL with the bundle mtime appended (cache-bust)."""
-    try:
-        return f"{_AGENTCHAT_JS_URL}?v={int(_AGENTCHAT_JS_FILE.stat().st_mtime)}"
-    except OSError:
-        return _AGENTCHAT_JS_URL
+    """Return the Agent Chat entry URL shared with its lazy module imports."""
+    return _module_url_with_cache_bust(_AGENTCHAT_JS_FILE, _AGENTCHAT_JS_URL)
 
 
 def _remove_all_agentchat_urls(hass: HomeAssistant) -> None:

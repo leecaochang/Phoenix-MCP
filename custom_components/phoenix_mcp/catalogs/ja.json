@@ -952,6 +952,7 @@
       "killSwitchEngaged": "キルスイッチが作動しています。",
       "maximumRequired": "{field} は {max} 以下にしてください。",
       "mesaArchiveRequired": "archive は必須です。",
+      "mesaProfileExists": "プロファイルはすでに存在します。編集モードで開いてください。",
       "mesaConflictModeInvalid": "on_conflict は skip または overwrite にしてください。",
       "mesaUnavailable": "MESA を利用できません。",
       "nonNegativeRequired": "{field} に負の値は指定できません。",

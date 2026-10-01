@@ -959,6 +959,7 @@
       "killSwitchEngaged": "Wyłącznik awaryjny włączony.",
       "maximumRequired": "{field} nie może przekraczać {max}.",
       "mesaArchiveRequired": "archive jest wymagane.",
+      "mesaProfileExists": "Profil już istnieje. Otwórz go w trybie edycji.",
       "mesaConflictModeInvalid": "on_conflict musi mieć wartość skip lub overwrite.",
       "mesaUnavailable": "MESA nie jest dostępne.",
       "nameRequired": "name jest wymagane.",

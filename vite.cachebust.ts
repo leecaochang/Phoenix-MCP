@@ -2,7 +2,7 @@ import type { Plugin } from "vite";
 import { createHash } from "node:crypto";
 
 /**
- * Appends ?v=<content-hash> to dynamic imports of emitted (non-entry) chunks.
+ * Give the complete emitted module graph one content-addressed URL revision.
  *
  * Chunk filenames stay stable, so the deployed frontend/ directory holds the
  * same file set every build instead of accumulating hashed variants; the query
@@ -11,22 +11,22 @@ import { createHash } from "node:crypto";
  * cache_headers=False, which only omits Cache-Control (browsers then fall back
  * to heuristic caching of the bare chunk URL), and panel.py's mtime ?v=
  * cache-bust covers the ENTRY files only, never the chunks they import.
- * The hash is content-based, so an unchanged chunk keeps its URL and stays
- * validly cached.
+ * Static parent imports use the same revision as the HA entry URL. A change to
+ * any dependency invalidates all graph URLs, including reciprocal entry imports.
  */
 export function chunkQueryCacheBust(): Plugin {
   return {
     name: "phx-chunk-query-cache-bust",
     generateBundle(_options, bundle) {
-      const hashes = new Map<string, string>();
-      for (const [fileName, item] of Object.entries(bundle)) {
-        if (item.type === "chunk" && !item.isEntry) {
-          hashes.set(fileName, createHash("sha256").update(item.code).digest("hex").slice(0, 10));
-        }
+      const chunks = Object.entries(bundle).filter(([, item]) => item.type === "chunk");
+      const digest = createHash("sha256");
+      for (const [fileName, item] of chunks.sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
+        if (item.type === "chunk") digest.update(fileName).update("\0").update(item.code).update("\0");
       }
-      for (const item of Object.values(bundle)) {
+      const revision = digest.digest("hex").slice(0, 10);
+      for (const [name, item] of Object.entries(bundle)) {
         if (item.type !== "chunk") continue;
-        for (const [fileName, hash] of hashes) {
+        for (const [fileName] of chunks) {
           // All three quote styles: the emitted form is bundler-dependent and
           // has changed across major versions (Vite 5 emitted a double-quoted
           // string, Vite 8 emits a template literal). Missing one silently
@@ -35,9 +35,12 @@ export function chunkQueryCacheBust(): Plugin {
           for (const q of ['"', "'", "`"]) {
             item.code = item.code.replaceAll(
               `${q}./${fileName}${q}`,
-              `${q}./${fileName}?v=${hash}${q}`,
+              `${q}./${fileName}?v=${revision}${q}`,
             );
           }
+        }
+        if (item.isEntry) {
+          this.emitFile({ type: "asset", fileName: `${name}.version`, source: revision });
         }
       }
     },

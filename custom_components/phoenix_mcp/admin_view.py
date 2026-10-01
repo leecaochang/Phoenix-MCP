@@ -3751,6 +3751,9 @@ class PhoenixAdminMesaProfileView(PhoenixView):
             return _err("invalid_request", str(exc), 400, rid, passthrough=True)
 
         async with runtime.lock:
+            if request.headers.get("If-None-Match") == "*" and runtime.store.get(entity_id) is not None:
+                return _err("precondition_failed", "A profile already exists. Open it in Edit mode.",
+                            412, rid, key="mesaProfileExists")
             runtime.store.set(entity_id, profile)
             await runtime.async_save()
 
@@ -3863,6 +3866,9 @@ class PhoenixAdminMesaDomainView(PhoenixView):
             return _err("invalid_request", str(exc), 400, rid, passthrough=True)
 
         async with runtime.lock:
+            if request.headers.get("If-None-Match") == "*" and runtime.store.get_domain_profile(domain) is not None:
+                return _err("precondition_failed", "A profile already exists. Open it in Edit mode.",
+                            412, rid, key="mesaProfileExists")
             runtime.store.set_domain_profile(domain, profile)
             await runtime.async_save()
         _audit_admin(self.hass, request, rid, request.path)
@@ -3951,6 +3957,9 @@ class PhoenixAdminMesaIntegrationView(PhoenixView):
             return _err("invalid_request", str(exc), 400, rid, passthrough=True)
 
         async with runtime.lock:
+            if request.headers.get("If-None-Match") == "*" and runtime.store.get_integration_profile(integration) is not None:
+                return _err("precondition_failed", "A profile already exists. Open it in Edit mode.",
+                            412, rid, key="mesaProfileExists")
             runtime.store.set_integration_profile(integration, profile)
             await runtime.async_save()
         _audit_admin(self.hass, request, rid, request.path)
@@ -4043,6 +4052,9 @@ class PhoenixAdminMesaAreaView(PhoenixView):
             return _err("invalid_request", str(exc), 400, rid, passthrough=True)
 
         async with runtime.lock:
+            if request.headers.get("If-None-Match") == "*" and runtime.store.get_area_profile(area_id) is not None:
+                return _err("precondition_failed", "A profile already exists. Open it in Edit mode.",
+                            412, rid, key="mesaProfileExists")
             runtime.store.set_area_profile(area_id, profile)
             await runtime.async_save()
         _audit_admin(self.hass, request, rid, request.path)
@@ -4148,6 +4160,9 @@ class PhoenixAdminMesaDeviceView(PhoenixView):
             return _err("invalid_request", str(exc), 400, rid, passthrough=True)
 
         async with runtime.lock:
+            if request.headers.get("If-None-Match") == "*" and runtime.store.get_device_profile(device_id) is not None:
+                return _err("precondition_failed", "A profile already exists. Open it in Edit mode.",
+                            412, rid, key="mesaProfileExists")
             runtime.store.set_device_profile(device_id, profile)
             await runtime.async_save()
         _audit_admin(self.hass, request, rid, request.path)

@@ -571,6 +571,7 @@
       "killSwitchEngaged": "紧急停止开关已启用。",
       "maximumRequired": "{field} 不能超过 {max}。",
       "mesaArchiveRequired": "archive 为必填项。",
+      "mesaProfileExists": "配置已存在。请在编辑模式中打开。",
       "mesaConflictModeInvalid": "on_conflict 必须为 skip 或 overwrite。",
       "mesaUnavailable": "MESA 当前不可用。",
       "nonNegativeRequired": "{field} 不能为负数。",

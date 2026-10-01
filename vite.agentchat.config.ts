@@ -20,9 +20,8 @@ export default defineConfig({
       output: {
         format: "es",
         entryFileNames: "phoenix-mcp-agentchat.js",
-        // Stable chunk name; freshness comes from chunkQueryCacheBust, which
-        // rewrites the entry's lazy import to ./phoenix-mcp-agentchat-window.js?v=<hash>
-        // (see vite.cachebust.ts for why a bare chunk URL goes stale).
+        // Stable files share one build-graph revision across every import and
+        // the matching HA entry URL, emitted in the entry's .version asset.
         chunkFileNames: "phoenix-mcp-agentchat-window.js",
         assetFileNames: "[name][extname]",
       },

@@ -902,6 +902,7 @@
       "killSwitchEngaged": "Interruptor de emergencia activado.",
       "maximumRequired": "{field} no debe superar {max}.",
       "mesaArchiveRequired": "archive es obligatorio.",
+      "mesaProfileExists": "Ya existe un perfil. Ábrelo en el modo de edición.",
       "mesaConflictModeInvalid": "on_conflict debe ser skip o overwrite.",
       "mesaUnavailable": "MESA no está disponible.",
       "nonNegativeRequired": "{field} debe ser no negativo.",

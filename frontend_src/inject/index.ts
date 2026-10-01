@@ -67,6 +67,7 @@ const timeouts = new Set<number>();
 const intervals = new Set<number>();
 const listeners: Array<{ type: string; handler: EventListener }> = [];
 let disposed = false;
+let identityGeneration = 0;
 let debounceTimer: number | undefined;
 
 function trackedTimeout(fn: () => void, delay: number): number {
@@ -441,15 +442,11 @@ function observeRoot(sr: ShadowRoot): void {
 }
 
 async function refreshProfiled(): Promise<void> {
+  const generation = identityGeneration;
   try {
-    const set = new Set<string>();
-    let cursor: string | undefined;
-    for (let i = 0; i < 20; i++) {
-      const resp = await api.listMesaProfiles({ limit: 200, cursor });
-      for (const p of resp.profiles) set.add(p.entity_id);
-      if (!resp.has_more || !resp.next_cursor) break;
-      cursor = resp.next_cursor;
-    }
+    const response = await api.listMesaProfiles({ all: true });
+    const set = new Set(response.profiles.map((profile) => profile.entity_id));
+    if (disposed || generation !== identityGeneration) return;
     replaceProfiled("entity", set);
     dbg("refreshProfiled done, entities=", set.size, [...set].slice(0, 12));
   } catch (e) {
@@ -475,8 +472,11 @@ const SCOPED_REFRESH: Record<Exclude<Scope, "entity">, () => Promise<string[]>> 
 };
 
 async function refreshScoped(scope: Exclude<Scope, "entity">): Promise<void> {
+  const generation = identityGeneration;
   try {
-    replaceProfiled(scope, await SCOPED_REFRESH[scope]());
+    const keys = await SCOPED_REFRESH[scope]();
+    if (disposed || generation !== identityGeneration) return;
+    replaceProfiled(scope, keys);
   } catch (e) {
     log(`${scope} profile list refresh failed`, e);
   }
@@ -484,9 +484,11 @@ async function refreshScoped(scope: Exclude<Scope, "entity">): Promise<void> {
 
 async function openModal(scope: Scope, key: string): Promise<void> {
   if (disposed) return;
-  await import("./QuickAdd"); // defines <phx-mesa-quick-add>
-  if (disposed) return;
-  const el = document.createElement("phx-mesa-quick-add");
+  const generation = identityGeneration;
+  const { QUICK_ADD_TAG } = await import("./QuickAdd");
+  if (disposed || generation !== identityGeneration || !getHass()?.user?.is_admin) return;
+  const el = document.createElement(QUICK_ADD_TAG);
+  el.setAttribute("data-phx-mesa-modal", "");
   el.setAttribute("scope", scope);
   el.setAttribute("key", key);
   // The editor renders the locked target and its own title from this, because
@@ -541,12 +543,16 @@ let startAttempts = 0;
 function start(): void {
   if (disposed) return;
   const hass = getHass();
-  if (!hass) {
-    // <home-assistant> not ready yet; retry briefly, then give up.
-    if (startAttempts++ < 40) trackedTimeout(() => safe(start), 250);
+  if (!hass || !hass.user) {
+    // HA can publish hass before the authenticated identity becomes available.
+    trackedTimeout(() => safe(start), startAttempts++ < 40 ? 250 : POLL_MS);
     return;
   }
-  if (!hass.user?.is_admin) return; // non-admins get nothing
+  if (!hass.user.is_admin) {
+    // Identity may change in a live HA session; remain dormant until admin login.
+    trackedTimeout(() => safe(start), POLL_MS);
+    return;
+  }
   setHass(hass);
   // Opportunistic card-catalog harvest. This module loads on EVERY HA page, so
   // it sees dashboards where the Lovelace resources are already imported, which
@@ -556,11 +562,12 @@ function start(): void {
   void syncCardCatalog();
   // Strings ride along with the profile reads this already waits on, so the
   // first scan paints its buttons with labels rather than raw keys.
+  const generation = identityGeneration;
   Promise.all([
     refreshProfiled(),
     ...SUBPAGE_SURFACES.map(({ scope }) => refreshScoped(scope)),
     loadTranslations(hass, resolveLanguage(hass)),
-  ]).then(() => safe(scan));
+  ]).then(() => { if (generation === identityGeneration) safe(scan); });
   // These buttons are painted once per scan, so without this their labels stay
   // in the old language until the next full page load.
   const languageHandler = () => {
@@ -571,8 +578,21 @@ function start(): void {
   window.addEventListener("phx-language-changed", languageHandler);
   listeners.push({ type: "phx-language-changed", handler: languageHandler });
   // "auto" tracks the HA profile language, which changes without a page load.
+  const ownerId = hass.user.id;
   trackedInterval(() => {
-    void syncTranslations(getHass()).then((changed) => { if (changed) safe(scan); });
+    const current = getHass();
+    if (!current?.user?.is_admin || current.user.id !== ownerId) {
+      controller.dispose();
+      identityGeneration += 1;
+      for (const entries of Object.values(profiled)) entries.clear();
+      disposed = false;
+      startAttempts = 0;
+      controllerHost[ACTIVE_FLAG] = controller;
+      setHass(null);
+      safe(start);
+      return;
+    }
+    void syncTranslations(current).then((changed) => { if (changed) safe(scan); });
   }, 5000);
   installListeners();
   // The build rides along because a redeploy can leave more than one copy of
@@ -603,7 +623,7 @@ controller = {
     observers.clear();
     listeners.length = 0;
     observedRoots = new WeakSet<ShadowRoot>();
-    for (const element of deepQueryAll(`.${BTN_CLASS},#${WIDEN_STYLE_ID}`)) element.remove();
+    for (const element of deepQueryAll(`.${BTN_CLASS},#${WIDEN_STYLE_ID},phx-mesa-quick-add,[data-phx-mesa-modal]`)) element.remove();
     for (const element of deepQueryAll("[data-phx-widen]")) {
       element.removeAttribute("data-phx-widen");
     }

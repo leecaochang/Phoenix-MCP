@@ -1654,6 +1654,7 @@
       "killSwitchEngaged": "Coupe-circuit activé.",
       "maximumRequired": "{field} ne doit pas dépasser {max}.",
       "mesaArchiveRequired": "archive est obligatoire.",
+      "mesaProfileExists": "Un profil existe déjà. Ouvrez-le en mode modification.",
       "mesaConflictModeInvalid": "on_conflict doit être skip ou overwrite.",
       "mesaUnavailable": "MESA n'est pas disponible.",
       "nonNegativeRequired": "{field} doit être non négatif.",

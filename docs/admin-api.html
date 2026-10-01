@@ -37,7 +37,7 @@
         <dl class="kv">
           <div class="kv-row"><dt>Bodies</dt><dd>JSON, <code>Content-Type: application/json</code>. Bodies over 1&nbsp;MB are rejected with 413.</dd></div>
           <div class="kv-row"><dt>Request ID</dt><dd>Every response carries <code>X-Phoenix-Request-ID</code>. Admin actions are recorded in Home Assistant's own log, not the Phoenix audit store; the audit-entry correlation applies to token-facing API requests.</dd></div>
-          <div class="kv-row"><dt>Errors</dt><dd>Error responses are <code>{ "error": code, "message": text }</code>, with an optional <code>suggestions</code> array. Codes: <code>unauthorized</code> (401), <code>forbidden</code> (403), <code>not_found</code> (404), <code>invalid_request</code> (400), <code>request_too_large</code> (413), <code>conflict</code> (409, e.g. a duplicate token name or an approval already being processed), <code>service_unavailable</code> (503, e.g. the kill switch or MESA unavailable), <code>internal_error</code> (500).</dd></div>
+          <div class="kv-row"><dt>Errors</dt><dd>Error responses are <code>{ "error": code, "message": text }</code>, with an optional <code>suggestions</code> array. Codes: <code>unauthorized</code> (401), <code>forbidden</code> (403), <code>not_found</code> (404), <code>invalid_request</code> (400), <code>request_too_large</code> (413), <code>precondition_failed</code> (412, when creating a MESA profile with <code>If-None-Match: *</code> and a profile already exists), <code>conflict</code> (409, e.g. a duplicate token name or an approval already being processed), <code>service_unavailable</code> (503, e.g. the kill switch or MESA unavailable), <code>internal_error</code> (500).</dd></div>
         </dl>
 
         <h2 id="tokens">Tokens</h2>

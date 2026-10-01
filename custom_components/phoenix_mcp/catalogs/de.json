@@ -1369,6 +1369,7 @@
       "killSwitchEngaged": "Notausschalter aktiviert.",
       "maximumRequired": "{field} darf {max} nicht überschreiten.",
       "mesaArchiveRequired": "archive ist erforderlich.",
+      "mesaProfileExists": "Ein Profil ist bereits vorhanden. Öffne es im Bearbeitungsmodus.",
       "mesaConflictModeInvalid": "on_conflict muss skip oder overwrite sein.",
       "mesaUnavailable": "MESA ist nicht verfügbar.",
       "nonNegativeRequired": "{field} darf nicht negativ sein.",

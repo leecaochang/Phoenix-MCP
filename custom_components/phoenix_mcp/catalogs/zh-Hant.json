@@ -55,6 +55,7 @@
       "killSwitchEngaged": "緊急停止開關已啟用。",
       "maximumRequired": "{field} 不能超過 {max}。",
       "mesaArchiveRequired": "archive 為必填項。",
+      "mesaProfileExists": "設定已存在。請在編輯模式中開啟。",
       "mesaConflictModeInvalid": "on_conflict 必須為 skip 或 overwrite。",
       "mesaUnavailable": "MESA 目前不可用。",
       "nameRequired": "name 為必填項。",

@@ -705,7 +705,7 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
   // "view" (MESA) vs "create" (+). Reloaded after the inline editor saves so a
   // newly created profile flips its "+" to "MESA" without leaving the tab.
   const loadMesaProfiles = useCallback(() => {
-    api.listMesaProfiles({ limit: 500 })
+    api.listMesaProfiles({ all: true })
       .then((r) => setMesaProfileEntities(new Set(r.profiles.map((p) => p.entity_id))))
       .catch(() => null);
     // The tree offers device and domain profiles too, so it needs to know which

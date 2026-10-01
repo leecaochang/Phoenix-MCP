@@ -1658,6 +1658,7 @@
       "killSwitchEngaged": "Kill switch engaged.",
       "maximumRequired": "{field} must not exceed {max}.",
       "mesaArchiveRequired": "archive is required.",
+      "mesaProfileExists": "A profile already exists. Open it in Edit mode.",
       "mesaConflictModeInvalid": "on_conflict must be skip or overwrite.",
       "mesaUnavailable": "MESA is not available.",
       "nonNegativeRequired": "{field} must be non-negative.",

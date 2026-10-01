@@ -49,6 +49,7 @@
       "killSwitchEngaged": "Kill switch attivato.",
       "maximumRequired": "{field} non deve superare {max}.",
       "mesaArchiveRequired": "archive è obbligatorio.",
+      "mesaProfileExists": "Esiste già un profilo. Aprilo in modalità modifica.",
       "mesaConflictModeInvalid": "on_conflict deve essere skip o overwrite.",
       "mesaUnavailable": "MESA non è disponibile.",
       "nameRequired": "name è obbligatorio.",

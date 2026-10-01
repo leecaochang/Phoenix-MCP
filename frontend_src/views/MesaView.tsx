@@ -269,32 +269,32 @@ function editorToDoc(s: EditorState): MesaProfileDocument {
 // scope a build failure instead.
 const SCOPE_API: Record<ProfileScope, {
   load: (key: string) => Promise<MesaProfileDocument | null>;
-  save: (key: string, doc: MesaProfileDocument) => Promise<MesaValidationIssue[]>;
+  save: (key: string, doc: MesaProfileDocument, createOnly?: boolean) => Promise<MesaValidationIssue[]>;
   remove: (key: string) => Promise<void>;
 }> = {
   entity: {
     load: async (k) => (await api.getMesaProfile(k)).stored,
-    save: async (k, doc) => (await api.putMesaProfile(k, doc)).warnings,
+    save: async (k, doc, createOnly) => (await api.putMesaProfile(k, doc, createOnly)).warnings,
     remove: async (k) => { await api.deleteMesaProfile(k); },
   },
   device: {
     load: async (k) => (await api.getMesaDevice(k)).stored,
-    save: async (k, doc) => { await api.putMesaDevice(k, doc); return []; },
+    save: async (k, doc, createOnly) => { await api.putMesaDevice(k, doc, createOnly); return []; },
     remove: async (k) => { await api.deleteMesaDevice(k); },
   },
   area: {
     load: async (k) => (await api.getMesaArea(k)).stored,
-    save: async (k, doc) => { await api.putMesaArea(k, doc); return []; },
+    save: async (k, doc, createOnly) => { await api.putMesaArea(k, doc, createOnly); return []; },
     remove: async (k) => { await api.deleteMesaArea(k); },
   },
   integration: {
     load: async (k) => (await api.getMesaIntegration(k)).stored,
-    save: async (k, doc) => { await api.putMesaIntegration(k, doc); return []; },
+    save: async (k, doc, createOnly) => { await api.putMesaIntegration(k, doc, createOnly); return []; },
     remove: async (k) => { await api.deleteMesaIntegration(k); },
   },
   domain: {
     load: async (k) => (await api.getMesaDomain(k)).stored,
-    save: async (k, doc) => { await api.putMesaDomain(k, doc); return []; },
+    save: async (k, doc, createOnly) => { await api.putMesaDomain(k, doc, createOnly); return []; },
     remove: async (k) => { await api.deleteMesaDomain(k); },
   },
 };
@@ -311,8 +311,8 @@ export function loadProfile(scope: ProfileScope, key: string): Promise<MesaProfi
   return SCOPE_API[scope].load(key);
 }
 
-export function saveProfile(scope: ProfileScope, key: string, doc: MesaProfileDocument): Promise<MesaValidationIssue[]> {
-  return SCOPE_API[scope].save(key, doc);
+export function saveProfile(scope: ProfileScope, key: string, doc: MesaProfileDocument, createOnly = false): Promise<MesaValidationIssue[]> {
+  return SCOPE_API[scope].save(key, doc, createOnly);
 }
 
 export function deleteProfile(scope: ProfileScope, key: string): Promise<void> {
@@ -705,7 +705,7 @@ export function ProfileEditor({
     setSaving(true);
     setError(null);
     try {
-      const w = await saveProfile(scope, state.key.trim(), editorToDoc(state));
+      const w = await saveProfile(scope, state.key.trim(), editorToDoc(state), isNew);
       cleanSnapshot.current = JSON.stringify(state);
       setWarnings(w);
       if (w.length === 0) { onSaved(); onClose(); }
@@ -1154,7 +1154,7 @@ export function MesaView() {
     setError(null);
     try {
       const [list, iss, doms, ints, ars, devs] = await Promise.all([
-        api.listMesaProfiles({ limit: 200 }),
+        api.listMesaProfiles({ all: true }),
         // Suggestions-scoped recompute: refresh() runs after every profile
         // save/delete in this tab (including Apply/Review from a suggestion),
         // and a saved profile's coverage must be re-evaluated immediately or

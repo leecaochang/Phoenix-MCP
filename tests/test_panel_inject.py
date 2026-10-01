@@ -215,3 +215,14 @@ def test_the_baseline_is_below_the_home_assistant_under_test():
     from custom_components.phoenix_mcp.const import MESA_INJECT_MIN_HA
 
     assert AwesomeVersion(ha_version) >= AwesomeVersion(MESA_INJECT_MIN_HA)
+
+
+def test_module_graph_revision_matches_entry_url(tmp_path):
+    from custom_components.phoenix_mcp.panel import _module_url_with_cache_bust
+    path = tmp_path / "module.js"
+    path.write_text("example")
+    version = tmp_path / "module.js.version"
+    version.write_text("abc1234567")
+    assert _module_url_with_cache_bust(path, "/module.js") == "/module.js?v=abc1234567"
+    version.write_text("invalid revision")
+    assert _module_url_with_cache_bust(path, "/module.js") == f"/module.js?v={int(path.stat().st_mtime)}"

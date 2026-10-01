@@ -18,7 +18,7 @@ vi.mock("../i18n", () => ({
   resolveLanguage: () => "en",
   t: (key: string) => key,
 }));
-vi.mock("../inject/QuickAdd", () => ({}));
+vi.mock("../inject/QuickAdd", () => ({ QUICK_ADD_TAG: "phx-mesa-quick-add" }));
 
 // HA inherits this conditional slot from @material/mwc-list 0.27.0:
 // ListItemBase.render() only calls renderMeta() when hasMeta is true.
@@ -214,4 +214,28 @@ describe("HA frontend 20260826.7 injection templates", () => {
     await boot();
     expect(root.querySelector(`.${BTN_CLASS}`)).toBeNull();
   });
+});
+
+
+it("waits for a late HA identity and removes controls when authority changes", async () => {
+  const root = start("/config/entities");
+  const ha = document.querySelector("home-assistant") as HTMLElement & { hass: { user?: { id: string; is_admin: boolean } } };
+  ha.hass.user = undefined;
+  const table = document.createElement("ha-data-table");
+  root.appendChild(table);
+  const rows = table.attachShadow({ mode: "open" });
+  rows.innerHTML = '<div role="row"><div role="cell"><ha-icon></ha-icon></div></div>';
+  Object.assign(rows.firstElementChild!, { rowId: "light.example" });
+  await boot();
+  await vi.advanceTimersByTimeAsync(12000);
+  expect(rows.querySelector(`.${BTN_CLASS}`)).toBeNull();
+  ha.hass.user = { id: "first-admin", is_admin: true };
+  await vi.advanceTimersByTimeAsync(2500);
+  expect(rows.querySelector(`.${BTN_CLASS}`)).not.toBeNull();
+  ha.hass.user = { id: "regular-user", is_admin: false };
+  await vi.advanceTimersByTimeAsync(5500);
+  expect(rows.querySelector(`.${BTN_CLASS}`)).toBeNull();
+  ha.hass.user = { id: "second-admin", is_admin: true };
+  await vi.advanceTimersByTimeAsync(2500);
+  expect(rows.querySelector(`.${BTN_CLASS}`)).not.toBeNull();
 });

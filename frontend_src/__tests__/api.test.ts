@@ -529,3 +529,32 @@ describe("api.previewCommandRoute", () => {
     }));
   });
 });
+
+
+describe("complete MESA profile catalog", () => {
+  it("follows authoritative cursors and combines every page", async () => {
+    const request = vi.fn()
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ profiles: [{ entity_id: "light.first" }], total_matched: 2, has_more: true, next_cursor: "second" }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ profiles: [{ entity_id: "light.last" }], total_matched: 2, has_more: false, next_cursor: null }) });
+    setHass({ fetchWithAuth: request });
+    const result = await api.listMesaProfiles({ all: true });
+    expect(result.profiles.map((profile) => profile.entity_id)).toEqual(["light.first", "light.last"]);
+    expect(result.has_more).toBe(false);
+    expect(request.mock.calls[1][0]).toContain("cursor=second");
+  });
+
+  it("refuses a non-progressing cursor rather than publishing a partial catalog", async () => {
+    setHass({ fetchWithAuth: vi.fn().mockResolvedValue({ ok: true, status: 200,
+      json: async () => ({ profiles: [{ entity_id: "light.same" }], total_matched: 100, has_more: true, next_cursor: "same" }) }) });
+    await expect(api.listMesaProfiles({ all: true })).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it("uses a create-only condition for MESA create requests", async () => {
+    const request = mockFetchResponse(200);
+    setHass({ fetchWithAuth: request });
+    await api.putMesaProfile("light.example", {}, true);
+    expect(request.mock.calls[0][1].headers["If-None-Match"]).toBe("*");
+    await api.putMesaProfile("light.example", {});
+    expect(request.mock.calls[1][1].headers["If-None-Match"]).toBeUndefined();
+  });
+});

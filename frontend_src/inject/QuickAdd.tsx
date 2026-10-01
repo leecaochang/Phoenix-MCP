@@ -17,7 +17,10 @@ import { Loading, ErrorMsg } from "../components/common";
 import PANEL_CSS from "../phoenix-mcp-panel.css?inline";
 import { hasMessage, loadTranslations, resolveLanguage, t } from "../i18n";
 
-const TAG = "phx-mesa-quick-add";
+import { JS_BUILD } from "../version";
+
+export const QUICK_ADD_TAG = `phx-mesa-quick-add-${JS_BUILD.replaceAll(".", "-")}`;
+const TAG = QUICK_ADD_TAG;
 
 /** The page's hass object, or null before Home Assistant has booted. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,23 +33,7 @@ function pageHass(): any {
   }
 }
 
-/** Load the string catalog when THIS module instance does not already have one.
- *
- * It usually will not, and the reason is structural rather than a race. The
- * injector is registered with a cache-busting query (`...inject.js?v=<mtime>`),
- * but this lazy chunk's static import of its parent is bare
- * (`./phoenix-mcp-inject.js`). A module is keyed by URL, so those are two
- * DIFFERENT instances: opening this modal instantiates a second copy of the
- * injector, which finds the active-flag already set, stands down, and therefore
- * never runs the startup that loads translations. Every string in this modal
- * then resolved to its own key, which is what shipped.
- *
- * Loading here rather than "fixing" the URL split is deliberate: the split is a
- * property of how the bundle is chunked and cache-busted, so a modal that owns
- * its own strings keeps working whichever instance ends up rendering it. The
- * probe key is one this modal itself renders, so a catalog that loaded but
- * lacks the MESA section is still treated as missing.
- */
+/** Keep modal strings ready even when opened independently of the injector. */
 async function ensureStrings(): Promise<void> {
   if (hasMessage("mesa.save")) return;
   const hass = pageHass();
