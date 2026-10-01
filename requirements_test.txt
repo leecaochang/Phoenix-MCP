@@ -5,7 +5,7 @@
 # version plus the matched pytest, pytest-asyncio, aiohttp, sqlalchemy, etc. So
 # pinning PHACC alone makes the whole stack reproducible.
 #
-#   PHACC 0.13.366  ->  homeassistant==2026.9.3
+#   PHACC 0.13.367  ->  homeassistant==2026.9.4
 #   Python: 3.14
 #
 # This is a TEST pin only. Phoenix MCP does not declare a manifest-level
@@ -20,7 +20,7 @@
 #   # then pip freeze the two lines back into this file)
 #   venv/bin/python -m pytest
 
-pytest-homeassistant-custom-component==0.13.366
+pytest-homeassistant-custom-component==0.13.367
 
 # Dependencies of HA's `conversation` component, needed by the Phoenix MCP voice-agent
 # tests (voice_agent.py imports homeassistant.components.conversation). PHACC does
