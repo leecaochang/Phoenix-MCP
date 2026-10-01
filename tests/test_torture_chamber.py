@@ -368,6 +368,7 @@ async def test_structured_get_states_seed_reaches_scope_filter(
 async def test_structured_call_service_seed_reaches_executor(hass: HomeAssistant):
     tool_def = next(item for item in ALL_DEFS if item["name"] == "call_service")
     seed = _placeholder("arguments", tool_def["inputSchema"])
+    seed["targets"] = [{"kind": "entity", "ids": ["light.test"]}]
     expected = ({"content": [{"type": "text", "text": "reached"}]}, "allowed", "service")
     executor = AsyncMock(return_value=expected)
 
@@ -383,6 +384,7 @@ async def test_structured_dry_run_seed_reaches_target_resolution(
 ):
     tool_def = next(item for item in ALL_DEFS if item["name"] == "dry_run_service")
     seed = _placeholder("arguments", tool_def["inputSchema"])
+    seed["targets"] = [{"kind": "entity", "ids": ["light.test"]}]
     resolver = MagicMock(return_value=([], 0))
 
     with patch.object(discovery, "resolve_service_targets", resolver):

@@ -34,6 +34,12 @@ const VERTICAL_ARROW_OWNER = [
   "[role='spinbutton']",
 ].join(", ");
 
+function activeElement(): HTMLElement | null {
+  let active = document.activeElement;
+  while (active?.shadowRoot?.activeElement) active = active.shadowRoot.activeElement;
+  return active instanceof HTMLElement ? active : null;
+}
+
 function ownsVerticalArrows(target: EventTarget | null): boolean {
   return target instanceof Element && Boolean(target.closest(VERTICAL_ARROW_OWNER));
 }
@@ -78,7 +84,7 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
   recordNavigationRef.current = recordNavigation;
 
   useEffect(() => {
-    previousFocus.current = document.activeElement as HTMLElement | null;
+    previousFocus.current = activeElement();
     const first = modalRef.current?.querySelector<HTMLElement>(
       "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
     );
@@ -144,7 +150,7 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
       if (
         (e.key !== "ArrowUp" && e.key !== "ArrowDown")
         || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || e.isComposing
-        || ownsVerticalArrows(e.target)
+        || ownsVerticalArrows(e.composedPath()[0] ?? e.target)
       ) return;
       if (!recordNavigationRef.current) return;
       // Consume the key before resolving a direction. At the first/last item,
@@ -181,10 +187,10 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
     }
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
-    if (e.shiftKey && document.activeElement === first) {
+    if (e.shiftKey && activeElement() === first) {
       e.preventDefault();
       last.focus();
-    } else if (!e.shiftKey && document.activeElement === last) {
+    } else if (!e.shiftKey && activeElement() === last) {
       e.preventDefault();
       first.focus();
     }

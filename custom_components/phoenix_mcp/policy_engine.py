@@ -76,6 +76,7 @@ def canonical_entity_id(entity_id: str, hass: HomeAssistant) -> str:
     fetch state after a permission check use the same id resolve() granted on
     (avoids a false 404 when a registry id or alias was supplied).
     """
+    entity_id = entity_id.lower()
     entry = er.async_get(hass).async_get(entity_id)
     return entry.entity_id if entry else entity_id
 
@@ -101,6 +102,7 @@ def resolve(entity_id: str, token: TokenRecord, hass: HomeAssistant) -> Permissi
     if not isinstance(entity_id, str):
         return Permission.NOT_FOUND
 
+    entity_id = entity_id.lower()
     registry = er.async_get(hass)
 
     # Resolve to canonical entity_id via entity registry
@@ -186,6 +188,7 @@ def resolve_registry_access(
     if ordinary not in (Permission.READ, Permission.WRITE):
         return ordinary
 
+    entity_id = entity_id.lower()
     registry = er.async_get(hass)
     entry = registry.async_get(entity_id)
     canonical_id = entry.entity_id if entry is not None else entity_id

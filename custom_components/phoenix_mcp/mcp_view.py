@@ -1203,6 +1203,17 @@ async def _tool_call_service(
 
     from .command_execution import bind_service_plan
 
+    if (service_key not in DUAL_GATE_SERVICES | NO_TARGET_SERVICES
+            and domain != _ESPHOME_DOMAIN
+            and not any((args.get("entity_id"), args.get("device_id"), args.get("area_id")))):
+        if (call_needs_physical_gate(domain=domain, service=service, token=token, hass=hass)
+                and effective_cap(token, "cap_physical_control") == CAP_DENY):
+            return _tool_error("Forbidden."), "denied", "call_service"
+        return (
+            _tool_error("An explicit entity_id, device_id, or area_id target is required."),
+            "invalid_request", "call_service",
+        )
+
     bound_args = bind_service_plan(args, hass, data, token)
     if bound_args is None:
         return _tool_error("Command targets or configuration changed."), "denied", "call_service"
@@ -1337,6 +1348,21 @@ async def _execute_call_service(
     resource = f"service:{domain}/{service}"
     service_key = f"{domain}/{service}"
 
+    if service_key in DUAL_GATE_SERVICES:
+        required_cap = "cap_restart"
+    elif call_needs_physical_gate(
+        domain=domain, service=service,
+        entity_id=args.get("entity_id"), device_id=args.get("device_id"),
+        area_id=args.get("area_id"), token=token, hass=hass,
+    ):
+        required_cap = "cap_physical_control"
+    elif service_key in NO_TARGET_SERVICES:
+        required_cap = "cap_yaml_edit"
+    else:
+        required_cap = None
+    if required_cap is not None and effective_cap(token, required_cap) == CAP_DENY:
+        return _tool_error("Forbidden."), "denied", resource
+
     # Re-run at the executor choke point. Confirm stores caller arguments and a
     # service can register or change its description while approval is pending,
     # so the request-time precheck alone is not an authorization boundary.
@@ -1354,9 +1380,7 @@ async def _execute_call_service(
     entity_id = args.get("entity_id")
     device_id = args.get("device_id")
     area_id = args.get("area_id")
-    # A target selector inside service_data is stripped rather than honoured: the
-    # explicit targets above are what this call may reach, and HA would union a
-    # leftover selector with them. See helpers.sanitize_service_data.
+    # Selector-bearing service data has already refused at the shared boundary.
     service_data = _sanitize_service_data(args.get("service_data"))
     from .command_execution import service_plan_is_current
     from .const import COMMAND_ROUTING_PLAN_KEY
@@ -1416,6 +1440,13 @@ async def _execute_call_service(
             )
 
     try:
+        if not any((entity_id, device_id, area_id)):
+            if domain == "esphome":
+                return _tool_error("Forbidden."), "denied", resource
+            return (
+                _tool_error("An explicit entity_id, device_id, or area_id target is required."),
+                "invalid_request", resource,
+            )
         permitted_entities, _requested_count = resolve_service_targets(
             entity_id=entity_id,
             device_id=device_id,

@@ -4,7 +4,7 @@ import { api } from "../api";
 import { Loading, ErrorMsg } from "../index";
 import { Modal } from "../components/Modal";
 import { BeforeAfter, RemovedPane } from "../components/DiffView";
-import { collectPreviewViews, DashboardPreview, rememberPreviewMode, SegmentedToggle, singleCardPreviewConfig, storedPreviewMode, useHuiCardReady, wrapCardPreviewConfig } from "../components/DashboardPreview";
+import { collectPreviewViews, DashboardPreview, rememberPreviewMode, SegmentedToggle, singleCardPreviewConfig, storedPreviewMode, wrapCardPreviewConfig } from "../components/DashboardPreview";
 import { YamlView, toYaml } from "../components/YamlView";
 import { approvalStatusLabel, formatDateTime, friendlyToolName } from "../utils";
 import { clearReasonDraft, getReasonDraft, setReasonDraft } from "../utils/approval_reason_draft";
@@ -1134,7 +1134,6 @@ function DiffView({ record, onConfigErrors }: {
 }) {
   const diff = record.diff || {};
   const kind = diff.kind || "system_action";
-  const huiReady = useHuiCardReady();
   // Diff vs Preview is a remembered preference (storedPreviewMode), so an
   // operator who chose Preview once gets it on every later record too.
   const [mode, setModeState] = useState<"diff" | "preview">(() => storedPreviewMode());
@@ -1179,7 +1178,7 @@ function DiffView({ record, onConfigErrors }: {
     before: beforeCardConfig !== null && collectPreviewViews(beforeCardConfig) !== null,
     after: afterCardConfig !== null && collectPreviewViews(afterCardConfig) !== null,
   };
-  const canPreview = !!energyPreview || (huiReady && (
+  const canPreview = !!energyPreview || ((
     isWholeLayout ? collectPreviewViews(wholeConfig) !== null
     : isCardOp ? (cardSideOk.before || cardSideOk.after)
     : false

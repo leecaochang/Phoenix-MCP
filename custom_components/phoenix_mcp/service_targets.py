@@ -64,6 +64,9 @@ async def unsupported_secondary_targets(
     """
     if not isinstance(service_data, dict) or not service_data:
         return ()
+    primary = tuple(sorted(str(key) for key in service_data if key in TARGET_SELECTOR_KEYS))
+    if primary:
+        return primary
     try:
         descriptions: Any = await async_get_all_descriptions(hass)
     except Exception:  # noqa: BLE001 - the static fallback is the safe degradation
@@ -93,6 +96,12 @@ async def unsupported_secondary_targets(
 def secondary_target_error(fields: tuple[str, ...]) -> str:
     """Explain a refusal using only field names the caller supplied."""
     joined = ", ".join(fields)
+    if TARGET_SELECTOR_KEYS.intersection(fields):
+        return (
+            f"Target selectors are not supported in service data: {joined}. "
+            "Put entity_id, device_id, or area_id in targets; floor_id and label_id "
+            "are not supported. No action was dispatched."
+        )
     return (
         f"Unsupported secondary target selector in service_data: {joined}. "
         "Phoenix MCP can authorize only the primary entity_id, device_id, or area_id "

@@ -717,40 +717,27 @@ async def _text_file_cas_conflict(
 
 
 def redaction_sentinel_path(value: Any, _prefix: tuple = ()) -> list | None:
-    """Locate a REDACTION_SENTINEL anywhere in a value, or None if clean.
-
-    THE WRITE-SIDE HALF OF REDACTION. Every config read is lossy: an entity the
-    token cannot resolve (out of scope, or a GHOST that no longer exists) comes
-    back as the sentinel, so a caller that reads a layout and writes it back
-    persists the placeholder AS IF IT WERE CONFIGURATION. That is silent and
-    permanent: the real entity id is gone from the stored config, so nobody can
-    tell afterwards what the value used to be.
-
-    Ghost entities are why this cannot be solved by widening permissions. Rule 8
-    returns NO_ACCESS for an entity absent from both hass.states and the registry
-    BEFORE any permission resolution runs, so a dashboard carrying a few dead
-    references redacts at every permission level, for every token.
-
-    Returns the PATH to the first offender rather than a bool, so the refusal can
-    name where the caller has to look. Walks dict keys as well as values: the
-    redacting readers drop an entity-id-shaped KEY's whole entry, but a caller
-    can still hand one back.
-    """
-    if isinstance(value, str):
-        return list(_prefix) if REDACTION_SENTINEL in value else None
-    if isinstance(value, dict):
-        for key, item in value.items():
-            if isinstance(key, str) and REDACTION_SENTINEL in key:
-                return [*_prefix, key]
-            found = redaction_sentinel_path(item, (*_prefix, key))
-            if found is not None:
-                return found
-        return None
-    if isinstance(value, list):
-        for index, item in enumerate(value):
-            found = redaction_sentinel_path(item, (*_prefix, index))
-            if found is not None:
-                return found
+    """Find the first placeholder path, visiting shared containers only once."""
+    pending = [(value, _prefix)]
+    visited: set[int] = set()
+    while pending:
+        current, path = pending.pop()
+        if isinstance(current, str):
+            if REDACTION_SENTINEL in current:
+                return list(path)
+        elif isinstance(current, (dict, list)):
+            identity = id(current)
+            if identity in visited:
+                continue
+            visited.add(identity)
+            if isinstance(current, dict):
+                for key in current:
+                    if isinstance(key, str) and REDACTION_SENTINEL in key:
+                        return [*path, key]
+                children = list(current.items())
+            else:
+                children = list(enumerate(current))
+            pending.extend((item, (*path, key)) for key, item in reversed(children))
     return None
 
 

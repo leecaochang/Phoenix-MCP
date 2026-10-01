@@ -171,6 +171,21 @@ class PhoenixTokenSensor(SensorEntity):
         return None
 
 
+@callback
+def _async_migrate_unique_ids(hass: HomeAssistant, tokens: list[TokenRecord]) -> None:
+    """Preserve entity IDs when released name-based sensor identities are upgraded."""
+    from homeassistant.helpers import entity_registry as er
+
+    registry = er.async_get(hass)
+    for token in tokens:
+        for sensor_type in _SENSOR_TYPES:
+            legacy = f"phoenix_mcp_{token_name_slug(token.name)}_{sensor_type}"
+            current = _unique_id(token.id, sensor_type)
+            entity_id = registry.async_get_entity_id("sensor", DOMAIN, legacy)
+            if entity_id is not None and registry.async_get_entity_id("sensor", DOMAIN, current) is None:
+                registry.async_update_entity(entity_id, new_unique_id=current)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -181,6 +196,7 @@ async def async_setup_entry(
     data.async_add_entities_cb = async_add_entities
 
     tokens = data.store.list_tokens()
+    _async_migrate_unique_ids(hass, tokens)
 
     sensors: list[PhoenixTokenSensor] = []
     for token in tokens:

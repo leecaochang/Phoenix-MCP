@@ -5,7 +5,7 @@ import { api } from "../api";
 import { toYaml } from "../components/YamlView";
 import { CodeToggle, diffLines, RawDiffPane, LayoutToggle, rememberCodeView, rememberDiffLayout, storedCodeView, storedDiffLayout } from "../components/DiffView";
 import { YamlView } from "../components/YamlView";
-import { collectPreviewViews, DashboardPreview, rememberPreviewMode, SegmentedToggle, storedPreviewMode, useHuiCardReady } from "../components/DashboardPreview";
+import { collectPreviewViews, DashboardPreview, rememberPreviewMode, SegmentedToggle, storedPreviewMode } from "../components/DashboardPreview";
 import { Loading, ErrorMsg, RefreshIcon } from "../index";
 import { formatDateTime } from "../utils";
 import { useLatestRequest } from "../utils/latest_request";
@@ -325,9 +325,8 @@ function ChangeDetail(
     rememberCodeView(next);
     setCode(next);
   };
-  // Dashboard versions offer a live layout preview next to the text diff.
+  // Dashboard versions offer an inert configuration overview beside the diff.
   // Diff vs Preview is a remembered preference shared with the approval card.
-  const huiReady = useHuiCardReady();
   const [mode, setModeState] = useState<"diff" | "preview">(() => storedPreviewMode());
   const setMode = (m: "diff" | "preview") => {
     rememberPreviewMode(m);
@@ -389,7 +388,7 @@ function ChangeDetail(
   const isDashboard = !!record && record.resource_type === "dashboard";
   const beforeOk = isDashboard && collectPreviewViews(record!.before) !== null;
   const afterOk = isDashboard && collectPreviewViews(record!.after) !== null;
-  const canPreview = huiReady && (beforeOk || afterOk);
+  const canPreview = (beforeOk || afterOk);
   // Never render a non-previewable side even if state says so (e.g. a create
   // version whose Before is null).
   const previewSide = side === "before" ? (beforeOk ? "before" : "after") : (afterOk ? "after" : "before");

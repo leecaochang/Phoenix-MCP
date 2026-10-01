@@ -4,7 +4,7 @@
 [![Hassfest](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hassfest.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hassfest.yml)
 [![Tests](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/tests.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/tests.yml)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.2%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.7%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
 
 
 [English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | [Nederlands](README.nl.md) | [Polski](README.pl.md) | **简体中文** | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md)
@@ -37,7 +37,7 @@ Phoenix MCP 脱胎于一个被弃置的开源项目，它的名字也由此而�
 
 ## 要求
 
-- Home Assistant 2025.2.0 或更高版本。
+- Home Assistant 2026.7.0 或更高版本。
 - 每个 Home Assistant 只能配置一个 Phoenix MCP 实例。Home Assistant 会安装固定版本的 Python 依赖项 `voluptuous-serialize==2.7.0`；MESA 已随 Phoenix MCP 一起提供。
 
 ## 通过 HACS 安装

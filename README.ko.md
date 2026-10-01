@@ -4,7 +4,7 @@
 [![Hassfest](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hassfest.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hassfest.yml)
 [![Tests](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/tests.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/tests.yml)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.2%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.7%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
 
 
 [English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | [Nederlands](README.nl.md) | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md) | **한국어** | [Русский](README.ru.md)
@@ -25,7 +25,7 @@ Phoenix MCP는 Home Assistant 내부에서 완전히 실행됩니다. 추가 프
 
 ## 요구 사항
 
-- Home Assistant 2025.2.0 이상.
+- Home Assistant 2026.7.0 이상.
 - Home Assistant마다 Phoenix MCP 인스턴스 하나만 설정할 수 있습니다. Home Assistant가 고정된 Python 의존성 `voluptuous-serialize==2.7.0`을 설치하며, MESA는 Phoenix MCP에 포함되어 있습니다.
 
 ## HACS를 통한 설치

@@ -4,14 +4,7 @@ import { ApprovalsView } from "../views/ApprovalsView";
 import { api } from "../api";
 import type { ApprovalRecord } from "../types";
 
-// One-click "Reject with error message": when the live preview detects a card
-// configuration error (HA swaps in hui-error-card), the approval modal offers
-// a third action that rejects with that error as the reason, so the operator
-// never has to copy-paste it back to the agent by hand.
-//
-// This file registers its OWN hui-card stub that always spawns an error card
-// (jsdom's custom element registry is shared per test file, which is why this
-// lives apart from approvals_dashboard_preview.test.tsx).
+// Review must not instantiate custom cards or run their error hooks.
 
 vi.mock("../api", () => ({
   api: { listApprovals: vi.fn(), getApproval: vi.fn(), rejectApproval: vi.fn() },
@@ -59,27 +52,18 @@ describe("Reject with error message", () => {
     localStorage.setItem("phx-dash-preview-mode", "preview");
   });
 
-  it("appears once the preview detects a config error and rejects with it as the reason", async () => {
-    vi.mocked(api.listApprovals).mockResolvedValue({
-      approvals: [record()], total: 1, limit: 50, offset: 0,
-    });
-    vi.mocked(api.rejectApproval).mockResolvedValue(record({ status: "rejected", rejected_reason: "x" }));
-
-    const { container, findByText, findByRole } = render(
+  it("shows an inert proposal and allows ordinary rejection without running card code", async () => {
+    vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [record()], total: 1, limit: 50, offset: 0 });
+    vi.mocked(api.rejectApproval).mockResolvedValue(record({ status: "rejected" }));
+    const { container, findByText, findByRole, queryByRole } = render(
       <ApprovalsView tab="pending" onTabChange={() => {}} />,
     );
     fireEvent.click(await findByText("Add 'custom:apexcharts-card' to dashboard"));
-    await waitFor(() => expect(container.querySelector("#approval-detail-tab-diff")).toBeTruthy());
-
-    // The stubbed hui-card spawns an error card; detection reports it and the
-    // third action appears alongside Approve/Reject.
-    const btn = await findByRole("button", { name: "Reject with error message" });
-    fireEvent.click(btn);
-
+    await waitFor(() => expect(container.querySelector(".dash-preview-config")).toBeTruthy());
+    expect(container.querySelector("hui-card, hui-error-card")).toBeNull();
+    expect(queryByRole("button", { name: "Reject with error message" })).toBeNull();
+    fireEvent.click(await findByRole("button", { name: /^Reject$/ }));
     await waitFor(() => expect(api.rejectApproval).toHaveBeenCalledTimes(1));
-    const [, body] = vi.mocked(api.rejectApproval).mock.calls[0];
-    expect((body as { reason: string }).reason).toContain("Card configuration error:");
-    expect((body as { reason: string }).reason).toContain("value.series[0] is not a ChartCardSeriesExternalConfig");
   });
 
   it("offers no such button when the preview reports no errors", async () => {

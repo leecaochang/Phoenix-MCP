@@ -3588,6 +3588,7 @@ async def test_call_service_service_not_found_hints_verbs_for_core_domain(hass):
     hass.services.async_register("valve", "open", _raise)
 
     token, _ = _make_token(pass_through=True)
+    token.cap_physical_control = "allow"
     store = MagicMock()
     store.get_settings.return_value = MagicMock(mesa_mode="off")
     data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
@@ -3632,6 +3633,7 @@ async def test_no_target_reload_executes_bare_without_entity_flattening(hass):
     hass.services.async_register("automation", "reload", _reload_handler)
 
     token, _ = _make_token()
+    token.cap_yaml_edit = "allow"
     store = MagicMock()
     store.get_settings.return_value = MagicMock(mesa_mode="off")
     data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)

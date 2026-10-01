@@ -429,7 +429,7 @@ class TestTokenStoreLoad:
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
 
-        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
+        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
             store = await TokenStore.async_create(hass)
 
         tokens = store.list_tokens()
@@ -461,7 +461,7 @@ class TestTokenStoreLoad:
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
 
-        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
+        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
             store = await TokenStore.async_create(hass)
 
         tokens = store.list_tokens()
@@ -492,7 +492,7 @@ class TestTokenStoreLoad:
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
 
-        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
+        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
             store = await TokenStore.async_create(hass)
 
         assert [t.id for t in store.list_tokens()] == ["tok-good"]
@@ -515,7 +515,7 @@ class TestTokenStoreLoad:
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
 
-        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
+        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
             store = await TokenStore.async_create(hass)
 
         assert [t.id for t in store.list_archived()] == ["arch-good"]
@@ -527,7 +527,7 @@ class TestTokenStoreLoad:
             mock_store = AsyncMock()
             mock_store.async_load = AsyncMock(return_value=corrupt_root)
             mock_store.async_save = AsyncMock()
-            with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
+            with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
                 store = await TokenStore.async_create(hass)
             assert store.list_tokens() == []
             assert store.list_archived() == []
@@ -550,7 +550,7 @@ class TestTokenStoreLoad:
         mock_store = AsyncMock()
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
-        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
+        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
             store = await TokenStore.async_create(hass)
         assert store.list_tokens() == []
         assert store.list_archived() == []
@@ -577,7 +577,7 @@ class TestTokenStoreLoad:
         mock_store = AsyncMock()
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
-        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
+        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
             store = await TokenStore.async_create(hass)
         assert [t.id for t in store.list_tokens()] == ["tok1"]
         mock_store.async_save.assert_not_awaited()
@@ -589,7 +589,7 @@ class TestTokenStoreLoad:
             mock_store = AsyncMock()
             mock_store.async_load = AsyncMock(return_value=corrupt_root)
             mock_store.async_save = AsyncMock()
-            with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
+            with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
                 store = await TokenStore.async_create(hass)
             assert store.list_tokens() == []
             mock_store.async_save.assert_awaited()
@@ -597,7 +597,7 @@ class TestTokenStoreLoad:
         fresh = AsyncMock()
         fresh.async_load = AsyncMock(return_value=None)
         fresh.async_save = AsyncMock()
-        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=fresh):
+        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=fresh):
             store = await TokenStore.async_create(hass)
         assert store.list_tokens() == []
         fresh.async_save.assert_not_awaited()
@@ -617,7 +617,7 @@ class TestTokenStoreLoad:
         mock_store = AsyncMock()
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
-        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
+        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
             store = await TokenStore.async_create(hass)
         assert store.get_pending_approvals() == [good_approval]
         mock_store.async_save.assert_awaited()  # cleaned form healed
@@ -642,7 +642,7 @@ class TestTokenStoreLoad:
         mock_store = AsyncMock()
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
-        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=mock_store):
+        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
             store = await TokenStore.async_create(hass)
         tok = store.list_tokens()[0]
         assert tok.pass_through is False
@@ -1070,7 +1070,7 @@ class TestSettings:
         assert "tool_routing_version" not in settings
         storage = AsyncMock()
         storage.async_load.return_value = {"version": STORAGE_VERSION, "settings": settings}
-        with patch("custom_components.phoenix_mcp.token_store.Store", return_value=storage):
+        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=storage):
             store = await TokenStore.async_create(hass)
         assert store.get_settings().to_dict() == settings
         storage.async_save.assert_not_awaited()

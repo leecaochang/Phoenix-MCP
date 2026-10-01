@@ -277,7 +277,7 @@ export function CapabilityMatrix({ token, onUpdate, esphome }: Props) {
   const [error, setError] = React.useState<string | null>(null);
 
   async function setMode(cap: CapName, mode: CapMode) {
-    if (token[cap] === mode) return;
+    if (saving !== null || token[cap] === mode) return;
     setSaving(cap);
     setError(null);
     try {
@@ -338,27 +338,30 @@ export function CapabilityMatrix({ token, onUpdate, esphome }: Props) {
                     </div>
                     <div className="cap-row-desc">{t(cap.descriptionKey)}</div>
                   </div>
-                  <div className="cap-row-modes" role="radiogroup" aria-label={t(cap.labelKey)}>
+                  <div className="cap-row-modes" role="group" aria-label={t(cap.labelKey)} aria-busy={isSaving}>
                     <ModeRadio
                       cap={cap.key}
                       mode="deny"
                       current={current}
                       onSelect={setMode}
-                      disabled={isSaving}
+                      disabled={false}
+                      busy={isSaving}
                     />
                     <ModeRadio
                       cap={cap.key}
                       mode="allow"
                       current={current}
                       onSelect={setMode}
-                      disabled={isSaving}
+                      disabled={false}
+                      busy={isSaving}
                     />
                     <ModeRadio
                       cap={cap.key}
                       mode="confirm"
                       current={current}
                       onSelect={setMode}
-                      disabled={isSaving || !cap.confirmAvailable}
+                      disabled={!cap.confirmAvailable}
+                      busy={isSaving}
                       unavailable={!cap.confirmAvailable}
                     />
                   </div>
@@ -378,29 +381,26 @@ interface ModeRadioProps {
   current: CapMode;
   onSelect: (cap: CapName, mode: CapMode) => void;
   disabled: boolean;
+  busy: boolean;
   unavailable?: boolean;
 }
 
-function ModeRadio({ cap, mode, current, onSelect, disabled, unavailable }: ModeRadioProps) {
+function ModeRadio({ cap, mode, current, onSelect, disabled, busy, unavailable }: ModeRadioProps) {
   const checked = current === mode;
   const id = `${cap}-${mode}`;
   return (
-    <label
-      htmlFor={id}
+    <button
+      type="button"
+      id={id}
+      disabled={disabled}
+      aria-disabled={busy || disabled}
+      aria-pressed={checked}
+      onClick={() => { if (!busy && !disabled) onSelect(cap, mode); }}
       className={`mode-radio mode-${mode}${checked ? " mode-radio-checked" : ""}${unavailable ? " mode-radio-unavailable" : ""}`}
       title={unavailable ? t("caps.confirmUnavailable") : t(MODE_DESC_KEYS[mode])}
     >
-      <input
-        id={id}
-        type="radio"
-        name={cap}
-        value={mode}
-        checked={checked}
-        disabled={disabled}
-        onChange={() => onSelect(cap, mode)}
-      />
       <span className="mode-radio-dot" />
       <span className="mode-radio-label">{t(MODE_LABEL_KEYS[mode])}</span>
-    </label>
+    </button>
   );
 }

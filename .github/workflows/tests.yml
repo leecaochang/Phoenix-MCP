@@ -12,16 +12,18 @@ permissions:
 
 jobs:
   ha-floor:
-    name: Home Assistant 2025.2 import compatibility
+    name: Home Assistant 2026.7 runtime compatibility
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          python-version: "3.13"
-      - name: Install advertised Home Assistant floor
-        run: python -m pip install "homeassistant==2025.2.0"
-      - name: Import every first-party module
+          python-version: "3.14"
+      - name: Install the matched floor test stack
+        run: python -m pip install "pytest-homeassistant-custom-component==0.13.344"
+      - name: Install integration and component requirements with HA constraints
+        run: python tests/ha_floor_dependencies.py
+      - name: Import first-party modules and exercise runtime boundaries
         run: |
           python - <<'PY'
           import importlib
@@ -29,15 +31,13 @@ jobs:
           import custom_components.phoenix_mcp as package
 
           prefix = f"{package.__name__}."
-          names = sorted(
-              module.name
-              for module in pkgutil.walk_packages(package.__path__, prefix)
-              if ".mesa_core" not in module.name
-          )
+          names = sorted(module.name for module in pkgutil.walk_packages(package.__path__, prefix)
+                         if ".mesa_core" not in module.name)
           for name in names:
               importlib.import_module(name)
-          print(f"Imported {len(names)} Phoenix modules on Home Assistant 2025.2.0")
+          print(f"Imported {len(names)} Phoenix modules on Home Assistant 2026.7.0")
           PY
+          python -m pytest -q tests/test_security_boundaries.py tests/test_http_authorization.py tests/test_config_flow.py tests/test_ha_version_floor.py
 
   pytest:
     name: Python (pytest)
@@ -47,7 +47,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           # Matches the pinned test stack in requirements_test.txt
-          # (pytest-homeassistant-custom-component -> homeassistant 2026.9.3).
+          # (pytest-homeassistant-custom-component -> homeassistant 2026.9.4).
           python-version: "3.14"
       - name: Install test dependencies
         run: |
@@ -99,4 +99,6 @@ jobs:
         # The build overwrites the committed bundles and succeeds either way,
         # so building alone proves nothing about what is shipped. This fails if
         # frontend_src changed without the rebuilt bundles being committed.
-        run: git diff --exit-code -- custom_components/phoenix_mcp/frontend
+        run: |
+          git diff --exit-code -- custom_components/phoenix_mcp/frontend
+          test -z "$(git ls-files --others --exclude-standard -- custom_components/phoenix_mcp/frontend)"

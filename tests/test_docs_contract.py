@@ -310,7 +310,9 @@ def test_operations_route_table_lists_every_mcp_and_skill_route() -> None:
 )
 def test_connect_page_states_the_ha_version_floor(feature: str, floor: str) -> None:
     """The optional AI surfaces need newer HA than the headline floor."""
-    major_minor = ".".join(floor.split(".")[:2])
+    from custom_components.phoenix_mcp.const import MIN_HA_VERSION
+
+    major_minor = ".".join(MIN_HA_VERSION.split(".")[:2])
     html = (DOCS / "connect.html").read_text(encoding="utf-8")
     assert major_minor in html, (
         f"connect.html never mentions that {feature} requires HA {major_minor}+"

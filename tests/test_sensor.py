@@ -288,10 +288,10 @@ def test_expires_in_partial_day_rounds_up():
 # --- async_setup_entry ---
 
 @pytest.mark.asyncio
-async def test_setup_entry_registers_callback_and_adds_sensors():
+async def test_setup_entry_registers_callback_and_adds_sensors(hass):
     token = _make_token(name="tok-one")
     data = _make_data(tokens=[token])
-    hass = _make_hass(data)
+    hass.data[DOMAIN] = data
     entry = _make_entry()
     add_entities = MagicMock()
 
@@ -319,10 +319,10 @@ async def test_setup_entry_no_tokens_does_not_call_add_entities():
 
 
 @pytest.mark.asyncio
-async def test_setup_entry_multiple_tokens():
+async def test_setup_entry_multiple_tokens(hass):
     tokens = [_make_token(name="alpha"), _make_token(name="beta")]
     data = _make_data(tokens=tokens)
-    hass = _make_hass(data)
+    hass.data[DOMAIN] = data
     entry = _make_entry()
     add_entities = MagicMock()
 
@@ -575,9 +575,8 @@ class TestTokenRenameKeepsSensorIdentity:
         assert after == before
         assert all(entity_id is not None for entity_id in after.values())
         # Only the display name moved.
-        device = dr.async_get(hass).async_get_devices(
-            identifiers={(DOMAIN, token.id)}
-        )[0]
+        device = dr.async_get(hass).async_get(device_id)
+        assert device is not None
         assert device.name == _device_name("beta")
         assert device.id == device_id
 
@@ -689,3 +688,15 @@ async def test_generated_entity_ids_match_the_documentation(hass, enable_custom_
             f"docs/operations.html does not list {entity_id} for the "
             f"{sensor_type} sensor."
         )
+
+
+async def test_released_sensor_identity_migration_preserves_entity_id(hass):
+    from homeassistant.helpers import entity_registry as er
+    from custom_components.phoenix_mcp.sensor import _async_migrate_unique_ids
+
+    token = _make_token(name="legacy-token")
+    registry = er.async_get(hass)
+    legacy = registry.async_get_or_create("sensor", DOMAIN, "phoenix_mcp_legacy_token_status")
+    _async_migrate_unique_ids(hass, [token])
+    assert registry.async_get_entity_id("sensor", DOMAIN, PhoenixTokenSensor(token, "status", _make_data()).unique_id) == legacy.entity_id
+    assert registry.async_get_entity_id("sensor", DOMAIN, "phoenix_mcp_legacy_token_status") is None

@@ -1,22 +1,7 @@
-"""Guard: a Home Assistant target selector must never survive into a service call.
+"""Refuse misplaced targets and constrain resolved targets on every service path.
 
-Phoenix MCP resolves and flattens every target itself and then calls the service
-with an explicit entity list. Home Assistant, however, reads target selectors
-back out of the call DATA (helpers.target.TargetSelection over ServiceCall.data)
-and unions whatever it finds there with that list, so a selector left in
-caller-supplied service data reaches entities the permission tree, the capability
-gates and MESA never evaluated.
-
-Two of the five selectors were resolved nowhere in Phoenix MCP and stripped
-nowhere either: a request naming floor_id or label_id actuated everything under
-that floor or label for a token scoped to a single entity. These tests pin the
-strip at every surface that accepts caller-supplied service data, plus the
-constant it reads, so a regression fails here rather than in the field.
-
-The assertion is always about what reached hass.services.async_call, not about a
-status code: the call is not refused for carrying a selector (the resolved
-targets already say what it may reach), it is stripped, so a test asserting on
-the response would pass with the selector still on the wire.
+Caller-supplied target selectors are refused before service dispatch. Sanitizing
+remains a second boundary: only the resolved explicit entity list reaches HA.
 """
 
 from __future__ import annotations
@@ -222,7 +207,7 @@ def test_sanitizer_degrades_a_wrong_shaped_value_to_empty():
 
 
 @pytest.mark.asyncio
-async def test_mcp_call_service_strips_selectors(hass, token_store):
+async def test_mcp_call_service_refuses_misplaced_selectors(hass, token_store):
     """MCP applied no filtering at all: service_data was a free-form caller dict
     forwarded verbatim."""
     from custom_components.phoenix_mcp.mcp_view import _execute_call_service
@@ -241,11 +226,11 @@ async def test_mcp_call_service_strips_selectors(hass, token_store):
         "custom_components.phoenix_mcp.mcp_view.resolve_service_targets",
         return_value=(["light.kitchen"], 1),
     ):
-        await _execute_call_service(args, token, hass, data, request_id="r1")
+        result, outcome, _ = await _execute_call_service(args, token, hass, data, request_id="r1")
 
-    call_data = _call_data(hass)
-    _assert_no_selectors_but_entity_list(call_data, ["light.kitchen"])
-    assert call_data["brightness_pct"] == 40
+    assert outcome == "invalid_request"
+    assert "targets" in result["content"][0]["text"]
+    hass.services.async_call.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -304,7 +289,7 @@ async def test_runtime_service_description_adds_secondary_target_guard(hass):
 
 
 @pytest.mark.asyncio
-async def test_approved_reexecution_strips_selectors(hass, token_store):
+async def test_approved_reexecution_refuses_misplaced_selectors(hass, token_store):
     """The executor is the single choke point, so an approval stored with a
     selector in its saved args cannot smuggle one past the gate on approval.
 
@@ -333,14 +318,12 @@ async def test_approved_reexecution_strips_selectors(hass, token_store):
     }
     saved_args = bind_targets(saved_args, ["light.kitchen"], hass)
     result, outcome, _ = await async_execute_approved_tool("call_service", saved_args, token, hass, data)
-    assert outcome == "allowed", result
-
-    assert len(calls) == 1
-    _assert_no_selectors_but_entity_list(calls[0].data, ["light.kitchen"])
+    assert outcome == "invalid_request", result
+    assert not calls
 
 
 @pytest.mark.asyncio
-async def test_dry_run_predicts_against_the_sanitised_call(hass, token_store):
+async def test_dry_run_refuses_misplaced_selectors(hass, token_store):
     """The preview must evaluate the call that would run.
 
     dry_run_service exists to predict the real verdict, so it has to hand MESA
@@ -373,9 +356,11 @@ async def test_dry_run_predicts_against_the_sanitised_call(hass, token_store):
         patch.object(discovery, "resolve_service_targets", return_value=(["light.kitchen"], 1)),
         patch.object(discovery, "evaluate_service_entities", side_effect=_capture),
     ):
-        await discovery._tool_dry_run_service(args, token, hass, data)
+        result, outcome, _ = await discovery._tool_dry_run_service(args, token, hass, data)
 
-    assert seen == {"brightness_pct": 40}
+    assert outcome == "invalid_request"
+    assert "targets" in result["content"][0]["text"]
+    assert seen == {}
 
 
 @pytest.mark.asyncio
@@ -417,7 +402,7 @@ async def test_mesa_evaluates_exactly_the_parameters_that_execute(hass, token_st
         "domain": "light",
         "service": "turn_on",
         "entity_id": ["light.kitchen", "light.hall"],
-        "service_data": {**_ALL_SELECTORS, "brightness_pct": 40},
+        "service_data": {"brightness_pct": 40},
     }
     with patch(
         "custom_components.phoenix_mcp.mcp_view.resolve_service_targets",

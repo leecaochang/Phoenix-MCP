@@ -36,7 +36,7 @@ import pytest
 # Tracks the interpreter the oldest supported HA release requires. Raising it is
 # a deliberate product decision that starts with raising the HA floor (it drops
 # installs on older interpreters), never a fix for a failing test.
-PYTHON_FLOOR = (3, 12)
+PYTHON_FLOOR = (3, 14)
 
 _PACKAGE = pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "phoenix_mcp"
 
@@ -63,7 +63,7 @@ def test_source_parses_on_the_python_floor(path: pathlib.Path):
         )
 
 
-def test_the_guard_actually_rejects_newer_syntax(tmp_path):
+def test_parser_honors_an_older_requested_grammar(tmp_path):
     """Mutation check in-file: prove feature_version is doing the work.
 
     Without this, a future Python whose ast ignores feature_version (or a typo in
@@ -72,16 +72,16 @@ def test_the_guard_actually_rejects_newer_syntax(tmp_path):
     newer = tmp_path / "newer.py"
     newer.write_text("type Alias[T = int] = list[T]\n", encoding="utf-8")
     with pytest.raises(SyntaxError):
-        ast.parse(newer.read_text(), feature_version=PYTHON_FLOOR)
+        ast.parse(newer.read_text(), feature_version=(3, 12))
 
     generic = tmp_path / "generic.py"
     generic.write_text("def f[T = int](x: T) -> T: return x\n", encoding="utf-8")
     with pytest.raises(SyntaxError):
-        ast.parse(generic.read_text(), feature_version=PYTHON_FLOOR)
+        ast.parse(generic.read_text(), feature_version=(3, 12))
 
 
 def test_the_guard_accepts_syntax_the_floor_allows():
-    """The complement: it must not reject what 3.12 genuinely supports."""
+    """The complement: it must not reject what the supported interpreter accepts."""
     for src in (
         "def f(x: int | None) -> None: ...\n",              # PEP 604, 3.10
         "def f(x):\n    match x:\n        case 1: return 2\n",  # match, 3.10

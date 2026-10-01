@@ -37,7 +37,6 @@ from .const import (
     DOMAIN,
     DOMAIN_SERVICE_HINTS,
     PASS_THROUGH_EXEMPT_CAPS,
-    SENSITIVE_ATTRIBUTES,
     SENSOR_WRITE_DEBOUNCE_SECONDS,
     TARGET_SELECTOR_KEYS,
     TOKEN_LENGTH,
@@ -490,7 +489,7 @@ class ScrubbedState:
     def __init__(self, raw: Any) -> None:
         self.entity_id = raw.entity_id
         self.state = raw.state
-        self.attributes = {k: v for k, v in raw.attributes.items() if k not in SENSITIVE_ATTRIBUTES}
+        self.attributes = {k: v for k, v in raw.attributes.items() if not is_sensitive_key(k)}
         self.last_updated = getattr(raw, "last_updated", None)
         self.last_changed = getattr(raw, "last_changed", None)
         self.last_reported = getattr(raw, "last_reported", None)
@@ -759,6 +758,9 @@ def _scrub_log_text(text: str) -> str:
 # A "key: value" or "key = value" line in a YAML/config diff, capturing the
 # leading key so its value can be redacted when the key name looks sensitive.
 _CONFIG_SECRET_LINE_RE = re.compile(r"^(\s*)([\w.\-]+)(\s*[:=]\s*)(\S.*)$")
+_SECRET_REFERENCE_RE = re.compile(
+    r"!(?:secret|env_var)\s+[A-Za-z_][A-Za-z0-9_.\-/]*\s*(?:#.*)?"
+)
 _CODE_INITIALIZER_RE = re.compile(
     r"\s*(?:(?:const|let|var)\s+)?"
     r"(?P<key>[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*=\s*"
@@ -807,7 +809,8 @@ def redact_secrets_in_text(text: str | None) -> str | None:
             out.append(line)
             continue
         m = _CONFIG_SECRET_LINE_RE.match(line)
-        if m is not None and is_sensitive_key(m.group(2)):
+        if (m is not None and is_sensitive_key(m.group(2))
+                and not _SECRET_REFERENCE_RE.fullmatch(m.group(4))):
             out.append(_scrub_log_text(f"{m.group(1)}{m.group(2)}{m.group(3)}<redacted>"))
         else:
             out.append(_scrub_log_text(line))

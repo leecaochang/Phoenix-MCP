@@ -70,12 +70,12 @@ describe("ESPHome availability in the panel", () => {
         esphome={{ integration: false, builder: false }}
       />,
     );
-    const group = screen.getByRole("radiogroup", { name: "ESPHome device YAML" });
-    const radios = group.querySelectorAll("input");
+    const group = screen.getByRole("group", { name: "ESPHome device YAML" });
+    const radios = group.querySelectorAll("button");
     expect(radios.length).toBeGreaterThan(0);
     // Only the Confirm-unavailable mechanic may disable a mode; absence of
     // ESPHome must not.
-    expect(Array.from(radios).every((r) => !(r as HTMLInputElement).disabled)).toBe(true);
+    expect(Array.from(radios).every((r) => !(r as HTMLButtonElement).disabled)).toBe(true);
   });
 
   it("notes the missing system on the esphome persona card", () => {

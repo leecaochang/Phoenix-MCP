@@ -2828,6 +2828,11 @@ async def _tool_dry_run_service(
             return _tool_success(json.dumps(body, default=str)), "allowed", "dry_run_service"
 
     try:
+        if not any((args.get("entity_id"), args.get("device_id"), args.get("area_id"))):
+            return (
+                _tool_error("An explicit entity_id, device_id, or area_id target is required."),
+                "invalid_request", "dry_run_service",
+            )
         permitted, requested = resolve_service_targets(
             entity_id=args.get("entity_id"), device_id=args.get("device_id"),
             area_id=args.get("area_id"), service_domain=domain, token=token, hass=hass,

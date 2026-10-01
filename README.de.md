@@ -4,7 +4,7 @@
 [![Hassfest](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hassfest.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hassfest.yml)
 [![Tests](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/tests.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/tests.yml)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
-[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.2%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
+[![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2026.7%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
 
 
 [English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | **Deutsch** | [Nederlands](README.nl.md) | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md)
@@ -25,7 +25,7 @@ Neu hier? Beginnen Sie mit dem **[Schnellstart](https://leecaochang.github.io/Ph
 
 ## Voraussetzungen
 
-- Home Assistant 2025.2.0 oder neuer.
+- Home Assistant 2026.7.0 oder neuer.
 - Eine Phoenix MCP-Instanz pro Home Assistant. Home Assistant installiert die festgelegte Python-Abhängigkeit `voluptuous-serialize==2.7.0`; MESA ist in Phoenix MCP enthalten.
 
 ## Installation über HACS

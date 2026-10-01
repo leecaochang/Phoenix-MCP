@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import importlib
 from unittest.mock import AsyncMock, patch
 
 import pytest
+
+importlib.import_module("custom_components.phoenix_mcp")
 
 pytest_plugins = "pytest_homeassistant_custom_component"
 
@@ -125,7 +128,7 @@ async def token_store(hass, mock_store):
     from custom_components.phoenix_mcp.token_store import TokenStore
 
     with patch(
-        "custom_components.phoenix_mcp.token_store.Store",
+        "custom_components.phoenix_mcp.token_store._PhoenixStore",
         return_value=mock_store,
     ):
         instance = await TokenStore.async_create(hass)

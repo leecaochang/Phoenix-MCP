@@ -58,12 +58,12 @@ describe("dashboard preview toggle on the approval card", () => {
     localStorage.setItem("phx-approval-default-view", "details");
   });
 
-  it("offers no Preview button before hui-card is registered, even for a previewable layout", async () => {
+  it("offers the text overview before HA registers its card renderer", async () => {
     const { queryByRole } = await openDetail(record({
       tool_name: "set_dashboard_config",
       args: { config: { views: [{ title: "Home", cards: [{ type: "markdown", content: "hi" }] }] } },
     }));
-    expect(queryByRole("button", { name: "Preview" })).toBeNull();
+    expect(queryByRole("button", { name: "Preview" })).toBeTruthy();
   });
 
   it("registers hui-card (as a session that has opened any dashboard would)", () => {
@@ -79,7 +79,7 @@ describe("dashboard preview toggle on the approval card", () => {
       args: { config: { views: [{ title: "Home", cards: [{ type: "markdown", content: "hi" }] }] } },
     }));
     fireEvent.click(await findByRole("button", { name: "Preview" }));
-    expect(container.querySelector("hui-card")).toBeTruthy();
+    expect(container.querySelector(".dash-preview-config")).toBeTruthy();
   });
 
   it("offers Preview for an add_dashboard_card approval (the reported gap)", async () => {
@@ -92,7 +92,7 @@ describe("dashboard preview toggle on the approval card", () => {
       args: { view_index: 0, card: { type: "history-graph", entities: ["sensor.solar"] } },
     }));
     fireEvent.click(await findByRole("button", { name: "Preview" }));
-    expect(container.querySelector("hui-card")).toBeTruthy();
+    expect(container.querySelector(".dash-preview-config")).toBeTruthy();
     // add has no Before card: no side toggle.
     expect(queryByRole("button", { name: "Before" })).toBeNull();
   });
@@ -111,7 +111,7 @@ describe("dashboard preview toggle on the approval card", () => {
     expect(getByRole("button", { name: "Before" })).toBeTruthy();
     expect(getByRole("button", { name: "After" }).getAttribute("aria-pressed")).toBe("true");
     fireEvent.click(getByRole("button", { name: "Before" }));
-    expect(container.querySelector("hui-card")).toBeTruthy();
+    expect(container.querySelector(".dash-preview-config")).toBeTruthy();
   });
 
   it("defaults to the Before side for delete_dashboard_card and offers no side toggle (no After exists)", async () => {
@@ -124,7 +124,7 @@ describe("dashboard preview toggle on the approval card", () => {
       args: { view_index: 0, card_index: 0 },
     }));
     fireEvent.click(await findByRole("button", { name: "Preview" }));
-    expect(container.querySelector("hui-card")).toBeTruthy();
+    expect(container.querySelector(".dash-preview-config")).toBeTruthy();
     expect(queryByRole("button", { name: "Before" })).toBeNull();
   });
 
@@ -151,7 +151,7 @@ describe("dashboard preview toggle on the approval card", () => {
       args: { view_index: 0, card: bigCard },
     }));
     fireEvent.click(await findByRole("button", { name: "Preview" }));
-    expect(container.querySelector("hui-card")).toBeTruthy();
+    expect(container.querySelector(".dash-preview-config")).toBeTruthy();
   });
 
   it("remembers the Preview choice: the next approval opens in Preview without a click", async () => {
@@ -161,7 +161,7 @@ describe("dashboard preview toggle on the approval card", () => {
     });
     const first = await openDetail(rec);
     fireEvent.click(await first.findByRole("button", { name: "Preview" }));
-    expect(first.container.querySelector("hui-card")).toBeTruthy();
+    expect(first.container.querySelector(".dash-preview-config")).toBeTruthy();
     first.unmount();
 
     const second = await openDetail(record({
@@ -170,7 +170,7 @@ describe("dashboard preview toggle on the approval card", () => {
       diff: { kind: "yaml_diff", summary: "Another layout" },
     }));
     // No click: the persisted preference opens the diff area in Preview mode.
-    await waitFor(() => expect(second.container.querySelector("hui-card")).toBeTruthy());
+    await waitFor(() => expect(second.container.querySelector(".dash-preview-config")).toBeTruthy());
   });
 
   it("offers Preview for a patch_dashboard approval that targets a card", async () => {
@@ -183,7 +183,7 @@ describe("dashboard preview toggle on the approval card", () => {
       args: { path: ["views", 0, "cards", 1], value: { type: "markdown", content: "patched" } },
     }));
     fireEvent.click(await findByRole("button", { name: "Preview" }));
-    expect(container.querySelector("hui-card")).toBeTruthy();
+    expect(container.querySelector(".dash-preview-config")).toBeTruthy();
   });
 
   it("offers NO Preview for a patch_dashboard approval that targets a badge", async () => {
@@ -211,7 +211,7 @@ describe("dashboard preview toggle on the approval card", () => {
       args: { path: ["views", 0, "cards", 1], op: "remove" },
     }));
     fireEvent.click(await findByRole("button", { name: "Preview" }));
-    expect(container.querySelector("hui-card")).toBeTruthy();
+    expect(container.querySelector(".dash-preview-config")).toBeTruthy();
   });
 
   it("renders the Diff|Preview switch inside the diff toolbar next to the layout toggle", async () => {

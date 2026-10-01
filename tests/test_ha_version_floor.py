@@ -314,15 +314,9 @@ def test_optional_feature_floors_match_their_constants() -> None:
         )
 
 
-def test_optional_feature_floors_are_stated_on_the_install_page() -> None:
-    # The install page promises these numbers to the reader; a silent change there
-    # is the same class of defect as a silent change to the floor itself.
-    html = (ROOT / "docs" / "install.html").read_text(encoding="utf-8")
-    for name, version in OPTIONAL_FEATURE_FLOORS.items():
-        major_minor = ".".join(version.split(".")[:2])
-        assert major_minor in html, (
-            f"docs/install.html never mentions {major_minor}, the floor for {name}."
-        )
+def test_optional_features_are_available_at_the_base_floor() -> None:
+    """The supported base release includes these formerly optional feature APIs."""
+    assert all(_version(version) <= FLOOR for version in OPTIONAL_FEATURE_FLOORS.values())
 
 
 def _unguarded_module_level_ha_imports() -> dict[tuple[str, str], set[str]]:

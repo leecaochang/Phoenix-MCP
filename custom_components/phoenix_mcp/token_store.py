@@ -454,7 +454,7 @@ class TokenRecord:
             token_hash=data["token_hash"],
             created_at=_require_dt(data["created_at"], "created_at"),
             created_by=data["created_by"],
-            expires_at=_parse_dt(data.get("expires_at")),
+            expires_at=_require_dt(data["expires_at"], "expires_at") if data.get("expires_at") is not None else None,
             revoked=data.get("revoked", False),
             last_used_at=_parse_dt(data.get("last_used_at")),
             pass_through=_load_bool(data.get("pass_through")),
@@ -783,6 +783,29 @@ class GlobalSettings:
         )
 
 
+class _PhoenixStore(Store[dict]):
+    """Load released v2/v3 storage without replaying obsolete pending actions."""
+
+    async def _async_migrate_func(
+        self, old_major_version: int, old_minor_version: int, old_data: dict
+    ) -> dict:
+        if old_major_version == STORAGE_VERSION:
+            return old_data
+        if old_major_version not in (2, 3):
+            raise ValueError(f"Unsupported Phoenix storage version: {old_major_version}")
+        raw, _ = _normalize_storage_root(old_data)
+        for approval in raw.get("pending_approvals", []):
+            if (isinstance(approval, dict) and approval.get("status") == "pending"
+                    and not approval.get("execution_started_at")):
+                from .const import APPROVAL_REASON_FORMAT_INCOMPATIBLE
+
+                approval["status"] = "cancelled"
+                approval["resolved_at"] = utcnow().isoformat()
+                approval["rejected_reason"] = APPROVAL_REASON_FORMAT_INCOMPATIBLE
+        raw["version"] = STORAGE_VERSION
+        return raw
+
+
 class TokenStore:
     """Manages persistent storage and in-memory state for Phoenix MCP tokens."""
 
@@ -801,7 +824,7 @@ class TokenStore:
     @classmethod
     async def async_create(cls, hass: HomeAssistant) -> TokenStore:
         """Create a TokenStore and load persisted data from HA storage."""
-        store: Store[dict] = Store(hass, STORAGE_VERSION, STORAGE_KEY)
+        store: Store[dict] = _PhoenixStore(hass, STORAGE_VERSION, STORAGE_KEY)
         instance = cls(hass, store)
         await instance.async_load()
         return instance

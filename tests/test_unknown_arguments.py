@@ -169,7 +169,7 @@ async def test_intentional_default_and_unrelated_extra_still_reach_read(hass):
 
 
 @pytest.mark.parametrize('extra', [{}, {'unrelated': True}])
-async def test_service_omission_still_reaches_existing_authorized_domain_default(hass, extra):
+async def test_service_omission_refuses_implicit_domain_fanout(hass, extra):
     from homeassistant.helpers import entity_registry as er
     from custom_components.phoenix_mcp.data import PhoenixData
 
@@ -187,8 +187,8 @@ async def test_service_omission_still_reaches_existing_authorized_domain_default
     _, outcome, _ = await _call_tool('call_service', {
         'service': {'domain': 'light', 'name': 'turn_on'}, **extra,
     }, token(pass_through=True), hass, data)
-    assert outcome == 'allowed'
-    assert calls == [{'entity_id': [entry.entity_id]}]
+    assert outcome == 'invalid_request'
+    assert calls == []
 
 
 async def test_toggle_target_typo_still_honors_physical_denial(hass):

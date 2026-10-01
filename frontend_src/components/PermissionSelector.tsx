@@ -79,6 +79,9 @@ export const PermissionSelector = React.memo(function PermissionSelector({ value
             // whatever is causing the mobile-only scroll on tap.
             e.currentTarget.blur();
           }}
+          onClick={(e) => {
+            if (!disabled && e.detail === 0) onChange(state === value ? "GREY" : state);
+          }}
           disabled={disabled}
           aria-pressed={value === state}
           aria-label={value === state ? t("perms.selSelected", { title }) : title}
