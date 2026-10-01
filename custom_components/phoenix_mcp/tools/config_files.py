@@ -81,12 +81,42 @@ def _authored_file_snapshot(rel: str, existed: bool, content: str | None,
     """Serialize one authored file without persisting secret-shaped source text."""
     if existed != (content is not None):
         raise ConfigurationRecoveryError("A complete file recovery snapshot is unavailable; nothing was dispatched.")
-    if content is not None and _redact_secrets_in_text(content) != content:
-        raise ConfigurationRecoveryError("The file contains secret-shaped content and cannot be snapshotted safely.")
+    redacted = _redact_secrets_in_text(content)
+    if content is not None and redacted != content:
+        redacted = redacted or ""
+        line = next(i for i, (before, after) in enumerate(
+            zip(content.split("\n"), redacted.split("\n")), 1) if before != after)
+        raise ConfigurationRecoveryError(
+            f"The file contains suspected sensitive content on line {line} and cannot be "
+            "snapshotted safely. Remove inline credentials or use references to securely "
+            "stored secrets. Approval cannot override this check; nothing was dispatched."
+        )
     return safe_snapshot({
         "snapshot_type": snapshot_type, "schema": 1,
         "resource_id": rel, "exists": existed, "content": content,
     }) or {}
+
+
+async def _file_recovery_precheck(
+    hass: HomeAssistant, path: str, rel: str, content: str, tool: str,
+    snapshot_type: str = "authored_file",
+) -> tuple[dict, str, str] | None:
+    """Admit both recovery images before asking an administrator to approve."""
+    existed = await hass.async_add_executor_job(os.path.isfile, path)
+    before = None
+    if existed:
+        try:
+            before = await hass.async_add_executor_job(_read_text_capped, path)
+        except (OSError, ValueError):
+            return _tool_error(
+                "The existing file cannot be read completely for recovery; nothing was dispatched."
+            ), "invalid_request", tool
+    for label, exists, text in (("Existing file", existed, before), ("Proposed file", True, content)):
+        try:
+            _authored_file_snapshot(rel, exists, text, snapshot_type)
+        except ConfigurationRecoveryError as err:
+            return _tool_error(f"{label}: {err}"), "invalid_request", tool
+    return None
 
 
 async def _recoverable_file_write(
@@ -331,6 +361,11 @@ async def _tool_write_file(
     )
     if conflict is not None:
         return conflict
+    target = _resolve_fs_path(hass, args["path"])
+    assert target is not None  # The side-effect-free path precheck succeeded.
+    pre = await _file_recovery_precheck(hass, target, args["path"], args["content"], "write_file")
+    if pre is not None:
+        return pre
     blocked = await _gate(
         "cap_filesystem", token, hass, data,
         tool_name="write_file", args=args, request_id=request_id,
@@ -860,6 +895,9 @@ async def _tool_set_yaml_config(
     )
     if conflict is not None:
         return conflict
+    pre = await _file_recovery_precheck(hass, path, rel, args["content"], "set_yaml_config", "yaml_file")
+    if pre is not None:
+        return pre
     blocked = await _gate(
         "cap_yaml_edit", token, hass, data,
         tool_name="set_yaml_config", args=args, request_id=request_id,
@@ -1097,6 +1135,9 @@ async def _tool_patch_yaml_config(
     )
     if conflict is not None:
         return conflict
+    pre = await _file_recovery_precheck(hass, path, rel, prepared.text, tool, "yaml_file")
+    if pre is not None:
+        return pre
     blocked = await _gate(
         "cap_yaml_edit", token, hass, data,
         tool_name=tool, args=args, request_id=request_id,

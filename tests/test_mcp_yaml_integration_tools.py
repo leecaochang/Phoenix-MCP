@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntryDisabler
@@ -13,6 +13,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.helpers import content_hash
 from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery
+from custom_components.phoenix_mcp.tools import config_files
 from custom_components.phoenix_mcp.mcp_view import (
     _EXECUTOR_REGISTRY,
     _call_tool,
@@ -78,6 +79,27 @@ class TestExecutorRegistration:
 
 
 class TestYamlConfig:
+    @pytest.mark.parametrize("tool", ["set_yaml_config", "patch_yaml_config"])
+    @pytest.mark.parametrize("existing_secret", [False, True])
+    async def test_snapshot_refusal_precedes_approval(self, hass, tool, existing_secret):
+        previous = "sensor:\n  password: existing-secret\n" if existing_secret else "sensor:\n  name: Before\n"
+        proposed = "sensor:\n  name: After\n" if existing_secret else "sensor:\n  password: proposed-secret\n"
+        path = hass.config.path("configuration.yaml")
+        with open(path, "w", encoding="utf-8") as stream:
+            stream.write(previous)
+        args = {"content": proposed} if tool == "set_yaml_config" else {
+            "key": "sensor", "content": "name: After\n" if existing_secret else "password: proposed-secret\n",
+        }
+        with patch.object(config_files, "_gate", new_callable=AsyncMock) as gate:
+            result, outcome, _ = await _call(tool, args, _token(cap_yaml_edit="confirm"), hass)
+        assert outcome == "invalid_request"
+        gate.assert_not_awaited()
+        assert "cannot be snapshotted safely" in result["content"][0]["text"]
+        assert "existing-secret" not in result["content"][0]["text"]
+        assert "proposed-secret" not in result["content"][0]["text"]
+        with open(path, encoding="utf-8") as stream:
+            assert stream.read() == previous
+
     async def test_get_deny(self, hass):
         _, outcome, _ = await _call("get_yaml_config", {}, _token(cap_yaml_edit="deny"), hass)
         assert outcome == "denied"

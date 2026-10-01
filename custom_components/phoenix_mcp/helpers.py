@@ -759,6 +759,35 @@ def _scrub_log_text(text: str) -> str:
 # A "key: value" or "key = value" line in a YAML/config diff, capturing the
 # leading key so its value can be redacted when the key name looks sensitive.
 _CONFIG_SECRET_LINE_RE = re.compile(r"^(\s*)([\w.\-]+)(\s*[:=]\s*)(\S.*)$")
+_CODE_INITIALIZER_RE = re.compile(
+    r"\s*(?:(?:const|let|var)\s+)?"
+    r"(?P<key>[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*)\s*=\s*"
+    r"(?P<value>null|undefined|true|false|\{\s*\}|\[\s*\]|\"\"|''|0)\s*;?\s*"
+)
+
+
+def _non_secret_code_initializer(line: str) -> bool:
+    """Recognize complete empty/boolean code initializers, never credential literals.
+
+    The member/declaration syntax keeps YAML/config scalars on the
+    conservative path. Zero is admitted only for session bookkeeping and named
+    counters, not passwords, PINs or numeric access tokens. No trailing source,
+    comments, nonempty strings or containers can take this exception.
+    """
+    match = _CODE_INITIALIZER_RE.fullmatch(line)
+    if match is None:
+        return False
+    key = match.group("key")
+    if _scrub_log_text(key) != key:
+        return False
+    if "." not in key and not line.lstrip().startswith(("const ", "let ", "var ")):
+        return False
+    if match.group("value") != "0":
+        return True
+    field = key.rsplit(".", 1)[-1].lower().lstrip("_$")
+    return field == "session" or field.endswith((
+        "count", "counter", "generation", "revision", "epoch", "index", "length", "size",
+    ))
 
 
 def redact_secrets_in_text(text: str | None) -> str | None:
@@ -774,12 +803,15 @@ def redact_secrets_in_text(text: str | None) -> str | None:
         return text
     out: list[str] = []
     for line in text.split("\n"):
+        if _non_secret_code_initializer(line):
+            out.append(line)
+            continue
         m = _CONFIG_SECRET_LINE_RE.match(line)
         if m is not None and is_sensitive_key(m.group(2)):
-            out.append(f"{m.group(1)}{m.group(2)}{m.group(3)}<redacted>")
+            out.append(_scrub_log_text(f"{m.group(1)}{m.group(2)}{m.group(3)}<redacted>"))
         else:
-            out.append(line)
-    return _scrub_log_text("\n".join(out))
+            out.append(_scrub_log_text(line))
+    return "\n".join(out)
 
 
 def redact_structure(obj: Any, _depth: int = 0) -> Any:

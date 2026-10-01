@@ -42,6 +42,22 @@ mode: single
 """
 
 
+@pytest.mark.parametrize("tool", ["create_blueprint", "edit_blueprint", "delete_blueprint"])
+async def test_secret_source_never_creates_approval(hass, bp_env, tool):
+    secret_source = VALID + "variables:\n  password: blueprint-secret\n"
+    args = {"domain": "automation", "path": "author/secret.yaml"}
+    if tool != "create_blueprint":
+        _write_existing(bp_env, rel=args["path"], body=secret_source)
+    if tool != "delete_blueprint":
+        args["content"] = secret_source if tool == "create_blueprint" else VALID
+    with patch.object(blueprint_tools, "_gate", new_callable=AsyncMock) as gate:
+        result, outcome, _ = await _call(tool, args, _token(cap_blueprint_write="confirm"), hass)
+    assert outcome == "invalid_request"
+    gate.assert_not_awaited()
+    assert "cannot be snapshotted safely" in _text(result)
+    assert "blueprint-secret" not in _text(result)
+
+
 def _token(**caps) -> TokenRecord:
     base = {
         "cap_blueprint_write": "allow",

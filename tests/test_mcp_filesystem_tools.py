@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.core import HomeAssistant
@@ -23,6 +23,7 @@ from custom_components.phoenix_mcp.mcp_view import (
     _execute_write_file,
 )
 from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.tools import config_files
 
 
 def _token(**caps) -> TokenRecord:
@@ -89,6 +90,77 @@ class TestReadFile:
 
 
 class TestWriteFile:
+    async def test_session_counter_source_is_written_with_recovery(self, hass, fs_env):
+        source = "class DeferredCard {\n  constructor() {\n    this.session = 0;\n  }\n}\n"
+        data = _data()
+        result, outcome, _ = await _call_tool(
+            "write_file", {"path": "www/counter.js", "content": source}, _token(), hass, data)
+        assert outcome == "allowed"
+        with open(hass.config.path("www/counter.js"), encoding="utf-8") as stream:
+            assert stream.read() == source
+        record = data.config_recovery.get(_json(result)["recovery_id"])
+        assert record["source"]["content"] == source
+        assert record["phase"] == "verified"
+
+    @pytest.mark.parametrize("existing", [False, True])
+    async def test_secret_snapshot_refused_before_approval(self, hass, fs_env, existing):
+        path = hass.config.path("www/counter.js")
+        secret = 'this.session = "private-session";'
+        if existing:
+            with open(path, "w", encoding="utf-8") as stream:
+                stream.write(secret)
+        args = {"path": "www/counter.js", "content": "this.session = 0;" if existing else secret}
+        with patch.object(config_files, "_gate", new_callable=AsyncMock) as gate:
+            result, outcome, _ = await _call("write_file", args, _token(cap_filesystem="confirm"), hass)
+        assert outcome == "invalid_request"
+        gate.assert_not_awaited()
+        message = result["content"][0]["text"]
+        assert "line 1" in message and "Approval cannot override" in message
+        assert "private-session" not in message
+        assert os.path.exists(path) == existing
+        if existing:
+            with open(path, encoding="utf-8") as stream:
+                assert stream.read() == secret
+
+    async def test_counter_source_reaches_confirm_gate(self, hass, fs_env):
+        pending = ({"status": "pending_approval"}, "pending_approval", "write_file")
+        with patch.object(config_files, "_gate", new_callable=AsyncMock, return_value=pending) as gate:
+            result = await _call("write_file", {"path": "www/counter.js", "content": "this.session = 0;"},
+                                 _token(cap_filesystem="confirm"), hass)
+        assert result == pending
+        gate.assert_awaited_once()
+        assert not os.path.exists(hass.config.path("www/counter.js"))
+
+    async def test_approved_executor_rechecks_existing_secret(self, hass, fs_env):
+        path = hass.config.path("www/hello.txt")
+        with open(path, "w", encoding="utf-8") as stream:
+            stream.write("password: existing-secret")
+        data = _data()
+        result, outcome, _ = await _execute_write_file(
+            {"path": "www/hello.txt", "content": "this.session = 0;"}, _token(), hass, data)
+        assert outcome == "invalid_request" and result["isError"]
+        assert data.config_recovery.records() == []
+        with open(path, encoding="utf-8") as stream:
+            assert stream.read() == "password: existing-secret"
+
+    async def test_unreadable_recovery_source_refused_before_approval(self, hass, fs_env):
+        with patch.object(config_files, "_read_text_capped", side_effect=ValueError("file too large")), patch.object(
+            config_files, "_gate", new_callable=AsyncMock,
+        ) as gate:
+            result, outcome, _ = await _call(
+                "write_file", {"path": "www/hello.txt", "content": "ok"},
+                _token(cap_filesystem="confirm"), hass)
+        assert outcome == "invalid_request" and "read completely" in result["content"][0]["text"]
+        gate.assert_not_awaited()
+
+    async def test_force_argument_cannot_bypass_snapshot_protection(self, hass, fs_env):
+        with patch.object(config_files, "_gate", new_callable=AsyncMock) as gate:
+            result, outcome, _ = await _call(
+                "write_file", {"path": "www/secret.js", "content": "password: secret", "force": True},
+                _token(cap_filesystem="confirm"), hass)
+        assert outcome == "invalid_request" and result["isError"]
+        gate.assert_not_awaited()
+
     async def test_deny(self, hass, fs_env):
         _, outcome, _ = await _call("write_file", {"path": "themes/x.yaml", "content": "a"}, _token(cap_filesystem="deny"), hass)
         assert outcome == "denied"

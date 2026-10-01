@@ -337,6 +337,24 @@ def _blueprint_recovery_snapshot(domain: str, rel: str, content: str | None) -> 
     }) or {}
 
 
+async def _blueprint_recovery_precheck(
+    hass: HomeAssistant, target: str, domain: str, rel: str,
+    content: str | None, tool: str,
+) -> tuple[dict, str, str] | None:
+    """Refuse inadmissible existing or intended source before approval."""
+    domain = domain.strip().lower()
+    before = await _read_blueprint_source(hass, target)
+    if before is None and await hass.async_add_executor_job(os.path.isfile, target):
+        return _tool_error("The existing blueprint cannot be read completely for recovery."), "invalid_request", tool
+    try:
+        _blueprint_recovery_snapshot(domain, rel, before)
+        expected = _canonical_blueprint_source(domain, content) if content is not None else None
+        _blueprint_recovery_snapshot(domain, rel, expected)
+    except ConfigurationRecoveryError as err:
+        return _tool_error(f"{err} Approval cannot override this check; nothing was dispatched."), "invalid_request", tool
+    return None
+
+
 async def _build_diff_blueprint(
     args: dict, hass: HomeAssistant, op: str
 ) -> dict:
@@ -381,8 +399,11 @@ async def _tool_create_blueprint(
     denied = _blueprint_denied(token, args, "create_blueprint")
     if denied is not None:
         return denied
-    pre, _target, _rel = _blueprint_write_precheck(
+    pre, target, rel = _blueprint_write_precheck(
         args, hass, "create_blueprint", needs_content=True)
+    if pre is not None:
+        return pre
+    pre = await _blueprint_recovery_precheck(hass, target, args["domain"], rel, args["content"], "create_blueprint")
     if pre is not None:
         return pre
     blocked = await _gate(
@@ -403,12 +424,15 @@ async def _tool_edit_blueprint(
     denied = _blueprint_denied(token, args, "edit_blueprint")
     if denied is not None:
         return denied
-    pre, target, _rel = _blueprint_write_precheck(
+    pre, target, rel = _blueprint_write_precheck(
         args, hass, "edit_blueprint", needs_content=True)
     if pre is not None:
         return pre
     if await _read_blueprint_source(hass, target) is None:
         return _tool_error("Blueprint not found."), "not_found", "edit_blueprint"
+    pre = await _blueprint_recovery_precheck(hass, target, args["domain"], rel, args["content"], "edit_blueprint")
+    if pre is not None:
+        return pre
     blocked = await _gate(
         "cap_blueprint_write", token, hass, data,
         tool_name="edit_blueprint", args=args, request_id=request_id,
@@ -427,12 +451,15 @@ async def _tool_delete_blueprint(
     denied = _blueprint_denied(token, args, "delete_blueprint")
     if denied is not None:
         return denied
-    pre, target, _rel = _blueprint_write_precheck(
+    pre, target, rel = _blueprint_write_precheck(
         args, hass, "delete_blueprint", needs_content=False)
     if pre is not None:
         return pre
     if await _read_blueprint_source(hass, target) is None:
         return _tool_error("Blueprint not found."), "not_found", "delete_blueprint"
+    pre = await _blueprint_recovery_precheck(hass, target, args["domain"], rel, None, "delete_blueprint")
+    if pre is not None:
+        return pre
     blocked = await _gate(
         "cap_blueprint_write", token, hass, data,
         tool_name="delete_blueprint", args=args, request_id=request_id,

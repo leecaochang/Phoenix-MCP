@@ -7,6 +7,8 @@ holding cap_log_read never receives another integration's secret verbatim.
 
 from __future__ import annotations
 
+import pytest
+
 from custom_components.phoenix_mcp.const import DOMAIN, TOKEN_PREFIX
 from custom_components.phoenix_mcp.helpers import (
     _PHOENIX_LOGGER_PREFIXES,
@@ -76,6 +78,33 @@ def test_redact_secrets_in_text_yaml_keys():
 def test_redact_secrets_in_text_none_passthrough():
     assert redact_secrets_in_text(None) is None
     assert redact_secrets_in_text("") == ""
+
+
+@pytest.mark.parametrize("source", [
+    "this.session = 0;", "this._session=0;", "this.sessionCounter = 0;",
+    "this.tokenCount=0;", "this.secretRevision = 0;", "this.sessionGeneration=0;",
+    "this.accessToken = null;", "this.session = undefined;", "this.secret = {};",
+    "this.credentials = [ ];", 'this.password = "";', "this.api_key = '';",
+    "this.session = false;", "this.session = true;", "let token = null;",
+    "const credentials = {};", "var session = 0;",
+    "this.session = 0", "this.accessToken=null", "let session = 0",
+])
+def test_empty_code_initializers_are_not_credentials(source):
+    assert redact_secrets_in_text(source) == source
+
+
+@pytest.mark.parametrize("source", [
+    'this.session = "actual-session-value";', "this.password = 1234;",
+    "this.password = 0;", "this.access_token = 1234;", "this.token = 0;",
+    'this.credentials = {password: "hunter2"};', 'this.tokens = ["abc"];',
+    'this.session = 0; this.password = "hunter2";',
+    'this.session = 0; // token=abc', 'this.session = ""; // password=abc',
+    "session: 0", "password: false", "api_key: 0", "session = 0",
+    "this.session = phx_" + "a" * 64 + ";",
+    "this.phx_" + "a" * 64 + " = null;",
+])
+def test_initializer_exception_cannot_admit_credential_values(source):
+    assert redact_secrets_in_text(source) != source
 
 
 def test_redact_diagnostics_scrubs_topology_conservatively():
