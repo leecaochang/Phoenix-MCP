@@ -53,9 +53,9 @@ _ENTITY_TOOL_DEFS: list[dict] = [
     {
         "name": "get_state",
         "description": (
-            "Get the current state of a Home Assistant entity. Returns a compact, domain-aware view by "
-            "default (state plus that domain's key attributes); use projection kind full for the full state, or "
-            "projection kind fields with fields=[...] to select exact fields (e.g. \"state\", \"attr.brightness\"). For everything "
+            "Get the current state of a Home Assistant entity. Required projection.kind selects compact "
+            "(state plus domain-specific key attributes), full, or fields with fields=[...] for exact fields "
+            "(e.g. \"state\", \"attr.brightness\"). For everything "
             "about one entity, use describe_entity."
         ),
         "inputSchema": {
@@ -434,21 +434,14 @@ _ENTITY_TOOL_DEFS: list[dict] = [
     {
         "name": "wait_for_approval",
         "description": (
-            "Block until a pending approval you created resolves, then return its final status and result. "
-            "Use this instead of repeatedly polling get_approval_status after a tool returns "
-            "'pending_approval': it returns immediately if the approval is already resolved, otherwise it "
-            "waits server-side (up to 'timeout' seconds, capped) for a human to approve, reject, or for it "
-            "to expire. On timeout it returns with the approval still pending so you can call again. Tokens "
-            "only ever see approvals they themselves created. "
-            "Pass approval_ids (a list) to wait for SEVERAL at once, which is what you want after a run of "
-            "confirm-gated writes: they queue immediately without blocking, the operator clears them in "
-            "whatever order or batch suits, and one call here waits for the whole set. Waiting on them one "
-            "at a time instead would block on the first while later ones were already resolved. The result "
-            "then carries every approval's status plus the ids still outstanding, so a timeout tells you "
-            "exactly which ones landed. In that plural form each approval's result is SUMMARIZED to "
-            "result_is_error plus a clipped result_text, so a batch of large writes still fits in one "
-            "reply; a failure's message is short and arrives intact. Call get_approval_status with a "
-            "single approval_id when you need one approval's full result."
+            "Wait for approvals this token created instead of polling get_approval_status. Pass the "
+            "required approval_ids list, including for one approval. Collect confirm-gated calls first, "
+            "then wait once for the whole set; the operator may resolve them in any order or batch. "
+            "Already-resolved approvals return immediately; others wait for approval, rejection or "
+            "expiry, up to the server-capped timeout. The response includes every status and outstanding "
+            "ID. On timeout, unresolved approvals stay pending and you may wait again. Results contain "
+            "result_is_error and clipped result_text; short failure messages remain intact. Use "
+            "get_approval_status with one approval_id for its full result."
         ),
         "inputSchema": {
             "type": "object",
@@ -1628,8 +1621,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "items": {
                         "type": "object",
                         "additionalProperties": False, "properties": {
-                            "device_id": {"type": "string"},
-                            "endpoint": {"type": "integer", "minimum": 1, "maximum": 254},
+                            "device_id": {"type": "string", "description": "WRITE-accessible Home Assistant device registry ID."},
+                            "endpoint": {"type": "integer", "minimum": 1, "maximum": 254, "description": "Zigbee endpoint ID on that device."},
                         },
                         "required": ["device_id", "endpoint"],
                     },
@@ -1665,8 +1658,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "items": {
                         "type": "object",
                         "additionalProperties": False, "properties": {
-                            "device_id": {"type": "string"},
-                            "endpoint": {"type": "integer", "minimum": 1, "maximum": 254},
+                            "device_id": {"type": "string", "description": "WRITE-accessible Home Assistant device registry ID."},
+                            "endpoint": {"type": "integer", "minimum": 1, "maximum": 254, "description": "Zigbee endpoint ID on that device."},
                         },
                         "required": ["device_id", "endpoint"],
                     },
@@ -2734,8 +2727,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "items": {
                         "type": "object",
                         "additionalProperties": False, "properties": {
-                            "step_id": {"type": "string"},
-                            "data": {"type": "object"},
+                            "step_id": {"type": "string", "description": "Step ID returned by the helper config flow."},
+                            "data": {"type": "object", "description": "Returned form fields, or next_step_id for a menu choice."},
                         },
                         "required": ["step_id", "data"],
                     },
@@ -3426,19 +3419,18 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
 # Strings, not shared dicts: each schema below builds its own dict literal, so no
 # two tools can ever alias one mutable object.
 _TARGET_NAME = (
-    "Name of a single entity or device as shown in Home Assistant, as a string. "
-    "One name only: to target several, use area, floor or domain, or call once "
-    "per name. At least one targeting parameter must be given."
+    "One entity/device name shown in Home Assistant (string). For several, use area, "
+    "floor or domain, or call per name. At least one targeting parameter is required."
 )
-_TARGET_AREA = "Name of a single area, as a string. Targets the matching entities in that area."
-_TARGET_FLOOR = "Name of a single floor, as a string. Targets the matching entities on that floor."
-_TARGET_DOMAIN = 'Limit targeting to these entity domains, as an array of strings, for example ["light"].'
+_TARGET_AREA = "One area name (string); targets matching entities in it."
+_TARGET_FLOOR = "One floor name (string); targets matching entities on it."
+_TARGET_DOMAIN = 'Entity-domain filter (string array), e.g. ["light"].'
 # The enum-constrained variant carries no example: the enum already names the
 # only accepted value, and a worked example naming a different domain would
 # contradict it.
-_TARGET_DOMAIN_ENUM = "Limit targeting to these entity domains, as an array of strings."
+_TARGET_DOMAIN_ENUM = "Entity-domain filter (string array)."
 _TARGET_DEVICE_CLASS = (
-    'Limit targeting to these device classes, as an array of strings, for example ["garage"].'
+    'Device-class filter (string array), e.g. ["garage"].'
 )
 
 # HassVacuumCleanArea's two parameters share their names with the targeting

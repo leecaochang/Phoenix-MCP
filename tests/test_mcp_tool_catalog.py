@@ -193,21 +193,21 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
     assert metrics == {
         "read_only": {
             "tool_count": 51,
-            "canonical_bytes": 44452,
-            "claude_bytes": 39201,
-            "openai_bytes": 40680,
+            "canonical_bytes": 43769,
+            "claude_bytes": 38518,
+            "openai_bytes": 39997,
         },
         "write_capable": {
             "tool_count": 97,
-            "canonical_bytes": 101696,
-            "claude_bytes": 91693,
-            "openai_bytes": 94506,
+            "canonical_bytes": 98598,
+            "claude_bytes": 88595,
+            "openai_bytes": 91408,
         },
         "announce_all": {
             "tool_count": 163,
-            "canonical_bytes": 172067,
-            "claude_bytes": 155241,
-            "openai_bytes": 159968,
+            "canonical_bytes": 169207,
+            "claude_bytes": 152381,
+            "openai_bytes": 157108,
         },
     }
     assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 163
@@ -216,23 +216,10 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
 
 def test_every_public_parameter_has_a_description():
     """Every property at every schema depth must explain its public meaning."""
-    missing: list[str] = []
+    from scripts.audit_mcp_catalog import missing_parameter_descriptions
 
-    def walk(tool: str, schema: dict, path: str = "") -> None:
-        for name, child in schema.get("properties", {}).items():
-            current = f"{path}.{name}" if path else name
-            if not isinstance(child, dict) or not str(child.get("description", "")).strip():
-                missing.append(f"{tool}.{current}")
-            if not isinstance(child, dict):
-                continue
-            walk(tool, child, current)
-            for keyword in ("oneOf", "anyOf", "allOf"):
-                for index, branch in enumerate(child.get(keyword, [])):
-                    if isinstance(branch, dict):
-                        walk(tool, branch, f"{current}.{keyword}[{index}]")
-
-    for definition in _all_defs():
-        walk(definition["name"], definition["inputSchema"])
+    missing = [path for definition in _all_defs() for path in
+               missing_parameter_descriptions(definition["inputSchema"], definition["name"])]
     assert not missing, f"public parameters without descriptions: {missing}"
 
 

@@ -7895,57 +7895,49 @@ def _build_instructions(token: TokenRecord, data: PhoenixData, base_url: str) ->
     caps = effective_caps(token)
     confirm_gated = sorted(c for c, m in caps.items() if m == CAP_CONFIRM)
     lines = [
-        "You are connected to Home Assistant through Phoenix MCP, a scoped gateway. This token "
-        "sees only the entities and tools an operator granted it, and some actions are gated.",
+        "Phoenix MCP is a scoped Home Assistant gateway. This token sees only operator-granted "
+        "entities/tools; some actions are gated.",
         "",
-        "- Call get_capability_summary first to see what you can read, control, and what "
-        "needs approval. Use get_overview or search_entities to discover entities; you only "
-        "see entities in this token's scope.",
-        "- Entity and history timestamps may be returned in UTC. When you need to present one "
-        "in local time and do not already know Home Assistant's local offset, call "
-        "llm__GetDateTime. "
+        "- Call get_capability_summary first for read/control permissions and approval gates. "
+        "Discover scoped entities with get_overview or search_entities.",
+        "- Entity/history timestamps may be returned in UTC. If you do not already know Home "
+        "Assistant's local offset, call llm__GetDateTime for local presentation. "
         "Present the local date and time directly. Do not mention UTC, offsets, or conversion "
-        "unless the user asks.",
+        "unless asked.",
         # Must agree with tool_common._tool_pending, which the agent reads at the
         # moment it matters; a primer that says something else is a second story
         # about the same event. Both say: continue, then collect the outcomes
         # together, because approvals queue and are cleared in one action.
-        "- Some actions return status \"pending_approval\". That is normal, not an error: a "
-        "human must approve them. Do not retry, and do not stop after one: further gated "
-        "calls queue alongside it and the operator clears the queue in a single action. If "
-        "you need the outcomes, call wait_for_approval ONCE with approval_ids listing all of "
-        "them (or get_approval_status for a one-shot check); otherwise tell the user what is "
-        "awaiting approval.",
-        "- Before a risky or bulk service call, preview it with dry_run_service (and whatif to "
-        "see what automations it would trigger).",
-        "- If a tool is not in the tool list, this token cannot use it; ask the operator to "
-        "grant the capability rather than attempting the call.",
-        "- If a tool response includes a notice that this token's permissions changed, your "
-        "tool list is stale: call get_capability_summary for the current state and ask the "
-        "user to reconnect or refresh this MCP server's tools.",
+        "- Status \"pending_approval\" is normal: a human must approve; the action has not run. "
+        "Do not retry; do not stop after one: further gated calls queue alongside it for one "
+        "operator action. For outcomes, call wait_for_approval ONCE with approval_ids listing "
+        "all of them, or get_approval_status "
+        "for a one-shot check. Otherwise report what awaits approval.",
+        "- Preview risky/bulk service calls with dry_run_service; use whatif for triggered automations.",
+        "- A tool absent from the list is unavailable: ask the operator to grant its capability; "
+        "do not attempt it.",
+        "- A permissions-changed notice means a stale tool list: call get_capability_summary "
+        "and ask the user to reconnect or refresh this MCP server's tools.",
     ]
     if confirm_gated:
         lines.append(
-            "- As of this connection, these capabilities require admin approval per call: "
+            "- Admin approval per call as of this connection: "
             + ", ".join(confirm_gated)
-            + ". Capabilities can change mid-session; call get_capability_summary for the current state."
+            + ". Permissions can change mid-session; check get_capability_summary."
         )
     if data.store.get_settings().mesa_mode != MESA_MODE_OFF:
         lines.append(
-            "- A per-entity safety layer (MESA) is active: some entities are read-only or "
-            "require confirmation by nature regardless of capabilities. describe_entity and "
-            "find_available_actions show an entity's control_mode."
+            "- MESA per-entity safety is active: nature can require read-only access or confirmation "
+            "regardless of capabilities. Read control_mode in describe_entity/find_available_actions."
         )
     if (
         caps.get("cap_automation_write") != CAP_DENY
         and caps.get("cap_search") != CAP_DENY
     ):
         lines.append(
-            "- Before authoring an automation, call find_available_actions on the trigger "
-            "or condition entity: Home Assistant may define a purpose-built trigger/condition "
-            "for it (for example a threshold crossing), and the response lists those with a "
-            "ready-to-use config example, which is more reliable than hand-building a generic "
-            "state or numeric_state equivalent."
+            "- Before authoring an automation, call find_available_actions on the trigger/condition "
+            "entity. Prefer its purpose-built triggers/conditions and ready-to-use config examples "
+            "over generic state/numeric_state equivalents."
         )
     lines.append("")
     lines.append(
