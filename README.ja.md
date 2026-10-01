@@ -1,8 +1,8 @@
 # Phoenix MCP
 
-[![HACS](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hacs.yml/badge.svg)](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hacs.yml)
-[![Hassfest](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hassfest.yml/badge.svg)](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hassfest.yml)
-[![Tests](https://github.com/leecaochang/phoenix-mcp/actions/workflows/tests.yml/badge.svg)](https://github.com/leecaochang/phoenix-mcp/actions/workflows/tests.yml)
+[![HACS](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hacs.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hacs.yml)
+[![Hassfest](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hassfest.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hassfest.yml)
+[![Tests](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/tests.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/tests.yml)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.2%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
 
@@ -19,9 +19,9 @@ Phoenix MCP は Home Assistant 内で完結して動作します。追加のプ�
 
 ## ドキュメント
 
-ツールリファレンス、権限、機能、MESA、管理 API を含む完全なドキュメントは、**[leecaochang.github.io/phoenix-mcp](https://leecaochang.github.io/phoenix-mcp/)** で公開しています。パネル内のヘルプリンクもこのサイトを参照します。
+ツールリファレンス、権限、機能、MESA、管理 API を含む完全なドキュメントは、**[leecaochang.github.io/Phoenix-MCP](https://leecaochang.github.io/Phoenix-MCP/)** で公開しています。パネル内のヘルプリンクもこのサイトを参照します。
 
-初めてお使いですか？まずは**[クイックスタート](https://leecaochang.github.io/phoenix-mcp/quickstart.html)**をご覧ください。最初のトークンを作成し、一台のデバイスへのアクセスを許可した後、Home Assistant 内でチャットするか、外部エージェントを接続するかを選択できます。どちらの方法でも数分で完了します。
+初めてお使いですか？まずは**[クイックスタート](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)**をご覧ください。最初のトークンを作成し、一台のデバイスへのアクセスを許可した後、Home Assistant 内でチャットするか、外部エージェントを接続するかを選択できます。どちらの方法でも数分で完了します。
 
 ## 動作要件
 
@@ -31,15 +31,15 @@ Phoenix MCP は Home Assistant 内で完結して動作します。追加のプ�
 ## HACS からインストール
 
 1. HACS で**インテグレーション**を開き、右上のメニューから**カスタムリポジトリ**を選択します。
-2. `https://github.com/leecaochang/phoenix-mcp` を入力し、カテゴリとして**インテグレーション**を選択して、**追加**をクリックします。
+2. `https://github.com/leecaochang/Phoenix-MCP` を入力し、カテゴリとして**インテグレーション**を選択して、**追加**をクリックします。
 3. HACS のインテグレーション一覧で Phoenix MCP を見つけてインストールし、Home Assistant を再起動します。
 
 手動でインストールする場合は、`custom_components/phoenix_mcp` フォルダーを Home Assistant の設定ディレクトリ内の `custom_components/phoenix_mcp` にコピーしてから、再起動してください。
 
 ### セットアップ
 
-**設定 > デバイスとサービス > 統合を追加**を開き、**Phoenix MCP** を検索します。一段階の設定フローを完了したら、サイドバーから **Phoenix MCP** パネルを開いてください。その後は[クイックスタート](https://leecaochang.github.io/phoenix-mcp/quickstart.html)に沿って進めます。
+**設定 > デバイスとサービス > 統合を追加**を開き、**Phoenix MCP** を検索します。一段階の設定フローを完了したら、サイドバーから **Phoenix MCP** パネルを開いてください。その後は[クイックスタート](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)に沿って進めます。
 
 ## 問題の報告とフィードバック
 
-問題は [github.com/leecaochang/phoenix-mcp/issues](https://github.com/leecaochang/phoenix-mcp/issues) で報告してください。
+問題は [github.com/leecaochang/Phoenix-MCP/issues](https://github.com/leecaochang/Phoenix-MCP/issues) で報告してください。

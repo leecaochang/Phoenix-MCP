@@ -1,8 +1,8 @@
 # Phoenix MCP
 
-[![HACS](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hacs.yml/badge.svg)](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hacs.yml)
-[![Hassfest](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hassfest.yml/badge.svg)](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hassfest.yml)
-[![Tests](https://github.com/leecaochang/phoenix-mcp/actions/workflows/tests.yml/badge.svg)](https://github.com/leecaochang/phoenix-mcp/actions/workflows/tests.yml)
+[![HACS](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hacs.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hacs.yml)
+[![Hassfest](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hassfest.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hassfest.yml)
+[![Tests](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/tests.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/tests.yml)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.2%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
 
@@ -19,9 +19,9 @@ The panel currently supports English, Spanish, French, Italian, German, Dutch, P
 
 ## Documentation
 
-The full documentation, including the tool reference, permissions, capabilities, MESA, and the admin API, is at **[leecaochang.github.io/phoenix-mcp](https://leecaochang.github.io/phoenix-mcp/)**. The panel's help links point there.
+The full documentation, including the tool reference, permissions, capabilities, MESA, and the admin API, is at **[leecaochang.github.io/Phoenix-MCP](https://leecaochang.github.io/Phoenix-MCP/)**. The panel's help links point there.
 
-New here? Start with the **[Quick start](https://leecaochang.github.io/phoenix-mcp/quickstart.html)**: it creates your first token, grants it one device, then lets you choose whether to chat from inside Home Assistant or connect an external agent, in a few minutes either way.
+New here? Start with the **[Quick start](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)**: it creates your first token, grants it one device, then lets you choose whether to chat from inside Home Assistant or connect an external agent, in a few minutes either way.
 
 ## Requirements
 
@@ -31,15 +31,15 @@ New here? Start with the **[Quick start](https://leecaochang.github.io/phoenix-m
 ## Install via HACS
 
 1. In HACS, open **Integrations**, then the top-right menu, and choose **Custom repositories**.
-2. Enter `https://github.com/leecaochang/phoenix-mcp` and select **Integration** as the category, then click **Add**.
+2. Enter `https://github.com/leecaochang/Phoenix-MCP` and select **Integration** as the category, then click **Add**.
 3. Find Phoenix MCP in the HACS integration list, install it, and restart Home Assistant.
 
 Prefer to install by hand? Copy the `custom_components/phoenix_mcp` folder into your Home Assistant config directory under `custom_components/phoenix_mcp`, then restart.
 
 ### Set up
 
-Go to **Settings > Devices & services > Add integration** and search for **Phoenix MCP**. Click through the single-step config flow, then open the **Phoenix MCP** panel in your sidebar. The [Quick start](https://leecaochang.github.io/phoenix-mcp/quickstart.html) takes it from there.
+Go to **Settings > Devices & services > Add integration** and search for **Phoenix MCP**. Click through the single-step config flow, then open the **Phoenix MCP** panel in your sidebar. The [Quick start](https://leecaochang.github.io/Phoenix-MCP/quickstart.html) takes it from there.
 
 ## Issues and feedback
 
-Report issues at [github.com/leecaochang/phoenix-mcp/issues](https://github.com/leecaochang/phoenix-mcp/issues).
+Report issues at [github.com/leecaochang/Phoenix-MCP/issues](https://github.com/leecaochang/Phoenix-MCP/issues).

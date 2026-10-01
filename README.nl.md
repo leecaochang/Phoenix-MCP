@@ -1,8 +1,8 @@
 # Phoenix MCP
 
-[![HACS](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hacs.yml/badge.svg)](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hacs.yml)
-[![Hassfest](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hassfest.yml/badge.svg)](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hassfest.yml)
-[![Tests](https://github.com/leecaochang/phoenix-mcp/actions/workflows/tests.yml/badge.svg)](https://github.com/leecaochang/phoenix-mcp/actions/workflows/tests.yml)
+[![HACS](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hacs.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hacs.yml)
+[![Hassfest](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hassfest.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hassfest.yml)
+[![Tests](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/tests.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/tests.yml)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.2%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
 
@@ -19,9 +19,9 @@ Het paneel ondersteunt momenteel Engels, Spaans, Frans, Italiaans, Duits, Nederl
 
 ## Documentatie
 
-De volledige documentatie, inclusief de toolreferentie, machtigingen, mogelijkheden, MESA en de admin-API, staat op **[leecaochang.github.io/phoenix-mcp](https://leecaochang.github.io/phoenix-mcp/)**. De helplinks van het paneel verwijzen daarheen.
+De volledige documentatie, inclusief de toolreferentie, machtigingen, mogelijkheden, MESA en de admin-API, staat op **[leecaochang.github.io/Phoenix-MCP](https://leecaochang.github.io/Phoenix-MCP/)**. De helplinks van het paneel verwijzen daarheen.
 
-Nieuw hier? Begin met de **[Snelstart](https://leecaochang.github.io/phoenix-mcp/quickstart.html)**: hiermee maak je je eerste token, geef je het toegang tot één apparaat en kies je vervolgens of je vanuit Home Assistant wilt chatten of een externe agent wilt verbinden; beide binnen enkele minuten.
+Nieuw hier? Begin met de **[Snelstart](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)**: hiermee maak je je eerste token, geef je het toegang tot één apparaat en kies je vervolgens of je vanuit Home Assistant wilt chatten of een externe agent wilt verbinden; beide binnen enkele minuten.
 
 ## Vereisten
 
@@ -31,15 +31,15 @@ Nieuw hier? Begin met de **[Snelstart](https://leecaochang.github.io/phoenix-mcp
 ## Installeren via HACS
 
 1. Open in HACS **Integraties**, vervolgens het menu rechtsboven en kies **Aangepaste repositories**.
-2. Voer `https://github.com/leecaochang/phoenix-mcp` in, selecteer **Integratie** als categorie en klik op **Toevoegen**.
+2. Voer `https://github.com/leecaochang/Phoenix-MCP` in, selecteer **Integratie** als categorie en klik op **Toevoegen**.
 3. Zoek Phoenix MCP in de HACS-integratielijst, installeer het en herstart Home Assistant.
 
 Liever handmatig installeren? Kopieer de map `custom_components/phoenix_mcp` naar de Home Assistant-configuratiemap onder `custom_components/phoenix_mcp` en herstart.
 
 ### Instellen
 
-Ga naar **Instellingen > Apparaten en services > Integratie toevoegen** en zoek naar **Phoenix MCP**. Doorloop de configuratiestap en open vervolgens het **Phoenix MCP**-paneel in de zijbalk. De [Snelstart](https://leecaochang.github.io/phoenix-mcp/quickstart.html) neemt het vanaf daar over.
+Ga naar **Instellingen > Apparaten en services > Integratie toevoegen** en zoek naar **Phoenix MCP**. Doorloop de configuratiestap en open vervolgens het **Phoenix MCP**-paneel in de zijbalk. De [Snelstart](https://leecaochang.github.io/Phoenix-MCP/quickstart.html) neemt het vanaf daar over.
 
 ## Problemen en feedback
 
-Meld problemen op [github.com/leecaochang/phoenix-mcp/issues](https://github.com/leecaochang/phoenix-mcp/issues).
+Meld problemen op [github.com/leecaochang/Phoenix-MCP/issues](https://github.com/leecaochang/Phoenix-MCP/issues).

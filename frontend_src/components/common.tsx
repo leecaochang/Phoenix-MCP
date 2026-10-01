@@ -20,7 +20,7 @@ export function ErrorMsg({ msg }: { msg: string }) {
 // The documentation is a hosted site, not a copy shipped inside the integration,
 // so every help link leaves Home Assistant. Exported because index.tsx links the
 // site root from the tab bar and the two must not drift.
-export const DOCS_BASE_URL = "https://leecaochang.github.io/phoenix-mcp/";
+export const DOCS_BASE_URL = "https://leecaochang.github.io/Phoenix-MCP/";
 
 // Small "?" badge next to a Settings tab card's label, linking out to the
 // matching section of the documentation site.

@@ -27,7 +27,7 @@ PHOENIX_VERSION = "1.4.0"
 # Raising this means re-deriving it, not editing it: check the module-level
 # `from homeassistant...` imports across the package against the target release.
 MIN_HA_VERSION = "2025.2.0"
-GITHUB_URL = "https://github.com/leecaochang/phoenix-mcp"
+GITHUB_URL = "https://github.com/leecaochang/Phoenix-MCP"
 DOMAIN = "phoenix_mcp"
 RUNTIME_READY_KEY = "phoenix_mcp_runtime_ready"
 STORAGE_KEY = "phoenix_mcp"

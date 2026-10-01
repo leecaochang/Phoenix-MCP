@@ -4,7 +4,7 @@
 
 如果您认为 Phoenix MCP 存在安全漏洞，请不要创建公开 Issue，也不要在公开讨论中披露细节。请使用 GitHub 的私密漏洞报告功能提交报告：
 
-<https://github.com/leecaochang/phoenix-mcp/security/advisories/new>
+<https://github.com/leecaochang/Phoenix-MCP/security/advisories/new>
 
 报告应尽量包含以下信息：
 
@@ -39,7 +39,7 @@
 
 If you believe Phoenix MCP has a security vulnerability, please do not open a public issue or disclose the details in a public discussion. Use GitHub's private vulnerability reporting feature:
 
-<https://github.com/leecaochang/phoenix-mcp/security/advisories/new>
+<https://github.com/leecaochang/Phoenix-MCP/security/advisories/new>
 
 Please include, where possible:
 

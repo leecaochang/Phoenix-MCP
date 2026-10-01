@@ -1,8 +1,8 @@
 # Phoenix MCP
 
-[![HACS](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hacs.yml/badge.svg)](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hacs.yml)
-[![Hassfest](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hassfest.yml/badge.svg)](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hassfest.yml)
-[![Tests](https://github.com/leecaochang/phoenix-mcp/actions/workflows/tests.yml/badge.svg)](https://github.com/leecaochang/phoenix-mcp/actions/workflows/tests.yml)
+[![HACS](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hacs.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hacs.yml)
+[![Hassfest](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hassfest.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hassfest.yml)
+[![Tests](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/tests.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/tests.yml)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.2%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
 
@@ -19,9 +19,9 @@ El panel admite actualmente inglés, español, francés, italiano, alemán, neer
 
 ## Documentación
 
-La documentación completa, incluida la referencia de herramientas, los permisos, las capacidades, MESA y la API de administración, está en **[leecaochang.github.io/phoenix-mcp](https://leecaochang.github.io/phoenix-mcp/)**. Los enlaces de ayuda del panel apuntan allí.
+La documentación completa, incluida la referencia de herramientas, los permisos, las capacidades, MESA y la API de administración, está en **[leecaochang.github.io/Phoenix-MCP](https://leecaochang.github.io/Phoenix-MCP/)**. Los enlaces de ayuda del panel apuntan allí.
 
-¿Es nuevo? Empiece por el **[Inicio rápido](https://leecaochang.github.io/phoenix-mcp/quickstart.html)**: crea su primer token, le concede un dispositivo y luego le deja elegir entre chatear desde Home Assistant o conectar un agente externo; en ambos casos, en pocos minutos.
+¿Es nuevo? Empiece por el **[Inicio rápido](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)**: crea su primer token, le concede un dispositivo y luego le deja elegir entre chatear desde Home Assistant o conectar un agente externo; en ambos casos, en pocos minutos.
 
 ## Requisitos
 
@@ -31,15 +31,15 @@ La documentación completa, incluida la referencia de herramientas, los permisos
 ## Instalación mediante HACS
 
 1. En HACS, abra **Integraciones** y, en el menú superior derecho, elija **Repositorios personalizados**.
-2. Introduzca `https://github.com/leecaochang/phoenix-mcp`, seleccione **Integración** como categoría y haga clic en **Añadir**.
+2. Introduzca `https://github.com/leecaochang/Phoenix-MCP`, seleccione **Integración** como categoría y haga clic en **Añadir**.
 3. Encuentre Phoenix MCP en la lista de integraciones de HACS, instálelo y reinicie Home Assistant.
 
 ¿Prefiere instalar manualmente? Copie la carpeta `custom_components/phoenix_mcp` en el directorio de configuración de Home Assistant, en `custom_components/phoenix_mcp`, y reinicie.
 
 ### Configuración
 
-Vaya a **Ajustes > Dispositivos y servicios > Añadir integración** y busque **Phoenix MCP**. Complete el flujo de configuración de un solo paso y abra el panel **Phoenix MCP** en la barra lateral. A partir de ahí, siga el [Inicio rápido](https://leecaochang.github.io/phoenix-mcp/quickstart.html).
+Vaya a **Ajustes > Dispositivos y servicios > Añadir integración** y busque **Phoenix MCP**. Complete el flujo de configuración de un solo paso y abra el panel **Phoenix MCP** en la barra lateral. A partir de ahí, siga el [Inicio rápido](https://leecaochang.github.io/Phoenix-MCP/quickstart.html).
 
 ## Incidencias y comentarios
 
-Informe de las incidencias en [github.com/leecaochang/phoenix-mcp/issues](https://github.com/leecaochang/phoenix-mcp/issues).
+Informe de las incidencias en [github.com/leecaochang/Phoenix-MCP/issues](https://github.com/leecaochang/Phoenix-MCP/issues).

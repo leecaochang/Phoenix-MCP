@@ -1,8 +1,8 @@
 # Phoenix MCP
 
-[![HACS](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hacs.yml/badge.svg)](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hacs.yml)
-[![Hassfest](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hassfest.yml/badge.svg)](https://github.com/leecaochang/phoenix-mcp/actions/workflows/hassfest.yml)
-[![Tests](https://github.com/leecaochang/phoenix-mcp/actions/workflows/tests.yml/badge.svg)](https://github.com/leecaochang/phoenix-mcp/actions/workflows/tests.yml)
+[![HACS](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hacs.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hacs.yml)
+[![Hassfest](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hassfest.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/hassfest.yml)
+[![Tests](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/tests.yml/badge.svg)](https://github.com/leecaochang/Phoenix-MCP/actions/workflows/tests.yml)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://hacs.xyz)
 [![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.2%2B-41BDF5?logo=home-assistant&logoColor=white)](https://www.home-assistant.io)
 
@@ -31,9 +31,9 @@ Phoenix MCP 脱胎于一个被弃置的开源项目，它的名字也由此而�
 
 ## 文档
 
-完整文档包括工具参考、权限、功能、MESA 和管理 API，位于 **[leecaochang.github.io/phoenix-mcp](https://leecaochang.github.io/phoenix-mcp/)**。面板中的帮助链接也会指向这里。
+完整文档包括工具参考、权限、功能、MESA 和管理 API，位于 **[leecaochang.github.io/Phoenix-MCP](https://leecaochang.github.io/Phoenix-MCP/)**。面板中的帮助链接也会指向这里。
 
-第一次使用？请从**[快速入门](https://leecaochang.github.io/phoenix-mcp/quickstart.html)**开始：它会创建您的第一个令牌，为其授予一台设备的访问权限，然后让您选择直接在 Home Assistant 内对话或连接外部智能体。无论选择哪种方式，几分钟即可完成。
+第一次使用？请从**[快速入门](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)**开始：它会创建您的第一个令牌，为其授予一台设备的访问权限，然后让您选择直接在 Home Assistant 内对话或连接外部智能体。无论选择哪种方式，几分钟即可完成。
 
 ## 要求
 
@@ -43,15 +43,15 @@ Phoenix MCP 脱胎于一个被弃置的开源项目，它的名字也由此而�
 ## 通过 HACS 安装
 
 1. 在 HACS 中打开**集成**，然后打开右上角菜单并选择**自定义存储库**。
-2. 输入 `https://github.com/leecaochang/phoenix-mcp`，类别选择**集成**，然后点击**添加**。
+2. 输入 `https://github.com/leecaochang/Phoenix-MCP`，类别选择**集成**，然后点击**添加**。
 3. 在 HACS 集成列表中找到 Phoenix MCP，安装后重新启动 Home Assistant。
 
 希望手动安装？将 `custom_components/phoenix_mcp` 文件夹复制到 Home Assistant 配置目录下的 `custom_components/phoenix_mcp`，然后重新启动。
 
 ### 设置
 
-前往**设置 > 设备与服务 > 添加集成**，搜索 **Phoenix MCP**。完成这个单步骤配置流程，然后打开侧边栏中的 **Phoenix MCP** 面板。之后请按照[快速入门](https://leecaochang.github.io/phoenix-mcp/quickstart.html)继续操作。
+前往**设置 > 设备与服务 > 添加集成**，搜索 **Phoenix MCP**。完成这个单步骤配置流程，然后打开侧边栏中的 **Phoenix MCP** 面板。之后请按照[快速入门](https://leecaochang.github.io/Phoenix-MCP/quickstart.html)继续操作。
 
 ## 问题与反馈
 
-请在 [github.com/leecaochang/phoenix-mcp/issues](https://github.com/leecaochang/phoenix-mcp/issues) 报告问题。
+请在 [github.com/leecaochang/Phoenix-MCP/issues](https://github.com/leecaochang/Phoenix-MCP/issues) 报告问题。
