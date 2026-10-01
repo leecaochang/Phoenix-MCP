@@ -323,7 +323,9 @@
       "typeHelper": "Ayudante",
       "typeScene": "Escena",
       "typeScript": "Script",
-      "typeYamlConfig": "Configuración YAML"
+      "typeYamlConfig": "Configuración YAML",
+      "typeArea": "Área",
+      "typeFloor": "Planta"
     },
     "selectBy": {
       "apply": "Aplicar",
@@ -841,7 +843,10 @@
       "configuration_recovery.acknowledge": "Comprobar la configuración tras un cambio interrumpido en {resource}",
       "create_calendar_event": "Crear evento del calendario",
       "update_calendar_event": "Actualizar evento del calendario",
-      "delete_calendar_event": "Eliminar evento del calendario"
+      "delete_calendar_event": "Eliminar evento del calendario",
+      "location.create": "Crear ubicación {name}",
+      "location.delete": "Eliminar ubicación {name}",
+      "location.update": "Actualizar ubicación {name}"
     },
     "adminError": {
       "authRequired": "Se requiere autenticación.",
@@ -1931,7 +1936,13 @@
       "update_calendar_event.title": "Actualizar evento del calendario",
       "update_calendar_event.body": "Se aplicará la acción propuesta. Abra Detalles para revisar el cambio exacto propuesto.",
       "delete_calendar_event.title": "Eliminar evento del calendario",
-      "delete_calendar_event.body": "Se eliminará el elemento seleccionado. Es posible que el cambio no se pueda deshacer."
+      "delete_calendar_event.body": "Se eliminará el elemento seleccionado. Es posible que el cambio no se pueda deshacer.",
+      "location.create.body": "Se aplicará el cambio de configuración propuesto. Abra Detalles para revisar el cambio exacto propuesto.",
+      "location.create.title": "Crear ubicación {name}",
+      "location.delete.body": "Se eliminará el elemento seleccionado. Es posible que el cambio no se pueda deshacer.",
+      "location.delete.title": "Eliminar ubicación {name}",
+      "location.update.body": "Se aplicará el cambio de configuración propuesto. Abra Detalles para revisar el cambio exacto propuesto.",
+      "location.update.title": "Actualizar ubicación {name}"
     },
     "common": {
       "after": "Después",

@@ -10,6 +10,8 @@ from collections.abc import Callable, Mapping
 from typing import Any, NamedTuple
 
 from homeassistant.core import HomeAssistant, State
+from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import floor_registry as fr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
 
@@ -26,6 +28,7 @@ from .device_semantics import (
     DeviceRegistrySnapshot,
     device_registry_snapshot,
     device_registry_snapshot_from_registry,
+    effective_entity_area_id,
 )
 from .token_store import TokenRecord
 
@@ -1236,3 +1239,69 @@ def esphome_entry_writable(hass: HomeAssistant, entry: Any, token: TokenRecord) 
         resolve(reg_entry.entity_id, token, hass) is Permission.WRITE
         for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id)
     )
+
+
+class LocationRegistryContext(NamedTuple):
+    """Complete location membership, including disabled and entity-free devices."""
+
+    entry: Any
+    area_ids: tuple[str, ...]
+    entity_ids: tuple[str, ...]
+    device_ids: tuple[str, ...]
+
+
+def location_registry_context(
+    kind: str, location_id: str, hass: HomeAssistant,
+) -> LocationRegistryContext | None:
+    """Resolve exact location IDs and complete current affected membership."""
+    areas = ar.async_get(hass)
+    entry: Any
+    area_ids: tuple[str, ...]
+    if kind == "area":
+        entry = areas.async_get_area(location_id)
+        area_ids = (location_id,)
+    elif kind == "floor":
+        entry = fr.async_get(hass).async_get_floor(location_id)
+        area_ids = tuple(sorted(area.id for area in areas.areas.values()
+                                if area.floor_id == location_id))
+    else:
+        return None
+    if entry is None:
+        return None
+    snapshot = device_registry_snapshot(hass)
+    if snapshot.conflicting_ids or snapshot.invalid_ancestry_ids:
+        return None
+    device_ids = tuple(sorted(device.id for device in snapshot.entries
+                              if snapshot.effective_area_id(device.id) in area_ids))
+    entity_ids = tuple(sorted(entity.entity_id for entity in er.async_get(hass).entities.values()
+                              if effective_entity_area_id(entity, snapshot) in area_ids
+                              or entity.device_id in device_ids))
+    return LocationRegistryContext(entry, area_ids, entity_ids, device_ids)
+
+
+def resolve_location_registry_write(
+    kind: str, location_id: str, token: TokenRecord, hass: HomeAssistant,
+    *, context: LocationRegistryContext | None = None,
+) -> Permission:
+    """Require whole-membership authority; empty locations require pass-through.
+
+    Location nodes do not exist in the permission tree. Entity grants alone
+    cannot authorize changes to an independently scoped device or empty area.
+    """
+    context = context or location_registry_context(kind, location_id, hass)
+    if context is None:
+        return Permission.NO_ACCESS
+    if not token.pass_through:
+        if not context.entity_ids and not context.device_ids:
+            return Permission.NO_ACCESS
+        for area_id in context.area_ids:
+            area_context = location_registry_context("area", area_id, hass)
+            if area_context is None or not (area_context.entity_ids or area_context.device_ids):
+                return Permission.NO_ACCESS
+    if any(resolve_registry_access(entity_id, token, hass, force_registry_only=True)
+           != Permission.WRITE for entity_id in context.entity_ids):
+        return Permission.NO_ACCESS
+    if any(resolve_device_registry_write(device_id, token, hass) != Permission.WRITE
+           for device_id in context.device_ids):
+        return Permission.NO_ACCESS
+    return Permission.WRITE

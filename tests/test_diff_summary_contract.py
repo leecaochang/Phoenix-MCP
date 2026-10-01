@@ -158,7 +158,7 @@ def test_every_template_is_reachable() -> None:
     out.
     """
     computed_prefixes = (
-        "blueprint.", "dashboard.", "dashboard_card.", "hass_turn.",
+        "location.", "blueprint.", "dashboard.", "dashboard_card.", "hass_turn.",
         "patch_dashboard.", "patch_yaml_config.", "patch.", "edit_energy_config.",
         "entity.", "device.",
     )

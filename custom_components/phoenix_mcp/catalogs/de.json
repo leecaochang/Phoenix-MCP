@@ -1305,7 +1305,10 @@
       "configuration_recovery.acknowledge": "Konfiguration nach einer unterbrochenen Änderung an {resource} prüfen",
       "create_calendar_event": "Kalendertermin erstellen",
       "update_calendar_event": "Kalendertermin aktualisieren",
-      "delete_calendar_event": "Kalendertermin löschen"
+      "delete_calendar_event": "Kalendertermin löschen",
+      "location.create": "Standort {name} erstellen",
+      "location.delete": "Standort {name} löschen",
+      "location.update": "Standort {name} aktualisieren"
     },
     "adminError": {
       "authRequired": "Authentifizierung erforderlich.",
@@ -1713,7 +1716,13 @@
       "update_calendar_event.title": "Kalendertermin aktualisieren",
       "update_calendar_event.body": "Dadurch wird die vorgeschlagene Aktion übernommen. Öffnen Sie Details, um die genaue vorgeschlagene Änderung zu prüfen.",
       "delete_calendar_event.title": "Kalendertermin löschen",
-      "delete_calendar_event.body": "Das ausgewählte Element wird entfernt. Die Änderung lässt sich möglicherweise nicht rückgängig machen."
+      "delete_calendar_event.body": "Das ausgewählte Element wird entfernt. Die Änderung lässt sich möglicherweise nicht rückgängig machen.",
+      "location.create.body": "Dadurch wird die vorgeschlagene Konfigurationsänderung übernommen. Öffnen Sie Details, um die genaue vorgeschlagene Änderung zu prüfen.",
+      "location.create.title": "Standort {name} erstellen",
+      "location.delete.body": "Das ausgewählte Element wird entfernt. Die Änderung lässt sich möglicherweise nicht rückgängig machen.",
+      "location.delete.title": "Standort {name} löschen",
+      "location.update.body": "Dadurch wird die vorgeschlagene Konfigurationsänderung übernommen. Öffnen Sie Details, um die genaue vorgeschlagene Änderung zu prüfen.",
+      "location.update.title": "Standort {name} aktualisieren"
     },
     "common": {
       "after": "Nachher",
@@ -1887,7 +1896,9 @@
       "typeHelper": "Helfer",
       "typeScene": "Szene",
       "typeScript": "Skript",
-      "typeYamlConfig": "YAML-Konfiguration"
+      "typeYamlConfig": "YAML-Konfiguration",
+      "typeArea": "Bereich",
+      "typeFloor": "Etage"
     },
     "audit": {
       "outcomeAllowed": "Erlaubt",

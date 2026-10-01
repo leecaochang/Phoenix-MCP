@@ -896,3 +896,41 @@ def _resolve_area_id(entry: Any, device_registry: Any) -> str | None:
     return effective_entity_area_id(
         entry, device_registry_snapshot_from_registry(device_registry)
     )
+
+
+async def _create_registry_mesa_approval(
+    hass: HomeAssistant,
+    data: PhoenixData,
+    token: TokenRecord,
+    *,
+    tool_name: str,
+    args: dict[str, Any],
+    diff: dict[str, Any],
+    request_id: str,
+    client_ip: str | None,
+    cap_name: str = "cap_registry_write",
+) -> tuple[dict, str, str]:
+    """Create the normal registry approval when only MESA requires confirm."""
+    from .approvals import (  # noqa: PLC0415
+        async_create_pending_approval,
+        create_approval_notification,
+        fire_approval_requested_event,
+    )
+
+    async with data.store.async_lock:
+        from .request_authority import check_request_authority
+        check_request_authority()
+        approval = await async_create_pending_approval(
+            data.store,
+            token_id=token.id,
+            token_name=token.name,
+            tool_name=tool_name,
+            cap_name=cap_name,
+            args=args,
+            diff=diff,
+            request_id=request_id,
+            client_ip=client_ip,
+        )
+    create_approval_notification(hass, approval)
+    fire_approval_requested_event(hass, approval)
+    return await _pending_or_inline(hass, data, token, approval)

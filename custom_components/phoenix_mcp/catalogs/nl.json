@@ -328,7 +328,9 @@
       "typeHelper": "Helper",
       "typeScene": "Scène",
       "typeScript": "Script",
-      "typeYamlConfig": "YAML-configuratie"
+      "typeYamlConfig": "YAML-configuratie",
+      "typeArea": "Ruimte",
+      "typeFloor": "Verdieping"
     },
     "audit": {
       "allOutcomes": "Alle uitkomsten",
@@ -682,7 +684,10 @@
       "configuration_recovery.acknowledge": "Configuratie controleren na een onderbroken wijziging aan {resource}",
       "create_calendar_event": "Kalenderafspraak maken",
       "update_calendar_event": "Kalenderafspraak bijwerken",
-      "delete_calendar_event": "Kalenderafspraak verwijderen"
+      "delete_calendar_event": "Kalenderafspraak verwijderen",
+      "location.create": "Locatie {name} maken",
+      "location.delete": "Locatie {name} verwijderen",
+      "location.update": "Locatie {name} bijwerken"
     },
     "approvals": {
       "approve": "Goedkeuren en uitvoeren",
@@ -2098,7 +2103,13 @@
       "update_calendar_event.title": "Kalenderafspraak bijwerken",
       "update_calendar_event.body": "Hiermee wordt de voorgestelde actie toegepast. Open Details om de exacte voorgestelde wijziging te bekijken.",
       "delete_calendar_event.title": "Kalenderafspraak verwijderen",
-      "delete_calendar_event.body": "Het geselecteerde item wordt verwijderd. De wijziging kan mogelijk niet worden teruggedraaid."
+      "delete_calendar_event.body": "Het geselecteerde item wordt verwijderd. De wijziging kan mogelijk niet worden teruggedraaid.",
+      "location.create.body": "Hiermee wordt de voorgestelde configuratiewijziging toegepast. Open Details om de exacte voorgestelde wijziging te bekijken.",
+      "location.create.title": "Locatie {name} maken",
+      "location.delete.body": "Het geselecteerde item wordt verwijderd. De wijziging kan mogelijk niet worden teruggedraaid.",
+      "location.delete.title": "Locatie {name} verwijderen",
+      "location.update.body": "Hiermee wordt de voorgestelde configuratiewijziging toegepast. Open Details om de exacte voorgestelde wijziging te bekijken.",
+      "location.update.title": "Locatie {name} bijwerken"
     },
     "routing": {
       "providerOptions": "Beslissingsproviders gebruiken vaste routeringskeuzes, zonder Chat-opties zoals denkniveaus. Modellen vernieuwen controleert de beschikbaarheid zonder een opdracht uit te voeren; het test niet de nauwkeurigheid van de routering.",

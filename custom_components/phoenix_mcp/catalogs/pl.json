@@ -332,7 +332,9 @@
       "typeHelper": "Pomocnik",
       "typeScene": "Scena",
       "typeScript": "Skrypt",
-      "typeYamlConfig": "Konfiguracja YAML"
+      "typeYamlConfig": "Konfiguracja YAML",
+      "typeArea": "Obszar",
+      "typeFloor": "Piętro"
     },
     "audit": {
       "allOutcomes": "Wszystkie wyniki",
@@ -686,7 +688,10 @@
       "configuration_recovery.acknowledge": "Sprawdź konfigurację po przerwanej zmianie w {resource}",
       "create_calendar_event": "Utwórz wydarzenie w kalendarzu",
       "update_calendar_event": "Zaktualizuj wydarzenie w kalendarzu",
-      "delete_calendar_event": "Usuń wydarzenie z kalendarza"
+      "delete_calendar_event": "Usuń wydarzenie z kalendarza",
+      "location.create": "Utwórz lokalizację {name}",
+      "location.delete": "Usuń lokalizację {name}",
+      "location.update": "Zaktualizuj lokalizację {name}"
     },
     "approvals": {
       "approve": "Zatwierdź i wykonaj",
@@ -2118,7 +2123,13 @@
       "update_calendar_event.title": "Zaktualizuj wydarzenie w kalendarzu",
       "update_calendar_event.body": "Spowoduje to zastosowanie proponowanej akcji. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
       "delete_calendar_event.title": "Usuń wydarzenie z kalendarza",
-      "delete_calendar_event.body": "Wybrany element zostanie usunięty. Zmiana może być nieodwracalna."
+      "delete_calendar_event.body": "Wybrany element zostanie usunięty. Zmiana może być nieodwracalna.",
+      "location.create.body": "Spowoduje to zastosowanie proponowanej zmiany konfiguracji. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
+      "location.create.title": "Utwórz lokalizację {name}",
+      "location.delete.body": "Wybrany element zostanie usunięty. Zmiana może być nieodwracalna.",
+      "location.delete.title": "Usuń lokalizację {name}",
+      "location.update.body": "Spowoduje to zastosowanie proponowanej zmiany konfiguracji. Otwórz Szczegóły, aby przejrzeć dokładną proponowaną zmianę.",
+      "location.update.title": "Zaktualizuj lokalizację {name}"
     },
     "routing": {
       "providerOptions": "Dostawcy decyzji używają stałych opcji routingu, bez opcji czatu takich jak poziomy rozumowania. Odświeżenie modeli sprawdza dostępność bez wykonywania poleceń; nie testuje dokładności routingu.",

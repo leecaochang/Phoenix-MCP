@@ -459,7 +459,9 @@
       "typeHelper": "ヘルパー",
       "typeScene": "シーン",
       "typeScript": "スクリプト",
-      "typeYamlConfig": "YAML 設定"
+      "typeYamlConfig": "YAML 設定",
+      "typeArea": "エリア",
+      "typeFloor": "フロア"
     },
     "audit": {
       "outcomeAllowed": "許可",
@@ -1253,7 +1255,10 @@
       "configuration_recovery.acknowledge": "{resource} の変更中断後の設定を確認",
       "create_calendar_event": "カレンダーの予定を作成",
       "update_calendar_event": "カレンダーの予定を更新",
-      "delete_calendar_event": "カレンダーの予定を削除"
+      "delete_calendar_event": "カレンダーの予定を削除",
+      "location.create": "場所 {name} を作成",
+      "location.delete": "場所 {name} を削除",
+      "location.update": "場所 {name} を更新"
     },
     "settings": {
       "addProviderFirst": "先に Agent Chat でプロバイダーアカウントを追加してください。",
@@ -2020,7 +2025,13 @@
       "update_calendar_event.title": "カレンダーの予定を更新",
       "update_calendar_event.body": "提案された操作を適用します。正確な変更内容を確認するには、詳細を開いてください。",
       "delete_calendar_event.title": "カレンダーの予定を削除",
-      "delete_calendar_event.body": "選択した項目を削除します。この変更は元に戻せない場合があります。"
+      "delete_calendar_event.body": "選択した項目を削除します。この変更は元に戻せない場合があります。",
+      "location.create.body": "提案された設定変更を適用します。正確な変更内容を確認するには、詳細を開いてください。",
+      "location.create.title": "場所 {name} を作成",
+      "location.delete.body": "選択した項目を削除します。この変更は元に戻せない場合があります。",
+      "location.delete.title": "場所 {name} を削除",
+      "location.update.body": "提案された設定変更を適用します。正確な変更内容を確認するには、詳細を開いてください。",
+      "location.update.title": "場所 {name} を更新"
     },
     "routing": {
       "providerOptions": "判断プロバイダーは固定のルーティング選択肢を使い、思考レベルなどのチャット設定は使いません。モデルの更新ではコマンドを実行せずに利用可能か確認します。ルーティングの正確さはテストしません。",

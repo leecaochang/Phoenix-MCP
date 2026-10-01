@@ -1175,6 +1175,41 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         },
     },
     {
+        "name": "set_area_or_floor",
+        "description": (
+            "Create, update or delete an area or floor through cap_registry_write. Scoped tokens require "
+            "WRITE on every affected registry entity and an explicit WRITE grant on every affected device; "
+            "empty locations and creation require pass-through authority. Use exact IDs from list_areas/list_floors. "
+            "Area labels must reference existing label IDs: labels replaces the set ([] clears), while "
+            "add_labels/remove_labels patch it. Floors have no labels. Deletion clears placement references, "
+            "does not rewrite consumers, and cannot be restored automatically. Approvals refuse identity, "
+            "membership, metadata or MESA drift. Inspect current state after an interrupted write before retrying."
+        ),
+        "cap": "cap_registry_write",
+        "inputSchema": {
+            "type": "object", "additionalProperties": False,
+            "properties": {
+                "kind": {"type": "string", "enum": ["area", "floor"], "description": "Location registry to change."},
+                "operation": {"type": "string", "enum": ["create", "update", "delete"], "description": "Explicit lifecycle operation."},
+                "location_id": {"type": "string", "description": "Exact existing ID for update/delete; omit for create."},
+                "changes": {"type": "object", "additionalProperties": False, "minProperties": 1,
+                    "description": "Required for create/update; omit for delete. Creation requires name.",
+                    "properties": {
+                        "name": {"type": "string", "description": "Location name."},
+                        "icon": {"type": ["string", "null"], "description": "Icon, or null to clear."},
+                        "aliases": {"type": "array", "items": {"type": "string"}, "description": "Replace aliases; [] clears."},
+                        "floor_id": {"type": ["string", "null"], "description": "Area only: writable destination floor, or null to clear."},
+                        "level": {"type": ["integer", "null"], "description": "Floor only: floor level, or null to clear."},
+                        "labels": {"type": "array", "items": {"type": "string"}, "description": "Area only: replace labels with existing IDs; [] clears. Cannot combine with label patches."},
+                        "add_labels": {"type": "array", "items": {"type": "string"}, "description": "Area only: add existing label IDs, preserving other labels."},
+                        "remove_labels": {"type": "array", "items": {"type": "string"}, "description": "Area only: remove existing label IDs, preserving other labels."},
+                    },
+                },
+            },
+            "required": ["kind", "operation"],
+        },
+    },
+    {
         "name": "set_device",
         "description": (
             "Update one device's user-controlled registry metadata: display-name override, area, enabled state, "
@@ -3894,6 +3929,7 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "get_helper_settings": _annot(True, False, True),
     "set_helper_settings": _annot(False, True, True),
     "set_entity": _annot(False, True, True),
+    "set_area_or_floor": _annot(False, True, False),
     "set_device": _annot(False, True, True),
     "remove_device": _annot(False, True, True),
     "delete_entity": _annot(False, True, True),

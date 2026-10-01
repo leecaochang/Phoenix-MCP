@@ -909,6 +909,9 @@ async def _tool_list_areas(
         if area_id:
             counts[area_id] = counts.get(area_id, 0) + 1
 
+    if token.pass_through and assist_expose_check(token, hass) is None:
+        for listed_area in area_reg.areas.values():
+            counts.setdefault(listed_area.id, 0)
     areas: list[dict] = []
     for area_id, count in counts.items():
         area = area_reg.async_get_area(area_id)
@@ -919,6 +922,8 @@ async def _tool_list_areas(
             "name": area.name,
             "floor_id": area.floor_id,
             "aliases": sorted(area.aliases) if area.aliases else [],
+            "icon": area.icon,
+            "labels": sorted(area.labels),
             "accessible_entity_count": count,
         })
     areas.sort(key=lambda a: (a["name"] or a["area_id"]).lower())
@@ -948,6 +953,12 @@ async def _tool_list_floors(
         floor_entity_counts[area.floor_id] = floor_entity_counts.get(area.floor_id, 0) + 1
         floor_area_ids.setdefault(area.floor_id, set()).add(area_id)
 
+    if token.pass_through and assist_expose_check(token, hass) is None:
+        for listed_floor in floor_reg.floors.values():
+            floor_entity_counts.setdefault(listed_floor.floor_id, 0)
+            floor_area_ids.setdefault(listed_floor.floor_id, set()).update(
+                area.id for area in area_reg.areas.values() if area.floor_id == listed_floor.floor_id
+            )
     floors: list[dict] = []
     for floor_id, count in floor_entity_counts.items():
         floor = floor_reg.async_get_floor(floor_id)
@@ -957,6 +968,8 @@ async def _tool_list_floors(
             "floor_id": floor.floor_id,
             "name": floor.name,
             "level": floor.level,
+            "icon": floor.icon,
+            "aliases": sorted(getattr(floor, "aliases", ())),
             "accessible_area_count": len(floor_area_ids[floor_id]),
             "accessible_entity_count": count,
         })

@@ -699,7 +699,9 @@ export type VersionResourceType =
   | "esphome_yaml"
   | "energy"
   | "file"
-  | "config_entry";
+  | "config_entry"
+  | "area"
+  | "floor";
 
 export interface VersionSummary {
   id: string;

@@ -1,6 +1,7 @@
 {
   "_comment": "Every resource_type _record_version is called with in mcp_view.py. Pinned by tests/test_frontend_contract.py (backend side, derived from source) and frontend_src/__tests__/contract.test.ts (VersionResourceType union).",
   "version_resource_types": [
+    "area",
     "automation",
     "blueprint",
     "config_entry",
@@ -10,6 +11,7 @@
     "entity",
     "esphome_yaml",
     "file",
+    "floor",
     "helper",
     "scene",
     "script",

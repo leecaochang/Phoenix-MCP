@@ -61,7 +61,8 @@ grain of the model gives the smoothest results and avoids dead ends.
   entity's nature/role), not by name. Reach for it when you care about what an
   entity is, not what it is called.
 - `list_areas`, `list_floors`, `list_zones`, `list_devices`, `get_device`:
-  registry enumeration. Areas require an accessible entity. Devices may instead
+  registry enumeration. Scoped areas require an accessible entity; unrestricted
+  pass-through area/floor listings also include empty locations. Devices may instead
   be reached by an explicit device grant; `list_devices` defaults to enabled
   entries and accepts `registry_state: disabled|all`. `get_device` returns only
   accessible children and allowlisted owner and hardware metadata.
@@ -545,6 +546,15 @@ mode: single
   are reported, not deleted. The result describes observed cleanup and restart
   need even if an integration raises. Its version is an audit record and cannot
   restore the removed entry.
+
+### Area and floor registry metadata
+
+- `set_area_or_floor` uses `kind: area|floor`, `operation: create|update|delete`, an exact `location_id` for update/delete, and a nonempty `changes` object for create/update. Creation requires `changes.name`, omits `location_id`, and requires pass-through authority. Delete omits `changes`.
+- `cap_registry_write` applies. Scoped writes require every affected registry entity to be writable and every affected device to have an explicit WRITE grant. Empty locations and floors with empty child areas require pass-through authority.
+- Name, icon and aliases are supported for both kinds; aliases replace the collection. Areas accept a writable `floor_id`; floors accept integer `level`. Null clears icon, floor assignment or level. Requested fields unavailable in the installed HA version refuse.
+- Area `labels` replaces the set (`[]` clears); `add_labels` and `remove_labels` patch current labels without dropping unrelated assignments. Supply existing label IDs and never combine replacement with patches. Floors have no labels.
+- Rename/delete preserve inherited MESA gates over complete affected membership. Unresolved MESA identity context refuses. Other metadata is not an actuation. Approvals pin current identity, membership, metadata and MESA context; a drifted review must be replaced.
+- Successful writes create history. Admin metadata restore requires the same surviving identity. Deletion clears placement references, does not rewrite consumers, and has no automatic inverse. Interrupted/uncertain writes must be inspected before any retry; Phoenix does not replay them.
 
 ### Device registry metadata
 

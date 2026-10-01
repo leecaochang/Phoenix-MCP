@@ -650,7 +650,9 @@
       "typeHelper": "Helper",
       "typeScene": "Scene",
       "typeScript": "Script",
-      "typeYamlConfig": "YAML config"
+      "typeYamlConfig": "YAML config",
+      "typeArea": "Area",
+      "typeFloor": "Floor"
     },
     "audit": {
       "outcomeAllowed": "Allowed",
@@ -1529,6 +1531,9 @@
       "integration.reload": "Reload integration {label}",
       "integration.remove": "Remove integration {label}",
       "integration.update": "Update integration {label}",
+      "location.create": "Create location {name}",
+      "location.delete": "Delete location {name}",
+      "location.update": "Update location {name}",
       "mesa_service": "MESA confirmation for {domain}.{service}",
       "patch_dashboard.append": "Append to {path} on dashboard '{label}'",
       "patch_dashboard.remove": "Remove {path} from dashboard '{label}'",
@@ -1907,6 +1912,12 @@
       "integration.remove.title": "Remove integration {label}",
       "integration.update.body": "This will change the {label} integration in Home Assistant.",
       "integration.update.title": "Update integration {label}",
+      "location.create.body": "This will apply the proposed configuration change. Open Details to review the exact proposed change.",
+      "location.create.title": "Create location {name}",
+      "location.delete.body": "This will remove the selected item. The change may not be reversible.",
+      "location.delete.title": "Delete location {name}",
+      "location.update.body": "This will apply the proposed configuration change. Open Details to review the exact proposed change.",
+      "location.update.title": "Update location {name}",
       "mesa_service.body": "This will run the proposed Home Assistant service action.",
       "mesa_service.title": "MESA confirmation for {domain}.{service}",
       "named.editAutomation.title": "Edit automation '{label}'",

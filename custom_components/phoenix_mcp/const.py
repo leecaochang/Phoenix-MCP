@@ -192,7 +192,7 @@ MAX_VERSIONS_PER_RESOURCE = 20
 # silently failed to record).
 VERSIONED_RESOURCE_TYPES = frozenset(
     {"automation", "script", "scene", "helper", "dashboard", "yaml_config", "file", "entity", "device",
-     "blueprint", "esphome_yaml", "energy", "config_entry"}
+     "blueprint", "esphome_yaml", "energy", "config_entry", "area", "floor"}
 )
 
 # Dashboard card catalog. Which Lovelace cards this instance can actually render,
@@ -1390,6 +1390,10 @@ DIFF_SUMMARY_TEMPLATES: dict[str, str] = {
     # Entity registry.
     "set_entity": "Update registry metadata ({fields}) for {entity_id}",
     "delete_entity": "Delete the registry entry for {entity_id}",
+    # Location registry.
+    "location.create": "Create location {name}",
+    "location.update": "Update location {name}",
+    "location.delete": "Delete location {name}",
     # Device registry.
     "set_device": "Update device registry metadata ({fields}) for {device_id}",
     "remove_device": "Remove {device_id} from config entry {config_entry_id}",
@@ -1599,7 +1603,9 @@ def _approval_summary_body(key: str) -> str:
         return "This will change the {label} integration in Home Assistant."
     if key.startswith(("dashboard", "patch_dashboard", "edit_energy_config")):
         return "This will update the Home Assistant dashboard configuration. Open Details to review the exact proposed change."
-    if key.startswith(("create_", "edit_", "set_", "patch_", "blueprint.")):
+    if key == "location.delete":
+        return "This will remove the selected item. The change may not be reversible."
+    if key.startswith(("create_", "edit_", "set_", "patch_", "blueprint.", "location.")):
         return "This will apply the proposed configuration change. Open Details to review the exact proposed change."
     if key.startswith(("call_service", "mesa_service")):
         return "This will run the proposed Home Assistant service action."
@@ -2547,3 +2553,12 @@ HOME_COMPANION_MAX_CONTEXT_BYTES = 65536
 HOME_COMPANION_MAX_REPORT_ENTITIES = 128
 HOME_COMPANION_MAX_REPORT_NAMES = 8
 HOME_COMPANION_TIMEOUT_SECONDS = 120
+
+
+# Location registry admission and private approval bindings.
+LOCATION_REGISTRY_COLLECTION_LIMIT = 100
+LOCATION_REGISTRY_TEXT_LIMIT = 255
+LOCATION_REGISTRY_BINDING = "_location_registry_binding"
+LOCATION_REGISTRY_FIELDS = frozenset({
+    "name", "icon", "aliases", "floor_id", "level", "labels", "add_labels", "remove_labels",
+})

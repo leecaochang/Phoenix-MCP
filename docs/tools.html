@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <script>(function(){try{var t=localStorage.getItem("phx-docs-theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
   <title>Tools reference &middot; Phoenix MCP docs</title>
-  <meta name="description" content="Every Phoenix MCP tool: the 23 native HA MCP tools plus 145 Phoenix MCP tools, each scoped to the token's permission tree and capabilities." />
+  <meta name="description" content="Every Phoenix MCP tool: the 23 native HA MCP tools plus 146 Phoenix MCP tools, each scoped to the token's permission tree and capabilities." />
   <link rel="icon" href="assets/phoenix-logo.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -25,13 +25,13 @@
         <header class="page-head">
           <p class="breadcrumb"><a href="index.html">Docs</a> / Reference / Tools</p>
           <h1>Tools reference</h1>
-          <p class="lede">Search all 168 tools by name, task, or required capability. Phoenix includes Home Assistant's 23 native MCP tools plus 145 scoped tools for configuration, diagnostics, and control. The Home Companion persona instead exposes a single <a href="#home-request"><code>home_request</code></a> tool.</p>
+          <p class="lede">Search all 169 tools by name, task, or required capability. Phoenix includes Home Assistant's 23 native MCP tools plus 146 scoped tools for configuration, diagnostics, and control. The Home Companion persona instead exposes a single <a href="#home-request"><code>home_request</code></a> tool.</p>
         </header>
 
         <div class="tool-toolbar" role="search">
           <label class="tool-search">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-            <input type="text" id="tool-search-input" placeholder="Search all 168 tools by name or keyword..." aria-label="Search tools" autocomplete="off" />
+            <input type="text" id="tool-search-input" placeholder="Search all 169 tools by name or keyword..." aria-label="Search tools" autocomplete="off" />
           </label>
           <button class="filter-chip" data-cap="all" aria-pressed="true">All</button>
           <button class="filter-chip" data-cap="read" aria-pressed="false">Reads</button>
@@ -288,7 +288,7 @@
 
           <article class="tool" data-cap="discovery" data-search="list_areas list_floors list_zones list_devices get_device registry enumeration">
             <div class="tool-head"><span class="tool-name">list_areas</span><span class="tool-name">list_floors</span><span class="tool-name">list_zones</span><span class="tool-name">list_devices</span><span class="tool-name">get_device</span><span class="badge badge-cap">Registry read</span></div>
-            <p class="tool-desc">List permission-scoped registry data. Areas and floors require an accessible entity. Devices are visible through an explicit device grant or an accessible attached entity.</p>
+            <p class="tool-desc">List permission-scoped registry data. Scoped area and floor listings require an accessible entity; unrestricted pass-through listings also include empty locations. Area results include assigned label IDs. Devices are visible through an explicit device grant or an accessible attached entity.</p>
             <p class="tool-desc"><code>list_devices</code> defaults to enabled entries and accepts <code>registry_state</code> as <code>enabled</code>, <code>disabled</code>, or <code>all</code>. Rows contain safe identity, placement, state, ownership, and model details. <code>get_device</code> adds versions, accessible entities, visible relationships, and allowlisted owner summaries. Sensitive identifiers and config-entry data are omitted.</p>
             <dl><dt>params</dt><dd><code>list_devices</code>: optional <code>registry_state</code>. <code>get_device</code>: <code>device_id</code> (required). The area, floor, and zone list tools take no parameters.</dd></dl>
           </article>
@@ -476,6 +476,14 @@
             <p class="tool-desc">Use <code>add_aliases</code> and <code>remove_aliases</code>; do not send a replacement list. These operations preserve Home Assistant's marker for the entity's current name, even after a rename. They also prevent an empty alias list from removing the entity from voice control.</p>
             <p class="tool-desc">Alias matching is case-insensitive. Adding an existing alias or removing a missing one succeeds with no change. The result and <code>describe_entity</code> both show the names the entity currently answers to.</p>
             <dl><dt>params</dt><dd><code>set_entity</code>: <code>entity_id</code> and a non-empty <code>changes</code> object containing at least one of <code>name</code> / <code>icon</code> / <code>area_id</code> / <code>device_class</code> / <code>enabled</code> / <code>hidden</code> / <code>add_aliases</code> / <code>remove_aliases</code> / <code>add_labels</code> / <code>remove_labels</code> / <code>categories</code> / <code>new_entity_id</code>; <code>delete_entity</code>: <code>entity_id</code></dd></dl>
+          </article>
+
+          <article class="tool" data-cap="system" data-search="set_area_or_floor location area floor registry labels aliases level create update delete">
+            <div class="tool-head"><span class="tool-name">set_area_or_floor</span><span class="badge badge-cap">Registry write</span></div>
+            <p class="tool-desc">Create, update or delete an area or floor using exact registry IDs. This requires <code>cap_registry_write</code>. Scoped tokens need WRITE on every affected registry entity, including disabled entries, plus an explicit WRITE grant on every affected device. Creating locations and editing empty locations require pass-through authority; a scoped floor write also refuses empty child areas.</p>
+            <p class="tool-desc">Use <code>changes.labels</code> to replace an area's label set; <code>[]</code> clears it. Use <code>add_labels</code> and <code>remove_labels</code> to preserve unrelated labels. References must be existing label IDs. Replacement and patches cannot be combined. Floors do not support labels. Both kinds support name, icon and alias replacement; areas support a writable <code>floor_id</code>, and floors support an integer <code>level</code>. Null clears icon, floor assignment or level.</p>
+            <p class="tool-desc">Rename and delete check inherited MESA for the complete affected membership. Unresolvable MESA context refuses; metadata-only fields have no MESA actuation gate. Approval rechecks the exact identity, membership, metadata and MESA context. Writes create history; metadata can be restored to the same surviving location. Deletion clears placement references, does not rewrite consumers, and cannot be restored automatically. Inspect current state after an interrupted write before retrying.</p>
+            <dl><dt>params</dt><dd><code>kind</code> (required): <code>area</code> or <code>floor</code>; <code>operation</code> (required): <code>create</code>, <code>update</code> or <code>delete</code>; <code>location_id</code> required for update/delete and omitted for create; <code>changes</code> required for create/update, with name required for create, and omitted for delete.</dd></dl>
           </article>
 
           <article class="tool" data-cap="system" data-search="set_device device registry rename enable disable area labels mesa version restore">

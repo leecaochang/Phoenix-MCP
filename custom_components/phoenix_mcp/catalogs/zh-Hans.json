@@ -748,7 +748,9 @@
       "typeEsphomeYaml": "ESPHome YAML",
       "typeFile": "文件",
       "typeConfigEntry": "集成/助手设置",
-      "typeEnergy": "能源仪表盘"
+      "typeEnergy": "能源仪表盘",
+      "typeArea": "区域",
+      "typeFloor": "楼层"
     },
     "perms": {
       "addHint": "添加提示",
@@ -950,7 +952,10 @@
       "configuration_recovery.acknowledge": "检查 {resource} 的更改中断后的配置",
       "create_calendar_event": "创建日历事件",
       "update_calendar_event": "更新日历事件",
-      "delete_calendar_event": "删除日历事件"
+      "delete_calendar_event": "删除日历事件",
+      "location.create": "创建位置 {name}",
+      "location.delete": "删除位置 {name}",
+      "location.update": "更新位置 {name}"
     },
     "approvals": {
       "approve": "批准并执行",
@@ -2020,7 +2025,13 @@
       "update_calendar_event.title": "更新日历事件",
       "update_calendar_event.body": "这将应用建议的操作。打开详细信息可查看具体更改内容。",
       "delete_calendar_event.title": "删除日历事件",
-      "delete_calendar_event.body": "此操作将移除所选项目。更改可能无法撤销。"
+      "delete_calendar_event.body": "此操作将移除所选项目。更改可能无法撤销。",
+      "location.create.body": "这将应用建议的配置更改。打开详细信息可查看具体更改内容。",
+      "location.create.title": "创建位置 {name}",
+      "location.delete.body": "此操作将移除所选项目。更改可能无法撤销。",
+      "location.delete.title": "删除位置 {name}",
+      "location.update.body": "这将应用建议的配置更改。打开详细信息可查看具体更改内容。",
+      "location.update.title": "更新位置 {name}"
     },
     "routing": {
       "providerOptions": "决策提供商使用固定的路由选项，不使用思考级别等聊天选项。“刷新模型”会检查模型是否可用，不会执行命令，也不会测试路由准确性。",

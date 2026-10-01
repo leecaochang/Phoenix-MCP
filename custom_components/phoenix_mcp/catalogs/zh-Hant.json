@@ -531,7 +531,13 @@
       "update_calendar_event.title": "更新行事曆事件",
       "update_calendar_event.body": "這將套用建議的操作。開啟詳細資訊可檢視具體更改內容。",
       "delete_calendar_event.title": "刪除行事曆事件",
-      "delete_calendar_event.body": "此操作將移除所選項目。變更可能無法復原。"
+      "delete_calendar_event.body": "此操作將移除所選項目。變更可能無法復原。",
+      "location.create.body": "這將套用建議的設定更改。開啟詳細資訊可檢視具體更改內容。",
+      "location.create.title": "建立位置 {name}",
+      "location.delete.body": "此操作將移除所選項目。變更可能無法復原。",
+      "location.delete.title": "刪除位置 {name}",
+      "location.update.body": "這將套用建議的設定更改。開啟詳細資訊可檢視具體更改內容。",
+      "location.update.title": "更新位置 {name}"
     },
     "approvals": {
       "approve": "核准並執行",
@@ -873,7 +879,9 @@
       "typeHelper": "輔助項目",
       "typeScene": "場景",
       "typeScript": "腳本",
-      "typeYamlConfig": "YAML 設定"
+      "typeYamlConfig": "YAML 設定",
+      "typeArea": "區域",
+      "typeFloor": "樓層"
     },
     "common": {
       "after": "更改後",
@@ -1002,7 +1010,10 @@
       "configuration_recovery.acknowledge": "檢查 {resource} 的變更中斷後的設定",
       "create_calendar_event": "建立行事曆事件",
       "update_calendar_event": "更新行事曆事件",
-      "delete_calendar_event": "刪除行事曆事件"
+      "delete_calendar_event": "刪除行事曆事件",
+      "location.create": "建立位置 {name}",
+      "location.delete": "刪除位置 {name}",
+      "location.update": "更新位置 {name}"
     },
     "inject": {
       "mesaProfile": "MESA 策略",

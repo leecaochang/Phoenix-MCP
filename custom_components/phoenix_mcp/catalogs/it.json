@@ -566,7 +566,13 @@
       "update_calendar_event.title": "Aggiornare un evento del calendario",
       "update_calendar_event.body": "Verrà applicata l'azione proposta. Apri Dettagli per rivedere la modifica esatta proposta.",
       "delete_calendar_event.title": "Eliminare un evento del calendario",
-      "delete_calendar_event.body": "Verrà rimosso l’elemento selezionato. La modifica potrebbe non essere reversibile."
+      "delete_calendar_event.body": "Verrà rimosso l’elemento selezionato. La modifica potrebbe non essere reversibile.",
+      "location.create.body": "Verrà applicata la modifica di configurazione proposta. Apri Dettagli per rivedere la modifica esatta proposta.",
+      "location.create.title": "Crea posizione {name}",
+      "location.delete.body": "Verrà rimosso l’elemento selezionato. La modifica potrebbe non essere reversibile.",
+      "location.delete.title": "Elimina posizione {name}",
+      "location.update.body": "Verrà applicata la modifica di configurazione proposta. Apri Dettagli per rivedere la modifica esatta proposta.",
+      "location.update.title": "Aggiorna posizione {name}"
     },
     "mesaSuggestion": {
       "baseline_note": " Proibito corrisponde alla base predefinita integrata per questo dominio, quindi il profilo creato rende esplicita tale intenzione; scegli conferma in Revisione per consentire invece il controllo dell'agente dietro approvazioni.",
@@ -1579,7 +1585,9 @@
       "typeHelper": "Aiutante",
       "typeScene": "Scena",
       "typeScript": "Script",
-      "typeYamlConfig": "Configurazione YAML"
+      "typeYamlConfig": "Configurazione YAML",
+      "typeArea": "Zona",
+      "typeFloor": "Piano"
     },
     "shell": {
       "agentChat": "Agent Chat",
@@ -1913,7 +1921,10 @@
       "configuration_recovery.acknowledge": "Controlla la configurazione dopo una modifica interrotta a {resource}",
       "create_calendar_event": "Creare un evento del calendario",
       "update_calendar_event": "Aggiornare un evento del calendario",
-      "delete_calendar_event": "Eliminare un evento del calendario"
+      "delete_calendar_event": "Eliminare un evento del calendario",
+      "location.create": "Crea posizione {name}",
+      "location.delete": "Elimina posizione {name}",
+      "location.update": "Aggiorna posizione {name}"
     },
     "wizard": {
       "accessSub": "Espandi il gruppo <code>light</code> e scegli una luce che puoi verificare. Seleziona <strong>W</strong> per concedere l'accesso in lettura e scrittura. Concedi un intero dispositivo o espandilo per scegliere una sola entità. Puoi aggiungere altre autorizzazioni in seguito.",

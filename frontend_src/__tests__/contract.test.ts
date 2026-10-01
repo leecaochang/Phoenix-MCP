@@ -94,6 +94,8 @@ const VERSION_RESOURCE_TYPES = {
   energy: true,
   file: true,
   config_entry: true,
+  area: true,
+  floor: true,
 } satisfies Record<VersionResourceType, true>;
 
 describe("frontend/backend version resource type contract", () => {

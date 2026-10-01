@@ -56,6 +56,8 @@ export const RESOURCE_TYPE_LABEL_KEYS: Record<string, string> = {
   energy: "changes.typeEnergy",
   file: "changes.typeFile",
   config_entry: "changes.typeConfigEntry",
+  area: "changes.typeArea",
+  floor: "changes.typeFloor",
 };
 
 function resourceTypeLabel(rt: string): string {

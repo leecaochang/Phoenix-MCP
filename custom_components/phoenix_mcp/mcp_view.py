@@ -49,6 +49,8 @@ from .data import PhoenixData
 from .tools.esphome import _tool_search_esphome_yaml, _tool_list_esphome_jobs, _tool_list_esphome_devices
 from .template_render import TemplateRenderError, async_render_template_for_token
 from .request_authority import (AuthorityChangedError, RequestAuthority, check_request_authority, policy_version, request_authority)
+from .tool_common import _create_registry_mesa_approval
+from .tools.locations import _tool_set_area_or_floor, _execute_set_area_or_floor, restore_location_version
 from .tool_input import tool_arguments_error
 from .device_semantics import device_registry_snapshot, update_device_registry_entry
 from .service_targets import secondary_target_error, unsupported_secondary_targets
@@ -2736,41 +2738,6 @@ def _mesa_preview(decision: RegistryMesaDecision) -> dict[str, Any]:
     }
 
 
-async def _create_registry_mesa_approval(
-    hass: HomeAssistant,
-    data: PhoenixData,
-    token: TokenRecord,
-    *,
-    tool_name: str,
-    args: dict[str, Any],
-    diff: dict[str, Any],
-    request_id: str,
-    client_ip: str | None,
-    cap_name: str = "cap_registry_write",
-) -> tuple[dict, str, str]:
-    """Create the normal registry approval when only MESA requires confirm."""
-    from .approvals import (  # noqa: PLC0415
-        async_create_pending_approval,
-        create_approval_notification,
-        fire_approval_requested_event,
-    )
-
-    async with data.store.async_lock:
-        approval = await async_create_pending_approval(
-            data.store,
-            token_id=token.id,
-            token_name=token.name,
-            tool_name=tool_name,
-            cap_name=cap_name,
-            args=args,
-            diff=diff,
-            request_id=request_id,
-            client_ip=client_ip,
-        )
-    create_approval_notification(hass, approval)
-    fire_approval_requested_event(hass, approval)
-    return await _pending_or_inline(hass, data, token, approval)
-
 
 def _registry_write_precheck(
     args: dict,
@@ -5411,6 +5378,8 @@ async def async_restore_version(
                 return await _execute_set_esphome_yaml(
                     {"file": resource_id, "content": restorable}, token, hass, data)
             return await _execute_write_file({"path": resource_id, "content": restorable}, token, hass, data)
+        if resource_type in {"area", "floor"}:
+            return await restore_location_version(resource_type, resource_id, target, token, hass, data)
         if resource_type == "entity":
             # Re-apply the registry metadata. Restoring a deleted
             # entry's snapshot lands here too and fails cleanly in set_entity if the
@@ -9658,6 +9627,7 @@ _register_executor("edit_dashboard_card", _execute_edit_dashboard_card)
 _register_executor("delete_dashboard_card", _execute_delete_dashboard_card)
 _register_executor("patch_dashboard", _execute_patch_dashboard)
 _register_executor("edit_energy_config", _execute_edit_energy_config)
+_register_executor("set_area_or_floor", _execute_set_area_or_floor)
 _register_executor("set_entity", _execute_set_entity)
 _register_executor("set_device", _execute_set_device)
 _register_executor("remove_device", _execute_remove_device)
@@ -9745,6 +9715,7 @@ _register_tool("get_blueprint", _tool_get_blueprint)
 _register_tool("create_blueprint", _tool_create_blueprint)
 _register_tool("edit_blueprint", _tool_edit_blueprint)
 _register_tool("delete_blueprint", _tool_delete_blueprint)
+_register_tool("set_area_or_floor", _tool_set_area_or_floor)
 _register_tool("set_entity", _tool_set_entity)
 _register_tool("set_device", _tool_set_device)
 _register_tool("remove_device", _tool_remove_device)

@@ -61,6 +61,7 @@ def _backend_version_resource_types() -> set[str]:
     tools/esphome.py and took "esphome_yaml" with them, which a single-file scan
     silently reported as a removed resource type.
     """
+    import ast
     import pathlib
 
     from custom_components.phoenix_mcp import mcp_view
@@ -70,7 +71,13 @@ def _backend_version_resource_types() -> set[str]:
     for path in package.rglob("*.py"):
         if "mesa_core" in path.parts:
             continue
-        found |= set(_VERSION_TYPE_RE.findall(path.read_text(encoding="utf-8")))
+        source = path.read_text(encoding="utf-8")
+        found |= set(_VERSION_TYPE_RE.findall(source))
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, ast.keyword) and node.arg == "resource_type" and isinstance(node.value, ast.IfExp):
+                for branch in (node.value.body, node.value.orelse):
+                    if isinstance(branch, ast.Constant) and isinstance(branch.value, str):
+                        found.add(branch.value)
     return found
 
 

@@ -648,7 +648,9 @@
       "typeHelper": "Entrée",
       "typeScene": "Scène",
       "typeScript": "Script",
-      "typeYamlConfig": "Configuration YAML"
+      "typeYamlConfig": "Configuration YAML",
+      "typeArea": "Zone",
+      "typeFloor": "Étage"
     },
     "audit": {
       "outcomeAllowed": "Autorisé",
@@ -1566,7 +1568,10 @@
       "configuration_recovery.acknowledge": "Vérifier la configuration après une modification interrompue de {resource}",
       "create_calendar_event": "Créer un événement du calendrier",
       "update_calendar_event": "Modifier un événement du calendrier",
-      "delete_calendar_event": "Supprimer un événement du calendrier"
+      "delete_calendar_event": "Supprimer un événement du calendrier",
+      "location.create": "Créer le lieu {name}",
+      "location.delete": "Supprimer le lieu {name}",
+      "location.update": "Mettre à jour le lieu {name}"
     },
     "version": {
       "card.added": "ajouté {subject} ({where})",
@@ -2020,7 +2025,13 @@
       "update_calendar_event.title": "Modifier un événement du calendrier",
       "update_calendar_event.body": "Cela appliquera la modification de configuration proposée. Ouvrez Détails pour réviser la modification proposée exacte.",
       "delete_calendar_event.title": "Supprimer un événement du calendrier",
-      "delete_calendar_event.body": "Cette action supprimera l’élément sélectionné. La modification peut être irréversible."
+      "delete_calendar_event.body": "Cette action supprimera l’élément sélectionné. La modification peut être irréversible.",
+      "location.create.body": "Cela appliquera la modification de configuration proposée. Ouvrez Détails pour réviser la modification proposée exacte.",
+      "location.create.title": "Créer le lieu {name}",
+      "location.delete.body": "Cette action supprimera l’élément sélectionné. La modification peut être irréversible.",
+      "location.delete.title": "Supprimer le lieu {name}",
+      "location.update.body": "Cela appliquera la modification de configuration proposée. Ouvrez Détails pour réviser la modification proposée exacte.",
+      "location.update.title": "Mettre à jour le lieu {name}"
     },
     "routing": {
       "providerOptions": "Les fournisseurs de décisions utilisent des choix de routage fixes, sans options de Chat telles que les niveaux de raisonnement. Actualiser les modèles vérifie leur disponibilité sans exécuter de commande et ne teste pas la précision du routage.",

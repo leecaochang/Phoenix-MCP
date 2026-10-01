@@ -604,7 +604,13 @@
       "update_calendar_event.title": "Изменить событие календаря",
       "update_calendar_event.body": "Будет применено предложенное действие. Откройте «Подробности», чтобы просмотреть точное предлагаемое изменение.",
       "delete_calendar_event.title": "Удалить событие календаря",
-      "delete_calendar_event.body": "Выбранный элемент будет удалён. Изменение может оказаться необратимым."
+      "delete_calendar_event.body": "Выбранный элемент будет удалён. Изменение может оказаться необратимым.",
+      "location.create.body": "Будет применено предложенное изменение конфигурации. Откройте «Подробности», чтобы просмотреть точное предлагаемое изменение.",
+      "location.create.title": "Создать расположение {name}",
+      "location.delete.body": "Выбранный элемент будет удалён. Изменение может оказаться необратимым.",
+      "location.delete.title": "Удалить расположение {name}",
+      "location.update.body": "Будет применено предложенное изменение конфигурации. Откройте «Подробности», чтобы просмотреть точное предлагаемое изменение.",
+      "location.update.title": "Обновить расположение {name}"
     },
     "approvals": {
       "approve": "Одобрить и выполнить",
@@ -948,7 +954,9 @@
       "typeHelper": "Вспомогательный объект",
       "typeScene": "Сцена",
       "typeScript": "Скрипт",
-      "typeYamlConfig": "Конфигурация YAML"
+      "typeYamlConfig": "Конфигурация YAML",
+      "typeArea": "Зона",
+      "typeFloor": "Этаж"
     },
     "common": {
       "after": "После",
@@ -1083,7 +1091,10 @@
       "configuration_recovery.acknowledge": "Проверить конфигурацию после прерванного изменения {resource}",
       "create_calendar_event": "Создать событие календаря",
       "update_calendar_event": "Изменить событие календаря",
-      "delete_calendar_event": "Удалить событие календаря"
+      "delete_calendar_event": "Удалить событие календаря",
+      "location.create": "Создать расположение {name}",
+      "location.delete": "Удалить расположение {name}",
+      "location.update": "Обновить расположение {name}"
     },
     "mesa": {
       "addAreaProfile": "Добавить профиль пространства",

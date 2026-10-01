@@ -387,7 +387,9 @@
       "typeHelper": "도우미",
       "typeScene": "장면",
       "typeScript": "스크립트",
-      "typeYamlConfig": "YAML 구성"
+      "typeYamlConfig": "YAML 구성",
+      "typeArea": "구역",
+      "typeFloor": "층"
     },
     "perms": {
       "addHint": "힌트 추가",
@@ -729,7 +731,10 @@
       "configuration_recovery.acknowledge": "{resource}의 변경 중단 후 구성 확인",
       "create_calendar_event": "캘린더 일정 생성",
       "update_calendar_event": "캘린더 일정 수정",
-      "delete_calendar_event": "캘린더 일정 삭제"
+      "delete_calendar_event": "캘린더 일정 삭제",
+      "location.create": "위치 {name} 만들기",
+      "location.delete": "위치 {name} 삭제",
+      "location.update": "위치 {name} 업데이트"
     },
     "adminError": {
       "activeTokenRequired": "{field}은(는) 활성 토큰을 참조해야 합니다.",
@@ -1630,7 +1635,13 @@
       "update_calendar_event.title": "캘린더 일정 수정",
       "update_calendar_event.body": "제안된 작업이 적용됩니다. 정확한 변경 내용을 확인하려면 세부 정보를 열어 주십시오.",
       "delete_calendar_event.title": "캘린더 일정 삭제",
-      "delete_calendar_event.body": "선택한 항목을 삭제합니다. 변경 사항을 되돌리지 못할 수 있습니다."
+      "delete_calendar_event.body": "선택한 항목을 삭제합니다. 변경 사항을 되돌리지 못할 수 있습니다.",
+      "location.create.body": "제안된 구성 변경 사항이 적용됩니다. 정확한 변경 내용을 확인하려면 세부 정보를 열어 주십시오.",
+      "location.create.title": "위치 {name} 만들기",
+      "location.delete.body": "선택한 항목을 삭제합니다. 변경 사항을 되돌리지 못할 수 있습니다.",
+      "location.delete.title": "위치 {name} 삭제",
+      "location.update.body": "제안된 구성 변경 사항이 적용됩니다. 정확한 변경 내용을 확인하려면 세부 정보를 열어 주십시오.",
+      "location.update.title": "위치 {name} 업데이트"
     },
     "approvals": {
       "approve": "승인 및 실행",
