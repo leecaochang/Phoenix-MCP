@@ -28,7 +28,7 @@ jobs:
         # translations/: hassfest validates translations/en.json against a closed
         # set of Home Assistant categories and errors on anything else.
         #
-        uses: home-assistant/actions/hassfest@a7c616ce81ccda50150bf1595786c71b1883fabb
+        uses: home-assistant/actions/hassfest@06749dd8c0b54f350bc69c8752456cee498808a3
 
   compatibility-canary:
     name: Hassfest current-rules canary
