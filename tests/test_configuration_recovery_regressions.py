@@ -50,6 +50,113 @@ async def test_real_dashboard_registry_restore_updates_only_supported_fields(has
     assert next(r for r in rows if r["id"] == row["id"])["title"] == "Before"
 
 
+@pytest.mark.parametrize("operation", ["create", "edit"])
+@pytest.mark.parametrize("field,previous,wanted", [
+    ("title", "Before", "After"),
+    ("icon", "mdi:home", "mdi:chart-box"),
+    ("show_in_sidebar", False, True),
+    ("require_admin", False, True),
+])
+async def test_dashboard_registry_stale_metadata_retains_barrier(
+    hass, hass_admin_user, operation, field, previous, wanted,
+):
+    from custom_components.phoenix_mcp.config_recovery import ConfigurationRecoveryError
+    from custom_components.phoenix_mcp.tools import lovelace
+    assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+    t, d = token(cap_lovelace_write="allow"), runtime()
+    config = {"url_path": "readback-board", "title": "Before", field: previous}
+    if operation == "edit":
+        created = await lovelace._execute_create_dashboard({"config": config}, t, hass, d)
+        row_id = body(created)["dashboard"]["id"]
+    submissions = []
+    original_snapshot = lovelace._dashboard_registry_snapshot
+
+    async def dispatch(host, command, payload):
+        result = await async_ws_command(host, command, payload)
+        if command.endswith(("/create", "/update")):
+            submissions.append(command)
+        return result
+
+    async def stale_readback(host, key):
+        snapshot = await original_snapshot(host, key)
+        if submissions and snapshot.get("dashboard"):
+            snapshot["dashboard"][field] = previous
+        return snapshot
+
+    with patch.object(lovelace, "async_ws_command", side_effect=dispatch), patch.object(
+        lovelace, "_dashboard_registry_snapshot", side_effect=stale_readback,
+    ):
+        if operation == "create":
+            result = await lovelace._execute_create_dashboard(
+                {"config": {**config, field: wanted}}, t, hass, d,
+            )
+        else:
+            result = await lovelace._execute_edit_dashboard(
+                {"dashboard_id": row_id, "config": {field: wanted}}, t, hass, d,
+            )
+    assert len(submissions) == 1
+    assert body(result)["status"] == "partial"
+    recovery = d.config_recovery.get(body(result)["recovery_id"])
+    assert recovery["phase"] == "partial" and recovery.get("source") is None
+    actual = await original_snapshot(hass, "readback-board")
+    assert actual["dashboard"][field] == wanted
+    assert recovery["expected"]["dashboard"][field] == wanted
+    with pytest.raises(ConfigurationRecoveryError):
+        await d.config_recovery.begin(recovery["resource"], "retry", t.id, {})
+
+
+async def test_dashboard_registry_missing_submitted_field_is_incomplete(hass, hass_admin_user):
+    from custom_components.phoenix_mcp.tools import lovelace
+    assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+    t, d = token(cap_lovelace_write="allow"), runtime()
+    created = await lovelace._execute_create_dashboard(
+        {"config": {"url_path": "nullable-board", "title": "Before", "icon": "mdi:home"}}, t, hass, d,
+    )
+    row_id = body(created)["dashboard"]["id"]
+    original_snapshot = lovelace._dashboard_registry_snapshot
+    applied = False
+
+    async def dispatch(host, command, payload):
+        nonlocal applied
+        result = await async_ws_command(host, command, payload)
+        if command.endswith("/update"):
+            applied = True
+        return result
+
+    async def incomplete_readback(host, key):
+        snapshot = await original_snapshot(host, key)
+        if applied:
+            snapshot["dashboard"].pop("icon")
+        return snapshot
+
+    with patch.object(lovelace, "async_ws_command", side_effect=dispatch), patch.object(
+        lovelace, "_dashboard_registry_snapshot", side_effect=incomplete_readback,
+    ):
+        result = await lovelace._execute_edit_dashboard(
+            {"dashboard_id": row_id, "config": {"icon": "mdi:chart-box"}}, t, hass, d,
+        )
+    assert applied and body(result)["status"] == "partial"
+    assert (await original_snapshot(hass, row_id))["dashboard"]["icon"] == "mdi:chart-box"
+    assert d.config_recovery.get(body(result)["recovery_id"])["phase"] == "partial"
+
+
+async def test_dashboard_registry_native_null_clear_is_verified(hass, hass_admin_user):
+    from custom_components.phoenix_mcp.tools import lovelace
+    assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+    t, d = token(cap_lovelace_write="allow"), runtime()
+    created = await lovelace._execute_create_dashboard(
+        {"config": {"url_path": "clear-board", "title": "Before", "icon": "mdi:home"}}, t, hass, d,
+    )
+    row_id = body(created)["dashboard"]["id"]
+    result = await lovelace._execute_edit_dashboard(
+        {"dashboard_id": row_id, "config": {"icon": None}}, t, hass, d,
+    )
+    assert body(result)["status"] == "verified"
+    observed = await lovelace._dashboard_registry_snapshot(hass, row_id)
+    assert "icon" not in observed["dashboard"]
+    assert d.config_recovery.get(body(result)["recovery_id"])["source"] == observed
+
+
 async def test_real_dashboard_layout_write_returns_recovery_id(hass):
     assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
     d = runtime()
@@ -57,6 +164,43 @@ async def test_real_dashboard_layout_write_returns_recovery_id(hass):
     assert result[1] == "allowed", result
     assert d.config_recovery.records()[0]["phase"] == "verified"
     assert body(result)["recovery_id"] == d.config_recovery.records()[0]["id"]
+
+
+@pytest.mark.parametrize("stale_readback", [True, False])
+async def test_dashboard_layout_restore_records_only_verified_history(hass, stale_readback):
+    from custom_components.phoenix_mcp.tools import lovelace
+    from custom_components.phoenix_mcp.ws_dispatch import async_get_lovelace_config, async_save_lovelace_config
+    assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+    t, d = token(cap_lovelace_write="allow"), runtime()
+    before, after = {"views": [{"title": "Before"}]}, {"views": [{"title": "After"}]}
+    await lovelace._execute_set_dashboard_config({"config": before}, t, hass, d)
+    edited = await lovelace._execute_set_dashboard_config({"config": after}, t, hass, d)
+    args = {"recovery_id": body(edited)["recovery_id"], "side": "before"}
+    receipt = body(await _tool_restore_configuration(args, t, hass, d))
+    args.update({key: receipt[key] for key in ("snapshot_digest", "target_fingerprint")})
+    previous_versions = {version.id for version in d.versions.list_recent()}
+    submissions = []
+
+    async def save(host, url_path, config):
+        await async_save_lovelace_config(host, url_path, config)
+        submissions.append(config)
+
+    async def read(host, url_path):
+        if submissions and stale_readback:
+            return after
+        return await async_get_lovelace_config(host, url_path)
+
+    with patch.object(lovelace, "async_save_lovelace_config", side_effect=save), patch.object(
+        lovelace, "async_get_lovelace_config", side_effect=read,
+    ):
+        result = await _tool_restore_configuration(args, t, hass, d)
+    assert submissions == [before]
+    assert await async_get_lovelace_config(hass, None) == before
+    response = body(result)
+    assert response["status"] == ("partial" if stale_readback else "verified")
+    assert d.config_recovery.get(response["recovery_id"])["phase"] == response["status"]
+    current_versions = {version.id for version in d.versions.list_recent()}
+    assert len(current_versions - previous_versions) == (0 if stale_readback else 1)
 
 
 async def test_file_restore_preview_compares_live_content(hass):

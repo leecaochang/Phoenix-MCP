@@ -124,9 +124,14 @@ async def _recoverable_dashboard_registry_write(
                         "status": "unknown", "recovery_id": rid,
                         "message": "Dashboard registry operation outcome is unknown; inspect before retrying.",
                     })), "allowed", f"dashboard:{dashboard_id}"
-                expected_exists = command != "lovelace/dashboards/delete"
+                expected_exists = expected_row is not None
+                observed_row = after.get("dashboard")
                 if after.get("exists") is not expected_exists or (
-                    expected_exists and after.get("dashboard") is None
+                    expected_exists and (
+                        not isinstance(observed_row, dict)
+                        or any(observed_row.get(key) != value
+                               for key, value in (expected_row or {}).items())
+                    )
                 ):
                     await recovery.mark(rid, "partial", observed=after)
                     return _tool_success(json.dumps({

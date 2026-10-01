@@ -883,6 +883,8 @@ async def _execute_restore_dashboard_layout(args, record, side, snapshot, token,
         )
         if result is None or result[1] != "allowed":
             return result or (_tool_error("Dashboard layout restore was not applied."), "invalid_request", tool)
+        if json.loads(result[0]["content"][0]["text"]).get("status") != "verified":
+            return result
         await _record_version(
             data, token, resource_type="dashboard", resource_id=snapshot["resource_id"],
             action="edit", before=before, after=snapshot["config"],
