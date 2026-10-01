@@ -1736,7 +1736,17 @@ async def _tool_log_query(
 async def _tool_get_logs(
     args: dict, token: TokenRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """MCP tool: read non-Phoenix system_log entries."""
+    """MCP tool: read the system ring or protected fault-dump blocks."""
+    if effective_cap(token, "cap_log_read") == CAP_DENY:
+        return _tool_error("Forbidden."), "denied", "get_logs"
+    source = args.get("source", "system_log")
+    if source == "fault_log":
+        from .fault_log import async_fault_log_query
+        return await async_fault_log_query(args, token, hass)
+    if source != "system_log":
+        return _tool_error("source must be system_log or fault_log."), "invalid_request", "get_logs"
+    if "order" in args:
+        return _tool_error("order is supported only for fault_log."), "invalid_request", "get_logs"
     return await _tool_log_query(
         args, token, hass, tool_name="get_logs", phoenix_only=False
     )

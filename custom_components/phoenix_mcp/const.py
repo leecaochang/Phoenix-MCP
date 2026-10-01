@@ -1174,6 +1174,15 @@ VACUUM_CLEAN_AREA_BIT = 16384
 # Maximum number of log buckets returned by the MCP diagnostics tools.
 MAX_LOG_ENTRIES = 100
 
+# Fixed crash-diagnostic source and independent input/output budgets.
+FAULT_LOG_FILENAME = "home-assistant.log.fault"
+FAULT_LOG_MAX_BYTES = 512 * 1024
+FAULT_LOG_MAX_LINES = 2000
+FAULT_LOG_MAX_BLOCK_BYTES = 32 * 1024
+FAULT_LOG_MAX_PAGE_BYTES = 64 * 1024
+FAULT_LOG_DEFAULT_LIMIT = 10
+FAULT_LOG_MAX_CURSOR_LEN = 1024
+
 # Logbook query bounds. Search is post-retrieval and never widens these windows.
 MAX_LOGBOOK_RESOURCE_IDS = 100
 MAX_LOGBOOK_HOME_DAYS = 7

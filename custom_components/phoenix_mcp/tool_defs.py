@@ -816,47 +816,58 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "first. Phoenix MCP's own records are excluded. The response reports source status and "
             "coverage, effective filters, every retained message variant, and stateless cursor "
             "pagination. This is not a continuous raw log: repeated records share one bucket and "
-            "live bucket updates can move records between pages."
+            "live bucket updates can move records between pages. Set source=fault_log for a protected "
+            "bounded tail of home-assistant.log.fault, requiring both Log read and Diagnostics. "
+            "Fault dumps preserve all thread lines within each block, support scrubbed search, "
+            "block order and whole-block cursor paging, and report incomplete coverage. "
+            "They have no timestamps or log levels; absent/empty differs from unreadable."
         ),
         "cap": "cap_log_read",
         "inputSchema": {
             "type": "object",
             "properties": {
+                "source": {
+                    "type": "string", "enum": ["system_log", "fault_log"],
+                    "default": "system_log",
+                    "description": "system_log reads the HA ring; fault_log reads native fault dumps and also requires Diagnostics.",
+                },
+                "order": {
+                    "type": "string", "enum": ["newest_first", "oldest_first"],
+                    "description": "fault_log only. Order whole dumps; defaults to newest_first. Lines inside each dump stay in original order.",
+                },
                 "level": {
                     "type": "string",
                     "enum": ["WARNING", "ERROR"],
-                    "description": "Minimum log level. WARNING returns WARNING+ERROR; ERROR returns ERROR only. Defaults to WARNING. Home Assistant's system log holds WARNING and above only, so INFO and DEBUG entries never enter it and cannot be read through this tool; asking for one is an error rather than a WARNING result.",
-                    "default": "WARNING",
+                    "description": "system_log only. Minimum log level. WARNING returns WARNING+ERROR; ERROR returns ERROR only. Defaults to WARNING. Home Assistant's system log holds WARNING and above only, so INFO and DEBUG entries never enter it and cannot be read through this tool; asking for one is an error rather than a WARNING result.",
                 },
                 "integration": {
                     "type": "string",
                     "maxLength": 512,
-                    "description": "Optional integration name to filter by (e.g. 'hue', 'mqtt'). Matches homeassistant.components.<name> and custom_components.<name>.",
+                    "description": "system_log only. Optional integration name to filter by (e.g. 'hue', 'mqtt'). Matches homeassistant.components.<name> and custom_components.<name>.",
                 },
                 "logger": {
                     "type": "string",
                     "maxLength": 512,
-                    "description": "Optional exact logger-name prefix, e.g. homeassistant.components.zha.",
+                    "description": "system_log only. Optional exact logger-name prefix, e.g. homeassistant.components.zha.",
                 },
                 "search": {
                     "type": "string",
                     "maxLength": 512,
-                    "description": "Case-insensitive literal search across already-scrubbed messages and exceptions.",
+                    "description": "Case-insensitive literal search after scrubbing; fault_log matches whole blocks and preserves every line.",
                 },
                 "since": {
                     "type": "string",
-                    "description": "Optional ISO timestamp or relative time. Filters by each bucket's latest occurrence.",
+                    "description": "system_log only. Optional ISO timestamp or relative time. Filters by each bucket's latest occurrence.",
                 },
                 "until": {
                     "type": "string",
-                    "description": "Optional ISO timestamp or relative time. Filters by each bucket's latest occurrence.",
+                    "description": "system_log only. Optional ISO timestamp or relative time. Filters by each bucket's latest occurrence.",
                 },
                 "limit": {
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 100,
-                    "default": 50,
-                    "description": "Maximum number of entries to return (1-100, default 50).",
+                    "description": "Maximum entries (1-100): system_log buckets default 50; fault_log whole blocks default 10, also bounded by response bytes.",
                 },
                 "cursor": {
                     "type": "string",

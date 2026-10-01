@@ -1085,14 +1085,19 @@ def _safe_log_location(value: Any, hass: HomeAssistant, *, root_cause: bool) -> 
     return result
 
 
-def _strict_phoenix_log_text(text: str, token: TokenRecord, hass: HomeAssistant) -> str:
-    """Apply the stronger Phoenix self-diagnostics text boundary."""
+def _strict_diagnostic_text(text: str) -> str:
+    """Scrub diagnostic credentials, topology and opaque identifiers."""
     scrubbed = _scrub_diagnostic_str(_scrub_log_text(text))
     scrubbed = _UUID_RE.sub("<redacted-id>", scrubbed)
     scrubbed = _ULID_RE.sub("<redacted-id>", scrubbed)
     scrubbed = _LONG_HEX_RE.sub("<redacted-id>", scrubbed)
 
-    return redact_inaccessible_entity_ids_in_text(scrubbed, token, hass)
+    return scrubbed
+
+
+def _strict_phoenix_log_text(text: str, token: TokenRecord, hass: HomeAssistant) -> str:
+    """Apply the stronger Phoenix self-diagnostics text boundary."""
+    return redact_inaccessible_entity_ids_in_text(_strict_diagnostic_text(text), token, hass)
 
 
 def _log_filter_fingerprint(filters: dict[str, Any], phoenix_only: bool) -> str:
