@@ -915,7 +915,12 @@ def _group_member_args(args: dict) -> list[dict[str, Any]] | None:
     members = args.get("members")
     if not isinstance(members, list) or not 1 <= len(members) <= 32:
         return None
-    return members if all(isinstance(item, dict) for item in members) else None
+    return members if all(
+        isinstance(item, dict) and set(item) == {"device_id", "endpoint"}
+        and isinstance(item["device_id"], str) and item["device_id"]
+        and isinstance(item["endpoint"], int) and not isinstance(item["endpoint"], bool)
+        and 1 <= item["endpoint"] <= 254 for item in members
+    ) else None
 
 
 async def _resolve_group_members(

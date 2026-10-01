@@ -306,12 +306,12 @@ class TestPatchDashboard:
             {"path": ["views", 0, "title"], "value": "x"}, _token(), h, _data()[0])
         assert outcome == "invalid_request"
 
-    async def test_wrong_shaped_op_falls_back_to_set(self, hass, lovelace_env):
-        """str_arg degrades a wrong-shaped argument to absent, never to str(value)."""
+    async def test_wrong_shaped_op_is_refused_without_writing(self, hass, lovelace_env):
+        """Malformed change kinds must not silently select another operation."""
         h, _l = lovelace_env
         await _seed(h)
         _c, outcome, _ = await _call(
             {"path": ["views", 0, "title"], "op": ["remove"], "value": "Kept"},
             _token(), h, _data()[0])
-        assert outcome == "allowed"
-        assert (await async_get_lovelace_config(h, None))["views"][0]["title"] == "Kept"
+        assert outcome == "invalid_request"
+        assert await async_get_lovelace_config(h, None) == LAYOUT

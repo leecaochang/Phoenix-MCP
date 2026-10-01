@@ -1149,9 +1149,9 @@ class TestEntityAliases:
 
     @pytest.mark.parametrize("field", ["add_aliases", "remove_aliases"])
     @pytest.mark.parametrize("value,fragment", [
-        (5, "string or a list of strings"),
-        ({"a": 1}, "string or a list of strings"),
-        (["ok", 7], "not one"),
+        (5, "string or array"),
+        ({"a": 1}, "string or array"),
+        (["ok", 7], "must be string"),
         (["x" * 300], "longer than"),
     ])
     async def test_a_wrong_shaped_value_is_refused_not_degraded(
@@ -1179,7 +1179,7 @@ class TestEntityAliases:
         assert outcome == "invalid_request"
         assert "at most" in content["content"][0]["text"]
 
-    async def test_a_caller_supplied_absolute_list_is_ignored(self, hass, reg_env):
+    async def test_a_caller_supplied_absolute_list_is_refused(self, hass, reg_env):
         """The exemption in test_tool_arg_schema.py depends on this.
 
         `aliases` is read by the executor for the restore path only. If a caller
@@ -1188,7 +1188,7 @@ class TestEntityAliases:
         eid = reg_env["light_kitchen"]
         content, outcome, _ = await self._set(hass, eid, aliases=[])
         assert outcome == "invalid_request"
-        assert "at least one of" in content["content"][0]["text"]
+        assert "unsupported fields" in content["content"][0]["text"]
         assert self._aliases(hass, eid) == [er.COMPUTED_NAME]
 
     async def test_write_scope_is_required(self, hass, reg_env):

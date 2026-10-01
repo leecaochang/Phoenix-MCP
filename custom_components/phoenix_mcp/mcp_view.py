@@ -47,7 +47,8 @@ from .const import AGENTCLI_CLIENT_IP, AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, PHOE
 from .data import PhoenixData
 from .tools.esphome import _tool_search_esphome_yaml, _tool_list_esphome_jobs, _tool_list_esphome_devices
 from .template_render import TemplateRenderError, async_render_template_for_token
-from .request_authority import (AuthorityChangedError, RequestAuthority, check_request_authority, finite_json_numbers, policy_version, request_authority)
+from .request_authority import (AuthorityChangedError, RequestAuthority, check_request_authority, policy_version, request_authority)
+from .tool_input import tool_arguments_error
 from .device_semantics import device_registry_snapshot, update_device_registry_entry
 from .service_targets import secondary_target_error, unsupported_secondary_targets
 from .tool_contracts import normalize_tool_args, unknown_argument_error
@@ -5504,8 +5505,8 @@ async def async_execute_approved_tool(
     Raises ExecutorNotRegistered if no executor is registered for the tool_name,
     which is the ONLY failure here that proves nothing was dispatched.
     """
-    if not finite_json_numbers(args):
-        return _tool_error("Non-finite numbers are not allowed."), "invalid_request", tool_name
+    if error := tool_arguments_error(args):
+        return _tool_error(error), "invalid_request", tool_name
     fn = _EXECUTOR_REGISTRY.get(tool_name)
     if fn is None:
         raise ExecutorNotRegistered(f"No executor registered for tool {tool_name!r}")
@@ -7667,6 +7668,8 @@ async def _call_tool(
     is enforced by an adversarial sweep over the whole surface instead.
     """
     check_request_authority()
+    if error := tool_arguments_error(arguments):
+        return _tool_error(error), "invalid_request", tool_name
     from .const import APPROVAL_TARGETS_KEY
     if APPROVAL_TARGETS_KEY in arguments:
         return _tool_error("Approval target bindings are server-owned."), "invalid_request", tool_name
@@ -7680,9 +7683,6 @@ async def _call_tool(
             return await run_request(arguments, token, hass, data)
     elif tool_name == "home_request":
         return _tool_error("This tool requires the Home Companion persona."), "denied", tool_name
-    if not finite_json_numbers(arguments):
-        record_outcome(token, tool_name, "invalid_request", arguments=arguments)
-        return _tool_error("Non-finite numbers are not allowed."), "invalid_request", tool_name
     internal_name = _NATIVE_TOOL_PUBLIC_TO_INTERNAL.get(tool_name, tool_name)
     entry = _TOOL_HANDLERS.get(internal_name)
     if entry is None:
@@ -9101,7 +9101,7 @@ class PhoenixMcpView(PhoenixView):
             ))
         try:
             parsed = json.loads(body_bytes, parse_constant=_reject_non_finite, parse_float=_parse_finite_float)
-        except ValueError:  # JSONDecodeError, or non-finite rejected above
+        except (ValueError, RecursionError):  # Invalid JSON, numeric overflow, or excessive nesting.
             _LOGGER.warning(
                 "MCP POST: invalid JSON body (%d bytes read, Content-Length %s) rid=%s",
                 len(body_bytes), request.content_length, request_id,

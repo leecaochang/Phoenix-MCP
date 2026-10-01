@@ -6,12 +6,15 @@ import json
 from typing import Any
 
 from .const import (
+    SERVICE_TARGET_MAX_GROUPS,
+    SERVICE_TARGET_MAX_IDS,
     UNKNOWN_ARGUMENT_ALIASES,
     UNKNOWN_ARGUMENT_MAX_ERRORS,
     UNKNOWN_ARGUMENT_MAX_NAME,
     UNKNOWN_ARGUMENT_PROTECTED_FIELDS,
 )
 from .tool_defs import _ENTITY_TOOL_DEFS, _SYSTEM_TOOL_DEFS
+from .tool_input import nested_argument_error
 
 
 _RETIRED_REPLACEMENTS: dict[str, dict[str, str]] = {
@@ -207,6 +210,9 @@ def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any]
     if error and tool not in {"call_service", "dry_run_service"}:
         return args, error
     out = dict(args)
+    nested_error = nested_argument_error(tool, args)
+    if nested_error and tool not in {"call_service", "dry_run_service"}:
+        return out, nested_error
     if tool in {"get_state", "get_states"}:
         projection = out.pop("projection", None)
         if not isinstance(projection, dict):
@@ -230,7 +236,7 @@ def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any]
         if "data" in service:
             out["service_data"] = service["data"]
         if targets is not None:
-            if not isinstance(targets, list) or not targets:
+            if not isinstance(targets, list) or not 1 <= len(targets) <= SERVICE_TARGET_MAX_GROUPS:
                 return out, "targets must be a non-empty array when supplied."
             target_ids: dict[str, list[Any]] = {}
             has_all = False
@@ -238,9 +244,11 @@ def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any]
                 if not isinstance(target, dict):
                     return out, "Each target must be an object."
                 kind, ids = target.get("kind"), target.get("ids")
+                if isinstance(ids, list) and len(ids) > SERVICE_TARGET_MAX_IDS:
+                    return out, "A target group contains too many ids."
                 if kind == "all":
                     has_all = True
-                elif kind in {"entity", "device", "area"} and isinstance(ids, list) and ids:
+                elif isinstance(kind, str) and kind in {"entity", "device", "area"} and isinstance(ids, list) and ids:
                     merged = target_ids.setdefault(kind, [])
                     merged.extend(item for item in ids if item not in merged)
                 else:
@@ -321,4 +329,4 @@ def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any]
         if not isinstance(ids, list) or not ids:
             return out, "entity_ids must be a non-empty array."
         out["entity_id"] = ids
-    return out, error
+    return out, error or nested_error

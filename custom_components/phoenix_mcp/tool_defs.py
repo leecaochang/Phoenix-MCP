@@ -17,6 +17,7 @@ registries, in both directions.
 
 from __future__ import annotations
 
+from .const import SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
 
 _NATIVE_TOOL_NAMES: dict[str, str] = {
     "GetLiveContext": "homeassistant__GetLiveContext",
@@ -61,7 +62,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "type": "object",
             "properties": {
                 "entity_id": {"type": "string", "description": "Entity ID, e.g. light.living_room."},
-                "projection": {"type": "object", "description": "Required output projection: compact, full, or exact fields.", "properties": {"kind": {"type": "string", "enum": ["compact", "full", "fields"], "description": "Projection mode."}, "fields": {"type": "array", "items": {"type": "string"}, "description": "Exact fields when kind is fields."}}, "required": ["kind"]},
+                "projection": {"type": "object", "description": "Required output projection: compact, full, or exact fields.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["compact", "full", "fields"], "description": "Projection mode."}, "fields": {"type": "array", "items": {"type": "string"}, "description": "Exact fields when kind is fields."}}, "required": ["kind"]},
             },
             "required": ["entity_id", "projection"],
         },
@@ -77,7 +78,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "projection": {"type": "object", "description": "Required output projection for every state.", "properties": {"kind": {"type": "string", "enum": ["compact", "full", "fields"], "description": "Projection mode."}, "fields": {"type": "array", "items": {"type": "string"}, "description": "Exact fields when kind is fields."}}, "required": ["kind"]},
+                "projection": {"type": "object", "description": "Required output projection for every state.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["compact", "full", "fields"], "description": "Projection mode."}, "fields": {"type": "array", "items": {"type": "string"}, "description": "Exact fields when kind is fields."}}, "required": ["kind"]},
             },
             "required": ["projection"],
         },
@@ -230,8 +231,8 @@ _ENTITY_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "service": {"type": "object", "description": "Service to execute.", "properties": {"domain": {"type": "string", "description": "Service domain."}, "name": {"type": "string", "description": "Service name."}, "data": {"type": "object", "description": "Additional service data."}}, "required": ["domain", "name"]},
-                "targets": {"type": "array", "description": "Optional resolved target groups.", "items": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["entity", "device", "area", "all"], "description": "Target selector kind."}, "ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "description": "IDs for entity, device, or area targets."}}, "required": ["kind"]}},
+                "service": {"type": "object", "description": "Service to execute.", "additionalProperties": False, "properties": {"domain": {"type": "string", "description": "Service domain."}, "name": {"type": "string", "description": "Service name."}, "data": {"type": "object", "description": "Additional service data."}}, "required": ["domain", "name"]},
+                "targets": {"type": "array", "minItems": 1, "maxItems": SERVICE_TARGET_MAX_GROUPS, "description": "Optional resolved target groups.", "items": {"type": "object", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "area", "all"], "description": "Target selector kind."}, "ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SERVICE_TARGET_MAX_IDS, "description": "IDs for entity, device, or area targets."}}, "required": ["kind"]}},
             },
             "required": ["service"],
         },
@@ -390,16 +391,16 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     ],
                     "description": "Which addressed Energy change to make.",
                 },
-                "target": {"type": "object", "description": "The existing statistic, redacted device name, or Energy source addressed by the operation.", "properties": {"kind": {"type": "string", "enum": ["statistic", "device_name", "source"], "description": "Address kind."}, "id": {"type": "string", "description": "Statistic ID."}, "name": {"type": "string", "description": "Device display name."}, "source_type": {"type": "string", "enum": ["grid", "solar", "battery", "gas", "water"], "description": "Energy source kind."}}, "required": ["kind"]},
-                "changes": {"type": "object", "description": "Fields changed by the selected operation. Empty for a removal.", "properties": {
+                "target": {"type": "object", "description": "The existing statistic, redacted device name, or Energy source addressed by the operation.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["statistic", "device_name", "source"], "description": "Address kind."}, "id": {"type": "string", "description": "Statistic ID."}, "name": {"type": "string", "description": "Device display name."}, "source_type": {"type": "string", "enum": ["grid", "solar", "battery", "gas", "water"], "description": "Energy source kind."}}, "required": ["kind"]},
+                "changes": {"type": "object", "description": "Fields changed by the selected operation. Empty for a removal.", "additionalProperties": False, "properties": {
                 "new_statistic": {"type": "string", "description": "Replacement statistic."},
                 "name": {"type": "string", "description": "Device display name."},
                 "stat_energy_from": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "description": "For set_source: grid import, solar production, battery discharge, or the gas/water meter.",
                 },
                 "stat_energy_to": {
-                    "type": "string",
+                    "type": ["string", "null"],
                     "description": "For set_source: grid export or battery charge. Not accepted on solar, gas or water.",
                 },
                 "number_energy_price": {
@@ -764,7 +765,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "type": "string",
                     "description": "ISO timestamp or relative string. Defaults to now.",
                 },
-                "target": {"type": "object", "description": "Optional resource or causal-context filter.", "properties": {"kind": {"type": "string", "enum": ["resources", "context"], "description": "Filter mode."}, "id": {"type": "string", "description": "Context ULID when kind is context."}, "entity_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 100, "uniqueItems": True, "description": "Entity IDs when kind is resources."}, "device_ids": {"type": "array", "items": {"type": "string"}, "maxItems": 100, "uniqueItems": True, "description": "Device registry IDs when kind is resources."}}, "required": ["kind"]},
+                "target": {"type": "object", "description": "Optional resource or causal-context filter.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["resources", "context"], "description": "Filter mode."}, "id": {"type": "string", "description": "Context ULID when kind is context."}, "entity_ids": {"type": "array", "items": {"type": "string"}, "description": "Entity IDs when kind is resources; at most 100 unique values, with duplicates normalized."}, "device_ids": {"type": "array", "items": {"type": "string"}, "description": "Device registry IDs when kind is resources; at most 100 unique values, with duplicates normalized."}}, "required": ["kind"]},
                 "search": {
                     "type": "string",
                     "maxLength": 512,
@@ -977,7 +978,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "type": "object",
             "properties": {
                 "entity_id": {"type": "string", "description": "Entity registry ID to update."},
-                "changes": {"type": "object", "minProperties": 1, "description": "User-controlled metadata changes.", "properties": {
+                "changes": {"type": "object", "minProperties": 1, "description": "User-controlled metadata changes.", "additionalProperties": False, "properties": {
                 "name": {"type": ["string", "null"], "description": "New friendly-name override, or null to clear it."},
                 "icon": {"type": ["string", "null"], "description": "New icon, or null to clear it."},
                 "area_id": {"type": ["string", "null"], "description": "Area assignment, or null to clear it."},
@@ -985,8 +986,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                 "new_entity_id": {"type": "string", "description": "New same-domain entity ID."},
                 "enabled": {"type": "boolean", "description": "Enable or user-disable the entity."},
                 "hidden": {"type": "boolean", "description": "Set user-hidden state."},
-                "add_aliases": {"type": "array", "items": {"type": "string"}, "description": "Aliases to add."},
-                "remove_aliases": {"type": "array", "items": {"type": "string"}, "description": "Aliases to remove."},
+                "add_aliases": {"type": ["string", "array"], "items": {"type": "string"}, "description": "One alias or an array of aliases to add."},
+                "remove_aliases": {"type": ["string", "array"], "items": {"type": "string"}, "description": "One alias or an array of aliases to remove."},
                 "add_labels": {"type": "array", "items": {"type": "string"}, "description": "Label IDs to add."},
                 "remove_labels": {"type": "array", "items": {"type": "string"}, "description": "Label IDs to remove."},
                 "categories": {
@@ -1015,7 +1016,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "type": "object",
             "properties": {
                 "device_id": {"type": "string", "description": "The device registry id."},
-                "changes": {"type": "object", "minProperties": 1, "description": "User-controlled device metadata changes.", "properties": {"name": {"type": ["string", "null"], "description": "Display-name override."}, "area_id": {"type": ["string", "null"], "description": "Area assignment."}, "enabled": {"type": "boolean", "description": "Enabled state."}, "add_labels": {"type": "array", "items": {"type": "string"}, "description": "Label IDs to add."}, "remove_labels": {"type": "array", "items": {"type": "string"}, "description": "Label IDs to remove."}}},
+                "changes": {"type": "object", "minProperties": 1, "description": "User-controlled device metadata changes.", "additionalProperties": False, "properties": {"name": {"type": ["string", "null"], "description": "Display-name override."}, "area_id": {"type": ["string", "null"], "description": "Area assignment."}, "enabled": {"type": "boolean", "description": "Enabled state."}, "add_labels": {"type": "array", "items": {"type": "string"}, "description": "Label IDs to add."}, "remove_labels": {"type": "array", "items": {"type": "string"}, "description": "Label IDs to remove."}}},
             },
             "required": ["device_id", "changes"],
         },
@@ -1406,7 +1407,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "description": "Initial WRITE-accessible device endpoints from groupable_members.",
                     "items": {
                         "type": "object",
-                        "properties": {
+                        "additionalProperties": False, "properties": {
                             "device_id": {"type": "string"},
                             "endpoint": {"type": "integer", "minimum": 1, "maximum": 254},
                         },
@@ -1443,7 +1444,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "description": "WRITE-accessible device endpoints to add or remove.",
                     "items": {
                         "type": "object",
-                        "properties": {
+                        "additionalProperties": False, "properties": {
                             "device_id": {"type": "string"},
                             "endpoint": {"type": "integer", "minimum": 1, "maximum": 254},
                         },
@@ -2140,7 +2141,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "lookup": {"type": "object", "description": "Job lookup by job ID or device YAML file.", "properties": {"kind": {"type": "string", "enum": ["job", "file"], "description": "Lookup kind."}, "id": {"type": "string", "description": "Job ID or device YAML filename."}}, "required": ["kind", "id"]},
+                "lookup": {"type": "object", "description": "Job lookup by job ID or device YAML file.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["job", "file"], "description": "Lookup kind."}, "id": {"type": "string", "description": "Job ID or device YAML filename."}}, "required": ["kind", "id"]},
             },
             "required": ["lookup"],
         },
@@ -2260,7 +2261,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "scope": {"type": "object", "description": "The one scope to inspect.", "properties": {"kind": {"type": "string", "enum": ["entity", "device", "integration", "area", "label"], "description": "Scope kind."}, "id": {"type": "string", "description": "Identifier for the selected scope."}}, "required": ["kind", "id"]},
+                "scope": {"type": "object", "description": "The one scope to inspect.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "integration", "area", "label"], "description": "Scope kind."}, "id": {"type": "string", "description": "Identifier for the selected scope."}}, "required": ["kind", "id"]},
             },
             "required": ["scope"],
         },
@@ -2369,8 +2370,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "service": {"type": "object", "description": "Service to preview.", "properties": {"domain": {"type": "string", "description": "Service domain."}, "name": {"type": "string", "description": "Service name."}, "data": {"type": "object", "description": "Additional service data."}}, "required": ["domain", "name"]},
-                "targets": {"type": "array", "description": "Optional target groups to resolve.", "items": {"type": "object", "properties": {"kind": {"type": "string", "enum": ["entity", "device", "area", "all"], "description": "Target selector kind."}, "ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "description": "IDs for non-all targets."}}, "required": ["kind"]}},
+                "service": {"type": "object", "description": "Service to preview.", "additionalProperties": False, "properties": {"domain": {"type": "string", "description": "Service domain."}, "name": {"type": "string", "description": "Service name."}, "data": {"type": "object", "description": "Additional service data."}}, "required": ["domain", "name"]},
+                "targets": {"type": "array", "minItems": 1, "maxItems": SERVICE_TARGET_MAX_GROUPS, "description": "Optional target groups to resolve.", "items": {"type": "object", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "area", "all"], "description": "Target selector kind."}, "ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SERVICE_TARGET_MAX_IDS, "description": "IDs for non-all targets."}}, "required": ["kind"]}},
             },
             "required": ["service"],
         },
@@ -2510,7 +2511,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
                     "description": "Cumulative config-flow steps. Use [] to inspect the first form or supported menu; resend prior steps plus the next step on each call. Menu data contains only next_step_id.",
                     "items": {
                         "type": "object",
-                        "properties": {
+                        "additionalProperties": False, "properties": {
                             "step_id": {"type": "string"},
                             "data": {"type": "object"},
                         },
@@ -2736,8 +2737,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "type": "object",
             "properties": {
                 "file": {"type": "string", "description": "Optional. Path relative to the configuration directory, e.g. 'templates.yaml'. Defaults to configuration.yaml. Must be a .yaml or .yml file that configuration.yaml loads."},
-                "address": {"type": "object", "description": "Key or path addressed by this patch.", "properties": {"kind": {"type": "string", "enum": ["key", "path"], "description": "Address kind."}, "value": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": ["string", "integer"]}}], "description": "Dotted key or key/index path."}}, "required": ["kind", "value"]},
-                "change": {"type": "object", "description": "Set, append, or remove operation.", "properties": {"kind": {"type": "string", "enum": ["set", "append", "remove"], "description": "Change kind."}, "content": {"type": "string", "description": "YAML value for set or append."}}, "required": ["kind"]},
+                "address": {"type": "object", "description": "Key or path addressed by this patch.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["key", "path"], "description": "Address kind."}, "value": {"oneOf": [{"type": "string"}, {"type": "array", "items": {"type": ["string", "integer"]}}], "description": "Dotted key or key/index path."}}, "required": ["kind", "value"]},
+                "change": {"type": "object", "description": "Set, append, or remove operation.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["set", "append", "remove"], "description": "Change kind."}, "content": {"type": "string", "description": "YAML value for set or append."}}, "required": ["kind"]},
                 "expected_hash": {"type": "string", "description": "Optional. The content_hash from a prior get_yaml_config; the write is refused if configuration.yaml changed since then."},
             },
             "required": ["address", "change"],
@@ -2826,7 +2827,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "type": "object",
             "properties": {
                 "entry_id": {"type": "string", "description": "The config entry id (from list_integrations)."},
-                "changes": {"type": "object", "minProperties": 1, "description": "Reversible integration metadata to update.", "properties": {"title": {"type": "string", "minLength": 1, "description": "New entry title."}, "pref_disable_new_entities": {"type": "boolean", "description": "Whether newly discovered entities start disabled."}, "pref_disable_polling": {"type": "boolean", "description": "Whether polling is disabled."}}},
+                "changes": {"type": "object", "minProperties": 1, "description": "Reversible integration metadata to update.", "additionalProperties": False, "properties": {"title": {"type": "string", "minLength": 1, "description": "New entry title."}, "pref_disable_new_entities": {"type": "boolean", "description": "Whether newly discovered entities start disabled."}, "pref_disable_polling": {"type": "boolean", "description": "Whether polling is disabled."}}},
             },
             "required": ["entry_id", "changes"],
         },
@@ -2983,7 +2984,15 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "config": {"type": "object", "description": "Dashboard fields: url_path, title, icon, mode, show_in_sidebar."},
+                "config": {"type": "object", "description": "Dashboard registry metadata.", "additionalProperties": False, "properties": {
+                    "url_path": {"type": "string", "minLength": 1, "description": "Unique dashboard URL path."},
+                    "title": {"type": "string", "minLength": 1, "description": "Dashboard display title."},
+                    "icon": {"type": "string", "description": "Sidebar icon, such as mdi:home."},
+                    "mode": {"type": "string", "enum": ["storage"], "description": "Dashboard mode; only storage is supported."},
+                    "show_in_sidebar": {"type": "boolean", "description": "Whether to show the dashboard in the sidebar."},
+                    "require_admin": {"type": "boolean", "description": "Whether opening the dashboard requires administrator access."},
+                    "allow_single_word": {"type": "boolean", "description": "Allow a URL path without a hyphen."},
+                }, "required": ["url_path", "title"]},
             },
             "required": ["config"],
         },
@@ -2996,7 +3005,12 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "type": "object",
             "properties": {
                 "dashboard_id": {"type": "string", "description": "The dashboard id (from list_dashboards)."},
-                "config": {"type": "object", "description": "Dashboard metadata fields to update."},
+                "config": {"type": "object", "minProperties": 1, "description": "Dashboard metadata fields to update.", "additionalProperties": False, "properties": {
+                    "title": {"type": "string", "minLength": 1, "description": "New dashboard display title."},
+                    "icon": {"type": ["string", "null"], "description": "New sidebar icon, or null to clear it."},
+                    "show_in_sidebar": {"type": "boolean", "description": "Whether to show the dashboard in the sidebar."},
+                    "require_admin": {"type": "boolean", "description": "Whether opening the dashboard requires administrator access."},
+                }},
             },
             "required": ["dashboard_id", "config"],
         },
@@ -3162,8 +3176,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "target": {"type": "object", "description": "Dashboard path to change.", "properties": {"url_path": {"type": "string", "description": "Dashboard URL path."}, "path": {"type": "array", "items": {"type": ["string", "integer"]}, "description": "Key/index path."}}, "required": ["path"]},
-                "change": {"type": "object", "description": "Set, append, or remove operation.", "properties": {"kind": {"type": "string", "enum": ["set", "append", "remove"], "description": "Change kind."}, "value": {"type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "New value for set or append."}}, "required": ["kind"]},
+                "target": {"type": "object", "description": "Dashboard path to change.", "additionalProperties": False, "properties": {"url_path": {"type": "string", "description": "Dashboard URL path."}, "path": {"type": "array", "items": {"type": ["string", "integer"]}, "description": "Key/index path."}}, "required": ["path"]},
+                "change": {"type": "object", "description": "Set, append, or remove operation.", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["set", "append", "remove"], "description": "Change kind."}, "value": {"type": ["string", "number", "integer", "boolean", "object", "array", "null"], "description": "New value for set or append."}}, "required": ["kind"]},
                 "expected_hash": {"type": "string", "description": "Optional. The content_hash from a prior read; the write is refused if the layout changed since then."},
             },
             "required": ["target", "change"],

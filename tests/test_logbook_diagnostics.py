@@ -89,10 +89,10 @@ async def test_capability_denial_runs_before_hostile_argument_validation():
 @pytest.mark.parametrize(
     ("args", "message"),
     [
-        ({"entity_ids": "light.one"}, "entity_ids must be an array"),
-        ({"entity_ids": ["light.one", 7]}, "entity_ids must be an array"),
+        ({"entity_ids": "light.one"}, "target.entity_ids must be array"),
+        ({"entity_ids": ["light.one", 7]}, "target.entity_ids[1] must be string"),
         ({"device_ids": [""]}, "device_ids must be an array"),
-        ({"context_id": ["bad"]}, "target must be a context id"),
+        ({"context_id": ["bad"]}, "target.id must be string"),
         ({"context_id": "not-a-ulid"}, "Invalid context_id"),
         ({"search": ["not", "text"]}, "search must be a string"),
         ({"search": "x" * 513}, "search must be at most"),
@@ -421,7 +421,7 @@ async def test_context_filter_is_forwarded_and_echoed_without_resource_filters()
     assert body["filters"]["limit"] == 100
 
 
-def test_published_resource_lists_are_unique_and_bounded():
+def test_published_resource_lists_describe_the_normalized_bound():
     from custom_components.phoenix_mcp.tool_defs import _SYSTEM_TOOL_DEFS
 
     definition = next(
@@ -429,8 +429,9 @@ def test_published_resource_lists_are_unique_and_bounded():
     )
     properties = definition["inputSchema"]["properties"]["target"]["properties"]
     for key in ("entity_ids", "device_ids"):
-        assert properties[key]["maxItems"] == 100
-        assert properties[key]["uniqueItems"] is True
+        assert "100 unique values" in properties[key]["description"]
+        assert "duplicates normalized" in properties[key]["description"]
+        assert "uniqueItems" not in properties[key]
 
 
 @pytest.mark.asyncio

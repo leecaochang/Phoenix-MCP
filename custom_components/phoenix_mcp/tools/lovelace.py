@@ -30,6 +30,7 @@ from ..card_catalog import CardEntry
 from ..const import CAP_DENY, MAX_DIFF_INLINE_BYTES, REDACTION_SENTINEL
 from ..data import PhoenixData
 from ..tool_contracts import normalize_tool_args, unknown_argument_error
+from ..tool_input import nested_argument_error
 from ..helpers import (
     content_hash,
     dict_arg,
@@ -370,6 +371,10 @@ async def _tool_create_dashboard(
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: create a dashboard (Confirm-gated)."""
+    if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "create_dashboard"
+    if error := nested_argument_error("create_dashboard", args):
+        return _tool_error(error), "invalid_request", "create_dashboard"
     blocked = await _gate(
         "cap_lovelace_write", token, hass, data,
         tool_name="create_dashboard", args=args, request_id=request_id,
@@ -383,6 +388,8 @@ async def _tool_create_dashboard(
 async def _execute_create_dashboard(
     args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
+    if error := nested_argument_error("create_dashboard", args):
+        return _tool_error(error), "invalid_request", "create_dashboard"
     config = args.get("config")
     if not isinstance(config, dict) or not config:
         return _tool_error("config must be a non-empty object (at least url_path and title)."), "invalid_request", "create_dashboard"
@@ -411,6 +418,8 @@ async def _tool_edit_dashboard(
     error = unknown_argument_error("edit_dashboard", args)
     if error:
         return _tool_error(error), "invalid_request", "edit_dashboard"
+    if error := nested_argument_error("edit_dashboard", args):
+        return _tool_error(error), "invalid_request", "edit_dashboard"
     blocked = await _gate(
         "cap_lovelace_write", token, hass, data,
         tool_name="edit_dashboard", args=args, request_id=request_id,
@@ -424,6 +433,8 @@ async def _tool_edit_dashboard(
 async def _execute_edit_dashboard(
     args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
+    if error := nested_argument_error("edit_dashboard", args):
+        return _tool_error(error), "invalid_request", "edit_dashboard"
     dashboard_id = str(args.get("dashboard_id") or "").strip()
     config = args.get("config")
     if not dashboard_id:

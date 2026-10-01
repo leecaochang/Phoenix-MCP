@@ -48,6 +48,7 @@ from typing import Any
 import copy
 import json
 import logging
+import math
 
 from homeassistant.core import HomeAssistant, valid_entity_id
 
@@ -557,9 +558,13 @@ def _source_fields_arg(args: dict, source_type: str, token: TokenRecord, hass: H
         if field in _STATISTIC_FIELDS:
             out[field] = _check_writable_statistic(value, field, token, hass)
             continue
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise _OpError(f"{field} must be a number or null.")
         try:
             out[field] = float(value)
-        except (TypeError, ValueError):
+            if not math.isfinite(out[field]):
+                raise _OpError(f"{field} must be a finite number or null.")
+        except (TypeError, ValueError, OverflowError):
             raise _OpError(f"{field} must be a number or null.") from None
     return out
 
@@ -844,11 +849,11 @@ async def _tool_edit_energy_config(
     change during the approval window is caught.
     """
     tool = "edit_energy_config"
+    if effective_cap(token, "cap_energy_write") == CAP_DENY:
+        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     args, error = normalize_tool_args(tool, args)
     if error:
         return _tool_error(error), "invalid_request", tool
-    if effective_cap(token, "cap_energy_write") == CAP_DENY:
-        return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     refusal = _sentinel_refusal(args)
     if refusal is not None:
         return _tool_error(refusal), "invalid_request", tool

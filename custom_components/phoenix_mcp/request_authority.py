@@ -59,19 +59,3 @@ def check_request_authority() -> None:
     version = policy_version.get()
     if version is not None and token.settings_version != version:
         raise AuthorityChangedError("Permissions changed. Retry with current permissions.")
-
-
-def finite_json_numbers(value: object) -> bool:
-    """Validate nested in-process tool arguments before persistence or dispatch."""
-    import math
-
-    pending = [value]
-    while pending:
-        item = pending.pop()
-        if isinstance(item, float) and not math.isfinite(item):
-            return False
-        if isinstance(item, dict):
-            pending.extend(item.values())
-        elif isinstance(item, list):
-            pending.extend(item)
-    return True

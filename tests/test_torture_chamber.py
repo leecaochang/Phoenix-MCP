@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from copy import deepcopy
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
@@ -191,7 +192,7 @@ def _hostile_values(kind: str | None) -> list:
     if kind == "boolean":
         return [None, f"{MARKER}", 2, [], {}]
     if kind in ("integer", "number"):
-        return [None, f"{MARKER}", [], {}, -1, 10**18]
+        return [None, f"{MARKER}", [], {}, True, -1, 10**18]
     return common + [f"{MARKER}"]
 
 
@@ -215,7 +216,32 @@ def _attacks(tool_def: dict) -> list[tuple[str, dict]]:
     for name, spec in props.items():
         for value in _hostile_values(spec.get("type")):
             cases.append((f"{name}={type(value).__name__}", {**base, name: value}))
+        for label, value in _nested_attacks(spec):
+            cases.append((f"{name}.{label}", {**deepcopy(base), name: value}))
     return cases
+
+
+def _nested_attacks(schema: dict) -> list[tuple[str, object]]:
+    """Exercise each declared nested field, including a malformed later row."""
+    attacks: list[tuple[str, object]] = []
+    if schema.get("type") == "object" and schema.get("properties"):
+        seed = _placeholder("nested", schema)
+        attacks.append(("unknown", {**seed, f"{MARKER}_unknown": MARKER}))
+        for name, spec in schema["properties"].items():
+            if name in schema.get("required", []):
+                attacks.append((f"missing_{name}", {key: value for key, value in seed.items() if key != name}))
+            for value in _hostile_values(spec.get("type")):
+                attacks.append((f"{name}={type(value).__name__}", {**seed, name: value}))
+            for label, value in _nested_attacks(spec):
+                attacks.append((f"{name}.{label}", {**seed, name: value}))
+    elif schema.get("type") == "array":
+        spec = schema.get("items", {})
+        seed_item = _placeholder("nested", spec)
+        for value in _hostile_values(spec.get("type")):
+            attacks.append((f"later_row={type(value).__name__}", [deepcopy(seed_item), value]))
+        for label, value in _nested_attacks(spec):
+            attacks.append((f"later_row.{label}", [deepcopy(seed_item), value]))
+    return attacks
 
 
 # ------------------------------------------------------------------- fixtures

@@ -891,9 +891,9 @@ class TestEntityRegistryWrite:
         "area_id,message",
         [
             ("no_such_area", "Unknown area_id"),
-            (["office"], "area_id must be a string"),
-            ({"area": "office"}, "area_id must be a string"),
-            (True, "area_id must be a string"),
+            (["office"], "changes.area_id must be string or null"),
+            ({"area": "office"}, "changes.area_id must be string or null"),
+            (True, "changes.area_id must be string or null"),
         ],
     )
     async def test_set_entity_invalid_area_rejected_before_pending(
@@ -940,7 +940,7 @@ class TestEntityRegistryWrite:
         with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
             content, outcome, _ = await _call_tool(
                 "set_entity",
-                {"entity_id": eid, **unsupported},
+                {"entity_id": eid, "changes": unsupported},
                 _token(
                     tree=PermissionTree(domains={"light": PermissionNode(state="GREEN")}),
                     cap_registry_write="confirm",
@@ -950,7 +950,7 @@ class TestEntityRegistryWrite:
             )
 
         assert outcome == "invalid_request"
-        assert "Provide at least one of" in content["content"][0]["text"]
+        assert "unsupported fields" in content["content"][0]["text"]
         gate.assert_not_awaited()
 
     async def test_set_entity_unknown_only_argument_revalidated_at_apply_time(self, hass, env):
@@ -970,12 +970,12 @@ class TestEntityRegistryWrite:
         assert "Provide at least one of" in content["content"][0]["text"]
 
     async def test_set_entity_unknown_argument_is_ignored_with_supported_edit(self, hass, env):
-        """Stray fields do not block a valid supported update."""
+        """Unrelated outer fields do not block a valid supported update."""
         eid, _area = env
         data, _ = _data()
         content, outcome, _ = await _call_tool(
             "set_entity",
-            {"entity_id": eid, "name": "Desk Lamp", "label_id": "kitchen"},
+            {"entity_id": eid, "changes": {"name": "Desk Lamp"}, "outer_extra": "kitchen"},
             self._token_rw(),
             hass,
             data,

@@ -62,7 +62,7 @@ UNPUBLISHED_ARGS = {
         "entity from voice control. async_restore_version needs the absolute "
         "form to replay a snapshot, so the executor accepts it ONLY when "
         "_restore_ctx is set. test_mcp_registry_tools.py pins that a caller "
-        "sending it outside a restore is ignored."
+        "sending it inside public changes outside a restore is refused."
     ),
     ("mcp_view.py", "labels"): (
         "INTERNAL absolute form used only while restoring an entity or device "

@@ -529,6 +529,8 @@ def _helper_flow_steps_error(steps: Any) -> str | None:
     for index, step in enumerate(steps):
         if not isinstance(step, dict):
             return f"flow_steps[{index}] must be an object."
+        if set(step) != {"step_id", "data"}:
+            return f"flow_steps[{index}] must contain only step_id and data."
         if not isinstance(step.get("step_id"), str) or not step["step_id"].strip():
             return f"flow_steps[{index}].step_id must be a non-empty string."
         if not isinstance(step.get("data"), dict):

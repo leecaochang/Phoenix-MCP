@@ -120,6 +120,28 @@ async def test_nonfinite_inprocess_never_dispatches(hass):
     assert result['isError']
 
 
+async def test_excessive_wire_nesting_never_reaches_handler(hass):
+    _, _, raw = await _environment(hass)
+    req = _make_request({'jsonrpc': '2.0', 'id': 1, 'method': 'ping'}, 'application/json', raw)
+    payload = ('{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_state","arguments":{"deep":'
+               + '[' * 2000 + '0' + ']' * 2000 + '}}}')
+    req.content.read = AsyncMock(return_value=payload.encode())
+    req.content.at_eof = lambda: True
+    handler = AsyncMock()
+    with patch.dict(mcp_view._TOOL_HANDLERS, {'get_state': (handler, (), {})}):
+        response = await _view(hass).post(req)
+    assert json.loads(response.text)['result']['isError']
+    handler.assert_not_called()
+
+
+async def test_json_decoder_recursion_error_is_contained(hass):
+    _, _, raw = await _environment(hass)
+    req = _make_request({'jsonrpc': '2.0', 'id': 1, 'method': 'ping'}, 'application/json', raw)
+    with patch.object(mcp_view.json, 'loads', side_effect=RecursionError):
+        response = await _view(hass).post(req)
+    assert json.loads(response.text)['error']['code'] == -32700
+
+
 @pytest.mark.parametrize('target', ['ghost', 'denied', 'valid'])
 async def test_physical_target_validated_before_approval(hass, target):
     data, token, _ = await _environment(hass)
