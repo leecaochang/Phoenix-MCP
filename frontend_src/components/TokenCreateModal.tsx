@@ -168,8 +168,7 @@ export function TokenCreateModal({ existingNames, onCreated, onClose, onOpenSett
   const canSubmit =
     name.length >= 3 &&
     !nameError &&
-    (!passThrough || ptConfirmed) &&
-    !saving;
+    (!passThrough || ptConfirmed);
 
   async function submit() {
     setSaving(true);
@@ -336,9 +335,9 @@ export function TokenCreateModal({ existingNames, onCreated, onClose, onOpenSett
         {error && <div className="banner banner-error mt-12">{error}</div>}
 
       <div className="modal-actions">
-        <button className="btn btn-primary" onClick={submit} disabled={!canSubmit}>
+        <BusyButton className="btn btn-primary" onClick={submit} disabled={!canSubmit} busy={saving}>
           {saving ? t("tokens.creating") : t("tokens.create")}
-        </button>
+        </BusyButton>
         <BusyButton className="btn btn-text" onClick={onClose} busy={saving}>{t("tokens.cancel")}</BusyButton>
       </div>
     </Modal>

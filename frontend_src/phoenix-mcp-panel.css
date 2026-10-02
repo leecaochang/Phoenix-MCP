@@ -163,6 +163,8 @@
   }
 }
 
+.raw-diff .sr-only { user-select: none; }
+
 .sr-only {
   position: absolute;
   width: 1px;
@@ -252,7 +254,7 @@
 .phx-tab-badge {
   display: inline-flex; align-items: center; justify-content: center;
   margin-left: 8px; padding: 0 6px; min-width: 18px; height: 18px;
-  border-radius: 9px; background: var(--phx-error, #d32f2f); color: #fff;
+  border-radius: 9px; background: var(--phx-error, #d32f2f); color: var(--phx-accent-fg);
   font-size: 10px; font-weight: 700; letter-spacing: 0;
   line-height: 1;
 }
@@ -434,7 +436,7 @@
 .btn-label-full  { display: inline; }
 .btn-primary { background: var(--phx-accent); color: var(--phx-accent-fg); }
 .btn-primary:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-accent-hov); box-shadow: var(--phx-shadow-md); }
-.btn-danger { background: var(--phx-error); color: #fff; }
+.btn-danger { background: var(--phx-error); color: var(--phx-accent-fg); }
 .btn-danger:hover:not(:disabled):not([aria-disabled="true"]) { opacity: 0.85; box-shadow: var(--phx-shadow-md); }
 .btn-outline {
   background: transparent;
@@ -2452,7 +2454,7 @@ hui-card { display: block; min-width: 0; }
 .agentcli-popout-error {
   padding: 8px 10px;
   color: var(--phx-error);
-  background: var(--phx-error-bg);
+  background: var(--phx-surface);
   border-bottom: 1px solid var(--phx-border);
   font-size: 12px;
   line-height: 1.4;
@@ -2650,7 +2652,7 @@ hui-card { display: block; min-width: 0; }
 }
 /* Send/Cancel matches the textarea height in the same row. */
 .agentcli-input > button { align-self: stretch; display: inline-flex; align-items: center; justify-content: center; }
-.agentcli-cancel-btn { border-color: var(--phx-error); color: var(--phx-error); }
+.agentcli-cancel-btn { background: var(--phx-surface); border-color: var(--phx-error); color: var(--phx-error); }
 
 /* The "continue?" checkpoint bar, shown above the composer when a turn paused
    at the round cap. flex:none so it is never collapsed by the shrink phase. */
@@ -2778,8 +2780,8 @@ hui-card { display: block; min-width: 0; }
 
 /* Routing keeps switches and accounts visible; connection timing expands in place. */
 .command-routing-settings .agentcli-settings-hint { line-height: 1.5; }
-.routing-account-choice { display: flex; align-items: center; gap: 12px; min-width: 0; cursor: pointer; }
-.routing-account-choice > input { flex: 0 0 auto; accent-color: var(--phx-accent); }
+.routing-account-choice { display: flex; align-items: center; gap: 12px; min-width: 0; cursor: pointer; background: transparent; color: var(--phx-text); border: 1px solid var(--phx-border); }
+.routing-account-choice[aria-pressed="true"] { background: var(--phx-accent-lt); color: var(--phx-accent); border-color: var(--phx-accent); }
 .routing-account-choice > span { min-width: 0; overflow-wrap: anywhere; }
 .routing-provider-section .agentcli-add-row { margin-top: 12px; }
 .routing-disclosure { border-top: 1px solid var(--phx-divider); margin-top: 12px; }

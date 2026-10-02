@@ -125,23 +125,20 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
 
   return <div className="routing-provider-section">
     <p className="agentcli-settings-hint" id="routing-provider-hint">{t("routing.providerHint", { voice: t("settings.voiceCard"), chat: t("settings.agentcliCard") })}</p>
-    <div className="agentcli-settings-providers" role="radiogroup" aria-label={t("routing.decisionAccount")}
+    <div className="agentcli-settings-providers" role="group" aria-label={t("routing.decisionAccount")}
       aria-describedby="routing-provider-hint">
-      <label className="routing-account-choice">
-        <BusyInput type="radio" name="decision-account" checked={!settings.decision_provider_id || selectedAccountMissing}
-          busy={saving || busy} onChange={() => selectAccount("")}
-          onClick={() => {
-            if (selectedAccountMissing) selectAccount("");
-          }} />
+      <BusyButton type="button" className="btn btn-secondary routing-account-choice"
+        aria-pressed={!settings.decision_provider_id || selectedAccountMissing}
+        busy={saving || busy} onClick={() => selectAccount("")}>
         {t("routing.localOnly")}
-      </label>
+      </BusyButton>
       {accounts.map(account => <div className="agentcli-settings-provider" key={account.id}>
         <div className="agentcli-settings-provider-main">
-        <label className="routing-account-choice">
-          <BusyInput type="radio" name="decision-account" checked={account.id === settings.decision_provider_id}
-            busy={saving || busy} onChange={() => selectAccount(account.id)} />
+        <BusyButton type="button" className="btn btn-secondary routing-account-choice"
+          aria-pressed={account.id === settings.decision_provider_id}
+          busy={saving || busy} onClick={() => selectAccount(account.id)}>
           <span className="agentcli-settings-provider-head">{account.name}</span>
-        </label>
+        </BusyButton>
         {editing === account.id ? <div className="agentcli-settings-model-edit">
           <BusySelect className="input input-auto" value={modelDraft} autoFocus
             aria-label={t("routing.accountModel", { name: account.name })}

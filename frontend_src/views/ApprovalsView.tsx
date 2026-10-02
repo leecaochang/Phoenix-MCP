@@ -508,8 +508,8 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
           className={`approvals-tab${tab === "pending" ? " active" : ""}`}
           onClick={() => switchTopTab("pending")}
         >
-          {tab === "pending" && records.length > 0
-            ? t("approvals.tabPendingCount", { count: records.length })
+          {tab === "pending" && pendingTotal > 0
+            ? t("approvals.tabPendingCount", { count: pendingTotal })
             : t("approvals.tabPending")}
         </button>
         <button
@@ -559,7 +559,7 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
       {loading && <Loading />}
       {error && <ErrorMsg msg={error} />}
 
-      {shown.length === 0 && !error && (
+      {shown.length === 0 && !loading && !error && (
         <div className="approvals-empty">
           {tab === "pending"
             ? t("approvals.emptyPending")

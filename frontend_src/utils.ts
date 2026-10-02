@@ -119,6 +119,8 @@ export async function copyToClipboard(text: string): Promise<void> {
     }
   }
 
+  let previousFocus = document.activeElement;
+  while (previousFocus?.shadowRoot?.activeElement) previousFocus = previousFocus.shadowRoot.activeElement;
   const ta = document.createElement("textarea");
   ta.value = text;
   ta.style.position = "fixed";
@@ -132,5 +134,6 @@ export async function copyToClipboard(text: string): Promise<void> {
     }
   } finally {
     document.body.removeChild(ta);
+    if (previousFocus instanceof HTMLElement && previousFocus.isConnected) previousFocus.focus();
   }
 }

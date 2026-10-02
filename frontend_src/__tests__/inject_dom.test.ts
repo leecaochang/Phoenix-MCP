@@ -319,3 +319,12 @@ it("anchors HA 2026.7 state-less rows to their domain icon and ignores status ic
   row.firstElementChild!.replaceChildren();
   expect(nameInsertionPoint(row)).toBeNull();
 });
+
+
+it("places the MESA control after the icon when HA selection mode adds a checkbox cell", () => {
+  const row = document.createElement("div");
+  row.innerHTML = '<div role="cell" class="mdc-data-table__cell--checkbox"><ha-checkbox></ha-checkbox></div><div role="cell" id="icon"><span><ha-state-icon></ha-state-icon></span></div><div role="cell">Name</div>';
+  const point = nameInsertionPoint(row);
+  expect(point?.parent.id).toBe("icon");
+  expect(point?.before).toBeNull();
+});

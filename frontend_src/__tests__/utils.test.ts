@@ -179,3 +179,18 @@ describe("HIGH_RISK_DOMAINS", () => {
     expect(HIGH_RISK_DOMAINS.has("sensor")).toBe(false);
   });
 });
+
+it.each([true, false])("restores shadow-root focus after fallback copy (success=%s)", async success => {
+  Object.assign(navigator, { clipboard: undefined });
+  document.execCommand = vi.fn().mockReturnValue(success);
+  const host = document.createElement("div");
+  document.body.append(host);
+  const shadow = host.attachShadow({ mode: "open" });
+  const button = document.createElement("button");
+  shadow.append(button);
+  button.focus();
+  if (success) await copyToClipboard("text");
+  else await expect(copyToClipboard("text")).rejects.toThrow("Clipboard unavailable");
+  expect(shadow.activeElement).toBe(button);
+  host.remove();
+});

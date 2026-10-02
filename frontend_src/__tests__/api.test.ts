@@ -601,3 +601,30 @@ it("refuses malformed approval rows before the review view consumes them", async
   globalThis.fetch = mockFetchResponse(200, { approvals: [{ id: "review", args: {}, diff: null }], total: 1 });
   await expect(api.listApprovals()).rejects.toMatchObject({ status: 502, code: "invalid_response" });
 });
+
+it.each([401, 404, 413, 504])("preserves HTTP %s for a non-JSON error", async status => {
+  globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status, statusText: "Gateway failure", json: async () => { throw new SyntaxError(); } });
+  await expect(api.listTokens()).rejects.toMatchObject({ status, code: "parse_error", message: "Gateway failure" });
+});
+
+it("accepts the token audit endpoint's list envelope", async () => {
+  globalThis.fetch = mockFetchResponse(200, [{ request_id: "request" }]);
+  expect(await api.getTokenAudit("token")).toEqual([{ request_id: "request" }]);
+});
+
+it.each([false, true])("restarts an invalidated full MESA load at most once (repeat=%s)", async repeat => {
+  const responses = [
+    { status: 200, body: { profiles: [{ entity_id: "light.old" }], has_more: true, next_cursor: "old" } },
+    { status: 400, body: { error: "invalid_request", message: "cursor invalidated by profile changes" } },
+    { status: 200, body: { profiles: [{ entity_id: "light.current" }], has_more: repeat, next_cursor: repeat ? "new" : null } },
+    { status: 400, body: { error: "invalid_request", message: "cursor invalidated by profile changes" } },
+  ];
+  globalThis.fetch = vi.fn().mockImplementation(async () => {
+    const { status, body } = responses.shift()!;
+    return { ok: status === 200, status, json: async () => body };
+  });
+  if (repeat) await expect(api.listMesaProfiles({ all: true })).rejects.toMatchObject({ status: 400 });
+  else expect((await api.listMesaProfiles({ all: true })).profiles).toEqual([{ entity_id: "light.current" }]);
+  expect(fetch).toHaveBeenCalledTimes(repeat ? 4 : 3);
+  expect(vi.mocked(fetch).mock.calls[2][0]).not.toContain("cursor=");
+});

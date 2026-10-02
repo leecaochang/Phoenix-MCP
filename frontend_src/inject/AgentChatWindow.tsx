@@ -1,3 +1,4 @@
+import { ErrorBoundary } from "../components/ErrorBoundary";
 /** Global Agent Chat window, mounted outside the Phoenix MCP panel so it can float over
  * the whole HA UI. Lazy-loaded by inject/agentchat.ts on first open. Mirrors the
  * QuickAdd pattern: a fixed, click-through host with its own shadow root carrying
@@ -147,12 +148,13 @@ function unwatchApprovalReview(): void {
 
 function paintAgentChat(): void {
   root?.render(
+    <ErrorBoundary key={persistenceOwner} onClose={hideAgentChat}>
     <Boot
-      key={persistenceOwner}
       tokenId={activeTokenId}
       onClose={hideAgentChat}
       summonVersion={summonVersion}
-    />,
+    />
+    </ErrorBoundary>,
   );
 }
 

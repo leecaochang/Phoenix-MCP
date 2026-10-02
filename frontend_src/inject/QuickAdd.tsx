@@ -1,3 +1,4 @@
+import { ErrorBoundary } from "../components/ErrorBoundary";
 /** In-context MESA profile quick-add modal, injected into HA's native config
  * pages. Defines <phx-mesa-quick-add>, which mounts the panel's ProfileEditor in
  * its own shadow root so an admin can create or edit an entity profile without
@@ -174,6 +175,7 @@ class QuickAddElement extends HTMLElement {
 
     this._root = createRoot(mount);
     this._root.render(
+      <ErrorBoundary onClose={() => this._close()}>
       <QuickAddApp
         scope={scope}
         profileKey={key}
@@ -190,6 +192,7 @@ class QuickAddElement extends HTMLElement {
           )
         }
       />
+      </ErrorBoundary>
     );
   }
 

@@ -1209,10 +1209,11 @@ export function MesaView() {
           operational_boundaries: { control_mode: s.suggested_mode, control_reason: s.reason },
         },
       };
-      if (s.scope === "domain") await api.putMesaDomain(s.subject_id, doc);
-      else await api.putMesaProfile(s.subject_id, doc);
+      if (s.scope === "domain") await api.putMesaDomain(s.subject_id, doc, true);
+      else await api.putMesaProfile(s.subject_id, doc, true);
       await refresh();
     } catch (e) {
+      if (e instanceof ApiError && e.status === 412) await refresh();
       setError(e instanceof Error ? e.message : t("mesa.applySuggestionFailed"));
     } finally {
       setSuggestBusyKey(null);

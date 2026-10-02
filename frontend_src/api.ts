@@ -120,7 +120,10 @@ async function _doReq<T>(method: string, path: string, body?: unknown, extraHead
   if (res.status === 204) return undefined as T;
   let json: unknown;
   try { json = await res.json(); }
-  catch { throw new ApiError(502, "invalid_response", t("common.invalidResponse")); }
+  catch {
+    if (!res.ok) throw new ApiError(res.status, "parse_error", res.statusText || t("common.invalidResponse"));
+    throw new ApiError(502, "invalid_response", t("common.invalidResponse"));
+  }
   const error = json !== null && typeof json === "object" && !Array.isArray(json)
     ? json as Record<string, unknown> : {};
 
@@ -283,9 +286,24 @@ export const api = {
     if (!params?.all && params?.cursor) p.set("cursor", params.cursor);
     const pages: MesaProfilesResponse["profiles"] = [];
     const seen = new Set<string>();
+    let restarted = false;
     for (;;) {
       const q = p.toString();
-      const page = await req<MesaProfilesResponse>("GET", `/mesa/profiles${q ? `?${q}` : ""}`);
+      let page: MesaProfilesResponse;
+      try {
+        page = await req<MesaProfilesResponse>("GET", `/mesa/profiles${q ? `?${q}` : ""}`);
+      } catch (error) {
+        if (params?.all && p.has("cursor") && !restarted && error instanceof ApiError
+          && error.status === 400 && error.code === "invalid_request"
+          && error.message === "cursor invalidated by profile changes") {
+          restarted = true;
+          pages.length = 0;
+          seen.clear();
+          p.delete("cursor");
+          continue;
+        }
+        throw error;
+      }
       if (!params?.all) return page;
       pages.push(...page.profiles);
       if (!page.has_more) return { ...page, profiles: pages, has_more: false, next_cursor: null };

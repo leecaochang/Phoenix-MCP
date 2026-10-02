@@ -13,6 +13,7 @@ export function validApiResponse(path: string, method: string, value: unknown): 
   if (route === "/tokens" && method === "GET" || route === "/tokens/archived" && method === "GET") {
     return records(value) && value.every(row => typeof row.id === "string" && typeof row.name === "string");
   }
+  if (method === "GET" && /^\/tokens\/[^/]+\/audit$/.test(route)) return records(value);
   if (!object(value)) return false;
   const field = route === "/approvals" ? "approvals" : route === "/audit" ? "entries"
     : route === "/versions" ? "versions" : route === "/mesa/profiles" ? "profiles" : null;

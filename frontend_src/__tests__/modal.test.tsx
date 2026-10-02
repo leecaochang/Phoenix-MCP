@@ -194,3 +194,19 @@ describe("Modal record navigation", () => {
     expect(outer).not.toHaveBeenCalled();
   });
 });
+
+it("restores the shadow-root opener even when a child auto-focuses during commit", () => {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const shadow = host.attachShadow({ mode: "open" });
+  const opener = document.createElement("button");
+  shadow.append(opener);
+  opener.focus();
+  const mount = document.createElement("div");
+  shadow.append(mount);
+  const view = render(<Modal titleId="autofocus"><h3 id="autofocus">Confirm</h3><input autoFocus /></Modal>, { container: mount });
+  expect(shadow.activeElement).toBe(mount.querySelector("input"));
+  view.unmount();
+  expect(shadow.activeElement).toBe(opener);
+  host.remove();
+});

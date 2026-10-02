@@ -49,18 +49,35 @@ it("keeps documentation buttons, signals and focus rings legible in both themes"
   const night = { ...base, ...read(docs.match(/:root\[data-theme="dark"\]\s*\{([^}]+)/)![1]) };
   for (const values of [base, night]) {
     expect(contrast(rgb(values["--button-ink"]), rgb(values["--button-bg"]))).toBeGreaterThanOrEqual(4.5);
-    for (const surface of ["--bg", "--surface", "--surface-2"]) {
+    for (const surface of ["--bg", "--surface", "--surface-2", "--surface-3"]) {
       const background = rgb(values[surface]);
-      expect(contrast(rgb(values["--accent-deep"]), background)).toBeGreaterThanOrEqual(3);
+      expect(contrast(rgb(values["--accent-deep"]), background)).toBeGreaterThanOrEqual(4.5);
       expect(contrast(rgb(values["--ink-3"]), background)).toBeGreaterThanOrEqual(4.5);
       for (const status of ["success", "error", "warn", "st-yellow", "st-green", "st-red"]) {
         const tint = rgb(values[`--${status}-bg`]);
         const blended = background.map((v, i) => tint[i] * tint[3] + v * (1 - tint[3]));
         expect(contrast(rgb(values[`--${status}`]), blended), `${surface} ${status}`).toBeGreaterThanOrEqual(4.5);
       }
+      const wash = rgb(values["--accent-wash"]);
+      const washed = background.map((v, i) => wash[i] * wash[3] + v * (1 - wash[3]));
+      expect(contrast(rgb(values["--accent-deep"]), washed)).toBeGreaterThanOrEqual(4.5);
       const tint = rgb(values["--st-grey-bg"]);
       const blended = background.map((v, i) => tint[i] * tint[3] + v * (1 - tint[3]));
-      expect(contrast(rgb(values["--ink-2"]), blended)).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(rgb(values["--st-grey"]), blended)).toBeGreaterThanOrEqual(4.5);
     }
+  }
+});
+
+const forcedDark = { ...light, ...tokens(css.match(/:host\(.phx-theme-dark\)\s*\{([^}]+)/)![1]) };
+it.each([["light", light], ["auto dark", dark], ["forced dark", forcedDark]] as const)("keeps %s destructive controls readable", (_theme, values) => {
+  const declarations = (selector: string) => {
+    const block = css.slice(css.indexOf(selector + " {"));
+    return Object.fromEntries([...block.slice(0, block.indexOf("}")).matchAll(/(?:^|[;{])\s*([\w-]+):\s*([^;]+)/g)].map(m => [m[1], m[2].trim()]));
+  };
+  const color = (value: string) => rgb(value.startsWith("var(") ? values[value.match(/--phx-[\w-]+/)![0]] : value);
+  for (const selector of [".btn-danger", ".phx-tab-badge", ".agentcli-cancel-btn", ".agentcli-popout-error"]) {
+    const rule = declarations(selector);
+    expect(rule.background, selector).toBeTruthy();
+    expect(contrast(color(rule.color), color(rule.background)), selector).toBeGreaterThanOrEqual(4.5);
   }
 });

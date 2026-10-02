@@ -137,3 +137,20 @@ it("refreshes every loaded pending page on the polling callback", async () => {
   view.unmount();
   timer.mockRestore();
 });
+
+it("keeps the toolbar but withholds the empty message while the queue is loading", async () => {
+  let finish!: (value: { approvals: ApprovalRecord[]; total: number; limit: number; offset: number }) => void;
+  vi.mocked(api.listApprovals).mockReturnValue(new Promise(resolve => { finish = resolve; }));
+  const view = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
+  expect(view.getByRole("tab", { name: "Pending" })).toBeInTheDocument();
+  expect(view.container.querySelector(".approvals-empty")).toBeNull();
+  const { act } = await import("@testing-library/react");
+  await act(async () => finish({ approvals: [], total: 0, limit: 50, offset: 0 }));
+  expect(view.container.querySelector(".approvals-empty")).toBeInTheDocument();
+});
+
+it("shows the server's pending total before all pages are loaded", async () => {
+  vi.mocked(api.listApprovals).mockResolvedValue({ approvals: [record()], total: 60, limit: 50, offset: 0 });
+  const view = render(<ApprovalsView tab="pending" onTabChange={() => {}} />);
+  expect(await view.findByRole("tab", { name: "Pending (60)" })).toBeInTheDocument();
+});

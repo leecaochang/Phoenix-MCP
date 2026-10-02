@@ -12,6 +12,7 @@ it("keeps busy action focus and prevents mouse and keyboard duplicate dispatch",
   button.focus();
   rerender(<BusyButton busy onClick={click}>Save</BusyButton>);
   expect(button).toHaveFocus();
+  expect(button).not.toBeDisabled();
   expect(button).toHaveAttribute("aria-disabled", "true");
   await userEvent.keyboard("{Enter} ");
   fireEvent.click(button);
@@ -32,11 +33,13 @@ it("keeps busy form controls focused and suppresses edits until completion", asy
   input.focus();
   rerender(controls(true));
   expect(input).toHaveFocus();
+  expect(input).not.toBeDisabled();
   await userEvent.keyboard("changed");
   expect(change).not.toHaveBeenCalled();
   const select = screen.getByRole("combobox", { name: "Mode" });
   select.focus();
   expect(select).toHaveFocus();
+  expect(select).not.toBeDisabled();
   fireEvent.change(select, { target: { value: "deny" } });
   expect(change).not.toHaveBeenCalled();
   await userEvent.keyboard("{Tab}");

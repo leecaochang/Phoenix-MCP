@@ -85,7 +85,7 @@ export const SUBPAGE_SURFACES: {
  * left/right "swap"). Refusing here makes a later scan retry once the icon is in.
  */
 export function nameInsertionPoint(row: HTMLElement): { parent: HTMLElement; before: Node | null } | null {
-  const firstCell = row.querySelector<HTMLElement>('[role="cell"]');
+  const firstCell = row.querySelector<HTMLElement>('[role="cell"]:not(.mdc-data-table__cell--checkbox)');
   const icon = firstCell?.querySelector<HTMLElement>("ha-state-icon, ha-icon, ha-entity-id-icon, ha-domain-icon, ha-svg-icon");
   const iconCell = icon ? icon.closest<HTMLElement>('[role="cell"]') : null;
   if (icon && iconCell) {

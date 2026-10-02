@@ -1,3 +1,4 @@
+import { BusyButton, BusyInput, BusySelect } from "./BusyButton";
 import { useEffect, useRef, useState } from "react";
 import { api, localizedApiMessage } from "../api";
 import { t } from "../i18n";
@@ -177,16 +178,15 @@ export function ProviderAddForm({
     }
   };
 
-  const controlsDisabled = Boolean(disabled || adding || form.saving);
 
   return (
     <>
       <div className="agentcli-add-row">
-        <select
+        <BusySelect
           ref={pickerRef}
           className="input input-auto"
           value={pickerValue}
-          disabled={controlsDisabled || providerTypes.length === 0}
+          busy={Boolean(disabled)} disabled={adding !== null || providerTypes.length === 0}
           onChange={(event) => selectProvider(event.target.value)}
           aria-label={t("settings.agentcliProviderType")}
         >
@@ -194,7 +194,7 @@ export function ProviderAddForm({
           {providerTypes.map((provider) => (
             <option key={provider.kind} value={provider.kind}>{providerLabel(provider)}</option>
           ))}
-        </select>
+        </BusySelect>
       </div>
 
       {adding && (
@@ -210,12 +210,12 @@ export function ProviderAddForm({
               <label className="agentcli-settings-field" htmlFor={id} key={field.id}>
                 <span>{fieldLabel(field)}</span>
                 {field.type === "choice" ? (
-                  <select
+                  <BusySelect
                     id={id}
                     className="input"
                     ref={index === 0 ? (element) => { firstFieldRef.current = element; } : undefined}
                     value={form.values[field.id] ?? ""}
-                    disabled={form.validating || form.saving}
+                    busy={form.validating || form.saving}
                     aria-describedby={form.error ? `${idPrefix}-error` : undefined}
                     aria-invalid={form.error ? true : undefined}
                     onChange={(event) => setValue(field.id, event.target.value)}
@@ -225,15 +225,15 @@ export function ProviderAddForm({
                         {choice.label_key ? t(choice.label_key) : choice.label}
                       </option>
                     ))}
-                  </select>
+                  </BusySelect>
                 ) : (
-                  <input
+                  <BusyInput
                     id={id}
                     ref={index === 0 ? (element) => { firstFieldRef.current = element; } : undefined}
                     type={field.type === "secret" ? "password" : "url"}
                     placeholder={field.placeholder ?? fieldLabel(field)}
                     value={form.values[field.id] ?? ""}
-                    disabled={form.validating || form.saving}
+                    busy={form.validating || form.saving}
                     aria-describedby={form.error ? `${idPrefix}-error` : undefined}
                     aria-invalid={form.error ? true : undefined}
                     onChange={(event) => setValue(field.id, event.target.value)}
@@ -258,25 +258,26 @@ export function ProviderAddForm({
           {form.validated && (
             <label className="agentcli-settings-model-row" htmlFor={`${idPrefix}-model`}>
               <span>{t("settings.agentcliSelectModel")}</span>
-              <select
+              <BusySelect
                 id={`${idPrefix}-model`}
                 className="input input-auto"
                 value={form.model}
-                disabled={form.saving || !form.models.length}
+                busy={form.saving} disabled={!form.models.length}
                 onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))}
               >
                 {form.models.length
                   ? form.models.map((model) => <option key={model} value={model}>{model}</option>)
                   : <option value="">{t("settings.agentcliNoModels")}</option>}
-              </select>
+              </BusySelect>
             </label>
           )}
           {form.validated && (
             <div className="agentcli-settings-model-actions">
               {allowCapabilityProbe && <div className="agentcli-settings-probe-opt">
                 <label className="toggle-switch" htmlFor="agentcli-add-probe-on-save">
-                  <input
+                  <BusyInput
                     id="agentcli-add-probe-on-save"
+                    busy={form.saving}
                     type="checkbox"
                     checked={form.probe}
                     onChange={(event) => setForm((current) => ({ ...current, probe: event.target.checked }))}
@@ -288,43 +289,43 @@ export function ProviderAddForm({
                 </label>
               </div>}
               <div className="agentcli-settings-form-actions">
-                <button
+                <BusyButton
                   type="button"
                   className="btn btn-primary btn-sm"
-                  disabled={form.saving || Boolean(disabled) || (requireModel && !form.models.includes(form.model))}
+                  busy={form.saving || Boolean(disabled)} disabled={requireModel && !form.models.includes(form.model)}
                   onClick={() => void complete()}
                 >
                   {completeLabel}
-                </button>
-                <button
+                </BusyButton>
+                <BusyButton
                   type="button"
                   className="btn btn-sm"
-                  disabled={form.saving}
+                  busy={form.saving}
                   onClick={() => reset()}
                 >
                   {t("settings.cancel")}
-                </button>
+                </BusyButton>
               </div>
             </div>
           )}
           {!form.validated && (
             <div className="agentcli-settings-form-actions">
-              <button
+              <BusyButton
                 type="button"
                 className="btn btn-primary btn-sm"
-                disabled={form.validating || form.saving}
+                busy={form.validating || form.saving}
                 onClick={() => void validate()}
               >
                 {t("settings.agentcliValidate")}
-              </button>
-              <button
+              </BusyButton>
+              <BusyButton
                 type="button"
                 className="btn btn-sm"
-                disabled={form.saving}
+                busy={form.saving}
                 onClick={() => reset()}
               >
                 {t("settings.cancel")}
-              </button>
+              </BusyButton>
             </div>
           )}
         </div>

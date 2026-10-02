@@ -1,5 +1,5 @@
 /**Accessible modal with focus trap, ARIA dialog role, and Escape to close.*/
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useRef, useCallback, useState } from "react";
 
 interface Props {
   titleId: string;
@@ -73,7 +73,8 @@ function touchScrollOwner(
 export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, recordNavigation, wide, children }: Props) {
   const backdropRef = useRef<HTMLDivElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
-  const previousFocus = useRef<HTMLElement | null>(null);
+  // Capture before React commits an autoFocus child inside this dialog.
+  const [previousFocus] = useState(activeElement);
   const onCloseRef = useRef(onClose);
   const onNavigatePreviousRef = useRef(onNavigatePrevious);
   const onNavigateNextRef = useRef(onNavigateNext);
@@ -84,15 +85,14 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
   recordNavigationRef.current = recordNavigation;
 
   useEffect(() => {
-    previousFocus.current = activeElement();
     const first = modalRef.current?.querySelector<HTMLElement>(
       "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])"
     );
     // Fall back to the dialog itself (tabIndex={-1}) so focus never stays
     // behind the backdrop when a modal has no focusable child (e.g. loading).
-    (first ?? modalRef.current)?.focus();
-    return () => { previousFocus.current?.focus(); };
-  }, []);
+    if (!modalRef.current?.contains(activeElement())) (first ?? modalRef.current)?.focus();
+    return () => { if (previousFocus?.isConnected) previousFocus.focus(); };
+  }, [previousFocus]);
 
   // A fixed backdrop does not automatically own a touch scroll gesture. On
   // mobile, swipes from an empty dialog area—or outward at a scroll boundary—

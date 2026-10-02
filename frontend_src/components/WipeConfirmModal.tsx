@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { BusyButton } from "./BusyButton";
 import { api } from "../api";
 import { Modal } from "./Modal";
 import { t } from "../i18n";
@@ -91,14 +92,15 @@ export function WipeConfirmModal({ onWiped, onClose }: Props) {
       </div>
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       <div className="modal-actions">
-        <button
+        <BusyButton
           className="btn btn-danger"
           onClick={doWipe}
-          disabled={typed !== "WIPE" || wiping || nothingSelected}
+          disabled={typed !== "WIPE" || nothingSelected}
+          busy={wiping}
         >
           {wiping ? t("settings.wipeBusy") : t("settings.wipeSubmit")}
-        </button>
-        <button className="btn btn-text" onClick={onClose} disabled={wiping}>{t("settings.cancel")}</button>
+        </BusyButton>
+        <BusyButton className="btn btn-text" onClick={onClose} busy={wiping}>{t("settings.cancel")}</BusyButton>
       </div>
     </Modal>
   );

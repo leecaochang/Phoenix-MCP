@@ -25,7 +25,7 @@
   --button-bg:     #b45309;
   --button-ink:    #ffffff;
   --accent:        #d97706;
-  --accent-deep:   #b45309;   /* inline links / text, 4.7:1 on the page bg */
+  --accent-deep:   #92400e;   /* Inline text also clears 4.5:1 on code and tinted surfaces. */
   --accent-hover:  #92400e;
   --accent-tint:   #faf3e8;
   --accent-wash:   rgba(217, 119, 6, 0.08);
@@ -42,10 +42,10 @@
   --warn:          #92400e;  --warn-bg:    rgba(217, 119, 6, 0.12);
 
   /* permission states (color is never the sole signal; labels always accompany) */
-  --st-grey:   #71717a;  --st-grey-bg:   rgba(113, 113, 122, 0.14);
+  --st-grey:   #52525b;  --st-grey-bg:   rgba(113, 113, 122, 0.14);
   --st-yellow: #854d0e;  --st-yellow-bg: rgba(202, 138, 4, 0.16);
   --st-green:  #116b33;  --st-green-bg:  rgba(22, 163, 74, 0.14);
-  --st-red:    #b91c1c;  --st-red-bg:    rgba(220, 38, 38, 0.12);
+  --st-red:    #991b1b;  --st-red-bg:    rgba(220, 38, 38, 0.12);
 
   /* deep zinc panel for the drenched hero */
   --hero:         #131316;
@@ -124,7 +124,7 @@
     --info:          #a1a1aa;  --info-bg:    rgba(161, 161, 170, 0.14);
     --warn:          #fbbf24;  --warn-bg:    rgba(251, 191, 36, 0.14);
 
-    --st-grey:   #a1a1aa;  --st-grey-bg:   rgba(161, 161, 170, 0.16);
+    --st-grey:   #c4c4cc;  --st-grey-bg:   rgba(161, 161, 170, 0.16);
     --st-yellow: #eab308;  --st-yellow-bg: rgba(234, 179, 8, 0.16);
     --st-green:  #4ade80;  --st-green-bg:  rgba(74, 222, 128, 0.15);
     --st-red:    #fca5a5;  --st-red-bg:    rgba(248, 113, 113, 0.15);
@@ -170,7 +170,7 @@
   --info:          #a1a1aa;  --info-bg:    rgba(161, 161, 170, 0.14);
   --warn:          #fbbf24;  --warn-bg:    rgba(251, 191, 36, 0.14);
 
-  --st-grey:   #a1a1aa;  --st-grey-bg:   rgba(161, 161, 170, 0.16);
+  --st-grey:   #c4c4cc;  --st-grey-bg:   rgba(161, 161, 170, 0.16);
   --st-yellow: #eab308;  --st-yellow-bg: rgba(234, 179, 8, 0.16);
   --st-green:  #4ade80;  --st-green-bg:  rgba(74, 222, 128, 0.15);
   --st-red:    #fca5a5;  --st-red-bg:    rgba(248, 113, 113, 0.15);
@@ -666,11 +666,11 @@ body[data-home] .layout { grid-template-columns: 1fr; }
     z-index: 120;
     transform: translateX(-100%);
     visibility: hidden;
-    transition: transform 0.28s var(--ease-out);
+    transition: transform 0.28s var(--ease-out), visibility 0s linear 0.28s;
     box-shadow: var(--shadow-lg);
     border-right: 1px solid var(--border);
   }
-  body[data-home].nav-open .sidebar { transform: translateX(0); visibility: visible; }
+  body[data-home].nav-open .sidebar { transform: translateX(0); visibility: visible; transition-delay: 0s; }
   body[data-home].nav-open .sidebar-backdrop {
     display: block; position: fixed; inset: 0; z-index: 110;
     background: rgba(0, 0, 0, 0.45); backdrop-filter: blur(2px);
@@ -1393,10 +1393,10 @@ td .no  { color: var(--ink-3); }
     padding-top: 22px;
     transform: translateX(-100%);
     visibility: hidden;
-    transition: transform 0.28s var(--ease-out);
+    transition: transform 0.28s var(--ease-out), visibility 0s linear 0.28s;
     box-shadow: var(--shadow-lg);
   }
-  body.nav-open .sidebar { transform: translateX(0); visibility: visible; }
+  body.nav-open .sidebar { transform: translateX(0); visibility: visible; transition-delay: 0s; }
   body.nav-open .sidebar-backdrop {
     display: block;
     position: fixed; inset: 0; z-index: 110;
