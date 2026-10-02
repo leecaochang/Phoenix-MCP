@@ -9,6 +9,7 @@ import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.const import MESA_MODE_ADVISORY, MESA_MODE_OFF
@@ -70,6 +71,31 @@ async def test_returns_standard_mcp_image_content(hass) -> None:
     assert image_block["mimeType"] == "image/jpeg"
     assert image_block["data"]
     get_image.assert_awaited_once_with(hass, "camera.front_door", width=None, height=None)
+
+
+@pytest.mark.parametrize("mesa_mode", ["advisory", "enforced", "off"])
+@pytest.mark.parametrize("setup_failed", [False, True])
+async def test_missing_mesa_runtime_refuses_camera_unless_explicitly_off(
+    hass, mesa_mode, setup_failed,
+) -> None:
+    hass.states.async_set("camera.front_door", "idle")
+    data = _data(mesa_mode=mesa_mode)
+    data.mesa_setup_failed = setup_failed
+    image = SimpleNamespace(content=b"jpeg-bytes", content_type="image/jpeg")
+    with patch.object(_camera_module(), "async_get_image", AsyncMock(return_value=image)) as fetch:
+        result, outcome, resource = await _call_tool(
+            "get_camera_image", {"entity_id": "camera.front_door"},
+            _token(), hass, data, "missing-runtime", None,
+        )
+    assert resource == "camera.front_door"
+    if mesa_mode == "off":
+        assert outcome == "allowed"
+        assert result["content"][1]["type"] == "image"
+        fetch.assert_awaited_once()
+    else:
+        assert outcome == "denied"
+        assert result["content"][0]["text"] == "Entity not found."
+        fetch.assert_not_awaited()
 
 
 async def test_requires_dedicated_capability_before_entity_lookup(hass) -> None:

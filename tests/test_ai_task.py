@@ -700,3 +700,15 @@ async def test_run_ai_task_error_raises_aitaskerror():
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
         with pytest.raises(AiTaskError, match="boom"):
             await async_run_ai_task(MagicMock(), data, token, _MockProvider(), MagicMock(), "http://h", "hi")
+
+
+def test_probatio_structure_serialization_does_not_import_legacy_converter(monkeypatch):
+    import sys
+
+    if not vol.Schema.__module__.startswith("probatio."):
+        pytest.skip("The installed HA uses the original Voluptuous engine")
+    monkeypatch.setitem(sys.modules, "voluptuous_openapi", None)
+    schema = vol.Schema({vol.Required("count"): int})
+    result = ai_task._structure_to_json(schema)
+    assert result["properties"]["count"]["type"] == "integer"
+    assert result["required"] == ["count"]

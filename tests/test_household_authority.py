@@ -53,6 +53,9 @@ def _context(user_id):
 @pytest.mark.parametrize("identity", ["admin", "user", "unknown"])
 @pytest.mark.parametrize("pass_through", [False, True])
 async def test_household_caps_intersect_token_even_in_pass_through(hass, hass_admin_user, identity, pass_through):
+    assert HOUSEHOLD_CAPABILITIES == {
+        "cap_search", "cap_physical_control", "cap_broadcast", "cap_service_response", "cap_registry_read",
+    }
     _, token = await _environment(hass)
     token.pass_through = pass_through
     user = hass_admin_user if identity == "admin" else await hass.auth.async_create_user("member", group_ids=[GROUP_ID_USER])
@@ -397,3 +400,24 @@ async def test_owned_provider_loop_keeps_household_restriction(hass, hass_admin_
             assert await module.async_voice_answer(hass, data, "read logs", context=Context(user_id=user.id)) == "denied"
         else:
             assert await module.async_generate_ai_task_data(hass, data, "read logs", None) == "denied"
+
+
+@pytest.mark.parametrize("admin", [False, True])
+async def test_conversation_agent_carries_real_ha_context_into_household_scope(hass, hass_admin_user, admin):
+    from homeassistant.components.conversation import ConversationInput
+
+    data, token = await _environment(hass)
+    user = hass_admin_user if admin else await hass.auth.async_create_user("member", group_ids=[GROUP_ID_USER])
+    seen = []
+
+    async def answer(*args, **kwargs):
+        authority = household_authority.get()
+        seen.append((authority.user_id, effective_cap(token, "cap_log_read")))
+        return "Ready"
+
+    user_input = ConversationInput(text="Read", context=Context(user_id=user.id),
+        conversation_id=None, device_id=None, satellite_id=None, language="en", agent_id=DOMAIN)
+    with patch.object(voice_agent, "_async_voice_answer", answer):
+        await voice_agent.PhoenixConversationAgent(hass, data).async_process(user_input)
+    assert seen == [(user.id, "allow" if admin else "deny")]
+    assert household_authority.get() is None

@@ -32,6 +32,16 @@ def _token() -> TokenRecord:
     )
 
 
+@pytest.mark.parametrize("name", [None, 7, True, ["untrusted"], {"name": "untrusted"}])
+async def test_live_context_uses_entity_id_for_non_string_friendly_name(hass, name):
+    hass.states.async_set("light.normal", "off", {"friendly_name": "Normal lamp"})
+    hass.states.async_set("light.malformed", "on", {"friendly_name": name})
+    context = _build_live_context(_token(), hass)
+    assert "names: Normal lamp" in context
+    assert "names: light.malformed" in context
+    assert "untrusted" not in context.replace(_UNTRUSTED_DATA_BOUNDARY, "")
+
+
 class TestYamlScalar:
     def test_plain_string_unquoted(self):
         assert _yaml_scalar("Kitchen Light") == "Kitchen Light"

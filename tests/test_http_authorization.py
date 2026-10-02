@@ -310,3 +310,56 @@ async def test_batch_within_capacity_refuses_exhausted_remaining_budget_before_d
     assert response.status == 429
     assert int(response.headers["Retry-After"]) > 0
     dispatch.assert_not_awaited()
+
+
+@pytest.mark.parametrize("version", ["2025-06-18", "2025-11-25", "2099-01-01"])
+async def test_initialize_negotiates_legacy_despite_foreign_header(http_authority, version):
+    client, data = http_authority
+    _, raw = await data.store.async_create_token("negotiate", "admin", rate_limit_requests=0)
+    response = await client.post("/api/phoenix-mcp", headers=_headers(raw, **{"MCP-Protocol-Version": version}), json=_initialize())
+    assert response.status == 200
+    assert (await response.json())["result"]["protocolVersion"] == "2025-03-26"
+    assert response.headers["Mcp-Session-Id"] in data.mcp_sessions
+
+
+async def test_batch_drops_request_notifications_before_dispatch(http_authority, monkeypatch):
+    from unittest.mock import AsyncMock
+    from custom_components.phoenix_mcp import mcp_view
+
+    client, data = http_authority
+    _, _, headers = await _initialized_session(client, data)
+    dispatch = AsyncMock(wraps=mcp_view._dispatch_mcp)
+    monkeypatch.setattr(mcp_view, "_dispatch_mcp", dispatch)
+    response = await client.post("/api/phoenix-mcp", headers=headers, json=[
+        {"jsonrpc": "2.0", "method": "tools/call", "params": {"name": "restart_ha", "arguments": {}}},
+        {"jsonrpc": "2.0", "id": "ping", "method": "ping"},
+    ])
+    assert response.status == 200
+    assert await response.json() == [{"jsonrpc": "2.0", "id": "ping", "result": {}}]
+    assert [call.args[0] for call in dispatch.await_args_list] == ["ping"]
+
+
+@pytest.mark.parametrize("sse", [False, True])
+async def test_modern_resource_error_uses_modern_code_and_retains_id(http_authority, sse):
+    import json
+
+    client, data = http_authority
+    _, raw = await data.store.async_create_token("resource", "admin", rate_limit_requests=0)
+    headers = _headers(raw, **{"MCP-Protocol-Version": "2026-07-28", "Mcp-Method": "resources/read", "Mcp-Name": "missing://resource"})
+    if sse:
+        headers["Accept"] = "application/json, text/event-stream"
+    response = await client.post("/api/phoenix-mcp", headers=headers, json={
+        "jsonrpc": "2.0", "id": "resource-id", "method": "resources/read", "params": {
+            "uri": "missing://resource", "_meta": {
+                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                "io.modelcontextprotocol/clientCapabilities": {},
+            },
+        },
+    })
+    if sse:
+        reply = [json.loads(line[5:].strip()) for line in (await response.text()).splitlines() if line.startswith("data:")][-1]
+    else:
+        reply = await response.json()
+    assert response.status == 200
+    assert reply["id"] == "resource-id"
+    assert reply["error"]["code"] == -32602

@@ -256,3 +256,17 @@ async def test_symlink_below_allowed_root_cannot_escape_config_jail(hass, fs_env
     finally:
         path.unlink()
         outside.rmdir()
+
+
+@pytest.mark.parametrize("path", ["www2/private.txt", "www/../www2/private.txt"])
+async def test_config_sibling_with_allowed_prefix_is_outside_jail(hass, fs_env, path):
+    from pathlib import Path
+
+    sibling = Path(hass.config.path("www2"))
+    sibling.mkdir()
+    (sibling / "private.txt").write_text("private fixture")
+    result, outcome, _ = await _call("read_file", {"path": path}, _token(), hass)
+    assert outcome == "not_found"
+    assert "private fixture" not in str(result)
+    _, allowed, _ = await _call("read_file", {"path": "www/hello.txt"}, _token(), hass)
+    assert allowed == "allowed"

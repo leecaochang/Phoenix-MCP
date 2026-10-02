@@ -32,7 +32,7 @@ async def test_mixed_case_keeps_entity_red_precedence(hass, registered, resolver
     if registered:
         entry = MockConfigEntry(domain="test")
         entry.add_to_hass(hass)
-        er.async_get(hass).async_get_or_create("light", "test", "kitchen", config_entry=entry)
+        er.async_get(hass).async_get_or_create("light", "test", "kitchen", config_entry=entry, suggested_object_id="kitchen")
     hass.states.async_set("light.kitchen", "on")
     token = _token()
     token.permissions.domains["light"] = PermissionNode("GREEN")
@@ -87,14 +87,31 @@ def test_secret_reference_exception_cannot_admit_literals(value):
 
 
 @pytest.mark.parametrize("executor", [_execute_call_service, _execute_call_service_mesa_approved])
-async def test_service_executor_rechecks_current_physical_capability(hass, executor):
-    token = _token(cap_physical_control="deny")
-    data = PhoenixData(store=MagicMock(), rate_limiter=RateLimiter(), audit=AuditLog())
-    with patch("homeassistant.core.ServiceRegistry.async_call", AsyncMock()) as dispatch:
-        result, outcome, _ = await executor({"domain": "lock", "service": "unlock", "entity_id": "lock.front_door"}, token, hass, data)
-    assert outcome == "denied"
-    assert result["isError"]
-    dispatch.assert_not_called()
+@pytest.mark.parametrize("mode", ["deny", "allow"])
+async def test_service_executor_rechecks_current_physical_capability(hass, executor, mode):
+    store = TokenStore(hass, AsyncMock())
+    token, _ = await store.async_create_token("physical", "admin")
+    token.cap_physical_control = mode
+    token.permissions.domains["lock"] = PermissionNode("GREEN")
+    store.get_settings().mesa_mode = "off"
+    data = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
+    hass.data[DOMAIN] = data
+    entry = er.async_get(hass).async_get_or_create("lock", "test", "front_door", suggested_object_id="front_door")
+    hass.states.async_set(entry.entity_id, "locked")
+    calls = []
+
+    async def unlock(call):
+        calls.append(call.data)
+
+    hass.services.async_register("lock", "unlock", unlock)
+    result, outcome, _ = await executor(
+        {"domain": "lock", "service": "unlock", "entity_id": entry.entity_id}, token, hass, data)
+    assert outcome == ("allowed" if mode == "allow" else "denied"), result
+    assert bool(calls) is (mode == "allow")
+    if mode == "allow":
+        assert calls == [{"entity_id": [entry.entity_id]}]
+    else:
+        assert result["isError"]
 
 
 @pytest.mark.parametrize("selector", ["entity_id", "device_id", "area_id", "floor_id", "label_id"])
@@ -139,3 +156,56 @@ def test_invalid_expiry_never_loads_as_an_unlimited_token():
     data["expires_at"] = "corrupt"
     with pytest.raises(ValueError, match="expires_at"):
         TokenRecord.from_dict(data)
+
+
+async def test_disabled_registry_mixed_case_cannot_use_an_entity_only_grant(hass):
+    entry = er.async_get(hass).async_get_or_create("light", "test", "fixture", suggested_object_id="fixture")
+    er.async_get(hass).async_update_entity(entry.entity_id, disabled_by=er.RegistryEntryDisabler.USER)
+    token = _token()
+    token.permissions.entities[entry.entity_id] = PermissionNode("GREEN")
+    for entity_id in (entry.entity_id, entry.entity_id.upper()):
+        assert resolve_registry_access(entity_id, token, hass) != Permission.WRITE
+    token.permissions.domains["light"] = PermissionNode("GREEN")
+    assert resolve_registry_access(entry.entity_id.upper(), token, hass) == Permission.WRITE
+
+
+async def test_missing_service_selector_refuses_before_creating_approval(hass):
+    from custom_components.phoenix_mcp.mcp_view import _tool_call_service
+
+    store = TokenStore(hass, AsyncMock())
+    token, _ = await store.async_create_token("target", "admin")
+    token.cap_physical_control = "confirm"
+    token.permissions.domains["lock"] = PermissionNode("GREEN")
+    store.get_settings().mesa_mode = "off"
+    data = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
+    hass.data[DOMAIN] = data
+    response, outcome, _ = await _tool_call_service(
+        {"service": {"domain": "lock", "name": "unlock"}}, token, hass, data)
+    assert outcome == "invalid_request", response
+    assert store.get_pending_approvals() == []
+
+
+@pytest.mark.parametrize("version", [0, 1])
+async def test_unknown_storage_versions_refuse_without_rewriting(hass, hass_storage, version):
+    from copy import deepcopy
+
+    original = {"version": version, "minor_version": 1, "key": STORAGE_KEY, "data": {
+        "version": version, "tokens": [_token().to_storage_dict()], "settings": {}, "pending_approvals": [],
+    }}
+    hass_storage[STORAGE_KEY] = deepcopy(original)
+    with pytest.raises(ValueError, match="Unsupported Phoenix storage version"):
+        await TokenStore.async_create(hass)
+    assert hass_storage[STORAGE_KEY] == original
+
+
+@pytest.mark.parametrize("version", [2, 3])
+async def test_released_storage_does_not_cancel_an_execution_claim(hass, hass_storage, version):
+    stamp = utcnow().isoformat()
+    approval = {"id": "executing", "status": "pending", "tool_name": "call_service", "args": {}, "execution_started_at": stamp}
+    hass_storage[STORAGE_KEY] = {"version": version, "minor_version": 1, "key": STORAGE_KEY, "data": {
+        "version": version, "tokens": [], "settings": {}, "pending_approvals": [approval],
+    }}
+    store = await TokenStore.async_create(hass)
+    stored = store.get_pending_approvals()[0]
+    assert stored["status"] == "pending"
+    assert stored["execution_started_at"] == stamp

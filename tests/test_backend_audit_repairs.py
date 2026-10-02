@@ -204,14 +204,15 @@ def test_internal_failure_records_location_without_exception_values(caplog):
 
 
 @pytest.mark.parametrize("domain", ["entity_registry", "device_registry", "area_registry", "helper"])
-async def test_failed_mesa_registry_runtime_refuses_identity_mutation(hass, token_store, domain):
+@pytest.mark.parametrize("failed", [False, True])
+async def test_failed_mesa_registry_runtime_refuses_identity_mutation(hass, token_store, domain, failed):
     from custom_components.phoenix_mcp.data import PhoenixData
     from custom_components.phoenix_mcp.mesa import evaluate_registry_action
     from custom_components.phoenix_mcp.rate_limiter import RateLimiter
     from custom_components.phoenix_mcp.audit import AuditLog
     from custom_components.phoenix_mcp.tools.helper import _helper_mesa_context
     caller, _ = await token_store.async_create_token("mesa-failure", "admin")
-    data = PhoenixData(store=token_store, rate_limiter=RateLimiter(), audit=AuditLog(), mesa_setup_failed=True)
+    data = PhoenixData(store=token_store, rate_limiter=RateLimiter(), audit=AuditLog(), mesa_setup_failed=failed)
     token_store.get_settings().mesa_mode = "advisory"
     decision = evaluate_registry_action(data, caller, "light.visible", action="update", registry_domain=domain)
     assert decision.decision == "deny" and decision.rule == "mesa:runtime_unavailable"

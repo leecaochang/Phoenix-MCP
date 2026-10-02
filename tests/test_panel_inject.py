@@ -28,6 +28,25 @@ def _make_hass(inject_enabled: bool) -> MagicMock:
     return hass
 
 
+@pytest.mark.parametrize("kind", ["mesa", "agentchat"])
+async def test_sync_sweeps_orphaned_urls_using_real_ha_url_manager(hass, kind):
+    from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL, UrlManager
+
+    is_mesa = kind == "mesa"
+    base = panel_mod._INJECT_JS_URL if is_mesa else panel_mod._AGENTCHAT_JS_URL
+    sync = panel_mod.async_sync_mesa_inject if is_mesa else panel_mod.async_sync_agentchat_inject
+    key = panel_mod._INJECT_REGISTERED_URL_KEY if is_mesa else panel_mod._AGENTCHAT_REGISTERED_URL_KEY
+    unrelated = "/local/unrelated.js"
+    manager = UrlManager(lambda *args: None, [base, base + "?v=old", unrelated])
+    hass.data[DATA_EXTRA_MODULE_URL] = manager
+    settings = GlobalSettings(mesa_inject_enabled=True, agentcli_global=True)
+    store = MagicMock()
+    store.get_settings.return_value = settings
+    hass.data[DOMAIN] = MagicMock(store=store)
+    await sync(hass)
+    assert manager.urls == {unrelated, hass.data[key]}
+
+
 @pytest.mark.asyncio
 async def test_sync_adds_module_when_enabled():
     hass = _make_hass(True)

@@ -333,3 +333,12 @@ async def test_report_finalizes_only_received_records_from_its_own_finished_turn
     assert recovery.blocks('token')
     assert {r['request_id'] for r in recovery.records('other')} == {'unrelated'}
     assert dispatch.await_count == 2
+
+
+@pytest.mark.parametrize("tool,expected", [("call_service", "call_service"), ("private" * 2000, "unknown_tool")])
+async def test_begin_persists_only_bounded_catalog_tool_names(tool, expected):
+    disk = Disk()
+    recovery = AgentRecovery(disk)
+    await recovery.begin("token", tool, "request")
+    assert recovery.records("token")[0]["tool"] == expected
+    assert disk.saved["records"]["request"]["tool"] == expected

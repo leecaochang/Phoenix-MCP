@@ -118,6 +118,74 @@ async def lifecycle_http(hass, hass_client_no_auth):
     return client, data, token, raw
 
 
+@pytest.mark.parametrize("era,batch", [("legacy", False), ("legacy", True), ("modern", False)])
+async def test_real_json_disconnect_preserves_only_legacy_dispatch(hass, socket_enabled, era, batch):
+    """Closing the real HTTP connection detaches legacy work but cancels modern work."""
+    assert await async_setup_component(hass, "http", {})
+    data, _, raw = await _environment(hass)
+    assert data.enforce_mcp_lifecycle
+    view = mcp_view.PhoenixMcpView()
+    view.hass = hass
+    hass.http.register_view(view)
+    client = TestClient(TestServer(hass.http.app, handler_cancellation=True))
+    await client.start_server()
+    headers = {"Authorization": f"Bearer {raw}", "Accept": "application/json"}
+    entered, release, finished = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    effects = []
+
+    async def dispatch(method, msg_id, *args, **kwargs):
+        entered.set()
+        try:
+            await release.wait()
+            effects.append(method)
+            return mcp_view._jsonrpc_result(msg_id, {}), method, "fixture", "allowed"
+        finally:
+            finished.set()
+
+    try:
+        if era == "legacy":
+            response = await client.post(view.url, headers=headers, json={
+                "jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {
+                    "protocolVersion": "2025-03-26", "capabilities": {},
+                    "clientInfo": {"name": "disconnect-test", "version": "1"}}})
+            assert response.status == 200
+            headers["Mcp-Session-Id"] = response.headers["Mcp-Session-Id"]
+            await response.read()
+            response = await client.post(view.url, headers=headers, json={
+                "jsonrpc": "2.0", "method": "notifications/initialized"})
+            assert response.status == 202
+            await response.read()
+        body = {"jsonrpc": "2.0", "id": 7, "method": "ping", "params": {}}
+        if era == "modern":
+            headers.update({"MCP-Protocol-Version": "2026-07-28", "Mcp-Method": "ping"})
+            body["params"] = {"_meta": {
+                "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+                "io.modelcontextprotocol/clientCapabilities": {},
+            }}
+        with patch.object(mcp_view, "_dispatch_mcp_authorized", side_effect=dispatch):
+            pending = asyncio.create_task(client.post(view.url, headers=headers, json=[body] if batch else body))
+            async with asyncio.timeout(3):
+                await entered.wait()
+            pending.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await pending
+            if era == "modern":
+                async with asyncio.timeout(3):
+                    await finished.wait()
+                assert effects == []
+            else:
+                # Let aiohttp observe the socket closure before permitting completion.
+                await asyncio.sleep(0.05)
+                assert not finished.is_set()
+                release.set()
+                async with asyncio.timeout(3):
+                    await finished.wait()
+                assert effects == ["ping"]
+    finally:
+        release.set()
+        await client.close()
+
+
 def _write(msg_id=1):
     return {"jsonrpc": "2.0", "id": msg_id, "method": "tools/call", "params": {
         "name": "call_service", "arguments": {"service": {"domain": "light", "name": "toggle"},
@@ -344,3 +412,19 @@ async def test_authority_recovery_double_fault_keeps_json_response_and_barrier(l
     assert "may already" in body["error"]["message"]
     assert "private-path" not in json.dumps(body) and "Traceback" not in json.dumps(body)
     assert effects == ["started"] and data.agent_recovery.blocks(token.id)
+
+
+async def test_emit_failure_after_pending_review_still_closes_it(hass):
+    data, token, _ = await _environment(hass)
+
+    async def emit(event, payload):
+        if event == "approval_required":
+            raise ConnectionResetError("client gone")
+
+    with pytest.raises(ConnectionResetError):
+        await agentcli._run_tool_batch(
+            [{"id": "call", "name": "restart_ha", "input": {}}], hass=hass, data=data,
+            token_id=token.id, client_ip="agentcli", base_url="", emit=emit, cancel=asyncio.Event())
+    pending = data.store.get_pending_approvals()
+    assert pending
+    assert get_approval(data.store, pending[0]["id"]).status == "cancelled"
