@@ -112,7 +112,8 @@
         </div>
 
         <h2>What you end up with</h2>
-        <p>The result is a normal scoped token, no different from one you build by hand. You can widen or tighten its <a href="permissions.html">permission tree</a>, change its <a href="capabilities.html">capabilities</a>, or rotate its value at any time from the token's detail page. When you are done with it, open the token and choose <strong>Revoke</strong>; revoked tokens can then be deleted permanently from the Archived list. Revoking also clears the token from any open Agent Chat window automatically.</p>
+        <p>Connection commands and files contain a bearer credential. Use HTTPS across untrusted networks, keep credentials out of shell history and version control, and rotate a disclosed token. See <a href="connect.html#credential-handling">credential handling</a> before sharing a configuration or screenshot.</p>
+        <p>The result is a normal scoped token, no different from one you build by hand. You can widen or tighten its <a href="permissions.html">permission tree</a>, change its <a href="capabilities.html">capabilities</a>, or rotate its value at any time from the token's detail page. When you are done with it, open the token and choose <strong>Revoke</strong>; revoked tokens can then be deleted permanently from the Archived list. An open Agent Chat window refreshes its token selection when it receives a token-change event; another browser may retain a stale selection until refresh. The server refuses the revoked credential on its next authorization check.</p>
 
         <h2>Where to go next</h2>
         <div class="grid-2">

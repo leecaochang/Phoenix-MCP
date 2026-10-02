@@ -8,7 +8,7 @@
     },
     "step": {
       "user": {
-        "description": "Fai clic su Invia per installare l'integrazione Phoenix MCP. Tieni presente che è possibile configurare una sola istanza alla volta"
+        "description": "Configura Phoenix MCP. È possibile configurare una sola istanza alla volta."
       }
     }
   },

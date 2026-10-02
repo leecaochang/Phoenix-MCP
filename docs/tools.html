@@ -25,7 +25,7 @@
         <header class="page-head">
           <p class="breadcrumb"><a href="index.html">Docs</a> / Reference / Tools</p>
           <h1>Tools reference</h1>
-          <p class="lede">Search all 169 tools by name, task, or required capability. Phoenix includes Home Assistant's 23 native MCP tools plus 146 scoped tools for configuration, diagnostics, and control. The Home Companion persona instead exposes a single <a href="#home-request"><code>home_request</code></a> tool.</p>
+          <p class="lede">Search all 169 tools by name, task, or required capability. Phoenix includes Home Assistant's 23 native MCP tools plus 146 additional scoped tools for configuration, diagnostics, and control. The Home Companion persona instead exposes a single <a href="#home-request"><code>home_request</code></a> tool.</p>
         </header>
 
         <div class="tool-toolbar" role="search">
@@ -63,14 +63,14 @@
           <p>These tools write YAML directly and do <strong>not</strong> consult the permission tree. See <a href="capabilities.html#automation-write">automation and script write</a>.</p></div>
 
           <article class="tool" data-cap="write" data-search="get_automation read automation config content_hash">
-            <div class="tool-head"><span class="tool-name">get_automation</span><span class="badge badge-cap">Automation write</span></div>
+            <div class="tool-head"><span class="tool-name">get_automation</span><span class="badge badge-cap">Manage automations</span></div>
             <p class="tool-desc">Read one automation's full configuration before editing it. <code>edit_automation</code> replaces the entire configuration, so omitting a trigger, condition, or action removes it.</p>
-            <p class="tool-desc">The response includes a <code>content_hash</code> for the edit's <code>expected_hash</code>. This prevents overwriting a newer change. YAML tags appear as display strings, such as <code>!secret my_key</code>; secret values are never resolved. The read requires Automation write but never needs approval.</p>
+            <p class="tool-desc">The response includes a <code>content_hash</code> for the edit's <code>expected_hash</code>. This prevents overwriting a newer change. YAML tags appear as display strings, such as <code>!secret my_key</code>; secret values are never resolved. The read requires Manage automations but never needs approval.</p>
             <dl><dt>params</dt><dd><code>automation_id</code> (required), from <code>list_automations</code> or the entity's <code>id</code> attribute</dd></dl>
           </article>
 
           <article class="tool" data-cap="write" data-search="create_automation edit_automation delete_automation automations.yaml expected_hash">
-            <div class="tool-head"><span class="tool-name">create_automation</span><span class="tool-name">edit_automation</span><span class="tool-name">delete_automation</span><span class="badge badge-cap">Automation write</span></div>
+            <div class="tool-head"><span class="tool-name">create_automation</span><span class="tool-name">edit_automation</span><span class="tool-name">delete_automation</span><span class="badge badge-cap">Manage automations</span></div>
             <p class="tool-desc">Create, edit, or delete automations in the YAML file selected by <code>configuration.yaml</code>. Phoenix follows <code>!include</code> and <code>!include_dir_*</code> layouts to the correct file. It rewrites only the target entry, preserving unrelated comments, formatting, and <code>!secret</code> references.</p>
             <p class="tool-desc">New automations are appended to a plain include or written as separate files for directory includes. Phoenix refuses ambiguous layouts, including duplicate IDs, package or inline entries, and multiple possible create targets. <strong>Edit replaces the entire automation</strong>; read it first and resend every field you want to keep.</p>
             <p class="tool-desc">Creation generates a new ID unless you supply an unused <code>automation_id</code>. An occupied ID is refused even when the alias matches. To intentionally replace an automation, read it first and use <code>edit_automation</code> with its current hash. Values such as <code>new</code> are literal IDs. Existing IDs cannot be changed through config.</p>
@@ -78,13 +78,13 @@
           </article>
 
           <article class="tool" data-cap="write" data-search="get_script read script config content_hash">
-            <div class="tool-head"><span class="tool-name">get_script</span><span class="badge badge-cap">Script write</span></div>
+            <div class="tool-head"><span class="tool-name">get_script</span><span class="badge badge-cap">Manage scripts</span></div>
             <p class="tool-desc">Read one script's full current configuration, the read half of a safe edit for the same reason as <code>get_automation</code>: <code>edit_script</code> replaces the whole config. Returns a <code>content_hash</code> for the edit's <code>expected_hash</code>, and renders YAML tags as display strings without resolving secrets.</p>
             <dl><dt>params</dt><dd><code>script_id</code> (required), the storage key returned by <code>list_scripts</code>, which stays the same after an entity ID rename</dd></dl>
           </article>
 
           <article class="tool" data-cap="write" data-search="create_script edit_script delete_script scripts.yaml expected_hash">
-            <div class="tool-head"><span class="tool-name">create_script</span><span class="tool-name">edit_script</span><span class="tool-name">delete_script</span><span class="badge badge-cap">Script write</span></div>
+            <div class="tool-head"><span class="tool-name">create_script</span><span class="tool-name">edit_script</span><span class="tool-name">delete_script</span><span class="badge badge-cap">Manage scripts</span></div>
             <p class="tool-desc">Create, edit, or delete scripts in the YAML file your <code>configuration.yaml</code> routes scripts to. Split configurations (<code>!include</code> and <code>!include_dir_named</code>/<code>merge_named</code> layouts) are followed to the correct leaf file, preserving untouched content byte-for-byte, the same include-graph handling as the automation tools. <strong>Edit replaces the entire configuration</strong>, so read it with <code>get_script</code> first.</p>
             <dl><dt>create</dt><dd><code>script_id</code> and <code>config</code> (both required), where <code>config</code> holds <code>alias</code>, <code>sequence</code>, <code>mode</code>, <code>variables</code>, <code>fields</code></dd><dt>edit / delete</dt><dd><code>script_id</code> (the slug); edit replaces the entire config and accepts an optional <code>expected_hash</code> from <code>get_script</code></dd></dl>
             <p class="tool-desc">Create and edit return a receipt with <code>config</code>, the storage ID, <code>write_success</code>, <code>reload_status</code>, and <code>registration</code>. Phoenix waits briefly for a registered entity and live state within the token's scope. Use the observed <code>registration.entity_id</code> for entity operations. A <code>timed_out</code> observation leaves the saved write intact: retry a lookup rather than repeating the write. Disabled entities are reported separately. A reload error also identifies that the configuration was saved. Observation confirms presence, not availability or that an edit is active.</p>
@@ -96,19 +96,19 @@
           <div class="tool-group-head"><h2>Configuration &amp; templates</h2></div>
 
           <article class="tool" data-cap="read" data-search="get_config configuration data">
-            <div class="tool-head"><span class="tool-name">get_config</span><span class="badge badge-cap">Config read</span></div>
+            <div class="tool-head"><span class="tool-name">get_config</span><span class="badge badge-cap">Configuration read</span></div>
             <p class="tool-desc">Read a curated subset of Home Assistant's configuration: version, time zone, unit system, location name, and the list of loaded integrations. Precise home coordinates, internal/external URLs, and host filesystem paths are withheld.</p>
           </article>
 
           <article class="tool" data-cap="read" data-search="get_energy_config energy dashboard grid solar battery gas water consumption statistics">
-            <div class="tool-head"><span class="tool-name">get_energy_config</span><span class="badge badge-cap">Config read</span></div>
+            <div class="tool-head"><span class="tool-name">get_energy_config</span><span class="badge badge-cap">Configuration read</span></div>
             <p class="tool-desc">Read the Energy dashboard configuration, including grid, solar, battery, gas, water, and individual-device statistics. <code>referenced_entities</code> combines every referenced entity into one list. Check this list before deleting an entity or removing its integration.</p>
             <p class="tool-desc"><code>issues</code> reports missing entities, absent long-term statistics, and incompatible device class, state class, or unit settings. A <code>null</code> value means the check could not run; an empty list means it found no issue. <code>configured: false</code> means the Energy dashboard has not been set up.</p>
             <p class="tool-desc">Entities outside the token's scope are redacted and omitted from <code>referenced_entities</code>. This tool is read-only.</p>
           </article>
 
           <article class="tool" data-cap="read" data-search="get_solar_forecast solar production forecast energy">
-            <div class="tool-head"><span class="tool-name">get_solar_forecast</span><span class="badge badge-cap">Config read</span></div>
+            <div class="tool-head"><span class="tool-name">get_solar_forecast</span><span class="badge badge-cap">Configuration read</span></div>
             <p class="tool-desc">Read solar production forecasts for the config entries your Energy dashboard's solar source names. Returns an empty result when no solar source names a forecast integration, which is the normal state without one installed.</p>
           </article>
 
@@ -133,19 +133,19 @@
           </article>
 
           <article class="tool" data-cap="read" data-search="list_blueprints blueprint automation script">
-            <div class="tool-head"><span class="tool-name">list_blueprints</span><span class="badge badge-cap">Config read</span></div>
+            <div class="tool-head"><span class="tool-name">list_blueprints</span><span class="badge badge-cap">Configuration read</span></div>
             <p class="tool-desc">List installed automation and script blueprints with their inputs. To instantiate one, create an automation or script with a <code>use_blueprint</code> config (the existing authoring tools accept it); there is no separate create-from-blueprint tool.</p>
             <dl><dt>params</dt><dd><code>domain</code> (optional, <code>automation</code> or <code>script</code>)</dd></dl>
           </article>
 
           <article class="tool" data-cap="read" data-search="get_blueprint blueprint source yaml automation script">
-            <div class="tool-head"><span class="tool-name">get_blueprint</span><span class="badge badge-cap">Config read</span></div>
+            <div class="tool-head"><span class="tool-name">get_blueprint</span><span class="badge badge-cap">Configuration read</span></div>
             <p class="tool-desc">Read a blueprint's YAML before using it. <code>list_blueprints</code> reports accepted inputs; this tool returns the complete body, including <code>!input</code> placeholders. It accepts only paths enumerated by the blueprint registry, so files outside <code>blueprints/</code> are unreachable.</p>
             <dl><dt>params</dt><dd><code>domain</code> (required; <code>automation</code> or <code>script</code>), <code>path</code> (required; exactly as returned by <code>list_blueprints</code>)</dd></dl>
           </article>
 
           <article class="tool" data-cap="system" data-search="create_blueprint edit_blueprint delete_blueprint blueprint authoring yaml">
-            <div class="tool-head"><span class="tool-name">create_blueprint</span><span class="tool-name">edit_blueprint</span><span class="tool-name">delete_blueprint</span><span class="badge badge-cap">Blueprint write</span></div>
+            <div class="tool-head"><span class="tool-name">create_blueprint</span><span class="tool-name">edit_blueprint</span><span class="tool-name">delete_blueprint</span><span class="badge badge-cap">Manage blueprints</span></div>
             <p class="tool-desc">Create, edit, or delete blueprints from supplied YAML. Writes are Confirm-eligible and require <code>cap_blueprint_write</code> plus the matching automation or script authoring capability. This prevents blueprint writes from bypassing a denied authoring capability.</p>
             <p class="tool-desc">Paths stay inside the domain's blueprint folder. Phoenix validates YAML with Home Assistant's blueprint schema before creating an approval. Supplied content must not use YAML anchors or aliases; excessive size or nesting is refused before schema validation.</p>
             <p class="tool-desc"><strong>An edit affects every consumer.</strong> Home Assistant reloads all automations or scripts built from the blueprint, although their own configurations and version histories do not change. Approval and results list the affected entities. Home Assistant refuses deletion while a consumer still uses the blueprint.</p>
@@ -154,24 +154,24 @@
           </article>
 
           <article class="tool" data-cap="read" data-search="get_logs system log entries fault_log crash faulthandler">
-            <div class="tool-head"><span class="tool-name">get_logs</span><span class="badge badge-cap">Log read</span></div>
+            <div class="tool-head"><span class="tool-name">get_logs</span><span class="badge badge-cap">System log read</span></div>
             <p class="tool-desc">Read Home Assistant's bounded, deduplicated <code>system_log</code> ring, newest first. Phoenix MCP's own entries are excluded. Each bucket includes its first and latest occurrence, occurrence count, every message variant Home Assistant retained, a scrubbed exception, and safe relative source and root-cause locations. Absolute or unrecognized paths are replaced.</p>
             <p class="tool-desc">The response reports whether the source is available or degraded, its configured capacity, retained and skipped bucket counts, earliest and latest retained times, the read timestamp, and the effective filters. <code>matched_buckets</code>, <code>has_more</code>, and an opaque <code>next_cursor</code> support stateless continuation. Pagination is best-effort over a live ring because an updated deduplication bucket can move between calls.</p>
-            <p class="tool-desc">Home Assistant retains only <code>WARNING</code> and above in this source. Phoenix does not read or parse the raw <code>home-assistant.log</code> file. Search is case-insensitive and literal, and runs only after token and credential scrubbing. The scrubber cannot recognize every arbitrary third-party secret or piece of personal data, so Log read remains an elevated-trust grant.</p>
+            <p class="tool-desc">Home Assistant retains only <code>WARNING</code> and above in this source. Phoenix does not read or parse the raw <code>home-assistant.log</code> file. Search is case-insensitive and literal, and runs only after token and credential scrubbing. The scrubber cannot recognize every arbitrary third-party secret or piece of personal data, so System log read remains an elevated-trust grant.</p>
             <p class="tool-desc">Set <code>source=fault_log</code> to diagnose native crashes from Home Assistant's <code>home-assistant.log.fault</code>. This also requires Diagnostics. Phoenix reads a bounded tail from that fixed file, scrubs credentials, topology, thread identifiers and inaccessible entity IDs, then searches and pages whole dumps. All thread lines stay in their original order; <code>order</code> chooses <code>newest_first</code> (default) or <code>oldest_first</code> for the dumps. Fault dumps have no timestamps or severity levels.</p>
             <p class="tool-desc">Absent or empty fault files succeed with <code>crash_recorded=false</code>; this does not prove Home Assistant has never crashed. Unreadable or unsafe sources return an error with unknown crash state. Clipped, partial, unrecognized or oversized content produces degraded coverage and a warning. A changed snapshot or filter invalidates its cursor. General file access remains unchanged.</p>
             <dl><dt>params</dt><dd><code>source</code> (<code>system_log</code> default / <code>fault_log</code>), <code>search</code>, <code>limit</code> (max 100; defaults to 50 system-log buckets or 10 fault blocks), <code>cursor</code>; system_log only: <code>level</code> (<code>WARNING</code> / <code>ERROR</code>), <code>integration</code>, <code>logger</code> (complete logger namespace prefix), <code>since</code>, <code>until</code>; fault_log only: <code>order</code></dd></dl>
           </article>
 
           <article class="tool" data-cap="read discovery" data-search="get_phoenix_diagnostics phoenix logs self diagnostics">
-            <div class="tool-head"><span class="tool-name">get_phoenix_diagnostics</span><span class="badge badge-cap">Diagnostics + Log read</span></div>
+            <div class="tool-head"><span class="tool-name">get_phoenix_diagnostics</span><span class="badge badge-cap">Diagnostics + System log read</span></div>
             <p class="tool-desc">Read only Phoenix MCP's own retained <code>WARNING</code>-and-above buckets. This separate tool requires both <code>cap_diagnostics</code> and <code>cap_log_read</code>. It uses the same source-coverage, time, search, and cursor contract as <code>get_logs</code>, with an optional Phoenix logger-prefix filter.</p>
             <p class="tool-desc">A stronger scrub removes credentials, network topology, URLs, filesystem paths, UUIDs, ULIDs, long opaque identifiers, and inaccessible or unknown entity IDs before search. Accessible entity IDs remain useful for diagnosis.</p>
             <dl><dt>params</dt><dd><code>level</code> (<code>WARNING</code> / <code>ERROR</code>), <code>logger</code>, <code>search</code>, <code>since</code>, <code>until</code>, <code>limit</code> (default 50, max 100), <code>cursor</code></dd></dl>
           </article>
 
           <article class="tool" data-cap="read" data-search="get_logbook human readable event history logbook">
-            <div class="tool-head"><span class="tool-name">get_logbook</span><span class="badge badge-cap">Log read</span></div>
+            <div class="tool-head"><span class="tool-name">get_logbook</span><span class="badge badge-cap">System log read</span></div>
             <p class="tool-desc">Read the human-readable event narrative (state changes, triggered automations and scripts) in chronological order. Narrow one query with a <code>target</code> object. Use <code>target.kind: "resources"</code> with up to 100 unique accessible <code>target.entity_ids</code> and <code>target.device_ids</code> together, or use <code>target.kind: "context"</code> with one causal <code>target.id</code>. Every requested resource must be accessible; a missing and an inaccessible resource answer identically.</p>
             <p class="tool-desc">Home-wide reads cover up to 7 days. Entity, device, and context queries cover up to 31 days. Search performs a bounded, case-insensitive literal match on safe <code>name</code>, <code>message</code>, and <code>state</code> fields after filtering and redaction.</p>
             <p class="tool-desc">The result includes <code>total</code> before limiting, plus <code>count</code>, <code>truncated</code>, and effective filters. Narrow the time window when truncated. Home Assistant does not provide a cursor for this query.</p>
@@ -180,7 +180,7 @@
           </article>
 
           <article class="tool" data-cap="read system" data-search="list_integration_log_levels set_integration_log_level logger persistence debug info timed">
-            <div class="tool-head"><span class="tool-name">list_integration_log_levels</span><span class="tool-name">set_integration_log_level</span><span class="badge badge-cap">Log read + Integration log levels</span></div>
+            <div class="tool-head"><span class="tool-name">list_integration_log_levels</span><span class="tool-name">set_integration_log_level</span><span class="badge badge-cap">System log read + Integration log levels</span></div>
             <p class="tool-desc">Inspect effective per-logger levels and the current Home Assistant integration-aware override for integration domains visible through this token's accessible config entries or registry entities. Phoenix MCP and inaccessible domains stay hidden. Stored overrides identify <code>none</code>, <code>once</code>, or <code>permanent</code> persistence, and the response reports unavailable or degraded upstream state instead of guessing after Home Assistant changes shape.</p>
             <p class="tool-desc">The write targets an integration domain, not an arbitrary Python logger. <code>NOTSET</code> clears the override. A runtime-only level can last 5 to 120 minutes.</p>
             <p class="tool-desc">Approval fingerprints visibility, declared loggers, and the previous override. A timed restore runs only while the applied setting and logger set remain current, so a newer operator change is preserved. INFO and DEBUG can consume disk and expose sensitive third-party output.</p>
@@ -202,7 +202,7 @@
 
           <article class="tool" data-cap="discovery" data-search="check_ha_config validate_automation_or_script validate configuration">
             <div class="tool-head"><span class="tool-name">check_ha_config</span><span class="tool-name">validate_automation_or_script</span><span class="badge badge-cap">Diagnostics</span></div>
-            <p class="tool-desc"><code>check_ha_config</code> validates the Home Assistant configuration files. <code>validate_automation_or_script</code> validates an automation or script configuration without saving it and reports, for each referenced entity, whether the token can access it. Entities outside the token's scope are reported as inaccessible without being revealed.</p>
+            <p class="tool-desc"><code>check_ha_config</code> validates the Home Assistant configuration files and returns validity, bounded error/warning counts and safe domain labels. Detailed messages are withheld because they can contain private configuration; inspect Home Assistant's configuration check and logs for the actual errors. <code>validate_automation_or_script</code> validates an automation or script configuration without saving it and reports, for each referenced entity, whether the token can access it. Entities outside the token's scope are reported as inaccessible without being revealed.</p>
             <dl><dt>params</dt><dd><code>check_ha_config</code> takes none. <code>validate_automation_or_script</code>: <code>type</code> (required; <code>automation</code> or <code>script</code>) and <code>config</code> (required; the configuration to validate).</dd></dl>
           </article>
 
@@ -256,8 +256,9 @@
             <div class="tool-head"><span class="tool-name">get_relationships</span><span class="badge badge-cap">Search &amp; discovery</span></div>
             <p class="tool-desc">Find configurations that reference an entity before you rename, replace, or remove it. The required <code>scope</code> selects one entity or all accessible entities attached to a device, integration, area, or label. This lets one integration-level query replace many entity-by-entity searches.</p>
             <p class="tool-desc">Results are grouped by <strong>consumer</strong>, such as an automation, script, scene, dashboard, group, person, or config entry. Each result identifies the referenced entities and their roles. Dashboard results also include a card path accepted by <code>patch_dashboard</code>.</p>
+        <p class="tool-desc">Only readable consumers are returned. Hidden consumers and their identities are omitted; unmapped or ambiguous identities produce a general coverage notice. An empty result does not prove that no other configuration uses the target.</p>
             <p class="tool-desc">Phoenix combines Home Assistant's loaded reference graph with direct configuration scans. The graph adds loaded package and blueprint configurations, people, and integration-managed consumers. The direct scan preserves detailed trigger, condition, action, sequence, and member roles and can find literal references that Home Assistant's extractor does not report.</p>
-            <p class="tool-desc">The response states what it searched. <code>searched</code> lists completed sources; <code>not_searched</code> lists unavailable, unreadable, unmodeled, or capability-skipped sources with reasons. Automation, script, scene, and legacy YAML group searches follow inline, <code>!include</code>, and compatible <code>!include_dir_*</code> layouts. Dashboard searches require Dashboard write, and config-entry searches require Integration management. Config entries matter because entity-based helpers can keep an integration in use without another recorded dependency.</p>
+            <p class="tool-desc">The response states what it searched. <code>searched</code> lists completed sources; <code>not_searched</code> lists unavailable, unreadable, unmodeled, or capability-skipped sources with reasons. Automation, script, scene, and legacy YAML group searches follow inline, <code>!include</code>, and compatible <code>!include_dir_*</code> layouts. Dashboard searches require Manage dashboards, and config-entry searches require Integration management. Config entries matter because entity-based helpers can keep an integration in use without another recorded dependency.</p>
             <p class="tool-desc"><code>dangling_references</code> lists entity IDs that appear in a consumer but no longer exist in state or the entity registry. Each result identifies the consumer and, for dashboards, the card path. Paths are capped; <code>path_count</code> reports the full number when the returned list is clipped.</p>
             <p class="tool-desc">Phoenix filters likely false positives. It omits targets computed by templates because their runtime values are unknown. Dashboard and config-entry values must resemble an entity ID from a domain present in Home Assistant, and service-name fields are ignored except for script calls. A scope with no accessible matches returns the same not-found response as a scope with no matches.</p>
             <dl><dt>params</dt><dd><code>scope</code> (required): <code>{kind, id}</code>, where <code>kind</code> is <code>entity</code>, <code>device</code>, <code>integration</code>, <code>area</code>, or <code>label</code>. With an entity scope, the response also carries <code>references</code>: what that automation or script itself uses.</dd></dl>
@@ -316,8 +317,8 @@
           </article>
 
           <article class="tool" data-cap="discovery" data-search="recognize_intent sentence voice grammar near miss diagnostic">
-            <div class="tool-head"><span class="tool-name">recognize_intent</span><span class="badge badge-cap">Search or Config read</span></div>
-            <p class="tool-desc">Diagnose how Home Assistant's default conversation agent recognizes one sentence without running the intent or changing state. A complete match returns the intent, parsed slots, and resolved entities intersected with both this token's read scope and Assist exposure. An incomplete recognition returns the closest candidate in <code>near_misses</code>.</p>
+            <div class="tool-head"><span class="tool-name">recognize_intent</span><span class="badge badge-cap">Search &amp; discovery or Configuration read</span></div>
+            <p class="tool-desc">Diagnose how Home Assistant's default conversation agent recognizes one sentence without running the intent or changing state. A complete match returns the intent, parsed slots, and resolved entities intersected with both this token's read scope and Assist exposure. An incomplete recognition returns <code>match: false</code> and an empty <code>near_misses</code> list; unscoped candidates are withheld.</p>
             <p class="tool-desc">Custom sentence templates and source file paths are omitted. The caller cannot select an agent, device, or satellite context.</p>
             <dl><dt>params</dt><dd><code>sentence</code> (required; 1-512 characters), optional <code>language</code></dd></dl>
           </article>
@@ -399,10 +400,10 @@
           </article>
 
           <article class="tool" data-cap="system" data-search="get_yaml_config set_yaml_config configuration.yaml packages include fragment key">
-            <div class="tool-head"><span class="tool-name">get_yaml_config</span><span class="tool-name">set_yaml_config</span><span class="badge badge-cap">Raw YAML edit</span></div>
+            <div class="tool-head"><span class="tool-name">get_yaml_config</span><span class="tool-name">set_yaml_config</span><span class="badge badge-cap">Edit raw YAML</span></div>
             <p class="tool-desc">Read or replace <code>configuration.yaml</code> and the YAML files it loads. Writes are Confirm-eligible. <code>get_yaml_config</code> reads the main file by default; optional <code>file</code> selects another <code>.yaml</code> or <code>.yml</code> file in the configuration directory.</p>
             <p class="tool-desc">Phoenix refuses <code>secrets.yaml</code>, <code>esphome/</code>, hidden directories such as <code>.storage</code>, and symlinks that resolve into them. Use <code>get_esphome_yaml</code> for device files. Optional <code>key</code> returns one dotted mapping key and preserves YAML tags.</p>
-            <p class="tool-desc">Reads return file content verbatim. Inline secrets therefore enter the agent's context. Grant Raw YAML edit only to trusted clients, and prefer <code>!secret</code> references over inline values.</p>
+            <p class="tool-desc">Reads return file content verbatim. Inline secrets therefore enter the agent's context. Grant Edit raw YAML only to trusted clients, and prefer <code>!secret</code> references over inline values.</p>
             <p class="tool-desc"><strong>Writing included files.</strong> <code>set_yaml_config</code> uses the same <code>file</code> parameter, so files such as <code>templates.yaml</code> and <code>sensors.yaml</code> can be edited directly. The file must be loaded by <code>configuration.yaml</code> at an ordinary integration key.</p>
             <p class="tool-desc">Phoenix refuses packages and files loaded under protected <code>homeassistant:</code>, <code>http:</code>, <code>frontend:</code>, or <code>lovelace:</code> keys. An included file inherits the rules of the key that loads it. Unreferenced files are also refused. If the main configuration cannot be read, no included file can be written.</p>
             <p class="tool-desc"><strong>Concurrency guard.</strong> The read returns a whole-file <code>content_hash</code>, and <code>set_yaml_config</code> accepts optional <code>expected_hash</code>. If the file changes before execution, Phoenix refuses the write and asks you to read and reapply it. Omitting the hash skips this check.</p>
@@ -413,7 +414,7 @@
           </article>
 
           <article class="tool" data-cap="system" data-search="patch_yaml_config key dotted path recorder configuration.yaml single setting comments">
-            <div class="tool-head"><span class="tool-name">patch_yaml_config</span><span class="badge badge-cap">Raw YAML edit</span></div>
+            <div class="tool-head"><span class="tool-name">patch_yaml_config</span><span class="badge badge-cap">Edit raw YAML</span></div>
             <p class="tool-desc">Change one key or list entry without resending the file. The tool is Confirm-eligible and follows the same <code>file</code> restrictions as <code>set_yaml_config</code>. Required <code>address</code> selects either a dotted mapping <code>key</code>, such as <code>recorder.include</code>, or a mixed key/index <code>path</code>.</p>
             <p class="tool-desc">Required <code>change.kind</code> is <code>set</code>, <code>append</code>, or <code>remove</code>. Set and append carry YAML in <code>content</code>. Phoenix adjusts indentation to the address depth.</p>
             <p class="tool-desc">Only the addressed section is rewritten. Unrelated comments, blank lines, key order, and quoting remain unchanged. Approval shows the addressed section's before and after values. Removing a key also removes a comment directly above it, but not one separated by a blank line.</p>
@@ -468,7 +469,7 @@
           </article>
 
           <article class="tool" data-cap="system" data-search="set_entity delete_entity rename registry enabled disabled hidden labels categories device class area icon orphan mesa">
-            <div class="tool-head"><span class="tool-name">set_entity</span><span class="tool-name">delete_entity</span><span class="badge badge-cap">Registry write</span></div>
+            <div class="tool-head"><span class="tool-name">set_entity</span><span class="tool-name">delete_entity</span><span class="badge badge-cap">Manage entity registry</span></div>
             <p class="tool-desc">Edit an entity's user-controlled registry metadata or delete a stale or duplicate entry. Editable fields include friendly name, icon, area, device class, enabled and hidden state, labels, categories, aliases, and a same-domain entity ID. A live entity requires direct write access. A registry-only entity requires inherited write access from its device or domain.</p>
             <p class="tool-desc">These writes require <code>cap_registry_write</code>, are Confirm-eligible, and create versions. Disabling is refused if it would remove the caller's only write grant. Phoenix does not overwrite integration-controlled or system-controlled state. A deleted entry cannot be recreated through Phoenix MCP.</p>
             <p class="tool-desc">Rename and delete are additionally governed by the entity's fully inherited MESA profile, including device and domain profiles. <code>read_only</code> always refuses; <code>prohibited</code> refuses when MESA is enforced and warns in advisory mode; enforced <code>confirm</code> joins the ordinary registry approval instead of creating a second approval. The approval is valid only for the MESA profile that was reviewed, and permissions and MESA are checked again immediately before execution.</p>
@@ -481,7 +482,7 @@
           </article>
 
           <article class="tool" data-cap="system" data-search="set_area_or_floor location area floor registry labels aliases level create update delete">
-            <div class="tool-head"><span class="tool-name">set_area_or_floor</span><span class="badge badge-cap">Registry write</span></div>
+            <div class="tool-head"><span class="tool-name">set_area_or_floor</span><span class="badge badge-cap">Manage entity registry</span></div>
             <p class="tool-desc">Create, update or delete an area or floor using exact registry IDs. This requires <code>cap_registry_write</code>. Scoped tokens need WRITE on every affected registry entity, including disabled entries, plus an explicit WRITE grant on every affected device. Creating locations and editing empty locations require pass-through authority; a scoped floor write also refuses empty child areas.</p>
             <p class="tool-desc">Use <code>changes.labels</code> to replace an area's label set; <code>[]</code> clears it. Use <code>add_labels</code> and <code>remove_labels</code> to preserve unrelated labels. References must be existing label IDs. Replacement and patches cannot be combined. Floors do not support labels. Both kinds support name, icon and alias replacement; areas support a writable <code>floor_id</code>, and floors support an integer <code>level</code>. Null clears icon, floor assignment or level.</p>
             <p class="tool-desc">Rename and delete check inherited MESA for the complete affected membership. Unresolvable MESA context refuses; metadata-only fields have no MESA actuation gate. Approval rechecks the exact identity, membership, metadata and MESA context. Writes create history; metadata can be restored to the same surviving location. Deletion clears placement references, does not rewrite consumers, and cannot be restored automatically. Inspect current state after an interrupted write before retrying.</p>
@@ -489,7 +490,7 @@
           </article>
 
           <article class="tool" data-cap="system" data-search="set_device device registry rename enable disable area labels mesa version restore">
-            <div class="tool-head"><span class="tool-name">set_device</span><span class="badge badge-cap">Registry write</span></div>
+            <div class="tool-head"><span class="tool-name">set_device</span><span class="badge badge-cap">Manage entity registry</span></div>
             <p class="tool-desc">Edit a device's reversible user metadata: display-name override, area, enabled state, and labels. This requires <code>cap_registry_write</code> plus an explicit device WRITE grant; child-entity or domain inheritance cannot authorize a whole-device write. Use <code>changes.name: null</code> to clear the user override and restore the integration-provided device name, or <code>area_id: null</code> to clear placement. Omitting name preserves the override; an empty string also clears it. Non-empty names containing only single/double quotes and whitespace refuse the whole request before mutation and again during approved execution. Names containing quotes alongside other text are allowed. Only user-disabled devices can be toggled, and an owner-disabled config entry prevents enablement.</p>
             <p class="tool-desc">Name, area, and enabled-state changes require every attached registry entity to remain writable; a more-specific entity RED/YELLOW restriction blocks the whole operation. Label-only edits do not change child authorization. Disabling previews every affected entity and its known consumers, while enabling reports whether an integration reload or restart may be needed. Changes are versioned and restorable.</p>
             <p class="tool-desc">Name changes and enable/disable evaluate <code>device_registry.rename</code>, <code>device_registry.enable</code>, or <code>device_registry.disable</code> across every attached entity's fully inherited MESA profile. Any denial blocks the whole device; enforced confirmation merges into the ordinary registry approval, whose fingerprint pins both entity membership and every resolved profile. Area and labels have no MESA gate. Entity-less devices fail closed for those MESA actions while MESA is active.</p>
@@ -497,7 +498,7 @@
           </article>
 
           <article class="tool" data-cap="system" data-search="remove_device device registry integration owner config entry remove delete mesa consumers">
-            <div class="tool-head"><span class="tool-name">remove_device</span><span class="badge badge-cap">Integration write</span></div>
+            <div class="tool-head"><span class="tool-name">remove_device</span><span class="badge badge-cap">Integration management</span></div>
             <p class="tool-desc">Ask one owning integration to remove a device through Home Assistant's integration-aware removal hook. This requires <code>cap_integration_write</code> plus an explicit device WRITE grant. Phoenix never deletes the raw device-registry row. The owner is inferred only when exactly one exists; pass <code>config_entry_id</code> for a multi-owner device. Unsupported integrations and Phoenix MCP's own entry are refused before approval, and an integration may reject the request without changing the registry.</p>
             <p class="tool-desc">The approval preview identifies the selected owner's affected entities and their known consumers, child devices that could lose their parent if the device disappears, remaining owners, device permission references, and device-level MESA configuration. <code>device_registry.remove</code> is evaluated across exactly those affected entities using normal MESA inheritance. Capability, permission, ownership, membership, support, and MESA are recomputed immediately before execution.</p>
             <p class="tool-desc">After the hook accepts, Phoenix removes only the selected config-entry ownership if the integration did not already do so. The result says whether the entire device disappeared and lists any remaining owners. Removal is captured as a non-restorable delete version.</p>
@@ -522,7 +523,7 @@
           </article>
 
           <article class="tool" data-cap="system" data-search="restart_ha restart home assistant">
-            <div class="tool-head"><span class="tool-name">restart_ha</span><span class="badge badge-cap">HA restart / stop</span></div>
+            <div class="tool-head"><span class="tool-name">restart_ha</span><span class="badge badge-cap">Restart or stop Home Assistant</span></div>
             <p class="tool-desc">Restart Home Assistant. Pass-through-exempt: even pass-through tokens must have this flag enabled.</p>
           </article>
         </section>
@@ -530,40 +531,40 @@
         <!-- ===== MESA profiles ===== -->
         <section class="tool-group" data-cap="mesa">
           <div class="tool-group-head"><h2 id="mesa-tools">MESA profiles</h2>
-          <p>Token-scoped reads of the per-entity safety profiles, plus the advisory lease pair. All require <strong>Config read</strong>, only ever see entities the token can read, and return an identical "not found" for a missing or out-of-scope entity, so they cannot probe for existence. See <a href="mesa.html">MESA</a>.</p></div>
+          <p>Token-scoped reads of the per-entity safety profiles, plus the advisory lease pair. All require <strong>Configuration read</strong>, only ever see entities the token can read, and return an identical "not found" for a missing or out-of-scope entity, so they cannot probe for existence. See <a href="mesa.html">MESA</a>.</p></div>
 
           <article class="tool" data-cap="read mesa" data-search="mesa_explain_profile why resolved conflict inheritance">
-            <div class="tool-head"><span class="tool-name">mesa_explain_profile</span><span class="badge badge-cap">Config read</span></div>
+            <div class="tool-head"><span class="tool-name">mesa_explain_profile</span><span class="badge badge-cap">Configuration read</span></div>
             <p class="tool-desc">Field-by-field explanation of why an accessible entity resolved the way it did, including any conflicts between levels.</p>
             <dl><dt>params</dt><dd><code>entity_id</code> (required), <code>show_conflicts</code></dd></dl>
           </article>
 
           <article class="tool" data-cap="read mesa" data-search="mesa_get_caller_context caller">
-            <div class="tool-head"><span class="tool-name">mesa_get_caller_context</span><span class="badge badge-cap">Config read</span></div>
+            <div class="tool-head"><span class="tool-name">mesa_get_caller_context</span><span class="badge badge-cap">Configuration read</span></div>
             <p class="tool-desc">The MESA context for the current caller.</p>
           </article>
 
           <article class="tool" data-cap="read mesa" data-search="mesa_get_profile entity stored effective profile semantic moments triggers">
-            <div class="tool-head"><span class="tool-name">mesa_get_profile</span><span class="badge badge-cap">Config read</span></div>
+            <div class="tool-head"><span class="tool-name">mesa_get_profile</span><span class="badge badge-cap">Configuration read</span></div>
             <p class="tool-desc">Return the stored and effective profile for one accessible entity. With <code>include_semantic_moments: true</code>, the result also lists its purpose-specific triggers and conditions on Home Assistant 2026.7 or newer. This live data is informational and is omitted on older versions.</p>
             <p class="tool-desc">Phoenix checks declared invalidation conditions against the current deployment. A changed dependency, integration version, or Home Assistant version produces <code>staleness_status: stale</code> and a warning that names the change.</p>
             <dl><dt>params</dt><dd><code>entity_id</code> (required), <code>include_diagnostic</code>, <code>include_semantic_moments</code></dd></dl>
           </article>
 
           <article class="tool" data-cap="read mesa" data-search="mesa_query_profiles list filter profiles domain tag area">
-            <div class="tool-head"><span class="tool-name">mesa_query_profiles</span><span class="badge badge-cap">Config read</span></div>
+            <div class="tool-head"><span class="tool-name">mesa_query_profiles</span><span class="badge badge-cap">Configuration read</span></div>
             <p class="tool-desc">List the profiles in scope, with array filters for domains, tags, areas, devices, integrations, and intents. <code>tags_match</code> selects any-tag or all-tags matching. Tag and intent filters use the effective resolved profile. Counts and cursors are relative to the token's scope.</p>
             <dl><dt>params</dt><dd><code>domains</code>, <code>tags</code>, <code>tags_match</code> (<code>any</code> or <code>all</code>, default <code>any</code>), <code>areas</code>, <code>devices</code>, <code>integrations</code>, <code>intents</code>, <code>min_origin_authority</code> (<code>inferred_ai</code>, <code>hybrid</code>, <code>user</code>, or <code>developer</code>), <code>include_inferred</code> (default <code>false</code>), <code>include_fields</code>, <code>limit</code> (1-200, default 50), <code>cursor</code></dd></dl>
           </article>
 
           <article class="tool" data-cap="read mesa" data-search="mesa_request_lease lease coordination advisory announce">
-            <div class="tool-head"><span class="tool-name">mesa_request_lease</span><span class="badge badge-cap">Config read</span></div>
+            <div class="tool-head"><span class="tool-name">mesa_request_lease</span><span class="badge badge-cap">Configuration read</span></div>
             <p class="tool-desc">Announce a short operation on specific entities (up to 30 seconds) so MESA-aware components can coordinate. A lease is advice, not a lock, and grants no authority: every action stays gated by scope, capabilities, and MESA. Covers only entities the token could already control; entities under protected or critical automation control are denied. Lease endings fire an <code>phoenix_mcp_mesa_lease_expired</code> event.</p>
             <dl><dt>params</dt><dd><code>entities</code> (required; list of entity ids), <code>duration_seconds</code> (required; max 30), <code>intent</code>, <code>priority_level</code> (<code>deferential</code>, <code>cooperative</code>, <code>assertive</code>), <code>caller_priority</code>, <code>preemption_handling</code> (<code>rollback_abort</code> or <code>continue_ignore</code>)</dd></dl>
           </article>
 
           <article class="tool" data-cap="read mesa" data-search="mesa_release_lease lease release early">
-            <div class="tool-head"><span class="tool-name">mesa_release_lease</span><span class="badge badge-cap">Config read</span></div>
+            <div class="tool-head"><span class="tool-name">mesa_release_lease</span><span class="badge badge-cap">Configuration read</span></div>
             <p class="tool-desc">Release a lease early when the work finishes ahead of its expiry. A token can only release its own leases.</p>
             <dl><dt>params</dt><dd><code>lease_id</code> (required)</dd></dl>
           </article>
@@ -673,7 +674,7 @@
             <dl><dt>params</dt><dd><code>projection</code> (required; <code>{kind: compact}</code>, <code>{kind: full}</code>, or <code>{kind: fields, fields: [...]}</code>)</dd></dl>
           </article>
           <article class="tool" data-cap="read" data-search="get_camera_image camera image still privacy multimodal">
-            <div class="tool-head"><span class="tool-name">get_camera_image</span><span class="badge badge-cap">cap_camera_read</span></div>
+            <div class="tool-head"><span class="tool-name">get_camera_image</span><span class="badge badge-cap">Camera image read</span></div>
             <p class="tool-desc">Retrieve a still image from one accessible <code>camera.*</code> entity named by <code>entity_id</code>, which is required. Requires the dedicated camera-image capability and READ or WRITE permission for the entity. Returns standard MCP image content for multimodal clients and never exposes a stream URL.</p>
             <dl><dt>params</dt><dd><code>entity_id</code> (required), optional <code>width</code> and <code>height</code> (1-2048 pixels)</dd></dl>
           </article>
@@ -704,7 +705,7 @@
           </article>
           <article class="tool" data-cap="read" data-search="get_calendar_write calendar receipt recovery">
             <div class="tool-head"><span class="tool-name">get_calendar_write</span><span class="badge badge-neutral">tree-scoped</span></div>
-            <p class="tool-desc">Read your token's retained calendar write receipts. Requires READ on the same calendar identity. Omit receipt_id to list receipt IDs, operations and outcomes, or supply one for UID-bearing before/after snapshots. Applied means the integration returned successfully; readback may still be unavailable. Outcome unknown requires verification in Home Assistant. No automatic replay or rollback is offered. Storage retains up to 200 receipts, evicting the oldest applied records and preserving uncertain records; a full uncertain journal refuses new writes.</p>
+            <p class="tool-desc">Read your token's retained calendar write receipts. Requires READ on the same calendar identity. Omit receipt_id to list receipt IDs, operations and outcomes, or supply one for UID-bearing before/after snapshots. Applied means the integration returned successfully; readback may still be unavailable. Outcome unknown requires verification in Home Assistant. No automatic replay or rollback is offered. An interrupted unknown outcome creates a Home Assistant Repair. Check the actual calendar, then acknowledge the Repair to mark the receipt reviewed; acknowledgment does not replay, undo or prove success. Storage retains up to 200 receipts, evicting the oldest applied, not_applied or reviewed records and preserving unresolved uncertain records; a full uncertain journal refuses new writes.</p>
             <dl><dt>params</dt><dd><code>entity_id</code> (required), <code>receipt_id</code> (optional)</dd></dl>
           </article>
           <article class="tool" data-cap="read" data-search="get_calendar_events calendar appointments">
@@ -728,7 +729,7 @@
         <section class="tool-group" data-cap="read">
           <div class="tool-group-head"><h2>Realtime subscriptions</h2></div>
           <article class="tool" data-cap="read" data-search="watch_entity blocking 30s">
-            <div class="tool-head"><span class="tool-name">watch_entity</span><span class="badge badge-cap">Config read</span></div>
+            <div class="tool-head"><span class="tool-name">watch_entity</span><span class="badge badge-cap">Configuration read</span></div>
             <p class="tool-desc">Bounded blocking subscription (max 30 seconds) that waits for an accessible entity to change state, then returns it.</p>
             <dl><dt>params</dt><dd><code>entity_id</code> (required), <code>timeout</code> (seconds, max 30)</dd></dl>
           </article>
@@ -739,7 +740,7 @@
           <div class="tool-group-head"><h2>Scenes, helpers &amp; dashboards</h2></div>
 
           <article id="helpers" class="tool" data-cap="write" data-search="create_helper edit_helper delete_helper input_ input_button counter timer schedule zone tag person device tracker NFC QR mold_indicator history_stats config flow">
-            <div class="tool-head"><span class="tool-name">create_helper</span><span class="tool-name">edit_helper</span><span class="tool-name">delete_helper</span><span class="badge badge-cap">Helper write</span></div>
+            <div class="tool-head"><span class="tool-name">create_helper</span><span class="tool-name">edit_helper</span><span class="tool-name">delete_helper</span><span class="badge badge-cap">Manage helpers</span></div>
             <p class="tool-desc">Create, edit, or delete storage-backed helpers, including <code>input_*</code>, <code>input_button</code>, counters, timers, schedules, zones, tags, and people. Writes are Confirm-eligible. Phoenix evaluates inherited MESA before approval and again before execution. A newly created helper is rolled back if its materialized entity inherits stricter rules than the approved proposal.</p>
             <p class="tool-desc">Creating a zone, tag, or person requires write access to the entire entity domain. Later edits and deletes require write access to the specific entity. Core zones, YAML-backed zones, and YAML-defined people cannot be changed with these tools.</p>
             <p class="tool-desc">A person accepts <code>name</code> and <code>device_trackers</code>. Every current and proposed tracker must be writable. Phoenix reports whether the person is linked to a Home Assistant user, but never returns or accepts the user ID or picture. Name-only edits preserve existing links. Restoring an existing person preserves private bindings; recreating a deleted person restores only its name and tracker links.</p>
@@ -758,7 +759,7 @@
           </article>
 
           <article class="tool" data-cap="write" data-search="get_helper_settings set_helper_settings helper reconfigure repoint source entity threshold derivative switch_as_x migration">
-            <div class="tool-head"><span class="tool-name">get_helper_settings</span><span class="tool-name">set_helper_settings</span><span class="badge badge-cap">Helper write</span></div>
+            <div class="tool-head"><span class="tool-name">get_helper_settings</span><span class="tool-name">set_helper_settings</span><span class="badge badge-cap">Manage helpers</span></div>
             <p class="tool-desc">Read and change helpers built on other entities, such as threshold, derivative, <code>switch_as_x</code>, <code>min_max</code>, utility meter, and attribute sensor. Home Assistant stores these helpers as config entries, not in the storage collection used by the helper CRUD tools. Writes are Confirm-eligible.</p>
             <p class="tool-desc">Before a write, Phoenix resolves inherited MESA for every entity owned by the helper. Approval records that result, and execution rechecks both membership and profiles. Phoenix supports the helper's options or reconfigure flow; <code>mechanism</code> identifies which one is used.</p>
             <p class="tool-desc"><strong>Use these tools to finish a migration.</strong> A helper can remain after its source entity is removed, but it stops producing values. <code>get_relationships</code> lists the helper as a <code>config_entry</code> consumer. Use this pair to point it to a replacement entity.</p>
@@ -772,7 +773,7 @@
           </article>
 
           <article class="tool" data-cap="write" data-search="get_scene create_scene edit_scene delete_scene expected_hash">
-            <div class="tool-head"><span class="tool-name">get_scene</span><span class="tool-name">create_scene</span><span class="tool-name">edit_scene</span><span class="tool-name">delete_scene</span><span class="badge badge-cap">Scene write</span></div>
+            <div class="tool-head"><span class="tool-name">get_scene</span><span class="tool-name">create_scene</span><span class="tool-name">edit_scene</span><span class="tool-name">delete_scene</span><span class="badge badge-cap">Manage scenes</span></div>
             <p class="tool-desc">Read, create, edit, or delete scenes. Writes are Confirm-eligible; reads are not. Phoenix follows <code>!include</code> and <code>!include_dir_*</code> references to the correct leaf file.</p>
             <p class="tool-desc"><code>get_scene</code> returns the name, entity map, and a <code>content_hash</code> for optional <code>expected_hash</code> checking. An edit replaces the entire scene, so read it first and resend every member. A missing scene and one containing an unwritable entity return the same response.</p>
             <dl><dt>params</dt><dd><code>scene_id</code> (required except for create), <code>config</code> (required for create/edit), <code>expected_hash</code> (edit, optional)</dd></dl>
@@ -780,7 +781,7 @@
           </article>
 
           <article class="tool" data-cap="write" data-search="list_dashboards create_dashboard edit_dashboard delete_dashboard get_dashboard_config set_dashboard_config lovelace">
-            <div class="tool-head"><span class="tool-name">list_dashboards</span><span class="tool-name">create_dashboard</span><span class="tool-name">edit_dashboard</span><span class="tool-name">delete_dashboard</span><span class="tool-name">get_dashboard_config</span><span class="tool-name">set_dashboard_config</span><span class="badge badge-cap">Dashboard write</span></div>
+            <div class="tool-head"><span class="tool-name">list_dashboards</span><span class="tool-name">create_dashboard</span><span class="tool-name">edit_dashboard</span><span class="tool-name">delete_dashboard</span><span class="tool-name">get_dashboard_config</span><span class="tool-name">set_dashboard_config</span><span class="badge badge-cap">Manage dashboards</span></div>
             <p class="tool-desc">List and manage Lovelace dashboards, or read and replace a stored view and card layout. <code>get_dashboard_config</code> masks out-of-scope entities with <code>&lt;redacted&gt;</code>. <code>set_dashboard_config</code> is Confirm-eligible, writes storage-mode dashboards, and creates a version.</p>
             <p class="tool-desc">Phoenix refuses a full layout containing a redaction placeholder because writing it would destroy the hidden reference. Use <code>patch_dashboard</code> for one value, or a card tool when its payload contains no placeholders.</p>
             <p class="tool-desc">The read returns a <code>content_hash</code>; the write accepts optional <code>expected_hash</code>. Phoenix checks the hash again after approval. Auto-generated dashboards have no stored layout, so any expected hash conflicts.</p>
@@ -789,7 +790,7 @@
           </article>
 
           <article class="tool" data-cap="write" data-search="list_dashboard_cards custom cards hacs catalog lovelace card picker installed">
-            <div class="tool-head"><span class="tool-name">list_dashboard_cards</span><span class="badge badge-cap">Dashboard write</span></div>
+            <div class="tool-head"><span class="tool-name">list_dashboard_cards</span><span class="badge badge-cap">Manage dashboards</span></div>
             <p class="tool-desc">List custom cards installed through HACS or integrations. Each entry includes the card's name, short description, and published documentation URL. Request details to include an example from the card's <code>getStubConfig</code>. The tool is read-only and never approval-gated.</p>
             <p class="tool-desc">Custom cards do not publish a standard configuration schema, and an uninstalled type is saved but renders as an error. Use the returned example as the starting point for a card configuration.</p>
             <p class="tool-desc">The Phoenix MCP panel builds this catalog in a browser from <code>window.customCards</code>. It cannot reliably discover those runtime names from files. Until a browser opens the panel, the catalog reports <em>un-harvested</em>: installed cards are unknown, not absent.</p>
@@ -797,7 +798,7 @@
           </article>
 
           <article class="tool" data-cap="write" data-search="add_dashboard_card edit_dashboard_card delete_dashboard_card lovelace card">
-            <div class="tool-head"><span class="tool-name">add_dashboard_card</span><span class="tool-name">edit_dashboard_card</span><span class="tool-name">delete_dashboard_card</span><span class="badge badge-cap">Dashboard write</span></div>
+            <div class="tool-head"><span class="tool-name">add_dashboard_card</span><span class="tool-name">edit_dashboard_card</span><span class="tool-name">delete_dashboard_card</span><span class="badge badge-cap">Manage dashboards</span></div>
             <p class="tool-desc">Add, replace, or remove one card by index without resending the dashboard. Sections views also require a section index. These writes are Confirm-eligible and versioned.</p>
             <p class="tool-desc">The dashboard must already have a stored layout. Create one with <code>set_dashboard_config</code> first. Strategy views, strategy dashboards, and auto-generated dashboards are refused.</p>
             <p class="tool-desc">Phoenix validates the operation before approval and again before applying it. A layout change during approval therefore fails instead of editing the wrong index. An unknown or unloaded <code>custom:</code> card adds an advisory <code>warnings</code> entry but does not block the write.</p>
@@ -806,7 +807,7 @@
           </article>
 
           <article class="tool" data-cap="write" data-search="patch_dashboard path badge view option single value lovelace">
-            <div class="tool-head"><span class="tool-name">patch_dashboard</span><span class="badge badge-cap">Dashboard write</span></div>
+            <div class="tool-head"><span class="tool-name">patch_dashboard</span><span class="badge badge-cap">Manage dashboards</span></div>
             <p class="tool-desc">Change one dashboard value by path without resending the layout. Required <code>target</code> contains <code>url_path</code> and a key/index <code>path</code>. For example, <code>["views", 0, "badges", 4, "entity"]</code> selects one badge entity.</p>
             <p class="tool-desc">Required <code>change.kind</code> is <code>set</code>, <code>append</code>, or <code>remove</code>. Set and append include a value. Parent structures must exist, and indexes cannot be negative. The write is Confirm-eligible, versioned, and validated before approval and execution.</p>
             <p class="tool-desc">Phoenix refuses any value containing <code>&lt;redacted&gt;</code>. That placeholder represents an entity ID the token cannot resolve, including IDs that no longer exist. Writing it would permanently replace the stored reference. Use a narrow patch when a full dashboard cannot safely round-trip.</p>
@@ -820,19 +821,19 @@
 
           <article class="tool" data-cap="service" data-search="call_service call any service domain automation trigger enable disable script start stop run scene activate variables">
             <div class="tool-head"><span class="tool-name">call_service</span><span class="badge badge-neutral">tree-scoped</span></div>
-            <p class="tool-desc">Call any Home Assistant service. Put its domain, name, and optional data in the required <code>service</code> object. Put resource selectors in optional <code>targets</code>.</p>
+            <p class="tool-desc">Call any Home Assistant service. Put its domain, name, and optional data in the required <code>service</code> object. Put explicit resource selectors in <code>targets</code>; targetless services are not supported by this tool.</p>
             <p class="tool-desc">For runtime actions, use <code>automation.trigger</code> to run actions now, <code>automation.turn_on</code> to enable future triggers, or <code>automation.turn_off</code> to disable them. Trigger skips conditions by default; set <code>service.data.skip_condition: false</code> to check them. Turn-off also stops running actions by default; <code>service.data.stop_actions: false</code> lets those runs finish. Use <code>script.turn_on</code> to start with inputs in <code>service.data.variables</code>, <code>script.turn_off</code> to stop all runs, and <code>scene.turn_on</code> to activate a scene. Stopping a script leaves it available to run again; registry disabling through <code>set_entity</code> is a separate operation.</p>
             <p class="tool-desc">Named <code>script.&lt;stored_id&gt;</code> services wait for completion and take inputs directly in <code>service.data</code>. Their resolved target must be exactly the corresponding script's current entity ID, including after renames. Use <code>find_available_actions</code> to discover that service. A timeout may leave effects in progress; inspect before retrying.</p>
             <p class="tool-desc">Use the existing create/edit tools for configuration, then a separate runtime call after successful reload and entity lookup. Script/scene receipts report reload and registration separately; a saved write is retained when observation times out. Runtime WRITE and MESA checks govern the automation, script, or scene itself. Its downstream actions run under Home Assistant; see <a href="permissions.html#indirect-control-risk">indirect control permissions</a>.</p>
-            <p class="tool-desc">Phoenix expands device and area targets to explicit entities and skips configuration, diagnostic, and hidden entities during those two expansion modes. Direct entity targets are not filtered by those categories. Omitting <code>targets</code>, or using <code>kind: all</code>, selects every entity in the service domain, including configuration, diagnostic, and hidden entities. Permission filtering still applies in every mode: denied entities are silently dropped, and a fully denied result returns the generic Forbidden response without calling Home Assistant.</p>
-            <p class="tool-desc">Phoenix strips primary target keys from <code>service.data</code> and refuses service-specific secondary selectors such as <code>media_player_entity_id</code> or <code>group_members</code>, because only the resolved target list is permission-checked and MESA-evaluated. Response data is scanned and inaccessible entity IDs are replaced with <code>&lt;redacted&gt;</code>. Physical-control and restart services need their capabilities. The core config-reload family is gated on <code>cap_yaml_edit</code> and is Confirm-eligible.</p>
-            <dl><dt>params</dt><dd><code>service</code> (required): <code>service.domain</code> and <code>service.name</code> are required strings; <code>service.data</code> is optional. <code>targets</code> is an optional array of <code>{kind, ids}</code> objects. <code>kind</code> is <code>entity</code>, <code>device</code>, <code>area</code>, or <code>all</code>; <code>ids</code> is required and non-empty except for <code>all</code>. Repeated groups of the same kind are merged and duplicate IDs are removed. <code>all</code> cannot be combined with another target kind.</dd></dl>
+            <p class="tool-desc">Phoenix expands device and area targets to explicit entities and skips configuration, diagnostic, and hidden entities during those two expansion modes. Direct entity targets are not filtered by those categories. Omitting <code>targets</code> is refused before an approval is created or a service is dispatched. Explicit <code>kind: all</code> selects every entity in the service domain, including configuration, diagnostic, and hidden entities. Permission filtering still applies in every mode: denied entities are silently dropped, and a fully denied result returns the generic Forbidden response without calling Home Assistant.</p>
+            <p class="tool-desc">Phoenix refuses primary target keys in <code>service.data</code>, including <code>entity_id</code>, <code>device_id</code>, <code>area_id</code>, <code>floor_id</code> and <code>label_id</code>. It also refuses service-specific secondary selectors such as <code>media_player_entity_id</code> or <code>group_members</code>, because only the resolved target list is permission-checked and MESA-evaluated. Response data is scanned and inaccessible entity IDs are replaced with <code>&lt;redacted&gt;</code>. Physical-control and restart services need their capabilities. The core config-reload family is gated on <code>cap_yaml_edit</code> and is Confirm-eligible.</p>
+            <dl><dt>params</dt><dd><code>service</code> (required): <code>service.domain</code> and <code>service.name</code> are required strings; <code>service.data</code> is optional. <code>targets</code> is a required array for supported service calls of <code>{kind, ids}</code> objects. <code>kind</code> is <code>entity</code>, <code>device</code>, <code>area</code>, or <code>all</code>; <code>ids</code> is required and non-empty except for <code>all</code>. Repeated groups of the same kind are merged and duplicate IDs are removed. <code>all</code> cannot be combined with another target kind.</dd></dl>
           </article>
 
           <article class="tool" data-cap="service" data-search="dry_run_service preview predicted outcome mesa">
             <div class="tool-head"><span class="tool-name">dry_run_service</span><span class="badge badge-cap">Search &amp; discovery</span></div>
             <p class="tool-desc">Preview a service call without running it. Resolves and flattens targets, reports the MESA verdict per entity, and returns a single <code>predicted_outcome</code> of <code>allowed</code>, <code>pending_approval</code>, or <code>denied</code>, folding the capability gate and MESA together. It uses the same structured <code>service</code> and <code>targets</code> parameters as <code>call_service</code>.</p>
-            <dl><dt>params</dt><dd><code>service</code> (required): required <code>service.domain</code> and <code>service.name</code>, plus optional <code>service.data</code>. Optional <code>targets</code> entries use <code>kind</code> <code>entity</code>, <code>device</code>, <code>area</code>, or <code>all</code>, with non-empty <code>ids</code> except for <code>all</code>.</dd></dl>
+            <dl><dt>params</dt><dd><code>service</code> (required): required <code>service.domain</code> and <code>service.name</code>, plus optional <code>service.data</code>. Required <code>targets</code> entries use <code>kind</code> <code>entity</code>, <code>device</code>, <code>area</code>, or <code>all</code>, with non-empty <code>ids</code> except for <code>all</code>.</dd></dl>
           </article>
         </section>
 

@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "description": "Kliknij Zatwierdź, aby zainstalować integrację Phoenix MCP. Pamiętaj, że można skonfigurować tylko jedną instancję naraz"
+        "description": "Skonfiguruj Phoenix MCP. Jednocześnie można skonfigurować tylko jedną instancję."
       }
     },
     "abort": {

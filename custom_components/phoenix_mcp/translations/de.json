@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "description": "Klicken Sie auf „Senden“, um die Phoenix-MCP-Integration zu installieren. Bitte beachten Sie, dass jeweils nur eine Instanz gleichzeitig konfiguriert werden kann"
+        "description": "Phoenix MCP einrichten. Es kann jeweils nur eine Instanz konfiguriert werden."
       }
     },
     "abort": {

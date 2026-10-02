@@ -16,6 +16,7 @@ as a hosted site; the integration ships no copy of it.
 
 from __future__ import annotations
 
+import ast
 import pathlib
 import html as html_parser
 import json
@@ -25,8 +26,6 @@ import pytest
 
 from custom_components.phoenix_mcp.const import (
     AGENTCLI_PROVIDERS,
-    AI_TASK_MIN_HA,
-    ASSIST_API_MIN_HA,
     CAPABILITY_NAMES,
 )
 from custom_components.phoenix_mcp.mcp_view import (
@@ -173,11 +172,15 @@ def test_shared_volume_article_attributes_each_target_contract() -> None:
 
 
 def test_service_target_expansion_modes_are_explicit() -> None:
-    """Broad no-target calls and category filtering must not share vague prose."""
+    """Refused omissions and explicit domain-wide selection stay distinct."""
     article = _tools_articles()["call_service"]
     plain = " ".join(re.sub(r"<[^>]+>", " ", article).lower().split())
 
     assert "omitting targets" in plain
+    assert "omitting targets is refused" in plain
+    assert "targetless services are not supported" in plain
+    assert "phoenix refuses primary target keys in service.data" in plain
+    assert 'kind: all' in plain
     assert "every entity in the service domain" in plain
     assert all(word in plain for word in ("configuration", "diagnostic", "hidden"))
     assert "permission filtering still applies in every mode" in plain
@@ -271,7 +274,7 @@ def test_admin_api_documents_every_provider_kind() -> None:
 
 
 def test_admin_api_documents_every_emitted_error_code() -> None:
-    src = (PKG / "admin_view.py").read_text(encoding="utf-8")
+    src = "\n".join((PKG / name).read_text(encoding="utf-8") for name in ("admin_view.py", "agentcli.py"))
     codes = set(re.findall(r'_err\(\s*"([a-z_]+)"', src))
     assert len(codes) >= 6, f"error-code extraction broke: {sorted(codes)}"
     html = (DOCS / "admin-api.html").read_text(encoding="utf-8")
@@ -344,18 +347,111 @@ def test_install_requirements_match_manifest_constraints() -> None:
     source = html_parser.unescape((DOCS / "install.html").read_text())
     for requirement in manifest["requirements"]:
         assert f"<code>{requirement}</code>" in source
+        for readme in ROOT.glob("README*.md"):
+            assert f"`{requirement}`" in readme.read_text(), readme.name
 
 
-@pytest.mark.parametrize(
-    ("feature", "floor"),
-    [("Assist", ASSIST_API_MIN_HA), ("AI Task", AI_TASK_MIN_HA)],
-)
-def test_connect_page_states_the_ha_version_floor(feature: str, floor: str) -> None:
-    """The optional AI surfaces need newer HA than the headline floor."""
+def test_connect_page_states_the_ha_version_floor() -> None:
+    """Assist and AI Task are available at the supported base release."""
     from custom_components.phoenix_mcp.const import MIN_HA_VERSION
 
     major_minor = ".".join(MIN_HA_VERSION.split(".")[:2])
     html = (DOCS / "connect.html").read_text(encoding="utf-8")
     assert major_minor in html, (
-        f"connect.html never mentions that {feature} requires HA {major_minor}+"
+        f"connect.html never mentions the supported HA {major_minor}+ base"
     )
+    assert "Available on every supported Home Assistant version" in html
+
+
+def _plain_page(name: str) -> str:
+    return " ".join(html_parser.unescape(re.sub(r"<[^>]+>", " ", (DOCS / name).read_text())).split())
+
+
+def test_tool_badges_use_current_capability_labels() -> None:
+    catalog = json.loads((PKG / "catalogs/en.json").read_text())["panel"]["caps"]
+    labels = {catalog[name]["label"] for name in CAPABILITY_NAMES}
+    # Shared articles describe combined gates or the selected authoring family.
+    labels.update({"Diagnostics + Radio management", "Diagnostics + System log read",
+                   "System log read + Integration log levels", "Search & discovery or Configuration read",
+                   "Family write", "Home Companion only"})
+    badges = {html_parser.unescape(value) for value in re.findall(
+        r'class="badge badge-cap">([^<]+)</span>', (DOCS / "tools.html").read_text())}
+    assert len(badges) >= 30
+    assert badges <= labels, badges - labels
+
+
+def test_documented_mesa_baseline_and_default_match_runtime() -> None:
+    from custom_components.phoenix_mcp.mesa_core import DOMAIN_SAFETY_BASELINE
+    from custom_components.phoenix_mcp.token_store import GlobalSettings
+
+    assert GlobalSettings().mesa_mode == "advisory"
+    assert DOMAIN_SAFETY_BASELINE["light"] == "autonomous"
+    assert DOMAIN_SAFETY_BASELINE["lock"] == DOMAIN_SAFETY_BASELINE["alarm_control_panel"] == "prohibited"
+    assert all(mode == "confirm" for domain, mode in DOMAIN_SAFETY_BASELINE.items()
+               if domain not in ("light", "lock", "alarm_control_panel"))
+    mesa = _plain_page("mesa.html")
+    assert "lights inherit an autonomous baseline, locks and alarm panels inherit prohibited baselines, and every other domain inherits a confirm baseline" in mesa
+    assert "The default is advisory" in mesa
+    assert "Advisory is the default" in _plain_page("index.html")
+    assert "every other domain requires confirmation under enforced mode" in _plain_page("capabilities.html")
+
+
+def test_audit_prose_keeps_master_off_and_administrator_provenance() -> None:
+    operations = _plain_page("operations.html")
+    assert "unless Disable all logging is enabled" in operations
+    assert "pending approval records bypass the per-outcome switches but are suppressed by Disable all logging" in operations
+    assert '"Never" disables the periodic flush; stop, reload and unload still attempt a final save' in operations
+    for name in ("security.html", "admin-api.html"):
+        page = _plain_page(name)
+        assert "originating_token_id" in page
+        assert "administrator as actor" in page
+        assert "not the Phoenix audit store" not in page
+
+
+def test_event_reference_covers_runtime_events_and_rate_limit_coalescing() -> None:
+    source = (DOCS / "operations.html").read_text()
+    events = set()
+    for path in PKG.rglob("*.py"):
+        if "mesa_core" in path.parts:
+            continue
+        for node in ast.walk(ast.parse(path.read_text())):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute) or not node.args:
+                continue
+            if node.func.attr == "async_fire":
+                argument = node.args[0]
+            elif (node.func.attr == "add_job" and len(node.args) >= 2
+                  and isinstance(node.args[0], ast.Attribute) and node.args[0].attr == "async_fire"):
+                argument = node.args[1]
+            else:
+                continue
+            if isinstance(argument, ast.Constant) and isinstance(argument.value, str):
+                event = argument.value
+            elif (isinstance(argument, ast.JoinedStr) and len(argument.values) == 2
+                  and isinstance(argument.values[0], ast.FormattedValue)
+                  and isinstance(argument.values[0].value, ast.Name) and argument.values[0].value.id == "DOMAIN"
+                  and isinstance(argument.values[1], ast.Constant)):
+                event = "phoenix_mcp" + argument.values[1].value
+            else:
+                continue
+            if event.startswith("phoenix_mcp_"):
+                events.add(event)
+    assert len(events) >= 8
+    documented = set(re.findall(r'<td><code>(phoenix_mcp_\w+)</code></td>', source))
+    assert events <= documented, events - documented
+    row = re.search(r'<tr><td><code>phoenix_mcp_rate_limited</code>.*?</tr>', source).group(0)
+    assert "at most once per token per minute" in row
+    assert "every rejected request" not in row
+
+
+def test_recovery_and_household_limitations_are_explicit() -> None:
+    operations = _plain_page("operations.html")
+    assert "no aggregate byte budget" in operations
+    assert "Each phase update rewrites the whole recovery store" in operations
+    assert "Active and unresolved records are never evicted" in operations
+    security = _plain_page("security.html")
+    assert "household-only authority, even when an administrator starts the task" in security
+    assert "shared" in security and "per-call" in security
+    assert "removal is not a full data wipe" in security
+    panel = _plain_page("panel.html")
+    assert "500" in panel and "seven days" in panel and "one hour" in panel
+    assert "Reject with error message" not in panel

@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Phoenix MCP",
-        "description": "Click Submit to install the Phoenix MCP integration. Please note only one instance can be configured at a time"
+        "description": "Set up Phoenix MCP. Only one instance can be configured at a time."
       }
     },
     "abort": {

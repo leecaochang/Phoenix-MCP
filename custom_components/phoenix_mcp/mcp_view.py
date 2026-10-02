@@ -84,8 +84,8 @@ from .recorder_queries import (
 # modules can use them without importing this transport module).
 # Per-domain tools live under tools/; this module keeps the transport, the
 # dispatch registry and the executor registry, and imports the names it
-# registers or calls. The dependency runs one way: nothing under tools/
-# imports this module.
+# registers or calls. A few domain adapters use local imports of shared
+# dispatch or recovery helpers from this module.
 from .tools.authoring import _execute_create_automation, _execute_create_scene, _execute_create_script, _execute_delete_automation, _execute_delete_scene, _execute_delete_script, _execute_edit_automation, _execute_edit_scene, _execute_edit_script, _tool_create_automation, _tool_create_scene, _tool_create_script, _tool_delete_automation, _tool_delete_scene, _tool_delete_script, _tool_edit_automation, _tool_edit_scene, _tool_edit_script, _tool_get_automation, _tool_get_automation_traces, _tool_get_scene, _tool_get_script, _tool_list_automations, _tool_list_scenes, _tool_list_scripts
 from .tools.config_files import (
     _execute_patch_yaml_config,

@@ -302,10 +302,9 @@ class TokenRecord:
     # back to the immediate pending_approval reply. 0 means off (return
     # immediately, the unattended-agent mode, API-settable only); a positive
     # value is clamped to [MIN, MAX]_CONFIRM_INLINE_WAIT_SECONDS. The product
-    # default is ON: async_create_token seeds new tokens with
+    # default is OFF: async_create_token seeds new tokens with
     # DEFAULT_CONFIRM_INLINE_WAIT_SECONDS and from_dict defaults a stored record
-    # missing the field to it. This raw dataclass default stays 0 so a directly
-    # constructed record (internal/tests) does not silently inherit the wait.
+    # missing the field to it. Directly constructed records also default to 0.
     confirm_inline_wait_seconds: int = 0
     rate_limit_requests: int = DEFAULT_RATE_LIMIT_REQUESTS
     rate_limit_burst: int = DEFAULT_RATE_LIMIT_BURST

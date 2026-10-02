@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "description": "Pulse Enviar para instalar la integración Phoenix MCP. Tenga en cuenta que solo se puede configurar una instancia a la vez."
+        "description": "Configure Phoenix MCP. Solo se puede configurar una instancia a la vez."
       }
     },
     "abort": {

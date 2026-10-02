@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "description": "Klik op Verzenden om de Phoenix MCP-integratie te installeren. Let op: er kan maar één instantie tegelijk worden geconfigureerd"
+        "description": "Stel Phoenix MCP in. Er kan slechts één instantie tegelijk worden geconfigureerd."
       }
     },
     "abort": {

@@ -9,9 +9,9 @@
 
 [English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | [Nederlands](README.nl.md) | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md) | **한국어** | [Русский](README.ru.md)
 
-Phoenix MCP는 AI 에이전트에 범위가 제한된 최소 권한의 Home Assistant 접근을 제공합니다. 각 클라이언트는 고유한 토큰을 가지며, 허용한 엔티티로만 제한되고, 개별 기능, 속도 제한, 선택적 만료 기간을 갖습니다. 감사는 기본적으로 활성화되어 있으며 결과별로 구성할 수 있고, 모든 토큰은 즉시 철회할 수 있습니다. 엔티티별 시맨틱 안전 계층(MESA)은 토큰에 부여된 권한과 관계없이 기기의 특성에 따라 확인 전용 또는 접근 금지로 만들 수 있습니다.
+Phoenix MCP는 AI 에이전트에 범위가 제한된 최소 권한의 Home Assistant 접근을 제공합니다. 각 클라이언트는 고유한 토큰을 가지며, 허용한 엔티티로만 제한되고, 개별 기능, 속도 제한, 선택적 만료 기간을 갖습니다. 감사는 기본적으로 활성화되어 있으며 결과별로 구성할 수 있고, 모든 토큰은 즉시 철회할 수 있습니다. 엔티티별 시맨틱 안전 계층(MESA)은 토큰에 부여된 권한과 관계없이 기기의 특성에 따라 확인 전용 또는 접근 금지로 만들 수 있습니다. MESA의 기본 모드는 권고입니다. 강제 모드를 선택하기 전에는 대부분의 정책 제한이 경고만 표시하며, 읽기 전용 속성과 명시적인 개인정보 거부는 계속 작업을 차단합니다.
 
-Phoenix MCP는 Home Assistant 내부에서 완전히 실행됩니다. 추가 프로세스가 필요 없고, 핵심 서버에 클라우드 의존성이 없으며, Phoenix MCP 패널 외에는 별도 설정이 필요 없습니다(선택 사항인 에이전트 채팅, 음성, AI 작업 기능은 로컬 Ollama를 지정하지 않는 한, 구성한 모델 공급자에게 대화를 보냅니다). 이미 사용 중인 MCP 클라이언트(Claude Code, Cursor, ChatGPT/Codex, Gemini 등)와 함께 사용할 수 있으며, 클라이언트를 설치하지 않고 Home Assistant 내부에서 바로 채팅할 수도 있습니다. 어느 쪽이든 안내식 설정을 통해 몇 분 안에 새 토큰에서 작동하는 에이전트까지 도달할 수 있으며, 구성을 읽고 제어하고 작성하는 169개 도구 카탈로그가 뒷받침합니다. 패널은 여러 언어를 지원하며 기본적으로 Home Assistant 프로필 언어를 따르고, 해당 언어를 사용할 수 없으면 영어로 대체합니다.
+Phoenix MCP는 Home Assistant 내부에서 완전히 실행됩니다. 추가 프로세스가 필요 없고, 핵심 서버에 클라우드 의존성이 없으며, Phoenix MCP 패널 외에는 별도 설정이 필요 없습니다(선택 사항인 에이전트 채팅, 음성, AI 작업 기능은 로컬 Ollama를 지정하지 않는 한, 구성한 모델 공급자에게 대화를 보냅니다). 이미 사용 중인 MCP 클라이언트(Claude Code, Cursor, ChatGPT/Codex, Gemini 등)와 함께 사용할 수 있으며, 클라이언트를 설치하지 않고 Home Assistant 내부에서 바로 채팅할 수도 있습니다. 어느 쪽이든 안내식 설정을 통해 몇 분 안에 새 토큰에서 작동하는 에이전트까지 도달할 수 있으며, 구성을 읽고 제어하고 작성하는 169개 도구 카탈로그가 뒷받침합니다. 패널은 여러 언어를 지원하며 기본적으로 Home Assistant 프로필 언어를 따르고, 해당 언어를 사용할 수 없으면 영어로 대체합니다. Home Companion과 선택적 판단 라우팅도 요청과 허용 범위 내 결과를 호스팅된 제공자에게 보낼 수 있습니다. 외부 MCP 클라이언트는 자체 제공자 및 데이터 공유 설정을 따릅니다.
 
 ## 언어
 
@@ -26,11 +26,11 @@ Phoenix MCP는 Home Assistant 내부에서 완전히 실행됩니다. 추가 프
 ## 요구 사항
 
 - Home Assistant 2026.7.0 이상.
-- Home Assistant마다 Phoenix MCP 인스턴스 하나만 설정할 수 있습니다. Home Assistant가 고정된 Python 의존성 `voluptuous-serialize==2.7.0`을 설치하며, MESA는 Phoenix MCP에 포함되어 있습니다.
+- Home Assistant마다 Phoenix MCP 인스턴스 하나만 설정할 수 있습니다. Home Assistant는 자체 의존성 제약에 따라 Python 의존성 `voluptuous-serialize>=2.7.0`, `Babel>=2.18.0`, `jsonschema>=4.26.0`을 설치하며, MESA는 Phoenix MCP에 포함되어 있습니다.
 
 ## HACS를 통한 설치
 
-1. HACS에서 **통합 구성 요소**를 열고 오른쪽 상단 메뉴에서 **사용자 지정 저장소**를 선택하세요.
+1. HACS에서 오른쪽 위 메뉴를 열고 **사용자 지정 저장소**를 선택합니다.
 2. `https://github.com/leecaochang/Phoenix-MCP`를 입력하고 범주로 **통합 구성 요소**를 선택한 다음 **추가**를 클릭하세요.
 3. HACS 통합 구성 요소 목록에서 Phoenix MCP를 찾아 설치한 후 Home Assistant를 재시작하세요.
 

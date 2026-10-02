@@ -78,7 +78,7 @@
             </tbody>
           </table>
         </div>
-        <p>Without a more specific profile, ordinary entities inherit the autonomous baseline; lock and alarm domains inherit prohibited baselines. The default is <strong>advisory</strong> on purpose: MESA ships conservative baselines for inherently risky domains (locks and alarms start out prohibited), so enforced is opt-in rather than a surprise wall on day one. A profile can also carry its own <code>enforcement_mode</code>, so you can enforce specific entities, domains, or areas while the deployment stays advisory.</p>
+        <p>Without an explicit override, lights inherit an autonomous baseline, locks and alarm panels inherit prohibited baselines, and every other domain inherits a confirm baseline. The default is <strong>advisory</strong> on purpose: MESA ships conservative baselines for inherently risky domains (locks and alarms start out prohibited), so enforced is opt-in rather than a surprise wall on day one. A profile can also carry its own <code>enforcement_mode</code>, so you can enforce specific entities, domains, or areas while the deployment stays advisory.</p>
 
         <h2 id="mesa-and-approvals">Confirm and the approval gate</h2>
         <p>A <code>confirm</code> entity under enforced mode produces the same kind of <a href="capabilities.html">pending approval</a> as a capability set to confirm: the action is saved, a notification is raised, and the in-panel <strong>Approvals</strong> queue holds it until an admin approves or rejects. On approval, MESA re-evaluates before the action runs, so an entity that became read-only or prohibited in the meantime is still refused. Under advisory mode nothing is held; the call proceeds and the agent receives an advisory note explaining the entity was marked confirm.</p>
@@ -149,7 +149,7 @@
           <summary>Use MESA tools and advisory leases</summary>
           <div class="advanced-content">
         <h2 id="mesa-tools">The MESA tools</h2>
-        <p>An agent can read MESA profiles through four retrieval tools, all gated by <strong>Config read</strong> (profiles are configuration metadata, the same sensitivity class as <code>get_config</code>). They are token-scoped: the handlers and resolver only ever see entities the token can read, and every count, cursor, and fingerprint is relative to that scope, so there is no way to enumerate entities outside it. An out-of-scope or nonexistent entity returns the same "not found" envelope.</p>
+        <p>An agent can read MESA profiles through four retrieval tools, all gated by <strong>Configuration read</strong> (profiles are configuration metadata, the same sensitivity class as <code>get_config</code>). They are token-scoped: the handlers and resolver only ever see entities the token can read, and every count, cursor, and fingerprint is relative to that scope, so there is no way to enumerate entities outside it. An out-of-scope or nonexistent entity returns the same "not found" envelope.</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th scope="col">Tool</th><th scope="col">Returns</th></tr></thead>

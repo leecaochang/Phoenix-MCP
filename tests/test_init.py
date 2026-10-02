@@ -2,7 +2,7 @@
 
 These cover async_setup_entry's wiring decisions, not the HA primitives it drives:
 the kill-switch gate on client route registration (admin routes + panel always
-register), MESA degrading to off without failing setup, and async_unload_entry
+register), MESA initialization failure retaining protected-write refusal, and async_unload_entry
 cleaning up hass.data. Real timers and background tasks are neutralized so the test
 asserts the orchestration without scheduling anything that would linger past it.
 The end-to-end route wiring is covered separately by the real-HTTP scaffold test.

@@ -9,9 +9,9 @@
 
 [English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | **Nederlands** | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md)
 
-Phoenix MCP geeft je AI-agents afgebakende toegang tot Home Assistant volgens het principe van minimale rechten. Elke client krijgt een eigen token, beperkt tot precies de entiteiten die je toestaat, met eigen mogelijkheden, snelheidslimiet en optionele verloopdatum. Auditing is standaard ingeschakeld en per uitkomst configureerbaar, elk token kan direct worden ingetrokken, en de semantische veiligheidslaag per entiteit (MESA) kan een apparaat op basis van zijn aard op alleen-bevestigen of verboden zetten, ongeacht de machtigingen die een token krijgt.
+Phoenix MCP geeft je AI-agents afgebakende toegang tot Home Assistant volgens het principe van minimale rechten. Elke client krijgt een eigen token, beperkt tot precies de entiteiten die je toestaat, met eigen mogelijkheden, snelheidslimiet en optionele verloopdatum. Auditing is standaard ingeschakeld en per uitkomst configureerbaar, elk token kan direct worden ingetrokken, en de semantische veiligheidslaag per entiteit (MESA) kan een apparaat op basis van zijn aard op alleen-bevestigen of verboden zetten, ongeacht de machtigingen die een token krijgt. De standaardmodus van MESA is Adviserend: de meeste beleidsbeperkingen geven alleen waarschuwingen totdat Afgedwongen is geselecteerd; alleen-lezen-eigenschappen en expliciete privacyweigeringen blijven blokkeren.
 
-Phoenix MCP draait volledig binnen Home Assistant, zonder extra proces, zonder cloudafhankelijkheid in de kernserver en zonder verdere installatie dan het Phoenix MCP-paneel (de optionele functies Agent Chat, spraak en AI-taak sturen gesprekken naar de modelprovider die je configureert, tenzij je ze naar een lokale Ollama verwijst). Het werkt met de MCP-clients die je al gebruikt (Claude Code, Cursor, ChatGPT/Codex, Gemini en andere), of je kunt het installeren van een client helemaal overslaan en rechtstreeks vanuit Home Assistant chatten. Hoe dan ook brengt een begeleide installatie je in enkele minuten van een nieuw token naar een werkende agent, ondersteund door een catalogus van 169 tools voor het lezen, besturen en opstellen van je configuratie. Het paneel is in meerdere talen beschikbaar, volgt standaard de taal van je Home Assistant-profiel en valt terug op Engels wanneer die taal niet beschikbaar is.
+Phoenix MCP draait volledig binnen Home Assistant, zonder extra proces, zonder cloudafhankelijkheid in de kernserver en zonder verdere installatie dan het Phoenix MCP-paneel (de optionele functies Agent Chat, spraak en AI-taak sturen gesprekken naar de modelprovider die je configureert, tenzij je ze naar een lokale Ollama verwijst). Het werkt met de MCP-clients die je al gebruikt (Claude Code, Cursor, ChatGPT/Codex, Gemini en andere), of je kunt het installeren van een client helemaal overslaan en rechtstreeks vanuit Home Assistant chatten. Hoe dan ook brengt een begeleide installatie je in enkele minuten van een nieuw token naar een werkende agent, ondersteund door een catalogus van 169 tools voor het lezen, besturen en opstellen van je configuratie. Het paneel is in meerdere talen beschikbaar, volgt standaard de taal van je Home Assistant-profiel en valt terug op Engels wanneer die taal niet beschikbaar is. Home Companion en optionele beslissingsroutering kunnen ook verzoeken en toegestane resultaten naar een gehoste provider sturen. Externe MCP-clients volgen hun eigen providerinstellingen en instellingen voor het delen van gegevens.
 
 ## Talen
 
@@ -26,11 +26,11 @@ Nieuw hier? Begin met de **[Snelstart](https://leecaochang.github.io/Phoenix-MCP
 ## Vereisten
 
 - Home Assistant 2026.7.0 of nieuwer.
-- Eén Phoenix MCP-instantie per Home Assistant. Home Assistant installeert de vastgepinde Python-afhankelijkheid `voluptuous-serialize==2.7.0`; MESA is gebundeld met Phoenix MCP.
+- Eén Phoenix MCP-instantie per Home Assistant. Home Assistant installeert de Python-afhankelijkheden `voluptuous-serialize>=2.7.0`, `Babel>=2.18.0`, `jsonschema>=4.26.0` binnen zijn eigen afhankelijkheidsbeperkingen; MESA is gebundeld met Phoenix MCP.
 
 ## Installeren via HACS
 
-1. Open in HACS **Integraties**, vervolgens het menu rechtsboven en kies **Aangepaste repositories**.
+1. Open in HACS het menu rechtsboven en kies **Aangepaste repositories**.
 2. Voer `https://github.com/leecaochang/Phoenix-MCP` in, selecteer **Integratie** als categorie en klik op **Toevoegen**.
 3. Zoek Phoenix MCP in de HACS-integratielijst, installeer het en herstart Home Assistant.
 

@@ -25,19 +25,19 @@
         <header class="page-head">
           <p class="breadcrumb"><a href="index.html">Docs</a> / Reference / Admin API</p>
           <h1>Admin API <span class="badge badge-neutral">Advanced</span></h1>
-          <p class="lede">Automate panel operations through the admin routes under <code>/api/phoenix-mcp/admin/</code>. Use a Home Assistant admin session; Phoenix tokens cannot call this API.</p>
+          <p class="lede">Automate panel operations through the admin routes under <code>/api/phoenix-mcp/admin/</code>. Use a Home Assistant administrator access token or session; Phoenix tokens cannot call this API.</p>
         </header>
 
         <div class="callout note">
           <svg class="callout-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4.5" y="10.5" width="15" height="10" rx="2.5"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5"/></svg>
-          <div class="callout-body"><p class="callout-title">Home Assistant session, admin only</p><p>Every admin route requires a valid Home Assistant session and the admin role. A Phoenix MCP token can never authenticate here, not even a pass-through token. See <a href="security.html">Security</a>.</p></div>
+          <div class="callout-body"><p class="callout-title">Home Assistant session, admin only</p><p>Every admin route requires a valid Home Assistant access token or session belonging to an active administrator. A long-lived access token belonging to that administrator is accepted. A Phoenix MCP token can never authenticate here, not even a pass-through token. See <a href="security.html">Security</a>.</p></div>
         </div>
 
         <h2>Conventions</h2>
         <dl class="kv">
           <div class="kv-row"><dt>Bodies</dt><dd>JSON, <code>Content-Type: application/json</code>. Bodies over 1&nbsp;MB are rejected with 413.</dd></div>
-          <div class="kv-row"><dt>Request ID</dt><dd>Every response carries <code>X-Phoenix-Request-ID</code>. Admin actions are recorded in Home Assistant's own log, not the Phoenix audit store; the audit-entry correlation applies to token-facing API requests.</dd></div>
-          <div class="kv-row"><dt>Errors</dt><dd>Error responses are <code>{ "error": code, "message": text }</code>, with an optional <code>suggestions</code> array. Codes: <code>unauthorized</code> (401), <code>forbidden</code> (403), <code>not_found</code> (404), <code>invalid_request</code> (400), <code>request_too_large</code> (413), <code>precondition_failed</code> (412, when creating a MESA profile with <code>If-None-Match: *</code> and a profile already exists), <code>conflict</code> (409, e.g. a duplicate token name or an approval already being processed), <code>service_unavailable</code> (503, e.g. the kill switch or MESA unavailable), <code>internal_error</code> (500).</dd></div>
+          <div class="kv-row"><dt>Request ID</dt><dd>Every response carries <code>X-Phoenix-Request-ID</code>. Audited administrator mutations use this ID in the Phoenix audit store, with the administrator as actor. Version restores retain an optional opaque <code>originating_token_id</code> for provenance. Administrator reads and diagnostic previews are not a complete audit of Home Assistant; the <a href="operations.html#audit-log">logging switches</a> still apply.</dd></div>
+          <div class="kv-row"><dt>Errors</dt><dd>Error responses are <code>{ "error": code, "message": text }</code>, with an optional <code>suggestions</code> array. Codes: <code>unauthorized</code> (401), <code>forbidden</code> (403), <code>not_found</code> (404), <code>invalid_request</code> (400), <code>request_too_large</code> (413), <code>precondition_failed</code> (412, when creating a MESA profile with <code>If-None-Match: *</code> and a profile already exists), <code>conflict</code> (409, e.g. a duplicate token name or an approval already being processed), <code>already_exists</code> (409, duplicate provider account), <code>service_unavailable</code> (503, e.g. the kill switch or MESA unavailable), <code>internal_error</code> (500).</dd></div>
         </dl>
 
         <h2 id="tokens">Tokens</h2>
@@ -153,7 +153,7 @@ POST    /api/phoenix-mcp/admin/approvals/{id}/approve   Approve and run the held
 POST    /api/phoenix-mcp/admin/approvals/batch/approve  Approve several, stopping at the first failure
 POST    /api/phoenix-mcp/admin/approvals/{id}/reject    Reject with an optional reason
 DELETE  /api/phoenix-mcp/admin/approvals/{id}           Cancel a pending approval</code></pre>
-        <p>List accepts <code>?status=pending|approved|rejected|expired|cancelled</code>, <code>?token_id=</code>, <code>?limit=</code>, and <code>?offset=</code>, and returns <code>{ approvals: [...], total, limit, offset }</code>. Approve and reject take small optional bodies.</p>
+        <p>List accepts <code>?status=pending|approved|rejected|expired|cancelled|failed</code>, <code>?token_id=</code>, <code>?limit=</code>, and <code>?offset=</code>, and returns <code>{ approvals: [...], total, limit, offset }</code>. Approve and reject take small optional bodies.</p>
         <pre class="code" data-lang="json" data-label="Approve / reject bodies"><code>// POST .../approve
 { "note": "looks fine" }      // optional
 
@@ -310,7 +310,7 @@ DELETE /api/phoenix-mcp/admin/wipe                      Wipe tokens, audit log, 
   "mesa_inject_enabled": false,  // experimental in-context MESA buttons; admin-only, off by default
   "token_presets_enabled": false, // token settings presets; enabling seeds a default preset on every token
   "agentcli_global": true,        // Agent Chat floats over all of Home Assistant, not just the Phoenix MCP panel (default on)
-  "agentcli_scrollback_lines": 100, // Agent Chat memory: 0-5000 lines, shown in the panel as "Chat memory"
+  "agentcli_scrollback_lines": 100, // Agent Chat history limit: 0-5000 lines, shown in the panel as "Chat history limit"
   "agentcli_max_iterations": 20,  // Agent Chat rounds per turn (3-100) before it pauses to ask whether to continue
   "agentcli_conversation_style": "direct", // direct | warm | calm_guide | lively | technical
   "agentcli_detail_level": "concise", // concise | balanced | detailed

@@ -9,9 +9,9 @@
 
 [English](README.md) | [Español](README.es.md) | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | [Nederlands](README.nl.md) | [Polski](README.pl.md) | **简体中文** | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md)
 
-Phoenix MCP 为您的 AI 智能体提供限定范围、最小权限的 Home Assistant 访问方式。每个客户端都拥有自己的令牌，只能访问您明确允许的实体，并各自拥有独立的功能、速率限制和可选的有效期。审计默认开启，并可按结果类型分别配置；任何令牌都可以立即吊销；逐实体的语义安全层（MESA）还能根据设备本身的性质，将其设为仅可在确认后操作或完全禁止操作，无论令牌被授予了什么权限。
+Phoenix MCP 为您的 AI 智能体提供限定范围、最小权限的 Home Assistant 访问方式。每个客户端都拥有自己的令牌，只能访问您明确允许的实体，并各自拥有独立的功能、速率限制和可选的有效期。审计默认开启，并可按结果类型分别配置；任何令牌都可以立即吊销；逐实体的语义安全层（MESA）还能根据设备本身的性质，将其设为仅可在确认后操作或完全禁止操作，无论令牌被授予了什么权限。 MESA 默认使用建议模式：大多数策略限制仅发出警告，选择强制模式后才会阻止操作；只读属性和明确的隐私拒绝仍会阻止操作。
 
-Phoenix MCP 完全运行在 Home Assistant 内部：无需额外进程，核心服务器不依赖任何云服务，除 Phoenix MCP 面板之外也无需任何设置（可选的智能体对话、语音和 AI 任务功能会将对话发送给您配置的模型提供商，除非您将它们指向本地的 Ollama）。它可以配合您已经在用的 MCP 客户端（Claude Code、Cursor、ChatGPT/Codex、Gemini 等），您也可以完全不安装客户端，直接在 Home Assistant 内部对话。无论采用哪种方式，引导式设置都能在几分钟内带您从新建令牌走到可用的智能体，背后是一个包含 169 个工具的目录，可用于读取、控制和编写您的配置。面板支持多种语言，默认跟随您的 Home Assistant 个人资料语言；如果该语言不可用，则回退到英文。
+Phoenix MCP 完全运行在 Home Assistant 内部：无需额外进程，核心服务器不依赖任何云服务，除 Phoenix MCP 面板之外也无需任何设置（可选的智能体对话、语音和 AI 任务功能会将对话发送给您配置的模型提供商，除非您将它们指向本地的 Ollama）。它可以配合您已经在用的 MCP 客户端（Claude Code、Cursor、ChatGPT/Codex、Gemini 等），您也可以完全不安装客户端，直接在 Home Assistant 内部对话。无论采用哪种方式，引导式设置都能在几分钟内带您从新建令牌走到可用的智能体，背后是一个包含 169 个工具的目录，可用于读取、控制和编写您的配置。面板支持多种语言，默认跟随您的 Home Assistant 个人资料语言；如果该语言不可用，则回退到英文。 Home Companion 和可选的决策路由也可能向托管服务商发送请求及授权范围内的结果。外部 MCP 客户端遵循自身的服务商和数据共享设置。
 
 <!-- readme-i18n:locale-only:start -->
 
@@ -38,11 +38,11 @@ Phoenix MCP 脱胎于一个被弃置的开源项目，它的名字也由此而�
 ## 要求
 
 - Home Assistant 2026.7.0 或更高版本。
-- 每个 Home Assistant 只能配置一个 Phoenix MCP 实例。Home Assistant 会安装固定版本的 Python 依赖项 `voluptuous-serialize==2.7.0`；MESA 已随 Phoenix MCP 一起提供。
+- 每个 Home Assistant 只能配置一个 Phoenix MCP 实例。Home Assistant 会根据自身的依赖约束安装 Python 依赖项 `voluptuous-serialize>=2.7.0`, `Babel>=2.18.0`, `jsonschema>=4.26.0`；MESA 已随 Phoenix MCP 一起提供。
 
 ## 通过 HACS 安装
 
-1. 在 HACS 中打开**集成**，然后打开右上角菜单并选择**自定义存储库**。
+1. 在 HACS 中打开右上角菜单，然后选择 **自定义存储库**。
 2. 输入 `https://github.com/leecaochang/Phoenix-MCP`，类别选择**集成**，然后点击**添加**。
 3. 在 HACS 集成列表中找到 Phoenix MCP，安装后重新启动 Home Assistant。
 

@@ -253,9 +253,7 @@ config is good on the strength of validation alone if you can compile it.
 - Prefer the native intent tools (`intent__HassTurnOn`, `intent__HassTurnOff`,
   `light__HassLightSet`, `intent__HassSetPosition`, climate/media/fan tools) for
   everyday control; fall back to `call_service` for anything they do not cover.
-- Target entities explicitly. Phoenix MCP resolves areas and devices to explicit entity
-  lists anyway, and an area or device target silently drops members you cannot
-  access, so naming entities makes the result predictable.
+- Supply explicit targets for call_service and dry_run_service; targetless services are unsupported. Use kind all only for intentional domain-wide targeting. Entity, device, area, floor and label selectors in service.data are refused. Phoenix resolves device/area targets to writable entities, silently dropping inaccessible members.
 - Authoring tools, when granted: automations and scripts (`cap_automation_write`
   / `cap_script_write`), scenes (`cap_scene_write`), helpers such as
   `input_boolean`, `input_number`, `timer`, `counter` (`cap_helper_write`),
@@ -350,7 +348,7 @@ Use `get_calendar_events` to read an accessible calendar and its integration-pro
 
 Creation supplies `event` with `summary`, `start` and exclusive `end`, using all-day ISO dates or timestamps with timezones. Updates and deletes supply the current `uid`, `expected_hash`, `start_time` and `end_time` lookup window. Updates explicitly select `mode`: `replace` requires summary/start/end and clears omitted optional fields; `patch` preserves omissions and accepts null to clear description/location. Recurrence-rule removal is refused because Home Assistant has no validated clear value; an existing rule must be retained or explicitly replaced. Recurring writes require the exact `recurrence_id`; the optional range is spelled `THISANDFUTURE` and requires a visible recurrence rule; edited exceptions are refused.
 
-Writes save a durable receipt before dispatch. Use `get_calendar_write(entity_id=...)` to find this token's receipts after interruption, then supply `receipt_id` for the prior occurrence, requested fields and readback. `outcome_unknown` means effects may have occurred. Do not automatically repeat the write. Snapshots preserve occurrence identity but cannot exactly restore deleted UIDs or complete recurring series. No automatic rollback is offered; recovery is an explicitly reviewed new request after checking current Home Assistant data.
+Writes save a durable receipt before dispatch. Use `get_calendar_write(entity_id=...)` to find this token's receipts after interruption, then supply `receipt_id` for the prior occurrence, requested fields and readback. `outcome_unknown` means effects may have occurred. Do not automatically repeat the write. Snapshots preserve occurrence identity but cannot exactly restore deleted UIDs or complete recurring series. No automatic rollback is offered; recovery is an explicitly reviewed new request after checking current Home Assistant data. Interrupted unknown outcomes create a Home Assistant Repair. An administrator must check the calendar before acknowledging it; acknowledgment marks the receipt reviewed without replay or rollback. The 200-receipt journal may evict applied, not_applied and reviewed records, but keeps unresolved uncertain outcomes.
 
 ## Home Assistant authoring best practices
 
@@ -637,7 +635,7 @@ mode: single
   patch returns the file's new `content_hash`, so several can be chained.
 - Neither tool can change the keys that define Home Assistant's own
   authentication, proxy trust, or dashboard code loading; copy them through
-  unchanged. After either, run `check_ha_config`, then tell the user a restart is
+  unchanged. Supplied patch content cannot contain YAML anchors or aliases. After either, run `check_ha_config`; it withholds detailed errors, so inspect the Home Assistant configuration check and logs when validation fails. Then tell the user a restart is
   needed. These changes do NOT reload on their own.
 
 ### Climate

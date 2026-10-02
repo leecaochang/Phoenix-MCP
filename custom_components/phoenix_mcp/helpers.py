@@ -1474,8 +1474,9 @@ def sanitize_service_data(value: object) -> dict[str, Any]:
     with an explicit entity list, so a selector arriving inside service data is
     never something to honour: Home Assistant unions it with that list, reaching
     entities the permission tree, the capability gates and MESA never evaluated.
-    Stripping is therefore the only correct handling; a call is not refused for
-    carrying one, because the resolved targets already say what it may reach.
+    Public service-call ingress refuses selectors in service data before
+    admission. This helper defensively removes selectors for internal callers;
+    it does not replace that ingress validation.
 
     The keys are const.TARGET_SELECTOR_KEYS, which is pinned against HA's own
     definition, so a release that adds a selector is a failing test rather than a

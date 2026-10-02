@@ -9,9 +9,9 @@
 
 [English](README.md) | **Español** | [Français](README.fr.md) | [Italiano](README.it.md) | [Deutsch](README.de.md) | [Nederlands](README.nl.md) | [Polski](README.pl.md) | [简体中文](README.zh-CN.md) | [繁體中文](README.zh-Hant.md) | [日本語](README.ja.md) | [한국어](README.ko.md) | [Русский](README.ru.md)
 
-Phoenix MCP proporciona a sus agentes de IA un acceso a Home Assistant con ámbito limitado y privilegios mínimos. Cada cliente recibe su propio token, limitado exactamente a las entidades que usted permita, con sus propias capacidades, límite de velocidad y expiración opcional. La auditoría está habilitada por defecto y es configurable por resultado; cualquier token puede revocarse al instante, y la capa de seguridad semántica por entidad (MESA) puede hacer que un dispositivo sea solo de confirmación o esté fuera de los límites por su propia naturaleza, sin importar los permisos que se concedan a un token.
+Phoenix MCP proporciona a sus agentes de IA un acceso a Home Assistant con ámbito limitado y privilegios mínimos. Cada cliente recibe su propio token, limitado exactamente a las entidades que usted permita, con sus propias capacidades, límite de velocidad y expiración opcional. La auditoría está habilitada por defecto y es configurable por resultado; cualquier token puede revocarse al instante, y la capa de seguridad semántica por entidad (MESA) puede hacer que un dispositivo sea solo de confirmación o esté fuera de los límites por su propia naturaleza, sin importar los permisos que se concedan a un token. El modo predeterminado de MESA es Consultivo: la mayoría de las restricciones de política solo advierten hasta seleccionar Obligatorio; la naturaleza de solo lectura y las denegaciones explícitas de privacidad siguen bloqueando.
 
-Phoenix MCP se ejecuta completamente dentro de Home Assistant, sin ningún proceso adicional, sin dependencia de la nube en el servidor principal y sin más configuración que el panel de Phoenix MCP (las funciones opcionales Chat de agente, voz y tarea de IA envían las conversaciones al proveedor de modelos que configure, a menos que las dirija a un Ollama local). Funciona con los clientes MCP que ya utiliza (Claude Code, Cursor, ChatGPT/Codex, Gemini y otros), o puede omitir la instalación de un cliente y chatear desde el propio Home Assistant. En cualquier caso, una configuración guiada le lleva de un nuevo token a un agente funcional en minutos, respaldada por un catálogo de 169 herramientas para leer, controlar y crear su configuración. El panel está disponible en varios idiomas, sigue de forma predeterminada el idioma del perfil de Home Assistant y usa el inglés como alternativa cuando ese idioma no está disponible.
+Phoenix MCP se ejecuta completamente dentro de Home Assistant, sin ningún proceso adicional, sin dependencia de la nube en el servidor principal y sin más configuración que el panel de Phoenix MCP (las funciones opcionales Chat de agente, voz y tarea de IA envían las conversaciones al proveedor de modelos que configure, a menos que las dirija a un Ollama local). Funciona con los clientes MCP que ya utiliza (Claude Code, Cursor, ChatGPT/Codex, Gemini y otros), o puede omitir la instalación de un cliente y chatear desde el propio Home Assistant. En cualquier caso, una configuración guiada le lleva de un nuevo token a un agente funcional en minutos, respaldada por un catálogo de 169 herramientas para leer, controlar y crear su configuración. El panel está disponible en varios idiomas, sigue de forma predeterminada el idioma del perfil de Home Assistant y usa el inglés como alternativa cuando ese idioma no está disponible. Home Companion y el enrutamiento de decisiones opcional también pueden enviar solicitudes y resultados autorizados a un proveedor alojado. Los clientes MCP externos siguen sus propios ajustes de proveedor y uso compartido de datos.
 
 ## Idiomas
 
@@ -26,11 +26,11 @@ La documentación completa, incluida la referencia de herramientas, los permisos
 ## Requisitos
 
 - Home Assistant 2026.7.0 o posterior.
-- Una instancia de Phoenix MCP por Home Assistant. Home Assistant instala la dependencia de Python fijada `voluptuous-serialize==2.7.0`; MESA viene incluido con Phoenix MCP.
+- Una instancia de Phoenix MCP por Home Assistant. Home Assistant instala las dependencias de Python `voluptuous-serialize>=2.7.0`, `Babel>=2.18.0`, `jsonschema>=4.26.0` según sus restricciones de dependencias; MESA viene incluido con Phoenix MCP.
 
 ## Instalación mediante HACS
 
-1. En HACS, abra **Integraciones** y, en el menú superior derecho, elija **Repositorios personalizados**.
+1. En HACS, abra el menú de la esquina superior derecha y elija **Repositorios personalizados**.
 2. Introduzca `https://github.com/leecaochang/Phoenix-MCP`, seleccione **Integración** como categoría y haga clic en **Añadir**.
 3. Encuentre Phoenix MCP en la lista de integraciones de HACS, instálelo y reinicie Home Assistant.
 

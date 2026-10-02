@@ -27,6 +27,7 @@ as a hosted site; the integration ships no copy of it.
 
 from __future__ import annotations
 
+import html
 import pathlib
 import re
 
@@ -63,7 +64,7 @@ _WORD_ALT = "|".join(sorted(WORDS, key=len, reverse=True))
 # window excludes quotes as well as sentence/tag boundaries: a real count and
 # its noun never straddle an HTML attribute boundary.
 NUMBER = re.compile(
-    r'(?<![\w.-])\b(' + _WORD_ALT + r'|\d{1,3})\b[^.<"]{0,45}?\b' + _NOUNS + r"\b",
+    r'(?<![\w.-])\b(' + _WORD_ALT + r'|\d{1,3})\b[^.<",;:)]{0,45}?\b' + _NOUNS + r"\b",
     re.IGNORECASE,
 )
 # The same count with the noun FIRST ("tools: 139", "capabilities (26)"). The
@@ -141,22 +142,27 @@ def test_word_list_has_no_gaps() -> None:
     assert sorted(WORDS.values()) == list(range(9, 100))
 
 
-@pytest.mark.parametrize("page", _pages(), ids=lambda p: p.name)
-def test_no_stale_counts_in_prose(page: pathlib.Path) -> None:
+def _stale_counts(text: str, name: str = "fixture") -> list[str]:
+    """Check visible prose; native and additional totals are not interchangeable."""
     counts = tool_catalog_counts()
     allowed = {
-        "tool": {counts["native"], counts["additional"], counts["total"]},
+        "tool": {counts["total"]},
         "capabilit": {len(CAPABILITY_NAMES)},
         "persona": {len(PERSONA_DEFINITIONS)},
         "switches": {len(CAPABILITY_NAMES)},
         "provider": {len(AGENTCLI_PROVIDERS)},
     }
 
+    # Remove non-prose first, preserving block boundaries while joining inline
+    # emphasis. Numbers in attributes or scripts are not visible count claims.
+    text = re.sub(r"<!--.*?-->|<(script|style)\b[^>]*>.*?</\1>", "", text, flags=re.S | re.I)
+    text = re.sub(r"</?(?:p|div|tr|td|th|li|h[1-6]|section|article|br)\b[^>]*>", "\n", text, flags=re.I)
+    text = html.unescape(re.sub(r"<[^>]+>", "", text))
     stale: list[str] = []
-    for lineno, line in enumerate(page.read_text(encoding="utf-8").split("\n"), 1):
+    for lineno, line in enumerate(text.split("\n"), 1):
         for big in BIG_WORD.finditer(line):
             stale.append(
-                f"{page.name}:{lineno} says {big.group(0)!r};"
+                f"{name}:{lineno} says {big.group(0)!r};"
                 " write the count in digits so this test can check it"
             )
         for pattern, num_group, noun_group in (
@@ -170,10 +176,18 @@ def test_no_stale_counts_in_prose(page: pathlib.Path) -> None:
                 if value is None:
                     value = int(raw)
                 kind = next(k for k in allowed if noun.startswith(k))
-                if value not in allowed[kind]:
+                expected = allowed[kind]
+                if kind == "tool":
+                    claim = match.group(0).lower()
+                    prefix = line[max(0, match.start() - 20):match.start()].lower()
+                    if "native" in claim or re.search(r"native\s+$", prefix):
+                        expected = {counts["native"]}
+                    elif re.search(r"\b(additional|more|phoenix)\b", claim) or re.search(r"(?:additional|phoenix)\s+$", prefix):
+                        expected = {counts["additional"]}
+                if value not in expected:
                     stale.append(
-                        f"{page.name}:{lineno} says {match.group(0)!r};"
-                        f" {kind} should be one of {sorted(allowed[kind])}"
+                        f"{name}:{lineno} says {match.group(0)!r};"
+                        f" {kind} should be one of {sorted(expected)}"
                     )
         for match in ELIDED_COUNT.finditer(line):
             raw = match.group(1).lower()
@@ -182,24 +196,51 @@ def test_no_stale_counts_in_prose(page: pathlib.Path) -> None:
                 value = int(raw)
             # No noun to key on, so any count the page could legitimately be
             # stating is accepted; a value matching none of them is stale.
-            every = {v for values in allowed.values() for v in values}
+            every = {counts["additional"]}
             if value not in every:
                 stale.append(
-                    f"{page.name}:{lineno} says {match.group(0)!r} with the noun left"
+                    f"{name}:{lineno} says {match.group(0)!r} with the noun left"
                     f" out; that count matches none of {sorted(every)}"
                 )
         for match in NUMBER_ZH.finditer(line):
             kind = _ZH_KIND[match.group(2)]
             if int(match.group(1)) not in allowed[kind]:
                 stale.append(
-                    f"{page.name}:{lineno} says {match.group(0)!r};"
+                    f"{name}:{lineno} says {match.group(0)!r};"
                     f" {kind} should be one of {sorted(allowed[kind])}"
                 )
         for match in NUMBER_JA.finditer(line):
             kind = _JA_KIND[match.group(2)]
             if int(match.group(1)) not in allowed[kind]:
                 stale.append(
-                    f"{page.name}:{lineno} says {match.group(0)!r};"
+                    f"{name}:{lineno} says {match.group(0)!r};"
                     f" {kind} should be one of {sorted(allowed[kind])}"
                 )
-    assert stale == []
+    return stale
+
+
+@pytest.mark.parametrize("page", _pages(), ids=lambda p: p.name)
+def test_no_stale_counts_in_prose(page: pathlib.Path) -> None:
+    assert _stale_counts(page.read_text(encoding="utf-8"), page.name) == []
+
+
+@pytest.mark.parametrize("claim", [
+    "a catalog of {native} tools",
+    "<strong>{wrong}</strong> tools",
+    "<strong>{native}</strong> additional tools",
+    "<strong>{additional}</strong> native tools",
+    "<strong>{wrong_caps}</strong> opt-in switches",
+])
+def test_count_guard_rejects_role_confusion_and_markup(claim: str) -> None:
+    counts = tool_catalog_counts()
+    assert _stale_counts(claim.format(**counts, wrong=counts["total"] + 1,
+                                     wrong_caps=len(CAPABILITY_NAMES) + 1))
+
+
+def test_count_guard_accepts_current_roles_and_ignores_attributes() -> None:
+    counts = tool_catalog_counts()
+    assert _stale_counts(
+        f'<p>Catalog of <strong>{counts["total"]}</strong> tools.</p>'
+        f'<p>{counts["native"]} native tools plus {counts["additional"]} more.</p>'
+        '<div title="900 tools"><script>const caption = "800 tools";</script></div>'
+    ) == []

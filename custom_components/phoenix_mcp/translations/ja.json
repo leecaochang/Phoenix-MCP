@@ -2,7 +2,7 @@
   "config": {
     "step": {
       "user": {
-        "description": "送信をクリックして Phoenix MCP インテグレーションをインストールします。一度に設定できるインスタンスは一つだけです。"
+        "description": "Phoenix MCP を設定します。同時に設定できるインスタンスは一つだけです。"
       }
     },
     "abort": {

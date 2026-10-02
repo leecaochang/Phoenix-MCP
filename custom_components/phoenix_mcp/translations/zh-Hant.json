@@ -8,7 +8,7 @@
     },
     "step": {
       "user": {
-        "description": "點選「提交」即可安裝 Phoenix MCP 整合。請注意，同一時間只能設定一個實例"
+        "description": "設定 Phoenix MCP。同一時間只能設定一個實例。"
       }
     }
   },

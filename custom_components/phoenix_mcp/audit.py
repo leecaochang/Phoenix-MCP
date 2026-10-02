@@ -116,7 +116,7 @@ class AuditLog:
 
     When a Store is provided, the log can be persisted to disk via async_save()
     and restored on startup via async_load(). Passing no store keeps the log
-    purely in-memory (test instances, or when audit_flush_interval is 0).
+    purely in-memory when no store is supplied (for example in tests).
     """
 
     def __init__(self, maxlen: int = AUDIT_LOG_MAXLEN, store: Store | None = None) -> None:
@@ -314,7 +314,7 @@ class AuditLog:
     async def async_save(self) -> None:
         """Snapshot the in-memory buffer to HA storage.
 
-        No-op when no store is configured (test instances or Never mode).
+        No-op when no store is configured. Never mode only disables periodic saves.
         """
         if self._store is None:
             return

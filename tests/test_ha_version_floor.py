@@ -276,23 +276,13 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
 # stop, for the second time.
 #
 # Add an entry here when a feature named in the BASE compatibility claim depends
-# on an API newer than the previous floor. Optional features tracked by their own
-# const (Assist, MESA injection, AI Task) belong in OPTIONAL_FEATURE_FLOORS below.
+# on an API newer than the previous floor. Assist and AI Task are also exercised
+# by the full suite on the supported base release.
 MANDATORY_FEATURE_IMPORTS: dict[str, str] = {
     # tools/lovelace.py + ws_dispatch.py, via a guarded import. Verified absent in
     # 2025.1.4 and present in 2025.2.0.
     "homeassistant.components.lovelace.const.LOVELACE_DATA": "2025.2.0",
 }
-
-# Optional features, each gated in the panel by its own constant. These are not
-# floor constraints; they are pinned so the numbers in const.py and the numbers
-# the installation page promises cannot drift apart.
-OPTIONAL_FEATURE_FLOORS: dict[str, str] = {
-    "ASSIST_API_MIN_HA": "2025.2.0",
-    "MESA_INJECT_MIN_HA": "2025.5.0",
-    "AI_TASK_MIN_HA": "2025.7.0",
-}
-
 
 @pytest.mark.parametrize("symbol", sorted(MANDATORY_FEATURE_IMPORTS))
 def test_mandatory_feature_imports_are_not_newer_than_the_floor(symbol: str) -> None:
@@ -312,20 +302,11 @@ def test_mandatory_feature_imports_are_not_newer_than_the_floor(symbol: str) -> 
     )
 
 
-def test_optional_feature_floors_match_their_constants() -> None:
-    """The panel's per-feature gates and this table must agree."""
+def test_injector_floor_matches_the_supported_base() -> None:
+    """The optional DOM injector cannot advertise an unsupported HA release."""
     from custom_components.phoenix_mcp import const  # noqa: PLC0415
 
-    for name, expected in OPTIONAL_FEATURE_FLOORS.items():
-        assert getattr(const, name) == expected, (
-            f"const.{name} is {getattr(const, name)!r} but this guard expects "
-            f"{expected!r}. Update both, and docs/install.html with them."
-        )
-
-
-def test_optional_features_are_available_at_the_base_floor() -> None:
-    """The supported base release includes these formerly optional feature APIs."""
-    assert all(_version(version) <= FLOOR for version in OPTIONAL_FEATURE_FLOORS.values())
+    assert const.MESA_INJECT_MIN_HA == MIN_HA_VERSION
 
 
 def _unguarded_module_level_ha_imports() -> dict[tuple[str, str], set[str]]:

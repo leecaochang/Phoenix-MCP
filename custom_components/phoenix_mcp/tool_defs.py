@@ -388,7 +388,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
     {
         "name": "call_service",
         "description": (
-            "Call a Home Assistant service on one or more entities. Targets (entity_id, area_id, "
+            "Call a Home Assistant service with explicit targets; targetless services are unsupported. Targets (entity_id, area_id, "
             "device_id, or 'all') are resolved and flattened to the entities this token can write; "
             "out-of-scope targets are dropped silently. The call passes the capability gate and "
             "per-entity MESA policy, so it may return pending_approval or be refused. Preview a risky "
@@ -403,8 +403,8 @@ _ENTITY_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "service": {"type": "object", "description": "Service to execute.", "additionalProperties": False, "properties": {"domain": {"type": "string", "description": "Service domain."}, "name": {"type": "string", "description": "Service name."}, "data": {"type": "object", "description": "Additional service data."}}, "required": ["domain", "name"]},
-                "targets": {"type": "array", "minItems": 1, "maxItems": SERVICE_TARGET_MAX_GROUPS, "description": "Optional resolved target groups.", "items": {"type": "object", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "area", "all"], "description": "Target selector kind."}, "ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SERVICE_TARGET_MAX_IDS, "description": "IDs for entity, device, or area targets."}}, "required": ["kind"]}},
+                "service": {"type": "object", "description": "Service to execute.", "additionalProperties": False, "properties": {"domain": {"type": "string", "description": "Service domain."}, "name": {"type": "string", "description": "Service name."}, "data": {"type": "object", "description": "Additional service data without target selectors; selectors here are refused."}}, "required": ["domain", "name"]},
+                "targets": {"type": "array", "minItems": 1, "maxItems": SERVICE_TARGET_MAX_GROUPS, "description": "Explicit target groups required for supported calls; use kind all for intentional domain-wide targeting.", "items": {"type": "object", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "area", "all"], "description": "Target selector kind."}, "ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SERVICE_TARGET_MAX_IDS, "description": "IDs for entity, device, or area targets."}}, "required": ["kind"]}},
             },
             "required": ["service"],
         },
@@ -1830,7 +1830,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Diagnose how Home Assistant's default conversation agent recognizes one natural-language "
             "sentence, without invoking an intent handler or changing state. Returns the matched intent, "
             "parsed slots, and resolved entities intersected with this token's read scope and Assist "
-            "exposure. An incomplete recognition is returned as a bounded near miss. Custom sentence "
+            "exposure. Incomplete recognition returns match false and an empty near_misses list. Custom sentence "
             "templates and source file paths are never exposed."
         ),
         "caps_any": ["cap_search", "cap_config_read"],
@@ -2449,7 +2449,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
     },
     {
         "name": "check_ha_config",
-        "description": "Validate the Home Assistant configuration files and return any errors and warnings.",
+        "description": "Validate Home Assistant configuration and return validity, bounded error/warning counts and safe domain labels. Detailed messages are withheld; inspect the Home Assistant configuration check and logs.",
         "cap": "cap_diagnostics",
         "inputSchema": {"type": "object", "properties": {}},
     },
@@ -2467,7 +2467,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "the card path, which patch_dashboard accepts directly), and config entries such as "
             "helpers built on another entity. 'searched' lists the consumer kinds actually "
             "checked and 'not_searched' names any unavailable, unreadable, unmodeled, or capability-skipped source, so a partial "
-            "answer is never mistaken for a clean one. 'dangling_references' reports entity IDs "
+            "answer is marked incomplete. Only readable consumers are returned; hidden or unmapped identities are omitted. 'dangling_references' reports entity IDs "
             "referenced by something but no longer existing anywhere. With an entity scope it also "
             "returns 'references': what that automation or script itself uses; when configuration "
             "branches could not be read, 'references_not_searched' explains that this list is incomplete."
@@ -2585,8 +2585,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
-                "service": {"type": "object", "description": "Service to preview.", "additionalProperties": False, "properties": {"domain": {"type": "string", "description": "Service domain."}, "name": {"type": "string", "description": "Service name."}, "data": {"type": "object", "description": "Additional service data."}}, "required": ["domain", "name"]},
-                "targets": {"type": "array", "minItems": 1, "maxItems": SERVICE_TARGET_MAX_GROUPS, "description": "Optional target groups to resolve.", "items": {"type": "object", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "area", "all"], "description": "Target selector kind."}, "ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SERVICE_TARGET_MAX_IDS, "description": "IDs for non-all targets."}}, "required": ["kind"]}},
+                "service": {"type": "object", "description": "Service to preview.", "additionalProperties": False, "properties": {"domain": {"type": "string", "description": "Service domain."}, "name": {"type": "string", "description": "Service name."}, "data": {"type": "object", "description": "Additional service data without target selectors; selectors here are refused."}}, "required": ["domain", "name"]},
+                "targets": {"type": "array", "minItems": 1, "maxItems": SERVICE_TARGET_MAX_GROUPS, "description": "Explicit target groups required for supported service previews.", "items": {"type": "object", "additionalProperties": False, "properties": {"kind": {"type": "string", "enum": ["entity", "device", "area", "all"], "description": "Target selector kind."}, "ids": {"type": "array", "items": {"type": "string"}, "minItems": 1, "maxItems": SERVICE_TARGET_MAX_IDS, "description": "IDs for non-all targets."}}, "required": ["kind"]}},
             },
             "required": ["service"],
         },

@@ -8,7 +8,7 @@
     },
     "step": {
       "user": {
-        "description": "제출을 클릭하여 Phoenix MCP 통합 구성 요소를 설치하세요. 한 번에 하나의 인스턴스만 설정할 수 있습니다."
+        "description": "Phoenix MCP를 설정합니다. 한 번에 하나의 인스턴스만 구성할 수 있습니다."
       }
     }
   },

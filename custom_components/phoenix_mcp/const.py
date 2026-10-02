@@ -424,17 +424,6 @@ VOICE_AGENT_CLIENT_IP = "voice"
 # from the voice/assist sentinels for audit clarity; suppresses the stale-tools
 # advisory like the others (it rebuilds its tool list every task).
 AI_TASK_CLIENT_IP = "ai_task"
-# Documented HA floor for the AI Task entity: the ai_task integration shipped in HA
-# 2025.7. Real gate is runtime feature detection (the import may be absent); this
-# only drives the panel's "requires HA X+" message, like ASSIST_API_MIN_HA.
-AI_TASK_MIN_HA = "2025.7.0"
-# Documented HA floor for the feature: convert_to_voluptuous (used to translate
-# Phoenix MCP's JSON-Schema tool params into the llm.Tool voluptuous schema) shipped with
-# the mcp client integration in HA 2025.2. The real gate is runtime feature
-# detection (the import may be absent); this constant only drives the panel's
-# "requires HA X+" message, decoupled from MIN_HA_VERSION like MESA_INJECT_MIN_HA.
-ASSIST_API_MIN_HA = "2025.2.0"
-
 # MESA (semantic safety layer) integration. Profiles persist in a separate
 # Store from tokens so the two storage versions evolve independently.
 # The inheritance levels a profile can be authored AT, most specific first.
@@ -468,9 +457,9 @@ MESA_CONFIRM_CAP = "mesa_control_mode"
 # tool router, so a token cannot invoke the approved-bypass path directly.
 MESA_APPROVED_EXECUTOR = "call_service_mesa_approved"
 
-# Minimum HA frontend version for the optional MESA profile injector.
-# Separate from MIN_HA_VERSION because the injector depends on frontend DOM shape.
-MESA_INJECT_MIN_HA = "2025.5.0"
+# The optional injector is qualified at the supported base release. Its separate
+# gate also retains frontend availability checks because it depends on DOM shape.
+MESA_INJECT_MIN_HA = MIN_HA_VERSION
 
 # MESA profile suggestions (mesa_suggestions.py). Two v1 signals; suggestions
 # are computed admin-side and NEVER auto-applied.
