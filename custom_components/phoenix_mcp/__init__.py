@@ -869,8 +869,9 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
         for token in store.list_tokens():
             changed.extend(await async_cancel_approvals_for_token(store, token.id, reason="integration_removed"))
             await store.async_archive_token(token.id, revoked=True)
-        await store.async_patch_settings(assist_token_id=None, voice_agent_token_id=None,
-            voice_agent_provider_id=None, voice_agent_model=None, ai_task_token_id=None,
+        await store.async_patch_settings(assist_bound_token_id=None,
+            voice_agent_enabled=False, voice_agent_token_id=None,
+            voice_agent_provider_id=None, voice_agent_model=None, ai_task_enabled=False, ai_task_token_id=None,
             ai_task_provider_id=None, ai_task_model=None, decision_provider_id=None)
     for record in changed:
         dismiss_approval_notification(hass, record.id)

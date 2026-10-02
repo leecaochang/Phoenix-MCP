@@ -38,7 +38,7 @@ import re
 from typing import Any, NamedTuple
 
 import voluptuous as vol
-from homeassistant.exceptions import HomeAssistantError, ServiceNotFound, ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceNotFound, ServiceValidationError, Unauthorized
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import entity_registry as er
 from homeassistant.core import HomeAssistant
@@ -52,6 +52,7 @@ from ..const import (
 )
 from ..data import PhoenixData
 from ..device_semantics import device_registry_snapshot, effective_entity_area_id
+from ..household_authority import household_service_kwargs
 from ..mesa import async_apply_mesa_to_call, fire_mesa_blocked_event
 from ..request_authority import check_request_authority
 from ..helpers import diff_summary_fields as _summary, effective_cap, str_arg, validation_error_message as _validation_error_message
@@ -348,6 +349,10 @@ async def _mesa_gate_native(
     shared gate distinguishes an explicit off mode from a failed production
     runtime.
     """
+    try:
+        household_service_kwargs(hass, service_domain, service_name)
+    except Unauthorized:
+        return _MesaGate((_tool_error("Forbidden."), "denied", tool_name), [], [])
     if data is None:
         data = hass.data.get(DOMAIN)
     if data is None:
@@ -436,6 +441,7 @@ async def _tool_intent_action(
                 call_data,
                 blocking=True,
                 return_response=False,
+                **household_service_kwargs(hass, service_domain, service_name),
             )
     except asyncio.TimeoutError:
         return (
@@ -1308,6 +1314,7 @@ async def _execute_hass_set_volume_relative(
                     {"volume_level": level, "entity_id": grouped_entities},
                     blocking=True,
                     return_response=False,
+                    **household_service_kwargs(hass, "media_player", "volume_set"),
                 )
             except asyncio.CancelledError:
                 raise
@@ -1649,6 +1656,7 @@ async def _tool_hass_cancel_all_timers(
                 await hass.services.async_call(
                     "timer", "cancel", {"entity_id": entities},
                     blocking=True, return_response=False,
+                    **household_service_kwargs(hass, "timer", "cancel"),
                 )
         except asyncio.TimeoutError:
             pass
@@ -1868,6 +1876,7 @@ async def _tool_hass_broadcast(
                 {"message": message, "entity_id": targets},
                 blocking=True,
                 return_response=False,
+                **household_service_kwargs(hass, "assist_satellite", "announce"),
             )
     except asyncio.TimeoutError:
         return (

@@ -3410,13 +3410,21 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 else:
                     if record.household_request:
                         from .household_authority import household_scope
-                        from .request_authority import check_request_authority
+                        from .request_authority import AuthorityChangedError, check_request_authority
 
                         async with household_scope(hass, user_id=record.ha_user_id):
-                            check_request_authority()
-                            tool_result, outcome, _resource = await async_execute_approved_tool(
-                                record.tool_name, record.args, token, hass, data,
-                            )
+                            try:
+                                check_request_authority()
+                            except AuthorityChangedError:
+                                # This check precedes the executor. A removed or
+                                # inactive requester cannot have caused effects.
+                                tool_result = {"isError": True, "content": [{"type": "text", "text":
+                                    "Requester authority changed. No action was dispatched."}]}
+                                outcome, _resource = "denied", record.tool_name
+                            else:
+                                tool_result, outcome, _resource = await async_execute_approved_tool(
+                                    record.tool_name, record.args, token, hass, data,
+                                )
                     else:
                         tool_result, outcome, _resource = await async_execute_approved_tool(
                             record.tool_name, record.args, token, hass, data,
@@ -3425,8 +3433,8 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 policy_version.reset(policy_ctx)
                 request_authority.reset(authority_ctx)
         except ExecutorNotRegistered:
-            # The ONLY failure that proves nothing was dispatched: raised by the
-            # registry lookup before any executor is called. It has its own type
+            # The registry lookup also proves nothing was dispatched: it raises
+            # before any executor is called. It has its own type
             # for exactly this reason. Catching bare KeyError here was wrong,
             # because an executor that raises KeyError internally (a dict lookup
             # on a service response, a missing config key) is indistinguishable

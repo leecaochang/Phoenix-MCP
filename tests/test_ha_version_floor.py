@@ -183,6 +183,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "HomeAssistantError": "0.0.0",
         "ServiceNotFound": "0.0.0",
         "ServiceValidationError": "0.0.0",
+        "Unauthorized": "2026.7.0",
     },
     "homeassistant.helpers": {
         "area_registry": "0.0.0",

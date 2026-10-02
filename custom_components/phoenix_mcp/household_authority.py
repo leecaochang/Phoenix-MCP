@@ -6,17 +6,20 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from functools import partial
+from inspect import unwrap
+from typing import TYPE_CHECKING, TypedDict
 
 from homeassistant.auth import EVENT_USER_REMOVED, EVENT_USER_UPDATED
 from homeassistant.auth.permissions.const import POLICY_CONTROL, POLICY_READ
-from homeassistant.core import callback
+from homeassistant.core import Context, callback
+from homeassistant.exceptions import Unauthorized
 
 from .request_authority import AuthorityChangedError
 
 if TYPE_CHECKING:
     from homeassistant.auth.models import User
-    from homeassistant.core import Context, Event, HomeAssistant
+    from homeassistant.core import Event, HomeAssistant
 
 
 @dataclass
@@ -27,6 +30,7 @@ class HouseholdAuthority:
     user: User | None
     invalid: bool = False
     closed: bool = False
+    context: Context | None = None
 
     def check(self) -> None:
         if self.closed or self.invalid or (self.user is not None and not self.user.is_active):
@@ -51,6 +55,47 @@ household_authority: ContextVar[HouseholdAuthority | None] = ContextVar(
 )
 
 
+class _ServiceContextKwargs(TypedDict, total=False):
+    """Optional service-call context, without changing non-household calls."""
+
+    context: Context
+
+
+def household_service_kwargs(hass: HomeAssistant, domain: str, service: str) -> _ServiceContextKwargs:
+    """Preserve HA caller identity and refuse native admin services for households.
+
+    HA's admin-service wrapper exempts a context without a user ID. Inspect its
+    registered job for unidentified callers too; sending an empty Context would
+    silently grant system authority. HA exposes no public admin-service flag.
+    """
+    authority = household_authority.get()
+    if authority is None:
+        return {}
+    authority.check()
+    if not authority.is_admin():
+        from homeassistant.helpers import service as ha_service
+
+        admin_handler = getattr(ha_service, "_async_admin_handler", None)
+        if admin_handler is None:
+            # Refuse if HA changes the registration adapter we have qualified.
+            raise Unauthorized()
+        registered = hass.services.async_services().get(domain, {}).get(service)
+        if registered is not None:
+            try:
+                target = unwrap(registered.job.target)
+                while isinstance(target, partial):
+                    target = unwrap(target.func)
+            except (AttributeError, ValueError):
+                raise Unauthorized() from None
+            if target is admin_handler:
+                raise Unauthorized()
+    if authority.context is not None:
+        return {"context": authority.context}
+    if authority.user_id is not None:
+        return {"context": Context(user_id=authority.user_id)}
+    return {}
+
+
 @asynccontextmanager
 async def household_scope(
     hass: HomeAssistant, context: Context | None = None, *, user_id: str | None = None,
@@ -59,7 +104,7 @@ async def household_scope(
     if context is not None:
         user_id = context.user_id
     user = await hass.auth.async_get_user(user_id) if user_id else None
-    authority = HouseholdAuthority(user_id, user, invalid=bool(user_id and user is None))
+    authority = HouseholdAuthority(user_id, user, invalid=bool(user_id and user is None), context=context)
 
     @callback
     def changed(event: Event) -> None:

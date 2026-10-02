@@ -26,6 +26,7 @@ from homeassistant.exceptions import (
     HomeAssistantError,
     ServiceNotFound,
     ServiceValidationError,
+    Unauthorized,
 )
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import category_registry as cr
@@ -49,6 +50,7 @@ from .data import PhoenixData
 from .tools.esphome import _tool_search_esphome_yaml, _tool_list_esphome_jobs, _tool_list_esphome_devices
 from .template_render import TemplateRenderError, async_render_template_for_token
 from .request_authority import (AuthorityChangedError, RequestAuthority, check_request_authority, policy_version, request_authority)
+from .household_authority import household_service_kwargs
 from .tool_common import _create_registry_mesa_approval
 from .tools.locations import _tool_set_area_or_floor, _execute_set_area_or_floor, restore_location_version
 from .tool_input import tool_arguments_error
@@ -1189,6 +1191,11 @@ async def _tool_call_service(
     if not domain or not service:
         return _tool_error("Missing required arguments: domain and service"), "denied", "call_service"
 
+    try:
+        household_service_kwargs(hass, domain, service)
+    except Unauthorized:
+        return _tool_error("Forbidden."), "denied", "call_service"
+
     if domain == "calendar" and service != "get_events":
         if effective_cap(token, "cap_calendar_write") == CAP_DENY:
             return _tool_error("Forbidden."), "denied", "call_service"
@@ -1301,6 +1308,7 @@ async def _dispatch_no_target_tool_call(
         async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
             await hass.services.async_call(
                 domain, service, service_data, blocking=True, return_response=False,
+                **household_service_kwargs(hass, domain, service),
             )
     except asyncio.TimeoutError:
         subject = "the device" if timeout_noun == "Action" else "HA"
@@ -1539,6 +1547,7 @@ async def _execute_call_service(
                 call_data,
                 blocking=True,
                 return_response=use_return_response,
+                **household_service_kwargs(hass, domain, service),
             )
     except asyncio.TimeoutError:
         return (
