@@ -22,6 +22,88 @@ import custom_components.phoenix_mcp as phoenix_init
 from custom_components.phoenix_mcp.const import DOMAIN, RUNTIME_READY_KEY
 
 
+@pytest.fixture(autouse=True)
+async def cleanup_direct_setup_entries(hass):
+    """Run unload callbacks for entries set up outside HA's entry manager."""
+    yield
+    # Direct setup never marks these mock entries loaded, so HA's fixture cannot
+    # unload them. In particular, their process-wide audit bridges must detach.
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        await entry._async_process_on_unload(hass)
+
+
+@pytest.mark.parametrize("exit_path", ["stop", "unload", "rollback"])
+async def test_lifecycle_drains_policy_callbacks_before_runtime_disposal(hass, exit_path):
+    """Shutdown must leave both HA execution bridges available to accepted work."""
+    import threading
+
+    from homeassistant.const import EVENT_HOMEASSISTANT_STOP
+    from custom_components.phoenix_mcp.mesa_core import ProfileStore, ashutdown_policy_workers
+    from custom_components.phoenix_mcp.mesa_core.backends import MemoryBackend
+    from custom_components.phoenix_mcp.mcp_view import PhoenixMcpView
+
+    _, entry, _ = await _run_setup(hass)
+    data = hass.data[DOMAIN]
+    entered, release, closing = asyncio.Event(), asyncio.Event(), asyncio.Event()
+    loop = asyncio.get_running_loop()
+
+    async def bridge():
+        entered.set()
+        await release.wait()
+        assert hass.data[DOMAIN] is data
+        return await hass.async_add_executor_job(lambda: [])
+
+    class BridgeBackend(MemoryBackend):
+        def list_keys(self, prefix=None):
+            return asyncio.run_coroutine_threadsafe(bridge(), loop).result(timeout=5)
+
+    async def observed_shutdown():
+        assert data.shutting_down and not data.ready
+        assert hass.data[RUNTIME_READY_KEY] is False
+        closing.set()
+        await ashutdown_policy_workers()
+
+    async def leave():
+        if exit_path == "stop":
+            hass.bus.async_fire(EVENT_HOMEASSISTANT_STOP)
+            await hass.async_block_till_done()
+        elif exit_path == "unload":
+            assert await phoenix_init.async_unload_entry(hass, entry)
+        else:
+            await phoenix_init._rollback_failed_setup(hass, entry, data)
+
+    work = asyncio.create_task(ProfileStore(BridgeBackend()).aentity_keys())
+    await asyncio.wait_for(entered.wait(), 5)
+    with (patch("custom_components.phoenix_mcp.mesa_core.ashutdown_policy_workers", observed_shutdown),
+          patch.object(hass.config_entries, "async_unload_platforms", AsyncMock(return_value=True)),
+          patch.object(phoenix_init, "_remove_frontend")):
+        cleanup = asyncio.create_task(leave())
+        try:
+            await asyncio.wait_for(closing.wait(), 5)
+            assert not cleanup.done()
+            view = PhoenixMcpView()
+            view.hass = hass
+            assert (await view.post(MagicMock())).status == 503
+        finally:
+            release.set()
+            assert await asyncio.wait_for(work, 5) == []
+            await asyncio.wait_for(cleanup, 5)
+    assert not any(t.name.startswith(("mesa-policy", "mesa-shutdown")) for t in threading.enumerate())
+    # A later setup can use the same vendored package without a process restart.
+    assert await ProfileStore(MemoryBackend()).aentity_keys() == []
+    await ashutdown_policy_workers()
+
+
+async def test_failed_unload_preserves_policy_workers(hass):
+    """A failed unload leaves the integration active and must not drain its pool."""
+    _, entry, _ = await _run_setup(hass)
+    with (patch("custom_components.phoenix_mcp.mesa_core.ashutdown_policy_workers", AsyncMock()) as shutdown,
+          patch.object(hass.config_entries, "async_unload_platforms", AsyncMock(return_value=False))):
+        assert not await phoenix_init.async_unload_entry(hass, entry)
+    shutdown.assert_not_awaited()
+    assert hass.data[DOMAIN].ready and not hass.data[DOMAIN].shutting_down
+
+
 def _settings(kill_switch: bool = False):
     return SimpleNamespace(
         kill_switch=kill_switch,

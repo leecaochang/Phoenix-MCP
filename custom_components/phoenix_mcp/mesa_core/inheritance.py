@@ -8,12 +8,15 @@ defaults apply only when no profile at any level declares the field).
 
 from __future__ import annotations
 
+import inspect
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from custom_components.phoenix_mcp.mesa_core.conflict import ConflictResolver, FieldExplanation, Layer
+from custom_components.phoenix_mcp.mesa_core.conflict import ConflictResolver, FieldExplanation, Layer, _is_trusted_for
+from custom_components.phoenix_mcp.mesa_core.exceptions import HostCallbackError
 from custom_components.phoenix_mcp.mesa_core.profile import (
+    CONTROL_MODE_RANK,
     ControlMode,
     PrivacyLevel,
     ProfileMetadata,
@@ -79,13 +82,49 @@ class InheritanceResolver:
         get_entity_device: Callable[[str], str | None] | None = None,
     ) -> None:
         self.store = store
-        self.get_entity_area = get_entity_area or store.get_entity_area
-        self.get_entity_domain = get_entity_domain or (lambda eid: eid.split(".", 1)[0])
-        self.get_entity_integration = get_entity_integration or getattr(
-            store, "get_entity_integration", None
-        )
-        self.get_entity_device = get_entity_device or getattr(store, "get_entity_device", None)
+        if get_entity_area is not None:
+            store.get_entity_area = get_entity_area
+        if get_entity_domain is not None:
+            store.get_entity_domain = get_entity_domain
+        if get_entity_integration is not None:
+            store.get_entity_integration = get_entity_integration
+        if get_entity_device is not None:
+            store.get_entity_device = get_entity_device
         self._conflicts = ConflictResolver()
+
+    @property
+    def get_entity_domain(self) -> Callable[[str], str]:
+        return self.store.get_entity_domain or (lambda eid: eid.split(".", 1)[0])
+
+    def lookup(self, kind: str, entity_id: str) -> str | None:
+        callback = getattr(self, f"get_entity_{kind}")
+        if callback is None:
+            return None
+        try:
+            value = callback(entity_id)
+        except Exception as err:
+            raise HostCallbackError(f"get_entity_{kind} callback failed") from err
+        if inspect.isawaitable(value):
+            if inspect.iscoroutine(value):
+                value.close()
+            raise HostCallbackError(f"get_entity_{kind} must be synchronous")
+        if value is None and kind != "domain":
+            return None
+        if not isinstance(value, str) or not value.strip():
+            raise HostCallbackError(f"get_entity_{kind} must return a non-empty identifier")
+        return value
+
+    @property
+    def get_entity_area(self) -> Callable[[str], str | None] | None:
+        return self.store.get_entity_area
+
+    @property
+    def get_entity_integration(self) -> Callable[[str], str | None] | None:
+        return self.store.get_entity_integration
+
+    @property
+    def get_entity_device(self) -> Callable[[str], str | None] | None:
+        return self.store.get_entity_device
 
     def _gather_layers(
         self, entity_id: str, entity_profile: SemanticProfile | None = None
@@ -100,13 +139,13 @@ class InheritanceResolver:
         # Device level (Spec 5.6): host maps entity to owning device; no
         # fallback exists, so without the callback device profiles are inert.
         if self.get_entity_device is not None:
-            device_id = self.get_entity_device(entity_id)
+            device_id = self.lookup("device", entity_id)
             if device_id is not None:
                 device_profile = self.store.get_device_profile(device_id)
                 if device_profile is not None:
                     layers.append(Layer("device", device_profile))
         if self.get_entity_area is not None:
-            area_id = self.get_entity_area(entity_id)
+            area_id = self.lookup("area", entity_id)
             if area_id is not None:
                 area_profile = self.store.get_area_profile(area_id)
                 if area_profile is not None:
@@ -116,14 +155,15 @@ class InheritanceResolver:
         # mapping we fall back to the entity's HA domain, which resolves
         # domain-defining integrations only.
         if self.get_entity_integration is not None:
-            integration = self.get_entity_integration(entity_id)
+            integration = self.lookup("integration", entity_id)
         else:
-            integration = self.get_entity_domain(entity_id)
+            integration = self.lookup("domain", entity_id)
         if integration is not None:
             integration_profile = self.store.get_integration_profile(integration)
             if integration_profile is not None:
                 layers.append(Layer("integration", integration_profile))
-        domain = self.get_entity_domain(entity_id)
+        domain = self.lookup("domain", entity_id)
+        assert domain is not None
         domain_profile = self.store.get_domain_profile(domain)
         if domain_profile is not None:
             layers.append(Layer("domain", domain_profile))
@@ -139,28 +179,59 @@ class InheritanceResolver:
     ) -> tuple[ControlMode, str, str]:
         """Rule E default for an undeclared control_mode.
 
-        Both deployment_defaults and the built-in baseline are scoped to
-        entities with no profile at any inheritance level: operators loosen an
-        unprofiled entity via ``deployment_defaults`` but a profiled one via the
-        Section 5.7 Rule A override, and the baseline "applies before any
-        profiles have been authored" (Spec 5.8, and the control_mode precedence
-        note in Spec 4). A profiled entity that leaves control_mode undeclared
-        therefore defaults to confirm: absence is never a silent autonomous
-        default (Spec 4), and a deployment default may not loosen it.
+        Unprofiled entities take the deployment/domain baseline. Profiles with no
+        trusted control declaration preserve the stricter of that floor and
+        confirm. This keeps locks prohibited when unrelated metadata is present.
         """
-        if layers:
-            return ControlMode.CONFIRM, "built_in_baseline", "unknown"
-        if defaults is not None:
-            return defaults.control_mode_for(domain), "deployment_default", "user"
-        return baseline_control_mode(domain), "built_in_baseline", "unknown"
+        mode = defaults.control_mode_for(domain) if defaults else baseline_control_mode(domain)
+        if layers and CONTROL_MODE_RANK[mode] < CONTROL_MODE_RANK[ControlMode.CONFIRM]:
+            mode = ControlMode.CONFIRM
+        return (
+            mode,
+            "deployment_default" if defaults else "built_in_baseline",
+            "user" if defaults else "unknown",
+        )
 
     def explain(
         self, entity_id: str, *, entity_profile: SemanticProfile | None = None
     ) -> ProfileExplanation:
         layers = self._gather_layers(entity_id, entity_profile)
         effective, resolution = self._conflicts.resolve(entity_id, layers)
-        domain = self.get_entity_domain(entity_id)
+        domain = self.lookup("domain", entity_id)
+        assert domain is not None
         defaults = self.store.get_deployment_defaults()
+
+        # Unconfirmed inferred declarations may tighten, never loosen, the
+        # applicable baseline. Trusted declarations explicitly replace it.
+        control_path = "operational_boundaries.control_mode"
+        trusted_control = any(
+            (layer.profile.declared(control_path) and _is_trusted_for(layer.profile, control_path))
+            or (
+                layer.level == "integration"
+                and "control_mode"
+                in layer.profile.raw.get("semantic_profile", {}).get("capability_semantics", {})
+                and _is_trusted_for(layer.profile, "capability_semantics.control_mode")
+            )
+            for layer in layers
+        )
+        floor, floor_level, floor_origin = self._default_control_mode(domain, layers, defaults)
+        if (
+            not trusted_control
+            and CONTROL_MODE_RANK[floor]
+            > CONTROL_MODE_RANK[effective.operational_boundaries.control_mode]
+        ):
+            effective.operational_boundaries.control_mode = floor
+            resolution.explanations = [
+                entry for entry in resolution.explanations if entry.field_path != control_path
+            ]
+            resolution.explanations.append(
+                FieldExplanation(
+                    field_path=control_path,
+                    effective_value=floor.value,
+                    provided_by_level=floor_level,
+                    provided_by_origin=floor_origin,
+                )
+            )
 
         declared_paths = {e.field_path for e in resolution.explanations}
 

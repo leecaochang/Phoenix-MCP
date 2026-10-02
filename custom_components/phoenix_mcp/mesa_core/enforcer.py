@@ -1,17 +1,17 @@
 """MesaEnforcer: service call evaluation (Module 4.4; Spec 4, 5.8, 6.4-6.6).
 
 Evaluation order: resolve effective profile -> apply temporal constraints (so a
-temporally tightened control_mode is honoured) -> privacy -> control_mode
-(including the enforced-mode confirmation round-trip) -> declared limits.
+temporally tightened control_mode is honoured) -> privacy -> declared limits ->
+control_mode (including the enforced-mode confirmation round-trip).
 
 The server-level ``mode`` interacts with per-profile ``enforcement_mode``: a
-call is enforced when either is "enforced". ``read_only`` blocks regardless of
-mode because it describes entity nature, not policy.
+call is enforced when either is "enforced". ``read_only`` and ``prohibited``
+share advisory/enforced behavior.
 """
 
 from __future__ import annotations
 
-import asyncio
+import inspect
 import json
 import logging
 import math
@@ -23,6 +23,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
+from custom_components.phoenix_mcp.mesa_core._async import run_sync
 from custom_components.phoenix_mcp.mesa_core.audit import MesaAuditEvent, emit_audit_event
 from custom_components.phoenix_mcp.mesa_core.exceptions import MesaError
 from custom_components.phoenix_mcp.mesa_core.inheritance import InheritanceResolver
@@ -32,6 +33,7 @@ from custom_components.phoenix_mcp.mesa_core.profile import (
     HA_TARGET_SELECTOR_KEYS,
     ControlMode,
     MetadataOrigin,
+    OperationalBoundaries,
     SemanticProfile,
 )
 from custom_components.phoenix_mcp.mesa_core.store import ProfileStore
@@ -56,6 +58,15 @@ UNAVAILABLE_STATES = frozenset({"unavailable", "unknown", "none", ""})
 
 @dataclass
 class EnforcementResult:
+    """One call's decision and evaluated restriction.
+
+    ``effective_profile`` is the inherited profile, before temporal and privacy
+    adjustments. ``evaluated_control_mode`` includes those adjustments from
+    this evaluation; it is None if policy could not be evaluated or the call
+    was refused before that stage. Hosts may apply a stronger write boundary
+    using this field without evaluating the policy a second time.
+    """
+
     allowed: bool
     reason: str
     rule_applied: str | None
@@ -63,6 +74,10 @@ class EnforcementResult:
     effective_profile: SemanticProfile
     warnings: list[str] = field(default_factory=list)
     confirmation_challenge: dict[str, Any] | None = None
+    deny_response_mode: str | None = None
+    active_constraint_ids: list[str] = field(default_factory=list)
+    active_constraint_reasons: dict[str, str] = field(default_factory=dict)
+    evaluated_control_mode: ControlMode | None = None
 
 
 def _target_conflict(entity_id: str, service_params: dict[str, Any]) -> str | None:
@@ -120,6 +135,8 @@ class ConfirmationManager:
     """
 
     def __init__(self, ttl_seconds: int = CHALLENGE_TTL_SECONDS) -> None:
+        if type(ttl_seconds) is not int or not 1 <= ttl_seconds <= CHALLENGE_TTL_SECONDS:
+            raise ValueError("challenge TTL must be an integer between 1 and 120 seconds")
         self._lock = threading.RLock()
         self.ttl_seconds = ttl_seconds
         self._challenges: dict[str, dict[str, Any]] = {}
@@ -127,9 +144,8 @@ class ConfirmationManager:
     def _evict_expired(self, now: datetime) -> None:
         """Drop challenges past their TTL.
 
-        Redemption is the only other removal path, and an unconfirmed call is
-        never redeemed, so without this every challenge a user declined or
-        ignored would be retained for the life of the process.
+        Used records remain until TTL expiry to detect replay. Both used and
+        unused records count toward the bounded capacity.
         """
         for challenge_id in [
             cid for cid, record in self._challenges.items() if now > record["expires_at"]
@@ -145,6 +161,8 @@ class ConfirmationManager:
     ) -> dict[str, Any]:
         with self._lock:
             self._evict_expired(now)
+            if len(self._challenges) >= 4096:
+                raise MesaError("confirmation challenge capacity reached; retry after expiry")
             challenge_id = uuid.uuid4().hex
             expires_at = now + timedelta(seconds=self.ttl_seconds)
             self._challenges[challenge_id] = {
@@ -182,6 +200,10 @@ class ConfirmationManager:
                 return False, "confirmation token missing approved_by (Spec 6.6)"
             if not isinstance(token.get("approved_at"), str) or not token["approved_at"]:
                 return False, "confirmation token missing approved_at (Spec 6.6)"
+            try:
+                datetime.fromisoformat(token["approved_at"])
+            except ValueError:
+                return False, "approved_at must be an ISO 8601 timestamp"
             record = self._challenges.get(challenge_id)
             if record is None:
                 return False, "unknown or expired confirmation challenge"
@@ -286,7 +308,9 @@ class MesaEnforcer:
             # rather than at the first prohibited call.
             raise MesaError(f"invalid mode {mode!r}: expected one of {list(VALID_MODES)}")
         self.store = store
-        self.resolver = resolver or InheritanceResolver(store=store)
+        if resolver is not None:
+            store.attach_resolver(resolver)
+        self.resolver = store.resolver
         self.mode = mode
         self.interactive = interactive
         self.privacy = privacy_enforcer or PrivacyEnforcer()
@@ -334,7 +358,9 @@ class MesaEnforcer:
                 "treated as active (fail-closed)"
             )
             return True
-        if state is None or state.strip().lower() in UNAVAILABLE_STATES:
+        if inspect.iscoroutine(state):
+            state.close()
+        if not isinstance(state, str) or state.strip().lower() in UNAVAILABLE_STATES:
             # HA reports an unreadable entity as the strings "unavailable" or
             # "unknown" rather than as absent. Comparing against them would
             # evaluate cleanly to False and silently disable the limit (Spec 6.5).
@@ -402,7 +428,21 @@ class MesaEnforcer:
     ) -> EnforcementResult:
         now = current_time or datetime.now()
         service_params = service_params or {}
-        explanation = self.resolver.explain(entity_id)
+        try:
+            explanation = self.resolver.explain(entity_id)
+        except (MesaError, ValueError, OSError, RecursionError):
+            return EnforcementResult(
+                allowed=False,
+                reason="entity policy could not be evaluated",
+                rule_applied="policy_unavailable",
+                entity_id=entity_id,
+                effective_profile=SemanticProfile(
+                    entity_id,
+                    operational_boundaries=OperationalBoundaries(
+                        control_mode=ControlMode.PROHIBITED
+                    ),
+                ),
+            )
         profile = explanation.effective_profile
         warnings = list(explanation.warnings)
 
@@ -477,6 +517,13 @@ class MesaEnforcer:
                 entity_id=entity_id,
                 effective_profile=profile,
                 warnings=warnings,
+                active_constraint_ids=list(temporal.active_constraint_ids),
+                active_constraint_reasons=dict(temporal.active_constraint_reasons),
+                evaluated_control_mode=(
+                    boundaries.control_mode
+                    if isinstance(boundaries.control_mode, ControlMode)
+                    else None
+                ),
             )
 
         # 1. Temporal constraints first, so a temporally tightened control_mode
@@ -497,7 +544,9 @@ class MesaEnforcer:
             is_minor=profile.person_traits.is_minor is True,
         )
         if not decision.allowed:
-            return blocked(decision.reason, "privacy:deny_for")
+            denied = blocked(decision.reason, "privacy:deny_for")
+            denied.deny_response_mode = decision.deny_response_mode
+            return denied
         if (
             decision.effective_level.value == "restricted"
             and boundaries.control_mode == ControlMode.AUTONOMOUS
@@ -520,15 +569,33 @@ class MesaEnforcer:
                 "(Spec 5.4 Rule 3)"
             )
 
+        enforced = self._is_enforced(boundaries.enforcement_mode)
+        # 5. Declared limits (profile limits plus active temporal value constraints).
+        all_limits = list(boundaries.declared_limits) + temporal.active_limits
+        for limit in all_limits:
+            limit_id = str(limit.get("id", "<unnamed>"))
+            if "predicate" in limit and not self._evaluate_predicate(
+                limit["predicate"], warnings, limit_id
+            ):
+                continue
+            violation = self._check_limit(limit, service, service_params)
+            if violation is not None:
+                if enforced:
+                    return blocked(violation, f"declared_limit:{limit_id}")
+                warnings.append(f"advisory: {violation}")
+
         # 4. control_mode.
         mode = boundaries.control_mode
+        if not isinstance(mode, ControlMode):
+            return blocked("unrecognized control mode", "policy_unavailable")
         reason_suffix = boundaries.control_reason or entity_id
         enforced = self._is_enforced(boundaries.enforcement_mode)
         if mode == ControlMode.READ_ONLY:
-            # Entity nature, not policy: blocks regardless of enforcement mode.
-            return blocked(
-                f"Entity is read-only by nature: {reason_suffix}", "control_mode:read_only"
-            )
+            if enforced:
+                return blocked(
+                    f"Entity is read-only by nature: {reason_suffix}", "control_mode:read_only"
+                )
+            warnings.append(f"advisory: entity is read-only ({reason_suffix})")
         if mode == ControlMode.PROHIBITED:
             if enforced:
                 return blocked(
@@ -544,12 +611,14 @@ class MesaEnforcer:
                 # No interaction channel: confirm is blocked for all domains
                 # (Spec 4). Operators pre-authorise via deployment_defaults or
                 # the Rule A loosening override.
-                return blocked(
-                    f"Entity requires confirmation but no interaction channel exists: "
-                    f"{reason_suffix}",
-                    "control_mode:confirm_no_channel",
-                )
-            if enforced:
+                warnings.append("no interaction channel: confirm is treated as prohibited")
+                if enforced:
+                    return blocked(
+                        f"Entity requires confirmation but no interaction channel exists: "
+                        f"{reason_suffix}",
+                        "control_mode:confirm_no_channel",
+                    )
+            elif enforced:
                 if confirmation_token is not None:
                     ok, message = self.confirmations.redeem(
                         confirmation_token, entity_id, service, service_params, now
@@ -565,7 +634,12 @@ class MesaEnforcer:
                         f"confirmation accepted (approved_by={approved['approved_by']})"
                     )
                 else:
-                    challenge = self.confirmations.issue(entity_id, service, service_params, now)
+                    try:
+                        challenge = self.confirmations.issue(
+                            entity_id, service, service_params, now
+                        )
+                    except MesaError as err:
+                        return blocked(str(err), "control_mode:confirm")
                     result = blocked(
                         f"Confirmation required: {reason_suffix}. Present this action to "
                         "the user and re-submit with the confirmation_token.",
@@ -575,20 +649,6 @@ class MesaEnforcer:
                     return result
             else:
                 warnings.append(f"confirmation required before acting (advisory): {reason_suffix}")
-
-        # 5. Declared limits (profile limits plus active temporal value constraints).
-        all_limits = list(boundaries.declared_limits) + temporal.active_limits
-        for limit in all_limits:
-            limit_id = str(limit.get("id", "<unnamed>"))
-            if "predicate" in limit and not self._evaluate_predicate(
-                limit["predicate"], warnings, limit_id
-            ):
-                continue
-            violation = self._check_limit(limit, service, service_params)
-            if violation is not None:
-                if enforced:
-                    return blocked(violation, f"declared_limit:{limit_id}")
-                warnings.append(f"advisory: {violation}")
 
         # Allowed calls are audited at DEBUG: full trails opt in via log level.
         # A confirmed write is the exception: it is the record of a human
@@ -604,6 +664,9 @@ class MesaEnforcer:
             entity_id=entity_id,
             effective_profile=profile,
             warnings=warnings,
+            active_constraint_ids=list(temporal.active_constraint_ids),
+            active_constraint_reasons=dict(temporal.active_constraint_reasons),
+            evaluated_control_mode=boundaries.control_mode,
         )
 
     async def aevaluate(
@@ -615,7 +678,7 @@ class MesaEnforcer:
         current_time: datetime | None = None,
         confirmation_token: dict[str, Any] | None = None,
     ) -> EnforcementResult:
-        return await asyncio.to_thread(
+        return await run_sync(
             self.evaluate,
             entity_id,
             service,

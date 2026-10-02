@@ -23,17 +23,13 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
         "level contributed each effective field and why. The first tool to reach "
         "for when agent behaviour is unexpected."
     ),
-    "mesa_get_caller_context": (
-        "Retrieve caller identity and roles for the current session."
-    ),
+    "mesa_get_caller_context": ("Retrieve caller identity and roles for the current session."),
     "mesa_request_lease": (
         "Request a temporary advisory coordination lease on entities (max 30s). "
         "Not a lock: native automations remain unaware. Partial grants are valid; "
         "denial_reasons explains denied entities."
     ),
-    "mesa_release_lease": (
-        "Release a held coordination lease early to signal completion."
-    ),
+    "mesa_release_lease": ("Release a held coordination lease early to signal completion."),
 }
 
 TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
@@ -62,9 +58,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 ),
             },
             "intents": {"type": "array", "items": {"type": "string"}},
-            "min_origin_authority": {
-                "enum": ["inferred_ai", "hybrid", "user", "developer"]
-            },
+            "min_origin_authority": {"enum": ["inferred_ai", "hybrid", "user", "developer"]},
             "include_inferred": {"type": "boolean", "default": False},
             "include_fields": {"type": "array", "items": {"type": "string"}},
             "limit": {"type": "integer", "default": 50, "minimum": 1, "maximum": 200},
@@ -112,6 +106,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "duration_seconds": {
                 "type": "number",
                 "exclusiveMinimum": 0,
+                "minimum": 0.001,
                 "description": "Requested duration; values above 30 are clamped (Spec 21.2).",
             },
             "intent": {"type": "string"},

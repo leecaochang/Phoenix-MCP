@@ -14,11 +14,11 @@ corrupted or hostile archive cannot silently poison a store.
 
 from __future__ import annotations
 
-import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+from custom_components.phoenix_mcp.mesa_core._async import run_sync
 from custom_components.phoenix_mcp.mesa_core.exceptions import MesaError, MesaValidationError
 from custom_components.phoenix_mcp.mesa_core.profile import SemanticProfile
 from custom_components.phoenix_mcp.mesa_core.store import (
@@ -81,8 +81,13 @@ def export_profiles(store: ProfileStore) -> dict[str, Any]:
     entities: dict[str, Any] = {}
     scoped: dict[str, dict[str, Any]] = {section: {} for section, _ in _SECTIONS}
     defaults: dict[str, Any] | None = None
+    unreadable: list[str] = []
     for key in store.backend.list_keys():
-        doc = store.backend.read(key)
+        try:
+            doc = store.backend.read(key)
+        except (MesaError, ValueError, OSError, RecursionError):
+            unreadable.append(key)
+            continue
         if doc is None:
             continue
         if key == _DEPLOYMENT_DEFAULTS_KEY:
@@ -105,6 +110,8 @@ def export_profiles(store: ProfileStore) -> dict[str, Any]:
     }
     if defaults is not None:
         archive["deployment_defaults"] = defaults
+    if unreadable:
+        archive["unreadable_profiles"] = unreadable
     return {"mesa_export": archive}
 
 
@@ -153,9 +160,10 @@ def import_profiles(
                     continue
                 if store.backend.read(f"{prefix}{key}") is not None:
                     raise MesaError(f"import conflict: {section} key {key!r} already exists")
-        if "deployment_defaults" in inner and store.backend.read(
-            _DEPLOYMENT_DEFAULTS_KEY
-        ) is not None:
+        if (
+            "deployment_defaults" in inner
+            and store.backend.read(_DEPLOYMENT_DEFAULTS_KEY) is not None
+        ):
             raise MesaError("import conflict: deployment_defaults already exist")
 
     for section, prefix, setter in sections:
@@ -190,7 +198,11 @@ def import_profiles(
             if exists and on_conflict == "skip":
                 result.skipped_existing.append(label)
                 continue
-            setter(key, profile)
+            try:
+                setter(key, profile)
+            except MesaValidationError as err:
+                result.invalid[label] = str(err)
+                continue
             if exists:
                 result.overwritten += 1
             else:
@@ -227,12 +239,10 @@ def import_profiles(
 
 
 async def aexport_profiles(store: ProfileStore) -> dict[str, Any]:
-    return await asyncio.to_thread(export_profiles, store)
+    return await run_sync(export_profiles, store)
 
 
 async def aimport_profiles(
     store: ProfileStore, archive: dict[str, Any], *, on_conflict: str = "skip"
 ) -> ImportResult:
-    return await asyncio.to_thread(
-        lambda: import_profiles(store, archive, on_conflict=on_conflict)
-    )
+    return await run_sync(lambda: import_profiles(store, archive, on_conflict=on_conflict))

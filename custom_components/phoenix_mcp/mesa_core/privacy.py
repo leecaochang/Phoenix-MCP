@@ -2,7 +2,7 @@
 
 Access to sensitive/restricted entities and all person entities is audit-logged
 through the ``mesa_core.audit`` logger; each record carries the standard
-``mesa_audit_event`` dict (mesa_core.audit, Module Proposal Section 8).
+``mesa_audit_event`` dict (mesa_core.audit, Module Proposal Section 4.11).
 """
 
 from __future__ import annotations
@@ -30,7 +30,15 @@ class CallerContext:
     session_started_at: str | None = None
 
     def effective_roles(self) -> list[str]:
-        return list(self.roles) if self.is_authenticated else []
+        if not isinstance(self.is_authenticated, bool):
+            raise ValueError("caller is_authenticated must be a boolean")
+        if isinstance(self.roles, str):
+            roles = [self.roles]
+        elif isinstance(self.roles, list) and all(isinstance(role, str) for role in self.roles):
+            roles = list(self.roles)
+        else:
+            raise ValueError("caller roles must be an array of role names")
+        return roles if self.is_authenticated else []
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -112,9 +120,10 @@ class PrivacyEnforcer:
     ) -> None:
         # Spec 7.1/17: log access for sensitive and restricted entities and for
         # ALL person entities regardless of access_logging_recommended.
-        if not is_person and PRIVACY_RANK[decision.effective_level] < PRIVACY_RANK[
-            PrivacyLevel.SENSITIVE
-        ]:
+        if (
+            not is_person
+            and PRIVACY_RANK[decision.effective_level] < PRIVACY_RANK[PrivacyLevel.SENSITIVE]
+        ):
             return
         emit_audit_event(
             MesaAuditEvent(

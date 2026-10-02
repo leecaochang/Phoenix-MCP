@@ -25,6 +25,14 @@ class InvalidCursorError(MesaError):
     """
 
 
+class InvalidQueryError(MesaValidationError, ValueError):
+    """Invalid caller arguments, distinct from corrupt stored policy."""
+
+
+class HostCallbackError(MesaError):
+    """A host registry callback failed or returned an unusable value."""
+
+
 class MesaEnforcementError(MesaError):
     """A service call was blocked by MESA enforcement."""
 

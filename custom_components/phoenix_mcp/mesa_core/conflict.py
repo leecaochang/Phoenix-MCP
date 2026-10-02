@@ -82,7 +82,11 @@ _PERSON_RULE_D_FIELDS = (
 # access), and an inferred value there only ever adds caution, so they keep the
 # normal Rule D trusted-tier-then-fallback resolution.
 _ACCESS_DECISION_FIELDS = frozenset(
-    {"privacy_classification.access_roles", "person_traits.is_minor"}
+    {
+        "privacy_classification.access_roles",
+        "privacy_classification.deny_response_mode",
+        "person_traits.is_minor",
+    }
 )
 
 
@@ -284,11 +288,7 @@ def _shape_trusted(layer: Layer, path: str, value: Any) -> bool:
     """
     if _is_trusted_for(layer.profile, path):
         return True
-    if (
-        isinstance(value, dict)
-        and value
-        and layer.profile.metadata.source == MetadataOrigin.HYBRID
-    ):
+    if isinstance(value, dict) and value and layer.profile.metadata.source == MetadataOrigin.HYBRID:
         prefix = f"{path}."
         for confirmed in layer.profile.metadata.confirmed_fields:
             if "\\" in confirmed:
@@ -297,7 +297,7 @@ def _shape_trusted(layer: Layer, path: str, value: Any) -> bool:
             if not confirmed.startswith(prefix):
                 continue
             node = value
-            for segment in confirmed[len(prefix):].split("."):
+            for segment in confirmed[len(prefix) :].split("."):
                 if not (isinstance(node, dict) and segment in node):
                     break
                 node = node[segment]
@@ -378,12 +378,12 @@ def _coerced_triggers(layer: Layer, domain: str) -> tuple[TriggersAutomations, s
     if (
         not human_authored
         and domain in HELPER_DOMAINS
-        and value == TriggersAutomations.NONE
+        and value != TriggersAutomations.LIKELY
         and not _is_confirmed(profile, "operational_boundaries.triggers_automations")
     ):
         return TriggersAutomations.LIKELY, (
             f"{profile.entity_id}: unconfirmed {profile.metadata.source.value} helper profile "
-            "asserted triggers_automations: none; read as likely (Spec 5.4 Rule 9)"
+            f"asserted triggers_automations: {value.value}; read as likely (Spec 5.4 Rule 9)"
         )
     return value, None
 
@@ -442,9 +442,9 @@ class ConflictResolver:
         hard = [c for c in candidates if CONTROL_MODE_RANK[c.value] >= 2]
         if hard:
             # prohibited / read_only can never be loosened; read_only wins the tie.
-            winner = next(
-                (c for c in hard if c.value == ControlMode.READ_ONLY),
-                max(hard, key=lambda c: (c.scope_rank, c.origin_authority)),
+            winner = max(
+                hard,
+                key=lambda c: (c.value == ControlMode.READ_ONLY, c.scope_rank, c.origin_authority),
             )
             effective: ControlMode = winner.value
             reason = "Rule A: prohibited/read_only is never loosened"
@@ -458,9 +458,7 @@ class ConflictResolver:
             effective = ControlMode.AUTONOMOUS
             reason = "Rule A exception: operator loosening override applied"
         else:
-            winner = max(
-                candidates, key=lambda c: (CONTROL_MODE_RANK[c.value], c.scope_rank)
-            )
+            winner = max(candidates, key=lambda c: (CONTROL_MODE_RANK[c.value], c.scope_rank))
             effective = winner.value
             reason = f"Rule A: most restrictive value wins ({effective.value})"
 
@@ -477,9 +475,7 @@ class ConflictResolver:
                 # conflicts, so a hint winning uncontested is surfaced as a
                 # warning instead of silently reading as an operational_
                 # boundaries declaration.
-                resolution.warnings.append(
-                    f"{winner.layer.profile.entity_id}: control_mode {note}"
-                )
+                resolution.warnings.append(f"{winner.layer.profile.entity_id}: control_mode {note}")
         resolution.explanations.append(
             FieldExplanation(
                 field_path="operational_boundaries.control_mode",
@@ -513,15 +509,21 @@ class ConflictResolver:
 
         # Entity-level override of a sticky likely (Spec 6.1: requires human_reason;
         # value must be none or deployment_defined).
+        path = "operational_boundaries.triggers_automations"
+        trusted = [c for c in candidates if _is_trusted_for(c.layer.profile, path)]
+        pool = trusted or candidates
         override: _Candidate | None = None
-        for cand in candidates:
+        for cand in pool:
             ob = cand.layer.profile.operational_boundaries
             if not ob.override_triggers_automations:
                 continue
             valid = (
                 cand.layer.level == "entity"
-                and cand.value
-                in (TriggersAutomations.NONE, TriggersAutomations.DEPLOYMENT_DEFINED)
+                and _is_trusted_for(cand.layer.profile, path)
+                and _is_trusted_for(
+                    cand.layer.profile, "operational_boundaries.override_triggers_automations"
+                )
+                and cand.value in (TriggersAutomations.NONE, TriggersAutomations.DEPLOYMENT_DEFINED)
                 and bool(ob.human_reason)
             )
             if valid:
@@ -533,7 +535,7 @@ class ConflictResolver:
                     "or deployment_defined); ignored (Spec 6.1)"
                 )
 
-        likely = [c for c in candidates if c.value == TriggersAutomations.LIKELY]
+        likely = [c for c in pool if c.value == TriggersAutomations.LIKELY]
         if override is not None:
             winner = override
             effective: TriggersAutomations = override.value
@@ -543,7 +545,7 @@ class ConflictResolver:
             effective = TriggersAutomations.LIKELY
             reason = "Rule B: likely is sticky upward"
         else:
-            winner = max(candidates, key=lambda c: (c.scope_rank, c.origin_authority))
+            winner = max(pool, key=lambda c: (c.scope_rank, c.origin_authority))
             effective = winner.value
             reason = "Rule B: most specific declaration wins (no likely present)"
 
@@ -638,6 +640,17 @@ class ConflictResolver:
             return False, None
         pool = trusted if trusted else candidates
         winner = max(pool, key=lambda c: (c.scope_rank, c.origin_authority))
+        resolved_value = winner.value
+        if path == "privacy_classification.access_roles":
+            # Tightening role lists accumulate; a more specific unrelated key
+            # must never erase an inherited denial. Unknown keys survive.
+            resolved_value = copy.deepcopy(winner.value) or {}
+            for key in ("deny_for", "restricted_for"):
+                roles = sorted({role for c in pool for role in (c.value or {}).get(key, [])})
+                if roles:
+                    resolved_value[key] = roles
+        elif path == "person_traits.is_minor":
+            resolved_value = any(c.value is True for c in pool)
 
         def _comparable(v: Any) -> Any:
             return v.value if hasattr(v, "value") else v
@@ -662,7 +675,7 @@ class ConflictResolver:
         resolution.explanations.append(
             FieldExplanation(
                 field_path=path,
-                effective_value=copy.deepcopy(_comparable(winner.value)),
+                effective_value=copy.deepcopy(_comparable(resolved_value)),
                 provided_by_level=winner.layer.level,
                 provided_by_origin=winner.origin.value,
                 conflict=conflict,
@@ -673,7 +686,7 @@ class ConflictResolver:
         # Deep-copied so the caller's effective profile owns its value: the
         # winner is otherwise a live reference into the input layer, and a
         # read-modify-write of the merged profile would mutate the source.
-        return True, copy.deepcopy(winner.value)
+        return True, copy.deepcopy(resolved_value)
 
     # -- Rule D (array union): declared_limits / temporal_constraints -----------
 
@@ -761,9 +774,7 @@ class ConflictResolver:
 
     # -- full merge -------------------------------------------------------------
 
-    def resolve(
-        self, entity_id: str, layers: list[Layer]
-    ) -> tuple[SemanticProfile, Resolution]:
+    def resolve(self, entity_id: str, layers: list[Layer]) -> tuple[SemanticProfile, Resolution]:
         """Merge declared layers into a single effective profile (no default filling)."""
         resolution = Resolution()
         domain = entity_id.split(".", 1)[0]
@@ -842,8 +853,7 @@ class ConflictResolver:
             # so no contribution is lost, but disagreeing declarations are still
             # reported; identical declarations agree and are not a conflict.
             conflict = (
-                len({_canonical(sorted(layer.profile.semantic_tags)) for layer in tag_layers})
-                > 1
+                len({_canonical(sorted(layer.profile.semantic_tags)) for layer in tag_layers}) > 1
             )
             resolution.explanations.append(
                 FieldExplanation(
@@ -872,63 +882,14 @@ class ConflictResolver:
                 )
             )
 
-        # diagnostic_profile: Rule D-style pick (most specific declaring layer).
-        diag_layers = [
-            Layer(layer.level, layer.profile)
+        diagnostics = [
+            (layer, "diagnostic_profile", layer.profile.diagnostic_profile)
             for layer in layers
             if layer.profile.diagnostic_profile is not None
         ]
-        if diag_layers:
-            # Trusted tier first, then scope, then authority: the same order as
-            # Rule D, so an untrusted entity-scope diagnostic profile cannot
-            # displace a trusted broader one.
-            trusted_diag = [
-                layer for layer in diag_layers
-                if _is_trusted_for(layer.profile, "diagnostic_profile")
-            ]
-            best = max(
-                trusted_diag or diag_layers,
-                key=lambda layer: (
-                    SCOPE_RANK.get(layer.level, 0),
-                    ORIGIN_AUTHORITY[layer.profile.metadata.source],
-                ),
-            )
-            # Deep-copied: the effective profile owns its diagnostics, so a
-            # read-modify-write of the merged result cannot mutate the layer.
-            effective.diagnostic_profile = copy.deepcopy(best.profile.diagnostic_profile)
-            # Spec 9.5: conflict is true when more than one level declared a
-            # distinct diagnostic_profile (the others were passed over by Rule D).
-            conflict = (
-                len({_canonical(layer.profile.diagnostic_profile) for layer in diag_layers}) > 1
-            )
-            if conflict and trusted_diag and len(trusted_diag) < len(diag_layers):
-                reason: str | None = "Rule D: lower-tier declaration never overrides trusted tier"
-            elif conflict:
-                reason = "Rule D: most specific scope wins, then origin authority"
-            else:
-                reason = None
-            resolution.explanations.append(
-                FieldExplanation(
-                    field_path="diagnostic_profile",
-                    effective_value=copy.deepcopy(best.profile.diagnostic_profile),
-                    provided_by_level=best.level,
-                    provided_by_origin=best.profile.metadata.source.value,
-                    conflict=conflict,
-                    conflict_resolution=reason,
-                    competing_values=(
-                        [
-                            {
-                                "level": layer.level,
-                                "origin": layer.profile.metadata.source.value,
-                                "value": copy.deepcopy(layer.profile.diagnostic_profile),
-                            }
-                            for layer in diag_layers
-                        ]
-                        if conflict
-                        else None
-                    ),
-                )
-            )
+        if diagnostics:
+            self._merge_unmodelled(diagnostics, ("diagnostic_profile",), effective, resolution)
+            effective.diagnostic_profile = effective.raw.pop("diagnostic_profile", None)
 
         # Effective metadata: the most specific contributing layer's provenance,
         # except profile_valid_for. That field is an invalidation trigger, not
@@ -963,9 +924,7 @@ class ConflictResolver:
         return effective, resolution
 
     @staticmethod
-    def _resolve_valid_for(
-        layers: list[Layer], resolution: Resolution
-    ) -> dict[str, Any] | None:
+    def _resolve_valid_for(layers: list[Layer], resolution: Resolution) -> dict[str, Any] | None:
         """Resolve ``profile_valid_for`` per subfield (Rule D + Rule E).
 
         Each subfield (the four typed members of Spec 5.5 and any forward-
@@ -1074,6 +1033,19 @@ class ConflictResolver:
         cannot piggyback past it on a confirmed sibling.
         """
         confirmed_path = cands[0][1]
+        if confirmed_path == "cooperative_priority":
+            valid = [
+                c
+                for c in cands
+                if isinstance(c[2], dict)
+                and c[2].get("level")
+                in ("critical", "protected", "assertive", "cooperative", "deferential")
+            ]
+            if valid and len(valid) != len(cands):
+                resolution.warnings.append(
+                    "malformed cooperative_priority cannot erase an inherited policy"
+                )
+                cands = valid
         object_cands = [c for c in cands if isinstance(c[2], dict) and c[2]]
         if len(object_cands) == len(cands):
             ConflictResolver._compose_children(
@@ -1095,9 +1067,7 @@ class ConflictResolver:
             # The object shape wins: the objects compose per subfield, and the
             # atomic declarations lose as one conflict at this node (Spec 9.5).
             atomic_trusted = any(
-                _is_trusted_for(c[0].profile, c[1])
-                for c in cands
-                if c not in object_cands
+                _is_trusted_for(c[0].profile, c[1]) for c in cands if c not in object_cands
             )
             ConflictResolver._compose_children(
                 object_cands,

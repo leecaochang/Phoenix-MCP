@@ -253,6 +253,16 @@ def _register_views(hass: HomeAssistant, view_classes: list) -> None:
         registered.add(view_cls.__name__)
 
 
+async def _async_shutdown_mesa_workers() -> None:
+    """Drain policy callbacks while HA's loop and executor are still available."""
+    from .mesa_core import ashutdown_policy_workers
+
+    try:
+        await ashutdown_policy_workers()
+    except Exception:
+        _LOGGER.exception("Phoenix MCP: could not shut down MESA policy workers")
+
+
 async def _rollback_failed_setup(
     hass: HomeAssistant, entry: ConfigEntry, data: PhoenixData | None
 ) -> None:
@@ -262,6 +272,7 @@ async def _rollback_failed_setup(
         data.ready = False
         data.shutting_down = True
         await data.decision_shadow.async_cancel()
+        await _async_shutdown_mesa_workers()
         try:
             from .assist_api import async_unregister_assist_api  # noqa: PLC0415
 
@@ -692,6 +703,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         data.shutting_down = True
         hass.data[RUNTIME_READY_KEY] = False
         await data.decision_shadow.async_cancel()
+        await _async_shutdown_mesa_workers()
         try:
             await data.routing_statistics.async_save()
         except Exception:
@@ -845,6 +857,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, _entry_platforms())
 
     if unload_ok:
+        await _async_shutdown_mesa_workers()
         if data is not None:
             for label, save in (("usage", data.store.async_flush_last_used), ("audit", data.audit.async_save)):
                 try:

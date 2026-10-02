@@ -22,7 +22,7 @@ from custom_components.phoenix_mcp.mesa import (
 )
 import custom_components.phoenix_mcp.mesa as mesa_module
 from custom_components.phoenix_mcp.token_store import GlobalSettings
-from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
+from custom_components.phoenix_mcp.mesa_core import ControlMode, MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
 
 
@@ -171,7 +171,7 @@ async def test_diff_includes_mesa_block(hass: HomeAssistant):
 
 
 def test_each_entity_is_evaluated_against_its_exact_service_data():
-    allowed = SimpleNamespace(allowed=True, warnings=[])
+    allowed = SimpleNamespace(allowed=True, warnings=[], rule_applied=None, evaluated_control_mode=ControlMode.AUTONOMOUS)
     enforcer = SimpleNamespace(evaluate=MagicMock(return_value=allowed))
     runtime = SimpleNamespace(enforcer=enforcer)
     verdict = evaluate_service_entities(

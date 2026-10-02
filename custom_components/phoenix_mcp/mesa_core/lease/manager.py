@@ -25,8 +25,9 @@ manager's lifetime, since lease expiry compares them against each other.
 
 from __future__ import annotations
 
-import asyncio
+import inspect
 import logging
+import math
 import threading
 import uuid
 from collections.abc import Callable
@@ -34,15 +35,25 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from custom_components.phoenix_mcp.mesa_core._async import run_sync
 from custom_components.phoenix_mcp.mesa_core.audit import MesaAuditEvent, emit_audit_event
-from custom_components.phoenix_mcp.mesa_core.exceptions import LeaseNotFoundError, MesaValidationError
+from custom_components.phoenix_mcp.mesa_core.exceptions import LeaseNotFoundError, MesaError
 from custom_components.phoenix_mcp.mesa_core.inheritance import InheritanceResolver
 from custom_components.phoenix_mcp.mesa_core.lease.registry import Lease, LeaseRegistry
-from custom_components.phoenix_mcp.mesa_core.store import ProfileStore
+from custom_components.phoenix_mcp.mesa_core.store import ProfileStore, validate_entity_id
 
 logger = logging.getLogger("mesa_core.lease")
 
 MAX_LEASE_DURATION_SECONDS = 30.0
+
+
+def _utc_now(now: datetime | None) -> datetime:
+    if now is None:
+        return datetime.now(UTC)
+    if now.tzinfo is None:
+        return now.replace(tzinfo=UTC)
+    return now.astimezone(UTC)
+
 
 _PRIORITY_LEVELS = ("deferential", "cooperative", "assertive")
 _PREEMPTION_HANDLING = ("rollback_abort", "continue_ignore")
@@ -128,13 +139,16 @@ class LeaseManager:
         treated as active (fail-closed). ``on_lease_event`` receives the
         ``mesa_lease_expired`` payload for every ended lease.
         """
+        if resolver is not None:
+            store = store or resolver.store
+            store.attach_resolver(resolver)
         self.store = store
-        self.resolver = resolver
+        self.resolver = store.resolver if store is not None else None
         self.get_state = get_state
         self.on_lease_event = on_lease_event
         self._registry = LeaseRegistry()
         # The registry is reached from threads (arequest/arelease offload with
-        # asyncio.to_thread), and granting is a check-then-act across holding()
+        # dedicated policy workers), and granting is a check-then-act across holding()
         # and add(). Reentrant because the lifecycle methods sweep as they go.
         self._lock = threading.RLock()
 
@@ -170,7 +184,7 @@ class LeaseManager:
 
     def _sweep(self, now: datetime) -> None:
         for lease in self._registry.sweep_expired(now):
-            self._emit(lease, "natural_expiry", now)
+            self._emit(lease, "natural_expiry", lease.expires_at)
 
     def _supersede(self, session_id: str, entities: list[str]) -> None:
         """Drop a session's prior hold on entities it is re-acquiring.
@@ -209,7 +223,9 @@ class LeaseManager:
                 "treated as active (fail-closed)"
             )
             return True
-        if state is None or state in ("unavailable", "unknown"):
+        if inspect.iscoroutine(state):
+            state.close()
+        if not isinstance(state, str) or state not in ("on", "off"):
             warnings.append(
                 f"protected automation {automation_id}: state unavailable; "
                 "treated as active (fail-closed)"
@@ -230,6 +246,7 @@ class LeaseManager:
         denials: dict[str, str] = {}
         conflicts: list[dict[str, Any]] = []
         if self.store is None:
+            warnings.append("no profile store configured; automation protection cannot be checked")
             return denials, conflicts
         for key in self.store.entity_keys():
             if not key.startswith("automation."):
@@ -240,7 +257,7 @@ class LeaseManager:
                     if self.resolver is not None
                     else self.store.get_effective(key)
                 )
-            except MesaValidationError as err:
+            except (MesaError, ValueError, OSError, RecursionError) as err:
                 warnings.append(
                     f"automation policy {key} could not be evaluated: {err}; "
                     "all requested entities denied (fail-closed)"
@@ -254,7 +271,7 @@ class LeaseManager:
                 continue
             sp = profile.raw.get("semantic_profile", {})
             cp = sp.get("cooperative_priority")
-            if cp is None:
+            if "cooperative_priority" not in sp:
                 continue
             # Malformed Section 11 data must fail closed: a typo'd level or a
             # wrong-typed entity list on the one automation guarding a lock
@@ -268,8 +285,6 @@ class LeaseManager:
                 level = "protected"
             else:
                 level = cp.get("level")
-                if level is None:
-                    continue
                 if (
                     level not in _DENYING_LEVELS
                     and level not in _CONFLICT_LEVELS
@@ -317,6 +332,12 @@ class LeaseManager:
                     )
                 scope = None if affected is None else scope | affected
             relevant = scope if level == "critical" else monitored
+            if not relevant and level in _DENYING_LEVELS:
+                warnings.append(
+                    f"automation {key} has no usable monitored scope; "
+                    "all requested entities covered (fail-closed)"
+                )
+                relevant = None
             # Unevaluable scope covers everything requested (fail-closed).
             overlap = set(requested) if relevant is None else requested & relevant
             if not overlap:
@@ -359,9 +380,25 @@ class LeaseManager:
         caller_priority: float | None = None,
         now: datetime | None = None,
     ) -> LeaseResponse:
+        if not isinstance(entities, list) or not entities:
+            raise ValueError("entities must be a non-empty list")
+        for entity_id in entities:
+            validate_entity_id(entity_id)
+        if not isinstance(session_id, str) or not session_id.strip():
+            raise ValueError("session_id is required")
+        if (
+            isinstance(duration_seconds, bool)
+            or not isinstance(duration_seconds, int | float)
+            or (isinstance(duration_seconds, float) and not math.isfinite(duration_seconds))
+            or duration_seconds < 0.001
+        ):
+            raise ValueError("duration_seconds must be finite and at least 0.001")
+        now = _utc_now(now)
+        policy_warnings: list[str] = []
+        policy = self._automation_conflicts(set(entities), policy_warnings)
         with self._lock:
             return self._request_locked(
-                entities,
+                list(dict.fromkeys(entities)),
                 duration_seconds,
                 session_id=session_id,
                 caller_id=caller_id,
@@ -370,6 +407,8 @@ class LeaseManager:
                 preemption_handling=preemption_handling,
                 caller_priority=caller_priority,
                 now=now,
+                policy=policy,
+                policy_warnings=policy_warnings,
             )
 
     def _request_locked(
@@ -384,8 +423,10 @@ class LeaseManager:
         preemption_handling: str = "rollback_abort",
         caller_priority: float | None = None,
         now: datetime | None = None,
+        policy: tuple[dict[str, str], list[dict[str, Any]]] | None = None,
+        policy_warnings: list[str] | None = None,
     ) -> LeaseResponse:
-        now = now or datetime.now(UTC)
+        now = _utc_now(now)
         self._sweep(now)
         if not entities:
             raise ValueError("entities must be a non-empty list")
@@ -396,7 +437,7 @@ class LeaseManager:
         if preemption_handling not in _PREEMPTION_HANDLING:
             raise ValueError(f"invalid preemption_handling: {preemption_handling!r}")
 
-        warnings: list[str] = []
+        warnings = list(policy_warnings or [])
         granted_duration = min(duration_seconds, MAX_LEASE_DURATION_SECONDS)
         if granted_duration < duration_seconds:
             warnings.append(
@@ -410,15 +451,20 @@ class LeaseManager:
                 "holders take precedence"
             )
 
-        denial_reasons, active_conflicts = self._automation_conflicts(set(entities), warnings)
+        denial_reasons, active_conflicts = (
+            policy if policy is not None else self._automation_conflicts(set(entities), warnings)
+        )
         automation_denials = sorted(denial_reasons)
 
         # Existing holder takes precedence (21.6 Rule 3 baseline). Same-session
         # overlap is a refresh and is granted.
+        holders = {
+            entity: lease for lease in self._registry.active(now) for entity in lease.entities
+        }
         for entity in entities:
             if entity in denial_reasons:
                 continue
-            holder = self._registry.holding(entity, now)
+            holder = holders.get(entity)
             if holder is not None and holder.session_id != session_id:
                 denial_reasons[entity] = "entity is under an active lease held by another session"
 
@@ -426,6 +472,9 @@ class LeaseManager:
         entities_denied = [e for e in entities if e in denial_reasons]
         lease_id = uuid.uuid4().hex
         expires_at = now + timedelta(seconds=granted_duration)
+        if not entities_granted:
+            expires_at = now
+            granted_duration = 0
 
         if entities_granted:
             self._supersede(session_id, entities_granted)
@@ -476,7 +525,7 @@ class LeaseManager:
         """Release a lease early. ``session_id``, when provided, must match the
         holder's; a mismatch reads as not-found so other sessions' leases are
         never disclosed (Spec 21.6)."""
-        now = now or datetime.now(UTC)
+        now = _utc_now(now)
         with self._lock:
             self._sweep(now)
             lease = self._registry.get(lease_id)
@@ -488,7 +537,7 @@ class LeaseManager:
 
     def release_session(self, session_id: str, *, now: datetime | None = None) -> int:
         """Release all leases of a terminated session (Spec 21.4). Returns count."""
-        now = now or datetime.now(UTC)
+        now = _utc_now(now)
         with self._lock:
             self._sweep(now)
             leases = self._registry.by_session(session_id)
@@ -501,16 +550,16 @@ class LeaseManager:
         """Sweep expired leases, emitting their events. Hosts SHOULD call this
         periodically for timely events; correctness does not depend on it."""
         with self._lock:
-            self._sweep(now or datetime.now(UTC))
+            self._sweep(_utc_now(now))
 
     def active_leases(self, now: datetime | None = None) -> list[Lease]:
         with self._lock:
-            return self._registry.active(now or datetime.now(UTC))
+            return self._registry.active(_utc_now(now))
 
     def sensor_state(self, now: datetime | None = None) -> dict[str, Any]:
         """The ``binary_sensor.mesa_lease_active`` state and attributes
         (Spec 21.4), for hosts that expose the sensor natively."""
-        now = now or datetime.now(UTC)
+        now = _utc_now(now)
         with self._lock:
             self._sweep(now)
             active = self._registry.active(now)
@@ -531,13 +580,13 @@ class LeaseManager:
     async def arequest(
         self, entities: list[str], duration_seconds: float, **kwargs: Any
     ) -> LeaseResponse:
-        return await asyncio.to_thread(lambda: self.request(entities, duration_seconds, **kwargs))
+        return await run_sync(lambda: self.request(entities, duration_seconds, **kwargs))
 
     async def arelease(self, lease_id: str, **kwargs: Any) -> Lease:
-        return await asyncio.to_thread(lambda: self.release(lease_id, **kwargs))
+        return await run_sync(lambda: self.release(lease_id, **kwargs))
 
     async def arelease_session(self, session_id: str, **kwargs: Any) -> int:
-        return await asyncio.to_thread(lambda: self.release_session(session_id, **kwargs))
+        return await run_sync(lambda: self.release_session(session_id, **kwargs))
 
     async def aexpire(self, now: datetime | None = None) -> None:
-        await asyncio.to_thread(self.expire, now)
+        await run_sync(self.expire, now)

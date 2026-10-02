@@ -108,11 +108,12 @@ def registry_entity(hass: HomeAssistant) -> tuple[str, str]:
 
 
 @pytest.mark.parametrize("profile_scope", ["domain", "device"])
+@pytest.mark.parametrize("mode", ["advisory", "enforced"])
 async def test_inherited_read_only_blocks_rename_and_delete_before_approval(
-    hass: HomeAssistant, registry_entity, profile_scope
+    hass: HomeAssistant, registry_entity, profile_scope, mode
 ):
     entity_id, device_id = registry_entity
-    data = await _data(hass, "enforced")
+    data = await _data(hass, mode)
     if profile_scope == "domain":
         data.mesa.store.set_domain_profile(
             "light", _profile("light", "read_only", "Domain protects registry identity")

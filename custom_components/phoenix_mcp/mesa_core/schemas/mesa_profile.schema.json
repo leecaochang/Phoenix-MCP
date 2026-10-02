@@ -180,13 +180,14 @@
               },
               {
                 "type": "string",
-                "pattern": "^(?!(?:assist|audio|automation|climate|diagnostic|energy|helper|latency|lighting|media|person|presence|reliability|resource|scene|security|space|sync|tts|ui|zone)\\.)[a-z][a-z0-9_]*(?:\\.[a-z0-9_]+)+$"
+                "pattern": "^(?!(?:assist|audio|automation|climate|diagnostic|energy|helper|latency|lighting|media|person|presence|reliability|resource|scene|security|space|sync|tts|ui|zone)\\.)[a-z][a-z0-9_]*(?:\\.[a-z0-9_-]+)+$(?![\\s\\S])"
               }
             ]
           }
         },
         "last_updated": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^\\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])(?:[T ](?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9](?:\\.\\d+)?)?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])?)?$(?![\\s\\S])"
         },
         "inheritance_scope": {
           "enum": [
@@ -207,6 +208,38 @@
                 "read_only",
                 "prohibited"
               ]
+            },
+            "triggers_automations": {
+              "enum": [
+                "likely",
+                "none",
+                "unknown"
+              ]
+            },
+            "state_persistence": {
+              "enum": [
+                "permanent",
+                "temporary",
+                "session",
+                "transient"
+              ]
+            },
+            "network_dependency": {
+              "enum": [
+                "local_only",
+                "local_preferred",
+                "cloud_required",
+                "cloud_optional"
+              ]
+            },
+            "reversible": {
+              "type": "boolean"
+            },
+            "idempotent": {
+              "type": "boolean"
+            },
+            "expected_latency_ms": {
+              "$ref": "#/$defs/finiteNumber"
             }
           }
         },
@@ -220,7 +253,12 @@
               "type": "string"
             },
             "review_after_days": {
-              "type": "number"
+              "type": "number",
+              "allOf": [
+                {
+                  "$ref": "#/$defs/finiteNumber"
+                }
+              ]
             },
             "invalidated_by_entities": {
               "type": "array",
@@ -246,6 +284,57 @@
               }
             },
             "enhances_domains": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "environmental_dependencies": {
+          "type": "object",
+          "properties": {
+            "trigger_entities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "condition_entities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "helper_traits": {
+          "type": "object",
+          "properties": {
+            "affected_automations": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "category_traits": {
+          "type": "object",
+          "required": [
+            "functional_domain"
+          ],
+          "properties": {
+            "functional_domain": {
+              "type": "string"
+            },
+            "specialization": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "performance_characteristics": {
               "type": "array",
               "items": {
                 "type": "string"
@@ -307,19 +396,35 @@
         "confidence": {
           "type": "number",
           "minimum": 0.0,
-          "maximum": 1.0
+          "maximum": 1.0,
+          "allOf": [
+            {
+              "$ref": "#/$defs/finiteNumber"
+            }
+          ]
         },
         "generated_at": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^\\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])(?:[T ](?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9](?:\\.\\d+)?)?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])?)?$(?![\\s\\S])"
         },
         "staleness_window_days": {
-          "type": "number"
+          "type": "number",
+          "allOf": [
+            {
+              "$ref": "#/$defs/finiteNumber"
+            }
+          ],
+          "minimum": 0
         },
         "confirmed_fields": {
           "type": "array",
           "items": {
             "type": "string"
           }
+        },
+        "last_updated": {
+          "type": "string",
+          "pattern": "^\\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])(?:[T ](?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9](?:\\.\\d+)?)?(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])?)?$(?![\\s\\S])"
         }
       },
       "allOf": [
@@ -423,7 +528,12 @@
           "type": "string"
         },
         "reversibility_window_seconds": {
-          "type": "number"
+          "type": "number",
+          "allOf": [
+            {
+              "$ref": "#/$defs/finiteNumber"
+            }
+          ]
         },
         "idempotent": {
           "type": "boolean"
@@ -437,7 +547,12 @@
           ]
         },
         "expected_latency_ms": {
-          "type": "number"
+          "type": "number",
+          "allOf": [
+            {
+              "$ref": "#/$defs/finiteNumber"
+            }
+          ]
         },
         "side_effect_scope": {
           "enum": [
@@ -542,7 +657,7 @@
     "accessRoles": {
       "$comment": "Spec 7.2: each entry is an array of role names. A bare string would be read as a set of its characters at enforcement, so 'deny_for: guest' would deny anyone named 'g' and nobody named 'guest'.",
       "type": "object",
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "unrestricted_for": {
           "type": "array",
@@ -574,10 +689,20 @@
           "type": "string"
         },
         "max_value": {
-          "type": "number"
+          "type": "number",
+          "allOf": [
+            {
+              "$ref": "#/$defs/finiteNumber"
+            }
+          ]
         },
         "min_value": {
-          "type": "number"
+          "type": "number",
+          "allOf": [
+            {
+              "$ref": "#/$defs/finiteNumber"
+            }
+          ]
         },
         "permitted_values": {
           "type": "array"
@@ -675,7 +800,12 @@
             "then": {
               "properties": {
                 "value": {
-                  "type": "number"
+                  "type": "number",
+                  "allOf": [
+                    {
+                      "$ref": "#/$defs/finiteNumber"
+                    }
+                  ]
                 }
               }
             }
@@ -756,6 +886,23 @@
           "required": [
             "service",
             "parameter"
+          ],
+          "anyOf": [
+            {
+              "required": [
+                "min_value"
+              ]
+            },
+            {
+              "required": [
+                "max_value"
+              ]
+            },
+            {
+              "required": [
+                "permitted_values"
+              ]
+            }
           ]
         },
         "human_reason": {
@@ -828,11 +975,11 @@
             "properties": {
               "start_time": {
                 "type": "string",
-                "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$(?![\\s\\S])"
               },
               "end_time": {
                 "type": "string",
-                "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$"
+                "pattern": "^([01][0-9]|2[0-3]):[0-5][0-9]$(?![\\s\\S])"
               }
             }
           }
@@ -920,7 +1067,12 @@
                 ]
               },
               "solar_offset_minutes": {
-                "type": "number"
+                "type": "number",
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/finiteNumber"
+                  }
+                ]
               }
             }
           }
@@ -942,7 +1094,12 @@
             ],
             "properties": {
               "duration_seconds": {
-                "type": "number"
+                "type": "number",
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/finiteNumber"
+                  }
+                ]
               }
             }
           }
@@ -968,7 +1125,12 @@
                 "type": "string"
               },
               "offset_seconds": {
-                "type": "number"
+                "type": "number",
+                "allOf": [
+                  {
+                    "$ref": "#/$defs/finiteNumber"
+                  }
+                ]
               }
             }
           }
@@ -1057,6 +1219,18 @@
           ]
         }
       }
+    },
+    "finiteNumber": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "number",
+          "minimum": -1.7976931348623157e+308,
+          "maximum": 1.7976931348623157e+308
+        }
+      ]
     }
   },
   "if": {
@@ -1067,5 +1241,5 @@
   "else": {
     "$ref": "#/$defs/semanticProfile"
   },
-  "$comment": "Structural validation only: also run semantic validation to reject duplicate IDs within each declared_limits or temporal_constraints array. Cross-layer overrides remain valid."
+  "$comment": "Structural validation only: semantic validation also checks unique safety IDs, min_value <= max_value, and actual calendar dates."
 }

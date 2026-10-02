@@ -229,6 +229,10 @@ class ScopedProfileStore:
     def get_entity_device(self) -> Any:
         return self._inner.get_entity_device
 
+    @property
+    def get_entity_domain(self) -> Any:
+        return self._inner.get_entity_domain
+
     def _fingerprint(self) -> str:
         digest = hashlib.sha256("|".join(self.entity_keys()).encode())
         return digest.hexdigest()[:16]
@@ -247,9 +251,6 @@ class ScopedProfileStore:
     def _default_resolver(self) -> InheritanceResolver:
         return InheritanceResolver(
             store=self,  # type: ignore[arg-type]  # ScopedProfileStore duck-types ProfileStore's read surface by design; mesa_core is read-only so it cannot declare a Protocol
-            get_entity_area=self.get_entity_area,
-            get_entity_integration=self.get_entity_integration,
-            get_entity_device=self.get_entity_device,
         )
 
 
@@ -381,9 +382,6 @@ def _build_handlers(
     scoped = ScopedProfileStore(runtime.store, token, hass)
     resolver = InheritanceResolver(
         store=scoped,  # type: ignore[arg-type]  # ScopedProfileStore duck-types ProfileStore's read surface by design; mesa_core is read-only so it cannot declare a Protocol
-        get_entity_area=runtime.store.get_entity_area,
-        get_entity_integration=runtime.store.get_entity_integration,
-        get_entity_device=runtime.store.get_entity_device,
     )
     ctx = build_caller_context(token, session_id)
     return MesaToolHandlers(

@@ -15,6 +15,7 @@ relative_to_event are unevaluable in 1.x and therefore fail closed.
 from __future__ import annotations
 
 import copy
+import inspect
 import math
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -45,6 +46,7 @@ class TemporalResult:
     boundaries: OperationalBoundaries
     active_limits: list[dict[str, Any]] = field(default_factory=list)
     active_constraint_ids: list[str] = field(default_factory=list)
+    active_constraint_reasons: dict[str, str] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
 
 
@@ -75,6 +77,8 @@ class TemporalEvaluator:
             # an exception that escapes the enforcement path.
             return None
         current = now.time()
+        if start == end:
+            return True  # Equal bounds explicitly mean a full day.
         if start <= end:
             return start <= current < end
         # Midnight-crossing range, e.g. 23:00-06:00.
@@ -98,6 +102,8 @@ class TemporalEvaluator:
             return None
         try:
             events = self.get_calendar_events(str(calendar_id))
+            if inspect.iscoroutine(events):
+                events.close()
             return bool(events) if isinstance(events, list) else None
         except Exception:
             return None
@@ -120,6 +126,8 @@ class TemporalEvaluator:
             elevation = self.get_solar_elevation(at)
         except Exception:
             return None
+        if inspect.iscoroutine(elevation):
+            elevation.close()
         if (
             isinstance(elevation, bool)
             or not isinstance(elevation, int | float)
@@ -150,9 +158,7 @@ class TemporalEvaluator:
 
     # -- application ----------------------------------------------------------
 
-    def apply(
-        self, boundaries: OperationalBoundaries, current_time: datetime
-    ) -> TemporalResult:
+    def apply(self, boundaries: OperationalBoundaries, current_time: datetime) -> TemporalResult:
         result = TemporalResult(boundaries=copy.deepcopy(boundaries))
         for tc in boundaries.temporal_constraints:
             tc_id = str(tc.get("id", "<unnamed>"))
@@ -169,6 +175,8 @@ class TemporalEvaluator:
             elif not evaluated:
                 continue
             result.active_constraint_ids.append(tc_id)
+            if isinstance(tc.get("human_reason"), str):
+                result.active_constraint_reasons[tc_id] = tc["human_reason"]
 
             if "control_mode" in effect:
                 try:
@@ -180,9 +188,14 @@ class TemporalEvaluator:
                     effect_mode = None
                 if effect_mode is not None:
                     current_mode = result.boundaries.control_mode
-                    if CONTROL_MODE_RANK[effect_mode] > CONTROL_MODE_RANK[current_mode]:
+                    if CONTROL_MODE_RANK[effect_mode] > CONTROL_MODE_RANK[current_mode] or (
+                        effect_mode == ControlMode.READ_ONLY
+                        and current_mode == ControlMode.PROHIBITED
+                    ):
                         result.boundaries.control_mode = effect_mode
-                    elif CONTROL_MODE_RANK[effect_mode] < CONTROL_MODE_RANK[current_mode]:
+                    elif (
+                        CONTROL_MODE_RANK[effect_mode] < CONTROL_MODE_RANK[boundaries.control_mode]
+                    ):
                         result.warnings.append(
                             f"temporal constraint {tc_id!r}: effect control_mode "
                             f"{effect_mode.value!r} would loosen the effective base "

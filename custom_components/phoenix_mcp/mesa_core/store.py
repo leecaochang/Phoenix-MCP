@@ -7,24 +7,32 @@ reserved ``__``-prefixed keys, which never collide with HA entity IDs.
 
 from __future__ import annotations
 
-import asyncio
 import base64
 import hashlib
 import json
+import re
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from custom_components.phoenix_mcp.mesa_core import validation
+from custom_components.phoenix_mcp.mesa_core._async import run_sync
 from custom_components.phoenix_mcp.mesa_core.backends import StorageBackend
-from custom_components.phoenix_mcp.mesa_core.exceptions import InvalidCursorError, MesaValidationError
+from custom_components.phoenix_mcp.mesa_core.exceptions import (
+    HostCallbackError,
+    InvalidCursorError,
+    InvalidQueryError,
+    MesaValidationError,
+)
 from custom_components.phoenix_mcp.mesa_core.profile import (
+    CONTROL_MODE_RANK,
     ORIGIN_AUTHORITY,
     ControlMode,
     MetadataOrigin,
     SemanticProfile,
     TriggersAutomations,
+    baseline_control_mode,
     baseline_triggers_automations,
 )
 
@@ -38,6 +46,16 @@ _AREA_PREFIX = "__area__:"
 _DEVICE_PREFIX = "__device__:"
 
 MAX_PAGE_SIZE = 200
+
+
+def validate_entity_id(entity_id: str) -> None:
+    """Entity APIs cannot address reserved storage namespaces or selectors."""
+    if (
+        not isinstance(entity_id, str)
+        or re.fullmatch(r"[a-z][a-z0-9_]*\.[a-z0-9_]+", entity_id) is None
+        or len(entity_id) > 240
+    ):
+        raise MesaValidationError("entity_id must be a canonical domain.object_id")
 
 
 def _parse_enum[EnumT: StrEnum](enum: type[EnumT], value: Any, where: str) -> EnumT:
@@ -75,6 +93,13 @@ class DeploymentDefaults:
             raise MesaValidationError(
                 f"deployment_defaults must be an object, got {type(inner).__name__}"
             )
+        unknown = set(inner) - {
+            "default_control_mode",
+            "triggers_automations_domains",
+            "domain_overrides",
+        }
+        if unknown:
+            raise MesaValidationError("deployment_defaults contains unknown keys")
         # Presence, not truthiness: `x or []` would read a falsy wrong type
         # (0, "", false, {}) as an empty list and accept it silently.
         domains = inner.get("triggers_automations_domains")
@@ -93,6 +118,8 @@ class DeploymentDefaults:
                 raise MesaValidationError(
                     f"{where} must be an object, got {type(override).__name__}"
                 )
+            if set(override) - {"control_mode", "triggers_automations"}:
+                raise MesaValidationError(f"{where} contains unknown keys")
             if "control_mode" in override:
                 _parse_enum(ControlMode, override["control_mode"], f"{where}.control_mode")
             if "triggers_automations" in override:
@@ -124,7 +151,8 @@ class DeploymentDefaults:
         override = self.domain_overrides.get(domain, {})
         if "control_mode" in override:
             return ControlMode(override["control_mode"])
-        return self.default_control_mode
+        baseline = baseline_control_mode(domain)
+        return baseline if CONTROL_MODE_RANK[baseline] >= 2 else self.default_control_mode
 
     def triggers_for(self, domain: str) -> TriggersAutomations:
         override = self.domain_overrides.get(domain, {})
@@ -171,10 +199,12 @@ def _encode_cursor(offset: int, fingerprint: str) -> str:
 def _decode_cursor(cursor: str, fingerprint: str) -> int:
     try:
         payload = json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
-        offset = int(payload["o"])
-        cursor_fp = str(payload["f"])
+        offset = payload["o"]
+        cursor_fp = payload["f"]
+        if type(offset) is not int or not isinstance(cursor_fp, str):
+            raise ValueError("invalid cursor types")
     except Exception as err:
-        raise InvalidCursorError(f"malformed cursor: {cursor!r}") from err
+        raise InvalidCursorError("malformed cursor") from err
     if cursor_fp != fingerprint:
         # Profile data changed since the cursor was issued (Spec 9.2): restart pagination.
         raise InvalidCursorError("cursor invalidated by profile changes")
@@ -193,11 +223,13 @@ class ProfileStore:
         get_entity_area: Callable[[str], str | None] | None = None,
         get_entity_integration: Callable[[str], str | None] | None = None,
         get_entity_device: Callable[[str], str | None] | None = None,
+        get_entity_domain: Callable[[str], str] | None = None,
     ) -> None:
         self.backend = backend
         self.get_entity_area = get_entity_area
         self.get_entity_integration = get_entity_integration
         self.get_entity_device = get_entity_device
+        self.get_entity_domain = get_entity_domain
         self._resolver: InheritanceResolver | None = None
 
     # -- entity profiles ------------------------------------------------------
@@ -226,27 +258,31 @@ class ProfileStore:
             raise MesaValidationError(
                 f"profile for {entity_id} could not be serialised: {err}"
             ) from err
-        sp = doc.setdefault("semantic_profile", {})
-        if "metadata_origin" not in sp:
-            sp["metadata_origin"] = {"source": profile.metadata.source.value}
         validation.validate_or_raise(doc, entity_id)
         return doc
 
     def get(self, entity_id: str) -> SemanticProfile | None:
+        validate_entity_id(entity_id)
         data = self.backend.read(entity_id)
         if data is None:
             return None
         return SemanticProfile.from_dict(entity_id, data)
 
     def set(self, entity_id: str, profile: SemanticProfile) -> None:
+        validate_entity_id(entity_id)
         self.backend.write(entity_id, self._stamped_doc(profile, entity_id))
 
     def delete(self, entity_id: str) -> None:
+        validate_entity_id(entity_id)
         self.backend.delete(entity_id)
 
     def set_many(self, profiles: dict[str, SemanticProfile]) -> None:
+        documents = {}
         for entity_id, profile in profiles.items():
-            self.set(entity_id, profile)
+            validate_entity_id(entity_id)
+            documents[entity_id] = self._stamped_doc(profile, entity_id)
+        for entity_id, document in documents.items():
+            self.backend.write(entity_id, document)
 
     def delete_many(self, entity_ids: list[str]) -> None:
         for entity_id in entity_ids:
@@ -404,7 +440,10 @@ class ProfileStore:
         digest = hashlib.sha256()
         for key in sorted(self.backend.list_keys()):
             digest.update(key.encode())
-            doc = self.backend.read(key)
+            try:
+                doc = self.backend.read(key)
+            except (MesaValidationError, ValueError, UnicodeError, OSError, RecursionError):
+                doc = {"unreadable": True}
             digest.update(json.dumps(doc, sort_keys=True, default=str).encode())
         return digest.hexdigest()[:16]
 
@@ -424,6 +463,8 @@ class ProfileStore:
         limit: int = 50,
         cursor: str | None = None,
         resolver: InheritanceResolver | None = None,
+        visible: Callable[[str, SemanticProfile], bool] | None = None,
+        visibility_context: str = "",
     ) -> ProfileQueryResult:
         """Query entity profiles with filtering and pagination (Spec 9.2).
 
@@ -443,29 +484,29 @@ class ProfileStore:
         for a stale or malformed cursor.
         """
         if tags_match not in ("any", "all"):
-            raise ValueError(f"invalid tags_match: {tags_match!r}")
+            raise InvalidQueryError("invalid tags_match")
         origin_filter = MetadataOrigin(origin) if origin is not None else None
         min_authority: int | None = None
         if min_origin_authority is not None:
             try:
                 min_authority = ORIGIN_AUTHORITY[MetadataOrigin(min_origin_authority)]
             except ValueError as err:
-                raise ValueError(
-                    f"invalid min_origin_authority: {min_origin_authority!r}"
-                ) from err
+                raise ValueError(f"invalid min_origin_authority: {min_origin_authority!r}") from err
 
         resolver = resolver or self._default_resolver()
         get_area = resolver.get_entity_area
         if areas and get_area is None:
-            raise ValueError("areas filter requires the get_entity_area callback")
+            raise InvalidQueryError("areas filter requires the get_entity_area callback")
         get_device = resolver.get_entity_device
         if devices and get_device is None:
-            raise ValueError("devices filter requires the get_entity_device callback")
+            raise InvalidQueryError("devices filter requires the get_entity_device callback")
         # No domain fallback here, unlike resolution: a fallback filter would
         # silently change which rows match, so an absent mapping fails loudly.
         get_integration = resolver.get_entity_integration
         if integrations and get_integration is None:
-            raise ValueError("integrations filter requires the get_entity_integration callback")
+            raise InvalidQueryError(
+                "integrations filter requires the get_entity_integration callback"
+            )
 
         limit = max(1, min(limit, MAX_PAGE_SIZE))
         warnings: list[str] = []
@@ -473,12 +514,12 @@ class ProfileStore:
         for key in self.entity_keys():
             try:
                 stored = self.get(key)
-            except MesaValidationError as err:
-                warnings.append(f"skipped malformed profile {key}: {err}")
+            except (MesaValidationError, ValueError, UnicodeError, OSError, RecursionError):
+                warnings.append("skipped an unreadable profile")
                 continue
             if stored is None:
                 continue
-            if domains and stored.domain not in domains:
+            if domains is not None and stored.domain not in domains:
                 continue
             source = stored.metadata.source
             if origin_filter is not None:
@@ -491,28 +532,38 @@ class ProfileStore:
                 continue
             if min_authority is not None and ORIGIN_AUTHORITY[source] < min_authority:
                 continue
-            if areas and get_area is not None and get_area(key) not in areas:
-                continue
-            if devices and get_device is not None and get_device(key) not in devices:
-                continue
-            if (
-                integrations
-                and get_integration is not None
-                and get_integration(key) not in integrations
-            ):
-                continue
             try:
+                if areas is not None and resolver.lookup("area", key) not in areas:
+                    continue
+                if devices is not None and resolver.lookup("device", key) not in devices:
+                    continue
+                if (
+                    integrations is not None
+                    and resolver.lookup("integration", key) not in integrations
+                ):
+                    continue
                 effective = resolver.resolve(key, entity_profile=stored)
-            except MesaValidationError as err:
-                warnings.append(f"skipped malformed effective profile {key}: {err}")
+            except (
+                HostCallbackError,
+                MesaValidationError,
+                ValueError,
+                UnicodeError,
+                OSError,
+                RecursionError,
+            ):
+                warnings.append("skipped an unevaluable profile")
+                continue
+            if visible is not None and not visible(key, effective):
                 continue
             effective_tags = set(effective.semantic_tags)
-            if tags:
+            if tags is not None:
+                if not tags:
+                    continue
                 if tags_match == "all" and not set(tags) <= effective_tags:
                     continue
                 if tags_match == "any" and not set(tags) & effective_tags:
                     continue
-            if intents:
+            if intents is not None:
                 # semantic_routing is an unmodelled field carried onto the
                 # effective profile, so intent_tags inherited from a domain,
                 # integration, or area profile are matched too, consistent
@@ -526,8 +577,27 @@ class ProfileStore:
             matched.append(QueryRow(entity_id=key, stored=stored, effective=effective))
 
         matched.sort(key=lambda row: row.entity_id)
-        fingerprint = self._fingerprint()
-        offset = _decode_cursor(cursor, fingerprint) if cursor else 0
+        # Bind pagination to the selected rows, filters and caller visibility.
+        # This also includes resolved inherited content and callback mappings.
+        selection = [
+            domains,
+            tags,
+            tags_match,
+            areas,
+            devices,
+            integrations,
+            intents,
+            include_inferred,
+            origin,
+            min_origin_authority,
+            visibility_context,
+            [
+                (row.entity_id, row.effective.to_dict() if row.effective else None)
+                for row in matched
+            ],
+        ]
+        fingerprint = hashlib.sha256(json.dumps(selection, sort_keys=True).encode()).hexdigest()
+        offset = _decode_cursor(cursor, fingerprint) if cursor is not None else 0
         page = matched[offset : offset + limit]
         has_more = offset + limit < len(matched)
         next_cursor = _encode_cursor(offset + limit, fingerprint) if has_more else None
@@ -543,7 +613,14 @@ class ProfileStore:
     # -- effective profiles -------------------------------------------------------
 
     def attach_resolver(self, resolver: InheritanceResolver) -> None:
+        if resolver.store is not self:
+            raise ValueError("resolver must belong to this store")
         self._resolver = resolver
+
+    @property
+    def resolver(self) -> InheritanceResolver:
+        """The resolver shared by retrieval, enforcement, leases and validation."""
+        return self._default_resolver()
 
     def _default_resolver(self) -> InheritanceResolver:
         if self._resolver is None:
@@ -571,89 +648,85 @@ class ProfileStore:
     # -- async variants -------------------------------------------------------------
 
     async def aget(self, entity_id: str) -> SemanticProfile | None:
-        return await asyncio.to_thread(self.get, entity_id)
+        return await run_sync(self.get, entity_id)
 
     async def aset(self, entity_id: str, profile: SemanticProfile) -> None:
-        await asyncio.to_thread(self.set, entity_id, profile)
+        await run_sync(self.set, entity_id, profile)
 
     async def adelete(self, entity_id: str) -> None:
-        await asyncio.to_thread(self.delete, entity_id)
+        await run_sync(self.delete, entity_id)
 
     async def aget_domain_profile(self, domain: str) -> SemanticProfile | None:
-        return await asyncio.to_thread(self.get_domain_profile, domain)
+        return await run_sync(self.get_domain_profile, domain)
 
     async def aset_domain_profile(self, domain: str, profile: SemanticProfile) -> None:
-        await asyncio.to_thread(self.set_domain_profile, domain, profile)
+        await run_sync(self.set_domain_profile, domain, profile)
 
     async def adelete_domain_profile(self, domain: str) -> None:
-        await asyncio.to_thread(self.delete_domain_profile, domain)
+        await run_sync(self.delete_domain_profile, domain)
 
     async def aget_integration_profile(self, integration: str) -> SemanticProfile | None:
-        return await asyncio.to_thread(self.get_integration_profile, integration)
+        return await run_sync(self.get_integration_profile, integration)
 
-    async def aset_integration_profile(
-        self, integration: str, profile: SemanticProfile
-    ) -> None:
-        await asyncio.to_thread(self.set_integration_profile, integration, profile)
+    async def aset_integration_profile(self, integration: str, profile: SemanticProfile) -> None:
+        await run_sync(self.set_integration_profile, integration, profile)
 
     async def adelete_integration_profile(self, integration: str) -> None:
-        await asyncio.to_thread(self.delete_integration_profile, integration)
+        await run_sync(self.delete_integration_profile, integration)
 
     async def aget_area_profile(self, area_id: str) -> SemanticProfile | None:
-        return await asyncio.to_thread(self.get_area_profile, area_id)
+        return await run_sync(self.get_area_profile, area_id)
 
     async def aset_area_profile(self, area_id: str, profile: SemanticProfile) -> None:
-        await asyncio.to_thread(self.set_area_profile, area_id, profile)
+        await run_sync(self.set_area_profile, area_id, profile)
 
     async def adelete_area_profile(self, area_id: str) -> None:
-        await asyncio.to_thread(self.delete_area_profile, area_id)
+        await run_sync(self.delete_area_profile, area_id)
 
     async def aget_device_profile(self, device_id: str) -> SemanticProfile | None:
-        return await asyncio.to_thread(self.get_device_profile, device_id)
+        return await run_sync(self.get_device_profile, device_id)
 
     async def aset_device_profile(self, device_id: str, profile: SemanticProfile) -> None:
-        await asyncio.to_thread(self.set_device_profile, device_id, profile)
+        await run_sync(self.set_device_profile, device_id, profile)
 
     async def adelete_device_profile(self, device_id: str) -> None:
-        await asyncio.to_thread(self.delete_device_profile, device_id)
+        await run_sync(self.delete_device_profile, device_id)
 
     async def aget_deployment_defaults(self) -> DeploymentDefaults | None:
-        return await asyncio.to_thread(self.get_deployment_defaults)
+        return await run_sync(self.get_deployment_defaults)
 
-    async def aset_deployment_defaults(
-        self, defaults: DeploymentDefaults | dict[str, Any]
-    ) -> None:
-        await asyncio.to_thread(self.set_deployment_defaults, defaults)
+    async def aset_deployment_defaults(self, defaults: DeploymentDefaults | dict[str, Any]) -> None:
+        await run_sync(self.set_deployment_defaults, defaults)
 
     async def aset_many(self, profiles: dict[str, SemanticProfile]) -> None:
-        await asyncio.to_thread(self.set_many, profiles)
+        await run_sync(self.set_many, profiles)
 
     async def adelete_many(self, entity_ids: list[str]) -> None:
-        await asyncio.to_thread(self.delete_many, entity_ids)
+        await run_sync(self.delete_many, entity_ids)
 
     async def aentity_keys(self) -> list[str]:
-        return await asyncio.to_thread(self.entity_keys)
+        return await run_sync(self.entity_keys)
 
     async def adomain_keys(self) -> list[str]:
-        return await asyncio.to_thread(self.domain_keys)
+        return await run_sync(self.domain_keys)
 
     async def aintegration_keys(self) -> list[str]:
-        return await asyncio.to_thread(self.integration_keys)
+        return await run_sync(self.integration_keys)
 
     async def aarea_keys(self) -> list[str]:
-        return await asyncio.to_thread(self.area_keys)
+        return await run_sync(self.area_keys)
 
     async def adevice_keys(self) -> list[str]:
-        return await asyncio.to_thread(self.device_keys)
+        return await run_sync(self.device_keys)
 
     async def aquery(self, **kwargs: Any) -> ProfileQueryResult:
-        return await asyncio.to_thread(lambda: self.query(**kwargs))
+        return await run_sync(lambda: self.query(**kwargs))
 
     async def aget_effective(self, entity_id: str) -> SemanticProfile:
-        return await asyncio.to_thread(self.get_effective, entity_id)
+        return await run_sync(self.get_effective, entity_id)
 
     async def aexplain(self, entity_id: str) -> ProfileExplanation:
-        return await asyncio.to_thread(self.explain, entity_id)
+        return await run_sync(self.explain, entity_id)
 
     async def afind_orphans(
         self,
@@ -664,7 +737,7 @@ class ProfileStore:
         known_areas: Iterable[str] | None = None,
         known_devices: Iterable[str] | None = None,
     ) -> list[str]:
-        return await asyncio.to_thread(
+        return await run_sync(
             lambda: self.find_orphans(
                 known_entity_ids,
                 known_domains=known_domains,

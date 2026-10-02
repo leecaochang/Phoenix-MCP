@@ -156,6 +156,7 @@
           "duration_seconds": {
             "type": "number",
             "exclusiveMinimum": 0,
+            "minimum": 0.001,
             "description": "Requested duration; values above 30 are clamped (Spec 21.2)."
           },
           "intent": {

@@ -268,7 +268,7 @@ async def test_deployment_default_confirm_suppresses_all(hass: HomeAssistant, mo
 
 
 @pytest.mark.asyncio
-async def test_deployment_default_autonomous_does_not_suppress(hass: HomeAssistant, monkeypatch):
+async def test_deployment_default_autonomous_preserves_lock_safety_floor(hass: HomeAssistant, monkeypatch):
     _no_refs(monkeypatch)
     hass.states.async_set("lock.front", "locked")
     runtime = await async_setup_mesa(hass, "advisory")
@@ -276,7 +276,8 @@ async def test_deployment_default_autonomous_does_not_suppress(hass: HomeAssista
 
     refresh_suggestions(hass, runtime)
 
-    assert _keys(runtime) == ["naked_risky:entity:lock.front"]
+    assert runtime.resolver.resolve("lock.front").operational_boundaries.control_mode == "prohibited"
+    assert _keys(runtime) == []
 
 
 @pytest.mark.asyncio

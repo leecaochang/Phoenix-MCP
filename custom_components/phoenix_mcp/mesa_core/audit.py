@@ -1,4 +1,4 @@
-"""Standard audit event schema (Module Proposal Section 8; Spec 7.1).
+"""Standard audit event schema (Module Proposal Section 4.11; Spec 7.1).
 
 Every audit record mesa-core emits on the ``mesa_core.audit`` logger carries a
 ``mesa_audit_event`` attribute holding the standard event dict. Hosts attach a
@@ -10,19 +10,22 @@ the RECOMMENDED shape, not a conformance requirement on third parties.
 
 from __future__ import annotations
 
+import json
 import logging
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 audit_logger = logging.getLogger("mesa_core.audit")
+audit_logger.setLevel(logging.INFO)
+audit_logger.addHandler(logging.NullHandler())
 
 
 @dataclass
 class MesaAuditEvent:
     """One audit event: a privacy access, an enforcement decision, or lease
     activity. ``details`` carries event-type-specific fields; the named fields
-    are common to every event type (Module Proposal Section 8)."""
+    are common to every event type (Module Proposal Section 4.11)."""
 
     event_type: str  # "privacy_access" | "enforcement_decision" | "lease"
     action: str  # "access", the service called, or the lease operation
@@ -61,13 +64,26 @@ def emit_audit_event(
     level: int = logging.INFO,
 ) -> None:
     if not event.timestamp:
-        event.timestamp = datetime.now().isoformat()
-    (logger or audit_logger).log(
-        level,
-        "mesa audit: %s %s entity=%s decision=%s",
-        event.event_type,
-        event.action,
-        event.entity_id or "-",
-        event.decision,
-        extra={"mesa_audit_event": event.to_dict()},
-    )
+        event.timestamp = datetime.now(UTC).isoformat()
+    try:
+        target = logger or audit_logger
+        if target.level == logging.NOTSET:
+            target.setLevel(logging.INFO)
+        target.log(
+            level,
+            "mesa audit: %s %s entity=%s decision=%s",
+            *(
+                json.dumps(value, ensure_ascii=True)
+                for value in (
+                    event.event_type,
+                    event.action,
+                    event.entity_id or "-",
+                    event.decision,
+                )
+            ),
+            extra={"mesa_audit_event": event.to_dict()},
+        )
+    except Exception:
+        # A host logging handler must never interrupt lease teardown or alter
+        # an enforcement decision. Do not re-enter the failed logging pipeline.
+        pass

@@ -15,13 +15,15 @@ because only the host can query the HA registries.
 
 from __future__ import annotations
 
-import asyncio
+import inspect
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
+from custom_components.phoenix_mcp.mesa_core._async import run_sync
 from custom_components.phoenix_mcp.mesa_core.exceptions import MesaValidationError
 from custom_components.phoenix_mcp.mesa_core.inheritance import InheritanceResolver
+from custom_components.phoenix_mcp.mesa_core.json_io import check_structure
 from custom_components.phoenix_mcp.mesa_core.profile import HA_AUTOMATION_SELECTOR_KEYS, TriggersAutomations
 from custom_components.phoenix_mcp.mesa_core.store import ProfileStore
 
@@ -72,9 +74,7 @@ def _ensure_acyclic(config: dict[str, Any]) -> None:
         stack.extend((value, False) for value in values)
 
 
-def _collect_references(
-    node: Any, entities: set[str], targets: set[tuple[str, str]]
-) -> None:
+def _collect_references(node: Any, entities: set[str], targets: set[tuple[str, str]]) -> None:
     pending = [node]
     visited: set[int] = set()
     while pending:
@@ -86,11 +86,19 @@ def _collect_references(
             pending.extend(current)
             continue
         for key, value in current.items():
-            if key == "entity_id":
+            if key in ("entity_id", "zone"):
                 if isinstance(value, str):
-                    entities.add(value)
+                    entities.update(
+                        item.strip().lower() for item in value.split(",") if item.strip()
+                    )
                 elif isinstance(value, list):
-                    entities.update(v for v in value if isinstance(v, str))
+                    entities.update(
+                        item.strip().lower()
+                        for v in value
+                        if isinstance(v, str)
+                        for item in v.split(",")
+                        if item.strip()
+                    )
             elif key in _TARGET_KEYS:
                 if isinstance(value, str):
                     targets.add((key, value))
@@ -118,7 +126,10 @@ def entities_by_role(
     entity IDs that selector covers in the deployment. Without the callback,
     indirectly referenced entities are invisible to the walk.
     """
+    if not isinstance(config, dict):
+        raise MesaValidationError("automation configuration must be an object")
     _ensure_acyclic(config)
+    check_structure(config)
     result: dict[str, set[str]] = {}
     for role, keys in _SECTION_KEYS.items():
         entities: set[str] = set()
@@ -128,9 +139,17 @@ def entities_by_role(
                 _collect_references(config[key], entities, targets)
         if expand_target is not None:
             for kind, ref in targets:
-                entities.update(expand_target(kind, ref))
+                expanded = expand_target(kind, ref)
+                if not isinstance(expanded, list) or not all(
+                    isinstance(item, str) for item in expanded
+                ):
+                    if inspect.iscoroutine(expanded):
+                        expanded.close()
+                    raise MesaValidationError("expand_target must return an array of entity IDs")
+                entities.update(item.strip().lower() for item in expanded)
         result[role] = entities
     return result
+
 
 class TriggerValidator:
     def __init__(
@@ -142,7 +161,9 @@ class TriggerValidator:
     ) -> None:
         self.store = store
         self.expand_target = expand_target
-        self.resolver = resolver or InheritanceResolver(store=store)
+        if resolver is not None:
+            store.attach_resolver(resolver)
+        self.resolver = store.resolver
 
     def _is_none(self, entity_id: str) -> bool:
         """Whether an entity reads as ``triggers_automations: none`` to an agent.
@@ -156,8 +177,11 @@ class TriggerValidator:
             effective = self.resolver.resolve(entity_id)
         except MesaValidationError:
             return False
-        return (
-            effective.operational_boundaries.triggers_automations == TriggersAutomations.NONE
+        value = effective.operational_boundaries.triggers_automations
+        helpers = effective.raw.get("semantic_profile", {}).get("helper_traits", {})
+        return value == TriggersAutomations.NONE or (
+            value == TriggersAutomations.DEPLOYMENT_DEFINED
+            and not helpers.get("affected_automations")
         )
 
     def _declared_none_entities(self, entity_ids: Iterable[str] | None = None) -> list[str]:
@@ -173,17 +197,63 @@ class TriggerValidator:
 
     def _walked_configs(
         self, configs: list[dict[str, Any]]
-    ) -> list[tuple[str, dict[str, set[str]]]]:
+    ) -> tuple[list[tuple[str, dict[str, set[str]]]], list[ValidationIssue]]:
         """Walk each config (and expand its target selectors) exactly once.
 
         The walk and the ``expand_target`` registry calls are per config, not
         per entity-config pair: with hundreds of ``none`` declarations the
         re-expansion dominated ``validate()``.
         """
-        return [
-            (str(config.get("id", "<unknown>")), entities_by_role(config, self.expand_target))
-            for config in configs
-        ]
+        if not isinstance(configs, list):
+            if inspect.iscoroutine(configs):
+                configs.close()
+            raise MesaValidationError("get_automation_configs must return a list")
+        walked = []
+        issues = []
+        for config in configs:
+            identifier = config.get("id", "<unknown>") if isinstance(config, dict) else "<unknown>"
+            if not isinstance(identifier, str | int):
+                identifier = "<invalid>"
+            automation_id = str(identifier)[:256]
+            try:
+                by_role = entities_by_role(config, self.expand_target)
+            except Exception as err:
+                issues.append(
+                    ValidationIssue(
+                        "",
+                        "unknown",
+                        automation_id,
+                        "configuration",
+                        "error",
+                        f"automation configuration cannot be inspected ({type(err).__name__})",
+                    )
+                )
+                continue
+            walked.append((automation_id, by_role))
+            pending: list[Any] = [config]
+            uncertain = False
+            while pending:
+                node = pending.pop()
+                if isinstance(node, str):
+                    uncertain |= "{{" in node or "{%" in node
+                elif isinstance(node, list):
+                    pending.extend(node)
+                elif isinstance(node, dict):
+                    uncertain |= "use_blueprint" in node
+                    pending.extend(node.values())
+            if uncertain:
+                issues.append(
+                    ValidationIssue(
+                        "",
+                        "unknown",
+                        automation_id,
+                        "configuration",
+                        "warning",
+                        "templates or blueprint inputs require host expansion; "
+                        "reference coverage is incomplete",
+                    )
+                )
+        return walked, issues
 
     def _issues_for(
         self, entity_id: str, walked: list[tuple[str, dict[str, set[str]]]]
@@ -225,8 +295,11 @@ class TriggerValidator:
         profile without carrying one of its own is not in the store's key set,
         so it can only be checked when the host names it.
         """
-        walked = self._walked_configs(get_automation_configs())
-        issues: list[ValidationIssue] = []
+        try:
+            configs = get_automation_configs()
+        except Exception as err:
+            raise MesaValidationError("get_automation_configs failed") from err
+        walked, issues = self._walked_configs(configs)
         for entity_id in self._declared_none_entities(entity_ids):
             issues.extend(self._issues_for(entity_id, walked))
         return issues
@@ -239,7 +312,12 @@ class TriggerValidator:
         """Validate a single entity against the automation registry."""
         if not self._is_none(entity_id):
             return []
-        return self._issues_for(entity_id, self._walked_configs(get_automation_configs()))
+        try:
+            configs = get_automation_configs()
+        except Exception as err:
+            raise MesaValidationError("get_automation_configs failed") from err
+        walked, issues = self._walked_configs(configs)
+        return [*issues, *self._issues_for(entity_id, walked)]
 
     async def avalidate(
         self,
@@ -247,15 +325,11 @@ class TriggerValidator:
         *,
         entity_ids: Iterable[str] | None = None,
     ) -> list[ValidationIssue]:
-        return await asyncio.to_thread(
-            lambda: self.validate(get_automation_configs, entity_ids=entity_ids)
-        )
+        return await run_sync(lambda: self.validate(get_automation_configs, entity_ids=entity_ids))
 
     async def avalidate_entity(
         self,
         entity_id: str,
         get_automation_configs: Callable[[], list[dict[str, Any]]],
     ) -> list[ValidationIssue]:
-        return await asyncio.to_thread(
-            self.validate_entity, entity_id, get_automation_configs
-        )
+        return await run_sync(self.validate_entity, entity_id, get_automation_configs)

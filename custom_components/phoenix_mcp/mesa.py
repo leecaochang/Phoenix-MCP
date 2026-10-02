@@ -61,6 +61,7 @@ from .const import (
 )
 from .mesa_core import (
     CallerContext,
+    ControlMode,
     InheritanceResolver,
     LeaseManager,
     MesaEnforcer,
@@ -860,11 +861,10 @@ def evaluate_service_entities(
 ) -> MesaVerdict:
     """Evaluate every flattened entity through the MesaEnforcer.
 
-    The enforcer runs with interactive=False, so a confirm entity surfaces as a
-    ``control_mode:confirm_no_channel`` block. We interpret that host-side: under
-    enforcement it becomes a confirm (routed to the admin gate); under advisory
-    it becomes an allowed-with-warning. ``confirm_approved=True`` (re-execution
-    after admin approval) folds confirm entities into allowed.
+    The public evaluated mode includes temporal and privacy adjustments from
+    this call. Phoenix always vetoes read-only writes. Non-interactive Confirm
+    blocks enter the admin gate; advisory Confirm allows with a host warning.
+    Approval satisfies only confirmation, never another restriction.
     """
     verdict = MesaVerdict()
     caller = build_caller_context(token, session_id)
@@ -891,38 +891,53 @@ def evaluate_service_entities(
             caller_context=caller,
             current_time=now,
         )
-        verdict.warnings.extend(result.warnings)
-        if result.allowed:
-            verdict.allowed.append(entity_id)
-            continue
+        mode = result.evaluated_control_mode
         rule = result.rule_applied or "control_mode:blocked"
-        if rule == "control_mode:confirm_no_channel":
+        confirmation = mode is ControlMode.CONFIRM and (
+            result.allowed or rule == "control_mode:confirm_no_channel"
+        )
+        # Phoenix supplies the human approval channel. Replace only the core's
+        # no-channel explanation, retaining independent policy/limit warnings.
+        verdict.warnings.extend(
+            warning for warning in result.warnings
+            if not (confirmation and warning == "no interaction channel: confirm is treated as prohibited")
+        )
+        if mode is ControlMode.READ_ONLY and result.allowed:
+            reason = f"Entity is read-only by nature: {entity_id}"
+            mesa_audit.record_read_only_denial(entity_id, service_str, caller, result)
+            verdict.blocked.append((entity_id, "control_mode:read_only", reason))
+            continue
+        if result.allowed and mode is None:
+            verdict.blocked.append((entity_id, "policy_unavailable", "MESA returned no evaluated control mode."))
+            continue
+        if confirmation:
             if confirm_approved or not _host_enforced(settings_mode, result):
                 verdict.allowed.append(entity_id)
-                # Advisory mode lets a confirm entity through; tell the agent why,
-                # since otherwise the call looks identical to an unrestricted one.
                 if not confirm_approved:
                     verdict.warnings.append(
-                        f"{entity_id}: this action is marked 'confirm' in its MESA profile; "
+                        f"{entity_id}: this action is marked 'confirm' by MESA; "
                         "proceeding because MESA is in advisory mode (it would require admin "
                         "approval under enforced mode)."
                     )
             else:
                 verdict.confirm.append(entity_id)
-        else:
-            if rule == _RULE_CONTRADICTORY_TARGET:
-                # Not a policy decision about the entity: it means the payload
-                # named a target other than the one the decision was made for,
-                # which cannot happen once target resolution has consumed the
-                # selectors. Reaching it is a Phoenix MCP bug, and the caller
-                # only ever sees the uniform refusal, so log it or the cause is
-                # invisible.
-                _LOGGER.error(
-                    "MESA refused %s on %s as a contradictory target, which means the "
-                    "evaluated parameters diverged from the resolved targets: %s",
-                    service_str, entity_id, result.reason,
-                )
-            verdict.blocked.append((entity_id, rule, result.reason))
+            continue
+        if result.allowed:
+            verdict.allowed.append(entity_id)
+            continue
+        if rule == _RULE_CONTRADICTORY_TARGET:
+            # Not a policy decision about the entity: it means the payload
+            # named a target other than the one the decision was made for,
+            # which cannot happen once target resolution has consumed the
+            # selectors. Reaching it is a Phoenix MCP bug, and the caller
+            # only ever sees the uniform refusal, so log it or the cause is
+            # invisible.
+            _LOGGER.error(
+                "MESA refused %s on %s as a contradictory target, which means the "
+                "evaluated parameters diverged from the resolved targets: %s",
+                service_str, entity_id, result.reason,
+            )
+        verdict.blocked.append((entity_id, rule, result.reason))
     return verdict
 
 

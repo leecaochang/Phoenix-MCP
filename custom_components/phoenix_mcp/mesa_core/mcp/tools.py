@@ -12,14 +12,20 @@ Errors are returned as the Spec 9.6 envelope:
 
 from __future__ import annotations
 
-import asyncio
+import contextvars
+import copy
 import inspect
+import json
 import logging
+import math
+import re
 from collections.abc import Callable, Collection
 from typing import Any
 
+from custom_components.phoenix_mcp.mesa_core._async import run_sync as _run_sync
 from custom_components.phoenix_mcp.mesa_core.exceptions import (
     InvalidCursorError,
+    InvalidQueryError,
     LeaseNotFoundError,
     MesaError,
     MesaValidationError,
@@ -30,9 +36,12 @@ from custom_components.phoenix_mcp.mesa_core.mcp.adapters import ToolRegistry
 from custom_components.phoenix_mcp.mesa_core.mcp.schemas import TOOL_DESCRIPTIONS, TOOL_SCHEMAS
 from custom_components.phoenix_mcp.mesa_core.privacy import AccessDecision, CallerContext, PrivacyEnforcer
 from custom_components.phoenix_mcp.mesa_core.profile import HELPER_DOMAINS, FreshnessReport, SemanticProfile
-from custom_components.phoenix_mcp.mesa_core.store import ProfileStore
+from custom_components.phoenix_mcp.mesa_core.store import ProfileStore, validate_entity_id
 
 logger = logging.getLogger("mesa_core.mcp")
+_CALLER: contextvars.ContextVar[CallerContext | None] = contextvars.ContextVar(
+    "mesa_caller", default=None
+)
 
 MESA_VERSION = "1.1"
 
@@ -72,9 +81,7 @@ def _component_type(entity_id: str) -> str:
     return "entity"
 
 
-_ANONYMOUS = CallerContext(
-    caller_id="anonymous", roles=[], is_authenticated=False, session_id=""
-)
+_ANONYMOUS = CallerContext(caller_id="anonymous", roles=[], is_authenticated=False, session_id="")
 
 
 def _error(code: str, message: str, details: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -84,7 +91,11 @@ def _error(code: str, message: str, details: dict[str, Any] | None = None) -> di
 _TYPE_PREDICATES: dict[str, Callable[[Any], bool]] = {
     "string": lambda v: isinstance(v, str),
     "boolean": lambda v: isinstance(v, bool),
-    "integer": lambda v: isinstance(v, int) and not isinstance(v, bool),
+    "integer": lambda v: (
+        isinstance(v, int | float)
+        and not isinstance(v, bool)
+        and (not isinstance(v, float) or (math.isfinite(v) and v.is_integer()))
+    ),
     "number": lambda v: isinstance(v, (int, float)) and not isinstance(v, bool),
     "object": lambda v: isinstance(v, dict),
     "array": lambda v: isinstance(v, list),
@@ -106,12 +117,23 @@ def _validate_value(name: str, spec: dict[str, Any], value: Any) -> None:
     declared = spec.get("type")
     if declared is not None and not _TYPE_PREDICATES[declared](value):
         raise MesaValidationError(f"{name} must be of type {declared} (got {value!r})")
+    if declared in ("integer", "number") and isinstance(value, float) and not math.isfinite(value):
+        raise MesaValidationError(f"{name} must be finite")
+    if declared == "string":
+        if "maxLength" in spec and len(value) > spec["maxLength"]:
+            raise MesaValidationError(f"{name} exceeds maximum length")
+        if "minLength" in spec and len(value) < spec["minLength"]:
+            raise MesaValidationError(f"{name} is empty")
+        if "pattern" in spec and re.search(spec["pattern"], value) is None:
+            raise MesaValidationError(f"{name} has an invalid format")
     for keyword, in_range in _BOUNDS.items():
         if keyword in spec and not in_range(value, spec[keyword]):
             raise MesaValidationError(
                 f"{name} must satisfy {keyword} {spec[keyword]} (got {value!r})"
             )
     if declared == "array":
+        if "maxItems" in spec and len(value) > spec["maxItems"]:
+            raise MesaValidationError(f"{name} has too many items")
         if "minItems" in spec and len(value) < spec["minItems"]:
             raise MesaValidationError(f"{name} must have at least {spec['minItems']} item(s)")
         items = spec.get("items")
@@ -121,6 +143,17 @@ def _validate_value(name: str, spec: dict[str, Any], value: Any) -> None:
 
 
 def _validate_params(name: str, params: dict[str, Any]) -> None:
+    try:
+        _validate_params_inner(name, params)
+        if "entity_id" in params:
+            validate_entity_id(params["entity_id"])
+        for entity_id in params.get("entities", []):
+            validate_entity_id(entity_id)
+    except MesaValidationError as err:
+        raise InvalidQueryError(str(err)) from err
+
+
+def _validate_params_inner(name: str, params: dict[str, Any]) -> None:
     """Validate a tool's params against its declared schema (Spec 9.2, 9.6).
 
     mesa-core carries no runtime dependencies, so this is a hand-rolled check of
@@ -165,14 +198,14 @@ class MesaToolHandlers:
         get_validity_context: Callable[[str], dict[str, Any]] | None = None,
     ) -> None:
         self.store = store
-        self.resolver = resolver or InheritanceResolver(store=store)
+        self.resolver = resolver or store.resolver
         self.caller_context_fn = caller_context_fn
         self.lease_manager = lease_manager
         self.get_semantic_moments = get_semantic_moments
         self.privacy = privacy_enforcer or PrivacyEnforcer()
         self.get_validity_context = get_validity_context
 
-    def _semantic_moments(self, entity_id: str) -> list[dict[str, Any]] | None:
+    async def _semantic_moments(self, entity_id: str) -> list[dict[str, Any]] | None:
         """Live HA purpose-specific trigger vocabulary for one entity (Spec 9.5).
 
         Surfaced for agent context only: never stored, never consulted by
@@ -183,7 +216,12 @@ class MesaToolHandlers:
         if self.get_semantic_moments is None:
             return None
         try:
-            moments = self.get_semantic_moments(entity_id)
+            moments = await _run_sync(self.get_semantic_moments, entity_id)
+            if inspect.isawaitable(moments):
+                moments = await moments
+            if moments is not None and not isinstance(moments, list):
+                raise TypeError("semantic moments must be a list")
+            json.dumps(moments, allow_nan=False)
         except Exception:
             logger.exception("get_semantic_moments callback failed")
             return None
@@ -284,9 +322,19 @@ class MesaToolHandlers:
         return supplied
 
     def _caller_context(self) -> CallerContext | None:
-        if self.caller_context_fn is None:
-            return None
-        return self.caller_context_fn()
+        return _CALLER.get()
+
+    async def _capture_caller(self) -> None:
+        _CALLER.set(None)
+        if self.caller_context_fn is not None:
+            caller = self.caller_context_fn()
+            if inspect.isawaitable(caller):
+                caller = await caller
+            if not isinstance(caller, CallerContext):
+                raise TypeError("caller_context_fn must return CallerContext")
+            caller = copy.deepcopy(caller)
+            caller.effective_roles()
+            _CALLER.set(caller)
 
     def _access(self, entity_id: str, effective: SemanticProfile) -> AccessDecision:
         """Apply access_roles before surfacing an entity's data (Spec 7.2).
@@ -333,7 +381,7 @@ class MesaToolHandlers:
     ) -> dict[str, Any]:
         doc = effective.to_dict()
         sp = doc.get("semantic_profile", {})
-        if include_fields:
+        if include_fields is not None:
             # metadata_origin and schema_version are always included (Spec 9.2);
             # requested fields absent from the profile are silently omitted.
             keep = set(include_fields) | {"metadata_origin", "schema_version"}
@@ -370,7 +418,16 @@ class MesaToolHandlers:
         """
         try:
             _validate_params("mesa_query_profiles", params)
-            result = await asyncio.to_thread(
+            await self._capture_caller()
+            caller = self._caller_context()
+            decisions: dict[str, AccessDecision] = {}
+
+            def visible(entity_id: str, profile: SemanticProfile) -> bool:
+                decision = self._access(entity_id, profile)
+                decisions[entity_id] = decision
+                return decision.allowed or decision.deny_response_mode != "omit"
+
+            result = await _run_sync(
                 self.store.query,
                 domains=params.get("domains"),
                 tags=params.get("tags"),
@@ -381,16 +438,18 @@ class MesaToolHandlers:
                 intents=params.get("intents"),
                 include_inferred=params.get("include_inferred", False),
                 min_origin_authority=params.get("min_origin_authority"),
-                limit=params.get("limit", 50),
+                limit=int(params.get("limit", 50)),
                 cursor=params.get("cursor"),
                 resolver=self.resolver,
+                visible=visible,
+                visibility_context=json.dumps(caller.to_dict() if caller else None, sort_keys=True),
             )
             include_fields = params.get("include_fields")
             validity_warnings: list[str] = []
             results: list[dict[str, Any]] = []
             for row in result.rows:
                 effective = row.effective or row.stored
-                decision = self._access(row.entity_id, effective)
+                decision = decisions[row.entity_id]
                 if not decision.allowed:
                     denied = self._denied_response(row.entity_id, decision)
                     if denied is not None:
@@ -399,7 +458,7 @@ class MesaToolHandlers:
                 # One evaluation per entity, against that entity's own context.
                 # Spec 5.5: a host SHOULD surface a warning when an
                 # invalidation trigger fires, for profiles of any origin.
-                freshness = await asyncio.to_thread(self._freshness, row.entity_id, effective)
+                freshness = await _run_sync(self._freshness, row.entity_id, effective)
                 validity_warnings.extend(freshness.warnings)
                 results.append(
                     self._result_object(row.entity_id, effective, include_fields, freshness)
@@ -418,12 +477,12 @@ class MesaToolHandlers:
             caller = self._caller_context()
             if caller is not None:
                 response["caller_context"] = caller.to_dict()
-            if result.warnings or validity_warnings:
-                response["warnings"] = [*result.warnings, *validity_warnings]
+            if validity_warnings:
+                response["warnings"] = validity_warnings
             return response
         except InvalidCursorError as err:
             return _error("invalid_cursor", str(err))
-        except (ValueError, MesaValidationError) as err:
+        except InvalidQueryError as err:
             return _error("invalid_query", str(err))
         except Exception:
             logger.exception("mesa_query_profiles failed")
@@ -432,24 +491,22 @@ class MesaToolHandlers:
     async def mesa_get_profile(self, params: dict[str, Any]) -> dict[str, Any]:
         try:
             _validate_params("mesa_get_profile", params)
+            await self._capture_caller()
             entity_id = params.get("entity_id")
             if not entity_id:
                 return _error("invalid_query", "entity_id is required")
+            validate_entity_id(entity_id)
             include_diagnostic = params.get("include_diagnostic", True)
-            if not await asyncio.to_thread(self.resolver.has_profile, entity_id):
-                return _error(
-                    "not_found", f"entity {entity_id!r} has no MESA profile at any level"
-                )
-            effective = await asyncio.to_thread(self.resolver.resolve, entity_id)
+            if not await _run_sync(self.resolver.has_profile, entity_id):
+                return _error("not_found", f"entity {entity_id!r} has no MESA profile at any level")
+            effective = await _run_sync(self.resolver.resolve, entity_id)
             decision = self._access(entity_id, effective)
             if not decision.allowed:
                 denied = self._denied_response(entity_id, decision)
                 if denied is not None:
                     return denied
                 # omit: a denied entity is indistinguishable from an absent one.
-                return _error(
-                    "not_found", f"entity {entity_id!r} has no MESA profile at any level"
-                )
+                return _error("not_found", f"entity {entity_id!r} has no MESA profile at any level")
             doc = effective.to_dict()
             out: dict[str, Any] = {
                 "mesa_version": MESA_VERSION,
@@ -460,7 +517,7 @@ class MesaToolHandlers:
             }
             if include_diagnostic and effective.diagnostic_profile is not None:
                 out["diagnostic_profile"] = effective.diagnostic_profile
-            freshness = await asyncio.to_thread(self._freshness, entity_id, effective)
+            freshness = await _run_sync(self._freshness, entity_id, effective)
             # Spec 9.3: staleness_status accompanies an inferred_ai origin,
             # including one inherited from a scoped layer the entity does not
             # store itself. Spec 5.5's warnings apply to every origin.
@@ -469,11 +526,11 @@ class MesaToolHandlers:
             if freshness.warnings:
                 out["warnings"] = freshness.warnings
             if params.get("include_semantic_moments", False):
-                moments = await asyncio.to_thread(self._semantic_moments, entity_id)
+                moments = await self._semantic_moments(entity_id)
                 if moments is not None:
                     out["semantic_moments"] = moments
             return out
-        except MesaValidationError as err:
+        except InvalidQueryError as err:
             return _error("invalid_query", str(err))
         except Exception:
             logger.exception("mesa_get_profile failed")
@@ -482,23 +539,25 @@ class MesaToolHandlers:
     async def mesa_explain_profile(self, params: dict[str, Any]) -> dict[str, Any]:
         try:
             _validate_params("mesa_explain_profile", params)
+            await self._capture_caller()
             entity_id = params.get("entity_id")
             if not entity_id:
                 return _error("invalid_query", "entity_id is required")
+            validate_entity_id(entity_id)
+            if not await _run_sync(self.resolver.has_profile, entity_id):
+                return _error("not_found", f"entity {entity_id!r} has no MESA profile at any level")
             show_conflicts = params.get("show_conflicts", True)
-            explanation = await asyncio.to_thread(self.resolver.explain, entity_id)
+            explanation = await _run_sync(self.resolver.explain, entity_id)
             decision = self._access(entity_id, explanation.effective_profile)
             if not decision.allowed:
                 denied = self._denied_response(entity_id, decision)
                 if denied is not None:
                     return denied
-                return _error(
-                    "not_found", f"entity {entity_id!r} has no MESA profile at any level"
-                )
+                return _error("not_found", f"entity {entity_id!r} has no MESA profile at any level")
             out = explanation.to_dict(show_conflicts=show_conflicts)
             out["mesa_version"] = MESA_VERSION
             return out
-        except MesaValidationError as err:
+        except InvalidQueryError as err:
             return _error("invalid_query", str(err))
         except Exception:
             logger.exception("mesa_explain_profile failed")
@@ -507,9 +566,10 @@ class MesaToolHandlers:
     async def mesa_get_caller_context(self, params: dict[str, Any]) -> dict[str, Any]:
         try:
             _validate_params("mesa_get_caller_context", params)
+            await self._capture_caller()
             caller = self._caller_context() or _ANONYMOUS
             return {"mesa_version": MESA_VERSION, **caller.to_dict()}
-        except MesaValidationError as err:
+        except InvalidQueryError as err:
             return _error("invalid_query", str(err))
         except Exception:
             logger.exception("mesa_get_caller_context failed")
@@ -521,16 +581,26 @@ class MesaToolHandlers:
         assert self.lease_manager is not None  # registered only when provided
         try:
             _validate_params("mesa_request_lease", params)
+            await self._capture_caller()
             entities = params.get("entities")
             if not entities or not isinstance(entities, list):
-                return _error(
-                    "invalid_query", "entities is required and must be a non-empty array"
-                )
+                return _error("invalid_query", "entities is required and must be a non-empty array")
             duration = params.get("duration_seconds")
             if duration is None:
                 return _error("invalid_query", "duration_seconds is required")
             caller = self._caller_context() or _ANONYMOUS
-            response = await self.lease_manager.arequest(
+            if not isinstance(caller.session_id, str) or not caller.session_id.strip():
+                return _error("invalid_query", "leases require a host-supplied session_id")
+            for entity_id in entities:
+                validate_entity_id(entity_id)
+                effective = await _run_sync(self.resolver.resolve, entity_id)
+                decision = self._access(entity_id, effective)
+                if not decision.allowed:
+                    return self._denied_response(entity_id, decision) or _error(
+                        "not_found", "requested entity is unavailable"
+                    )
+            response = await _run_sync(
+                self.lease_manager.request,
                 [str(e) for e in entities],
                 # Passed through unconverted: the schema already guarantees a
                 # number, and float() of an arbitrarily large JSON integer
@@ -544,18 +614,42 @@ class MesaToolHandlers:
                 preemption_handling=params.get("preemption_handling", "rollback_abort"),
                 caller_priority=params.get("caller_priority"),
             )
-            if not response.granted and response.automation_denials and set(
-                response.automation_denials
-            ) == set(response.entities_denied):
+            # Denial reasons and warnings can identify protected automations.
+            # Shape those identities with the same caller snapshot as retrieval.
+            hidden = []
+            for key in await _run_sync(self.store.entity_keys):
+                if key.startswith("automation."):
+                    try:
+                        profile = await _run_sync(self.resolver.resolve, key)
+                        if not self._access(key, profile).allowed:
+                            hidden.append(key)
+                    except (MesaError, ValueError, OSError, RecursionError):
+                        hidden.append(key)
+            for key in hidden:
+                response.denial_reasons = {
+                    entity: (
+                        "entity is protected by automation policy" if key in reason else reason
+                    )
+                    for entity, reason in response.denial_reasons.items()
+                }
+                response.warnings = [warning for warning in response.warnings if key not in warning]
+                response.active_conflicts = [
+                    item for item in response.active_conflicts if item.get("automation_id") != key
+                ]
+            if (
+                not response.granted
+                and response.automation_denials
+                and set(response.automation_denials) == set(response.entities_denied)
+            ):
                 # Total denial by protected/critical automations (Spec 9.6).
                 return _error(
                     "lease_conflict",
                     "lease denied: all requested entities are under protected or "
                     "critical automation control",
-                    details={"denial_reasons": response.denial_reasons},
+                    details=response.to_dict(),
                 )
             return {"mesa_version": MESA_VERSION, **response.to_dict()}
-        except (TypeError, ValueError, MesaValidationError) as err:
+        except InvalidQueryError as err:
             return _error("invalid_query", str(err))
         except Exception:
             logger.exception("mesa_request_lease failed")
@@ -565,11 +659,19 @@ class MesaToolHandlers:
         assert self.lease_manager is not None  # registered only when provided
         try:
             _validate_params("mesa_release_lease", params)
+            await self._capture_caller()
             lease_id = params.get("lease_id")
             if not lease_id:
                 return _error("invalid_query", "lease_id is required")
             caller = self._caller_context()
-            lease = await self.lease_manager.arelease(
+            if (
+                caller is None
+                or not isinstance(caller.session_id, str)
+                or not caller.session_id.strip()
+            ):
+                return _error("invalid_query", "leases require a host-supplied session_id")
+            lease = await _run_sync(
+                self.lease_manager.release,
                 str(lease_id),
                 session_id=caller.session_id if caller is not None else None,
             )
@@ -579,7 +681,7 @@ class MesaToolHandlers:
                 "lease_id": lease.lease_id,
                 "entities": list(lease.entities),
             }
-        except MesaValidationError as err:
+        except InvalidQueryError as err:
             return _error("invalid_query", str(err))
         except LeaseNotFoundError as err:
             return _error("lease_not_found", str(err))
@@ -623,7 +725,7 @@ def register_mesa_tools(
     When ``lease_manager`` is provided, the lease coordination tools
     (mesa_request_lease, mesa_release_lease) are registered as well; omitted,
     they are not, and the server does not participate in the Section 21
-    protocol. ``enforcer`` is accepted for API stability; enforcement is
+    protocol. ``enforcer`` shares its resolver with retrieval and leases; enforcement is
     wired into the host's service-call path directly (see the Module
     Proposal, Section 6.2), not exposed as a tool.
     """
@@ -644,6 +746,13 @@ def register_mesa_tools(
     else:
         registry = adapter
 
+    resolver = resolver or (enforcer.resolver if enforcer is not None else store.resolver)
+    store.attach_resolver(resolver)
+    if lease_manager is not None:
+        if lease_manager.store is not None and lease_manager.store is not store:
+            raise MesaError("lease manager must use the registered profile store")
+        lease_manager.store = store
+        lease_manager.resolver = resolver
     handlers = MesaToolHandlers(
         store=store,
         resolver=resolver,

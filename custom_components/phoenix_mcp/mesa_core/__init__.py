@@ -1,5 +1,6 @@
 """mesa-core: reference implementation of the MESA specification."""
 
+from custom_components.phoenix_mcp.mesa_core._async import ashutdown_policy_workers, shutdown_policy_workers
 from custom_components.phoenix_mcp.mesa_core.audit import MesaAuditEvent, emit_audit_event
 from custom_components.phoenix_mcp.mesa_core.conflict import ConflictResolver
 from custom_components.phoenix_mcp.mesa_core.enforcer import ConfirmationManager, EnforcementResult, MesaEnforcer
@@ -46,7 +47,7 @@ from custom_components.phoenix_mcp.mesa_core.trigger_validator import (
 )
 from custom_components.phoenix_mcp.mesa_core.validation import ValidationReport, validate_document, validate_or_raise
 
-__version__ = "1.3.1"
+__version__ = "1.3.3"
 
 __all__ = [
     "DOMAIN_SAFETY_BASELINE",
@@ -92,12 +93,14 @@ __all__ = [
     "ValidationReport",
     "aexport_profiles",
     "aimport_profiles",
+    "ashutdown_policy_workers",
     "emit_audit_event",
     "entities_by_role",
     "export_profiles",
     "import_from_integration",
     "import_profiles",
     "migrate_profile",
+    "shutdown_policy_workers",
     "validate_document",
     "validate_or_raise",
 ]

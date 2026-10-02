@@ -12,10 +12,13 @@ from __future__ import annotations
 import math
 import re
 from dataclasses import dataclass, field
+from datetime import datetime
+from reprlib import repr as _safe_repr
 from typing import Any
 
 from custom_components.phoenix_mcp.mesa_core import vocabulary
 from custom_components.phoenix_mcp.mesa_core.exceptions import MesaValidationError
+from custom_components.phoenix_mcp.mesa_core.json_io import check_structure
 
 VALID_CONTROL_MODES = {"autonomous", "confirm", "read_only", "prohibited"}
 VALID_TRIGGERS = {"likely", "none", "unknown", "deployment_defined"}
@@ -87,6 +90,7 @@ class ValidationReport:
 
     errors: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    semantic_errors: list[str] = field(default_factory=list)
 
     @property
     def ok(self) -> bool:
@@ -118,12 +122,12 @@ def _check_enum(
         return
     value = container[key]
     if not isinstance(value, str) or value not in valid:
-        report.errors.append(f"{where}: invalid value {value!r} (valid: {sorted(valid)})")
+        report.errors.append(f"{where}: invalid value {_safe_repr(value)} (valid: {sorted(valid)})")
 
 
 def _check_bool(container: dict[str, Any], key: str, where: str, report: ValidationReport) -> None:
     if key in container and not isinstance(container[key], bool):
-        report.errors.append(f"{where}: must be a boolean (got {container[key]!r})")
+        report.errors.append(f"{where}: must be a boolean (got {_safe_repr(container[key])})")
 
 
 def _check_number(
@@ -133,7 +137,7 @@ def _check_number(
         return
     value = container[key]
     if isinstance(value, bool) or not isinstance(value, int | float):
-        report.errors.append(f"{where}: must be a number (got {value!r})")
+        report.errors.append(f"{where}: must be a number (got {_safe_repr(value)})")
     elif isinstance(value, float) and not math.isfinite(value):
         # NaN/Infinity are Python floats (json.loads accepts the non-standard
         # tokens), but a NaN safety bound disables its limit because every
@@ -143,14 +147,14 @@ def _check_number(
         # passing an arbitrarily large JSON integer to math.isfinite (which
         # converts to float) would raise OverflowError on hostile input, so int
         # is accepted as a finite number without conversion.
-        report.errors.append(f"{where}: must be a finite number (got {value!r})")
+        report.errors.append(f"{where}: must be a finite number (got {_safe_repr(value)})")
 
 
 def _check_string(
     container: dict[str, Any], key: str, where: str, report: ValidationReport
 ) -> None:
     if key in container and not isinstance(container[key], str):
-        report.errors.append(f"{where}: must be a string (got {container[key]!r})")
+        report.errors.append(f"{where}: must be a string (got {_safe_repr(container[key])})")
 
 
 def _check_string_array(
@@ -160,7 +164,7 @@ def _check_string_array(
         return
     value = container[key]
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
-        report.errors.append(f"{where}: must be an array of strings (got {value!r})")
+        report.errors.append(f"{where}: must be an array of strings (got {_safe_repr(value)})")
 
 
 def predicate_operand_valid(operator: str, value: Any) -> bool:
@@ -198,7 +202,7 @@ def _check_predicate(pred: Any, where: str, report: ValidationReport) -> None:
     # isinstance first: an unhashable operator would raise out of the set test.
     if not isinstance(op, str) or op not in PREDICATE_OPERATORS:
         report.errors.append(
-            f"{where}: unrecognised predicate operator {op!r} "
+            f"{where}: unrecognised predicate operator {_safe_repr(op)} "
             f"(canonical tokens: {sorted(PREDICATE_OPERATORS)}; Spec 6.3)"
         )
     if "entity" not in pred:
@@ -207,8 +211,12 @@ def _check_predicate(pred: Any, where: str, report: ValidationReport) -> None:
         _check_string(pred, "entity", f"{where}.entity", report)
     if "value" not in pred:
         report.errors.append(f"{where}: predicate requires 'value'")
-    elif isinstance(op, str) and not predicate_operand_valid(op, pred["value"]):
-        report.errors.append(f"{where}: value has incompatible type for operator {op!r}")
+    elif (
+        isinstance(op, str)
+        and op in PREDICATE_OPERATORS
+        and not predicate_operand_valid(op, pred["value"])
+    ):
+        report.errors.append(f"{where}: value has incompatible type for operator {_safe_repr(op)}")
 
 
 def _object_at(
@@ -223,7 +231,7 @@ def _object_at(
         return None
     value = container[key]
     if not isinstance(value, dict):
-        report.errors.append(f"{where} must be an object (got {value!r})")
+        report.errors.append(f"{where} must be an object (got {_safe_repr(value)})")
         return None
     return value
 
@@ -239,8 +247,9 @@ def _check_metadata_origin(sp: dict[str, Any], report: ValidationReport) -> None
     if mo is None:
         return
     for key in ("generated_at", "last_updated"):
-        _check_string(mo, key, f"metadata_origin.{key}", report)
+        _check_timestamp(mo, key, f"metadata_origin.{key}", report)
     _check_number(mo, "staleness_window_days", "metadata_origin.staleness_window_days", report)
+    _check_nonnegative(mo, "staleness_window_days", "metadata_origin", report)
     if "source" not in mo:
         report.errors.append("metadata_origin requires source (Spec 5.3)")
     source = mo.get("source")
@@ -257,7 +266,7 @@ def _check_metadata_origin(sp: dict[str, Any], report: ValidationReport) -> None
         # rather than ignored: honouring it would let an inferred profile
         # self-certify past Rules 8 and 9.
         report.errors.append(
-            f"'confirmed_fields' is only meaningful for source 'hybrid', not {source!r}: "
+            f"'confirmed_fields' is only meaningful for source 'hybrid', not {_safe_repr(source)}: "
             "human confirmation promotes the confirmed fields to hybrid (Spec 5.4 Rule 6)"
         )
     confidence = mo.get("confidence")
@@ -273,7 +282,8 @@ def _check_metadata_origin(sp: dict[str, Any], report: ValidationReport) -> None
         or not 0.0 <= confidence <= 1.0
     ):
         report.errors.append(
-            f"metadata_origin.confidence must be a number between 0.0 and 1.0 (got {confidence!r})"
+            "metadata_origin.confidence must be a number between 0.0 and 1.0 "
+            f"(got {_safe_repr(confidence)})"
         )
     if source == "inferred_ai":
         # Inferred Rule 1 (Spec 5.4): missing either field makes the profile malformed.
@@ -285,7 +295,7 @@ def _check_metadata_origin(sp: dict[str, Any], report: ValidationReport) -> None
             )
     if source in ("developer", "user") and "generated_at" in mo:
         report.warnings.append(
-            f"trust laundering suspected: source {source!r} but profile carries "
+            f"trust laundering suspected: source {_safe_repr(source)} but profile carries "
             "'generated_at', an AI-inference marker. AI-generated content must be "
             "marked 'hybrid' or 'inferred_ai' (Getting Started Guide)."
         )
@@ -332,7 +342,7 @@ def _check_boundaries(sp: dict[str, Any], report: ValidationReport) -> None:
     # limit in it, and a truthy scalar would raise out of enumerate().
     for key in ("declared_limits", "temporal_constraints"):
         if key in ob and not isinstance(ob[key], list):
-            report.errors.append(f"{key} must be an array (got {ob[key]!r})")
+            report.errors.append(f"{key} must be an array (got {_safe_repr(ob[key])})")
 
     for key in ("declared_limits", "temporal_constraints"):
         seen: set[str] = set()
@@ -341,7 +351,7 @@ def _check_boundaries(sp: dict[str, Any], report: ValidationReport) -> None:
             if isinstance(identifier, str):
                 if identifier in seen:
                     report.errors.append(
-                        f"{key}[{i}]: duplicate id {identifier!r} within declaration"
+                        f"{key}[{i}]: duplicate id {_safe_repr(identifier)} within declaration"
                     )
                 seen.add(identifier)
 
@@ -359,6 +369,8 @@ def _check_boundaries(sp: dict[str, Any], report: ValidationReport) -> None:
             report.errors.append(f"{where}: 'limit' requires 'service' and 'parameter'")
         else:
             _check_value_constraint(lim, f"{where}.limit", report)
+            if not {"max_value", "min_value", "permitted_values"} & lim.keys():
+                report.errors.append(f"{where}.limit: a value bound is required")
 
     for i, tc in enumerate(_array_at(ob, "temporal_constraints")):
         _check_temporal_constraint(tc, f"temporal_constraints[{i}]", report)
@@ -377,6 +389,11 @@ def _check_value_constraint(spec: dict[str, Any], where: str, report: Validation
         _check_number(spec, key, f"{where}.{key}", report)
     if "permitted_values" in spec and not isinstance(spec["permitted_values"], list):
         report.errors.append(f"{where}.permitted_values: must be an array")
+    low, high = spec.get("min_value"), spec.get("max_value")
+    if isinstance(low, int | float) and isinstance(high, int | float) and low > high:
+        message = f"{where}: min_value must not exceed max_value"
+        report.errors.append(message)
+        report.semantic_errors.append(message)
 
 
 def _check_temporal_condition(cond: Any, where: str, report: ValidationReport) -> None:
@@ -394,15 +411,16 @@ def _check_temporal_condition(cond: Any, where: str, report: ValidationReport) -
     for required in TEMPORAL_REQUIRED_FIELDS[cond_type]:
         if required not in cond:
             report.errors.append(
-                f"{where}.condition: {cond_type!r} requires {required!r} (Spec 6.5)"
+                f"{where}.condition: {_safe_repr(cond_type)} requires "
+                f"{_safe_repr(required)} (Spec 6.5)"
             )
     if cond_type == "time_range":
         for key in ("start_time", "end_time"):
             _check_string(cond, key, f"{where}.condition.{key}", report)
             value = cond.get(key)
-            if isinstance(value, str) and not _HHMM_RE.match(value):
+            if isinstance(value, str) and not _HHMM_RE.fullmatch(value):
                 report.errors.append(
-                    f"{where}.condition.{key}: must be 24-hour HH:MM (got {value!r})"
+                    f"{where}.condition.{key}: must be 24-hour HH:MM (got {_safe_repr(value)})"
                 )
     elif cond_type == "day_of_week":
         days = cond.get("days")
@@ -412,7 +430,7 @@ def _check_temporal_condition(cond: Any, where: str, report: ValidationReport) -
             invalid = [d for d in days if not isinstance(d, str) or d not in VALID_WEEKDAYS]
             if invalid:
                 report.errors.append(
-                    f"{where}.condition.days: invalid weekday(s) {invalid!r} "
+                    f"{where}.condition.days: invalid weekday(s) {_safe_repr(invalid)} "
                     f"(valid: {sorted(VALID_WEEKDAYS)})"
                 )
     elif cond_type == "calendar_entity":
@@ -450,7 +468,9 @@ def _check_temporal_constraint(tc: Any, where: str, report: ValidationReport) ->
     # or it silently constrains nothing (Spec 6.5).
     bounds = [key for key in ("max_value", "min_value", "permitted_values") if key in effect]
     if bounds and "service" not in effect:
-        report.errors.append(f"{where}.effect: {bounds[0]!r} requires 'service' (Spec 6.5)")
+        report.errors.append(
+            f"{where}.effect: {_safe_repr(bounds[0])} requires 'service' (Spec 6.5)"
+        )
     if "service" in effect and "parameter" not in effect:
         report.errors.append(f"{where}.effect: 'service' requires 'parameter' (Spec 6.5)")
     if "control_mode" not in effect and not bounds:
@@ -488,12 +508,11 @@ def _check_access_roles(pc: dict[str, Any], report: ValidationReport) -> None:
     for key, value in roles.items():
         where = f"privacy_classification.access_roles.{key}"
         if key not in VALID_ACCESS_ROLE_KEYS:
-            report.errors.append(
-                f"{where}: unknown key (valid: {sorted(VALID_ACCESS_ROLE_KEYS)}; Spec 7.2)"
-            )
             continue
         if not isinstance(value, list) or not all(isinstance(role, str) for role in value):
-            report.errors.append(f"{where}: must be an array of role names (got {value!r})")
+            report.errors.append(
+                f"{where}: must be an array of role names (got {_safe_repr(value)})"
+            )
 
 
 def validate_document(data: dict[str, Any], entity_id: str = "") -> ValidationReport:
@@ -502,18 +521,42 @@ def validate_document(data: dict[str, Any], entity_id: str = "") -> ValidationRe
     if not isinstance(data, dict):
         report.errors.append("profile document must be an object")
         return report
+    try:
+        check_structure(data)
+    except MesaValidationError as err:
+        report.errors.append(str(err))
+        return report
     if "semantic_profile" in data and not isinstance(data["semantic_profile"], dict):
         # Nothing below can be checked, and coercing this to an empty object
         # would report the document clean and then fail to parse it.
         report.errors.append(
-            f"semantic_profile must be an object (got {data['semantic_profile']!r})"
+            f"semantic_profile must be an object (got {_safe_repr(data['semantic_profile'])})"
         )
-        return report
 
     sp = _semantic_profile_of(data)
     _check_metadata_origin(sp, report)
     _check_boundaries(sp, report)
     _check_person_traits(sp, report)
+    if "cooperative_priority" in sp:
+        priority = sp["cooperative_priority"]
+        if not isinstance(priority, dict) or priority.get("level") not in (
+            "critical",
+            "protected",
+            "assertive",
+            "cooperative",
+            "deferential",
+        ):
+            report.warnings.append(
+                "cooperative_priority.level is required; malformed policy is treated as protected"
+            )
+    for section, keys in (
+        ("environmental_dependencies", ("trigger_entities", "condition_entities")),
+        ("helper_traits", ("affected_automations",)),
+    ):
+        value = _object_at(sp, section, section, report)
+        if value is not None:
+            for key in keys:
+                _check_string_array(value, key, f"{section}.{key}", report)
     routing = _object_at(sp, "semantic_routing", "semantic_routing", report)
     if routing is not None:
         for key in ("intent_tags", "enhances_domains"):
@@ -522,23 +565,39 @@ def validate_document(data: dict[str, Any], entity_id: str = "") -> ValidationRe
     if "semantic_tags" in sp:
         tags = sp["semantic_tags"]
         if not isinstance(tags, list) or not all(isinstance(t, str) for t in tags):
-            report.errors.append(f"semantic_tags must be an array of strings (got {tags!r})")
+            report.errors.append(
+                f"semantic_tags must be an array of strings (got {_safe_repr(tags)})"
+            )
         else:
             report.errors.extend(vocabulary.check_tags(tags))
     for key in ("schema_version", "profile_version", "last_updated"):
         _check_string(sp, key, key, report)
+    _check_timestamp(sp, "last_updated", "last_updated", report)
 
     _check_enum(sp, "inheritance_scope", VALID_INHERITANCE_SCOPES, "inheritance_scope", report)
 
-    # capability_semantics is an integration-profile section (Spec 8.2). Only its
-    # control_mode member participates in resolution (the Spec 4 capability hint),
-    # so only that member is typed; the rest stays unmodelled (Spec 23).
-    _object_at(sp, "capability_semantics", "capability_semantics", report)
-    cs = sp.get("capability_semantics")
-    if isinstance(cs, dict):
-        _check_enum(
-            cs, "control_mode", VALID_CONTROL_MODES, "capability_semantics.control_mode", report
-        )
+    category = _object_at(sp, "category_traits", "category_traits", report)
+    if category is not None:
+        if "functional_domain" not in category:
+            report.errors.append("category_traits.functional_domain is required (Spec 8.1)")
+        _check_string(category, "functional_domain", "category_traits.functional_domain", report)
+        for key in ("specialization", "performance_characteristics"):
+            _check_string_array(category, key, f"category_traits.{key}", report)
+    cs = _object_at(sp, "capability_semantics", "capability_semantics", report)
+    if cs is not None:
+        for key, values in (
+            ("control_mode", VALID_CONTROL_MODES),
+            ("triggers_automations", {"likely", "none", "unknown"}),
+            ("state_persistence", VALID_STATE_PERSISTENCE),
+            (
+                "network_dependency",
+                {"local_only", "local_preferred", "cloud_required", "cloud_optional"},
+            ),
+        ):
+            _check_enum(cs, key, values, f"capability_semantics.{key}", report)
+        for key in ("reversible", "idempotent"):
+            _check_bool(cs, key, f"capability_semantics.{key}", report)
+        _check_number(cs, "expected_latency_ms", "capability_semantics.expected_latency_ms", report)
 
     # profile_valid_for is a semantic_profile field; diagnostic_profile is a root
     # sibling. Both are opaque to this version (Spec 23) but must be objects: a
@@ -553,6 +612,7 @@ def validate_document(data: dict[str, Any], entity_id: str = "") -> ValidationRe
         _check_string(pvf, "integration_version", "profile_valid_for.integration_version", report)
         _check_string(pvf, "ha_version", "profile_valid_for.ha_version", report)
         _check_number(pvf, "review_after_days", "profile_valid_for.review_after_days", report)
+        _check_nonnegative(pvf, "review_after_days", "profile_valid_for", report)
         _check_string_array(
             pvf, "invalidated_by_entities", "profile_valid_for.invalidated_by_entities", report
         )
@@ -560,7 +620,7 @@ def validate_document(data: dict[str, Any], entity_id: str = "") -> ValidationRe
     pc = _privacy_of(data)
     if pc is not None or "privacy_classification" in data:
         if not isinstance(pc, dict):
-            report.errors.append(f"privacy_classification must be an object (got {pc!r})")
+            report.errors.append(f"privacy_classification must be an object (got {_safe_repr(pc)})")
         else:
             if "level" not in pc:
                 report.errors.append("privacy_classification requires 'level' (Spec 7.1)")
@@ -582,6 +642,36 @@ def validate_document(data: dict[str, Any], entity_id: str = "") -> ValidationRe
             _check_access_roles(pc, report)
 
     return report
+
+
+def _check_timestamp(
+    container: dict[str, Any], key: str, where: str, report: ValidationReport
+) -> None:
+    _check_string(container, key, where, report)
+    value = container.get(key)
+    if isinstance(value, str):
+        pattern = (
+            r"^\d{4}-(?:0[1-9]|1[0-2])-(?:0[1-9]|[12][0-9]|3[01])"
+            r"(?:[T ](?:[01][0-9]|2[0-3]):[0-5][0-9](?::[0-5][0-9](?:\.\d+)?)?"
+            r"(?:Z|[+-](?:[01][0-9]|2[0-3]):[0-5][0-9])?)?$(?![\s\S])"
+        )
+        if not re.fullmatch(pattern, value):
+            report.errors.append(f"{where}: must be an ISO 8601 timestamp")
+            return
+        try:
+            datetime.fromisoformat(value)
+        except ValueError:
+            message = f"{where}: timestamp has an invalid calendar date"
+            report.errors.append(message)
+            report.semantic_errors.append(message)
+
+
+def _check_nonnegative(
+    container: dict[str, Any], key: str, where: str, report: ValidationReport
+) -> None:
+    value = container.get(key)
+    if isinstance(value, int | float) and value < 0:
+        report.errors.append(f"{where}.{key}: must be nonnegative")
 
 
 def validate_or_raise(data: dict[str, Any], entity_id: str = "") -> ValidationReport:

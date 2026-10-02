@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import math
 from typing import Annotated, Any, Literal
 
 from custom_components.phoenix_mcp.mesa_core.exceptions import MesaError
@@ -25,6 +26,7 @@ logger = logging.getLogger("mesa_core.mcp")
 # Subscripted at runtime from the declared schema, which the static forms cannot express.
 _LITERAL: Any = Literal
 _LIST: Any = list
+_UNSET = object()
 
 # JSON Schema keyword -> the pydantic Field constraint that republishes it.
 _CONSTRAINTS = {
@@ -81,7 +83,11 @@ def _annotation(spec: dict[str, Any]) -> Any:
         # Field on the union would emit gt/ge/le, which standard validators
         # ignore, showing clients a looser contract than the transport enforces.
         branch = Field(**numeric) if numeric else None
-        int_t = Annotated[StrictInt, branch] if branch else StrictInt
+        integer_bounds = {
+            key: (math.ceil(value) if key in ("ge", "lt") else math.floor(value))
+            for key, value in numeric.items()
+        }
+        int_t = Annotated[StrictInt, Field(**integer_bounds)] if numeric else StrictInt
         float_t = Annotated[StrictFloat, branch] if branch else StrictFloat
         union = int_t | float_t
         if "description" in spec:
@@ -89,20 +95,35 @@ def _annotation(spec: dict[str, Any]) -> Any:
         return union
 
     annotation = _base_annotation(spec)
-    if not field_kwargs:
-        return annotation
-    return Annotated[annotation, Field(**field_kwargs)]
+    if field_kwargs:
+        annotation = Annotated[annotation, Field(**field_kwargs)]
+    if spec.get("type") == "integer":
+        from pydantic import BeforeValidator
+
+        def integer(value: Any) -> Any:
+            if isinstance(value, float) and value.is_integer():
+                return int(value)
+            return value
+
+        annotation = Annotated[annotation, BeforeValidator(integer)]
+    return annotation
 
 
 def tool_function(name: str, handler: ToolHandler, schema: dict[str, Any]) -> Any:
     """Wrap a handler in a callable whose signature is ``schema``."""
+    from pydantic import Field
+
     properties: dict[str, Any] = schema.get("properties", {})
     required = set(schema.get("required", []))
     parameters: list[inspect.Parameter] = []
     annotations: dict[str, Any] = {}
     for key, spec in properties.items():
         annotation = _annotation(spec)
-        default = inspect.Parameter.empty if key in required else spec.get("default", None)
+        default = (
+            inspect.Parameter.empty
+            if key in required
+            else spec.get("default", Field(default_factory=lambda: _UNSET))
+        )
         annotations[key] = annotation
         parameters.append(
             inspect.Parameter(
@@ -115,7 +136,7 @@ def tool_function(name: str, handler: ToolHandler, schema: dict[str, Any]) -> An
         # so a None here means "not provided": strip it so the handler applies
         # its own default. An explicit caller-supplied null never arrives, the
         # non-nullable strict annotation rejects it at the transport first.
-        return await handler({key: value for key, value in kwargs.items() if value is not None})
+        return await handler({key: value for key, value in kwargs.items() if value is not _UNSET})
 
     annotations["return"] = dict[str, Any]
     tool_fn.__signature__ = inspect.Signature(  # type: ignore[attr-defined]
@@ -152,9 +173,7 @@ class FastMCPRegistry:
             except TypeError:
                 add_tool(tool_fn)
         else:
-            raise MesaError(
-                "server does not look like a FastMCP instance (no .tool or .add_tool)"
-            )
+            raise MesaError("server does not look like a FastMCP instance (no .tool or .add_tool)")
         self._forbid_extra_properties(name)
         self.registered.append(name)
 
@@ -190,6 +209,9 @@ class FastMCPRegistry:
                 close = getattr(tool, "close", None)
                 if close is not None:
                     close()
+                stored = getattr(manager, "_tools", {}).get(name)
+                if stored is not None and hasattr(stored, "parameters"):
+                    stored.parameters["additionalProperties"] = False
                 return
             arg_model = getattr(getattr(tool, "fn_metadata", None), "arg_model", None)
             if arg_model is None:

@@ -21,15 +21,11 @@ TWO DELIBERATE LIMITS, both about keeping the Audit tab worth reading:
    so it is never a Phoenix denial. Recording it makes the tab list actions MESA
    did not stop, one row per confirm entity, for no block at all.
 
-2. THE LOGGER'S LEVEL IS NOT TOUCHED. Forcing ``mesa_core.audit`` to INFO would
-   override an operator's explicit logging config AND put a line in
-   home-assistant.log for every event, which is the exact noise this bridge
-   exists to avoid. HA's normal root level is WARNING unless configured otherwise.
-   The consequence, worth knowing before trusting an empty log: where the
-   effective logger level sits above INFO,
-   mesa-core emits nothing, so the tab shows no MESA rows at all, which is
-   indistinguishable from "MESA blocked nothing". See docs/mesa.html for the
-   one-line entry that restores it.
+2. THE BRIDGE DOES NOT CHANGE THE LOGGER'S LEVEL. The bundled library defaults
+   ``mesa_core.audit`` to INFO. An operator raising its level can suppress
+   companion rows, so an empty MESA audit trail does not prove no denial occurred.
+   Phoenix's extra read-only veto uses the same public audit event API; core
+   denials are not emitted again. See docs/mesa.html for logging configuration.
 
 Rows are attributed to the request that provoked them through a ContextVar set
 by the actuation gate, MESA-tool adapter and camera privacy check. The preview tools
@@ -47,6 +43,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Iterator
 
 from .mesa_core.audit import audit_logger
+from .mesa_core import CallerContext, EnforcementResult, MesaAuditEvent, emit_audit_event
 
 if TYPE_CHECKING:
     from .data import PhoenixData
@@ -117,6 +114,25 @@ def request_context(
 def _resource(event: dict[str, Any]) -> str:
     """What the decision was about: the entity, else the action."""
     return str(event.get("entity_id") or event.get("action") or "-")
+
+
+def record_read_only_denial(
+    entity_id: str, service: str, caller: CallerContext, result: EnforcementResult
+) -> None:
+    """Record Phoenix's stronger read-only boundary only for actual requests."""
+    if _context.get() is None:
+        return
+    emit_audit_event(MesaAuditEvent(
+        event_type="enforcement_decision",
+        action=service,
+        decision="blocked",
+        entity_id=entity_id,
+        caller_id=caller.caller_id,
+        roles=caller.effective_roles(),
+        profile_version=result.effective_profile.metadata.profile_version,
+        rule_applied="control_mode:read_only",
+        details={"enforcement_source": "phoenix_read_only_boundary"},
+    ))
 
 
 class MesaAuditBridge(logging.Handler):

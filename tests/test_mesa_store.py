@@ -15,7 +15,7 @@ from custom_components.phoenix_mcp.mesa import (
     async_setup_mesa,
     refresh_orphans,
 )
-from custom_components.phoenix_mcp.mesa_core import ControlMode, SemanticProfile
+from custom_components.phoenix_mcp.mesa_core import ControlMode, MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.token_store import GlobalSettings
 
 
@@ -24,6 +24,7 @@ def _profile(entity_id: str, control_mode: str = "autonomous", **boundaries) -> 
     return SemanticProfile.from_dict(
         entity_id,
         {"semantic_profile": {"semantic_tags": [], "operational_boundaries": ob}},
+        default_origin=MetadataOrigin.USER,
     )
 
 

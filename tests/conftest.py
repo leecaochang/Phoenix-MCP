@@ -12,6 +12,15 @@ importlib.import_module("custom_components.phoenix_mcp")
 pytest_plugins = "pytest_homeassistant_custom_component"
 
 
+@pytest.fixture(autouse=True)
+async def cleanup_mesa_policy_workers(hass):
+    """Drain public core async APIs used outside integration setup by unit tests."""
+    from custom_components.phoenix_mcp.mesa_core import ashutdown_policy_workers
+
+    yield
+    await ashutdown_policy_workers()
+
+
 @pytest.fixture
 def custom_sentence_recognition(monkeypatch):
     """Mark a real HA match with the metadata used for custom sentence precedence."""

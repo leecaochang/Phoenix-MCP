@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import reprlib
 
 CANONICAL_TAGS: frozenset[str] = frozenset(
     {
@@ -140,7 +141,7 @@ CANONICAL_TAGS: frozenset[str] = frozenset(
 CANONICAL_ROOTS: frozenset[str] = frozenset(tag.split(".", 1)[0] for tag in CANONICAL_TAGS)
 
 # Spec Section 22: all lowercase, dot notation, no hyphens in the namespace root.
-_TAG_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z0-9_]+)+$")
+_TAG_PATTERN = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z0-9_-]+)+$")
 
 
 def check_tag(tag: str) -> str | None:
@@ -151,15 +152,15 @@ def check_tag(tag: str) -> str | None:
     """
     if tag in CANONICAL_TAGS:
         return None
-    if not _TAG_PATTERN.match(tag):
+    if not _TAG_PATTERN.fullmatch(tag):
         return (
-            f"invalid tag format: {tag!r} (tags are lowercase dot notation, "
+            f"invalid tag format: {reprlib.repr(tag)} (tags are lowercase dot notation, "
             "no hyphens in the namespace root)"
         )
     root = tag.split(".", 1)[0]
     if root in CANONICAL_ROOTS:
         return (
-            f"unknown tag {tag!r} uses canonical namespace root {root!r}; "
+            f"unknown tag {reprlib.repr(tag)} uses canonical namespace root {reprlib.repr(root)}; "
             "vendor tags MUST NOT reuse canonical roots (Spec Section 22)"
         )
     return None  # well-formed vendor namespace tag; treated as opaque

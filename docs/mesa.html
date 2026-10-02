@@ -59,7 +59,7 @@
             <tbody>
               <tr><td><span class="badge badge-success">autonomous</span></td><td>The agent may control the entity directly, subject to the token and capabilities.</td></tr>
               <tr><td><span class="badge badge-cap">confirm</span></td><td>The action is held for a human. Under enforced mode it becomes a pending approval; under advisory mode it runs but the agent is told why it was risky.</td></tr>
-              <tr><td><span class="badge badge-neutral">read_only</span></td><td>Control is refused by the entity's nature. This holds even in advisory mode; read_only is a property of the entity, not a policy preference.</td></tr>
+              <tr><td><span class="badge badge-neutral">read_only</span></td><td>Phoenix refuses control when the evaluated restriction is read_only, including inherited and active time-based restrictions. This holds even in advisory mode and after approval.</td></tr>
               <tr><td><span class="badge badge-error">prohibited</span></td><td>Control is refused outright.</td></tr>
             </tbody>
           </table>
@@ -67,7 +67,7 @@
 
         <h2 id="deployment-mode">Deployment mode</h2>
         <p>A single deployment setting, <code>mesa_mode</code>, decides how strict MESA is overall. It is set in the panel's <strong>Settings</strong> tab and reported by <code>get_overview</code> (which, when MESA is active, also lists the operator-set prohibited and read-only entities so an agent learns what is off-limits up front).</p>
-        <p>MESA companion audit entries depend on the <code>mesa_core.audit</code> logger accepting INFO events. Home Assistant normally suppresses them at its default WARNING level. To retain actual denial details in Phoenix's audit log, add <code>mesa_core.audit: info</code> under <code>logger.logs</code> in your HA configuration. This also writes MESA event lines to the HA log. Phoenix does not override your logger settings; no companion rows alone does not establish that no MESA decision occurred.</p>
+        <p>MESA companion audit entries depend on the <code>mesa_core.audit</code> logger accepting INFO events. The bundled library defaults this logger to INFO; raising it to WARNING suppresses companion rows. To retain actual denial details in Phoenix's audit log, set <code>mesa_core.audit: info</code> under <code>logger.logs</code> in your HA configuration. This also writes MESA event lines to the HA log. Phoenix's audit bridge does not change the logger level; no companion rows alone does not establish that no MESA decision occurred.</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th scope="col">mesa_mode</th><th scope="col">Effect</th></tr></thead>

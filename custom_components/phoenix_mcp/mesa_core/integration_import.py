@@ -12,10 +12,10 @@ separate machine from HA cannot use this import path.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from custom_components.phoenix_mcp.mesa_core.exceptions import MesaValidationError
+from custom_components.phoenix_mcp.mesa_core.json_io import loads
 from custom_components.phoenix_mcp.mesa_core.profile import MetadataOrigin, SemanticProfile
 
 SIDECAR_FILENAME = "mesa_profile.json"
@@ -45,16 +45,14 @@ def import_from_integration(integration_path: str | Path) -> SemanticProfile | N
     if not sidecar.exists():
         return None
     try:
-        data = json.loads(sidecar.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, UnicodeError) as err:
+        data = loads(sidecar.read_text(encoding="utf-8"))
+    except (MesaValidationError, UnicodeError) as err:
         # A truncated or typo'd sidecar is malformed content like any other, and
         # hosts run this across every installed integration catching the
         # documented error.
         raise MesaValidationError(
             f"{sidecar}: sidecar is not valid JSON (UTF-8 required): {err}"
         ) from err
-    profile = SemanticProfile.from_dict(
-        path.name, data, default_origin=MetadataOrigin.DEVELOPER
-    )
+    profile = SemanticProfile.from_dict(path.name, data, default_origin=MetadataOrigin.DEVELOPER)
     profile.inheritance_scope = "integration"
     return profile

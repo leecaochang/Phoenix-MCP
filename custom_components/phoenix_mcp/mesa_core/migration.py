@@ -62,9 +62,7 @@ def migrate_profile(
     if source == target:
         if "schema_version" not in sp:
             sp["schema_version"] = target_version
-            logger.info(
-                "migration: stamped missing schema_version as %s", target_version
-            )
+            logger.info("migration: stamped missing schema_version as %s", target_version)
         return migrated
 
     while source != target:

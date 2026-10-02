@@ -735,7 +735,6 @@ async def test_integration_capability_hint_tightens_an_entity_with_no_profile(en
     runtime.store.set_integration_profile("demo", _integration_hint_profile("read_only"))
 
     with patch.object(runtime.store, "get_entity_integration", lambda _eid: "demo"):
-        runtime.resolver.get_entity_integration = lambda _eid: "demo"
         effective = runtime.resolver.resolve("light.a")
 
     assert effective.operational_boundaries.control_mode is ControlMode.READ_ONLY
@@ -769,7 +768,7 @@ async def test_a_restrictive_hint_defeats_an_operator_loosening_override(env):
         ),
     )
 
-    runtime.resolver.get_entity_integration = lambda _eid: "demo"
+    runtime.store.get_entity_integration = lambda _eid: "demo"
     explanation = runtime.resolver.explain("light.a")
 
     assert explanation.effective_profile.operational_boundaries.control_mode is ControlMode.READ_ONLY

@@ -7,18 +7,20 @@ while edits to the typed fields are never silently dropped.
 
 ``declared_paths`` records which fields the source document actually declared,
 which is what Rule E reads (absence is inherited, never defaulted). A field is
-serialised only when it was declared or has been set away from its default, so
-a parse/serialise round-trip neither invents declarations nor loses them.
+serialised when declared, explicitly assigned (including its default), or set
+away from its default. Serialization canonicalises containers and stamps schema
+version/origin metadata; it is not byte-for-byte identity.
 """
 
 from __future__ import annotations
 
 import copy
-from collections.abc import Collection, Iterator
-from dataclasses import dataclass, field
+from collections.abc import Collection, Iterator, Mapping
+from dataclasses import MISSING, dataclass, field, fields
 from datetime import datetime
 from enum import StrEnum
-from typing import Any
+from types import MappingProxyType
+from typing import Any, Self
 
 from custom_components.phoenix_mcp.mesa_core import validation
 from custom_components.phoenix_mcp.mesa_core.exceptions import MesaValidationError
@@ -55,19 +57,23 @@ class MetadataOrigin(StrEnum):
 
 # Rule A restrictiveness ranking. read_only ties with prohibited but wins the tie
 # because it describes entity nature rather than operator policy (Spec Section 4).
-CONTROL_MODE_RANK: dict[ControlMode, int] = {
-    ControlMode.AUTONOMOUS: 0,
-    ControlMode.CONFIRM: 1,
-    ControlMode.PROHIBITED: 2,
-    ControlMode.READ_ONLY: 2,
-}
+CONTROL_MODE_RANK: Mapping[ControlMode, int] = MappingProxyType(
+    {
+        ControlMode.AUTONOMOUS: 0,
+        ControlMode.CONFIRM: 1,
+        ControlMode.PROHIBITED: 2,
+        ControlMode.READ_ONLY: 2,
+    }
+)
 
-PRIVACY_RANK: dict[PrivacyLevel, int] = {
-    PrivacyLevel.PUBLIC: 0,
-    PrivacyLevel.NORMAL: 1,
-    PrivacyLevel.SENSITIVE: 2,
-    PrivacyLevel.RESTRICTED: 3,
-}
+PRIVACY_RANK: Mapping[PrivacyLevel, int] = MappingProxyType(
+    {
+        PrivacyLevel.PUBLIC: 0,
+        PrivacyLevel.NORMAL: 1,
+        PrivacyLevel.SENSITIVE: 2,
+        PrivacyLevel.RESTRICTED: 3,
+    }
+)
 
 # Rule D authority within equal scope (Spec 5.7).
 ORIGIN_AUTHORITY: dict[MetadataOrigin, int] = {
@@ -115,21 +121,23 @@ HA_AUTOMATION_SELECTOR_KEYS: tuple[str, ...] = tuple(
     key for key in HA_TARGET_SELECTOR_KEYS if key != "config_entry_id"
 )
 
-# Built-in domain safety baseline (Spec 5.8). Applies only when an entity has no
-# profile at any inheritance level and no deployment_defaults are configured.
-DOMAIN_SAFETY_BASELINE: dict[str, ControlMode] = {
-    "light": ControlMode.AUTONOMOUS,
-    "media_player": ControlMode.CONFIRM,
-    "input_select": ControlMode.CONFIRM,
-    "switch": ControlMode.CONFIRM,
-    "cover": ControlMode.CONFIRM,
-    "climate": ControlMode.CONFIRM,
-    "lock": ControlMode.PROHIBITED,
-    "alarm_control_panel": ControlMode.PROHIBITED,
-    "input_boolean": ControlMode.CONFIRM,
-    "script": ControlMode.CONFIRM,
-    "scene": ControlMode.CONFIRM,
-}
+# Built-in domain safety baseline (Spec 5.8). Applies without an explicit
+# trusted control declaration; unrelated metadata cannot weaken the safety floor.
+DOMAIN_SAFETY_BASELINE: Mapping[str, ControlMode] = MappingProxyType(
+    {
+        "light": ControlMode.AUTONOMOUS,
+        "media_player": ControlMode.CONFIRM,
+        "input_select": ControlMode.CONFIRM,
+        "switch": ControlMode.CONFIRM,
+        "cover": ControlMode.CONFIRM,
+        "climate": ControlMode.CONFIRM,
+        "lock": ControlMode.PROHIBITED,
+        "alarm_control_panel": ControlMode.PROHIBITED,
+        "input_boolean": ControlMode.CONFIRM,
+        "script": ControlMode.CONFIRM,
+        "scene": ControlMode.CONFIRM,
+    }
+)
 
 
 def baseline_control_mode(domain: str) -> ControlMode:
@@ -142,8 +150,33 @@ def baseline_triggers_automations(domain: str) -> TriggersAutomations:
     return TriggersAutomations.UNKNOWN
 
 
+class _DeclaredFields:
+    """Track explicit constructor arguments and assignments, including defaults.
+
+    Parsing clears this record and uses source paths instead; generated
+    dataclass defaults are never mistaken for authored declarations.
+    """
+
+    def __new__(cls, *args: Any, **kwargs: Any) -> Self:
+        instance = super().__new__(cls)
+        names = [item.name for item in fields(cls)]  # type: ignore[arg-type]
+        object.__setattr__(instance, "_assigned", set(names[: len(args)]) | set(kwargs))
+        object.__setattr__(instance, "_initializing", True)
+        return instance
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "_initializing", False)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if not name.startswith("_") and not getattr(self, "_initializing", True):
+            self._assigned.add(name)
+        object.__setattr__(self, name, value)
+
+    _assigned: set[str]
+
+
 @dataclass
-class PrivacyClassification:
+class PrivacyClassification(_DeclaredFields):
     level: PrivacyLevel = PrivacyLevel.NORMAL
     contains_presence_data: bool = False
     contains_audio_capture: bool = False
@@ -158,7 +191,7 @@ class PrivacyClassification:
 
 
 @dataclass
-class OperationalBoundaries:
+class OperationalBoundaries(_DeclaredFields):
     control_mode: ControlMode = ControlMode.CONFIRM
     triggers_automations: TriggersAutomations = TriggersAutomations.UNKNOWN
     # Absence is not a permissive default (Spec 5.7 Rule E): None means "not declared".
@@ -181,7 +214,7 @@ class OperationalBoundaries:
 
 
 @dataclass
-class PersonTraits:
+class PersonTraits(_DeclaredFields):
     """People semantics for person entities (Enrichment Section 17).
 
     None (or an empty list) means "not declared" (Rule E); ``is_minor: true``
@@ -211,7 +244,7 @@ class FreshnessReport:
 
 
 @dataclass
-class ProfileMetadata:
+class ProfileMetadata(_DeclaredFields):
     # Programmatically built profiles are authored by this library, so they
     # carry the current format version; from_dict keeps "1.0" for unversioned
     # stored documents (Spec 23: never silently migrated).
@@ -365,7 +398,7 @@ def iter_unmodelled(raw: dict[str, Any]) -> Iterator[tuple[tuple[str, ...], str,
 
 
 @dataclass
-class SemanticProfile:
+class SemanticProfile(_DeclaredFields):
     entity_id: str
     semantic_tags: list[str] = field(default_factory=list)
     metadata: ProfileMetadata = field(default_factory=ProfileMetadata)
@@ -399,7 +432,37 @@ class SemanticProfile:
 
     def declared(self, path: str) -> bool:
         """Whether a dotted field path was explicitly declared (Rule E)."""
-        return path in self.declared_paths
+        obj, name = self._field_target(path)
+        return path in self.declared_paths or name in obj._assigned
+
+    def _field_target(self, path: str) -> tuple[_DeclaredFields, str]:
+        prefix, _, name = path.partition(".")
+        containers: dict[str, _DeclaredFields] = {
+            "operational_boundaries": self.operational_boundaries,
+            "privacy_classification": self.privacy_classification,
+            "person_traits": self.person_traits,
+            "metadata_origin": self.metadata,
+        }
+        if prefix in containers and name:
+            return containers[prefix], name
+        return self, path
+
+    def undeclare(self, path: str) -> None:
+        """Remove a typed declaration so this field inherits again."""
+        obj, name = self._field_target(path)
+        for item in fields(obj):  # type: ignore[arg-type]
+            if item.name == name:
+                if item.default_factory is not MISSING:
+                    value = item.default_factory()
+                elif item.default is not MISSING:
+                    value = copy.deepcopy(item.default)
+                else:
+                    raise ValueError(f"cannot undeclare required field {path}")
+                object.__setattr__(obj, name, value)
+                obj._assigned.discard(name)
+                self.declared_paths.discard(path)
+                return
+        raise ValueError(f"unknown typed field {path}")
 
     @staticmethod
     def _declared_paths_of(root: dict[str, Any]) -> set[str]:
@@ -512,6 +575,8 @@ class SemanticProfile:
         # raises OverflowError for a validated but astronomically large window;
         # int/float comparison is exact and cannot overflow.
         age_seconds = (now - generated).total_seconds()
+        if age_seconds < 0:
+            return "unknown"
         return "stale" if age_seconds > self.metadata.staleness_window_days * 86400 else "current"
 
     def validity_warnings(
@@ -594,6 +659,14 @@ class SemanticProfile:
                     anchor = anchor.replace(tzinfo=None)
                 elif current.tzinfo is not None and anchor.tzinfo is None:
                     current = current.replace(tzinfo=None)
+                if anchor > current:
+                    warnings.append(
+                        (
+                            False,
+                            prefix + "review_after_days cannot be evaluated: "
+                            "anchor timestamp is in the future",
+                        )
+                    )
                 # Seconds, not timedelta(days=...): exact and cannot overflow.
                 if (current - anchor).total_seconds() > days * 86400:
                     warnings.append(
@@ -657,6 +730,8 @@ class SemanticProfile:
             root = copy.deepcopy(data)
         else:
             root = {"semantic_profile": copy.deepcopy(data)}
+            if "diagnostic_profile" in root["semantic_profile"]:
+                root["diagnostic_profile"] = root["semantic_profile"].pop("diagnostic_profile")
         sp = root.get("semantic_profile") or {}
 
         # Canonicalise privacy_classification to the sibling location (Spec 7).
@@ -732,7 +807,7 @@ class SemanticProfile:
             presence_entity=pt_raw.get("presence_entity"),
         )
 
-        return cls(
+        profile = cls(
             entity_id=entity_id,
             semantic_tags=list(sp.get("semantic_tags") or []),
             metadata=metadata,
@@ -745,6 +820,9 @@ class SemanticProfile:
             declared_paths=cls._declared_paths_of(root),
             parse_warnings=list(report.warnings),
         )
+        for model in (profile, metadata, boundaries, privacy, person):
+            model._assigned.clear()
+        return profile
 
     # -- serialisation ------------------------------------------------------
 
@@ -755,7 +833,7 @@ class SemanticProfile:
         set away from their default, so serialising never invents a declaration
         Rule E would then honour, and never drops an edit.
         """
-        return path in self.declared_paths or value != default
+        return self.declared(path) or value != default
 
     def to_dict(self) -> dict[str, Any]:
         """Serialise to the root document form.
