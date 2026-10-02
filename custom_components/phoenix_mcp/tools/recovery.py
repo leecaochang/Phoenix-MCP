@@ -803,7 +803,7 @@ async def _execute_restore_blueprint_configuration(args, record, side, snapshot,
     try:
         if content_hash(snapshot) != args.get("snapshot_digest"):
             return _tool_error("The selected blueprint snapshot changed after approval."), "invalid_request", tool
-        expected_source = _canonical_blueprint_source(domain, snapshot["content"]) if snapshot["exists"] else None
+        expected_source = await hass.async_add_executor_job(_canonical_blueprint_source, domain, snapshot["content"]) if snapshot["exists"] else None
         async with recovery.resource(resource):
             before_text = await _read_blueprint_source(hass, target_path)
             before = _blueprint_recovery_snapshot(domain, path, before_text)

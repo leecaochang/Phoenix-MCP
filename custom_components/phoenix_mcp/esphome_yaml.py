@@ -182,7 +182,7 @@ def _compose(text: str) -> Any:
     """
     try:
         return yaml.compose(text, Loader=PhoenixLenientLoader)
-    except yaml.YAMLError as err:
+    except (yaml.YAMLError, RecursionError) as err:
         raise YamlParseError(str(err)) from err
 
 

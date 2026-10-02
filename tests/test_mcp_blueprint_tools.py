@@ -42,6 +42,17 @@ mode: single
 """
 
 
+@pytest.mark.parametrize("tool", ["create_blueprint", "edit_blueprint"])
+@pytest.mark.parametrize("suffix", ["variables: &v [*v]\n", "variables:\n  v: &v [1]\n  copy: *v\n", "variables: " + "[" * 2000 + "]" * 2000])
+async def test_unsafe_yaml_never_reaches_blueprint_approval(hass, bp_env, tool, suffix):
+    args = {"domain": "automation", "path": "author/unsafe.yaml", "content": VALID + suffix}
+    with patch.object(blueprint_tools, "_gate", new_callable=AsyncMock) as gate:
+        result, outcome, _ = await _call(tool, args, _token(cap_blueprint_write="confirm"), hass)
+    assert outcome == "invalid_request"
+    assert "YAML" in _text(result)
+    gate.assert_not_awaited()
+
+
 @pytest.mark.parametrize("tool", ["create_blueprint", "edit_blueprint", "delete_blueprint"])
 async def test_secret_source_never_creates_approval(hass, bp_env, tool):
     secret_source = VALID + "variables:\n  password: blueprint-secret\n"

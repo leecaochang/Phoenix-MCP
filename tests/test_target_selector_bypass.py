@@ -173,6 +173,18 @@ def test_nested_target_selector_is_discovered_for_custom_integrations():
     assert "destination" in secondary_target_fields(descriptions)
 
 
+async def test_config_entry_selector_refused_with_missing_service_metadata(hass):
+    with patch("custom_components.phoenix_mcp.service_targets.async_get_all_descriptions", AsyncMock(return_value={})):
+        assert await unsupported_secondary_targets(
+            hass, {"entry_id": "unrelated-entry"}, domain="homeassistant", service="reload_config_entry",
+        ) == ("entry_id",)
+
+
+def test_custom_config_entry_selector_is_discovered():
+    descriptions = {"example": {"reload": {"fields": {"integration": {"selector": {"config_entry": {}}}}}}}
+    assert "integration" in secondary_target_fields(descriptions)
+
+
 # --- the helper --------------------------------------------------------------
 
 

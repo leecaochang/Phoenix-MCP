@@ -10,7 +10,7 @@ from homeassistant.helpers.service import async_get_all_descriptions
 
 from .const import SECONDARY_TARGET_SELECTOR_KEYS, TARGET_SELECTOR_KEYS
 
-_TARGET_SELECTOR_TYPES = frozenset({"area", "device", "entity", "target"})
+_TARGET_SELECTOR_TYPES = frozenset({"area", "device", "entity", "target", "config_entry"})
 
 
 def _contains_target_selector(value: object) -> bool:

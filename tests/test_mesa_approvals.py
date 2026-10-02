@@ -96,6 +96,50 @@ async def test_off_mode_allows_all(hass: HomeAssistant):
     assert outcome.entities == ["light.a"]
 
 
+@pytest.mark.parametrize("mode,profile", [("advisory", "read_only"), ("enforced", "prohibited")])
+@pytest.mark.parametrize("approved", [False, True])
+async def test_registry_id_cannot_bypass_entity_profile(hass, mode, profile, approved):
+    from homeassistant.helpers import entity_registry as er
+    from pytest_homeassistant_custom_component.common import async_mock_service
+    from custom_components.phoenix_mcp.mcp_view import _execute_call_service, async_execute_approved_tool
+
+    data = await _make_data(hass, mode)
+    entry = er.async_get(hass).async_get_or_create("light", "test", "uuid-target", suggested_object_id="target")
+    hass.states.async_set(entry.entity_id, "off")
+    _set_profile(data, entry.entity_id, profile)
+    calls = async_mock_service(hass, "light", "turn_on")
+    token = _token()
+    token.pass_through = True
+    args = {"domain": "light", "service": "turn_on", "entity_id": entry.id}
+    if approved:
+        _, outcome, _ = await async_execute_approved_tool("call_service", args, token, hass, data)
+    else:
+        _, outcome, _ = await _execute_call_service(args, token, hass, data)
+    assert outcome == "denied"
+    assert not calls
+    assert not data.store._pending
+
+
+async def test_registry_id_dispatches_one_canonical_authorized_target(hass):
+    from homeassistant.helpers import entity_registry as er
+    from pytest_homeassistant_custom_component.common import async_mock_service
+    from custom_components.phoenix_mcp.mcp_view import _execute_call_service
+
+    data = await _make_data(hass, "enforced")
+    entry = er.async_get(hass).async_get_or_create("light", "test", "uuid-allowed", suggested_object_id="allowed")
+    hass.states.async_set(entry.entity_id, "off")
+    _set_profile(data, entry.entity_id, "autonomous")
+    calls = async_mock_service(hass, "light", "turn_on")
+    token = _token()
+    token.pass_through = True
+    _, outcome, _ = await _execute_call_service(
+        {"domain": "light", "service": "turn_on", "entity_id": [entry.id, entry.entity_id]}, token, hass, data,
+    )
+    assert outcome == "allowed"
+    assert len(calls) == 1
+    assert calls[0].data["entity_id"] == [entry.entity_id]
+
+
 @pytest.mark.asyncio
 async def test_all_blocked_denies(hass: HomeAssistant):
     data = await _make_data(hass, "enforced")

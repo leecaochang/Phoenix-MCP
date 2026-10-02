@@ -274,7 +274,10 @@ async def dispatch_agent_tool(
 ) -> tuple:
     """One dispatch, with no retry after the durable boundary."""
     recovery = data.agent_recovery
-    write = name != "home_request" and not tool_is_read_only(name)
+    # Unknown names are refused before a handler can run. Do not turn a model
+    # typo into a durable claim that an action might have reached HA.
+    write = (name != "home_request" and _journal_tool_name(name) != "unknown_tool"
+             and not tool_is_read_only(name))
     try:
         if write:
             await recovery.reconcile(data.store, token.id)

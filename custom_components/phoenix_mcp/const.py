@@ -1067,11 +1067,15 @@ SECONDARY_TARGET_SELECTOR_KEYS = frozenset({
     "account",
     "bridge",
     "cleaning_area_id",
+    "config_entry",
+    "config_entry_id",
     "container_device_id",
     "device_ids",
     "doorbells",
     "entities",
     "entity",
+    "entry",
+    "entry_id",
     "group_members",
     "master",
     "media_player",
@@ -1328,6 +1332,8 @@ SEARCH_FUZZY_MATCH_CUTOFF = 0.6
 FILESYSTEM_ALLOWED_DIRS = ("www", "themes", "custom_templates")
 # Maximum file size (bytes) the filesystem read/write tools will handle inline.
 MAX_FILE_BYTES = 1_048_576
+YAML_MAX_DEPTH = 64
+YAML_MAX_EXPANDED_NODES = 100_000
 
 # configuration.yaml subtrees set_yaml_config may never add, remove, or modify,
 # as {top-level key: protected child keys}. Not operator-configurable, and not a

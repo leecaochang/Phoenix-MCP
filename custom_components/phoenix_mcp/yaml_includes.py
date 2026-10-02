@@ -48,6 +48,7 @@ import yaml
 from homeassistant.util.file import write_utf8_file_atomic
 
 from .helpers import content_hash
+from .const import MAX_FILE_BYTES, YAML_MAX_DEPTH, YAML_MAX_EXPANDED_NODES
 
 CONFIGURATION_YAML = "configuration.yaml"
 SECRETS_YAML = "secrets.yaml"
@@ -143,7 +144,58 @@ class TaggedValue:
 
 
 class PhoenixSafeLoader(yaml.SafeLoader):
-    """SafeLoader keeping HA custom tags as opaque TaggedValue scalars."""
+    """Bounded SafeLoader keeping HA custom tags as opaque TaggedValue scalars."""
+
+    allow_aliases = True
+
+    def __init__(self, stream: Any) -> None:
+        if isinstance(stream, str) and len(stream.encode("utf-8")) > MAX_FILE_BYTES:
+            raise yaml.YAMLError("YAML exceeds the maximum file size.")
+        self._compose_depth = 0
+        self._node_costs: dict[int, tuple[int, int]] = {}
+        super().__init__(stream)
+
+    def fetch_flow_collection_start(self, token_class: Any) -> None:
+        # The scanner can look ahead for a possible simple key before composing
+        # the first node. Bound that lookahead too, using actual YAML tokens.
+        if self.flow_level >= YAML_MAX_DEPTH:
+            raise yaml.YAMLError("YAML nesting exceeds the maximum depth.")
+        super().fetch_flow_collection_start(token_class)
+
+    def compose_node(self, parent: Any, index: Any) -> Any:
+        """Bound parsing and later tree walks without expanding alias graphs."""
+        if self._compose_depth >= YAML_MAX_DEPTH:
+            raise yaml.YAMLError("YAML nesting exceeds the maximum depth.")
+        event = self.peek_event()
+        alias = isinstance(event, yaml.events.AliasEvent)
+        if not self.allow_aliases and (alias or getattr(event, "anchor", None)):
+            raise yaml.YAMLError("YAML anchors and aliases are not supported in supplied content.")
+        self._compose_depth += 1
+        try:
+            node = super().compose_node(parent, index)
+        finally:
+            self._compose_depth -= 1
+        if alias:
+            # An unfinished anchor is a cycle, not a reusable completed subtree.
+            if id(node) not in self._node_costs:
+                raise yaml.YAMLError("Recursive YAML aliases are not supported.")
+        else:
+            children = (
+                [child for pair in node.value for child in pair]
+                if isinstance(node, yaml.MappingNode) else
+                node.value if isinstance(node, yaml.SequenceNode) else []
+            )
+            costs = [self._node_costs[id(child)] for child in children]
+            self._node_costs[id(node)] = (
+                1 + sum(size for size, _ in costs),
+                1 + max((depth for _, depth in costs), default=0),
+            )
+        size, depth = self._node_costs[id(node)]
+        if size > YAML_MAX_EXPANDED_NODES:
+            raise yaml.YAMLError("YAML expansion exceeds the maximum node count.")
+        if self._compose_depth + depth > YAML_MAX_DEPTH:
+            raise yaml.YAMLError("YAML nesting exceeds the maximum depth.")
+        return node
 
 
 class PhoenixSafeDumper(yaml.SafeDumper):
@@ -209,6 +261,12 @@ def _construct_unknown_tag(loader: yaml.SafeLoader, tag_suffix: str, node: yaml.
 PhoenixLenientLoader.add_multi_constructor("!", _construct_unknown_tag)
 
 
+class PhoenixInputLoader(PhoenixLenientLoader):
+    """Reject caller-supplied anchors before any construction or expansion."""
+
+    allow_aliases = False
+
+
 def load_tagged(path: str) -> Any:
     """Parse a YAML file with the opaque-tag loader. Returns None for empty files."""
     with open(path, "r", encoding="utf-8") as f:
@@ -219,15 +277,15 @@ class YamlParseError(Exception):
     """Raised when text handed to load_tagged_lenient is not valid YAML."""
 
 
-def load_tagged_lenient(text: str) -> Any:
+def load_tagged_lenient(text: str, *, allow_aliases: bool = True) -> Any:
     """Parse YAML text keeping known AND unknown custom tags opaque.
 
     Raises YamlParseError on a real syntax error, so callers can surface the
     message without importing PyYAML themselves.
     """
     try:
-        return yaml.load(text, Loader=PhoenixLenientLoader)
-    except yaml.YAMLError as err:
+        return yaml.load(text, Loader=PhoenixLenientLoader if allow_aliases else PhoenixInputLoader)
+    except (yaml.YAMLError, RecursionError) as err:
         raise YamlParseError(str(err)) from err
 
 

@@ -796,7 +796,10 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     data.ready = True
     hass.data[RUNTIME_READY_KEY] = True
     if data.async_sync_ai_task is not None:
-        data.async_sync_ai_task()
+        try:
+            data.async_sync_ai_task()
+        except Exception:
+            _LOGGER.exception("Could not refresh the optional AI Task entity")
     await _reconcile_configuration()
     return True
 

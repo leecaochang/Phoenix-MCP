@@ -146,7 +146,7 @@ def describe_path(path: list[Segment]) -> str:
 def _compose(text: str) -> Any:
     try:
         return yaml.compose(text, Loader=PhoenixLenientLoader)
-    except yaml.YAMLError as err:
+    except (yaml.YAMLError, RecursionError) as err:
         raise PatchError(f"configuration.yaml is not valid YAML, so no key can be located in it: {err}") from err
 
 
@@ -527,10 +527,7 @@ def parse_value(content: Any) -> Any:
             "To delete the key instead, pass op 'remove'."
         )
     try:
-        for token in yaml.scan(content):
-            if isinstance(token, (yaml.tokens.AnchorToken, yaml.tokens.AliasToken)):
-                raise PatchError("YAML anchors and aliases are not supported in patch content.")
-        return load_tagged_lenient(content)
+        return load_tagged_lenient(content, allow_aliases=False)
     except (YamlParseError, yaml.YAMLError, RecursionError) as err:
         raise PatchError(f"content is not valid YAML: {err}") from err
 

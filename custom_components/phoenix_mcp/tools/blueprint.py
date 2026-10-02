@@ -187,10 +187,12 @@ def _validate_blueprint_source(domain: str, content: str) -> str | None:
     )
     from homeassistant.exceptions import HomeAssistantError  # noqa: PLC0415
     from homeassistant.util import yaml as yaml_util  # noqa: PLC0415
+    from ..yaml_includes import load_tagged_lenient, YamlParseError
 
     try:
+        load_tagged_lenient(content, allow_aliases=False)
         data = yaml_util.parse_yaml(content)
-    except HomeAssistantError as err:
+    except (HomeAssistantError, YamlParseError, RecursionError) as err:
         return f"content is not valid YAML: {err}"
     if not isinstance(data, dict):
         return "content must be a YAML mapping with a top-level 'blueprint' key."
@@ -254,7 +256,7 @@ async def _tool_get_blueprint(
     return _tool_success(json.dumps(body, default=str)), "allowed", "get_blueprint"
 
 
-def _blueprint_write_precheck(
+async def _blueprint_write_precheck(
     args: dict, hass: HomeAssistant, tool_name: str, *, needs_content: bool
 ) -> tuple[tuple[dict, str, str] | None, str, str]:
     """Pre-gate validation for a blueprint write.
@@ -282,7 +284,7 @@ def _blueprint_write_precheck(
             return _refuse("content must be a non-empty string.")
         if len(content.encode("utf-8")) > MAX_FILE_BYTES:
             return _refuse("Content exceeds the maximum file size.")
-        problem = _validate_blueprint_source(domain, content)
+        problem = await hass.async_add_executor_job(_validate_blueprint_source, domain, content)
         if problem is not None:
             return _refuse(problem)
     return None, target, rel
@@ -319,8 +321,13 @@ def _canonical_blueprint_source(domain: str, content: str) -> str:
     from homeassistant.components.blueprint.models import Blueprint
     from homeassistant.components.blueprint.schemas import BLUEPRINT_SCHEMA
     from homeassistant.util import yaml as yaml_util
+    from ..yaml_includes import load_tagged_lenient, YamlParseError
 
-    parsed = yaml_util.parse_yaml(content)
+    try:
+        load_tagged_lenient(content, allow_aliases=False)
+        parsed = yaml_util.parse_yaml(content)
+    except (YamlParseError, RecursionError) as err:
+        raise ConfigurationRecoveryError("Blueprint source is not safe YAML.") from err
     if not isinstance(parsed, dict):
         raise ConfigurationRecoveryError("Blueprint source must be a YAML mapping.")
     return Blueprint(parsed, expected_domain=domain, schema=BLUEPRINT_SCHEMA).yaml()
@@ -348,7 +355,7 @@ async def _blueprint_recovery_precheck(
         return _tool_error("The existing blueprint cannot be read completely for recovery."), "invalid_request", tool
     try:
         _blueprint_recovery_snapshot(domain, rel, before)
-        expected = _canonical_blueprint_source(domain, content) if content is not None else None
+        expected = await hass.async_add_executor_job(_canonical_blueprint_source, domain, content) if content is not None else None
         _blueprint_recovery_snapshot(domain, rel, expected)
     except ConfigurationRecoveryError as err:
         return _tool_error(f"{err} Approval cannot override this check; nothing was dispatched."), "invalid_request", tool
@@ -399,7 +406,7 @@ async def _tool_create_blueprint(
     denied = _blueprint_denied(token, args, "create_blueprint")
     if denied is not None:
         return denied
-    pre, target, rel = _blueprint_write_precheck(
+    pre, target, rel = await _blueprint_write_precheck(
         args, hass, "create_blueprint", needs_content=True)
     if pre is not None:
         return pre
@@ -424,7 +431,7 @@ async def _tool_edit_blueprint(
     denied = _blueprint_denied(token, args, "edit_blueprint")
     if denied is not None:
         return denied
-    pre, target, rel = _blueprint_write_precheck(
+    pre, target, rel = await _blueprint_write_precheck(
         args, hass, "edit_blueprint", needs_content=True)
     if pre is not None:
         return pre
@@ -451,7 +458,7 @@ async def _tool_delete_blueprint(
     denied = _blueprint_denied(token, args, "delete_blueprint")
     if denied is not None:
         return denied
-    pre, target, rel = _blueprint_write_precheck(
+    pre, target, rel = await _blueprint_write_precheck(
         args, hass, "delete_blueprint", needs_content=False)
     if pre is not None:
         return pre
@@ -478,13 +485,13 @@ async def _save_blueprint(
     denied = _blueprint_denied(token, args, tool_name)
     if denied is not None:
         return denied
-    pre, target, rel = _blueprint_write_precheck(
+    pre, target, rel = await _blueprint_write_precheck(
         args, hass, tool_name, needs_content=True)
     if pre is not None:
         return pre
     domain = str(args.get("domain") or "").strip().lower()
     content = args["content"]
-    expected_source = _canonical_blueprint_source(domain, content)
+    expected_source = await hass.async_add_executor_job(_canonical_blueprint_source, domain, content)
     before = await _read_blueprint_source(hass, target)
     if allow_override and before is None:
         return _tool_error("Blueprint not found."), "not_found", tool_name
@@ -573,7 +580,7 @@ async def _execute_delete_blueprint(
     denied = _blueprint_denied(token, args, "delete_blueprint")
     if denied is not None:
         return denied
-    pre, target, rel = _blueprint_write_precheck(
+    pre, target, rel = await _blueprint_write_precheck(
         args, hass, "delete_blueprint", needs_content=False)
     if pre is not None:
         return pre

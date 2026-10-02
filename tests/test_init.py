@@ -71,10 +71,12 @@ async def _run_setup(hass: HomeAssistant, *, kill_switch: bool = False, mesa_fai
     return result, entry, hass.http.register_view.call_count
 
 
-async def test_setup_publishes_ai_task_availability_after_ready(hass, phoenix_ai_task_platform):
+@pytest.mark.parametrize("disabled", [False, True])
+async def test_setup_publishes_ai_task_availability_after_ready(hass, phoenix_ai_task_platform, disabled):
     """Run real entity registration before setup publishes its final readiness."""
     from custom_components.phoenix_mcp import ai_task
     from custom_components.phoenix_mcp.token_store import GlobalSettings
+    from homeassistant.helpers import entity_registry as er
 
     platform, _ = phoenix_ai_task_platform
     store = _mock_store()
@@ -86,17 +88,28 @@ async def test_setup_publishes_ai_task_availability_after_ready(hass, phoenix_ai
         if "ai_task" not in platforms:
             return
         platform.config_entry = entry
+        if disabled:
+            er.async_get(hass).async_get_or_create(
+                "ai_task", DOMAIN, f"{entry.entry_id}_ai_task", config_entry=entry,
+                disabled_by=er.RegistryEntryDisabler.USER,
+            )
         assert hass.data[DOMAIN].ready is False
         await ai_task.async_setup_entry(hass, entry, platform._async_schedule_add_entities_for_entry)
         await hass.async_block_till_done()
         entity = hass.data[DOMAIN].ai_task_entity
-        assert hass.states.get(entity.entity_id).state == "unavailable"
+        if not disabled:
+            assert hass.states.get(entity.entity_id).state == "unavailable"
 
     with patch(__name__ + "._mock_store", return_value=store):
         result, _, _ = await _run_setup(hass, forward=AsyncMock(side_effect=forward))
     assert result is True
     entity = hass.data[DOMAIN].ai_task_entity
-    assert hass.states.get(entity.entity_id).state == "unknown"
+    if disabled:
+        assert entity is None
+        hass.data[DOMAIN].async_sync_ai_task()
+        assert hass.data[DOMAIN].ai_task_entity is None
+    else:
+        assert hass.states.get(entity.entity_id).state == "unknown"
 
 
 async def test_setup_registers_routes_when_kill_switch_off(hass: HomeAssistant):
@@ -107,6 +120,21 @@ async def test_setup_registers_routes_when_kill_switch_off(hass: HomeAssistant):
     # Admin views plus the client views were all registered.
     from custom_components.phoenix_mcp.admin_view import ALL_ADMIN_VIEWS
     assert view_count > len(ALL_ADMIN_VIEWS)
+
+
+async def test_optional_ai_task_refresh_failure_keeps_integration_ready(hass, caplog):
+    refresh = MagicMock(side_effect=RuntimeError("refresh failed"))
+
+    async def forward(entry, platforms):
+        if "ai_task" in platforms:
+            hass.data[DOMAIN].async_sync_ai_task = refresh
+
+    result, _, _ = await _run_setup(hass, forward=AsyncMock(side_effect=forward))
+    assert result is True
+    assert hass.data[DOMAIN].ready is True
+    assert hass.data[RUNTIME_READY_KEY] is True
+    refresh.assert_called_once()
+    assert "Could not refresh the optional AI Task entity" in caplog.text
 
 
 async def test_setup_skips_client_routes_when_kill_switch_on(hass: HomeAssistant):

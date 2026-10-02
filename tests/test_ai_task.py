@@ -164,19 +164,19 @@ def test_sync_creates_real_ha_entity_with_runtime_availability(hass):
     add.assert_called_once()
 
 
-def test_sync_adds_entity_when_fully_configured():
+def test_sync_adds_entity_when_fully_configured(hass):
     data = _make_data(**_FULL)
     data.ai_task_entity = None
     add = MagicMock()
     dummy = SimpleNamespace(entity_id="ai_task.phoenix_mcp_ai_task")
     with patch.object(ai_task, "_AI_TASK_AVAILABLE", True), \
          patch.object(ai_task, "PhoenixAITaskEntity", MagicMock(return_value=dummy)):
-        ai_task.async_sync_ai_task(MagicMock(), SimpleNamespace(entry_id="e"), data, add)
+        ai_task.async_sync_ai_task(hass, SimpleNamespace(entry_id="e"), data, add)
     assert data.ai_task_entity is dummy
     add.assert_called_once_with([dummy])
 
 
-def test_sync_adds_configured_entity_before_runtime_ready_on_restart():
+def test_sync_adds_configured_entity_before_runtime_ready_on_restart(hass):
     """Platform setup precedes Phoenix's final ready publication on every restart."""
     data = _make_data(**_FULL)
     data.ready = False
@@ -185,7 +185,7 @@ def test_sync_adds_configured_entity_before_runtime_ready_on_restart():
     dummy = SimpleNamespace(entity_id="ai_task.phoenix_mcp_ai_task")
     with patch.object(ai_task, "_AI_TASK_AVAILABLE", True), \
          patch.object(ai_task, "PhoenixAITaskEntity", MagicMock(return_value=dummy)):
-        ai_task.async_sync_ai_task(MagicMock(), SimpleNamespace(entry_id="e"), data, add)
+        ai_task.async_sync_ai_task(hass, SimpleNamespace(entry_id="e"), data, add)
     assert data.ai_task_entity is dummy
     add.assert_called_once_with([dummy])
 
@@ -289,6 +289,40 @@ async def test_sync_publishes_runtime_availability(hass, phoenix_ai_task_platfor
         data.async_sync_ai_task()
         assert data.ai_task_entity is entity
         assert hass.states.get(entity.entity_id).state == expected
+
+
+async def test_live_disabled_ai_task_is_not_refreshed_or_readded(hass, phoenix_ai_task_platform, caplog):
+    from homeassistant.helpers import entity_registry as er
+
+    platform, entry = phoenix_ai_task_platform
+    data = _make_data(**_FULL)
+    data.ai_task_entity = None
+    hass.data[DOMAIN] = data
+    await ai_task.async_setup_entry(hass, entry, platform._async_schedule_add_entities_for_entry)
+    await hass.async_block_till_done()
+    entity_id = data.ai_task_entity.entity_id
+    er.async_get(hass).async_update_entity(entity_id, disabled_by=er.RegistryEntryDisabler.USER)
+    await hass.async_block_till_done()
+    caplog.clear()
+    data.async_sync_ai_task()
+    data.async_sync_ai_task()
+    assert data.ai_task_entity is None
+    assert hass.states.get(entity_id) is None
+    assert "incorrectly being triggered" not in caplog.text
+
+
+def test_sync_drops_entity_after_ha_aborts_registration(hass):
+    data = _make_data(**_FULL)
+    hass.data[DOMAIN] = data
+    entry = SimpleNamespace(entry_id="aborted")
+    entity = ai_task.PhoenixAITaskEntity(hass, entry)
+    entity.entity_id = "ai_task.aborted"
+    entity.add_to_platform_abort()
+    data.ai_task_entity = entity
+    add = MagicMock()
+    ai_task.async_sync_ai_task(hass, entry, data, add)
+    assert data.ai_task_entity is None
+    add.assert_not_called()
 
 
 def test_clear_preferred_resets_when_ours(hass):

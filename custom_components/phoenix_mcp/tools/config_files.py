@@ -596,7 +596,7 @@ def _yaml_write_precheck(args: dict, tool_name: str) -> tuple[dict, str, str] | 
 _MISSING = object()
 
 
-def _protected_subtree_diff(old_text: str | None, new_text: str) -> list[str]:
+def _protected_subtree_diff(old_text: str | None, new_text: str, *, allow_aliases: bool = True) -> list[str]:
     """Dotted paths under YAML_PROTECTED_SUBTREES whose value the write changes.
 
     Both sides parse with the lenient loader so an unknown third-party tag cannot
@@ -607,7 +607,7 @@ def _protected_subtree_diff(old_text: str | None, new_text: str) -> list[str]:
     content that does not parse is treated as empty, which fails closed: every
     protected key in the new content then counts as changed.
     """
-    new_doc = yaml_includes.load_tagged_lenient(new_text)
+    new_doc = yaml_includes.load_tagged_lenient(new_text, allow_aliases=allow_aliases)
     try:
         old_doc = yaml_includes.load_tagged_lenient(old_text) if old_text else None
     except yaml_includes.YamlParseError:
@@ -642,7 +642,7 @@ def _yaml_protected_check(
     not parse stops Home Assistant from starting anyway.
     """
     try:
-        changed = _protected_subtree_diff(old_text, new_text)
+        changed = _protected_subtree_diff(old_text, new_text, allow_aliases=tool_name != "set_yaml_config")
     except yaml_includes.YamlParseError as err:
         return (
             _tool_error(f"content is not valid YAML: {err}"),

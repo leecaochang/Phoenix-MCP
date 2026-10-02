@@ -719,9 +719,12 @@ def resolve_service_targets(
 
     # Entity creation check for explicit entity_ids; raises immediately if any are not in registry
     for eid in explicit_ids:
-        if entity_registry.async_get(eid) is None:
+        entry = entity_registry.async_get(eid.lower())
+        if entry is None:
             raise EntityCreationNotPermitted(eid)
-        candidates.add(eid)
+        # HA accepts registry IDs too. Every later gate and dispatch must use
+        # the same canonical identity that permission resolution authorizes.
+        candidates.add(entry.entity_id)
 
     raw_count = len(candidates)
 

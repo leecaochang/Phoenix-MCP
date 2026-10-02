@@ -3437,7 +3437,7 @@ async def _run_tool_batch(
                     await _cancel_agent_approval(hass, data, saved["id"])
             raise
         result = dispatch_tool_result(resp_msg)
-        if outcome in ("denied", "invalid_request") and (resp_msg or {}).get("error"):
+        if outcome in ("denied", "invalid_request") and (resp_msg or {}).get("error", {}).get("code") == -32000:
             authority_lost = stop_turn = True
         pending = _parse_pending(
             result,
@@ -4049,7 +4049,7 @@ async def _run_headless_turn(
             except RecoveryRequired:
                 return _HeadlessTurnResult("", review_urls, outcome=TURN_OUTCOME_UNKNOWN)
             result = dispatch_tool_result(resp_msg)
-            if outcome in ("denied", "invalid_request") and (resp_msg or {}).get("error"):
+            if outcome in ("denied", "invalid_request") and (resp_msg or {}).get("error", {}).get("code") == -32000:
                 authority_lost = True
             pending = _parse_pending(
                 result,

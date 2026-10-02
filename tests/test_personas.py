@@ -41,6 +41,19 @@ def test_every_persona_covers_every_cap():
         assert set(mapping.keys()) == expected, f"persona {name} cap set mismatch"
 
 
+def test_frontend_presets_match_every_backend_capability_value():
+    """The panel sends these overrides, so key-only parity cannot protect defaults."""
+    import re
+    from pathlib import Path
+
+    source = (Path(__file__).resolve().parents[1] / "frontend_src/personas.ts").read_text()
+    for persona, expected in PERSONA_DEFINITIONS.items():
+        block = re.search(rf"\b{re.escape(persona)}:\s*\{{([^}}]+)\}}", source)
+        assert block is not None, persona
+        actual = dict(re.findall(r'"?(cap_\w+)"?\s*:\s*"(deny|allow|confirm)"', block[1]))
+        assert actual == expected, persona
+
+
 def test_persona_values_are_valid_modes():
     """Every persona value must be one of deny/allow/confirm."""
     valid = {CAP_DENY, CAP_ALLOW, CAP_CONFIRM}

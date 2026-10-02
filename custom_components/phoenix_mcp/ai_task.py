@@ -506,6 +506,14 @@ def async_sync_ai_task(hass: HomeAssistant, entry, data, async_add_entities) -> 
     # the restored registry entity unavailable until a settings toggle re-synced it.
     should_exist = _is_fully_configured(data.store.get_settings())
 
+    if should_exist:
+        registry = er.async_get(hass)
+        entity_id = registry.async_get_entity_id("ai_task", DOMAIN, f"{entry.entry_id}_ai_task")
+        registered = registry.async_get(entity_id) if entity_id is not None else None
+        if registered is not None and registered.disabled:
+            data.ai_task_entity = None
+            return
+
     if should_exist and data.ai_task_entity is None:
         entity = PhoenixAITaskEntity(hass, entry)
         data.ai_task_entity = entity
@@ -515,7 +523,11 @@ def async_sync_ai_task(hass: HomeAssistant, entry, data, async_add_entities) -> 
         # after startup and settings changes without replacing the live entity.
         entity = data.ai_task_entity
         if entity.entity_id is not None:
-            entity.async_write_ha_state()
+            if entity.hass is None or entity.platform is None:
+                # HA can assign an ID and then abort platform registration.
+                data.ai_task_entity = None
+            else:
+                entity.async_write_ha_state()
     elif not should_exist:
         data.ai_task_entity = None
         # Remove any registry entry for our unique_id (covers both a tracked entity and

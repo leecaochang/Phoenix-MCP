@@ -3,7 +3,7 @@
 import asyncio
 import copy
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -142,6 +142,78 @@ def test_read_classification_uses_canonical_and_legacy_server_catalog():
     assert not tool_is_read_only("HassTurnOn")
     assert not tool_is_read_only("intent__HassTurnOn")
     assert not tool_is_read_only("invented_read")
+
+
+async def test_unknown_tool_does_not_create_recovery_barrier(hass, token_store):
+    """A real protocol refusal cannot imply an uncertain side effect."""
+    from homeassistant.helpers import issue_registry as ir
+    from custom_components.phoenix_mcp.audit import AuditLog
+    from custom_components.phoenix_mcp.data import PhoenixData
+    from custom_components.phoenix_mcp.mcp_view import _dispatch_mcp
+    from custom_components.phoenix_mcp.rate_limiter import RateLimiter
+
+    token, _ = await token_store.async_create_token("unknown tool", "admin")
+    data = PhoenixData(store=token_store, rate_limiter=RateLimiter(), audit=AuditLog())
+    hass.data["phoenix_mcp"] = data
+    response, _, _, outcome = await dispatch_agent_tool(
+        _dispatch_mcp, hass=hass, data=data, token=token, name="made_up_tool",
+        arguments={}, tool_id="tool", request_id="unknown", client_ip="agentcli",
+        base_url="http://example",
+    )
+    assert response["error"]["code"] == -32602
+    assert outcome == "invalid_request"
+    assert data.agent_recovery.records(token.id) == []
+    assert not data.agent_recovery.blocks(token.id)
+    assert ir.async_get(hass).async_get_issue("phoenix_mcp", "agent_recovery_unknown") is None
+
+
+@pytest.mark.parametrize("surface", ["chat", "voice", "ai_task"])
+async def test_provider_loops_continue_after_unknown_tool(hass, token_store, surface):
+    """Exercise the actual three turn loops and the actual MCP dispatcher."""
+    from custom_components.phoenix_mcp import agentcli
+    from custom_components.phoenix_mcp.audit import AuditLog
+    from custom_components.phoenix_mcp.data import PhoenixData
+    from custom_components.phoenix_mcp.rate_limiter import RateLimiter
+
+    token, _ = await token_store.async_create_token("loop", "admin")
+    data = PhoenixData(store=token_store, rate_limiter=RateLimiter(), audit=AuditLog(), ready=True)
+    hass.data["phoenix_mcp"] = data
+    provider = agentcli.OpenAICompatProvider(agentcli.ProviderConfig(
+        kind="chatgpt", model="test", base_url="https://example.test", api_key="test",
+    ))
+    rounds = 0
+
+    async def stream(*args, **kwargs):
+        nonlocal rounds
+        rounds += 1
+        if rounds == 1:
+            yield {"type": agentcli.EV_TOOL, "name": "made_up_tool", "id": "bad", "input": {}}
+        else:
+            yield {"type": agentcli.EV_TEXT, "text": "Recovered."}
+        yield {"type": agentcli.EV_DONE, "stop_reason": "tool_use" if rounds == 1 else "end_turn",
+               "assistant_msg": {"role": "assistant", "content": "Recovered."}}
+
+    events = []
+
+    async def emit(name, payload):
+        events.append((name, payload))
+
+    with patch.object(agentcli, "_stream_turn_resilient", stream), \
+         patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
+         patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="Test"):
+        if surface == "chat":
+            await agentcli.async_run_agent_turn(
+                hass=hass, data=data, token=token, provider=provider, session=MagicMock(),
+                messages=[{"role": "user", "content": "test"}], options={}, client_ip="agentcli",
+                base_url="http://example", emit=emit, cancel=asyncio.Event(),
+            )
+            assert not [payload for name, payload in events if name == "error"]
+        else:
+            run = agentcli.async_run_voice_turn if surface == "voice" else agentcli.async_run_ai_task
+            assert await run(hass, data, token, provider, MagicMock(), "http://example", "test") == "Recovered."
+    assert rounds == 2
+    assert data.agent_recovery.records(token.id) == []
+    assert not data.agent_recovery.blocks(token.id)
 
 
 @pytest.mark.asyncio

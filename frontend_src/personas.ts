@@ -1,8 +1,8 @@
 // Persona presets shared by the PersonaPicker (Token Detail) and the onboarding
 // wizard. PERSONA_CAP_DEFAULTS mirrors personas.py PERSONA_DEFINITIONS and is
 // used to pre-fill cap values when applying a persona via PATCH so the matrix
-// updates in one round-trip. If this drifts from the backend, the backend
-// validates each value and the PATCH fails closed.
+// updates in one round-trip. tests/test_personas.py pins every value against
+// the backend because valid overrides can otherwise silently change a preset.
 import type { Persona } from "./types";
 
 export interface PersonaDef {
@@ -169,7 +169,7 @@ export const PERSONA_CAP_DEFAULTS: Record<Persona, Record<string, string> | null
     cap_config_read: "allow",
     cap_camera_read: "deny",
     cap_template_render: "allow",
-    cap_log_read: "allow",
+    cap_log_read: "deny",
     cap_log_control: "deny",
     cap_search: "allow",
     cap_registry_read: "allow",
