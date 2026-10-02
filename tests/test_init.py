@@ -49,7 +49,7 @@ def _fake_bg(coro, name=None):
     return MagicMock(cancel=MagicMock())
 
 
-async def _run_setup(hass: HomeAssistant, *, kill_switch: bool = False, mesa_fail: bool = False):
+async def _run_setup(hass: HomeAssistant, *, kill_switch: bool = False, mesa_fail: bool = False, forward=None):
     entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN)
     entry.add_to_hass(hass)
     hass.http = MagicMock()
@@ -65,10 +65,38 @@ async def _run_setup(hass: HomeAssistant, *, kill_switch: bool = False, mesa_fai
          patch("custom_components.phoenix_mcp.ws_dispatch.check_ws_dispatch_compat", return_value=None), \
          patch.object(phoenix_init, "async_track_time_interval", MagicMock(return_value=MagicMock())), \
          patch.object(hass, "async_create_background_task", _fake_bg), \
-         patch.object(hass.config_entries, "async_forward_entry_setups", AsyncMock()):
+         patch.object(hass.config_entries, "async_forward_entry_setups", forward or AsyncMock()):
         result = await phoenix_init.async_setup_entry(hass, entry)
 
     return result, entry, hass.http.register_view.call_count
+
+
+async def test_setup_publishes_ai_task_availability_after_ready(hass, phoenix_ai_task_platform):
+    """Run real entity registration before setup publishes its final readiness."""
+    from custom_components.phoenix_mcp import ai_task
+    from custom_components.phoenix_mcp.token_store import GlobalSettings
+
+    platform, _ = phoenix_ai_task_platform
+    store = _mock_store()
+    store.get_settings.return_value = GlobalSettings(
+        ai_task_enabled=True, ai_task_token_id="t", ai_task_provider_id="p", ai_task_model="m",
+    )
+
+    async def forward(entry, platforms):
+        if "ai_task" not in platforms:
+            return
+        platform.config_entry = entry
+        assert hass.data[DOMAIN].ready is False
+        await ai_task.async_setup_entry(hass, entry, platform._async_schedule_add_entities_for_entry)
+        await hass.async_block_till_done()
+        entity = hass.data[DOMAIN].ai_task_entity
+        assert hass.states.get(entity.entity_id).state == "unavailable"
+
+    with patch(__name__ + "._mock_store", return_value=store):
+        result, _, _ = await _run_setup(hass, forward=AsyncMock(side_effect=forward))
+    assert result is True
+    entity = hass.data[DOMAIN].ai_task_entity
+    assert hass.states.get(entity.entity_id).state == "unknown"
 
 
 async def test_setup_registers_routes_when_kill_switch_off(hass: HomeAssistant):

@@ -2650,7 +2650,7 @@ async def test_revoke_clears_ai_task_token():
 
 
 @pytest.mark.asyncio
-async def test_ai_task_preferred_get_reports_status(hass):
+async def test_ai_task_preferred_get_excludes_registry_only_entity(hass):
     from homeassistant.helpers import entity_registry as er
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -2658,13 +2658,13 @@ async def test_ai_task_preferred_get_reports_status(hass):
     hass.data[DOMAIN] = data
     entry = MockConfigEntry(domain=DOMAIN)
     entry.add_to_hass(hass)
-    entity = er.async_get(hass).async_get_or_create("ai_task", DOMAIN, f"{entry.entry_id}_ai_task")
+    er.async_get(hass).async_get_or_create("ai_task", DOMAIN, f"{entry.entry_id}_ai_task")
     view = PhoenixAdminAiTaskPreferredView()
     view.hass = hass
     resp = await view.get(_make_admin_request())
     assert resp.status == 200
     status = json.loads(resp.text)
-    assert status["entity_id"] == entity.entity_id
+    assert status["entity_id"] is None
     assert status["supported"] is False  # No preferences store set up yet.
     assert status["is_preferred"] is False
 
@@ -2848,10 +2848,13 @@ async def test_settings_patch_audit_side_effects_fire_for_their_keys():
 
 
 @pytest.mark.asyncio
-async def test_settings_patch_ai_task_sync_fires_on_ai_task_keys():
+@pytest.mark.parametrize("setting_patch", [
+    {"ai_task_enabled": True}, {"kill_switch": True}, {"kill_switch": False},
+])
+async def test_settings_patch_ai_task_sync_fires_on_config_and_kill_switch(setting_patch):
     hass, data, _ = _patchable_hass()
     data.async_sync_ai_task = MagicMock()
-    resp = await _settings_patch(hass, {"ai_task_enabled": True})
+    resp = await _settings_patch(hass, setting_patch)
     assert resp.status == 200
     data.async_sync_ai_task.assert_called_once()
 

@@ -2335,7 +2335,9 @@ async def _apply_settings_side_effects(
 
     # Add/remove the Phoenix MCP AI Task entity to match its config (it exists only while
     # fully configured), so it appears in HA's AI Task picker only when usable.
-    if data.async_sync_ai_task is not None and any(k.startswith("ai_task_") for k in patchable):
+    if data.async_sync_ai_task is not None and (
+        "kill_switch" in patchable or any(k.startswith("ai_task_") for k in patchable)
+    ):
         data.async_sync_ai_task()
 
     if "mesa_inject_enabled" in patchable:

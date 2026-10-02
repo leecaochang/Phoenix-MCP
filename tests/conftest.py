@@ -165,3 +165,27 @@ def provider_context_history(request):
         [{'type': 'text', 'text': 'The read-only checks are complete.'}] if style == 'anthropic'
         else 'The read-only checks are complete.')})
     return history
+
+
+@pytest.fixture
+def phoenix_ai_task_platform(hass, enable_custom_integrations):
+    """Use HA's real AI Task component and Phoenix entity registration path."""
+    import logging
+    from datetime import timedelta
+
+    from homeassistant.components.ai_task.const import DATA_COMPONENT
+    from homeassistant.helpers.entity_component import EntityComponent
+    from homeassistant.helpers.entity_platform import EntityPlatform
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    domain = "phoenix_mcp"
+    entry = MockConfigEntry(domain=domain)
+    entry.add_to_hass(hass)
+    hass.data[DATA_COMPONENT] = EntityComponent(logging.getLogger(__name__), "ai_task", hass)
+    platform = EntityPlatform(
+        hass=hass, logger=logging.getLogger(__name__), domain="ai_task",
+        platform_name=domain, platform=None, scan_interval=timedelta(seconds=60),
+        entity_namespace=None,
+    )
+    platform.config_entry = entry
+    return platform, entry

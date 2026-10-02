@@ -234,17 +234,61 @@ def test_set_preferred_requires_entity(hass):
         ai_task.set_ai_task_preferred(hass, SimpleNamespace(entry_id="nope"))
 
 
-def test_set_preferred_updates_prefs_and_status(hass):
-    from homeassistant.helpers import entity_registry as er
-
-    ent = er.async_get(hass).async_get_or_create("ai_task", "phoenix_mcp", "e1_ai_task")
+async def test_set_preferred_updates_prefs_and_status(hass, phoenix_ai_task_platform):
+    platform, entry = phoenix_ai_task_platform
+    data = _make_data(**_FULL)
+    data.ai_task_entity = None
+    hass.data[DOMAIN] = data
+    await ai_task.async_setup_entry(hass, entry, platform._async_schedule_add_entities_for_entry)
+    await hass.async_block_till_done()
+    ent = data.ai_task_entity
     fake = _FakePrefs()
     with patch.object(ai_task, "_AI_TASK_AVAILABLE", True), \
          patch.object(ai_task, "_ai_task_preferences", return_value=fake):
-        status = ai_task.set_ai_task_preferred(hass, SimpleNamespace(entry_id="e1"))
+        status = ai_task.set_ai_task_preferred(hass, entry)
     assert fake.gen_data_entity_id == ent.entity_id
     assert status["is_preferred"] is True
     assert status["entity_id"] == ent.entity_id
+
+
+def test_preferred_rejects_registry_only_entity(hass, phoenix_ai_task_platform):
+    """A restored registry record is not a loaded AI Task picker option."""
+    from homeassistant.helpers import entity_registry as er
+
+    ent = er.async_get(hass).async_get_or_create("ai_task", DOMAIN, "e1_ai_task")
+    hass.states.async_set(ent.entity_id, "unavailable", {"restored": True})
+    fake = _FakePrefs(ent.entity_id)
+    entry = SimpleNamespace(entry_id="e1")
+    with patch.object(ai_task, "_ai_task_preferences", return_value=fake):
+        status = ai_task.ai_task_preferred_status(hass, entry)
+        assert status["entity_id"] is None
+        assert status["is_preferred"] is False
+        with pytest.raises(ai_task.AiTaskSetupError):
+            ai_task.set_ai_task_preferred(hass, entry)
+        assert fake.gen_data_entity_id == ent.entity_id
+        ai_task.clear_ai_task_preferred(hass, entry)
+    assert fake.gen_data_entity_id is None
+
+
+async def test_sync_publishes_runtime_availability(hass, phoenix_ai_task_platform):
+    """Non-polling entities need a state write after readiness and kill-switch changes."""
+    platform, entry = phoenix_ai_task_platform
+    data = _make_data(**_FULL)
+    data.ready = False
+    data.ai_task_entity = None
+    hass.data[DOMAIN] = data
+    await ai_task.async_setup_entry(hass, entry, platform._async_schedule_add_entities_for_entry)
+    await hass.async_block_till_done()
+    entity = data.ai_task_entity
+    assert hass.states.get(entity.entity_id).state == "unavailable"
+    for ready, kill_switch, expected in [
+        (True, False, "unknown"), (True, True, "unavailable"), (True, False, "unknown"),
+    ]:
+        data.ready = ready
+        data.store.get_settings.return_value = GlobalSettings(**_FULL, kill_switch=kill_switch)
+        data.async_sync_ai_task()
+        assert data.ai_task_entity is entity
+        assert hass.states.get(entity.entity_id).state == expected
 
 
 def test_clear_preferred_resets_when_ours(hass):

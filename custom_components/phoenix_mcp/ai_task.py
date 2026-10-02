@@ -71,6 +71,19 @@ def _ai_task_entity_id(hass: HomeAssistant, entry_id: str) -> str | None:
     return er.async_get(hass).async_get_entity_id("ai_task", DOMAIN, f"{entry_id}_ai_task")
 
 
+def _loaded_ai_task_entity_id(hass: HomeAssistant, entry_id: str) -> str | None:
+    """Return an entity eligible for selection, excluding registry-only leftovers."""
+    if not _AI_TASK_AVAILABLE:
+        return None
+    from homeassistant.components.ai_task.const import DATA_COMPONENT
+
+    entity_id = _ai_task_entity_id(hass, entry_id)
+    component = hass.data.get(DATA_COMPONENT)
+    if entity_id is None or component is None or component.get_entity(entity_id) is None:
+        return None
+    return entity_id
+
+
 def _ai_task_preferences(hass: HomeAssistant) -> Any:
     """HA's AITaskPreferences object (holds gen_data_entity_id), or None."""
     try:
@@ -88,7 +101,7 @@ def ai_task_preferred_status(hass: HomeAssistant, entry) -> dict:
     exists then). gen_data_entity_id/gen_data_name: whatever is currently the default
     (so the panel can warn before overwriting it). is_preferred: Phoenix MCP is that default.
     """
-    entity_id = _ai_task_entity_id(hass, entry.entry_id) if _AI_TASK_AVAILABLE else None
+    entity_id = _loaded_ai_task_entity_id(hass, entry.entry_id)
     prefs = _ai_task_preferences(hass)
     current = getattr(prefs, "gen_data_entity_id", None) if prefs is not None else None
     name = None
@@ -110,7 +123,7 @@ def set_ai_task_preferred(hass: HomeAssistant, entry) -> dict:
     Requires the entity to exist (fully configured). Overwrites any prior default
     (there is only one), which the panel confirms first. Returns the new status.
     """
-    entity_id = _ai_task_entity_id(hass, entry.entry_id)
+    entity_id = _loaded_ai_task_entity_id(hass, entry.entry_id)
     if entity_id is None:
         raise AiTaskSetupError(
             "Configure and enable the Phoenix MCP AI Task (token, provider, and model) first."
@@ -497,6 +510,12 @@ def async_sync_ai_task(hass: HomeAssistant, entry, data, async_add_entities) -> 
         entity = PhoenixAITaskEntity(hass, entry)
         data.ai_task_entity = entity
         async_add_entities([entity])
+    elif should_exist:
+        # HA's AI Task entity does not poll. Refresh the published availability
+        # after startup and settings changes without replacing the live entity.
+        entity = data.ai_task_entity
+        if entity.entity_id is not None:
+            entity.async_write_ha_state()
     elif not should_exist:
         data.ai_task_entity = None
         # Remove any registry entry for our unique_id (covers both a tracked entity and

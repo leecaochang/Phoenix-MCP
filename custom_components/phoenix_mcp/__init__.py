@@ -795,6 +795,8 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     # failures are caught by async_setup_entry and rolled back.
     data.ready = True
     hass.data[RUNTIME_READY_KEY] = True
+    if data.async_sync_ai_task is not None:
+        data.async_sync_ai_task()
     await _reconcile_configuration()
     return True
 
