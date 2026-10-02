@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import math
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -22,6 +23,7 @@ if TYPE_CHECKING:
     from .token_store import TokenRecord
 
 PARALLEL_UPDATES = 0
+_LOGGER = logging.getLogger(__name__)
 
 _SENSOR_TYPES = (
     "status",
@@ -188,9 +190,12 @@ def _async_migrate_unique_ids(hass: HomeAssistant, tokens: list[TokenRecord]) ->
         for sensor_type in _SENSOR_TYPES:
             legacy = f"phoenix_mcp_{token_name_slug(token.name)}_{sensor_type}"
             current = _unique_id(token.id, sensor_type)
-            entity_id = registry.async_get_entity_id("sensor", DOMAIN, legacy)
-            if entity_id is not None and registry.async_get_entity_id("sensor", DOMAIN, current) is None:
-                registry.async_update_entity(entity_id, new_unique_id=current)
+            try:
+                entity_id = registry.async_get_entity_id("sensor", DOMAIN, legacy)
+                if entity_id is not None and registry.async_get_entity_id("sensor", DOMAIN, current) is None:
+                    registry.async_update_entity(entity_id, new_unique_id=current)
+            except Exception:  # Independent telemetry rows must still initialize.
+                _LOGGER.warning("Phoenix MCP: sensor identity migration failed for %s", sensor_type)
 
 
 async def async_setup_entry(

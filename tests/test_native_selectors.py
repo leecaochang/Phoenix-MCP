@@ -301,7 +301,8 @@ async def test_numeric_relative_volume_preserves_magnitude_and_clamps(step, expe
         attributes={"volume_level": levels[entity_id]}
     )
     hass.services.async_call = AsyncMock(return_value=None)
-    data = SimpleNamespace(mesa=None, mesa_setup_failed=False)
+    data = SimpleNamespace(mesa=None, mesa_setup_failed=False,
+        store=SimpleNamespace(get_settings=lambda: SimpleNamespace(mesa_mode="off")))
     with patch(f"{NATIVE}.resolve_intent_entities", return_value=entities), \
             patch(f"{NATIVE}.resolve", return_value=Permission.WRITE):
         _response, outcome, _resource = await _tool_hass_set_volume_relative(

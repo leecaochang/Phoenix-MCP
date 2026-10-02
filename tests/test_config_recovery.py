@@ -612,3 +612,68 @@ async def test_template_change_during_form_preparation_never_submits(hass, chang
         assert runtime.config_recovery.records() == []
     else:
         assert runtime.config_recovery.records()[0]["before"]["title"] == "Recover me"
+
+
+async def test_recovery_scans_run_outside_event_loop_and_preserve_owned_copies(hass):
+    import threading
+    from custom_components.phoenix_mcp.config_recovery import safe_snapshot
+
+    loop_thread = threading.get_ident()
+    scans = []
+
+    def scan(value):
+        assert threading.get_ident() != loop_thread
+        scans.append(value)
+        return safe_snapshot(value)
+
+    store = MagicMock(async_save=AsyncMock())
+    recovery = ConfigurationRecovery(store, hass=hass)
+    before = {"content": "harmless file content\n" * 24000}
+    with patch("custom_components.phoenix_mcp.config_recovery.safe_snapshot", new=scan):
+        rid = await recovery.begin("r", "edit", "t", before, expected=before)
+        await recovery.mark(rid, "dispatching", details={"state": "ready"})
+        source = {"content": "observed"}
+        await recovery.set_source(rid, source)
+        await recovery.update(rid, observations={"state": "verified"})
+        store.async_load = AsyncMock(return_value=store.async_save.call_args.args[0])
+        restored = ConfigurationRecovery(store, hass=hass)
+        await restored.async_load()
+    assert len(scans) == 9
+    before["content"] = "changed"
+    source["content"] = "changed"
+    assert restored.get(rid)["before"]["content"].startswith("harmless file content")
+    assert restored.get(rid)["source"]["content"] == "observed"
+    assert restored.get(rid)["observations"] == {"state": "verified"}
+
+
+async def test_file_admission_and_recovery_redaction_run_in_executor(hass, tmp_path):
+    import threading
+    from custom_components.phoenix_mcp.tools import config_files
+
+    loop_thread = threading.get_ident()
+    scan = config_files._redact_secrets_in_text
+    calls = []
+
+    def checked_scan(value):
+        assert threading.get_ident() != loop_thread
+        calls.append(value)
+        return scan(value)
+
+    text = "harmless file content\n" * 24000
+    path = tmp_path / "example.txt"
+    path.write_text("before")
+    runtime = data()
+    runtime.config_recovery = ConfigurationRecovery(hass=hass)
+    with patch.object(config_files, "_redact_secrets_in_text", side_effect=checked_scan):
+        assert await config_files._file_recovery_precheck(hass, str(path), "www/example.txt", text, "write_file") is None
+        result = await config_files._recoverable_file_write(
+            path=str(path), rel="www/example.txt", before_exists=True, before_content="before",
+            content=text, token=_restore_token("admin"), data=runtime, operation="write_file",
+            display_path="www/example.txt", hass=hass, return_result=True,
+        )
+    assert len(calls) == 5
+    assert result[1] == "allowed"
+    assert path.read_text() == text
+    record = runtime.config_recovery.records()[0]
+    assert record["phase"] == "verified"
+    assert record["source"]["content"] == text

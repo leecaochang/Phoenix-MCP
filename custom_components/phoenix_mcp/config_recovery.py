@@ -11,6 +11,7 @@ import json
 from typing import Any
 import uuid
 
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.util.dt import parse_datetime, utcnow
 
@@ -58,8 +59,9 @@ def safe_snapshot(value: dict | None) -> dict | None:
 class ConfigurationRecovery:
     """Keep in-flight safety copies independent of optional, rotating history."""
 
-    def __init__(self, store: Store | None = None) -> None:
+    def __init__(self, store: Store | None = None, *, hass: HomeAssistant | None = None) -> None:
         self._store = store
+        self._hass = hass
         self._records: dict[str, dict[str, Any]] = {}
         self._lock = asyncio.Lock()
         self._resources: set[str] = set()
@@ -68,6 +70,12 @@ class ConfigurationRecovery:
         self.reconcile_lock = asyncio.Lock()
         self.reconcile_cursor = 0
         self.announced_approvals: set[str] = set()
+
+    async def _snapshot(self, value: dict | None) -> dict | None:
+        """Perform bounded serialization and secret scanning outside the event loop."""
+        if self._hass is not None:
+            return await self._hass.async_add_executor_job(safe_snapshot, value)
+        return await asyncio.to_thread(safe_snapshot, value)
 
     async def async_load(self) -> None:
         """Retry failed initialization without discarding unreadable recovery data."""
@@ -89,9 +97,9 @@ class ConfigurationRecovery:
                     raise ValueError
                 if any(record.get(field) is not None and not isinstance(record[field], dict) for field in ("before", "source", "expected")):
                     raise ValueError
-                safe_snapshot(record.get("before"))
-                safe_snapshot(record.get("source"))
-                safe_snapshot(record.get("expected"))
+                await self._snapshot(record.get("before"))
+                await self._snapshot(record.get("source"))
+                await self._snapshot(record.get("expected"))
             self._records = records
             self._load_failed = False
         except Exception:
@@ -153,10 +161,11 @@ class ConfigurationRecovery:
 
     async def update(self, rid: str, **fields: Any) -> None:
         """Persist internal reconciliation bindings without replacing observations."""
-        safe_snapshot(fields)
+        admitted = await self._snapshot(fields)
+        assert admitted is not None
         async with self._lock:
             old = self._records[rid]
-            self._records[rid] = {**old, **deepcopy(fields)}
+            self._records[rid] = {**old, **admitted}
             try:
                 await self._save()
             except BaseException:
@@ -178,9 +187,9 @@ class ConfigurationRecovery:
                     before: dict | None, *, source: dict | None = None,
                     expected: dict | None = None) -> str:
         """Persist before dispatch; storage failure always prevents the mutation."""
-        before = safe_snapshot(before)
-        source = safe_snapshot(source if source is not None else recovery_source.get())
-        expected = safe_snapshot(expected)
+        before = await self._snapshot(before)
+        source = await self._snapshot(source if source is not None else recovery_source.get())
+        expected = await self._snapshot(expected)
         async with self._lock:
             if self._load_failed:
                 await self.async_load()
@@ -210,10 +219,10 @@ class ConfigurationRecovery:
         """Persist a phase without removing its safety payload."""
         if phase not in ("dispatching", "verified", "partial", "unknown", "not_applied"):
             raise ValueError("Invalid recovery phase")
-        safe_snapshot(observations)
+        admitted = await self._snapshot(observations)
         async with self._lock:
             old = self._records[rid]
-            self._records[rid] = {**old, "phase": phase, "observations": observations}
+            self._records[rid] = {**old, "phase": phase, "observations": admitted}
             try:
                 await self._save()
             except BaseException:
@@ -222,7 +231,7 @@ class ConfigurationRecovery:
 
     async def set_source(self, rid: str, source: dict) -> None:
         """Attach a post-write snapshot only after the owning adapter reads it back."""
-        safe_source = safe_snapshot(source)
+        safe_source = await self._snapshot(source)
         assert safe_source is not None
         async with self._lock:
             old = self._records[rid]

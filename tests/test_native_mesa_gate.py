@@ -40,6 +40,7 @@ def _hass(*, with_mesa: bool) -> MagicMock:
     data = MagicMock()
     data.mesa = MagicMock() if with_mesa else None
     data.mesa_setup_failed = False
+    data.store.get_settings.return_value.mesa_mode = "advisory" if with_mesa else "off"
     hass.data = {DOMAIN: data}
     hass.services = MagicMock()
     hass.services.async_call = AsyncMock(return_value=None)
@@ -168,30 +169,32 @@ class TestMesaDecisionRouting:
 
 
 class TestMesaRuntimeAbsent:
-    async def test_missing_runtime_degrades_to_allow_all(self):
-        """Tests and a failed setup both leave data.mesa None; that must not block."""
+    @pytest.mark.parametrize("mode", ["advisory", "enforced"])
+    @pytest.mark.parametrize("failed", [False, True])
+    async def test_missing_runtime_refuses_write_regardless_of_failure_flag(self, mode, failed):
         hass = _hass(with_mesa=False)
+        data = hass.data[DOMAIN]
+        data.mesa_setup_failed = failed
+        data.store.get_settings.return_value.mesa_mode = mode
 
-        with patch(f"{NATIVE}.async_apply_mesa_to_call", AsyncMock()) as gate:
-            content, outcome, _ = await _tool_intent_action(
-                "HassTurnOn", "homeassistant", "turn_on", {}, ["light.kitchen"],
-                hass, _token(), {})
+        content, outcome, _ = await _tool_intent_action(
+            "HassTurnOn", "homeassistant", "turn_on", {}, ["light.kitchen"],
+            hass, _token(), {})
 
-        gate.assert_not_awaited()
-        assert outcome == "allowed"
-        hass.services.async_call.assert_awaited_once()
+        assert outcome == "denied"
+        assert content["isError"]
+        hass.services.async_call.assert_not_awaited()
 
-    async def test_missing_domain_data_degrades_to_allow_all(self):
+    async def test_missing_domain_data_refuses_write(self):
         hass = _hass(with_mesa=False)
         hass.data = {}
 
-        with patch(f"{NATIVE}.async_apply_mesa_to_call", AsyncMock()) as gate:
-            _content, outcome, _ = await _tool_intent_action(
-                "HassTurnOn", "homeassistant", "turn_on", {}, ["light.kitchen"],
-                hass, _token(), {})
+        _content, outcome, _ = await _tool_intent_action(
+            "HassTurnOn", "homeassistant", "turn_on", {}, ["light.kitchen"],
+            hass, _token(), {})
 
-        gate.assert_not_awaited()
-        assert outcome == "allowed"
+        assert outcome == "denied"
+        hass.services.async_call.assert_not_awaited()
 
     async def test_failed_runtime_refuses_native_write(self):
         """A configured MESA failure must not become native allow-all."""

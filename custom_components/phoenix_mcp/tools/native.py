@@ -356,11 +356,10 @@ async def _mesa_gate_native(
     if data is None:
         data = hass.data.get(DOMAIN)
     if data is None:
-        return _MesaGate(None, list(entities), [])
-    if getattr(data, "mesa", None) is None and getattr(
-        data, "mesa_setup_failed", False
-    ) is not True:
-        return _MesaGate(None, list(entities), [])
+        return _MesaGate(
+            (_tool_error("No accessible entities matched your request."), "denied", tool_name),
+            [], [],
+        )
     from ..request_authority import dispatch_request_id
     request_id = request_id or dispatch_request_id.get() or generate_request_id()
     mesa_kwargs: dict[str, Any] = {}

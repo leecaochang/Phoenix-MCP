@@ -286,7 +286,7 @@ async def _tool_restore_file_configuration(
                 )
                 if refusal is not None:
                     return refusal
-        target_snapshot = _authored_file_snapshot(rel, current_exists, current_text, family)
+        target_snapshot = await hass.async_add_executor_job(_authored_file_snapshot, rel, current_exists, current_text, family)
         digest, fingerprint = content_hash(snapshot), content_hash(target_snapshot)
     except ConfigurationRecoveryError as exc:
         return _tool_error(str(exc)), "invalid_request", tool
@@ -736,7 +736,7 @@ async def _execute_restore_file_configuration(args, record, side, snapshot, toke
         async with _get_yaml_file_lock(hass, rel):
             exists = await hass.async_add_executor_job(os.path.isfile, path)
             current = await hass.async_add_executor_job(_read_text_capped, path) if exists else None
-            target_snapshot = _authored_file_snapshot(rel, exists, current, family)
+            target_snapshot = await hass.async_add_executor_job(_authored_file_snapshot, rel, exists, current, family)
             if content_hash(snapshot) != args.get("snapshot_digest"):
                 return _tool_error("The file recovery snapshot changed after approval."), "invalid_request", tool
             if content_hash(target_snapshot) != args.get("target_fingerprint"):

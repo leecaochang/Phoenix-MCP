@@ -114,7 +114,7 @@ async def _file_recovery_precheck(
             ), "invalid_request", tool
     for label, exists, text in (("Existing file", existed, before), ("Proposed file", True, content)):
         try:
-            _authored_file_snapshot(rel, exists, text, snapshot_type)
+            await hass.async_add_executor_job(_authored_file_snapshot, rel, exists, text, snapshot_type)
         except ConfigurationRecoveryError as err:
             return _tool_error(f"{label}: {err}"), "invalid_request", tool
     return None
@@ -130,10 +130,11 @@ async def _recoverable_file_write(
     recovery = data.config_recovery
     resource = f"authored_file:{rel}"
     try:
-        before = _authored_file_snapshot(rel, before_exists, before_content, snapshot_type)
+        before = await hass.async_add_executor_job(_authored_file_snapshot, rel, before_exists, before_content, snapshot_type)
+        expected = await hass.async_add_executor_job(_authored_file_snapshot, rel, True, content, snapshot_type)
         async with recovery.resource(resource):
             rid = await recovery.begin(resource, operation, token.id, before,
-                expected=_authored_file_snapshot(rel, True, content, snapshot_type))
+                expected=expected)
             if recovery_id_out is not None:
                 recovery_id_out["recovery_id"] = rid
             try:
@@ -172,7 +173,8 @@ async def _recoverable_file_write(
                         "message": "The file write landed but readback differs; do not retry automatically.",
                     })), "allowed", f"file:{display_path}"
                 await recovery.mark(rid, "verified", observed_hash=content_hash(observed))
-                await recovery.set_source(rid, _authored_file_snapshot(rel, True, observed, snapshot_type))
+                source = await hass.async_add_executor_job(_authored_file_snapshot, rel, True, observed, snapshot_type)
+                await recovery.set_source(rid, source)
                 if return_result:
                     return _tool_success(json.dumps({
                         "status": "verified", "recovery_id": rid,
@@ -196,7 +198,7 @@ async def _recoverable_file_delete(
     recovery = data.config_recovery
     resource = f"authored_file:{rel}"
     try:
-        before = _authored_file_snapshot(rel, True, before_content)
+        before = await hass.async_add_executor_job(_authored_file_snapshot, rel, True, before_content)
         async with recovery.resource(resource):
             rid = await recovery.begin(resource, operation, token.id, before,
                 expected=_authored_file_snapshot(rel, False, None))

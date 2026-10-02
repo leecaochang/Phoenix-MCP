@@ -700,3 +700,37 @@ async def test_released_sensor_identity_migration_preserves_entity_id(hass):
     _async_migrate_unique_ids(hass, [token])
     assert registry.async_get_entity_id("sensor", DOMAIN, PhoenixTokenSensor(token, "status", _make_data()).unique_id) == legacy.entity_id
     assert registry.async_get_entity_id("sensor", DOMAIN, "phoenix_mcp_legacy_token_status") is None
+
+
+@pytest.mark.parametrize("failure_stage", ["lookup", "update"])
+async def test_sensor_setup_continues_after_one_identity_migration_failure(hass, failure_stage, caplog):
+    from homeassistant.helpers import entity_registry as er
+    from custom_components.phoenix_mcp.sensor import _unique_id
+
+    token = _make_token(name="legacy-token")
+    data = _make_data(tokens=[token])
+    hass.data[DOMAIN] = data
+    registry = er.async_get(hass)
+    legacy = {
+        kind: registry.async_get_or_create("sensor", DOMAIN, f"phoenix_mcp_legacy_token_{kind}")
+        for kind in _SENSOR_TYPES
+    }
+    method = "async_get_entity_id" if failure_stage == "lookup" else "async_update_entity"
+    original = getattr(registry, method)
+
+    def failing_row(*args, **kwargs):
+        if (failure_stage == "lookup" and args[2] == "phoenix_mcp_legacy_token_status") or (
+            failure_stage == "update" and args[0] == legacy["status"].entity_id
+        ):
+            raise RuntimeError("simulated registry failure")
+        return original(*args, **kwargs)
+
+    add_entities = MagicMock()
+    with patch.object(registry, method, side_effect=failing_row):
+        await async_setup_entry(hass, _make_entry(), add_entities)
+
+    assert "sensor identity migration failed for status" in caplog.text
+    assert len(add_entities.call_args.args[0]) == len(_SENSOR_TYPES)
+    for kind in _SENSOR_TYPES[1:]:
+        assert registry.async_get_entity_id("sensor", DOMAIN, _unique_id(token.id, kind)) == legacy[kind].entity_id
+    assert registry.async_get_entity_id("sensor", DOMAIN, "phoenix_mcp_legacy_token_status") == legacy["status"].entity_id

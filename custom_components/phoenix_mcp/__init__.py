@@ -325,7 +325,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     from .const import CONFIG_RECOVERY_STORAGE_KEY
     config_recovery = ConfigurationRecovery(DurableStore(
         hass, 1, CONFIG_RECOVERY_STORAGE_KEY, private=True, atomic_writes=True, serialize_in_event_loop=False,
-    ))
+    ), hass=hass)
     try:
         await config_recovery.async_load()
     except ConfigurationRecoveryError:

@@ -38,6 +38,7 @@ def _data(*, with_mesa: bool) -> SimpleNamespace:
     return SimpleNamespace(
         mesa=MagicMock() if with_mesa else None,
         mesa_setup_failed=False,
+        store=SimpleNamespace(get_settings=lambda: SimpleNamespace(mesa_mode="advisory" if with_mesa else "off")),
     )
 
 

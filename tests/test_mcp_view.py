@@ -2880,8 +2880,10 @@ async def test_turn_on_confirm_creates_real_approval_then_executor_actuates(hass
 
     token = _make_physical_token("confirm")
     store = _ApprStore()
-    # mesa=None and no hass.data[DOMAIN] entry -> the MESA gate degrades to allow-all.
+    from custom_components.phoenix_mcp.token_store import GlobalSettings
+    store.get_settings = lambda: GlobalSettings(mesa_mode="off")
     data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
+    hass.data[DOMAIN] = data
 
     er.async_get(hass).async_get_or_create("lock", "test", "front_door", suggested_object_id="front_door")
     hass.states.async_set("lock.front_door", "unlocked", {})
@@ -3511,6 +3513,7 @@ async def test_intent_action_surfaces_schema_rejection_as_invalid_request(hass):
     )
 
     token, _ = _make_token(pass_through=True)
+    hass.data[DOMAIN] = _make_data(token)
 
     result, outcome, _res = await _tool_intent_action(
         "HassBroadcast", "notify", "persistent_notification",

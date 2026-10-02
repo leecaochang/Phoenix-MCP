@@ -70,7 +70,7 @@ async def observe_configuration(hass, record: dict) -> dict:
         if path is None:
             raise ConfigurationRecoveryError("The recovery target is outside its current file jail.")
         text = await _read_file(hass, path)
-        return _authored_file_snapshot(rel, text is not None, text, kind)
+        return await hass.async_add_executor_job(_authored_file_snapshot, rel, text is not None, text, kind)
     if kind == "blueprint_source":
         from .tools.blueprint import _resolve_blueprint_path, _blueprint_recovery_snapshot
         domain, rel = snapshot["domain"], snapshot["path"]
