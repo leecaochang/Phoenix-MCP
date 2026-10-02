@@ -38,5 +38,16 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "state": {
+          "active": "Actif",
+          "expired": "Expiré",
+          "revoked": "Révoqué"
+        }
+      }
+    }
   }
 }

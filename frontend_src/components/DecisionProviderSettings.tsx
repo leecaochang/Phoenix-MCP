@@ -170,13 +170,13 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
         {options === account.id && <p className="agentcli-settings-hint" role="status">{t("routing.providerOptions")}</p>}
         </div>
         {editing !== account.id && <div className="agentcli-account-actions">
-          <IconButton label={t("settings.agentcliChangeModel")} disabled={saving || busy}
+          <IconButton label={t("settings.agentcliChangeModel")} blocked={saving || busy}
             onClick={() => void editModel(account)}><EditIcon /></IconButton>
           <IconButton label={t("settings.agentcliRefresh")} busyLabel={t("settings.agentcliRefreshing")}
-            busy={refreshing === account.id} disabled={saving || busy} onClick={() => void refresh(account.id)}><RefreshIcon /></IconButton>
-          <IconButton label={t("settings.agentcliProbeCaps")} expanded={options === account.id} disabled={saving || busy}
+            busy={refreshing === account.id} blocked={saving || busy} onClick={() => void refresh(account.id)}><RefreshIcon /></IconButton>
+          <IconButton label={t("settings.agentcliProbeCaps")} expanded={options === account.id} blocked={saving || busy}
             onClick={() => setOptions(options === account.id ? null : account.id)}><ProbeIcon /></IconButton>
-          <IconButton label={t("settings.agentcliRemoveAccount", { name: account.name })} danger disabled={saving || busy}
+          <IconButton label={t("settings.agentcliRemoveAccount", { name: account.name })} danger blocked={saving || busy}
             onClick={() => { setConfirmRemove(account); setError(""); }}><TrashIcon /></IconButton>
         </div>}
       </div>)}

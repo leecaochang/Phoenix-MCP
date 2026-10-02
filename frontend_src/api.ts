@@ -75,10 +75,7 @@ function authHass(): any {
   return hassInstance;
 }
 
-// The live hass object, for components that hand it to an HA custom element
-// (the dashboard preview's <hui-card>). Unlike the hass prop drilled through
-// React (which only re-renders on user change), this is fresh on every read:
-// setHass runs on every hass assignment from HA.
+// Read the current HA client for scoped card-example harvesting.
 export function currentHass(): unknown {
   return authHass();
 }

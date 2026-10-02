@@ -256,19 +256,22 @@ def test_load_bearing_whitespace_is_enforced(checker, catalogs, capsys):
     assert "leading/trailing space" in out
 
 
-def test_entity_section_must_not_be_translated(checker, tmp_path, monkeypatch, capsys):
-    monkeypatch.setattr(checker, "TRANSLATIONS", tmp_path)
-    (tmp_path / "en.json").write_text(
-        json.dumps({"panel": {"a": "A thing"}, "entity": {"sensor": {"status": {"name": "Status"}}}}),
-        encoding="utf-8",
-    )
-    (tmp_path / "xx.json").write_text(
-        json.dumps({"panel": {"a": "一个东西"}, "entity": {"sensor": {"status": {"name": "状态"}}}}),
-        encoding="utf-8",
-    )
+@pytest.mark.parametrize("translated_name", [False, True])
+def test_sensor_states_translate_while_identity_names_stay_english(
+    checker, catalogs, tmp_path, monkeypatch, capsys, translated_name,
+):
+    monkeypatch.setattr(checker, "KEEP_ENGLISH", {"identity": ("entity.sensor.status.name",)})
+    monkeypatch.setattr(checker, "KEEP_ENGLISH_KEYS", {"entity.sensor.status.name"})
+    source = {"entity": {"sensor": {"status": {"name": "Status", "state": {"active": "Active"}}}}}
+    translated = {"entity": {"sensor": {"status": {"state": {"active": "有效"}}}}}
+    if translated_name:
+        translated["entity"]["sensor"]["status"]["name"] = "状态"
+    (tmp_path / "en.json").write_text(json.dumps(source), encoding="utf-8")
+    (tmp_path / "xx.json").write_text(json.dumps(translated), encoding="utf-8")
     code, out = run(checker, capsys)
-    assert code == 1
-    assert "must stay English" in out
+    assert code == int(translated_name), out
+    if translated_name:
+        assert "entity.sensor.status.name: deliberately stays English" in out
 
 
 def test_keep_english_manifest_rejects_a_missing_key(checker, catalogs, capsys, monkeypatch):

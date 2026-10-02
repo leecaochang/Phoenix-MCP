@@ -513,13 +513,13 @@ export function AgentCliSettings({
             </div>
             {editing !== inst.id && (
               <div className="agentcli-account-actions">
-                  <IconButton label={t("settings.agentcliChangeModel")} disabled={busy}
+                  <IconButton label={t("settings.agentcliChangeModel")} blocked={busy}
                               onClick={() => { setEditing(inst.id); setModelDraft(inst.model); setModelError(null); }}>
                     <EditIcon />
                   </IconButton>
                   <IconButton label={t("settings.agentcliRefresh")} busy={refreshing === inst.id}
                               busyLabel={t("settings.agentcliRefreshing")}
-                              disabled={busy || refreshing !== null} onClick={() => void refresh(inst)}>
+                              blocked={busy || refreshing !== null} onClick={() => void refresh(inst)}>
                     <RefreshIcon />
                   </IconButton>
                   {/* The last-checked time rides on this button's own tooltip
@@ -531,12 +531,12 @@ export function AgentCliSettings({
                               label={inst.capabilities_checked_at
                                 ? t("settings.agentcliProbeCapsChecked", { when: formatDateTime(inst.capabilities_checked_at) })
                                 : t("settings.agentcliProbeCaps")}
-                              disabled={busy || probing !== null || !inst.model}
+                              blocked={busy || probing !== null} disabled={!inst.model}
                               onClick={() => setConfirmProbe(inst)}>
                     <ProbeIcon />
                   </IconButton>
                   <IconButton label={t("settings.agentcliRemoveAccount", { name: inst.name })} danger
-                              disabled={busy} onClick={() => setConfirmRemove(inst)}>
+                              blocked={busy} onClick={() => setConfirmRemove(inst)}>
                     <TrashIcon />
                   </IconButton>
               </div>

@@ -164,14 +164,12 @@ export function SegmentedToggle<T extends string>({ value, options, onChange, ar
 }
 
 /** Review configuration as escaped text without access to the HA client. */
-export function DashboardPreview({ config, onConfigErrors }: {
+export function DashboardPreview({ config }: {
   config: unknown;
-  onConfigErrors?: (messages: string[]) => void;
 }) {
   const views = useMemo(() => collectPreviewViews(config), [config]);
   const [active, setActive] = useState(0);
   useEffect(() => { setActive(0); }, [config]);
-  useEffect(() => { onConfigErrors?.([]); }, [config, onConfigErrors]);
   if (views === null) return <p className="dash-preview-note">{t("changes.previewNoLayout")}</p>;
   if (views.length === 0) return <p className="dash-preview-note">{t("changes.previewNoViews")}</p>;
   const view = views[Math.min(active, views.length - 1)];

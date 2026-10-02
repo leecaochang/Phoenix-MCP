@@ -345,3 +345,25 @@ it("requires explicit activation when choosing a decision account with the keybo
   await user.keyboard(" ");
   expect(onChange).toHaveBeenCalledExactlyOnceWith("decision_provider_id", "two");
 });
+
+
+it("keeps refresh focused while blocking duplicate provider actions", async () => {
+  mocks.list.mockResolvedValue({ instances: [{ id: "decision", name: "JEV", model: "jev-latest" }], provider_types: types });
+  let release!: (value: unknown) => void;
+  mocks.refresh.mockReturnValue(new Promise(resolve => { release = resolve; }));
+  render(<DecisionProviderSettings settings={settings} onChange={vi.fn()} saving={false} />);
+  const button = await screen.findByRole("button", { name: "Refresh models" });
+  await userEvent.click(button);
+  expect(button).toHaveFocus();
+  expect(button).not.toBeDisabled();
+  expect(button).toHaveAttribute("aria-disabled", "true");
+  await userEvent.keyboard("{Enter} ");
+  fireEvent.click(button);
+  fireEvent.click(screen.getByRole("button", { name: "Change default model" }));
+  expect(mocks.models).not.toHaveBeenCalled();
+  expect(mocks.refresh).toHaveBeenCalledExactlyOnceWith("decision");
+  await act(async () => release({ models: ["jev-latest"], declared: false }));
+  await screen.findByRole("button", { name: "Refresh models" });
+  expect(button).toHaveFocus();
+  expect(button).not.toHaveAttribute("aria-disabled", "true");
+});

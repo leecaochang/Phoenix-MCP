@@ -38,5 +38,16 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "state": {
+          "active": "有効",
+          "expired": "期限切れ",
+          "revoked": "取り消し済み"
+        }
+      }
+    }
   }
 }

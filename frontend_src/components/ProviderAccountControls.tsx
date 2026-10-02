@@ -1,8 +1,10 @@
+import { BusyButton } from "./BusyButton";
+
 /** A square icon action. Icon-only, so the accessible name and the tooltip are
  *  the SAME localized sentence: a screen reader and a hovering mouse must not be
  *  told different things, and neither may be told a slug. */
-export function IconButton({ label, busyLabel, danger, disabled, busy, onClick, children, expanded }: {
-  expanded?: boolean; label: string; busyLabel?: string; danger?: boolean; disabled?: boolean; busy?: boolean;
+export function IconButton({ label, busyLabel, danger, disabled, busy, blocked, onClick, children, expanded }: {
+  expanded?: boolean; label: string; busyLabel?: string; danger?: boolean; disabled?: boolean; busy?: boolean; blocked?: boolean;
   onClick: () => void; children: React.ReactNode;
 }) {
   // While running, the NAME changes rather than only the styling. A text button
@@ -10,11 +12,11 @@ export function IconButton({ label, busyLabel, danger, disabled, busy, onClick, 
   // nothing, so the running state has to live somewhere a name can carry it.
   const name = busy && busyLabel ? busyLabel : label;
   return (
-    <button type="button" onClick={onClick} disabled={disabled}
+    <BusyButton busy={!!busy || !!blocked} type="button" onClick={onClick} disabled={disabled}
             className={`agentcli-account-btn${danger ? " is-danger" : ""}${busy ? " is-busy" : ""}`}
             aria-label={name} title={name} aria-busy={busy || undefined} aria-expanded={expanded}>
       {children}
-    </button>
+    </BusyButton>
   );
 }
 

@@ -839,21 +839,13 @@ function ApprovalDetailModal({ record, defaultView, claimed, onClose, onResolved
   // here is also what the Agent Chat window's Reject button sends for this same
   // approval, and reopening the modal keeps what was typed.
   const [reason, setReason] = useState(() => getReasonDraft(record.id));
-  // Card configuration errors the live preview detected for THIS record,
-  // powering the one-click "Reject with error message". Last-known-non-empty:
-  // flipping back to the Diff view unmounts the preview (whose tiles report
-  // empty on cleanup), but the detected errors are still true statements
-  // about the proposed card, so the button stays until the record changes.
-  const [previewErrors, setPreviewErrors] = useState<string[]>([]);
   const [summaryRejectOpen, setSummaryRejectOpen] = useState(false);
   const summaryReasonRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { setPreviewErrors([]); setReason(getReasonDraft(record.id)); }, [record.id]);
+  useEffect(() => { setReason(getReasonDraft(record.id)); }, [record.id]);
   useEffect(() => {
     if (summaryRejectOpen) summaryReasonRef.current?.focus();
   }, [summaryRejectOpen]);
-  const onConfigErrors = useCallback((messages: string[]) => {
-    if (messages.length > 0) setPreviewErrors(messages);
-  }, []);
+
 
   const isPending = record.status === "pending";
   const summary = friendlyApprovalSummary(record.diff);
@@ -919,14 +911,6 @@ function ApprovalDetailModal({ record, defaultView, claimed, onClose, onResolved
 
   function reject() {
     return rejectWith(reason);
-  }
-
-  // One click sends the preview's detected card error(s) back to the agent as
-  // the rejection reason (surfaced in its tool result and the chat transcript),
-  // no copy-paste needed. Bounded: a rejection reason is a message, not a log.
-  function rejectWithConfigErrors() {
-    const text = t("approvals.cardErrorReason", { errors: previewErrors.join("; ") });
-    return rejectWith(text.length > 1200 ? `${text.slice(0, 1200)}...` : text);
   }
 
   const othersBanner = othersPending > 0 && onReviewAll ? (
@@ -1074,7 +1058,7 @@ function ApprovalDetailModal({ record, defaultView, claimed, onClose, onResolved
             role="tabpanel"
             aria-labelledby={`approval-detail-tab-${activeTab}`}
           >
-            {activeTab === "diff" && <DiffView record={record} onConfigErrors={onConfigErrors} />}
+            {activeTab === "diff" && <DiffView record={record} />}
             {activeTab === "args" && <YamlView value={toYaml(record.args as Record<string, unknown>)} />}
             {activeTab === "result" && (record.result == null ? (
               <p className="approvals-empty">
@@ -1093,7 +1077,7 @@ function ApprovalDetailModal({ record, defaultView, claimed, onClose, onResolved
                   onChange={(e) => { setReason(e.target.value); setReasonDraft(record.id, e.target.value); }}
                   className="approval-reason-input" placeholder={t("approvals.reasonPlaceholder")} disabled={locked} />
               </div>
-              <div className={`modal-actions approval-modal-actions${previewErrors.length === 0 ? " approval-modal-actions-compact" : ""}`}>
+              <div className="modal-actions approval-modal-actions approval-modal-actions-compact">
                 <button className="btn btn-primary approval-approve-btn" onClick={approve}
                   aria-disabled={locked} aria-busy={busy === "approve" || claimed}
                   aria-label={busy === "approve" || claimed ? t("approvals.approving") : t("approvals.approve")}>
@@ -1105,11 +1089,6 @@ function ApprovalDetailModal({ record, defaultView, claimed, onClose, onResolved
                   aria-label={busy === "reject" ? t("approvals.rejecting") : t("approvals.reject")}>
                   <span className="approval-action-label">{t("approvals.reject")}</span>
                 </button>
-                {previewErrors.length > 0 && (
-                  <button className="btn btn-outline" onClick={rejectWithConfigErrors} aria-disabled={locked} title={t("approvals.rejectWithErrorTitle")}>
-                    {t("approvals.rejectWithError")}
-                  </button>
-                )}
                 <button className="btn btn-text" onClick={() => { if (!busy) onClose(); }} aria-disabled={busy !== null}>
                   <span className="approval-action-label">{t("common.close")}</span>
                 </button>
@@ -1145,9 +1124,8 @@ function isRemovePatch(record: { tool_name: string; args?: Record<string, unknow
   return record.tool_name === "patch_dashboard" && record.args?.op === "remove";
 }
 
-function DiffView({ record, onConfigErrors }: {
+function DiffView({ record }: {
   record: ApprovalRecord;
-  onConfigErrors?: (messages: string[]) => void;
 }) {
   const diff = record.diff || {};
   const kind = diff.kind || "system_action";
@@ -1169,8 +1147,7 @@ function DiffView({ record, onConfigErrors }: {
   }, [record.id, record.tool_name, showsBeforeFirst]);
 
   const isWholeLayout = record.tool_name === "set_dashboard_config";
-  // Energy previews render the configuration itself rather than a Lovelace
-  // layout, so they bypass the hui-card readiness gate entirely.
+  // Energy preferences have their own structured configuration preview.
   const energyPreview = (diff.preview as Record<string, unknown> | undefined)?.energy as
     { before?: unknown; after?: unknown } | undefined;
   const isCardOp = CARD_OP_TOOLS.has(record.tool_name) || isCardPatchRecord(record);
@@ -1249,7 +1226,7 @@ function DiffView({ record, onConfigErrors }: {
             />
           </div>
         )}
-        <DashboardPreview key={previewSide} config={previewConfig} onConfigErrors={onConfigErrors} />
+        <DashboardPreview key={previewSide} config={previewConfig} />
       </div>
     );
   }
@@ -1319,14 +1296,7 @@ function MesaPreviewBlock({ mesa }: { mesa: Record<string, unknown> }) {
   );
 }
 
-// The visual Preview for an Energy edit. Energy has no Lovelace layout, so the
-// hui-card machinery the dashboard preview uses has nothing to render, and HA's
-// own energy cards read preferences from the backend collection rather than from
-// card config, so one embedded here would show the CURRENT dashboard regardless
-// of what the approval proposes. Showing the operator something that is not what
-// they are approving is worse than showing no picture, the same rule that limits
-// patch_dashboard's preview to card paths. So this renders the configuration
-// itself, with what changed marked.
+// Show proposed Energy preferences directly, including the changed fields.
 type EnergySourceRow = { type?: string; name?: string; meters?: Array<[string, string]> };
 type EnergyDeviceRow = { name?: string; statistic?: string };
 type EnergyRows = { sources?: EnergySourceRow[]; devices?: EnergyDeviceRow[] };

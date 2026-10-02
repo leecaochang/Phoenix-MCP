@@ -2023,7 +2023,6 @@ button.changes-row:hover { background: var(--phx-surface-2); }
 /* Safe: the panel renders in its own shadow root, so this cannot leak into HA.
    Cards pick up HA's active theme (HA's CSS custom properties inherit into the
    shadow root from the page), which may differ from a forced Phoenix MCP panel theme. */
-hui-card { display: block; min-width: 0; }
 @media (max-width: 800px) { .dash-preview-grid { grid-template-columns: 1fr; } }
 
 .approval-summary-line { margin: 4px 0 8px 0; font-size: 13px; }
@@ -2876,7 +2875,7 @@ hui-card { display: block; min-width: 0; }
 
 /* Energy approval preview. Renders the preferences themselves rather than a
    Lovelace layout (Energy has none), so it borrows the diff palette but not the
-   hui-card panes. Rows carry their own semantics via ::before markers rather
+   configuration panes. Rows carry their own semantics via ::before markers rather
    than colour alone, so an added and a removed row are still distinguishable
    without colour vision. */
 .energy-preview { display: flex; flex-direction: column; gap: 16px; }

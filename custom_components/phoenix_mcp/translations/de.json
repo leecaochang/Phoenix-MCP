@@ -38,5 +38,16 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "state": {
+          "active": "Aktiv",
+          "expired": "Abgelaufen",
+          "revoked": "Widerrufen"
+        }
+      }
+    }
   }
 }

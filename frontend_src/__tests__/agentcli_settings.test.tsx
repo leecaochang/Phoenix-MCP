@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, fireEvent, screen, waitFor } from "@testing-library/react";
+import { act, render, fireEvent, screen, waitFor } from "@testing-library/react";
 
 const getAgentCliProviders = vi.fn();
 const probeAgentCliProvider = vi.fn();
@@ -759,10 +759,20 @@ describe("AgentCliSettings account actions", () => {
     let release: (v: unknown) => void = () => {};
     refreshAgentCliProvider.mockReturnValue(new Promise((r) => { release = r; }));
     renderCard();
-    fireEvent.click(await screen.findByLabelText("Refresh models"));
+    const button = await screen.findByLabelText("Refresh models");
+    button.focus();
+    fireEvent.click(button);
+    expect(button).toHaveFocus();
+    expect(button).not.toBeDisabled();
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(button);
+    expect(refreshAgentCliProvider).toHaveBeenCalledTimes(1);
     // An icon that merely spins announces nothing to a screen reader.
     expect(await screen.findByLabelText("Refreshing...")).toBeTruthy();
-    release({ models: [], capabilities: {}, declared: false, checked_at: "x" });
+    await act(async () => release({ models: [], capabilities: {}, declared: false, checked_at: "x" }));
+    await screen.findByLabelText("Refresh models");
+    expect(button).toHaveFocus();
+    expect(button).not.toHaveAttribute("aria-disabled", "true");
   });
 
   it("checks the new model's options as part of adding an account", async () => {

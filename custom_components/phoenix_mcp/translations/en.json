@@ -43,7 +43,12 @@
   "entity": {
     "sensor": {
       "status": {
-        "name": "Status"
+        "name": "Status",
+        "state": {
+          "active": "Active",
+          "expired": "Expired",
+          "revoked": "Revoked"
+        }
       },
       "request_count": {
         "name": "Request Count"

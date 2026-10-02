@@ -26,9 +26,8 @@ PACKAGE = REPO / "custom_components" / "phoenix_mcp"
 CATALOGS = PACKAGE / "catalogs"
 TRANSLATIONS = PACKAGE / "translations"
 
-# Sections the panel and HA actually read. `entity` is deliberately absent from
-# every translated locale (see KEEP_ENGLISH_SECTIONS).
-SECTIONS = ("config", "issues", "panel", "notification", "voice")
+# Sections the panel and HA actually read, including translated sensor states.
+SECTIONS = ("config", "entity", "issues", "panel", "notification", "voice")
 
 # Which directory each section is stored in. To a translator, and to every check
 # in this file, there is ONE catalog per language; it is split across two
@@ -66,18 +65,23 @@ def languages() -> list[str]:
     stems = {p.stem for d in (CATALOGS, TRANSLATIONS) for p in d.glob("*.json")}
     return sorted(s for s in stems if s not in ("en", "strings"))
 
-# Whole sections that stay English in every locale.
-#
-# entity: the six per-token sensor names. Their entity_id is slugified from the
-# display name at first registration, so translating them would give a fresh
-# install under a non-English locale different entity_ids from every other
-# install. The names are also read back by anyone writing a template.
-KEEP_ENGLISH_SECTIONS = ("entity",)
+# No whole section is exempt; sensor names are excluded individually below.
+KEEP_ENGLISH_SECTIONS: tuple[str, ...] = ()
 
 # Individual keys that stay English, with the reason grouped so the next person
 # can tell a decision from an oversight. Absence from the locale file IS the
 # mechanism: HA falls back per key.
 KEEP_ENGLISH: dict[str, tuple[str, ...]] = {
+    # Sensor display names seed entity IDs at first registration. Translate the
+    # displayed enum states while keeping these established names stable.
+    "sensor identity names": (
+        "entity.sensor.status.name",
+        "entity.sensor.request_count.name",
+        "entity.sensor.denied_count.name",
+        "entity.sensor.rate_limit_hits.name",
+        "entity.sensor.last_access.name",
+        "entity.sensor.expires_in.name",
+    ),
     # NOTE (2026-07-30): the MESA enum values and the permission states
     # (READ/WRITE/DENY/INHERIT) USED to live here, on the argument
     # that the effective-resolution table prints the raw mesa-core value beside

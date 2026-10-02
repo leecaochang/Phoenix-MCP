@@ -38,5 +38,16 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "status": {
+        "state": {
+          "active": "활성",
+          "expired": "만료됨",
+          "revoked": "철회됨"
+        }
+      }
+    }
   }
 }
