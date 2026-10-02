@@ -321,8 +321,9 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     await card_catalog.async_load()
 
     from .config_recovery import ConfigurationRecovery, ConfigurationRecoveryError
+    from .durable_storage import DurableStore
     from .const import CONFIG_RECOVERY_STORAGE_KEY
-    config_recovery = ConfigurationRecovery(Store(
+    config_recovery = ConfigurationRecovery(DurableStore(
         hass, 1, CONFIG_RECOVERY_STORAGE_KEY, private=True, atomic_writes=True, serialize_in_event_loop=False,
     ))
     try:
@@ -330,7 +331,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     except ConfigurationRecoveryError:
         _LOGGER.error("Configuration recovery storage unavailable; protected writes will retry initialization")
 
-    agent_recovery = AgentRecovery(Store(hass, 1, AGENT_RECOVERY_STORAGE_KEY))
+    agent_recovery = AgentRecovery(DurableStore(hass, 1, AGENT_RECOVERY_STORAGE_KEY, atomic_writes=True))
     await agent_recovery.async_load()
 
     from .routing_statistics import RoutingStatistics
@@ -363,9 +364,13 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     agent_recovery.publish_issues(hass)
     from .tools.calendar import CalendarWriteJournal
     data.calendar_writes = CalendarWriteJournal(hass)
-    async with data.calendar_writes.lock:
-        await data.calendar_writes.load()
-    data.calendar_writes.publish_issues()
+    try:
+        async with data.calendar_writes.lock:
+            await data.calendar_writes.load()
+        data.calendar_writes.publish_issues()
+    except Exception:
+        data.calendar_writes.unavailable = True
+        _LOGGER.error("Calendar recovery storage unavailable; calendar writes will retry initialization")
 
 
     from .logger_control import async_get_logger_override_manager

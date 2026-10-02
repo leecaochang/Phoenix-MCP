@@ -1,11 +1,37 @@
 """Real HA entry setup, reload, route ownership, unload and credential deletion."""
 
+import copy
+import pytest
 from homeassistant.config_entries import ConfigEntryState
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.agentcli import _get_secret_store
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.token_store import TokenStore
+
+
+@pytest.mark.parametrize("stored", [
+    {"version": 1, "data": {"records": {"a": 1}}},
+    {"version": 1, "data": {"records": ["x"]}},
+    {"version": 1, "data": {"records": None}},
+    {"version": 2, "data": {"records": []}},
+])
+async def test_unreadable_calendar_journal_does_not_abort_entry(hass, hass_storage, enable_custom_integrations, stored):
+    key = "phoenix_mcp_calendar_writes"
+    hass_storage[key] = copy.deepcopy(stored)
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=DOMAIN, title="Phoenix MCP")
+    entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+    data = hass.data[DOMAIN]
+    assert data.ready and data.calendar_writes.unavailable
+    with pytest.raises(ValueError, match="Calendar recovery storage is unavailable"):
+        await data.calendar_writes.load()
+    with pytest.raises(ValueError):
+        await data.calendar_writes.save()
+    assert hass_storage[key] == stored
+    assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 async def test_real_entry_reload_has_stable_routes_and_deletion_retires_credentials(hass, enable_custom_integrations, caplog):

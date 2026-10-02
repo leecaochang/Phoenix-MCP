@@ -51,6 +51,7 @@ from .tools.esphome import _tool_search_esphome_yaml, _tool_list_esphome_jobs, _
 from .template_render import TemplateRenderError, async_render_template_for_token
 from .request_authority import (AuthorityChangedError, RequestAuthority, check_request_authority, policy_version, request_authority)
 from .household_authority import household_service_kwargs, household_tool_access
+from .request_authority import DispatchProgress, dispatch_progress, mark_dispatch_started
 from .tool_common import _create_registry_mesa_approval
 from .tools.locations import _tool_set_area_or_floor, _execute_set_area_or_floor, restore_location_version
 from .tool_input import tool_arguments_error
@@ -1308,9 +1309,11 @@ async def _dispatch_no_target_tool_call(
         )
     try:
         async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
+            service_context = household_service_kwargs(hass, domain, service)
+            mark_dispatch_started()
             await hass.services.async_call(
                 domain, service, service_data, blocking=True, return_response=False,
-                **household_service_kwargs(hass, domain, service),
+                **service_context,
             )
     except asyncio.TimeoutError:
         subject = "the device" if timeout_noun == "Action" else "HA"
@@ -1543,13 +1546,15 @@ async def _execute_call_service(
 
     try:
         async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
+            service_context = household_service_kwargs(hass, domain, service)
+            mark_dispatch_started()
             svc_response = await hass.services.async_call(
                 domain,
                 service,
                 call_data,
                 blocking=True,
                 return_response=use_return_response,
-                **household_service_kwargs(hass, domain, service),
+                **service_context,
             )
     except asyncio.TimeoutError:
         return (
@@ -7709,7 +7714,11 @@ async def _call_tool(
     them as Any, so their own returns are erased here. A valid outcome per tool
     is enforced by an adversarial sweep over the whole surface instead.
     """
-    check_request_authority()
+    try:
+        check_request_authority()
+    except AuthorityChangedError as exc:
+        exc.not_dispatched = True
+        raise
     if not household_tool_access(tool_name):
         return _tool_error("Forbidden."), "denied", tool_name
     if error := tool_arguments_error(arguments):
@@ -7735,15 +7744,26 @@ async def _call_tool(
     context = {"data": data, "request_id": request_id, "client_ip": client_ip}
     from .request_authority import dispatch_request_id
     request_context = dispatch_request_id.set(request_id)
+    from .tools.calendar import _tool_calendar_write
+    progress = DispatchProgress(tracked=handler in (_tool_call_service, _tool_calendar_write))
+    parent_progress = dispatch_progress.get()
+    progress_context = dispatch_progress.set(progress)
     try:
         result = await handler(
             arguments, token, hass, **{k: context[k] for k in wanted}, **bound
         )
+    except AuthorityChangedError as exc:
+        exc.not_dispatched = progress.tracked and not progress.started
+        raise
     finally:
         dispatch_request_id.reset(request_context)
+        dispatch_progress.reset(progress_context)
+        if parent_progress is not None and (progress.started or not progress.tracked):
+            parent_progress.started = True
     try:
         check_request_authority()
     except AuthorityChangedError as exc:
+        exc.not_dispatched = progress.tracked and not progress.started
         if not tool_is_read_only(tool_name):
             exc.receipt = (result[1], result[2])
             if result[1] == "pending_approval" and result[2].startswith("approval:"):
@@ -7751,6 +7771,11 @@ async def _call_tool(
                 from .approvals import get_approval, STATUS_APPROVED
 
                 saved = get_approval(data.store, result[2].rsplit(":", 1)[-1])
+                exc.not_dispatched = exc.not_dispatched and (
+                    saved is not None and saved.token_id == token.id and saved.request_id == request_id
+                    and saved.status in {"pending", "rejected", "cancelled", "expired"}
+                    and not saved.execution_started_at
+                )
                 if (saved is not None and saved.token_id == token.id
                         and saved.request_id == request_id and saved.status == STATUS_APPROVED
                         and isinstance(saved.result, dict) and saved.result.get("outcome") == "allowed"):
@@ -8214,13 +8239,23 @@ async def _dispatch_mcp(
         if write_entered:
             completed = (result is not None and result[3] == "allowed") or (exc.receipt is not None and exc.receipt[0] == "allowed")
             name = params["name"]
+            if exc.not_dispatched and not completed:
+                _log(data, token, request_id=request_id, method="authority/changed", resource=name,
+                     outcome="denied", client_ip=client_ip)
+                return _jsonrpc_result(msg_id, _tool_error("Request authority changed before dispatch. No action was executed.")), method, name, "denied"
             _log(data, token, request_id=request_id, method="authority/changed", resource=name,
                  outcome="invalid_request", client_ip=client_ip)
             if completed:
                 receipt = _tool_success("Action dispatch completed, but authority changed before its response could be delivered. Response details were withheld. Do not repeat the action; verify its outcome in Home Assistant.")
                 return _jsonrpc_result(msg_id, receipt), method, name, "allowed"
-            await data.agent_recovery.retain_unknown(token.id, name, request_id)
-            data.agent_recovery.publish_issues(hass)
+            try:
+                await data.agent_recovery.retain_unknown(token.id, name, request_id)
+            except Exception as recovery_error:
+                log_internal_failure(_LOGGER, "retain_unknown", recovery_error)
+            try:
+                data.agent_recovery.publish_issues(hass)
+            except Exception as recovery_error:
+                log_internal_failure(_LOGGER, "publish_recovery", recovery_error)
             return _jsonrpc_error(msg_id, -32000, "Authority changed during dispatch. The action may already have executed. Do not repeat it. Check Home Assistant and resolve the associated Repair before submitting another write."), method, name, "invalid_request"
         _log(data, token, request_id=request_id, method=method, resource="/api/phoenix-mcp",
              outcome="denied", client_ip=client_ip)

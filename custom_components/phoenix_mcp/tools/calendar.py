@@ -22,13 +22,14 @@ from ..const import (
     CALENDAR_RESULT_MAX_BYTES,
 )
 from ..data import PhoenixData
+from ..durable_storage import DurableStore
 from ..helpers import (
     content_hash, effective_cap, diff_summary_fields, redact_inaccessible_entity_ids_in_text,
     redact_structure,
 )
 from ..mesa import async_apply_mesa_to_call
 from ..policy_engine import Permission, resolve
-from ..request_authority import AuthorityChangedError, check_request_authority, dispatch_request_id
+from ..request_authority import AuthorityChangedError, check_request_authority, dispatch_request_id, mark_dispatch_started
 from ..token_store import TokenRecord
 from ..tool_common import (
     _approved_exec_ctx, _gate, _pending_or_inline, _tool_error, _tool_success,
@@ -45,19 +46,44 @@ class CalendarWriteJournal:
     def __init__(self, hass: HomeAssistant) -> None:
         self.hass = hass
         self.active: set[str] = set()
-        self.store: Store[dict] = Store(hass, 1, "phoenix_mcp_calendar_writes", private=True, serialize_in_event_loop=False)
+        self.store: Store[dict] = DurableStore(hass, 1, "phoenix_mcp_calendar_writes", private=True, atomic_writes=True, serialize_in_event_loop=False)
         self.lock = asyncio.Lock()
         self.records: list[dict] | None = None
+        self.unavailable = False
 
     async def load(self) -> list[dict]:
         """Load under the caller-held journal lock, without reinterpreting intent."""
-        if self.records is None:
-            value = await self.store.async_load()
-            self.records = value.get("records", []) if isinstance(value, dict) else []
+        if self.records is None or self.unavailable:
+            try:
+                value = await self.store.async_load()
+                records = [] if value is None else value["records"]
+                if not isinstance(records, list) or len(records) > CALENDAR_RECEIPT_LIMIT:
+                    raise ValueError
+                seen = set()
+                for row in records:
+                    if (not isinstance(row, dict) or not isinstance(row.get("receipt_id"), str)
+                            or not row["receipt_id"] or row["receipt_id"] in seen
+                            or row.get("status") not in {"outcome_unknown", "applied", "reviewed", "not_applied"}
+                            or not all(isinstance(row.get(key), str) and row[key]
+                                       for key in ("entity_id", "token_id", "created_at", "recovery"))
+                            or row.get("operation") not in {"create", "update", "delete"}
+                            or not isinstance(row.get("identity"), dict)
+                            or not isinstance(row.get("requested"), dict)
+                            or any(row.get(key) is not None and not isinstance(row[key], dict)
+                                   for key in ("before", "after"))):
+                        raise ValueError
+                    seen.add(row["receipt_id"])
+                self.records = records
+                self.unavailable = False
+            except Exception:
+                self.unavailable = True
+                raise ValueError("Calendar recovery storage is unavailable; no write was dispatched.") from None
         return self.records
 
     async def save(self) -> None:
         """Persist snapshots before acknowledging a transition."""
+        if self.unavailable or self.records is None:
+            raise ValueError("Calendar recovery storage is unavailable; no write was dispatched.")
         await self.store.async_save({"records": self.records})
 
 
@@ -345,6 +371,7 @@ async def _execute_calendar_write(args: dict, token: TokenRecord, hass: HomeAssi
         return _tool_error("Forbidden."), "denied", entity_id
     async with journal.lock:
         receipt = None
+        ready_for_dispatch = False
         try:
             check_request_authority()
             entity = _calendar_entity(entity_id, token, hass, write=True)
@@ -393,27 +420,35 @@ async def _execute_calendar_write(args: dict, token: TokenRecord, hass: HomeAssi
             entity = _calendar_entity(entity_id, token, hass, write=True)
             if effective_cap(token, "cap_calendar_write") == CAP_DENY or not targets_current(args, [entity_id], hass):
                 raise PermissionError
+            ready_for_dispatch = True
         except AuthorityChangedError:
-            if receipt is not None:
-                receipt["status"] = "not_applied"
-                await journal.save()
             raise
         except PermissionError:
-            if receipt is not None:
-                receipt["status"] = "not_applied"
-                await journal.save()
             return _tool_error("Calendar not found or its identity changed."), "denied", entity_id
         except ValueError as exc:
-            if receipt is not None:
-                receipt["status"] = "not_applied"
-                await journal.save()
             return _tool_error(_safe_calendar_data(str(exc), token, hass)), "invalid_request", entity_id
         except Exception:
             _LOGGER.exception("Calendar write preparation failed")
             return _tool_error("Calendar write preparation failed. No write was dispatched."), "invalid_request", entity_id
+        finally:
+            if receipt is not None and not ready_for_dispatch:
+                receipt["status"] = "not_applied"
+                try:
+                    await journal.save()
+                except asyncio.CancelledError:
+                    receipt["status"] = "outcome_unknown"
+                    raise
+                except Exception:
+                    receipt["status"] = "outcome_unknown"
+                    _LOGGER.error("Could not persist the undispatched calendar receipt")
+                try:
+                    journal.publish_issues()
+                except Exception:
+                    _LOGGER.error("Could not publish calendar recovery issues")
         journal.active.add(receipt["receipt_id"])
         try:
             async with asyncio.timeout(CALENDAR_TIMEOUT_SECONDS):
+                mark_dispatch_started()
                 if operation == "create":
                     await entity.async_create_event(**_calendar_event_payload(plan["event"]))
                 else:

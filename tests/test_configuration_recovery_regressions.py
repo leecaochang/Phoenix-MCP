@@ -29,6 +29,34 @@ def body(result):
     return json.loads(result[0]["content"][0]["text"])
 
 
+@pytest.mark.parametrize("newline", ["\n", "\r\n", "\r"])
+async def test_file_recovery_preserves_line_endings_through_write_read_and_restore(hass, newline):
+    from custom_components.phoenix_mcp.tools.config_files import _execute_write_file, _tool_read_file
+    from custom_components.phoenix_mcp.helpers import content_hash
+
+    t, d = token(cap_filesystem="allow"), runtime()
+    path = Path(hass.config.path("www", "endings.txt"))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    before = newline.join(["original", "text", ""])
+    wanted = newline.join(["changed", "text", ""])
+    path.write_bytes(before.encode())
+    result = await _execute_write_file({"path": "www/endings.txt", "content": wanted,
+                                        "expected_hash": content_hash(before)}, t, hass, d)
+    assert result[1] == "allowed", result
+    saved = d.config_recovery.get(body(result)["recovery_id"])
+    assert saved["phase"] == "verified"
+    assert saved["before"]["content"] == before
+    assert saved["source"]["content"] == wanted
+    assert path.read_bytes() == wanted.encode()
+    read = await _tool_read_file({"path": "www/endings.txt"}, t, hass)
+    assert body(read)["content"] == wanted
+    restored = await _execute_write_file({"path": "www/endings.txt", "content": saved["before"]["content"],
+                                          "expected_hash": content_hash(wanted)}, t, hass, d)
+    assert restored[1] == "allowed", restored
+    assert d.config_recovery.get(body(restored)["recovery_id"])["phase"] == "verified"
+    assert path.read_bytes() == before.encode()
+
+
 async def test_real_dashboard_registry_restore_updates_only_supported_fields(hass, hass_admin_user):
     assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
     from custom_components.phoenix_mcp.tools.lovelace import _execute_create_dashboard, _execute_edit_dashboard

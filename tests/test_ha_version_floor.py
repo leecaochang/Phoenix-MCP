@@ -247,6 +247,8 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     "homeassistant.util.file": {"WriteError": "2026.7.0",
         "write_utf8_file_atomic": "0.0.0",
     },
+    # Export and Store's error-catching seam verified at the supported floor.
+    "homeassistant.util.json": {"SerializationError": "2026.7.0"},
     "homeassistant.util.ulid": {
         # Re-exported from ulid_transform. Verified absent in 2024.7.0 and
         # present in 2024.8.0, before Phoenix MCP's 2025.2.0 floor.

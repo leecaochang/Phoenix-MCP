@@ -647,7 +647,7 @@ def _usable_path_arg(value: Any) -> str | None:
 def _read_text_capped(target: str) -> str:
     if os.path.getsize(target) > MAX_FILE_BYTES:
         raise ValueError("file too large")
-    with open(target, "r", encoding="utf-8") as f:
+    with open(target, "r", encoding="utf-8", newline="") as f:
         return f.read()
 
 

@@ -389,11 +389,13 @@ async def test_recurrence_rule_removal_is_refused(calendar_env):
 
 async def test_unknown_receipt_capacity_requires_explicit_review_without_replay(calendar_env):
     from custom_components.phoenix_mcp.const import CALENDAR_RECEIPT_LIMIT
-    hass, data, _token, entity = calendar_env
+    hass, data, token, entity = calendar_env
     journal = tools.CalendarWriteJournal(hass)
     data.calendar_writes = journal
     journal.records = [{"receipt_id": f"r-{i}", "entity_id": entity.entity_id,
-                        "status": "outcome_unknown", "operation": "create"}
+                        "status": "outcome_unknown", "operation": "create", "token_id": token.id,
+                        "created_at": "2026-10-02T00:00:00+00:00", "identity": {},
+                        "requested": {}, "before": None, "after": None, "recovery": "Manual review required."}
                        for i in range(CALENDAR_RECEIPT_LIMIT)]
     await journal.save()
     journal.publish_issues()
@@ -421,3 +423,42 @@ async def test_calendar_review_persistence_failure_keeps_unknown_receipt(hass):
     with pytest.raises(OSError):
         await journal.reviewed("r")
     assert journal.records == [{"receipt_id": "r", "status": "outcome_unknown"}]
+
+
+@pytest.mark.parametrize("failure", ["readback", "pending", "cancelled"])
+async def test_calendar_preparation_exits_retain_only_not_applied_receipts(calendar_env, monkeypatch, failure):
+    from homeassistant.helpers import issue_registry as ir
+    from custom_components.phoenix_mcp.approvals import async_create_pending_approval
+
+    hass, data, token, entity = calendar_env
+    original = tools._calendar_write_plan
+
+    async def plan(*args):
+        if data.calendar_writes is not None and data.calendar_writes.records:
+            if failure == "readback":
+                raise OSError("temporary integration failure")
+            if failure == "cancelled":
+                raise asyncio.CancelledError
+        return await original(*args)
+
+    original_mesa = tools.async_apply_mesa_to_call
+
+    async def mesa(*args, **kwargs):
+        if failure == "pending" and data.calendar_writes is not None and data.calendar_writes.records:
+            approval = await async_create_pending_approval(data.store, token_id=token.id, token_name=token.name,
+                tool_name="create_calendar_event", cap_name="cap_calendar_write", args={}, diff={}, request_id="held")
+            return SimpleNamespace(decision="pending", approval=approval)
+        return await original_mesa(*args, **kwargs)
+
+    monkeypatch.setattr(tools, "_calendar_write_plan", plan)
+    monkeypatch.setattr(tools, "async_apply_mesa_to_call", mesa)
+    if failure == "cancelled":
+        with pytest.raises(asyncio.CancelledError):
+            await call(calendar_env, "create_calendar_event", CREATE)
+    else:
+        result = await call(calendar_env, "create_calendar_event", CREATE)
+        assert result[1] == ("pending_approval" if failure == "pending" else "invalid_request")
+    assert entity.calls == []
+    rows = await tools.CalendarWriteJournal(hass).load()
+    assert [row["status"] for row in rows] == ["not_applied"]
+    assert not any(domain == DOMAIN and issue.startswith("calendar_recovery_") for domain, issue in ir.async_get(hass).issues)

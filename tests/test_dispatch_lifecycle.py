@@ -164,6 +164,32 @@ async def test_unknown_write_retains_barrier_and_refuses_repeat(lifecycle_http, 
     assert any(row.method == "authority/changed" and row.outcome == "invalid_request" for row in data.audit.query())
 
 
+@pytest.mark.parametrize("service_error", ["authority", "integration"])
+async def test_real_service_uncertain_effect_retains_barrier(lifecycle_http, hass, service_error):
+    from homeassistant.exceptions import HomeAssistantError
+
+    client, data, token, raw = lifecycle_http
+    effects = []
+
+    async def service(call):
+        effects.append(call.data)
+        token.settings_version += 1
+        if service_error == "authority":
+            check_request_authority()
+        raise HomeAssistantError("private-integration-failure")
+
+    hass.services.async_register("light", "toggle", service)
+    first = await client.post("/api/phoenix-mcp", headers={"Authorization": f"Bearer {raw}"}, json=_write())
+    body = await first.json()
+    assert "may already" in json.dumps(body)
+    assert "No action was executed" not in json.dumps(body)
+    assert "private-integration-failure" not in json.dumps(body)
+    assert data.agent_recovery.blocks(token.id)
+    second = await client.post("/api/phoenix-mcp", headers={"Authorization": f"Bearer {raw}"}, json=_write(2))
+    assert "earlier agent action" in json.dumps(await second.json())
+    assert len(effects) == 1
+
+
 async def test_buffered_batch_write_keeps_receipt_when_later_read_loses_authority(lifecycle_http, hass):
     client, data, token, raw = lifecycle_http
     calls = AsyncMock()
@@ -236,3 +262,85 @@ async def test_unknown_receipt_never_persists_caller_tool_text(hass):
     rows = {row["request_id"]: row for row in data.agent_recovery.records(token.id)}
     assert rows["unknown"]["tool"] == "unknown_tool"
     assert rows["known"]["tool"] == "call_service"
+
+
+@pytest.mark.parametrize("surface", ["http", "agent"])
+async def test_service_authority_loss_before_dispatch_has_no_unknown_barrier(lifecycle_http, hass, monkeypatch, surface):
+    from custom_components.phoenix_mcp.agent_recovery import dispatch_agent_tool
+    client, data, token, raw = lifecycle_http
+    calls = AsyncMock()
+    hass.services.async_register("light", "toggle", calls)
+    original = mcp_view.unsupported_secondary_targets
+    checks = 0
+
+    async def change(*args, **kwargs):
+        nonlocal checks
+        checks += 1
+        if checks == 2:
+            token.settings_version += 1
+        return await original(*args, **kwargs)
+
+    monkeypatch.setattr(mcp_view, "unsupported_secondary_targets", change)
+    if surface == "http":
+        response = await client.post("/api/phoenix-mcp", headers={"Authorization": f"Bearer {raw}"}, json=_write())
+        assert response.status == 200
+        body = await response.json()
+    else:
+        body, _, _, _ = await dispatch_agent_tool(mcp_view._dispatch_mcp, hass=hass, data=data, token=token,
+            name="call_service", arguments=_write()["params"]["arguments"], tool_id=1, request_id="prepare",
+            client_ip="agentcli", base_url="")
+    assert checks == 2
+    assert "No action was executed" in json.dumps(body)
+    calls.assert_not_awaited()
+    assert not data.agent_recovery.blocks(token.id)
+
+
+@pytest.mark.parametrize("status", ["rejected", "cancelled"])
+async def test_inline_refusal_after_authority_change_does_not_claim_dispatch(lifecycle_http, hass, status):
+    client, data, token, raw = lifecycle_http
+    token.cap_physical_control = "confirm"
+    token.confirm_inline_wait_seconds = 3
+    er.async_get(hass).async_get_or_create("cover", "test", "held", suggested_object_id="held")
+    hass.states.async_set("cover.held", "closed")
+    calls = AsyncMock()
+    hass.services.async_register("cover", "open_cover", calls)
+    body = _write()
+    body["params"]["arguments"] = {"service": {"domain": "cover", "name": "open_cover"}, "targets": [{"kind": "entity", "ids": ["cover.held"]}]}
+    request = asyncio.create_task(client.post("/api/phoenix-mcp", headers={"Authorization": f"Bearer {raw}"}, json=body))
+    async with asyncio.timeout(2):
+        while not data.store.get_pending_approvals():
+            await asyncio.sleep(0.01)
+    records = data.store.get_pending_approvals()
+    records[0]["status"] = status
+    data.store.set_pending_approvals(records)
+    token.settings_version += 1
+    if status == "cancelled":
+        data.store.get_settings().kill_switch = True
+    hass.bus.async_fire(f"{DOMAIN}_approval_resolved", {"approval_id": records[0]["id"]})
+    response = await request
+    assert "No action was executed" in json.dumps(await response.json())
+    calls.assert_not_awaited()
+    assert not data.agent_recovery.blocks(token.id)
+
+
+@pytest.mark.parametrize("failure", ["save", "issues"])
+async def test_authority_recovery_double_fault_keeps_json_response_and_barrier(lifecycle_http, hass, monkeypatch, failure):
+    client, data, token, raw = lifecycle_http
+    effects = []
+    async def handler(*args, **kwargs):
+        effects.append("started")
+        token.settings_version += 1
+        check_request_authority()
+    if failure == "save":
+        data.agent_recovery._store = AsyncMock()
+        data.agent_recovery._store.async_save.side_effect = OSError("private-path-disk-full")
+    else:
+        monkeypatch.setattr(data.agent_recovery, "publish_issues", MagicMock(side_effect=ValueError("private-path-issue")))
+    with patch.dict(mcp_view._TOOL_HANDLERS, {"call_service": (handler, (), {})}):
+        response = await client.post("/api/phoenix-mcp", headers={"Authorization": f"Bearer {raw}"}, json=_write(72))
+    assert response.status == 200
+    body = await response.json()
+    assert body["id"] == 72 and body["error"]["code"] == -32000
+    assert "may already" in body["error"]["message"]
+    assert "private-path" not in json.dumps(body) and "Traceback" not in json.dumps(body)
+    assert effects == ["started"] and data.agent_recovery.blocks(token.id)

@@ -19,6 +19,24 @@ class AuthorityChangedError(PermissionError):
     """The request's credential, runtime, or policy is no longer current."""
 
     receipt: tuple[Outcome, str] | None = None
+    not_dispatched: bool = False
+
+
+@dataclass
+class DispatchProgress:
+    """Evidence only for handlers with every execution boundary instrumented."""
+
+    tracked: bool
+    started: bool = False
+
+
+dispatch_progress: ContextVar[DispatchProgress | None] = ContextVar("phoenix_dispatch_progress", default=None)
+
+
+def mark_dispatch_started() -> None:
+    """Latch before an external effect; later refusals cannot erase prior effects."""
+    if (progress := dispatch_progress.get()) is not None:
+        progress.started = True
 
 
 @dataclass(frozen=True)

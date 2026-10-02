@@ -202,7 +202,10 @@ async def test_service_preparation_wait_rechecks_before_side_effect(hass, change
     with patch.object(mcp_view, 'unsupported_secondary_targets', prepare):
         response = await _view(hass).post(_make_request(body, 'application/json', raw))
     assert prepares == 2
-    assert 'error' in json.loads(response.text)
+    body = json.loads(response.text)
+    assert body['result']['isError'] is True
+    assert 'No action was executed' in json.dumps(body)
+    assert not data.agent_recovery.blocks(token.id)
     sink.assert_not_called()
 
 

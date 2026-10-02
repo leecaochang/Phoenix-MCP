@@ -16,6 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.storage import Store
 from homeassistant.util.dt import parse_datetime, utcnow
 
+from .durable_storage import DurableStore
 from .const import (
     AGENTCLI_MAX_ITERATIONS,
     AGENTCLI_MAX_ITERATIONS_MAX,
@@ -783,7 +784,7 @@ class GlobalSettings:
         )
 
 
-class _PhoenixStore(Store[dict]):
+class _PhoenixStore(DurableStore[dict]):
     """Load released v2/v3 storage without replaying obsolete pending actions."""
 
     async def _async_migrate_func(
@@ -826,7 +827,7 @@ class TokenStore:
     @classmethod
     async def async_create(cls, hass: HomeAssistant) -> TokenStore:
         """Create a TokenStore and load persisted data from HA storage."""
-        store: Store[dict] = _PhoenixStore(hass, STORAGE_VERSION, STORAGE_KEY)
+        store: Store[dict] = _PhoenixStore(hass, STORAGE_VERSION, STORAGE_KEY, atomic_writes=True)
         instance = cls(hass, store)
         await instance.async_load()
         return instance

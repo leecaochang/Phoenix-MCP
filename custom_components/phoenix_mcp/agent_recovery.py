@@ -149,8 +149,10 @@ class AgentRecovery:
                     "token_id": token_id, "tool": _journal_tool_name(tool),
                     "started_at": utcnow().isoformat(), "turn_id": _turn_id.get(),
                 }
-            await self._save()
-            self._active.discard(rid)
+            try:
+                await self._save()
+            finally:
+                self._active.discard(rid)
 
     async def finish(self, rid: str) -> None:
         async with self._lock:
