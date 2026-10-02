@@ -365,9 +365,9 @@ class TestRelationshipCoverage:
         body = _json(content)
         assert body["searched"] == ["automation", "script", "scene", "group"]
         assert {n["kind"] for n in body["not_searched"]} == {
-            "dashboard", "config_entry", "reference_graph",
+            "dashboard", "config_entry", "reference_graph", "consumer_identity",
         }
-        cap_gaps = [n for n in body["not_searched"] if n["kind"] != "reference_graph"]
+        cap_gaps = [n for n in body["not_searched"] if n["kind"] in {"dashboard", "config_entry"}]
         assert all("requires cap_" in n["reason"] for n in cap_gaps)
 
     async def test_reference_graph_adds_a_consumer_absent_from_yaml(
@@ -399,6 +399,7 @@ class TestRelationshipCoverage:
         assert consumer == {
             "kind": "automation",
             "id": "graph-only-id",
+            "entity_id": "automation.graph_only",
             "name": "Graph only",
             "roles": ["reference"],
             "entities": [{"entity_id": "light.kitchen", "roles": ["reference"]}],

@@ -196,7 +196,7 @@ def test_installed_assist_converter_preserves_json_schema_validation(schema, acc
 
 
 @pytest.mark.asyncio
-async def test_assist_provider_schemas_preserve_complete_catalog(hass):
+async def test_assist_provider_schemas_preserve_complete_catalog(hass, hass_admin_user):
     """Exercise HA's serializer hook for the whole native, Phoenix and MESA catalog."""
     from custom_components.phoenix_mcp.agentcli import build_mcp_tool_list
 
@@ -204,7 +204,9 @@ async def test_assist_provider_schemas_preserve_complete_catalog(hass):
     data = _make_data(token, bound_id=token.id)
     data.mesa = MagicMock()
     definitions = {d["name"]: deepcopy(d["inputSchema"]) for d in build_mcp_tool_list(token, data)}
-    instance = await PhoenixAssistAPI(hass, data).async_get_api_instance(_ctx())
+    context = _ctx()
+    context.context.user_id = hass_admin_user.id
+    instance = await PhoenixAssistAPI(hass, data).async_get_api_instance(context)
     assert {tool.name for tool in instance.tools} == set(definitions)
     assert instance.custom_serializer is not None
     for tool in instance.tools:

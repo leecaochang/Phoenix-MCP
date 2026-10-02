@@ -2394,6 +2394,7 @@ def build_mcp_tool_list(token: TokenRecord, data: PhoenixData) -> list[dict]:
         _ENTITY_TOOL_DEFS, _NATIVE_TOOL_DEFS, _SYSTEM_TOOL_DEFS, _tool_is_announced,
     )
     from .mesa_tools import mesa_tool_defs  # noqa: PLC0415
+    from .household_authority import household_tool_access
 
     from .home_companion import is_companion, internal_turn, wrapper_tool
     if is_companion(token) and not internal_turn(token):
@@ -2404,7 +2405,7 @@ def build_mcp_tool_list(token: TokenRecord, data: PhoenixData) -> list[dict]:
     mesa_defs = mesa_tool_defs() if getattr(data, "mesa", None) is not None else []
     out = []
     for d in list(_ENTITY_TOOL_DEFS) + list(_NATIVE_TOOL_DEFS) + list(_SYSTEM_TOOL_DEFS) + mesa_defs:
-        if announce_all or _tool_is_announced(d, token, has_write, cast(Any, hass)):
+        if household_tool_access(d["name"]) and (announce_all or _tool_is_announced(d, token, has_write, cast(Any, hass))):
             out.append({k: v for k, v in d.items() if k not in ("cap", "caps", "caps_any", "requires")})
     if is_companion(token):
         from .const import HOME_COMPANION_TOOLS

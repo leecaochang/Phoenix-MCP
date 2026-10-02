@@ -22,9 +22,11 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from typing import Any, TypeGuard
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
 from ..card_catalog import CardEntry
 from ..const import CAP_DENY, MAX_DIFF_INLINE_BYTES, REDACTION_SENTINEL
@@ -36,11 +38,10 @@ from ..helpers import (
     dict_arg,
     diff_summary_fields as _summary,
     effective_cap,
-    redact_inaccessible_entity_ids_in_text,
     str_arg,
     version_summary_fields as _version_summary,
 )
-from ..policy_engine import filter_service_response
+from ..policy_engine import Permission, filter_service_response, is_sensitive_key, resolve_registry_access
 from ..token_store import TokenRecord
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
 from ..request_authority import check_request_authority
@@ -224,6 +225,44 @@ async def _tool_list_dashboards(
     return _tool_success(json.dumps({"dashboards": result}, default=str)), "allowed", "list_dashboards"
 
 
+_EXAMPLE_DOTTED_TEXT = re.compile(r"[a-z0-9_]+(?:\.[a-z0-9_]+)+")
+
+
+def _scope_card_example(config: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+    """Keep example placeholders and prose while removing real inaccessible entities."""
+    registry = er.async_get(hass)
+    denied: dict[str, bool] = {}
+
+    def scrub_match(match: re.Match) -> str:
+        parts = match.group().split(".")
+        hidden_parts: set[int] = set()
+        for index in range(len(parts) - 1):
+            eid = ".".join(parts[index:index + 2])
+            if eid not in denied:
+                known = hass.states.get(eid) is not None or registry.async_get(eid) is not None
+                denied[eid] = known and resolve_registry_access(eid, token, hass) not in (Permission.READ, Permission.WRITE)
+            if denied[eid]:
+                hidden_parts.update((index, index + 1))
+        return ".".join(REDACTION_SENTINEL if index in hidden_parts else part
+                        for index, part in enumerate(parts)
+                        if index not in hidden_parts or index - 1 not in hidden_parts)
+
+    def scrub(value: Any, depth: int = 0) -> Any:
+        if isinstance(value, str):
+            # Consider each pair in states.domain.object.attributes, including overlaps.
+            return _EXAMPLE_DOTTED_TEXT.sub(scrub_match, value)
+        if isinstance(value, dict):
+            if depth > 10:
+                return {}
+            return {key: REDACTION_SENTINEL if is_sensitive_key(key) else scrub(item, depth + 1)
+                    for key, item in value.items() if not isinstance(key, str) or scrub(key) == key}
+        if isinstance(value, list):
+            return [] if depth > 10 else [scrub(item, depth + 1) for item in value]
+        return value
+
+    return scrub(config)
+
+
 def _card_row(entry: CardEntry, *, detailed: bool, token: TokenRecord, hass: HomeAssistant) -> dict:
     """Project one catalog entry. Lean by default, with the example only on request.
 
@@ -250,10 +289,7 @@ def _card_row(entry: CardEntry, *, detailed: bool, token: TokenRecord, hass: Hom
     if detailed:
         row["has_visual_editor"] = entry.has_visual_editor
         if entry.stub_config is not None:
-            scoped = filter_service_response(entry.stub_config, token, hass)
-            row["example_config"] = json.loads(redact_inaccessible_entity_ids_in_text(
-                json.dumps(scoped), token, hass,
-            ))
+            row["example_config"] = _scope_card_example(entry.stub_config, token, hass)
     return row
 
 

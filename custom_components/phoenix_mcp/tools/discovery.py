@@ -53,6 +53,8 @@ from homeassistant.core import HomeAssistant, valid_entity_id
 from homeassistant.util.dt import as_utc, parse_datetime, utcnow
 
 from ..const import CAP_ALLOW, CAP_CONFIRM, CAP_DENY, DUAL_GATE_SERVICES, MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS, MAX_DANGLING_PATHS, MAX_CONFIG_CHECK_MESSAGES, MAX_SEARCH_QUERY_LEN, MAX_SEARCH_MEMBERS, MAX_SEARCH_MEMBER_CHECKS, MAX_SEARCH_MEMBER_ID_LEN, MESA_MODE_OFF, NO_TARGET_SERVICES, PHYSICAL_GATE_DOMAINS, RUNTIME_SERVICE_GUIDANCE, SCRIPT_ENTITY_SERVICES, SEARCH_FUZZY_MATCH_CUTOFF
+from ..consumer_identity import ConsumerIdentityIndex, IDENTITY_COVERAGE
+from ..household_authority import household_admin_access
 from ..data import PhoenixData
 from ..device_semantics import (
     DeviceRegistrySnapshot,
@@ -139,7 +141,8 @@ def _references_for_entity_details(
         by_role = entities_by_role(cfg, expand)
         roles = sorted(role for role, ents in by_role.items() if entity_id in ents)
         if roles:
-            refs.append({"kind": "automation", "id": str(cfg.get("id", "")), "name": cfg.get("alias"), "roles": roles})
+            refs.append({"kind": "automation", "id": str(cfg.get("id", "")), "name": cfg.get("alias"), "roles": roles,
+                         **({"_identity_config": cfg} if not cfg.get("id") else {})})
 
     scripts, gaps = _domain_entries(hass, "script")
     not_searched.extend(gaps)
@@ -158,14 +161,15 @@ def _references_for_entity_details(
             continue
         members = scene.get("entities")
         if isinstance(members, dict) and entity_id in members:
-            refs.append({"kind": "scene", "id": str(scene.get("id", "")), "name": scene.get("name"), "roles": ["member"]})
+            refs.append({"kind": "scene", "id": str(scene.get("id", "")), "name": scene.get("name"), "roles": ["member"],
+                         **({"_identity_config": scene} if not scene.get("id") else {})})
 
     return refs, not_searched
 
 
 def _references_for_entity(hass: HomeAssistant, entity_id: str) -> list[dict]:
     """Return reverse references, retaining the legacy list-only helper API."""
-    return _references_for_entity_details(hass, entity_id)[0]
+    return ConsumerIdentityIndex(hass).bind(_references_for_entity_details(hass, entity_id)[0])
 
 
 # ---------------------------------------------------------------------------
@@ -330,7 +334,7 @@ def _dangling_report(value: str, holders: list[dict]) -> dict:
     return {"entity_id": value, "referenced_by": out}
 
 
-def _consumer_visible(consumer: dict, token: TokenRecord, hass: HomeAssistant) -> bool:
+def _consumer_visible(consumer: dict, token: TokenRecord, hass: HomeAssistant, index: ConsumerIdentityIndex | None = None) -> bool:
     """A reference never grants visibility of the consumer's identity."""
     kind, identity = consumer.get("kind"), str(consumer.get("id", ""))
     if kind == "dashboard":
@@ -339,11 +343,8 @@ def _consumer_visible(consumer: dict, token: TokenRecord, hass: HomeAssistant) -
         return resolve_config_entry_registry_access(identity, token, hass) in (Permission.READ, Permission.WRITE)
     if kind not in _GRAPH_CONSUMER_KINDS:
         return False
-    candidates = {f"{kind}.{identity}"}
-    candidates.update(entry.entity_id for entry in er.async_get(hass).entities.values()
-                      if entry.domain == kind and entry.unique_id == identity)
-    return any(resolve_registry_access(eid, token, hass) in (Permission.READ, Permission.WRITE)
-               for eid in candidates)
+    index = index or ConsumerIdentityIndex(hass)
+    return index.visible(kind, identity, token, hass, consumer.get("entity_id"))
 
 
 def _consumer(kind: str, cid: str, name: Any) -> dict:
@@ -368,6 +369,7 @@ def _finish(consumer: dict) -> dict:
             for eid, roles in sorted(consumer["entities"].items())
         ],
         **({"paths": consumer["paths"]} if consumer.get("paths") else {}),
+        **({"_identity_config": consumer["_identity_config"]} if "_identity_config" in consumer else {}),
     }
 
 
@@ -486,22 +488,24 @@ def _merge_graph_hits(
     """Merge graph-only consumers without weakening detailed YAML roles."""
     by_key = {
         (consumer["kind"], str(consumer["id"])): consumer
-        for consumer in consumers
+        for consumer in consumers if "entity_id" not in consumer
     }
+    by_entity = {consumer["entity_id"]: consumer for consumer in consumers if "entity_id" in consumer}
     for kind, graph_entity_id, target_entity_id in sorted(hits):
         consumer_id, name = _graph_consumer_identity(hass, kind, graph_entity_id)
         key = (kind, consumer_id)
-        consumer = by_key.get(key)
+        consumer = by_entity.get(graph_entity_id) or by_key.get(key)
         if consumer is None:
             consumer = {
                 "kind": kind,
                 "id": consumer_id,
+                "entity_id": graph_entity_id,
                 "name": name,
                 "roles": ["reference"],
                 "entities": [],
             }
             consumers.append(consumer)
-            by_key[key] = consumer
+            by_entity[graph_entity_id] = consumer
 
         existing = next(
             (item for item in consumer["entities"] if item["entity_id"] == target_entity_id),
@@ -565,10 +569,12 @@ def _scan_relationships(
             continue
         by_role = entities_by_role(cfg, expand)
         entry = _consumer("automation", str(cfg.get("id", "")), cfg.get("alias"))
+        evidence = {"_identity_config": cfg} if not cfg.get("id") else {}
+        entry.update(evidence)
         for role, ents in by_role.items():
             for eid in ents:
                 _note(eid, {"kind": "automation", "id": entry["id"],
-                            "name": entry["name"], "typed": True, "service": False})
+                            "name": entry["name"], "typed": True, "service": False, **evidence})
                 if eid in scope:
                     _record(entry, eid, role)
         if entry["entities"]:
@@ -595,10 +601,12 @@ def _scan_relationships(
         if not isinstance(members, dict):
             continue
         entry = _consumer("scene", str(scene.get("id", "")), scene.get("name"))
+        evidence = {"_identity_config": scene} if not scene.get("id") else {}
+        entry.update(evidence)
         for member in members:
             if isinstance(member, str):
                 _note(member, {"kind": "scene", "id": entry["id"], "name": entry["name"],
-                               "typed": True, "service": False})
+                               "typed": True, "service": False, **evidence})
         for eid in set(members) & scope:
             _record(entry, eid, "member")
         if entry["entities"]:
@@ -921,7 +929,7 @@ async def _tool_list_areas(
         if area_id:
             counts[area_id] = counts.get(area_id, 0) + 1
 
-    if token.pass_through and assist_expose_check(token, hass) is None:
+    if token.pass_through and household_admin_access() and assist_expose_check(token, hass) is None:
         for listed_area in area_reg.areas.values():
             counts.setdefault(listed_area.id, 0)
     areas: list[dict] = []
@@ -965,7 +973,7 @@ async def _tool_list_floors(
         floor_entity_counts[area.floor_id] = floor_entity_counts.get(area.floor_id, 0) + 1
         floor_area_ids.setdefault(area.floor_id, set()).add(area_id)
 
-    if token.pass_through and assist_expose_check(token, hass) is None:
+    if token.pass_through and household_admin_access() and assist_expose_check(token, hass) is None:
         for listed_floor in floor_reg.floors.values():
             floor_entity_counts.setdefault(listed_floor.floor_id, 0)
             floor_area_ids.setdefault(listed_floor.floor_id, set()).update(
@@ -1453,8 +1461,8 @@ async def _tool_search_entities(
         if f.domains is not None and domain not in f.domains:
             continue
         attrs = e.get("attributes", {})
-        fname = attrs.get("friendly_name") or (
-            (entry.name or entry.original_name) if entry is not None else ""
+        fname = str_arg(attrs.get("friendly_name")) or (
+            str_arg(entry.name or entry.original_name) if entry is not None else ""
         )
         device_class = attrs.get("device_class") or (
             (entry.device_class or entry.original_device_class) if entry is not None else None
@@ -2109,8 +2117,10 @@ async def _registry_relationships_preview(
         dashboards,
         entries,
     )
+    identity_index = ConsumerIdentityIndex(hass)
+    identity_index.bind(consumers)
     _merge_graph_hits(hass, consumers, graph_hits)
-    incomplete = [*graph_gaps, *skipped, *unreadable]
+    incomplete = [*graph_gaps, *skipped, *unreadable, IDENTITY_COVERAGE]
     preview: dict[str, Any] = {
         "consumers": consumers,
         "consumer_count": len(consumers),
@@ -2180,13 +2190,15 @@ async def _tool_get_relationships(
     consumers, refs, unreadable = await hass.async_add_executor_job(
         _scan_relationships, hass, scope, dashboards, entries,
     )
+    identity_index = ConsumerIdentityIndex(hass)
+    identity_index.bind(consumers)
     _merge_graph_hits(hass, consumers, graph_hits)
     # A YAML branch this cannot read is the same class of gap as a capability it
     # does not hold, so it lands in the same field rather than a second one.
-    not_searched.extend(unreadable)
-    consumers = [c for c in consumers if _consumer_visible(c, token, hass)]
+    not_searched.extend([*unreadable, IDENTITY_COVERAGE])
+    consumers = [c for c in consumers if _consumer_visible(c, token, hass, identity_index)]
     refs = {eid: visible for eid, holders in refs.items()
-            if (visible := [h for h in holders if _consumer_visible(h, token, hass)])}
+            if (visible := [h for h in identity_index.bind(holders) if _consumer_visible(h, token, hass, identity_index)])}
     # Missing targets are evidence from readable consumer configuration only.
     # Hidden holders cannot reveal their identities or unrelated broken references.
     registry = er.async_get(hass)
@@ -2246,7 +2258,9 @@ async def _tool_describe_entity(
     referenced_by, referenced_by_not_searched = await hass.async_add_executor_job(
         _references_for_entity_details, hass, entity_id,
     )
-    referenced_by = [c for c in referenced_by if _consumer_visible(c, token, hass)]
+    identity_index = ConsumerIdentityIndex(hass)
+    referenced_by = [c for c in identity_index.bind(referenced_by) if _consumer_visible(c, token, hass, identity_index)]
+    referenced_by_not_searched.append(IDENTITY_COVERAGE)
     body: dict = {
         "entity_id": entity_id,
         "domain": domain,
@@ -2414,9 +2428,14 @@ async def _tool_whatif(
 
     candidates: list[dict] = []
     expand = build_expand_target(hass)
+    identity_index = ConsumerIdentityIndex(hass)
     for cfg in automations:
-        if (not isinstance(cfg, dict) or not _consumer_visible(
-                {"kind": "automation", "id": cfg.get("id", "")}, token, hass)):
+        if not isinstance(cfg, dict):
+            continue
+        consumer = {"kind": "automation", "id": str(cfg.get("id", "")),
+                    **({"_identity_config": cfg} if not cfg.get("id") else {})}
+        identity_index.bind([consumer])
+        if not _consumer_visible(consumer, token, hass, identity_index):
             continue
         triggers = cfg.get("trigger") or cfg.get("triggers") or []
         if isinstance(triggers, dict):
@@ -2455,7 +2474,8 @@ async def _tool_whatif(
         else:
             verdict = False
         candidates.append({
-            "automation_id": str(cfg.get("id", "")),
+            "automation_id": consumer["id"],
+            **({"entity_id": consumer["entity_id"]} if "entity_id" in consumer else {}),
             "name": cfg.get("alias"),
             "would_fire": verdict,
             "triggers": matched,
@@ -2466,6 +2486,7 @@ async def _tool_whatif(
         "current_state": current_state,
         "hypothetical_state": hypothetical,
         "candidates": candidates,
+        "not_searched": [IDENTITY_COVERAGE],
     }
     return _tool_success(json.dumps(body, default=str)), "allowed", entity_id
 

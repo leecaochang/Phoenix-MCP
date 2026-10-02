@@ -40,6 +40,7 @@ import voluptuous as vol
 
 from .const import ASSIST_CLIENT_IP, DOMAIN
 from .household_authority import household_scope
+from .request_authority import AuthorityChangedError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -114,6 +115,15 @@ _UNBOUND_PROMPT = (
     "No Home Assistant token is currently bound to Phoenix MCP. An administrator must bind "
     "a token in the Phoenix MCP panel (Tokens, then Tool Announcement & Assist) before this "
     "assistant can control anything. Until then you have no tools available."
+)
+
+_UNAVAILABLE_PROMPT = (
+    "Phoenix MCP is currently unavailable or disabled. No Phoenix MCP tools are available. "
+    "An administrator must restore availability before this assistant can use them."
+)
+_USER_UNAVAILABLE_PROMPT = (
+    "The requesting Home Assistant user is no longer available. No Phoenix MCP tools are available. "
+    "Ask an administrator to check the user's account before continuing."
 )
 
 _ASSIST_ADDENDUM = (
@@ -245,12 +255,17 @@ if _ASSIST_API_SUPPORTED:
             if token is None:
                 return _llm.APIInstance(
                     api=self,
-                    api_prompt=_UNBOUND_PROMPT,
+                    api_prompt=_UNAVAILABLE_PROMPT if settings.kill_switch or not data.ready or data.shutting_down else _UNBOUND_PROMPT,
                     llm_context=llm_context,
                     tools=[],
                 )
 
-            async with household_scope(self.hass, llm_context.context):
+            async with household_scope(self.hass, llm_context.context) as authority:
+                try:
+                    authority.check()
+                except AuthorityChangedError:
+                    return _llm.APIInstance(api=self, api_prompt=_USER_UNAVAILABLE_PROMPT,
+                                            llm_context=llm_context, tools=[])
                 from .agentcli import build_mcp_tool_list  # noqa: PLC0415
                 from .mcp_view import _build_instructions  # noqa: PLC0415
 

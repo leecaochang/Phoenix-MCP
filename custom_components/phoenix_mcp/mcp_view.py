@@ -50,7 +50,7 @@ from .data import PhoenixData
 from .tools.esphome import _tool_search_esphome_yaml, _tool_list_esphome_jobs, _tool_list_esphome_devices
 from .template_render import TemplateRenderError, async_render_template_for_token
 from .request_authority import (AuthorityChangedError, RequestAuthority, check_request_authority, policy_version, request_authority)
-from .household_authority import household_service_kwargs
+from .household_authority import household_service_kwargs, household_tool_access
 from .tool_common import _create_registry_mesa_approval
 from .tools.locations import _tool_set_area_or_floor, _execute_set_area_or_floor, restore_location_version
 from .tool_input import tool_arguments_error
@@ -437,7 +437,9 @@ def _tool_gate_map(
         internal_name = _NATIVE_TOOL_PUBLIC_TO_INTERNAL.get(name, name)
         caps = _tool_required_caps(tool_def)
         any_caps = _tool_any_caps(tool_def)
-        if not _requires_satisfied(tool_def, hass):
+        if not household_tool_access(name):
+            unavailable.append(name)
+        elif not _requires_satisfied(tool_def, hass):
             unavailable.append(name)
             reasons[name] = _requires_unavailable_reason(tool_def)
         elif caps or any_caps:
@@ -7708,6 +7710,8 @@ async def _call_tool(
     is enforced by an adversarial sweep over the whole surface instead.
     """
     check_request_authority()
+    if not household_tool_access(tool_name):
+        return _tool_error("Forbidden."), "denied", tool_name
     if error := tool_arguments_error(arguments):
         return _tool_error(error), "invalid_request", tool_name
     from .const import APPROVAL_TARGETS_KEY
@@ -8317,7 +8321,7 @@ async def _dispatch_mcp_authorized(
         mesa_defs = mesa_tool_defs() if data.mesa is not None else []
         tools = []
         for tool_def in list(_ENTITY_TOOL_DEFS) + list(_NATIVE_TOOL_DEFS) + list(_SYSTEM_TOOL_DEFS) + mesa_defs:
-            if announce_all or _tool_is_announced(tool_def, token, has_write, hass):
+            if household_tool_access(tool_def["name"]) and (announce_all or _tool_is_announced(tool_def, token, has_write, hass)):
                 tools.append({k: v for k, v in tool_def.items() if k not in ("cap", "caps", "caps_any", "requires")})
         if is_companion(token):
             from .home_companion import wrapper_tool

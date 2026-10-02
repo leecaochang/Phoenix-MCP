@@ -110,6 +110,52 @@ async def test_assist_listing_withholds_admin_tools_for_regular_user(hass, hass_
     assert "get_logs" in {t.name for t in admin.tools}
 
 
+@pytest.mark.parametrize("identity", ["admin", "user", "unknown"])
+@pytest.mark.parametrize("announce_all", [False, True])
+async def test_shared_token_history_requires_household_admin(hass, hass_admin_user, identity, announce_all):
+    data, token = await _environment(hass)
+    token.announce_all_tools = announce_all
+    await data.store.async_patch_settings(assist_bound_token_id=token.id)
+    user = hass_admin_user if identity == "admin" else await hass.auth.async_create_user("member", group_ids=[GROUP_ID_USER])
+    context = _context(user.id if identity != "unknown" else None)
+    data.audit.record(request_id="private", token_id=token.id, token_name=token.name,
+                      method="write_file", resource="file:private-path", outcome="allowed", client_ip="external",
+                      settings=data.store.get_settings())
+    record = await async_create_pending_approval(data.store, token_id=token.id, token_name=token.name,
+        tool_name="restart_ha", cap_name="cap_restart", args={}, diff={}, request_id="external", client_ip="external")
+    api = await assist_api.PhoenixAssistAPI(hass, data).async_get_api_instance(context)
+    restricted = {"get_audit_summary", "get_approval_status", "wait_for_approval"}
+    assert restricted.intersection(tool.name for tool in api.tools) == (restricted if identity == "admin" else set())
+    for name, args in (("get_audit_summary", {}), ("get_approval_status", {}),
+                       ("get_approval_status", {"approval_id": record.id}),
+                       ("wait_for_approval", {"approval_ids": ["missing"]})):
+        tool = assist_api.PhoenixAssistTool(name, "", {}, token.id)
+        result = await tool.async_call(hass, llm.ToolInput(tool_name=name, tool_args=args), context)
+        if identity != "admin":
+            assert result == {"error": "Forbidden."}
+        elif name == "get_audit_summary":
+            assert "private-path" in json.dumps(result)
+        elif name == "get_approval_status":
+            assert record.id in json.dumps(result)
+
+
+@pytest.mark.parametrize("unavailable", ["removed_user", "inactive_user", "kill_switch"])
+async def test_assist_unavailable_turn_has_no_tools_and_an_accurate_prompt(hass, hass_admin_user, unavailable):
+    data, token = await _environment(hass)
+    await data.store.async_patch_settings(assist_bound_token_id=token.id)
+    user = await hass.auth.async_create_user("member", group_ids=[GROUP_ID_USER])
+    if unavailable == "removed_user":
+        await hass.auth.async_remove_user(user)
+    elif unavailable == "inactive_user":
+        await hass.auth.async_deactivate_user(user)
+    else:
+        await data.store.async_patch_settings(kill_switch=True)
+    instance = await assist_api.PhoenixAssistAPI(hass, data).async_get_api_instance(_context(user.id))
+    assert instance.tools == []
+    assert "currently bound" not in instance.api_prompt
+    assert ("disabled" if unavailable == "kill_switch" else "user is no longer available") in instance.api_prompt
+
+
 @pytest.mark.parametrize("change", ["remove", "deactivate", "demote"])
 async def test_household_identity_change_during_wait_stops_disclosure(hass, hass_admin_user, change):
     user = await hass.auth.async_create_user("member", group_ids=[GROUP_ID_USER])

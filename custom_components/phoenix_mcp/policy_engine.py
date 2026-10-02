@@ -298,6 +298,13 @@ def resolve_device_registry_access(
         return Permission.NO_ACCESS
 
     entity_ids = device_registry_entity_ids(hass, device_id)
+    from .household_authority import household_admin_access
+
+    if not household_admin_access() and not any(
+        resolve_registry_access(entity_id, token, hass, force_registry_only=device.disabled_by is not None)
+        in (Permission.READ, Permission.WRITE) for entity_id in entity_ids
+    ):
+        return Permission.NO_ACCESS
     if token.pass_through:
         expose = assist_expose_check(token, hass)
         if expose is not None and not any(

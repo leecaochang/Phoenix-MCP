@@ -55,6 +55,19 @@ household_authority: ContextVar[HouseholdAuthority | None] = ContextVar(
 )
 
 
+def household_admin_access() -> bool:
+    """Token administration requires a known administrator on household ingress."""
+    authority = household_authority.get()
+    return authority is None or authority.is_admin()
+
+
+def household_tool_access(tool_name: str) -> bool:
+    """Shared-token history belongs to administrators, even without a capability."""
+    from .const import HOUSEHOLD_ADMIN_TOOLS
+
+    return tool_name not in HOUSEHOLD_ADMIN_TOOLS or household_admin_access()
+
+
 class _ServiceContextKwargs(TypedDict, total=False):
     """Optional service-call context, without changing non-household calls."""
 

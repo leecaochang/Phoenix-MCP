@@ -15,7 +15,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from homeassistant.const import EntityCategory
-from homeassistant.core import HomeAssistant
+from homeassistant.auth.models import Group
+from homeassistant.core import Context, HomeAssistant
 from homeassistant.helpers import area_registry as ar
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -24,6 +25,7 @@ from homeassistant.util.dt import utcnow
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.mcp_view import _call_tool
+from custom_components.phoenix_mcp.household_authority import household_scope
 from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
 
 
@@ -140,6 +142,43 @@ async def _call(name: str, args: dict, token: TokenRecord, hass: HomeAssistant) 
     data = MagicMock()
     data.mesa = None  # MESA-off path; per-tool MESA behavior is tested separately
     return await _call_tool(name, args, token, hass, data)
+
+
+@pytest.mark.parametrize("pass_through", [False, True])
+async def test_household_registry_reads_intersect_ha_permissions(hass, hass_admin_user, reg_env, pass_through):
+    user = await hass.auth.async_create_user("restricted member", group_ids=[])
+    user.groups = [Group(name="Kitchen", policy={"entities": {"entity_ids": {reg_env["light_kitchen"]: True}}})]
+    empty_floor = fr.async_get(hass).async_create("Empty private floor")
+    empty_area = ar.async_get(hass).async_create("Empty private area")
+    ar.async_get(hass).async_update(empty_area.id, floor_id=empty_floor.floor_id)
+    token = _token(pass_through=pass_through)
+    # A Phoenix device grant cannot enlarge the requesting HA user's authority.
+    token.permissions.devices[reg_env["sensor_hub"].id] = PermissionNode(state="GREEN")
+    async with household_scope(hass, Context(user_id=user.id)):
+        for tool, key, expected in (("list_areas", "areas", {"Kitchen"}),
+                                    ("list_floors", "floors", {"Ground"}),
+                                    ("list_devices", "devices", {"Living Hub"})):
+            content, outcome, _ = await _call(tool, {}, token, hass)
+            assert outcome == "allowed", content
+            assert {row["name"] for row in _result_json(content)[key]} == expected
+        content, outcome, _ = await _call("get_device", {"device_id": reg_env["hub"].id}, token, hass)
+        assert outcome == "allowed"
+        assert _result_json(content)["entities"] == [reg_env["light_kitchen"]]
+        hidden = await _call("get_device", {"device_id": reg_env["sensor_hub"].id}, token, hass)
+        missing = await _call("get_device", {"device_id": "absent"}, token, hass)
+        assert hidden[:2] == missing[:2]
+        assert hidden[1] == "not_found"
+
+
+@pytest.mark.parametrize("pass_through", [False, True])
+async def test_unidentified_registry_reads_keep_the_bound_token_scope(hass, reg_env, pass_through):
+    token = _token(pass_through=pass_through)
+    async with household_scope(hass):
+        content, outcome, _ = await _call("get_device", {"device_id": reg_env["hub"].id}, token, hass)
+        assert outcome == "allowed"
+        assert reg_env["light_kitchen"] in _result_json(content)["entities"]
+        token.cap_registry_read = "deny"
+        assert (await _call("get_device", {"device_id": reg_env["hub"].id}, token, hass))[1] == ("allowed" if pass_through else "denied")
 
 
 class TestCapGate:

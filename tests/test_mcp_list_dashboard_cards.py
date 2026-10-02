@@ -14,6 +14,7 @@ import uuid
 from unittest.mock import MagicMock
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.card_catalog import CardCatalogStore
@@ -122,6 +123,7 @@ async def test_unavailable_card_is_flagged_and_available_ones_are_not(hass: Home
 
 
 async def test_single_type_lookup_returns_the_example(hass: HomeAssistant) -> None:
+    hass.states.async_set("light.kitchen", "on")
     content, outcome, _ = await _call(
         {"type": "mushroom-light-card"}, _token(), hass, _data(await _harvested())
     )
@@ -152,6 +154,7 @@ async def test_missing_type_reports_not_installed(hass: HomeAssistant) -> None:
 
 
 async def test_detailed_includes_every_example(hass: HomeAssistant) -> None:
+    hass.states.async_set("light.kitchen", "on")
     content, _, _ = await _call({"detailed": True}, _token(), hass, _data(await _harvested()))
     cards = {c["type"]: c for c in _json(content)["cards"]}
 
@@ -192,3 +195,29 @@ async def test_examples_filter_existing_and_embedded_out_of_scope_entities(hass:
         assert "lock.private_door" not in json.dumps(example)
         assert "private" not in json.dumps(example)
         assert catalog.get("scope-card").stub_config["nested"] == ["lock.private_door"]
+
+
+async def test_examples_preserve_placeholders_urls_and_css_but_redact_attribute_access(hass):
+    hass.states.async_set("light.visible", "on")
+    hass.states.async_set("lock.private_door", "locked")
+    hidden = er.async_get(hass).async_get_or_create("lock", "test", "registered_only", suggested_object_id="registered_only")
+    token = _token()
+    token.permissions.domains["light"] = PermissionNode(state="YELLOW")
+    benign = {"entity": "light.example", "image": "/local/images/bg.png",
+              "url_path": "https://www.home-assistant.io/docs/configuration.yaml",
+              "style": "width: 10.5px", "template": "{{ states.light.visible.state }}"}
+    private = {"template": "{{ states.lock.private_door.state }}",
+               "attribute": "lock.private_door.attributes.battery",
+               "registry": f"{{{{ states.{hidden.entity_id}.state }}}}",
+               "password": "secret", "nested": [{"lock.private_door": "must disappear"}]}
+    catalog = await _harvested(entries=[{"type": "examples", "stub_config": {"benign": benign, "private": private}}])
+    for args in ({"type": "examples"}, {"detailed": True}):
+        content, outcome, _ = await _call(args, token, hass, _data(catalog))
+        body = _json(content)
+        example = (body["card"] if "card" in body else body["cards"][0])["example_config"]
+        assert outcome == "allowed"
+        assert example["benign"] == benign
+        assert "lock.private_door" not in json.dumps(example)
+        assert hidden.entity_id not in json.dumps(example)
+        assert example["private"]["nested"] == [{}]
+        assert example["private"]["password"] == "<redacted>"
