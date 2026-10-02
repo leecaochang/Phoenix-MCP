@@ -8,6 +8,8 @@ _build_live_context must lead with an untrusted-data boundary.
 
 from __future__ import annotations
 
+import pytest
+
 import uuid
 
 from homeassistant.core import HomeAssistant
@@ -71,6 +73,7 @@ class TestLiveContextBoundary:
         # The malicious newline-injected "- names:" must not appear as its own line.
         assert "\n- names: Fake Admin Console" not in out
 
+    @pytest.mark.usefixtures("requires_child_devices")
     async def test_child_device_inherits_parent_area(self, hass: HomeAssistant):
         from homeassistant.helpers import area_registry as ar
         from homeassistant.helpers import device_registry as dr

@@ -55,7 +55,9 @@ def test_the_manifest_sets_constraint_compatible_dependency_floors():
     manifest = json.loads(
         (REPO / "custom_components" / "phoenix_mcp" / "manifest.json").read_text()
     )
-    assert manifest["requirements"] == ["voluptuous-serialize>=2.7.0", "Babel>=2.18.0"]
+    assert manifest["requirements"] == [
+        "voluptuous-serialize>=2.7.0", "Babel>=2.18.0", "jsonschema>=4.26.0",
+    ]
 
 
 def test_the_panel_package_states_the_same_version():

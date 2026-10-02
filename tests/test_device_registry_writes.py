@@ -153,6 +153,7 @@ async def test_whole_device_write_requires_explicit_device_green(
     assert "explicit WRITE" in content["content"][0]["text"]
 
 
+@pytest.mark.usefixtures("requires_child_devices")
 async def test_child_device_update_uses_child_registry_api(
     hass: HomeAssistant, device_env
 ):

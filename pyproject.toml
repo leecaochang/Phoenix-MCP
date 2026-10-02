@@ -22,7 +22,7 @@ fail_under = 80
 # NON-STRICT on purpose: the goal is to catch real drift (a renamed HA attribute,
 # a wrong argument) rather than to chase full annotation coverage on a codebase
 # that was never type-checked.
-# Deliberately NOT pinned to Phoenix's own 3.12 floor: mypy applies python_version
+# Keep this aligned with the HA test interpreter: mypy applies python_version
 # when parsing dependencies too, and Home Assistant itself uses syntax far newer
 # than that floor (unparenthesized except groups in hundreds of files, plus type
 # parameter defaults), which stops the run before it checks anything. It therefore

@@ -812,10 +812,16 @@ async def test_integration_permission_options_use_exact_entry_and_warn_shared_de
     # HA 2026.9 stages multi-owner updates as a move because its registry model
     # became single-owner; emulate the 2025.2 composite shape directly.
     updated_device = device
-    object.__setattr__(updated_device, "_pending_move", None)
-    object.__setattr__(updated_device, "_composite_subentries", {
-        first.entry_id: {None}, second.entry_id: {None},
-    })
+    if hasattr(updated_device, "_pending_move"):
+        object.__setattr__(updated_device, "_pending_move", None)
+        object.__setattr__(updated_device, "_composite_subentries", {
+            first.entry_id: {None}, second.entry_id: {None},
+        })
+    else:
+        object.__setattr__(updated_device, "config_entries", {first.entry_id, second.entry_id})
+        object.__setattr__(updated_device, "config_entries_subentries", {
+            first.entry_id: {None}, second.entry_id: {None},
+        })
     assert second.entry_id in updated_device.config_entries
     live = er.async_get(hass).async_get_or_create(
         "sensor", "test_integration", "live-a", config_entry=first
@@ -895,6 +901,7 @@ async def test_integration_bulk_selection_is_one_atomic_write_and_preserves_chil
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("requires_child_devices")
 async def test_area_bulk_selection_includes_child_device_inherited_area(hass):
     from homeassistant.helpers import area_registry as ar
     from homeassistant.helpers import device_registry as dr

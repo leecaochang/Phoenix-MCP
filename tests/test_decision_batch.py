@@ -188,6 +188,7 @@ async def test_batch_shares_one_graph_without_changing_complete_category_catalog
 
 
 @pytest.mark.parametrize('change', ['unchanged', 'area'])
+@pytest.mark.usefixtures("requires_child_devices")
 async def test_batch_recaptures_device_graph_after_model_wait(hass, batch_home, change):
     _, _, _, _, entity_id = batch_home
     config = MockConfigEntry(domain='test')

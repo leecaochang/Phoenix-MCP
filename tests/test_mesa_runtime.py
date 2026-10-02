@@ -44,6 +44,7 @@ def _token(persona: str = "voice_assistant") -> TokenRecord:
     )
 
 
+@pytest.mark.usefixtures("requires_child_devices")
 def test_mesa_area_callback_uses_child_device_effective_area(
     hass: HomeAssistant,
 ) -> None:

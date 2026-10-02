@@ -987,6 +987,7 @@ class TestResolveServiceTargetsAreaId:
         assert env["light_accent"].entity_id in entity_ids
         assert env["sensor"].entity_id not in entity_ids
 
+    @pytest.mark.usefixtures("requires_child_devices")
     async def test_area_id_expands_child_device_inherited_placement(
         self, hass, device_env, config_entry, entity_reg, device_reg
     ):

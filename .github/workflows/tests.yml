@@ -21,6 +21,8 @@ jobs:
           python-version: "3.14"
       - name: Install the matched floor test stack
         run: python -m pip install "pytest-homeassistant-custom-component==0.13.344"
+      - name: Install the compiler required by HA audio dependencies
+        run: sudo apt-get update && sudo apt-get install -y build-essential
       - name: Install integration and component requirements with HA constraints
         run: python tests/ha_floor_dependencies.py
       - name: Import first-party modules and exercise runtime boundaries
@@ -37,7 +39,7 @@ jobs:
               importlib.import_module(name)
           print(f"Imported {len(names)} Phoenix modules on Home Assistant 2026.7.0")
           PY
-          python -m pytest -q tests/test_security_boundaries.py tests/test_http_authorization.py tests/test_config_flow.py tests/test_ha_version_floor.py tests/test_runtime_lifecycle_real.py
+          python -m pytest -q tests/
 
   pytest:
     name: Python (pytest)

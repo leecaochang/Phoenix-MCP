@@ -1,29 +1,9 @@
-"""Guard: Phoenix MCP's own source must parse on its declared Python floor.
+"""Check first-party Python syntax against the supported HA interpreter floor.
 
-The floor is Python 3.12, and it is DERIVED rather than chosen: it tracks the
-`REQUIRED_PYTHON_VER` of the oldest supported Home Assistant, so no install this
-integration runs on has an older interpreter. It is currently one release
-CONSERVATIVE. The HA floor moved to 2025.2.0, which declares `(3, 13, 0)`, so
-3.13 is what the derivation now allows; the guard stays at 3.12 because a
-stricter floor is always safe (3.12 syntax parses on 3.13) and loosening it buys
-nothing until some change actually wants newer syntax. Raise it to 3.13 then,
-deliberately, rather than as a side effect.
-
-Nothing else enforces it. The suite runs on a much newer interpreter, where
-later syntax simply works, and a type checker cannot enforce it either: its
-target-version setting applies when parsing DEPENDENCIES too, and Home Assistant
-itself uses syntax newer than this floor, which aborts the run before it checks
-anything of ours.
-
-`ast.parse(..., feature_version=(3, 12))` is the one mechanism that checks only
-our files, and it rejects exactly the constructs that matter (type parameter
-defaults, unparenthesized except groups, t-strings) while accepting everything
-3.12 allows (PEP 695 `type` statements and generic parameter lists, PEP 604
-unions, match statements, ExceptionGroup syntax).
-
-Scope is Phoenix's own package. The vendored mesa_core is a copy of a separate
-project and is excluded. Tests and scripts are excluded too: they never run on
-a user's HA install.
+Home Assistant 2026.7.0 requires Python 3.14.2, so Phoenix source must parse
+with the Python 3.14 grammar. Dependency and vendored source are outside this
+scan. The full runtime suites qualify behavior on the floor and pinned HA.
+An older-grammar negative control proves that feature_version is enforced.
 """
 
 from __future__ import annotations

@@ -13,17 +13,12 @@ take effect on the next call with no re-registration.
 
 HA-COUPLING POINT (re-verify on HA upgrades, same posture as ws_dispatch):
 ``homeassistant.helpers.llm`` (async_register_api / API / Tool / APIInstance) is
-under active refactoring, and Home Assistant's schema converter translates each
-tool's JSON-Schema parameters into the voluptuous schema ``llm.Tool`` advertises
-(HA's own ``mcp`` client integration uses the same call). Stable releases expose
-``voluptuous_openapi.convert_to_voluptuous``; Probatio-based HA exposes
-``probatio.from_openapi`` instead. The active HA validation engine selects the
-converter, even when both packages are installed. The original JSON Schema is
-retained through HA's custom serializer hook to avoid a lossy round trip. The converter
-is resolved once on the executor before registration; when either dependency is
-missing the bridge simply never registers (``assist_api_supported()`` is False)
-and the panel shows a "requires HA X+" hint, decoupled from MIN_HA_VERSION like
-the MESA injector.
+under active refactoring. Probatio-based HA uses ``probatio.from_openapi``.
+The original Voluptuous engine uses a JSON Schema validator wrapped as a native
+HA schema so bounds and composition remain intact. Both paths retain the original
+JSON Schema through HA's custom serializer hook. Resolve the validator in the
+executor before registration, and omit individual schemas that cannot be supported.
+
 """
 from __future__ import annotations
 
@@ -55,22 +50,18 @@ except ImportError:  # pragma: no cover - depends on HA version
 
 @cache
 def _schema_converter() -> Callable[[Any], Any]:
-    """Resolve Home Assistant's schema converter once for this process."""
+    """Select a schema validator compatible with Home Assistant's engine."""
     if vol.Schema.__module__.startswith("probatio."):
         probatio = importlib.import_module("probatio")
         return cast(Callable[[Any], Any], probatio.from_openapi)
-    try:
-        legacy = importlib.import_module("voluptuous_openapi")
-    except ModuleNotFoundError as err:
-        if err.name != "voluptuous_openapi":
-            raise
-        probatio = importlib.import_module("probatio")
-        return cast(Callable[[Any], Any], probatio.from_openapi)
-    return cast(Callable[[Any], Any], legacy.convert_to_voluptuous)
+    from .assist_schema import legacy_schema
+
+    return legacy_schema
+
 
 
 def _convert_to_voluptuous(schema: Any) -> Any:
-    """Convert an OpenAPI schema on stable and Probatio-based HA Core."""
+    """Build HA parameters without weakening the advertised JSON Schema."""
     return _schema_converter()(schema)
 
 

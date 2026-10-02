@@ -168,8 +168,10 @@ async def test_native_public_names_match_installed_ha_llm_platforms(hass, ha_int
     )
 
 
-def _ha_llm_intents() -> set[str]:
+def _ha_llm_intents(registered: dict[str, str]) -> set[str]:
     """Every intent the installed HA can expose through an LLM platform."""
+    if not (Path(homeassistant.__file__).parent / "components/homeassistant/llm.py").exists():
+        return (set(registered) | {intent.INTENT_BROADCAST}) - ha_llm.AssistAPI.IGNORE_INTENTS
     published = {intent.INTENT_BROADCAST}
     components_dir = Path(homeassistant.__file__).parent / "components"
     for component in _INTENT_COMPONENTS:
@@ -254,7 +256,7 @@ async def test_phoenix_publishes_nothing_ha_withholds_from_llm_apis(ha_intents):
     # integration's llm.py platform. Publishing outside those declarations
     # should be a deliberate departure, not something that arrives by copying a
     # registered intent.
-    outside_ha = sorted(set(_published_hass_tools()) - _ha_llm_intents())
+    outside_ha = sorted(set(_published_hass_tools()) - _ha_llm_intents(ha_intents))
     assert not outside_ha, f"publishing intents HA withholds from LLM APIs: {outside_ha}"
 
 
@@ -263,7 +265,7 @@ async def test_every_unpublished_ha_intent_has_a_written_reason(ha_intents):
     # somebody decides whether Phoenix MCP should publish it. Without this, a new
     # actuator intent is simply never noticed.
     ours = set(_published_hass_tools())
-    ha_llm_intents = _ha_llm_intents()
+    ha_llm_intents = _ha_llm_intents(ha_intents)
     untriaged = sorted(
         name
         for name in ha_intents

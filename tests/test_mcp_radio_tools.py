@@ -392,10 +392,13 @@ def radio_env(hass: HomeAssistant):
     ent_reg = er.async_get(hass)
 
     def _device(identifiers, name, *, via_device_id=None):
-        return dev_reg.async_get_or_create(
+        device = dev_reg.async_get_or_create(
             config_entry_id=entry.entry_id, identifiers=identifiers, name=name,
-            manufacturer="Acme", model="M1", via_device_id=via_device_id,
+            manufacturer="Acme", model="M1",
         )
+        if via_device_id is not None:
+            device = dev_reg.async_update_device(device.id, via_device_id=via_device_id)
+        return device
 
     bridge = _device({("mqtt", "zigbee2mqtt_bridge_0x00124b002e1e03c7")}, "Z2M Bridge")
     z2m_bulb = _device(

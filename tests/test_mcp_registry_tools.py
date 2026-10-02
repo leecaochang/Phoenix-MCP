@@ -232,6 +232,7 @@ class TestListDevices:
         assert ids == {reg_env["hub"].id}  # Sensor Hub has no accessible entity
         assert body["devices"][0]["manufacturer"] == "Acme"
 
+    @pytest.mark.usefixtures("requires_child_devices")
     async def test_child_device_is_listed_with_inherited_area_and_parent(
         self, hass, reg_env
     ):

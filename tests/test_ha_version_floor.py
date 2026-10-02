@@ -73,7 +73,7 @@ FLOOR = _version(MIN_HA_VERSION)
 # https://raw.githubusercontent.com/home-assistant/core/<tag>/<path>.
 KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     # Entity-command feature exports verified in each component's 2024.5.0
-    # __init__.py, before the current 2025.2.0 floor.
+    # __init__.py, before the supported runtime floor.
     "homeassistant.components.alarm_control_panel": {"AlarmControlPanelEntityFeature": "0.0.0"},
     "homeassistant.components.climate": {"ClimateEntityFeature": "0.0.0"},
     "homeassistant.components.fan": {"FanEntityFeature": "0.0.0"},
@@ -131,7 +131,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "async_validate_config_item": "0.0.0",
     },
     "homeassistant.components.sensor": {
-        "SensorDeviceClass": "2026.7.0",
+        "SensorDeviceClass": "0.0.0",
         "SensorEntity": "0.0.0",
         "SensorStateClass": "0.0.0",
     },
@@ -154,7 +154,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "support_entry_unload": "0.0.0",
     },
     "homeassistant.const": {
-        "EntityCategory": "2026.7.0",
+        "EntityCategory": "0.0.0",
         "EVENT_HOMEASSISTANT_STARTED": "0.0.0",
         "EVENT_HOMEASSISTANT_STOP": "0.0.0",
         "MATCH_ALL": "0.0.0",
@@ -183,7 +183,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "HomeAssistantError": "0.0.0",
         "ServiceNotFound": "0.0.0",
         "ServiceValidationError": "0.0.0",
-        "Unauthorized": "2026.7.0",
+        "Unauthorized": "0.0.0",
     },
     "homeassistant.helpers": {
         "area_registry": "0.0.0",
@@ -244,14 +244,14 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "parse_datetime": "0.0.0",
         "utcnow": "0.0.0",
     },
-    "homeassistant.util.file": {"WriteError": "2026.7.0",
+    "homeassistant.util.file": {"WriteError": "0.0.0",
         "write_utf8_file_atomic": "0.0.0",
     },
     # Export and Store's error-catching seam verified at the supported floor.
     "homeassistant.util.json": {"SerializationError": "2026.7.0"},
     "homeassistant.util.ulid": {
         # Re-exported from ulid_transform. Verified absent in 2024.7.0 and
-        # present in 2024.8.0, before Phoenix MCP's 2025.2.0 floor.
+        # present in 2024.8.0, before Phoenix MCP's supported runtime floor.
         "ulid_to_bytes_or_none": "2024.8.0",
     },
     "homeassistant.util.yaml": {

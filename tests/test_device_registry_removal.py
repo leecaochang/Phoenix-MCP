@@ -104,6 +104,10 @@ def _add_owner_entity(
 
 def _make_legacy_shared_device(device: object, *entry_ids: str) -> None:
     """Emulate HA's pre-2026.9 composite ownership shape without deprecated APIs."""
+    if not hasattr(device, "_pending_move"):
+        object.__setattr__(device, "config_entries", set(entry_ids))
+        object.__setattr__(device, "config_entries_subentries", {eid: {None} for eid in entry_ids})
+        return
     object.__setattr__(device, "_pending_move", None)
     object.__setattr__(
         device,
@@ -199,6 +203,7 @@ async def test_integration_may_remove_device_itself(
     assert dr.async_get(hass).async_get(device_id) is None
 
 
+@pytest.mark.usefixtures("requires_child_devices")
 async def test_child_device_removal_uses_child_ownership(
     hass: HomeAssistant, removal_env
 ):
@@ -362,11 +367,7 @@ async def test_mesa_evaluates_exact_selected_owner_membership(
 
     def remove_legacy_owner(target_id: str, **kwargs):
         if kwargs.get("remove_config_entry_id") == removal_env["owner"].entry_id:
-            object.__setattr__(
-                registry.async_get(target_id),
-                "_composite_subentries",
-                {second.entry_id: {None}},
-            )
+            _make_legacy_shared_device(registry.async_get(target_id), second.entry_id)
         return registry.async_get(target_id)
 
     with patch(

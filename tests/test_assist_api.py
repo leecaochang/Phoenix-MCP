@@ -20,7 +20,13 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from jsonschema import Draft202012Validator
-from probatio import Invalid, to_openapi
+import voluptuous as vol
+
+Invalid = vol.Invalid
+if vol.Schema.__module__.startswith("probatio."):
+    from probatio import to_openapi
+else:
+    from voluptuous_openapi import convert as to_openapi
 
 from custom_components.phoenix_mcp import assist_api
 from custom_components.phoenix_mcp.assist_api import (
@@ -87,44 +93,8 @@ async def test_schema_converter_probe_runs_off_the_event_loop(hass):
     executor.assert_called_once_with()
 
 
-def test_schema_converter_falls_back_to_probatio_when_legacy_module_is_absent(monkeypatch):
-    assist_api._schema_converter.cache_clear()
-    monkeypatch.setattr(assist_api, "vol", SimpleNamespace(Schema=type("LegacySchema", (), {})))
-    legacy_error = ModuleNotFoundError(
-        "No module named 'voluptuous_openapi'", name="voluptuous_openapi"
-    )
-    probatio = SimpleNamespace(from_openapi=lambda schema: {"probatio": schema})
-
-    def _import_module(name):
-        if name == "voluptuous_openapi":
-            raise legacy_error
-        assert name == "probatio"
-        return probatio
-
-    monkeypatch.setattr(assist_api.importlib, "import_module", _import_module)
-    assert assist_api._convert_to_voluptuous({"type": "object"}) == {
-        "probatio": {"type": "object"}
-    }
-    assist_api._schema_converter.cache_clear()
-
-
-def test_schema_converter_preserves_nested_module_not_found(monkeypatch):
-    assist_api._schema_converter.cache_clear()
-    monkeypatch.setattr(assist_api, "vol", SimpleNamespace(Schema=type("LegacySchema", (), {})))
-
-    def _import_module(name):
-        assert name == "voluptuous_openapi"
-        raise ModuleNotFoundError("No module named 'dependency'", name="dependency")
-
-    monkeypatch.setattr(assist_api.importlib, "import_module", _import_module)
-    with pytest.raises(ModuleNotFoundError, match="dependency"):
-        assist_api._convert_to_voluptuous({"type": "object"})
-    assist_api._schema_converter.cache_clear()
-
-
-def test_schema_converter_matches_probatio_engine_when_legacy_is_also_installed(monkeypatch):
-    import probatio
-
+def test_schema_converter_matches_installed_probatio_engine(monkeypatch):
+    probatio = pytest.importorskip("probatio")
     assist_api._schema_converter.cache_clear()
     imported = MagicMock(return_value=probatio)
     monkeypatch.setattr(assist_api.importlib, "import_module", imported)
@@ -133,15 +103,12 @@ def test_schema_converter_matches_probatio_engine_when_legacy_is_also_installed(
     assist_api._schema_converter.cache_clear()
 
 
-def test_schema_converter_uses_legacy_on_original_voluptuous_engine(monkeypatch):
-    import voluptuous_openapi
+def test_schema_converter_uses_lossless_wrapper_on_original_engine(monkeypatch):
+    from custom_components.phoenix_mcp.assist_schema import legacy_schema
 
     assist_api._schema_converter.cache_clear()
     monkeypatch.setattr(assist_api, "vol", SimpleNamespace(Schema=type("LegacySchema", (), {})))
-    imported = MagicMock(return_value=voluptuous_openapi)
-    monkeypatch.setattr(assist_api.importlib, "import_module", imported)
-    assert assist_api._schema_converter() is voluptuous_openapi.convert_to_voluptuous
-    imported.assert_called_once_with("voluptuous_openapi")
+    assert assist_api._schema_converter() is legacy_schema
     assist_api._schema_converter.cache_clear()
 
 
@@ -323,8 +290,13 @@ async def test_assist_omits_real_incompatible_schema_without_breaking_other_tool
                    {"name": "supported", "inputSchema": {"type": "object"}}]
     with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=definitions):
         instance = await PhoenixAssistAPI(hass, data).async_get_api_instance(_ctx())
-    assert [tool.name for tool in instance.tools] == ["supported"]
-    assert "skipping tool unsupported" in caplog.text
+    if keyword == "unevaluatedProperties" and not vol.Schema.__module__.startswith("probatio."):
+        assert [tool.name for tool in instance.tools] == ["unsupported", "supported"]
+        with pytest.raises(vol.Invalid):
+            instance.tools[0].parameters({"nested": {"extra": 1}})
+    else:
+        assert [tool.name for tool in instance.tools] == ["supported"]
+        assert "skipping tool unsupported" in caplog.text
 
 @pytest.mark.asyncio
 async def test_register_and_unregister_lifecycle(hass):

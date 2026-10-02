@@ -189,3 +189,11 @@ def phoenix_ai_task_platform(hass, enable_custom_integrations):
     )
     platform.config_entry = entry
     return platform, entry
+
+
+@pytest.fixture
+def requires_child_devices():
+    """Run child-device cases only on HA releases that expose that API."""
+    from homeassistant.helpers import device_registry as dr
+    if not hasattr(dr.DeviceRegistry, "async_get_or_create_child"):
+        pytest.skip("Installed Home Assistant has no child-device registry API")

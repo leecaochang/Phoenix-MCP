@@ -10,6 +10,9 @@ from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers.template import Template
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
+from homeassistant.components.template import config_flow as template_flow
+
+_TEMPLATE_OPTIONS_SECTION = getattr(template_flow, "CONF_ADDITIONAL_OPTIONS", "advanced_options")
 
 from tests.runtime_fixtures import mesa_off_store
 
@@ -156,7 +159,7 @@ async def test_literal_authorized_source_reaches_real_creation(hass):
 
 @pytest.mark.parametrize("settings", [
     {"state": "{{ states('sensor.source') }}"},
-    {"additional_options": {"availability": "{{ has_value('sensor.source') }}"}},
+    {_TEMPLATE_OPTIONS_SECTION: {"availability": "{{ has_value('sensor.source') }}"}},
     {"state": "{{ states | list }}"},
 ])
 async def test_edit_and_executor_refuse_before_mutation(hass, settings):
@@ -181,7 +184,7 @@ async def test_partial_edit_checks_retained_reference_and_allows_removing_it(has
     token = agent()
     token.permissions.entities["sensor.source"] = PermissionNode(state="RED")
     data = runtime()
-    result, outcome, _ = await _call_tool("set_helper_settings", {"entry_id": entry.entry_id, "settings": {"additional_options": {"availability": "{{ true }}"}}}, token, hass, data)
+    result, outcome, _ = await _call_tool("set_helper_settings", {"entry_id": entry.entry_id, "settings": {_TEMPLATE_OPTIONS_SECTION: {"availability": "{{ true }}"}}}, token, hass, data)
     assert outcome == "denied", result
     assert data.config_recovery.records() == []
     result, outcome, _ = await _call_tool("set_helper_settings", {"entry_id": entry.entry_id, "settings": {"state": "{{ 9 }}"}}, token, hass, data)
@@ -291,7 +294,7 @@ async def test_retained_actions_and_restore_actions_refuse(hass):
     await hass.async_block_till_done()
     token = agent()
     data = runtime()
-    result, outcome, _ = await _call_tool("set_helper_settings", {"entry_id": entry.entry_id, "settings": {"additional_options": {"availability": "{{ true }}"}}}, token, hass, data)
+    result, outcome, _ = await _call_tool("set_helper_settings", {"entry_id": entry.entry_id, "settings": {_TEMPLATE_OPTIONS_SECTION: {"availability": "{{ true }}"}}}, token, hass, data)
     assert outcome == "denied", result
     snapshot = template_snapshot(hass, entry)
     result, outcome, _ = await restore_template(snapshot, token, hass, data)

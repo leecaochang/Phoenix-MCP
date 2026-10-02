@@ -1,5 +1,7 @@
 """Tests for Home Assistant device-registry compatibility semantics."""
 
+import pytest
+
 from types import SimpleNamespace
 
 from homeassistant.core import HomeAssistant
@@ -43,6 +45,7 @@ def test_conflicting_identity_and_invalid_ancestry_fail_closed() -> None:
     assert snapshot.invalid_ancestry_ids == frozenset({"invalid-child"})
 
 
+@pytest.mark.usefixtures("requires_child_devices")
 async def test_real_child_collection_inherits_one_parent_area(
     hass: HomeAssistant,
 ) -> None:

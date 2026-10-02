@@ -8,10 +8,10 @@
 #   PHACC 0.13.367  ->  homeassistant==2026.9.4
 #   Python: 3.14
 #
-# This is a TEST pin only. Phoenix MCP does not declare a manifest-level
-# min_ha_version; compatibility is feature-detected at runtime. Keep this
-# tracking the live HA version and re-run the suite on every HA upgrade (the
-# ws_dispatch module leans on HA internals).
+# This is a TEST pin only. hacs.json and const.MIN_HA_VERSION declare the
+# supported runtime floor, tested separately in CI. Keep this stack tracking
+# the live HA version and rerun the suite on every upgrade; ws_dispatch uses
+# version-sensitive Home Assistant APIs.
 #
 # Set up / upgrade:
 #   python3.14 -m venv venv
@@ -29,9 +29,8 @@ pytest-homeassistant-custom-component==0.13.367
 gazetteer-matcher==1.1.0
 hassil==3.12.1
 home-assistant-intents==2026.8.28
-voluptuous-openapi==0.3.0
 
-# Independent Draft 2020-12 schema and validation checks for the Assist bridge.
+# Draft 2020-12 validation for legacy Assist and independent modern-engine checks.
 jsonschema==4.26.0
 
 # Native camera service-schema checks; matches the pinned HA camera manifest.
@@ -47,7 +46,7 @@ ical==14.1.1
 pyflakes==3.4.0
 
 # Standalone type checker, same rationale as pyflakes above (not pulled in by
-# PHACC). Config and the per-module ratchet live in pyproject.toml.
+# PHACC). Config lives in pyproject.toml.
 mypy==2.3.1
 
 # Locale-aware routing replies; matches the integration manifest.
