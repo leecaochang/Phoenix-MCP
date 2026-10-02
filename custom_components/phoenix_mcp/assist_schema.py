@@ -9,6 +9,8 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 import voluptuous as vol
 
+from .const import ASSIST_SCHEMA_DIALECT
+
 
 def legacy_schema(schema: Any) -> Any:
     """Wrap a local JSON Schema without converting away its validation rules."""
@@ -19,6 +21,9 @@ def legacy_schema(schema: Any) -> Any:
         node = pending.pop()
         if not isinstance(node, dict):
             continue
+        dialect = node.get("$schema", ASSIST_SCHEMA_DIALECT)
+        if not isinstance(dialect, str) or dialect.rstrip("#") != ASSIST_SCHEMA_DIALECT:
+            raise ValueError("Assist schemas require JSON Schema 2020-12")
         if any(key in node for key in ("$ref", "$dynamicRef", "$recursiveRef")):
             raise ValueError("Assist schemas cannot resolve references")
         for key in ("properties", "patternProperties", "$defs", "dependentSchemas"):

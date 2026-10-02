@@ -65,6 +65,7 @@ from .approvals import (
 from .const import (
     DECISION_TYPESAFE_BASE_URL, DECISION_TYPESAFE_MODEL,
     AGENTCLI_ANTHROPIC_VERSION,
+    PROVIDER_API_KEY_MAX_LENGTH,
     AGENTCLI_APPROVAL_WAIT_SECONDS,
     AGENTCLI_PROGRESS_INTERVAL_SECONDS,
     AGENTCLI_CLAUDE_BASE_URL,
@@ -456,9 +457,8 @@ def _host_of(url: str) -> str:
         return ""
 
 
-def _instance_name(inst: dict, has_dupes: bool) -> str:
-    """Display name: the kind label alone, or with a discriminator when there is
-    more than one account of the same kind (last 4 of the key, or the Ollama host)."""
+def _instance_name(inst: dict, has_dupes: bool, instance_id: str) -> str:
+    """Disambiguate accounts using server-owned identity or endpoint metadata."""
     kind = inst.get("kind", "")
     label = _KINDS.get(kind, {}).get("label", kind)
     if not has_dupes:
@@ -477,9 +477,7 @@ def _instance_name(inst: dict, has_dupes: bool) -> str:
             endpoint_id,
         )
         return f"{label} ({endpoint})"
-    key = inst.get("api_key", "") or ""
-    tail = key[-4:] if len(key) >= 4 else key
-    return f"{label} ({tail})" if tail else label
+    return f"{label} ({instance_id[:8]})"
 
 
 def _with_learned(inst: dict) -> dict:
@@ -696,7 +694,7 @@ class AgentCliStore:
                 "kind": kind,
                 "name": (f"{PROVIDER_DEFINITIONS[kind].label} ({iid[:8]})"
                          if provider_purpose(kind) == "decision" and counts[kind] > 1
-                         else _instance_name(inst, counts[kind] > 1)),
+                         else _instance_name(inst, counts[kind] > 1, iid)),
                 "model": inst.get("model", ""),
                 "base_url": inst.get("base_url", ""),
                 "endpoint_id": inst.get("endpoint_id") or None,
@@ -1152,6 +1150,8 @@ class ClaudeProvider:
                 return False, f"Provider returned HTTP {resp.status}."
         try:
             return await _retry_transient(_probe)
+        except ValueError:
+            return False, "Invalid provider connection settings."
         except (ClientError, asyncio.TimeoutError) as exc:
             return False, f"Could not reach the provider: {exc}"
 
@@ -1817,6 +1817,8 @@ class OpenAICompatProvider:
                 return False, f"Provider returned HTTP {resp.status}."
         try:
             return await _retry_transient(_probe)
+        except ValueError:
+            return False, "Invalid provider connection settings."
         except (ClientError, asyncio.TimeoutError) as exc:
             if self._is_ollama_local:
                 # Newlines are preserved in the panel (the banner uses
@@ -4709,7 +4711,8 @@ async def _probe_config(kind: str, body: dict) -> ProviderConfig | ProbeConfigEr
     api_key: str | None = None
     if any(field.id == "api_key" for field in definition.fields):
         raw_key = body.get("api_key", "")
-        if not isinstance(raw_key, str) or any(ord(char) < 32 or ord(char) == 127 for char in raw_key):
+        if (not isinstance(raw_key, str) or len(raw_key) > PROVIDER_API_KEY_MAX_LENGTH
+                or any(ord(char) < 32 or ord(char) == 127 for char in raw_key)):
             return ProbeConfigError("Enter your API key.", "providerApiKeyRequired")
         api_key = raw_key.strip()
         if not api_key and any(field.id == "api_key" and field.required for field in definition.fields):
@@ -4742,7 +4745,7 @@ async def _probe_config(kind: str, body: dict) -> ProviderConfig | ProbeConfigEr
     if definition.purpose == "decision":
         if urlparse(base_url).query:
             return ProbeConfigError("The base URL must not contain a query.", "providerUrlInvalid")
-        if len(model) > 200 or (api_key and (len(api_key) > 4096 or any(ch in api_key for ch in "\r\n"))):
+        if len(model) > 200:
             return ProbeConfigError("Invalid provider configuration.", "providerUrlInvalid")
     return ProviderConfig(kind=kind, model=model or _default_model(kind),
                           base_url=base_url.rstrip("/"), api_key=api_key,

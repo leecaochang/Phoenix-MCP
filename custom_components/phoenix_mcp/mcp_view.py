@@ -45,7 +45,7 @@ from homeassistant.util.dt import utcnow
 from homeassistant.util.ulid import ulid_to_bytes_or_none
 
 from .audit import generate_request_id
-from .const import AGENTCLI_CLIENT_IP, AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, PHOENIX_VERSION, BLOCKED_DOMAINS, VOICE_AGENT_CLIENT_IP, HOME_COMPANION_CLIENT_IP, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, CAPABILITY_NAMES, DOMAIN, DOMAIN_IMPORTANT_ATTRIBUTES, DUAL_GATE_SERVICES, LEAN_ALWAYS_ATTRS, HIGH_RISK_DOMAINS, MCP_DISCOVER_TTL_MS, MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSIONS, MCP_SSE_KEEPALIVE_SECONDS, MAX_APPROVAL_RESULT_CHARS, MAX_BATCH_APPROVALS, MAX_BATCH_ITEMS, LOG_LEVELS, LOG_LEVEL_ERROR_MESSAGE, MAX_LOG_ENTRIES, MAX_LOGBOOK_HOME_DAYS, MAX_LOGBOOK_NARROWED_DAYS, MAX_LOGBOOK_RESOURCE_IDS, MAX_SEARCH_QUERY_LEN, MAX_SUBSCRIPTION_SECONDS, MAX_ENTITY_ALIASES, MAX_ENTITY_ALIAS_LENGTH, MAX_TOOL_NAME_LENGTH, MESA_APPROVED_EXECUTOR, MESA_MODE_OFF, NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS
+from .const import AGENTCLI_CLIENT_IP, AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, PHOENIX_VERSION, BLOCKED_DOMAINS, VOICE_AGENT_CLIENT_IP, HOME_COMPANION_CLIENT_IP, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, CAPABILITY_NAMES, DOMAIN, DOMAIN_IMPORTANT_ATTRIBUTES, DUAL_GATE_SERVICES, LEAN_ALWAYS_ATTRS, HIGH_RISK_DOMAINS, MCP_AUTHORITY_CHANGED_ERROR, MCP_DISCOVER_TTL_MS, MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSIONS, MCP_SSE_KEEPALIVE_SECONDS, MAX_APPROVAL_RESULT_CHARS, MAX_BATCH_APPROVALS, MAX_BATCH_ITEMS, LOG_LEVELS, LOG_LEVEL_ERROR_MESSAGE, MAX_LOG_ENTRIES, MAX_LOGBOOK_HOME_DAYS, MAX_LOGBOOK_NARROWED_DAYS, MAX_LOGBOOK_RESOURCE_IDS, MAX_SEARCH_QUERY_LEN, MAX_SUBSCRIPTION_SECONDS, MAX_ENTITY_ALIASES, MAX_ENTITY_ALIAS_LENGTH, MAX_TOOL_NAME_LENGTH, MESA_APPROVED_EXECUTOR, MESA_MODE_OFF, NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS
 from .data import PhoenixData
 from .tools.esphome import _tool_search_esphome_yaml, _tool_list_esphome_jobs, _tool_list_esphome_devices
 from .template_render import TemplateRenderError, async_render_template_for_token
@@ -607,6 +607,12 @@ def _validate_modern_request(
     header_version = request.headers.get("MCP-Protocol-Version")
     body_version = meta.get(_MCP_PROTOCOL_META) if meta is not None else None
 
+    if body_version is None and isinstance(header_version, str) and header_version not in MCP_PROTOCOL_VERSIONS:
+        return _protocol_error_response(
+            msg_id, -32022, "Unsupported protocol version", request_id,
+            data={"supported": list(MCP_PROTOCOL_VERSIONS), "requested": header_version},
+        )
+
     if not isinstance(header_version, str) or not isinstance(body_version, str):
         return _protocol_error_response(
             msg_id, -32020, "Header mismatch: protocol version metadata is required.",
@@ -668,8 +674,11 @@ def _modernize_response(response_msg: dict | None, method: str) -> dict | None:
     if response_msg is None:
         return None
     error = response_msg.get("error")
-    if isinstance(error, dict) and error.get("code") == -32002:
-        error["code"] = -32602
+    if isinstance(error, dict):
+        if error.get("code") == -32002:
+            error["code"] = -32602
+        elif error.get("code") == -32000:
+            error["code"] = MCP_AUTHORITY_CHANGED_ERROR
     result = response_msg.get("result")
     if not isinstance(result, dict):
         return response_msg
@@ -1225,7 +1234,7 @@ async def _tool_call_service(
                 and effective_cap(token, "cap_physical_control") == CAP_DENY):
             return _tool_error("Forbidden."), "denied", "call_service"
         return (
-            _tool_error("An explicit entity_id, device_id, or area_id target is required."),
+            _tool_error("An explicit entity_id, device_id, or area_id target is required for an entity service. Targetless services outside the supported allowlist are unavailable through call_service."),
             "invalid_request", "call_service",
         )
 
@@ -1462,7 +1471,7 @@ async def _execute_call_service(
             if domain == "esphome":
                 return _tool_error("Forbidden."), "denied", resource
             return (
-                _tool_error("An explicit entity_id, device_id, or area_id target is required."),
+                _tool_error("An explicit entity_id, device_id, or area_id target is required for an entity service. Targetless services outside the supported allowlist are unavailable through call_service."),
                 "invalid_request", resource,
             )
         permitted_entities, _requested_count = resolve_service_targets(
@@ -7846,7 +7855,7 @@ def _build_context_plain(token: TokenRecord, hass: HomeAssistant) -> str:
     """Build the plain-text context document listing accessible entities and capabilities."""
     from .home_companion import is_companion
     if is_companion(token):
-        return "Use home_companion for scoped household requests; installation context is unavailable."
+        return "Use home_request for scoped household requests; installation context is unavailable."
 
     lines: list[str] = []
 
@@ -7917,7 +7926,7 @@ def _build_context_json(token: TokenRecord, hass: HomeAssistant) -> dict:
     from .home_companion import is_companion
     if is_companion(token):
         return {"token_name": token.name, "persona": token.persona, "entities": [],
-                "capability_flags": effective_caps(token), "message": "Use home_companion for scoped household requests."}
+                "capability_flags": effective_caps(token), "message": "Use home_request for scoped household requests."}
     registry = er.async_get(hass)
     dev_registry = dr.async_get(hass)
 
@@ -9284,6 +9293,11 @@ class PhoenixMcpView(PhoenixView):
                         "Invalid Request: JSON-RPC batches are not supported by this protocol version.",
                         request_id,
                     ), body=parsed, resource="mcp:batch")
+                if header_version and header_version not in MCP_PROTOCOL_VERSIONS:
+                    return audited_transport_response(_protocol_error_response(
+                        None, -32022, "Unsupported protocol version", request_id,
+                        data={"supported": list(MCP_PROTOCOL_VERSIONS), "requested": header_version},
+                    ), body=parsed, resource="mcp:batch")
                 if any(
                     isinstance(item, dict) and item.get("method") == "initialize"
                     for item in parsed
@@ -9457,10 +9471,12 @@ class PhoenixMcpView(PhoenixView):
                         ), body=body)
                     legacy_session_id = _open_legacy_session(data, token)
                     if legacy_session_id is None:
-                        return audited_transport_response(_protocol_error_response(
+                        response = _protocol_error_response(
                             msg_id, -32000, "Legacy MCP session capacity reached. Close unused sessions or retry after they expire.", request_id,
                             status=429,
-                        ), body=body)
+                        )
+                        response.headers["Retry-After"] = str(math.ceil(_MCP_LEGACY_SESSION_TTL_SECONDS))
+                        return audited_transport_response(response, body=body)
                 else:
                     session = _legacy_session(data, request, token)
                     if session is None:

@@ -712,3 +712,25 @@ class TestPayloadRedaction:
         stored = log.query()[0].payload
         assert "light.kitchen" in stored
         assert "50" in stored
+
+
+async def test_restore_origin_survives_persistence_without_relaxing_payload_scrubbing(hass):
+    from homeassistant.helpers.storage import Store
+
+    backing = Store(hass, 1, "phoenix_test_restore_audit")
+    audit = AuditLog(store=backing)
+    audit.record(
+        request_id="restore", token_id="admin", token_name="admin:owner",
+        method="version/restore", resource="version:fixture", outcome="allowed",
+        client_ip="", settings=_settings(), originating_token_id="source-identity",
+        payload={"originating_token_id": "private-payload", "api_key": "private-key"},
+    )
+    await audit.async_save()
+    loaded = AuditLog(store=backing)
+    await loaded.async_load()
+    entry = loaded.query(limit=1)[0].to_dict()
+    assert entry["token_id"] == "admin"
+    assert entry["ha_user_id"] == "owner"
+    assert entry["originating_token_id"] == "source-identity"
+    assert "private-payload" not in entry["payload"]
+    assert "private-key" not in entry["payload"]

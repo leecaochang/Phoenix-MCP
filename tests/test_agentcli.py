@@ -1499,7 +1499,8 @@ async def test_secret_store_instances(hass):
     listed = store.list_instances()
     names = {i["name"] for i in listed}
     # Two Anthropic accounts get discriminators; the single Ollama stays plain.
-    assert "Anthropic (w5c4)" in names and "Anthropic (q9r8)" in names
+    assert f"Anthropic ({c1[:8]})" in names and f"Anthropic ({c2[:8]})" in names
+    assert "w5c4" not in json.dumps(listed) and "q9r8" not in json.dumps(listed)
     assert "Ollama (local)" in names
     # The list never leaks a key.
     assert "api_key" not in json.dumps(listed)
@@ -4416,3 +4417,40 @@ async def test_obsolete_numeric_patch_is_rejected_without_mutation(hass, body):
     assert response.status == 400
     assert json.loads(response.text)['message_key'] == 'adminError.unknownFields'
     store.assert_not_called()
+
+
+@pytest.mark.parametrize("kind", [
+    kind for kind, definition in agentcli.PROVIDER_DEFINITIONS.items()
+    if any(field.id == "api_key" for field in definition.fields)
+])
+@pytest.mark.parametrize("bad_key", ["x" * 4097, "key\rvalue", "key\nvalue", "key\x00value", "key\x7fvalue", ["key"]])
+async def test_all_provider_key_inputs_refuse_before_setup(hass, kind, bad_key):
+    view = agentcli.PhoenixAgentCliProvidersView()
+    view.hass = hass
+    with patch.object(agentcli, "_get_secret_store") as store:
+        response = await view.post(_admin_request({"kind": kind, "api_key": bad_key}))
+    assert response.status == 400
+    assert json.loads(response.text)["error"] == "invalid_request"
+    store.assert_not_called()
+
+
+@pytest.mark.parametrize("kind", ["claude", "chatgpt", "typesafe"])
+async def test_provider_key_length_boundary_is_accepted(kind):
+    with patch.object(agentcli, "_validate_base_url", AsyncMock(return_value=None)):
+        cfg = await agentcli._probe_config(kind, {
+            "api_key": "k" * 4096, "base_url": "https://example.com/v1", "model": "model",
+        })
+    assert isinstance(cfg, ProviderConfig)
+    assert len(cfg.api_key) == 4096
+
+
+@pytest.mark.parametrize("kind", ["claude", "minimax", "chatgpt", "ollama"])
+async def test_provider_validation_refuses_value_error_without_secret_echo(kind):
+    provider = agentcli.build_provider(ProviderConfig(kind, "model", "https://example.com", "key"))
+    session = MagicMock()
+    session.get.side_effect = ValueError("private provider setting")
+    ok, message = await provider.validate(session)
+    assert not ok
+    assert message == "Invalid provider connection settings."
+    assert "private" not in message
+    session.get.assert_called_once()

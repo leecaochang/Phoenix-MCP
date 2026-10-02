@@ -3253,3 +3253,19 @@ async def test_routing_statistics_reset_is_explicit_and_surface_scoped(body,stat
     assert response.status == status
     assert d.routing_statistics.summary()['voice']['outcomes']['local'] == 3
     assert d.routing_statistics.summary()['chat']['outcomes']['local'] == (0 if status == 200 else 5)
+
+
+@pytest.mark.parametrize(("view_type", "method"), [
+    (PhoenixAdminVoiceAgentPipelineView, "post"),
+    (PhoenixAdminAiTaskPreferredView, "get"),
+    (PhoenixAdminAiTaskPreferredView, "post"),
+    (PhoenixAdminAiTaskPreferredView, "delete"),
+])
+async def test_missing_integration_setup_returns_not_found(view_type, method):
+    data, _ = _settings_data([])
+    view = view_type()
+    view.hass = _make_hass(data)
+    view.hass.config_entries.async_entries.return_value = []
+    response = await getattr(view, method)(_make_admin_request(body=b"{}"))
+    assert response.status == 404
+    assert json.loads(response.text)["error"] == "not_found"

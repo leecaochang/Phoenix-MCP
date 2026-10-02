@@ -272,3 +272,30 @@ class TestVersionDetail:
         view.hass = _hass(_data())
         resp = await view.get(_request(), version_id="does-not-exist")
         assert resp.status == 404
+
+
+async def test_restore_audit_keeps_admin_actor_and_opaque_source_identity():
+    from custom_components.phoenix_mcp.audit import AuditLog
+    from custom_components.phoenix_mcp.token_store import GlobalSettings
+
+    data = _data()
+    data.audit = AuditLog()
+    data.store.get_settings.return_value = GlobalSettings(log_allowed=True)
+    record = await data.versions.record(
+        resource_type="automation", resource_id="fixture", action="edit",
+        before={"alias": "Before"}, after={"alias": "After"},
+        token_id="source-identity", token_name="source",
+    )
+    view = PhoenixAdminVersionRestoreView()
+    view.hass = _hass(data)
+    req = _request()
+    req.content_length = 0
+    req.content.read = AsyncMock(side_effect=[b"", b""])
+    result = ({"content": [{"type": "text", "text": "restored"}]}, "allowed", "fixture")
+    with patch("custom_components.phoenix_mcp.mcp_view.async_restore_version", AsyncMock(return_value=result)):
+        response = await view.post(req, version_id=record.id)
+    assert response.status == 200
+    entry = data.audit.query(limit=1)[0].to_dict()
+    assert entry["token_id"] == "admin"
+    assert entry["ha_user_id"] == "admin-user"
+    assert entry["originating_token_id"] == "source-identity"

@@ -18,7 +18,8 @@ from custom_components.phoenix_mcp.token_store import TokenStore
 async def http_authority(hass, hass_client_no_auth):
     assert await async_setup_component(hass, "http", {})
     store = await TokenStore.async_create(hass)
-    data = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog(), enforce_mcp_lifecycle=True)
+    data = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
+    assert data.enforce_mcp_lifecycle is True
     hass.data[DOMAIN] = data
     for view_cls in ALL_MCP_VIEWS:
         view = view_cls()
@@ -179,3 +180,133 @@ async def test_all_admin_routes_reject_real_read_only_ha_identity(hass, hass_cli
             assert response.status == 403, (method, path, await response.text())
             assert (await response.json())["error"] == "forbidden"
     assert store.list_tokens() == []
+
+
+async def _initialized_session(client, data, *, rate=0):
+    token, raw = await data.store.async_create_token("session", "admin", rate_limit_requests=rate, rate_limit_burst=0)
+    response = await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())
+    assert response.status == 200
+    headers = _headers(raw, **{"Mcp-Session-Id": response.headers["Mcp-Session-Id"]})
+    response = await client.post("/api/phoenix-mcp", headers=headers,
+                                 json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+    assert response.status == 202
+    return token, raw, headers
+
+
+@pytest.mark.parametrize("version", ["2025-06-18", "2025-11-25", "2099-01-01"])
+@pytest.mark.parametrize("batch", [False, True])
+async def test_legacy_foreign_version_reports_unsupported_and_preserves_session(http_authority, version, batch):
+    from custom_components.phoenix_mcp.const import MCP_PROTOCOL_VERSIONS
+
+    client, data = http_authority
+    _, _, headers = await _initialized_session(client, data)
+    body = {"jsonrpc": "2.0", "id": 2, "method": "ping"}
+    response = await client.post("/api/phoenix-mcp", headers={**headers, "MCP-Protocol-Version": version},
+                                 json=[body] if batch else body)
+    error = (await response.json())["error"]
+    assert response.status == 400
+    assert error == {"code": -32022, "message": "Unsupported protocol version",
+                     "data": {"supported": list(MCP_PROTOCOL_VERSIONS), "requested": version}}
+    response = await client.post("/api/phoenix-mcp", headers=headers, json=body)
+    assert response.status == 200 and "result" in await response.json()
+
+
+@pytest.mark.parametrize("modern", [False, True])
+@pytest.mark.parametrize("sse", [False, True])
+async def test_authority_loss_wire_code_matches_era_after_real_dispatch(http_authority, monkeypatch, modern, sse):
+    import json
+    from custom_components.phoenix_mcp import mcp_view
+    from custom_components.phoenix_mcp.const import MCP_AUTHORITY_CHANGED_ERROR
+
+    client, data = http_authority
+    token, raw, headers = await _initialized_session(client, data)
+    body = {"jsonrpc": "2.0", "id": "authority", "method": "tools/list", "params": {}}
+    if modern:
+        headers = _headers(raw, **{"MCP-Protocol-Version": "2026-07-28", "Mcp-Method": "tools/list"})
+        body["params"] = {"_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28",
+            "io.modelcontextprotocol/clientCapabilities": {},
+        }}
+    if sse:
+        headers["Accept"] = "application/json, text/event-stream"
+
+    async def read_reply(response):
+        if sse:
+            messages = [json.loads(line[5:].strip()) for line in (await response.text()).splitlines()
+                        if line.startswith("data:")]
+            return next(item for item in reversed(messages) if item.get("id") == "authority")
+        return await response.json()
+
+    response = await client.post("/api/phoenix-mcp", headers=headers, json=body)
+    assert response.status == 200 and "result" in await read_reply(response)
+    original = mcp_view._dispatch_mcp_authorized
+
+    async def revoke_after_dispatch(*args, **kwargs):
+        result = await original(*args, **kwargs)
+        await data.store.async_archive_token(token.id, revoked=True)
+        return result
+
+    monkeypatch.setattr(mcp_view, "_dispatch_mcp_authorized", revoke_after_dispatch)
+    response = await client.post("/api/phoenix-mcp", headers=headers, json=body)
+    reply = await read_reply(response)
+    assert response.status == 200
+    assert reply["error"]["code"] == (MCP_AUTHORITY_CHANGED_ERROR if modern else -32000)
+    assert "result" not in reply
+    rows = data.audit.query(token_id=token.id, limit=20)
+    assert any(row.request_id == response.headers["X-Phoenix-Request-ID"] and row.outcome == "denied" for row in rows)
+
+
+async def test_legacy_session_capacity_retries_without_eviction_and_delete_releases(http_authority, monkeypatch):
+    from custom_components.phoenix_mcp import mcp_view
+
+    client, data = http_authority
+    monkeypatch.setattr(mcp_view, "_MCP_LEGACY_SESSION_TOKEN_LIMIT", 2)
+    _, raw, headers = await _initialized_session(client, data)
+    second = await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())
+    assert second.status == 200
+    sessions = set(data.mcp_sessions)
+    response = await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())
+    assert response.status == 429
+    assert 0 < int(response.headers["Retry-After"]) <= mcp_view._MCP_LEGACY_SESSION_TTL_SECONDS
+    assert set(data.mcp_sessions) == sessions
+    assert (await client.delete("/api/phoenix-mcp", headers=headers)).status == 204
+    assert (await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())).status == 200
+
+
+async def test_legacy_session_idle_expiry_and_activity_refresh(http_authority, monkeypatch):
+    from custom_components.phoenix_mcp import mcp_view
+
+    client, data = http_authority
+    _, _, headers = await _initialized_session(client, data)
+    session = headers["Mcp-Session-Id"]
+    clock = data.mcp_sessions[session]["last_seen"]
+    # Replace this module's clock object, not asyncio's shared time module.
+    from types import SimpleNamespace
+    monkeypatch.setattr(mcp_view, "time", SimpleNamespace(monotonic=lambda: clock))
+    body = {"jsonrpc": "2.0", "id": 2, "method": "ping"}
+    for _ in range(2):
+        clock += mcp_view._MCP_LEGACY_SESSION_TTL_SECONDS - 1
+        assert (await client.post("/api/phoenix-mcp", headers=headers, json=body)).status == 200
+        assert data.mcp_sessions[session]["last_seen"] == clock
+    clock += mcp_view._MCP_LEGACY_SESSION_TTL_SECONDS + 1
+    response = await client.post("/api/phoenix-mcp", headers=headers, json=body)
+    assert response.status == 404
+    assert session not in data.mcp_sessions
+
+
+@pytest.mark.parametrize("sse", [False, True])
+async def test_batch_within_capacity_refuses_exhausted_remaining_budget_before_dispatch(http_authority, monkeypatch, sse):
+    from unittest.mock import AsyncMock
+    from custom_components.phoenix_mcp import mcp_view
+
+    client, data = http_authority
+    _, _, headers = await _initialized_session(client, data, rate=5)
+    if sse:
+        headers["Accept"] = "application/json, text/event-stream"
+    dispatch = AsyncMock(wraps=mcp_view._dispatch_mcp)
+    monkeypatch.setattr(mcp_view, "_dispatch_mcp", dispatch)
+    body = [{"jsonrpc": "2.0", "id": i, "method": "ping"} for i in range(4)]
+    response = await client.post("/api/phoenix-mcp", headers=headers, json=body)
+    assert response.status == 429
+    assert int(response.headers["Retry-After"]) > 0
+    dispatch.assert_not_awaited()

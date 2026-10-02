@@ -392,3 +392,30 @@ def test_declined_targets_are_never_added_to_a_non_allowed_result():
         "HassTurnOff",
     )
     assert _with_declined_targets(parseable, ["lock.front_door"], MagicMock()) is parseable
+
+
+@pytest.mark.parametrize("domain", [None, [], ["light"]])
+async def test_light_set_empty_domain_preserves_explicit_name_selection(domain):
+    resolver = MagicMock(return_value=["light.fixture"])
+    action = AsyncMock(return_value=({}, "allowed", "HassLightSet"))
+    with patch(f"{NATIVE}.resolve_intent_entities", resolver), patch(f"{NATIVE}._tool_intent_action", action):
+        _, outcome, _ = await _call_tool(
+            "light__HassLightSet", {"domain": domain, "name": "Fixture", "brightness": 50},
+            _token(), MagicMock(), MagicMock(),
+        )
+    assert outcome == "allowed"
+    assert resolver.call_args.kwargs["name"] == "Fixture"
+    assert resolver.call_args.kwargs["domains"] == ["light"]
+    action.assert_awaited_once()
+
+
+@pytest.mark.parametrize("domain", [[], "light", ["fan"]])
+async def test_light_set_empty_or_wrong_domain_cannot_expand_implicit_selection(domain):
+    with patch(f"{NATIVE}.resolve_intent_entities") as resolver:
+        response, outcome, _ = await _call_tool(
+            "light__HassLightSet", {"domain": domain, "brightness": 50},
+            _token(), MagicMock(), MagicMock(),
+        )
+    assert outcome == "invalid_request"
+    assert response["isError"]
+    resolver.assert_not_called()

@@ -96,6 +96,10 @@ async def test_home_companion_legacy_context_is_restricted(hass):
     hass.states.async_set("light.visible", "on")
     assert _build_context_json(caller, hass)["entities"] == []
     assert "light.visible" not in _build_context_plain(caller, hass)
+    from custom_components.phoenix_mcp.home_companion import wrapper_tool
+    tool_name = wrapper_tool()["name"]
+    assert tool_name in _build_context_plain(caller, hass)
+    assert tool_name in _build_context_json(caller, hass)["message"]
 
 
 async def test_url_sweeps_use_real_ha_url_manager(hass):

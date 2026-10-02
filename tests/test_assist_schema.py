@@ -69,3 +69,12 @@ def test_validation_error_does_not_echo_the_bad_argument():
     with pytest.raises(vol.Invalid) as error:
         validator("private caller value")
     assert "private caller value" not in str(error.value)
+
+
+@pytest.mark.parametrize("nested", [False, True])
+def test_unsupported_dialect_cannot_switch_reference_or_validation_semantics(nested):
+    schema = {"$schema": "http://json-schema.org/draft-07/schema#", "type": "object"}
+    if nested:
+        schema = {"type": "object", "properties": {"value": schema}}
+    with pytest.raises(ValueError, match="require JSON Schema 2020-12"):
+        legacy_schema(schema)

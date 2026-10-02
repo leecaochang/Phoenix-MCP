@@ -2549,7 +2549,7 @@ class PhoenixAdminVoiceAgentPipelineView(PhoenixView):
         entries = self.hass.config_entries.async_entries(DOMAIN)
         if not entries:
             return _err(
-                "invalid_request", "Phoenix MCP is not set up.", 400, rid,
+                "not_found", "Phoenix MCP is not set up.", 404, rid,
                 key="setupMissing",
             )
 
@@ -2601,7 +2601,7 @@ class PhoenixAdminAiTaskPreferredView(PhoenixView):
         entry = self._entry()
         if entry is None:
             return _err(
-                "invalid_request", "Phoenix MCP is not set up.", 400, rid,
+                "not_found", "Phoenix MCP is not set up.", 404, rid,
                 key="setupMissing",
             )
         return _ok(ai_task_preferred_status(self.hass, entry), request_id=rid)
@@ -2613,7 +2613,7 @@ class PhoenixAdminAiTaskPreferredView(PhoenixView):
         entry = self._entry()
         if entry is None:
             return _err(
-                "invalid_request", "Phoenix MCP is not set up.", 400, rid,
+                "not_found", "Phoenix MCP is not set up.", 404, rid,
                 key="setupMissing",
             )
         try:
@@ -2634,7 +2634,7 @@ class PhoenixAdminAiTaskPreferredView(PhoenixView):
         entry = self._entry()
         if entry is None:
             return _err(
-                "invalid_request", "Phoenix MCP is not set up.", 400, rid,
+                "not_found", "Phoenix MCP is not set up.", 404, rid,
                 key="setupMissing",
             )
         result = clear_ai_task_preferred(self.hass, entry)
@@ -3308,7 +3308,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 closed_method = "approval/cancelled"
                 closed_reason = REASON_TOKEN_INACTIVE
                 closed_response = _err(
-                    "not_found", "Token no longer active.", 409, rid,
+                    "not_found", "Token no longer active.", 404, rid,
                     key="approvalTokenInactive",
                 )
             elif not recovery_request and record.cap_name != MESA_CONFIRM_CAP and effective_cap(token, record.cap_name) == "deny":
@@ -3322,7 +3322,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 closed_method = "approval/failed"
                 closed_reason = REASON_CAPABILITY_DENIED
                 closed_response = _err(
-                    "forbidden", "Capability is now denied for this token.", 409, rid,
+                    "forbidden", "Capability is now denied for this token.", 403, rid,
                     key="approvalCapabilityDenied",
                 )
             elif settings.kill_switch and not recovery_request:
@@ -3366,7 +3366,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
         return closed_response
     if token is None:
         return _err(
-            "not_found", "Token no longer active.", 409, rid,
+            "not_found", "Token no longer active.", 404, rid,
             key="approvalTokenInactive",
         )
 
@@ -4608,7 +4608,7 @@ class PhoenixAdminVersionRestoreView(PhoenixView):
             token_id="admin",
             token_name=f"admin:{user.id}",
             ha_user_id=user.id,
-            payload={"originating_token_id": record.token_id},
+            originating_token_id=record.token_id,
             method="version/restore",
             resource=f"version_restore:{record.resource_type}:{record.resource_id}",
             outcome=cast(Outcome, _outcome),

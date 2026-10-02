@@ -732,7 +732,8 @@ class TestApprovalApprove:
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
 
-        assert resp.status == 409
+        assert resp.status == 404
+        assert json.loads(resp.text)["error"] == "not_found"
         # Storage should now show the approval cancelled.
         cancelled = next(r for r in store._pending if r["id"] == "appr_a")
         assert cancelled["status"] == STATUS_CANCELLED
@@ -752,7 +753,8 @@ class TestApprovalApprove:
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
 
-        assert resp.status == 409
+        assert resp.status == 403
+        assert json.loads(resp.text)["error"] == "forbidden"
         rejected = next(r for r in store._pending if r["id"] == "appr_a")
         assert rejected["status"] == STATUS_FAILED
         assert rejected["rejected_reason"] == "capability_denied"

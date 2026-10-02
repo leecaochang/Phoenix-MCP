@@ -77,6 +77,8 @@ class AuditEntry:
     # True when the stale-tool-list notice was injected into this response.
     stale_tools_advisory: bool = False
     ha_user_id: str | None = None
+    # Server-owned source identity, never a bearer credential.
+    originating_token_id: str | None = None
 
     def to_dict(self) -> dict:
         d = {
@@ -100,6 +102,8 @@ class AuditEntry:
             d["stale_tools_advisory"] = True
         if self.ha_user_id is not None:
             d["ha_user_id"] = self.ha_user_id
+        if self.originating_token_id is not None:
+            d["originating_token_id"] = self.originating_token_id
         return d
 
 
@@ -137,6 +141,7 @@ class AuditLog:
         stale_tools_advisory: bool = False,
         timestamp: datetime | None = None,
         ha_user_id: str | None = None,
+        originating_token_id: str | None = None,
     ) -> None:
         """Append an audit entry, subject to the current logging settings.
 
@@ -203,6 +208,7 @@ class AuditLog:
             preset=preset,
             stale_tools_advisory=stale_tools_advisory,
             ha_user_id=ha_user_id if ha_user_id is not None else household.user_id if household else None,
+            originating_token_id=originating_token_id,
         ))
 
     _VALID_OUTCOMES = frozenset({"allowed", "denied", "not_found", "rate_limited", "not_implemented", "invalid_request", "pending_approval"})
@@ -358,6 +364,7 @@ class AuditLog:
                     preset=r.get("preset"),
                     stale_tools_advisory=r.get("stale_tools_advisory", False),
                     ha_user_id=r.get("ha_user_id"),
+                    originating_token_id=r.get("originating_token_id"),
                 ))
             except (KeyError, TypeError, ValueError) as exc:
                 _LOGGER.warning("Skipping corrupt audit entry: %s", exc)

@@ -228,7 +228,7 @@ async def test_system_approval_requires_durable_back_reference(hass, runtime):
     await runtime.config_recovery.update(rid, approval_id="some-other-request")
     assert not is_recovery_approval(get_approval(runtime.store, approval_id), runtime)
     response = await _approve_approval(hass, request(), approval_id)
-    assert response.status == 409
+    assert response.status == 404
     assert path.read_text() == "unexpected"
 
 

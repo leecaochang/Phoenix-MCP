@@ -17,6 +17,7 @@ CATALOGS_DIR = pathlib.Path(__file__).parent / "catalogs"
 PHOENIX_VERSION = "1.4.0"
 # Supported base release; floor CI exercises runtime imports and boundaries.
 MIN_HA_VERSION = "2026.7.0"
+ASSIST_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
 GITHUB_URL = "https://github.com/leecaochang/Phoenix-MCP"
 DOMAIN = "phoenix_mcp"
 RUNTIME_READY_KEY = "phoenix_mcp_runtime_ready"
@@ -207,6 +208,7 @@ MAX_CARD_CATALOG_FAILURES = 50
 # settings serialization (which the settings GET and audit snapshots echo).
 AGENTCLI_SECRETS_STORAGE_KEY = "phoenix_mcp_agentcli_secrets"
 AGENTCLI_SECRETS_STORAGE_VERSION = 1
+PROVIDER_API_KEY_MAX_LENGTH = 4096
 AGENTCLI_PROVIDERS = frozenset({
     "claude", "deepseek", "chatgpt", "gemini", "grok", "kimi", "meta",
     "minimax", "mistral", "openrouter", "nvidia", "ollama", "ollama_cloud",
@@ -1308,6 +1310,7 @@ MCP_SSE_KEEPALIVE_SECONDS = 15.0
 # legacy revision unless every MUST introduced by that revision is implemented.
 MCP_PROTOCOL_VERSIONS: tuple[str, ...] = ("2026-07-28", "2025-03-26")
 MCP_PROTOCOL_VERSION_PREFERRED = MCP_PROTOCOL_VERSIONS[0]
+MCP_AUTHORITY_CHANGED_ERROR = 1001
 MCP_LEGACY_PROTOCOL_VERSIONS: tuple[str, ...] = ("2025-03-26",)
 MCP_LEGACY_PROTOCOL_VERSION_PREFERRED = MCP_LEGACY_PROTOCOL_VERSIONS[0]
 

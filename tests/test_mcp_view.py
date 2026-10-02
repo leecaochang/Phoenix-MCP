@@ -4205,3 +4205,19 @@ async def test_single_id_form_is_untouched(hass):
     content, outcome, _r = await _tool_wait_for_approval(
         {"approval_id": "appr-1"}, token, hass, data)
     assert outcome == "invalid_request" and content["isError"] is True
+
+
+@pytest.mark.parametrize("domain,service", [("notify", "persistent_notification"), ("persistent_notification", "create"), ("logbook", "log")])
+async def test_untargeted_service_refusal_explains_unsupported_targetless_calls(hass, domain, service):
+    from custom_components.phoenix_mcp.mcp_view import _tool_call_service, _execute_call_service
+
+    token, _ = _make_token(pass_through=True)
+    data = _make_data(token)
+    hass.data[DOMAIN] = data
+    for handler in (_tool_call_service, _execute_call_service):
+        args = ({"service": {"domain": domain, "name": service, "data": {"message": "fixture"}}}
+                if handler is _tool_call_service else
+                {"domain": domain, "service": service, "service_data": {"message": "fixture"}})
+        response, outcome, _ = await handler(args, token, hass, data)
+        assert outcome == "invalid_request"
+        assert "Targetless services outside the supported allowlist are unavailable" in response["content"][0]["text"]

@@ -894,7 +894,7 @@ def _validate_hass_light_set_args(args: dict) -> tuple[dict, str, str] | None:
     refusal = _no_selector_refusal(args, "HassLightSet", _DOMAIN_TARGET_SELECTORS)
     if refusal is not None:
         return refusal
-    if args.get("domain") is not None and args["domain"] != ["light"]:
+    if args.get("domain") not in (None, [], ["light"]):
         return _tool_error("HassLightSet requires light targets."), "invalid_request", "HassLightSet"
     if not any(args.get(name) is not None for name in ("brightness", "color", "temperature")):
         return (
