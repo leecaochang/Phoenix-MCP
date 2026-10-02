@@ -1,3 +1,4 @@
+import { BusyButton } from "./BusyButton";
 import React, { useState } from "react";
 import type { TokenRecord, PatchTokenBody } from "../types";
 import { api } from "../api";
@@ -58,13 +59,13 @@ export const PassThroughNotice = React.memo(function PassThroughNotice({ token, 
             {t("tokens.ptConvertBody")}
           </p>
           <div className="pass-through-actions">
-            <button
+            <BusyButton
               className="btn btn-primary"
               onClick={convertToScoped}
-              disabled={saving}
+              busy={saving}
             >
               {saving ? t("tokens.switching") : t("tokens.switchToScoped")}
-            </button>
+            </BusyButton>
             <button className="btn btn-text" onClick={() => setConfirming(false)}>
               {t("tokens.cancel")}
             </button>

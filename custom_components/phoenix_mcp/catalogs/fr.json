@@ -22,7 +22,8 @@
       "preview": "Aperçu",
       "refresh": "Actualiser",
       "save": "Enregistrer",
-      "saving": "Enregistrement..."
+      "saving": "Enregistrement...",
+      "invalidResponse": "Le serveur a renvoyé une réponse invalide. Actualisez et réessayez."
     },
     "approvals": {
       "approve": "Approuver et exécuter",
@@ -514,7 +515,8 @@
       "killSwitchFull": "COUPE-CIRCUIT ACTIF",
       "killSwitchShort": "COUPE-CIRCUIT ACTIVÉ",
       "agentChat": "Chat de l'agent",
-      "approvalsTabAria": "Approbations ({count} en attente)"
+      "approvalsTabAria": "Approbations ({count} en attente)",
+      "renderFailed": "Cette vue ne peut pas être affichée. Actualisez pour réessayer ou choisissez une autre section."
     },
     "perms": {
       "addHint": "Ajouter une indication",
@@ -1234,7 +1236,7 @@
       "mesaModeAdvisory": "Consultatif",
       "mesaModeAria": "Mode d'application de MESA",
       "mesaModeEnforced": "Appliqué",
-      "mesaModeHelp": "Consultatif affiche des avertissements mais autorise les appels. Appliqué bloque les actions interdites et en lecture seule, et envoie les demandes de confirmation aux approbations.",
+      "mesaModeHelp": "Advisory avertit pour la plupart des limites; la lecture seule et les refus explicites de confidentialité restent bloquants. Enforced bloque les actions interdites et demande une confirmation.",
       "mesaModeLabel": "Mode d'application",
       "mesaModeOff": "Désactivé",
       "model": "Modèle",

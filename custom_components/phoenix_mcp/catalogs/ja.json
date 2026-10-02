@@ -22,7 +22,8 @@
       "preview": "プレビュー",
       "refresh": "更新",
       "save": "保存",
-      "saving": "保存中..."
+      "saving": "保存中...",
+      "invalidResponse": "サーバーから無効な応答が返されました。更新して再試行してください。"
     },
     "approvals": {
       "approve": "承認して実行",
@@ -325,7 +326,8 @@
       "killSwitchFull": "キルスイッチが作動中です",
       "killSwitchShort": "キルスイッチ オン",
       "agentChat": "エージェントチャット",
-      "approvalsTabAria": "承認（{count} 件が承認待ち）"
+      "approvalsTabAria": "承認（{count} 件が承認待ち）",
+      "renderFailed": "この画面を表示できませんでした。更新して再試行するか、別のセクションを選択してください。"
     },
     "perms": {
       "addHint": "ヒントを追加",
@@ -1412,7 +1414,7 @@
       "mesaModeAdvisory": "アドバイザリ",
       "mesaModeAria": "MESA 強制モード",
       "mesaModeEnforced": "強制",
-      "mesaModeHelp": "アドバイザリは警告を表示して呼び出しを許可します。強制は、禁止および読み取り専用のアクションをブロックし、確認リクエストを承認へ送ります。",
+      "mesaModeHelp": "Advisory は通常のポリシー制限を警告します。読み取り専用の制限と明示的なプライバシー拒否は引き続き適用されます。Enforced は禁止操作をブロックし、確認を求めます。",
       "mesaModeLabel": "強制モード",
       "mesaModeOff": "オフ",
       "model": "モデル",

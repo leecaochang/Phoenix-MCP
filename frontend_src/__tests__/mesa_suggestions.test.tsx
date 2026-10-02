@@ -97,7 +97,7 @@ describe("MesaSuggestions", () => {
     );
     const row = container.querySelector(".mesa-suggest-row") as HTMLElement;
     for (const b of Array.from(row.querySelectorAll("button"))) {
-      expect((b as HTMLButtonElement).disabled).toBe(true);
+      expect(b).toHaveAttribute("aria-disabled", "true");
     }
     expect((getByText("Rescan") as HTMLButtonElement).disabled).toBe(false);
     expect(container.querySelector(".mesa-suggest-toggle")).not.toBeNull();

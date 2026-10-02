@@ -11,6 +11,8 @@ from homeassistant.helpers.template import Template
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 
+from tests.runtime_fixtures import mesa_off_store
+
 from custom_components.phoenix_mcp.const import HELPER_TEMPLATE_MAX_CHARS
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool
@@ -30,7 +32,7 @@ def agent(**caps):
 
 
 def runtime():
-    return PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock())
+    return PhoenixData(store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock())
 
 
 def steps(expression, **extra):

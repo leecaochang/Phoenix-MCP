@@ -17,14 +17,22 @@ from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenStore
-from tests.test_mcp_sse import _make_request, _view
+from tests.test_mcp_sse import _make_request as _transport_request, _view
+
+
+def _make_request(*args, **kwargs):
+    kwargs["extra_headers"] = {"Mcp-Session-Id": "authority-session", **kwargs.get("extra_headers", {})}
+    return _transport_request(*args, **kwargs)
 
 
 async def _environment(hass):
     store = TokenStore(hass, AsyncMock())
+    store.get_settings().mesa_mode = "off"
     token, raw = await store.async_create_token('audit-boundary', 'admin', rate_limit_requests=0)
     token.pass_through = True
     data = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
+    data.mcp_sessions["authority-session"] = {"token_id": token.id, "initialized": True,
+        "last_seen": mcp_view.time.monotonic(), "protocol_version": "2025-03-26"}
     hass.data[DOMAIN] = data
     return data, token, raw
 

@@ -1,3 +1,5 @@
+import { BusyInput, BusySelect } from "./BusyButton";
+import { BusyButton } from "./BusyButton";
 import { RoutingStatistics } from "./RoutingStatistics";
 import { CommandRoutingToggle } from "./CommandRoutingToggle";
 import { IconButton, EditIcon, RefreshIcon, ProbeIcon, TrashIcon } from "./ProviderAccountControls";
@@ -441,7 +443,7 @@ export function AgentCliSettings({
             )}
             {editing === inst.id ? (
               <div className="agentcli-settings-model-edit">
-                <select className="input input-auto" value={modelDraft} disabled={busy}
+                <BusySelect className="input input-auto" value={modelDraft} busy={busy}
                         aria-label={t("settings.agentcliSelectModel")}
                         onChange={(e) => setModelDraft(e.target.value)}>
                   {(liveModels[inst.id] ?? []).map((m) => (
@@ -460,7 +462,7 @@ export function AgentCliSettings({
                       {t("settings.agentcliModelUnavailable", { model: inst.model })}
                     </option>
                   )}
-                </select>
+                </BusySelect>
                 <div className="agentcli-settings-model-actions">
                   <div className="agentcli-settings-probe-opt">
                     <label className="toggle-switch" htmlFor={`agentcli-probe-on-save-${inst.id}`}>
@@ -473,11 +475,11 @@ export function AgentCliSettings({
                     </label>
                   </div>
                   <div className="agentcli-settings-form-actions">
-                    <button className="btn btn-primary btn-sm"
-                            disabled={busy || !modelDraft || modelDraft === inst.model}
-                            onClick={() => void saveModel(inst.id)}>{t("common.save")}</button>
-                    <button className="btn btn-text btn-sm" disabled={busy}
-                            onClick={() => { setEditing(null); setModelError(null); }}>{t("settings.cancel")}</button>
+                    <BusyButton className="btn btn-primary btn-sm"
+                            busy={busy} disabled={!modelDraft || modelDraft === inst.model}
+                            onClick={() => void saveModel(inst.id)}>{t("common.save")}</BusyButton>
+                    <BusyButton className="btn btn-text btn-sm" busy={busy}
+                            onClick={() => { setEditing(null); setModelError(null); }}>{t("settings.cancel")}</BusyButton>
                   </div>
                 </div>
               </div>
@@ -552,10 +554,10 @@ export function AgentCliSettings({
           <p>{tRich("settings.agentcliProbeBody", { strong: (c) => <strong>{c}</strong> },
                     { model: confirmProbe.model, name: confirmProbe.name })}</p>
           <div className="modal-actions">
-            <button className="btn btn-primary btn-sm" disabled={busy}
-                    onClick={() => void probeCaps(confirmProbe)}>{t("settings.agentcliProbeRun")}</button>
-            <button className="btn btn-text" disabled={busy}
-                    onClick={() => setConfirmProbe(null)}>{t("settings.cancel")}</button>
+            <BusyButton className="btn btn-primary btn-sm" busy={busy}
+                    onClick={() => void probeCaps(confirmProbe)}>{t("settings.agentcliProbeRun")}</BusyButton>
+            <BusyButton className="btn btn-text" busy={busy}
+                    onClick={() => setConfirmProbe(null)}>{t("settings.cancel")}</BusyButton>
           </div>
         </Modal>
       )}
@@ -566,8 +568,8 @@ export function AgentCliSettings({
           <p>{tRich("settings.agentcliRemoveBody", { strong: (c) => <strong>{c}</strong> }, { name: confirmRemove.name })}</p>
           {removeError && <div className="banner banner-error" role="alert">{removeError}</div>}
           <div className="modal-actions">
-            <button className="btn btn-danger btn-sm" disabled={busy} onClick={() => void remove(confirmRemove.id)}>{t("settings.remove")}</button>
-            <button className="btn btn-text" disabled={busy} onClick={() => { setConfirmRemove(null); setRemoveError(null); }}>{t("settings.cancel")}</button>
+            <BusyButton className="btn btn-danger btn-sm" busy={busy} onClick={() => void remove(confirmRemove.id)}>{t("settings.remove")}</BusyButton>
+            <BusyButton className="btn btn-text" busy={busy} onClick={() => { setConfirmRemove(null); setRemoveError(null); }}>{t("settings.cancel")}</BusyButton>
           </div>
         </Modal>
       )}
@@ -581,11 +583,11 @@ export function AgentCliSettings({
           </small>
         </div>
         <label className={`toggle-switch${saving ? " disabled" : ""}`}>
-          <input
+          <BusyInput
             type="checkbox"
             aria-label={t("settings.agentcliGlobalAria")}
             checked={globalVisible}
-            disabled={saving}
+            busy={saving}
             onChange={(e) => onGlobalChange(e.target.checked)}
           />
           <span className="toggle-switch-track" />
@@ -598,12 +600,12 @@ export function AgentCliSettings({
             {t("settings.agentcliScrollbackHelp")}
           </small>
         </div>
-        <input
+        <BusyInput
           className="input input-auto"
           type="number" min={0} max={5000} step={100}
           aria-label={t("settings.agentcliScrollbackAria")}
           value={scrollInput}
-          disabled={saving}
+          busy={saving}
           onChange={(e) => onScrollInput(e.target.value)}
           onBlur={() => commitNow(scrollInput)}
           onKeyDown={(e) => { if (e.key === "Enter") commitNow(scrollInput); }}
@@ -616,12 +618,12 @@ export function AgentCliSettings({
             {t("settings.agentcliStepsHelp")}
           </small>
         </div>
-        <input
+        <BusyInput
           className="input input-auto"
           type="number" min={3} max={100} step={1}
           aria-label={t("settings.agentcliStepsAria")}
           value={maxIterInput}
-          disabled={saving}
+          busy={saving}
           onChange={(e) => onMaxIterInput(e.target.value)}
           onBlur={() => commitMaxIterNow(maxIterInput)}
           onKeyDown={(e) => { if (e.key === "Enter") commitMaxIterNow(maxIterInput); }}

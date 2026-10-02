@@ -17,6 +17,8 @@ as a hosted site; the integration ships no copy of it.
 from __future__ import annotations
 
 import pathlib
+import html as html_parser
+import json
 import re
 
 import pytest
@@ -286,22 +288,62 @@ def test_admin_api_documents_every_sse_frame() -> None:
     assert missing == [], f"admin-api.html SSE frame list missing: {missing}"
 
 
-def test_operations_route_table_lists_every_mcp_and_skill_route() -> None:
+@pytest.mark.parametrize("page,module_names", [
+    ("operations.html", ("mcp_view", "skill_view")),
+    ("admin-api.html", ("admin_view", "agentcli")),
+])
+def test_route_reference_matches_methods_and_paths(page, module_names) -> None:
+    """A documented URL alone cannot pin an omitted DELETE or wrong verb."""
+    import importlib
     from homeassistant.components.http import HomeAssistantView
 
-    from custom_components.phoenix_mcp import mcp_view, skill_view
+    expected = set()
+    for name in module_names:
+        module = importlib.import_module(f"custom_components.phoenix_mcp.{name}")
+        for cls in vars(module).values():
+            if not isinstance(cls, type) or not issubclass(cls, HomeAssistantView) or cls.__module__ != module.__name__:
+                continue
+            url = cls.__dict__.get("url")
+            if not isinstance(url, str):
+                continue
+            for method in ("get", "post", "put", "patch", "delete"):
+                if method in cls.__dict__:
+                    expected.add((method.upper(), re.sub(r"\{[^}]+\}", "{}", url)))
+    assert len(expected) >= (4 if page == "operations.html" else 60)
+    source = html_parser.unescape((DOCS / page).read_text())
+    documented = {
+        (method, re.sub(r"\{[^}]+\}", "{}", path))
+        for methods, path in re.findall(r"\b((?:GET|POST|PUT|PATCH|DELETE)(?:/(?:GET|POST|PUT|PATCH|DELETE))*)\s+(/api/[\w/{}.-]+)", source)
+        for method in methods.split("/")
+    }
+    assert expected <= documented, sorted(expected - documented)
+    assert documented <= expected, sorted(documented - expected)
 
-    urls: set[str] = set()
-    for module in (mcp_view, skill_view):
-        for obj in vars(module).values():
-            if isinstance(obj, type) and issubclass(obj, HomeAssistantView):
-                url = obj.__dict__.get("url")
-                if isinstance(url, str):
-                    urls.add(url)
-    assert len(urls) == 3, f"route extraction broke: {sorted(urls)}"
-    html = (DOCS / "operations.html").read_text(encoding="utf-8")
-    missing = sorted(u for u in urls if u not in html)
-    assert missing == [], f"operations.html route table missing: {missing}"
+
+def test_capability_labels_and_persona_defaults_match_shipped_catalog() -> None:
+    from custom_components.phoenix_mcp.personas import PERSONA_DEFINITIONS
+
+    catalog = json.loads((PKG / "catalogs/en.json").read_text())["panel"]
+    source = (DOCS / "capabilities.html").read_text()
+    labels = dict((slug, html_parser.unescape(label)) for label, slug in re.findall(
+        r'<span class="badge badge-cap">([^<]+)</span><br /><code class="cap-slug">(cap_\w+)</code>', source))
+    assert labels == {name: catalog["caps"][name]["label"] for name in CAPABILITY_NAMES}
+    defaults = {key: [html_parser.unescape(value) for value in (label, allow, confirm)]
+                for key, label, allow, confirm in re.findall(
+                    r'<tr data-persona-defaults="([^"]+)"><td>([^<]+)</td><td>([^<]+)</td><td>([^<]+)</td></tr>', source)}
+    assert set(defaults) == set(PERSONA_DEFINITIONS)
+    for key, caps in PERSONA_DEFINITIONS.items():
+        assert defaults[key][0] == catalog["personas"][key]["label"]
+        for index, mode in enumerate(("allow", "confirm"), 1):
+            expected = sorted((catalog["caps"][cap]["label"] for cap, value in caps.items() if value == mode), key=str.casefold)
+            assert defaults[key][index] == (", ".join(expected) or "None"), (key, mode)
+
+
+def test_install_requirements_match_manifest_constraints() -> None:
+    manifest = json.loads((PKG / "manifest.json").read_text())
+    source = html_parser.unescape((DOCS / "install.html").read_text())
+    for requirement in manifest["requirements"]:
+        assert f"<code>{requirement}</code>" in source
 
 
 @pytest.mark.parametrize(

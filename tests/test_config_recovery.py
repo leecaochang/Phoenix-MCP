@@ -10,6 +10,8 @@ from homeassistant.config_entries import SOURCE_USER
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import entity_registry as er
 
+from tests.runtime_fixtures import mesa_off_store
+
 from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery, ConfigurationRecoveryError
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _restore_token, _call_tool
@@ -19,7 +21,7 @@ from homeassistant.util.dt import utcnow
 
 
 def data():
-    return PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock())
+    return PhoenixData(store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock())
 
 
 async def test_failed_save_keeps_barrier_and_no_active_claim():

@@ -1,3 +1,5 @@
+import { BusyInput } from "./BusyButton";
+import { BusyButton } from "./BusyButton";
 import React, { useState, useCallback, useEffect } from "react";
 import type { EntityTree, DomainTree, PermissionTree, NodeState } from "../types";
 import { PermissionSelector } from "./PermissionSelector";
@@ -234,11 +236,11 @@ function HintInput({ tokenId, entityId, currentHint, globalHint, currentState, o
       <div className="hint-scope">
         <span className={allTokens ? "" : "hint-scope-active"}>{t("perms.hintThisToken")}</span>
         <label className={`toggle-switch${saving ? " disabled" : ""}`}>
-          <input
+          <BusyInput
             type="checkbox"
             aria-label={t("perms.hintAllAria")}
             checked={allTokens}
-            disabled={saving}
+            busy={saving}
             onChange={(e) => switchScope(e.target.checked)}
           />
           <span className="toggle-switch-track" />
@@ -252,10 +254,10 @@ function HintInput({ tokenId, entityId, currentHint, globalHint, currentState, o
       </p>
       {saveError && <p className="hint-modal-error" role="alert">{saveError}</p>}
       <div className="modal-actions">
-        <button className="btn btn-primary" onClick={save} disabled={saving}>
+        <BusyButton className="btn btn-primary" onClick={save} busy={saving}>
           {saving ? t("common.saving") : t("common.save")}
-        </button>
-        <button className="btn btn-text" onClick={() => setOpen(false)} disabled={saving}>{t("common.cancel")}</button>
+        </BusyButton>
+        <BusyButton className="btn btn-text" onClick={() => setOpen(false)} busy={saving}>{t("common.cancel")}</BusyButton>
       </div>
     </Modal>
   );

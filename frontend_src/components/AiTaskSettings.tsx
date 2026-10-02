@@ -1,3 +1,5 @@
+import { BusyInput, BusySelect } from "./BusyButton";
+import { BusyButton } from "./BusyButton";
 import { useEffect, useState } from "react";
 import type { GlobalSettings, TokenRecord, AgentCliInstance, AiTaskPreferredStatus } from "../types";
 import { api } from "../api";
@@ -110,11 +112,11 @@ export function AiTaskSettings({
           </small>
         </div>
         <label className={`toggle-switch${saving || !supported ? " disabled" : ""}`}>
-          <input
+          <BusyInput
             type="checkbox"
             aria-label={t("settings.aiTaskEnableLabel")}
             checked={enabled}
-            disabled={saving || !supported}
+            busy={saving} disabled={!supported}
             onChange={(e) => handleEnableToggle(e.target.checked)}
           />
           <span className="toggle-switch-track" />
@@ -126,18 +128,18 @@ export function AiTaskSettings({
           <span>{t("settings.token")}</span>
           <small>{t("settings.aiTaskTokenHelp")}</small>
         </div>
-        <select
+        <BusySelect
           aria-label={t("settings.aiTaskTokenAria")}
           className="input input-auto"
           value={tokenId}
-          disabled={saving || !supported}
+          busy={saving} disabled={!supported}
           onChange={(e) => onChange("ai_task_token_id", e.target.value)}
         >
           <option value="">{t("settings.selectToken")}</option>
           {tokens.map((tok) => (
             <option key={tok.id} value={tok.id}>{tok.name}</option>
           ))}
-        </select>
+        </BusySelect>
       </div>
 
       <div className="toggle-row toggle-row-stacked-control">
@@ -145,18 +147,18 @@ export function AiTaskSettings({
           <span>{t("settings.providerAccount")}</span>
           <small>{noProviders ? t("settings.addProviderFirst") : t("settings.aiTaskProviderHelp")}</small>
         </div>
-        <select
+        <BusySelect
           aria-label={t("settings.aiTaskProviderAria")}
           className="input input-auto"
           value={providerId}
-          disabled={saving || noProviders || !supported}
+          busy={saving} disabled={noProviders || !supported}
           onChange={(e) => onChange("ai_task_provider_id", e.target.value)}
         >
           <option value="">{t("settings.selectProvider")}</option>
           {instances.map((i) => (
             <option key={i.id} value={i.id}>{i.name}</option>
           ))}
-        </select>
+        </BusySelect>
       </div>
 
       <div className="toggle-row toggle-row-stacked-control">
@@ -164,18 +166,18 @@ export function AiTaskSettings({
           <span>{t("settings.model")}</span>
           <small>{t("settings.aiTaskModelHelp")}</small>
         </div>
-        <select
+        <BusySelect
           aria-label={t("settings.aiTaskModelAria")}
           className="input input-auto"
           value={model}
-          disabled={saving || !providerId || noProviders || !supported}
+          busy={saving} disabled={!providerId || noProviders || !supported}
           onChange={(e) => onChange("ai_task_model", e.target.value)}
         >
           <option value="">{t("settings.selectModel")}</option>
           {models.map((m) => (
             <option key={m} value={m}>{m}</option>
           ))}
-        </select>
+        </BusySelect>
       </div>
 
       <ConversationBehaviorControls
@@ -199,18 +201,18 @@ export function AiTaskSettings({
             </small>
           </div>
           {pref?.is_preferred ? (
-            <button className="btn btn-text" onClick={removeDefault} disabled={saving}>
+            <BusyButton className="btn btn-text" onClick={removeDefault} busy={saving}>
               {t("settings.aiTaskRemoveDefault")}
-            </button>
+            </BusyButton>
           ) : (
-            <button
+            <BusyButton
               className="btn btn-secondary"
               onClick={() => setShowSetDefault(true)}
-              disabled={saving || !pref?.entity_id}
+              busy={saving} disabled={!pref?.entity_id}
               title={pref?.entity_id ? undefined : t("settings.aiTaskConfigureFirst")}
             >
               {t("settings.aiTaskMakeDefault")}
-            </button>
+            </BusyButton>
           )}
         </div>
       )}
@@ -282,12 +284,12 @@ function AiTaskDefaultModal({
       )}
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       <div className="modal-actions">
-        <button className="btn btn-primary" onClick={confirm} disabled={busy || !entityReady}>
+        <BusyButton className="btn btn-primary" onClick={confirm} busy={busy} disabled={!entityReady}>
           {busy ? t("settings.aiTaskSetting") : t("settings.aiTaskSetAsDefault")}
-        </button>
-        <button className="btn btn-text" onClick={onClose} disabled={busy}>
+        </BusyButton>
+        <BusyButton className="btn btn-text" onClick={onClose} busy={busy}>
           {entityReady ? t("settings.cancel") : t("settings.aiTaskSetUpLater")}
-        </button>
+        </BusyButton>
       </div>
     </Modal>
   );

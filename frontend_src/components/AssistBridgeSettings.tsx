@@ -1,3 +1,4 @@
+import { BusySelect } from "./BusyButton";
 import { useEffect, useState } from "react";
 import type { GlobalSettings, TokenRecord } from "../types";
 import { api } from "../api";
@@ -47,18 +48,18 @@ export function AssistBridgeSettings({
             )}
           </small>
         </div>
-        <select
+        <BusySelect
           aria-label={t("settings.assistBoundTokenAria")}
           className="input input-auto"
           value={boundId}
-          disabled={saving || !supported}
+          busy={saving} disabled={!supported}
           onChange={(e) => onChange("assist_bound_token_id", e.target.value)}
         >
           <option value="">{t("settings.assistNotBound")}</option>
           {tokens.map((tok) => (
             <option key={tok.id} value={tok.id}>{tok.name}</option>
           ))}
-        </select>
+        </BusySelect>
       </div>
     </div>
   );

@@ -1,3 +1,5 @@
+import { BusyInput, BusySelect } from "./BusyButton";
+import { BusyButton } from "./BusyButton";
 import { RoutingStatistics } from "./RoutingStatistics";
 import { CommandRoutingToggle } from "./CommandRoutingToggle";
 import { useEffect, useState } from "react";
@@ -105,11 +107,11 @@ export function VoiceAgentSettings({
           <small>{t("settings.voiceEnableHelp")}</small>
         </div>
         <label className="toggle-switch">
-          <input
+          <BusyInput
             type="checkbox"
             aria-label={t("settings.voiceEnableLabel")}
             checked={enabled}
-            disabled={saving}
+            busy={saving}
             onChange={(e) => handleEnableToggle(e.target.checked)}
           />
           <span className="toggle-switch-track" />
@@ -121,18 +123,18 @@ export function VoiceAgentSettings({
           <span>{t("settings.token")}</span>
           <small>{t("settings.voiceTokenHelp")}</small>
         </div>
-        <select
+        <BusySelect
           aria-label={t("settings.voiceTokenAria")}
           className="input input-auto"
           value={tokenId}
-          disabled={saving}
+          busy={saving}
           onChange={(e) => onChange("voice_agent_token_id", e.target.value)}
         >
           <option value="">{t("settings.selectToken")}</option>
           {tokens.map((tok) => (
             <option key={tok.id} value={tok.id}>{tok.name}</option>
           ))}
-        </select>
+        </BusySelect>
       </div>
 
       <div className="toggle-row toggle-row-stacked-control">
@@ -140,18 +142,18 @@ export function VoiceAgentSettings({
           <span>{t("settings.providerAccount")}</span>
           <small>{instances.length === 0 ? t("settings.addProviderFirst") : t("settings.voiceProviderHelp")}</small>
         </div>
-        <select
+        <BusySelect
           aria-label={t("settings.voiceProviderAria")}
           className="input input-auto"
           value={providerId}
-          disabled={saving || noProviders}
+          busy={saving} disabled={noProviders}
           onChange={(e) => onChange("voice_agent_provider_id", e.target.value)}
         >
           <option value="">{t("settings.selectProvider")}</option>
           {instances.map((i) => (
             <option key={i.id} value={i.id}>{i.name}</option>
           ))}
-        </select>
+        </BusySelect>
       </div>
 
       <div className="toggle-row toggle-row-stacked-control">
@@ -159,18 +161,18 @@ export function VoiceAgentSettings({
           <span>{t("settings.model")}</span>
           <small>{t("settings.voiceModelHelp")}</small>
         </div>
-        <select
+        <BusySelect
           aria-label={t("settings.voiceModelAria")}
           className="input input-auto"
           value={model}
-          disabled={saving || !providerId || noProviders}
+          busy={saving} disabled={!providerId || noProviders}
           onChange={(e) => onChange("voice_agent_model", e.target.value)}
         >
           <option value="">{t("settings.selectModel")}</option>
           {models.map((m) => (
             <option key={m} value={m}>{m}</option>
           ))}
-        </select>
+        </BusySelect>
       </div>
 
       {!companion && <CommandRoutingToggle surface="voice" mode={settings.voice_agent_routing_mode}
@@ -199,18 +201,18 @@ export function VoiceAgentSettings({
             </small>
           </div>
           {pipelineId ? (
-            <button className="btn btn-text" onClick={() => setShowRemove(true)} disabled={saving}>
+            <BusyButton className="btn btn-text" onClick={() => setShowRemove(true)} busy={saving}>
               {t("settings.voiceRemoveAssistant")}
-            </button>
+            </BusyButton>
           ) : (
-            <button
+            <BusyButton
               className="btn btn-secondary"
               onClick={() => setShowSetup(true)}
-              disabled={saving || !fullyConfigured}
+              busy={saving} disabled={!fullyConfigured}
               title={fullyConfigured ? undefined : t("settings.voiceConfigureFirst")}
             >
               {t("settings.voiceSetUpAssistant")}
-            </button>
+            </BusyButton>
           )}
         </div>
       )}
@@ -303,11 +305,11 @@ function VoiceAgentSetupModal({
           <small>{t("settings.voicePreferredHelp")}</small>
         </div>
         <label className="toggle-switch">
-          <input
+          <BusyInput
             type="checkbox"
             aria-label={t("settings.voicePreferredLabel")}
             checked={preferred}
-            disabled={busy}
+            busy={busy}
             onChange={(e) => setPreferred(e.target.checked)}
           />
           <span className="toggle-switch-track" />
@@ -315,16 +317,16 @@ function VoiceAgentSetupModal({
       </div>
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       <div className="modal-actions">
-        <button
+        <BusyButton
           className="btn btn-primary"
           onClick={setupAutomatically}
-          disabled={busy || !fullyConfigured}
+          busy={busy} disabled={!fullyConfigured}
         >
           {busy ? t("settings.voiceSettingUp") : t("settings.voiceSetUpAutomatically")}
-        </button>
-        <button className="btn btn-text" onClick={onClose} disabled={busy}>
+        </BusyButton>
+        <BusyButton className="btn btn-text" onClick={onClose} busy={busy}>
           {t("settings.voiceSetUpManually")}
-        </button>
+        </BusyButton>
       </div>
     </Modal>
   );
@@ -362,10 +364,10 @@ function VoiceAgentRemoveModal({
       </p>
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       <div className="modal-actions">
-        <button className="btn btn-danger" onClick={confirm} disabled={busy}>
+        <BusyButton className="btn btn-danger" onClick={confirm} busy={busy}>
           {busy ? t("settings.voiceRemoving") : t("settings.voiceRemoveConfirm")}
-        </button>
-        <button className="btn btn-text" onClick={onClose} disabled={busy}>{t("settings.cancel")}</button>
+        </BusyButton>
+        <BusyButton className="btn btn-text" onClick={onClose} busy={busy}>{t("settings.cancel")}</BusyButton>
       </div>
     </Modal>
   );

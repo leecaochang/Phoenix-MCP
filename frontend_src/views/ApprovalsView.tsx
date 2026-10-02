@@ -343,7 +343,7 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
         closeRecord();
       });  // gone/expired: close
     return () => { cancelled = true; };
-  }, [refreshSignal, selected, onCountChange]);
+  }, [refreshSignal, selected, onCountChange, closeRecord]);
 
   // Fetch a notification deep-link, but do not clear its URL yet. Home Assistant
   // can replace this custom-panel element while routing; keeping the target in

@@ -4492,7 +4492,7 @@ class PhoenixAgentCliChatView(PhoenixView):
         cfg = store.resolve(instance_id, body.get("model") or None)
         if cfg is None:
             return _err(
-                "invalid_request", "Provider account is not configured.", 400, rid,
+                "not_found", "Provider account is not configured.", 404, rid,
                 key="providerNotConfigured",
             )
         if not cfg.model:
@@ -4998,7 +4998,7 @@ class PhoenixAgentCliModelsView(PhoenixView):
         cfg = store.resolve(instance_id, purpose=provider_purpose((store.get(instance_id) or {}).get("kind", "")))
         if cfg is None:
             return _err(
-                "invalid_request", "Provider account is not configured.", 400, rid,
+                "not_found", "Provider account is not configured.", 404, rid,
                 key="providerNotConfigured",
             )
         session = async_get_clientsession(self.hass)
@@ -5036,7 +5036,7 @@ class PhoenixAgentCliRefreshView(PhoenixView):
         cfg = store.resolve(instance_id, purpose=provider_purpose((store.get(instance_id) or {}).get("kind", "")))
         if cfg is None:
             return _err(
-                "invalid_request", "Provider account is not configured.", 400, rid,
+                "not_found", "Provider account is not configured.", 404, rid,
                 key="providerNotConfigured",
             )
         session = async_get_clientsession(self.hass)
@@ -5094,7 +5094,7 @@ class PhoenixAgentCliProbeCapsView(PhoenixView):
         cfg = store.resolve(instance_id)
         if cfg is None:
             return _err(
-                "invalid_request", "Provider account is not configured.", 400, rid,
+                "not_found", "Provider account is not configured.", 404, rid,
                 key="providerNotConfigured",
             )
         if not cfg.model:

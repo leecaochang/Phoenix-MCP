@@ -1,3 +1,4 @@
+import { BusyInput } from "./BusyButton";
 import type { GlobalSettings } from "../types";
 import { t } from "../i18n";
 
@@ -66,11 +67,11 @@ export function LoggingSettings({ settings, onToggle, saving }: Props) {
               <small>{t(descriptionKey)}</small>
             </div>
             <label className={`toggle-switch${(saving || greyed) ? " disabled" : ""}`}>
-              <input
+              <BusyInput
                 type="checkbox"
                 aria-label={t(labelKey)}
                 checked={settings[key] as boolean}
-                disabled={saving || greyed}
+                busy={saving} disabled={greyed}
                 onChange={(e) => onToggle(key, e.target.checked)}
               />
               <span className="toggle-switch-track" />

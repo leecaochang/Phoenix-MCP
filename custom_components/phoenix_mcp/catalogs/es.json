@@ -1554,7 +1554,7 @@
       "mesaModeAdvisory": "Consultivo",
       "mesaModeAria": "Modo de aplicación de MESA",
       "mesaModeEnforced": "Obligatorio",
-      "mesaModeHelp": "El modo Consultivo muestra advertencias, pero permite las llamadas. El modo Obligatorio bloquea las acciones prohibidas y de solo lectura, y envía solicitudes de confirmación a Aprobaciones.",
+      "mesaModeHelp": "Advisory avisa sobre la mayoría de los límites; el modo de solo lectura y las denegaciones explícitas de privacidad siguen bloqueando. Enforced bloquea acciones prohibidas y solicita confirmación.",
       "mesaModeLabel": "Modo de aplicación",
       "mesaModeOff": "Desactivado",
       "model": "Modelo",
@@ -1964,7 +1964,8 @@
       "preview": "Vista previa",
       "refresh": "Actualizar",
       "save": "Guardar",
-      "saving": "Guardando..."
+      "saving": "Guardando...",
+      "invalidResponse": "El servidor devolvió una respuesta no válida. Actualiza e inténtalo de nuevo."
     },
     "personas": {
       "automation_builder": {
@@ -2029,7 +2030,8 @@
       "killSwitchFull": "EL INTERRUPTOR DE EMERGENCIA ESTÁ ACTIVO",
       "killSwitchShort": "INTERRUPTOR DE EMERGENCIA ACTIVADO",
       "agentChat": "Chat de agente",
-      "approvalsTabAria": "Aprobaciones ({count} pendientes)"
+      "approvalsTabAria": "Aprobaciones ({count} pendientes)",
+      "renderFailed": "No se pudo mostrar esta vista. Actualiza para volver a intentarlo o elige otra sección."
     },
     "routing": {
       "providerOptions": "Los proveedores de decisiones usan opciones de enrutamiento fijas, sin opciones de Chat como los niveles de razonamiento. Actualizar modelos comprueba la disponibilidad sin ejecutar comandos; no evalúa la precisión del enrutamiento.",

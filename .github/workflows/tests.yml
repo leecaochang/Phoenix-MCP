@@ -59,7 +59,7 @@ jobs:
         # checkout. scripts/ holds the vendoring and release tooling.
         run: python -m pyflakes custom_components/phoenix_mcp tests scripts
       - name: Typecheck (mypy)
-        # Config, including the per-module ratchet, lives in pyproject.toml so the
+        # Config, including the first-party module checks, lives in pyproject.toml so the
         # local run and CI agree. Non-strict on purpose: this exists to catch HA
         # drift (a renamed attribute, a wrong argument) now that `hass` is typed
         # as HomeAssistant rather than Any, not to enforce full annotations.
@@ -85,6 +85,8 @@ jobs:
         run: npm ci
       - name: Typecheck
         run: npx tsc --noEmit -p tsconfig.json
+      - name: Check React hooks
+        run: npm run lint
       - name: Run vitest
         run: npm run test
       - name: Audit shipped dependencies

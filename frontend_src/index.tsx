@@ -8,6 +8,7 @@ import {
   getDurable as getAgentCliDurable,
   patchDurable as patchAgentCliDurable,
 } from "./utils/agentcli_state";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { TokenListView } from "./views/TokenList";
 import { TokenDetailView } from "./views/TokenDetail";
 import { AuditView } from "./views/AuditView";
@@ -575,6 +576,7 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
         aria-labelledby={`phx-tab-${tab}`}
       >
         <h2 className="sr-only">{t(TAB_LABEL_KEYS[tab])}</h2>
+        <ErrorBoundary key={`${tab}:${view.name}:${view.name === "detail" ? view.tokenId : ""}`} >
         {tab === "tokens" && view.name === "list" && (
           <TokenListView
             tokens={tokens}
@@ -632,6 +634,7 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
             onLanguageChange={onLanguageChange}
           />
         )}
+        </ErrorBoundary>
       </main>
 
       {/* Panel-only window. Not rendered in global-visibility mode (the inject
@@ -640,7 +643,7 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
           renders as the fallback. */}
       {settings && !settings.kill_switch && agentCliOpen
         && !(settings.agentcli_global && globalChatReady) && (
-        <AgentCliWindow
+        <ErrorBoundary key={agentCliKey}><AgentCliWindow
           key={agentCliKey}
           tokens={tokens}
           instances={agentCliInstances}
@@ -648,7 +651,7 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
           initialTokenId={tokens[0]?.id ?? ""}
           onClose={closeAgentCli}
           hass={hass}
-        />
+        /></ErrorBoundary>
       )}
     </div>
   );

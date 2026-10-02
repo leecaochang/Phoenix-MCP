@@ -1,3 +1,5 @@
+import { BusySelect } from "../components/BusyButton";
+import { BusyButton } from "../components/BusyButton";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AgentCliInstance, AgentCliProviderType, CreateTokenBody, EntityTree as EntityTreeData, Persona, PermissionTree } from "../types";
 import { api, ApiError } from "../api";
@@ -237,9 +239,9 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
             {tokenId && <div className="banner banner-info">{t("wizard.tokenCreatedBanner")}</div>}
             <div className="wizard-actions">
               <button className="btn btn-text" onClick={() => setStep(0)}>{t("wizard.back")}</button>
-              <button className="btn btn-primary" disabled={saving} onClick={createAndAdvance}>
+              <BusyButton className="btn btn-primary" busy={saving} onClick={createAndAdvance}>
                 {saving ? t("wizard.working") : tokenId ? t("wizard.next") : t("wizard.createToken")}
-              </button>
+              </BusyButton>
             </div>
           </>
         );
@@ -431,11 +433,11 @@ export function WizardProviderSetup({ onBack, onTryNow }: {
       {instances && instances.length > 0 && (
         <div className="field">
           <label htmlFor="wiz-provider-account">{t("wizard.providerAccount")}</label>
-          <select id="wiz-provider-account" className="input" value={selected}
-                  disabled={busy || adding}
+          <BusySelect id="wiz-provider-account" className="input" value={selected}
+                  busy={busy} disabled={adding}
                   onChange={(e) => setSelected(e.target.value)}>
             {instances.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
-          </select>
+          </BusySelect>
         </div>
       )}
 
@@ -450,11 +452,11 @@ export function WizardProviderSetup({ onBack, onTryNow }: {
       {!adding && err && <div className="banner banner-error" role="alert">{err}</div>}
 
       <div className="wizard-actions">
-        <button className="btn btn-text" disabled={busy} onClick={onBack}>{t("wizard.back")}</button>
+        <BusyButton className="btn btn-text" busy={busy} onClick={onBack}>{t("wizard.back")}</BusyButton>
         {!adding && (
-          <button className="btn btn-primary" disabled={!selected || busy} onClick={() => void tryExisting()}>
+          <BusyButton className="btn btn-primary" busy={busy} disabled={!selected} onClick={() => void tryExisting()}>
             {busy ? t("wizard.working") : t("wizard.tryNow")}
-          </button>
+          </BusyButton>
         )}
       </div>
     </>

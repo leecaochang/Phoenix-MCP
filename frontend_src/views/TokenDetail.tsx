@@ -1,3 +1,5 @@
+import { BusyInput, BusySelect } from "../components/BusyButton";
+import { BusyButton } from "../components/BusyButton";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import type { TokenRecord, PatchTokenBody } from "../types";
 import PHOENIX_ICON from "../../custom_components/phoenix_mcp/brand/icon.png";
@@ -90,10 +92,10 @@ function ConfirmModal({ title, body, checkLabel, confirmLabel, confirmClass, loa
         </label>
       </div>
       <div className="modal-actions">
-        <button className={`btn ${confirmClass}`} onClick={onConfirm} disabled={!checked || loading}>
+        <BusyButton className={`btn ${confirmClass}`} onClick={onConfirm} busy={loading} disabled={!checked}>
           {loading ? t("tokens.pleaseWait") : confirmLabel}
-        </button>
-        <button className="btn btn-text" onClick={onClose} disabled={loading}>{t("tokens.cancel")}</button>
+        </BusyButton>
+        <BusyButton className="btn btn-text" onClick={onClose} busy={loading}>{t("tokens.cancel")}</BusyButton>
       </div>
     </Modal>
   );
@@ -161,11 +163,11 @@ export function ToolAnnouncementToggle({ token, onUpdate }: { token: TokenRecord
           <small>{t("tokens.announceAllHelp")}</small>
         </div>
         <label className="toggle-switch">
-          <input
+          <BusyInput
             type="checkbox"
             aria-label={t("tokens.announceAllLabel")}
             checked={!!token.announce_all_tools}
-            disabled={saving}
+            busy={saving}
             onChange={(e) => patch({ announce_all_tools: e.target.checked })}
           />
           <span className="toggle-switch-track" />
@@ -177,11 +179,11 @@ export function ToolAnnouncementToggle({ token, onUpdate }: { token: TokenRecord
           <small>{t("tokens.assistExposureHelp")}</small>
         </div>
         <label className="toggle-switch">
-          <input
+          <BusyInput
             type="checkbox"
             aria-label={t("tokens.assistExposureLabel")}
             checked={!!token.use_assist_exposure}
-            disabled={saving || !token.pass_through}
+            busy={saving} disabled={!token.pass_through}
             onChange={(e) => patch({ use_assist_exposure: e.target.checked })}
           />
           <span className="toggle-switch-track" />
@@ -197,18 +199,18 @@ export function ToolAnnouncementToggle({ token, onUpdate }: { token: TokenRecord
             )}
           </small>
         </div>
-        <select
+        <BusySelect
           className="input input-auto"
           aria-label={t("tokens.inlineWaitAria")}
           value={token.confirm_inline_wait_seconds ?? 0}
-          disabled={saving}
+          busy={saving}
           onChange={(e) => patch({ confirm_inline_wait_seconds: Number(e.target.value) })}
         >
           <option value={0}>{t("tokens.inlineWaitOff")}</option>
           {inlineWaitOptions(token.confirm_inline_wait_seconds ?? 0).map((s) => (
             <option key={s} value={s}>{t("tokens.secondsOption", { s })}</option>
           ))}
-        </select>
+        </BusySelect>
       </div>
     </>
   );
@@ -367,10 +369,10 @@ function EditablePresetName(
 
   return (
     <span className="preset-name-edit">
-      <input
+      <BusyInput
         className="preset-name-input"
         value={value}
-        disabled={saving}
+        busy={saving}
         spellCheck={false}
         maxLength={40}
         aria-label={t("tokens.presetNameAria", { name: preset.name })}
@@ -495,14 +497,14 @@ function PresetsCard({ token, onUpdate }: { token: TokenRecord; onUpdate: (t: To
           )}
           {error && <ErrorMsg msg={error} />}
           <div className="modal-actions">
-            <button className="btn btn-text" onClick={() => { setAction(null); setPtConfirmed(false); setError(null); }} disabled={busy}>{t("tokens.cancel")}</button>
-            <button
+            <BusyButton className="btn btn-text" onClick={() => { setAction(null); setPtConfirmed(false); setError(null); }} busy={busy}>{t("tokens.cancel")}</BusyButton>
+            <BusyButton
               className={`btn ${action.kind === "delete" ? "btn-danger" : action.kind === "revert" ? "btn-warning" : "btn-primary"}`}
               onClick={runAction}
-              disabled={busy || (needsPtConfirm && !ptConfirmed)}
+              busy={busy} disabled={(needsPtConfirm && !ptConfirmed)}
             >
               {busy ? t("tokens.working") : action.kind === "switch" ? t("tokens.presetSwitch") : action.kind === "revert" ? t("tokens.presetRevert") : t("tokens.delete")}
-            </button>
+            </BusyButton>
           </div>
         </Modal>
       )}
@@ -516,19 +518,19 @@ function PresetsCard({ token, onUpdate }: { token: TokenRecord; onUpdate: (t: To
             {isActive && dirty && <span className="badge badge-amber" title={t("tokens.presetModifiedTitle")}>{t("tokens.presetModified")}</span>}
             <span className="preset-row-actions">
               {!isActive && (
-                <button className="btn btn-outline btn-sm" disabled={busy} onClick={() => setAction({ kind: "switch", preset: p })}>
+                <BusyButton className="btn btn-outline btn-sm" busy={busy} onClick={() => setAction({ kind: "switch", preset: p })}>
                   {t("tokens.presetSwitchTo")}
-                </button>
+                </BusyButton>
               )}
               {isActive && dirty && (
-                <button className="btn btn-outline btn-sm" disabled={busy} onClick={() => setAction({ kind: "revert", preset: p })}>
+                <BusyButton className="btn btn-outline btn-sm" busy={busy} onClick={() => setAction({ kind: "revert", preset: p })}>
                   {t("tokens.presetRevertToSaved")}
-                </button>
+                </BusyButton>
               )}
               {!isActive && (
-                <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setAction({ kind: "delete", preset: p })} aria-label={t("tokens.presetDeleteAria", { name: p.name })}>
+                <BusyButton className="btn btn-ghost btn-sm" busy={busy} onClick={() => setAction({ kind: "delete", preset: p })} aria-label={t("tokens.presetDeleteAria", { name: p.name })}>
                   {t("tokens.delete")}
-                </button>
+                </BusyButton>
               )}
             </span>
           </div>
@@ -539,23 +541,23 @@ function PresetsCard({ token, onUpdate }: { token: TokenRecord; onUpdate: (t: To
       )}
 
       <div className="preset-create-row">
-        <input
+        <BusyInput
           className="input"
           placeholder={t("tokens.presetNewName")}
           value={newName}
           maxLength={40}
-          disabled={busy || token.presets.length >= MAX_PRESETS}
+          busy={busy} disabled={token.presets.length >= MAX_PRESETS}
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") createPreset(); }}
           aria-label={t("tokens.presetNewName")}
         />
-        <button
+        <BusyButton
           className="btn btn-outline btn-sm"
-          disabled={busy || !newName.trim() || token.presets.length >= MAX_PRESETS}
+          busy={busy} disabled={!newName.trim() || token.presets.length >= MAX_PRESETS}
           onClick={createPreset}
         >
           {t("tokens.presetSaveCurrent")}
-        </button>
+        </BusyButton>
       </div>
       {token.presets.length >= MAX_PRESETS && (
         <small className="preset-hint">{t("tokens.presetMax", { max: MAX_PRESETS })}</small>
@@ -603,10 +605,10 @@ function EditableTokenName({ token, onRenamed }: { token: TokenRecord; onRenamed
 
   return (
     <span className="token-name-edit">
-      <input
+      <BusyInput
         className="token-card-name token-name-input"
         value={value}
-        disabled={saving}
+        busy={saving}
         spellCheck={false}
         maxLength={32}
         aria-label={t("tokens.tokenNameAria")}

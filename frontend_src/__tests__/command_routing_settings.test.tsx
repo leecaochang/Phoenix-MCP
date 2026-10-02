@@ -34,5 +34,5 @@ it.each(["auto", "local", "hybrid"])("preserves enabled %s routing and locks it 
   render(<CommandRoutingToggle surface="chat" mode={mode} onChange={vi.fn()} saving />);
   const toggle = screen.getByRole("checkbox");
   expect(toggle).toBeChecked();
-  expect(toggle).toBeDisabled();
+  expect(toggle).toHaveAttribute("aria-disabled", "true");
 });

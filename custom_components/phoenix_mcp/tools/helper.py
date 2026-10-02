@@ -40,7 +40,6 @@ from homeassistant.util import slugify
 from ..const import CAP_DENY, TEMPLATE_RECOVERY_TYPES
 from ..data import PhoenixData
 from ..mesa import (
-    MesaRuntime,
     RegistryMesaDecision,
     async_create_mesa_approval,
     evaluate_registry_action,
@@ -154,16 +153,6 @@ def _helper_mesa_context(
     decisions: list[tuple[str, RegistryMesaDecision]] = []
     try:
         for entity_id in entities:
-            if not isinstance(data.mesa, MesaRuntime) and data.mesa_setup_failed is not True:
-                decisions.append((
-                    entity_id,
-                    RegistryMesaDecision(
-                        decision="allow",
-                        rule="mesa:unavailable_in_test_context",
-                        reason="MESA has no runtime in this host context.",
-                    ),
-                ))
-                continue
             decisions.append((
                 entity_id,
                 evaluate_registry_action(
@@ -2149,30 +2138,19 @@ def _config_entry_helper_mesa_entities(
     entity_ids = _config_entry_helper_entity_ids(hass, entry.entry_id)
     if entity_ids:
         return entity_ids
-    if data.mesa_setup_failed is True:
-        return (
-            _tool_error(
-                "MESA is configured but unavailable, so helper ownership cannot be checked."
-            ),
-            "denied",
-            "set_helper_settings",
-        )
-    if isinstance(data.mesa, MesaRuntime):
-        try:
-            if data.store.get_settings().mesa_mode != "off":
-                return (
-                    _tool_error(
-                        "MESA cannot protect this helper because it has no registry entities; nothing changed."
-                    ),
-                    "denied",
-                    "set_helper_settings",
-                )
-        except Exception:  # noqa: BLE001 - unreadable safety mode fails closed
+    try:
+        if data.store.get_settings().mesa_mode != "off":
             return (
-                _tool_error("MESA safety state could not be read; nothing changed."),
+                _tool_error("MESA cannot protect this helper because it has no registry entities; nothing changed."),
                 "denied",
                 "set_helper_settings",
             )
+    except Exception:  # noqa: BLE001 - unreadable safety mode fails closed
+        return (
+            _tool_error("MESA safety state could not be read; nothing changed."),
+            "denied",
+            "set_helper_settings",
+        )
     return [f"{entry.domain}.__phoenix_helper_settings__"]
 
 

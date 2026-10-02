@@ -102,7 +102,7 @@ describe("api.wipe", () => {
 
 describe("api.getAudit", () => {
   it("builds query string from params", async () => {
-    globalThis.fetch = mockFetchResponse(200, []);
+    globalThis.fetch = mockFetchResponse(200, { entries: [], total: 0 });
 
     await api.getAudit({ limit: 50, outcome: "denied", token_id: "tok-1" });
     const [url] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
@@ -112,7 +112,7 @@ describe("api.getAudit", () => {
   });
 
   it("sends no query string when params are empty", async () => {
-    globalThis.fetch = mockFetchResponse(200, []);
+    globalThis.fetch = mockFetchResponse(200, { entries: [], total: 0 });
 
     await api.getAudit();
     const [url] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
@@ -585,4 +585,19 @@ it("does not dispatch a queued permission edit under a different HA user", async
   first({ ok: true, status: 200, json: async () => ({}) });
   await a; await refusal;
   expect(requests).toHaveBeenCalledOnce();
+});
+
+it.each([null, 42, "unexpected", { error: "parse_error" }, [null]])("refuses malformed token-list success data: %j", async (body) => {
+  globalThis.fetch = mockFetchResponse(200, body);
+  await expect(api.listTokens()).rejects.toMatchObject({ status: 502, code: "invalid_response" });
+});
+
+it("refuses a successful response whose JSON cannot be parsed", async () => {
+  globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: () => Promise.reject(new SyntaxError("private content")) });
+  await expect(api.listTokens()).rejects.toMatchObject({ status: 502, code: "invalid_response" });
+});
+
+it("refuses malformed approval rows before the review view consumes them", async () => {
+  globalThis.fetch = mockFetchResponse(200, { approvals: [{ id: "review", args: {}, diff: null }], total: 1 });
+  await expect(api.listApprovals()).rejects.toMatchObject({ status: 502, code: "invalid_response" });
 });

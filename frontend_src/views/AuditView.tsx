@@ -1,3 +1,4 @@
+import { BusyButton } from "../components/BusyButton";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { AuditEntry, TokenRecord, Outcome } from "../types";
 import { api } from "../api";
@@ -173,10 +174,10 @@ export function AuditView({ tokens }: Props) {
         />
         {hasMore && (
           <div className="approval-history-more">
-            <button className="btn btn-ghost btn-sm" disabled={loadingMore}
+            <BusyButton className="btn btn-ghost btn-sm" busy={loadingMore}
               onClick={() => load(entries.length)}>
               {loadingMore ? t("common.loading") : t("common.loadMore")}
-            </button>
+            </BusyButton>
           </div>
         )}
       </div>

@@ -7670,11 +7670,15 @@ async def _tool_mesa(
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
+    client_ip: str | None = None,
     *,
     mesa_tool_name: str,
 ) -> tuple[dict, str, str]:
     """Adapter for the mesa_* tools, whose entry point takes the name first."""
-    return await async_call_mesa_tool(mesa_tool_name, args, token, hass, data, request_id)
+    from .mesa_audit import request_context
+
+    with request_context(token, request_id, client_ip):
+        return await async_call_mesa_tool(mesa_tool_name, args, token, hass, data, request_id)
 
 
 async def _call_tool(

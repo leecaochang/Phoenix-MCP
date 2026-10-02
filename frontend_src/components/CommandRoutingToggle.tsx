@@ -1,3 +1,4 @@
+import { BusyInput } from "./BusyButton";
 import { t } from "../i18n";
 
 export function CommandRoutingToggle({ surface, mode, onChange, saving }: {
@@ -13,7 +14,7 @@ export function CommandRoutingToggle({ surface, mode, onChange, saving }: {
       <small id={`${id}-help`}>{t("routing.commandHelp")}</small>
     </div>
     <label className="toggle-switch">
-      <input id={id} type="checkbox" aria-describedby={`${id}-help`} disabled={saving}
+      <BusyInput id={id} type="checkbox" aria-describedby={`${id}-help`} busy={saving}
         checked={["auto", "local", "hybrid"].includes(mode ?? "off")}
         onChange={event => onChange(event.target.checked ? "auto" : "off")} />
       <span className="toggle-switch-track" />

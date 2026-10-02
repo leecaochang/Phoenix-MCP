@@ -8,8 +8,7 @@ to this very test because its word dictionary only knew nine through
 twenty-five, so the checks are mechanical and the word list is generated.
 
 The counts themselves come from mcp_view.tool_catalog_counts(), the single
-source of truth (also served by the admin info endpoint and printed by
-scripts/count_tools.py). Nothing here re-derives them from the def lists.
+source of truth (also served by the admin info endpoint). Nothing here re-derives them from the def lists.
 
 The localized READMEs restate the same headline counts and are scanned by their
 own patterns, because the English one cannot match a CJK noun (see NUMBER_ZH and

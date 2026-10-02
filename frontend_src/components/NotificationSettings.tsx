@@ -1,3 +1,4 @@
+import { BusyInput } from "./BusyButton";
 import type { GlobalSettings } from "../types";
 import { t } from "../i18n";
 
@@ -18,11 +19,11 @@ export function NotificationSettings({ settings, onToggle, saving }: Props) {
           </small>
         </div>
         <label className={`toggle-switch${saving ? " disabled" : ""}`}>
-          <input
+          <BusyInput
             type="checkbox"
             aria-label={t("settings.notifyApprovalLabel")}
             checked={settings.notify_on_approval}
-            disabled={saving}
+            busy={saving}
             onChange={(e) => onToggle("notify_on_approval", e.target.checked)}
           />
           <span className="toggle-switch-track" />
@@ -36,11 +37,11 @@ export function NotificationSettings({ settings, onToggle, saving }: Props) {
           </small>
         </div>
         <label className={`toggle-switch${saving ? " disabled" : ""}`}>
-          <input
+          <BusyInput
             type="checkbox"
             aria-label={t("settings.notifyRateLimitLabel")}
             checked={settings.notify_on_rate_limit}
-            disabled={saving}
+            busy={saving}
             onChange={(e) => onToggle("notify_on_rate_limit", e.target.checked)}
           />
           <span className="toggle-switch-track" />

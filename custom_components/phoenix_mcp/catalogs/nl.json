@@ -92,7 +92,8 @@
       "tabAudit": "Auditlogboeken",
       "tabChanges": "Wijzigingen",
       "tabSettings": "Instellingen",
-      "tabTokens": "Tokens"
+      "tabTokens": "Tokens",
+      "renderFailed": "Deze weergave kon niet worden getoond. Vernieuw om opnieuw te proberen of kies een andere sectie."
     },
     "common": {
       "after": "Na",
@@ -116,7 +117,8 @@
       "preview": "Voorbeeld",
       "refresh": "Opnieuw laden",
       "save": "Opslaan",
-      "saving": "Opslaan..."
+      "saving": "Opslaan...",
+      "invalidResponse": "De server heeft een ongeldig antwoord teruggegeven. Vernieuw en probeer opnieuw."
     },
     "inject": {
       "mesaProfile": "MESA-profiel",
@@ -1721,7 +1723,7 @@
       "mesaModeAdvisory": "Adviserend",
       "mesaModeAria": "MESA-handhavingsmodus",
       "mesaModeEnforced": "Afgedwongen",
-      "mesaModeHelp": "Adviserend toont waarschuwingen maar staat aanroepen toe. Afgedwongen blokkeert verboden en alleen-lezen acties en stuurt bevestigingsverzoeken naar Goedkeuringen.",
+      "mesaModeHelp": "Advisory waarschuwt voor de meeste beleidsgrenzen; alleen-lezen en expliciete privacyweigeringen blijven blokkeren. Enforced blokkeert verboden acties en vraagt om bevestiging.",
       "mesaModeLabel": "Handhavingsmodus",
       "mesaModeOff": "Uit",
       "model": "Model",

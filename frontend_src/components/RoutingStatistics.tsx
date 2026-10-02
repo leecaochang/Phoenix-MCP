@@ -1,3 +1,4 @@
+import { BusyButton } from "./BusyButton";
 import { Fragment, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { t } from "../i18n";
@@ -67,8 +68,8 @@ export function RoutingStatistics({ surface }: { surface: "voice" | "chat" }) {
       {busy && <p role="status">{t("common.loading")}</p>}
       {error && <p className="banner banner-error" role="alert">{t("routingStats.error")}</p>}
       <div className="routing-statistics-actions">
-        <button type="button" className="btn btn-text btn-sm" disabled={busy} onClick={() => void load()}>{t("common.refresh")}</button>
-        <button type="button" className="btn btn-text btn-sm" disabled={busy || !stats} onClick={() => setConfirm(true)}>{t("routingStats.reset")}</button>
+        <BusyButton type="button" className="btn btn-text btn-sm" busy={busy} onClick={() => void load()}>{t("common.refresh")}</BusyButton>
+        <BusyButton type="button" className="btn btn-text btn-sm" busy={busy} disabled={!stats} onClick={() => setConfirm(true)}>{t("routingStats.reset")}</BusyButton>
       </div>
     </div>}
     {confirm && <Modal titleId={`routing-stats-reset-${surface}`} onClose={busy ? undefined : () => setConfirm(false)}>
@@ -76,8 +77,8 @@ export function RoutingStatistics({ surface }: { surface: "voice" | "chat" }) {
       <p>{t("routingStats.confirm")}</p>
       {error && <p className="banner banner-error" role="alert">{t("routingStats.error")}</p>}
       <div className="modal-actions">
-        <button type="button" className="btn btn-danger" disabled={busy} onClick={() => void load(true)}>{t("routingStats.reset")}</button>
-        <button type="button" className="btn btn-text" disabled={busy} onClick={() => setConfirm(false)}>{t("common.cancel")}</button>
+        <BusyButton type="button" className="btn btn-danger" busy={busy} onClick={() => void load(true)}>{t("routingStats.reset")}</BusyButton>
+        <BusyButton type="button" className="btn btn-text" busy={busy} onClick={() => setConfirm(false)}>{t("common.cancel")}</BusyButton>
       </div>
     </Modal>}
   </details>;

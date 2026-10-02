@@ -18,6 +18,8 @@ from homeassistant.const import UnitOfTemperature
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 
+from tests.runtime_fixtures import mesa_off_store
+
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _EXECUTOR_REGISTRY, _call_tool
 from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
@@ -50,7 +52,7 @@ def _json(content: dict) -> dict:
 
 async def _call(name, args, token, hass):
     return await _call_tool(name, args, token, hass, PhoenixData(
-        store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(),
+        store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(),
     ))
 
 
@@ -503,7 +505,7 @@ class TestVersionCapture:
     def _data():
         versions = VersionStore()
         data = PhoenixData(
-            store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions,
+            store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions,
         )
         return data, versions
 
@@ -592,7 +594,7 @@ class TestInputButtonLifecycle:
         await hass.async_block_till_done()
         versions = VersionStore()
         data = PhoenixData(
-            store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions,
+            store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions,
         )
         token = _token()
 
@@ -735,7 +737,7 @@ class TestZoneLifecycle:
         await self._setup(hass)
         versions = VersionStore()
         data = PhoenixData(
-            store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(),
+            store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(),
             versions=versions,
         )
         token = _token(permissions=PermissionTree(
@@ -771,7 +773,7 @@ class TestZoneLifecycle:
         await self._setup(hass)
         versions = VersionStore()
         data = PhoenixData(
-            store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(),
+            store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(),
             versions=versions,
         )
         token = _token()
@@ -923,7 +925,7 @@ class TestZoneLifecycle:
             result, outcome, _ = await _call_tool(
                 "list_helpers", {"helper_type": "zone"}, _token(), hass,
                 PhoenixData(
-                    store=MagicMock(), rate_limiter=MagicMock(),
+                    store=mesa_off_store(), rate_limiter=MagicMock(),
                     audit=MagicMock(), versions=VersionStore(),
                 ),
             )
@@ -941,6 +943,7 @@ class TestZoneLifecycle:
                 self.pending: list[dict] = []
                 self.async_lock = asyncio.Lock()
                 self.async_save = AsyncMock()
+                self.get_settings = mesa_off_store().get_settings
 
             def get_pending_approvals(self) -> list[dict]:
                 return self.pending
@@ -1059,7 +1062,7 @@ class TestTagLifecycle:
         await self._setup(hass)
         versions = VersionStore()
         data = PhoenixData(
-            store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(),
+            store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(),
             versions=versions,
         )
         token = _token(permissions=PermissionTree(
@@ -1095,6 +1098,7 @@ class TestTagLifecycle:
                 self.pending: list[dict] = []
                 self.async_lock = asyncio.Lock()
                 self.async_save = AsyncMock()
+                self.get_settings = mesa_off_store().get_settings
 
             def get_pending_approvals(self) -> list[dict]:
                 return self.pending
@@ -1149,7 +1153,7 @@ class TestTagLifecycle:
             result, outcome, _ = await _call_tool(
                 "list_helpers", {"helper_type": "tag"}, _token(), hass,
                 PhoenixData(
-                    store=MagicMock(), rate_limiter=MagicMock(),
+                    store=mesa_off_store(), rate_limiter=MagicMock(),
                     audit=MagicMock(), versions=VersionStore(),
                 ),
             )
@@ -1165,7 +1169,7 @@ class TestTagLifecycle:
         await self._setup(hass)
         versions = VersionStore()
         data = PhoenixData(
-            store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(),
+            store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(),
             versions=versions,
         )
         token = _token()
@@ -1306,6 +1310,7 @@ class TestTagLifecycle:
                 self.pending: list[dict] = []
                 self.async_lock = asyncio.Lock()
                 self.async_save = AsyncMock()
+                self.get_settings = mesa_off_store().get_settings
 
             def get_pending_approvals(self) -> list[dict]:
                 return self.pending
@@ -1459,7 +1464,7 @@ class TestPersonLifecycle:
         await self._setup(hass)
         versions = VersionStore()
         data = PhoenixData(
-            store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(),
+            store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(),
             versions=versions,
         )
         token = _token()
@@ -1556,6 +1561,7 @@ class TestPersonLifecycle:
                 self.pending: list[dict] = []
                 self.async_lock = asyncio.Lock()
                 self.async_save = AsyncMock()
+                self.get_settings = mesa_off_store().get_settings
 
             def get_pending_approvals(self) -> list[dict]:
                 return self.pending
@@ -1611,7 +1617,7 @@ class TestScheduleLifecycle:
         await hass.async_block_till_done()
         versions = VersionStore()
         data = PhoenixData(
-            store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions,
+            store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions,
         )
         token = _token()
         initial_config = {
@@ -1839,7 +1845,7 @@ async def test_template_create_helper_covers_available_types(hass, kind):
     snapshot = template_snapshot(hass, entry)
     validate_snapshot(snapshot)
     await hass.config_entries.async_remove(entry_id)
-    runtime = PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock())
+    runtime = PhoenixData(store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock())
     from custom_components.phoenix_mcp.template_recovery import restore_template
     restored, restored_outcome, _ = await restore_template(snapshot, token, hass, runtime)
     assert restored_outcome == "allowed", (kind, restored)
@@ -1862,7 +1868,7 @@ async def test_template_helper_list_edit_delete_and_agent_restore(hass):
         cap_integration_write="allow",
         permissions=PermissionTree(domains={"sensor": PermissionNode(state="GREEN")}),
     )
-    runtime = PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock())
+    runtime = PhoenixData(store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock())
     steps = [
         {"step_id": "user", "data": {"next_step_id": "sensor"}},
         {"step_id": "sensor", "data": {"name": "CRUD template", "state": "{{ 7 }}"}},
@@ -1949,7 +1955,7 @@ async def test_template_creation_rechecks_terminal_boundary(hass):
     ):
         content, outcome, _ = await helper._execute_create_helper(
             {"helper_type": "template", "flow_steps": steps}, _token(), hass,
-            PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock()),
+            PhoenixData(store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock()),
         )
     assert outcome == "invalid_request", content
     assert "final boundary changed" in content["content"][0]["text"]
@@ -1965,7 +1971,7 @@ async def test_template_creation_authority_loss_before_final_submit(hass):
                side_effect=[None, RuntimeError("Authority changed")]) as authority:
         content, outcome, _ = await helper._execute_create_helper(
             {"helper_type": "template", "flow_steps": steps}, _token(), hass,
-            PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock()),
+            PhoenixData(store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock()),
         )
     assert outcome == "invalid_request", content
     assert authority.call_count == 2

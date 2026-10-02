@@ -903,7 +903,8 @@
       "preview": "預覽",
       "refresh": "重新整理",
       "save": "儲存",
-      "saving": "儲存中…"
+      "saving": "儲存中…",
+      "invalidResponse": "伺服器傳回了無效回應。請重新整理後再試。"
     },
     "diff": {
       "blueprint.create": "建立 {domain} 藍圖「{rel}」",
@@ -1589,7 +1590,7 @@
       "mesaModeAdvisory": "建議",
       "mesaModeAria": "MESA 執行模式",
       "mesaModeEnforced": "強制",
-      "mesaModeHelp": "「建議」會顯示警告但仍允許呼叫。「強制」會阻止「禁止」和「唯讀」的操作，並把確認請求傳送到「核准」。",
+      "mesaModeHelp": "Advisory 對大多數政策限制發出警告；唯讀限制和明確的隱私拒絕仍會阻止操作。Enforced 會阻止禁止的操作，並將確認請求加入審批佇列。",
       "mesaModeLabel": "執行模式",
       "mesaModeOff": "關閉",
       "model": "模型",
@@ -1711,7 +1712,8 @@
       "tabAudit": "稽核日誌",
       "tabChanges": "變更",
       "tabSettings": "設定",
-      "tabTokens": "權杖"
+      "tabTokens": "權杖",
+      "renderFailed": "無法顯示此檢視。請重新整理再試，或選擇其他區段。"
     },
     "tokens": {
       "advanced": "高階",

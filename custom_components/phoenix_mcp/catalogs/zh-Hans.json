@@ -22,7 +22,8 @@
       "refresh": "刷新",
       "save": "保存",
       "saving": "保存中…",
-      "empty": "（空）"
+      "empty": "（空）",
+      "invalidResponse": "服务器返回了无效响应。请刷新后重试。"
     },
     "shell": {
       "agentChat": "智能体对话",
@@ -38,7 +39,8 @@
       "tabAudit": "审计日志",
       "tabChanges": "变更",
       "tabSettings": "设置",
-      "tabTokens": "令牌"
+      "tabTokens": "令牌",
+      "renderFailed": "无法显示此视图。请刷新重试，或选择其他栏目。"
     },
     "caps": {
       "cap_automation_write": {
@@ -1392,7 +1394,7 @@
       "mesaCard": "MESA 语义安全",
       "mesaEnforcedWarning": "没有 MESA 策略的实体将使用内置安全基线。门锁和警报控制面板会被阻止；大多数其他域需要审批。在依赖“强制”模式之前，请先添加策略或部署默认设置。",
       "mesaModeAria": "MESA 执行模式",
-      "mesaModeHelp": "“建议”会显示警告但仍允许调用。“强制”会阻止“禁止”和“只读”的操作，并把确认请求发送到“审批”。",
+      "mesaModeHelp": "Advisory 对大多数策略限制发出警告；只读限制和明确的隐私拒绝仍会阻止操作。Enforced 会阻止禁止的操作，并将确认请求加入审批队列。",
       "mesaModeLabel": "执行模式",
       "model": "模型",
       "notificationsCard": "通知",

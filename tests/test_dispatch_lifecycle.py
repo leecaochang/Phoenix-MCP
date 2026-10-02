@@ -23,6 +23,7 @@ from custom_components.phoenix_mcp.token_store import TokenStore
 
 async def _environment(hass):
     store = TokenStore(hass, AsyncMock())
+    store.get_settings().mesa_mode = "off"
     token, raw = await store.async_create_token("lifecycle", "admin", rate_limit_requests=0)
     token.pass_through = True
     token.cap_restart = "confirm"
@@ -102,7 +103,19 @@ async def lifecycle_http(hass, hass_client_no_auth):
         view = cls()
         view.hass = hass
         hass.http.register_view(view)
-    return await hass_client_no_auth(), data, token, raw
+    client = await hass_client_no_auth()
+    headers = {"Authorization": f"Bearer {raw}"}
+    response = await client.post("/api/phoenix-mcp", headers=headers, json={
+        "jsonrpc": "2.0", "id": 0, "method": "initialize", "params": {
+            "protocolVersion": "2025-03-26", "capabilities": {}, "clientInfo": {"name": "fixture", "version": "1"}}})
+    assert response.status == 200
+    session = response.headers["Mcp-Session-Id"]
+    headers["Mcp-Session-Id"] = session
+    response = await client.post("/api/phoenix-mcp", headers=headers,
+        json={"jsonrpc": "2.0", "method": "notifications/initialized"})
+    assert response.status == 202
+    client.session.headers["Mcp-Session-Id"] = session
+    return client, data, token, raw
 
 
 def _write(msg_id=1):

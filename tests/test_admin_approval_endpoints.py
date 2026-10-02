@@ -151,8 +151,7 @@ class TestApprovalsList:
         view.hass = hass
         request = _make_admin_request()
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f):
-            resp = await view.get(request)
+        resp = await view.get(request)
 
         body = json.loads(resp.text)
         assert body["total"] == 2
@@ -169,8 +168,7 @@ class TestApprovalsList:
         view.hass = hass
         request = _make_admin_request(query={"status": STATUS_PENDING})
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f):
-            resp = await view.get(request)
+        resp = await view.get(request)
 
         body = json.loads(resp.text)
         assert body["total"] == 1
@@ -188,8 +186,7 @@ class TestApprovalsList:
         view.hass = hass
         request = _make_admin_request(query={"token_id": "tok-1"})
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f):
-            resp = await view.get(request)
+        resp = await view.get(request)
 
         body = json.loads(resp.text)
         assert body["total"] == 1
@@ -209,8 +206,7 @@ class TestApprovalDetail:
         view.hass = hass
         request = _make_admin_request()
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f):
-            resp = await view.get(request, approval_id="appr_a")
+        resp = await view.get(request, approval_id="appr_a")
 
         body = json.loads(resp.text)
         assert body["id"] == "appr_a"
@@ -225,8 +221,7 @@ class TestApprovalDetail:
         view.hass = hass
         request = _make_admin_request()
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f):
-            resp = await view.get(request, approval_id="appr_missing")
+        resp = await view.get(request, approval_id="appr_missing")
 
         assert resp.status == 404
 
@@ -244,7 +239,7 @@ class TestApprovalDelete:
         view.hass = hass
         request = _make_admin_request()
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.delete(request, approval_id="appr_a")
 
@@ -261,8 +256,7 @@ class TestApprovalDelete:
         view.hass = hass
         request = _make_admin_request()
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f):
-            resp = await view.delete(request, approval_id="appr_a")
+        resp = await view.delete(request, approval_id="appr_a")
 
         body = json.loads(resp.text)
         # Idempotent: already-terminal record returns its current state, not cancelled.
@@ -278,8 +272,7 @@ class TestApprovalDelete:
         view.hass = hass
         request = _make_admin_request()
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f):
-            resp = await view.delete(request, approval_id="appr_a")
+        resp = await view.delete(request, approval_id="appr_a")
 
         assert resp.status == 409
         assert next(r for r in store._pending if r["id"] == "appr_a")["status"] == STATUS_PENDING
@@ -299,7 +292,7 @@ class TestApprovalReject:
         body = json.dumps({"reason": "not_safe"}).encode()
         request = _make_admin_request(body=body)
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
 
@@ -316,7 +309,7 @@ class TestApprovalReject:
         view.hass = hass
         request = _make_admin_request(body=b"{}")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
 
@@ -334,8 +327,7 @@ class TestApprovalReject:
         view.hass = hass
         request = _make_admin_request(body=b"{}")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f):
-            resp = await view.post(request, approval_id="appr_a")
+        resp = await view.post(request, approval_id="appr_a")
 
         assert resp.status == 409
         assert next(r for r in store._pending if r["id"] == "appr_a")["status"] == STATUS_PENDING
@@ -350,10 +342,9 @@ class TestApprovalReject:
         view = PhoenixAdminApprovalRejectView()
         view.hass = hass
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f):
-            response = await view.post(
-                _make_admin_request(body=b"{}"), approval_id="appr_a",
-            )
+        response = await view.post(
+            _make_admin_request(body=b"{}"), approval_id="appr_a",
+        )
 
         stored = next(r for r in store._pending if r["id"] == "appr_a")
         assert response.status == 409
@@ -378,7 +369,7 @@ class TestApprovalApprove:
         async def _fake_executor(name, args, tok, hass, data):
             return ({"content": [{"type": "text", "text": '{"success": true}'}]}, "allowed", "restart_ha")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
@@ -419,7 +410,7 @@ class TestApprovalApprove:
             ]
             return ({"content": [{"type": "text", "text": "{}"}]}, "allowed", "restart_ha")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_observing_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
@@ -457,7 +448,7 @@ class TestApprovalApprove:
         request = _make_admin_request(body=b"{}")
 
         executor = AsyncMock()
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
@@ -483,7 +474,7 @@ class TestApprovalApprove:
         request = _make_admin_request(body=b"{}")
 
         executor = AsyncMock()
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
@@ -504,7 +495,7 @@ class TestApprovalApprove:
         view.hass = hass
         executor = AsyncMock()
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor):
             response = await view.post(
                 _make_admin_request(body=b"{}"), approval_id="appr_a",
@@ -532,7 +523,7 @@ class TestApprovalApprove:
             return ({"content": [{"type": "text", "text": "{}"}]}, "allowed", "restart_ha")
 
         executor = AsyncMock(side_effect=_blocked_executor)
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             first_task = asyncio.create_task(
@@ -565,7 +556,7 @@ class TestApprovalApprove:
         view.hass = hass
         executor = AsyncMock()
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"), \
              patch("custom_components.phoenix_mcp.approvals.fire_approval_resolved_event") as resolved:
@@ -607,7 +598,7 @@ class TestApprovalApprove:
         store.async_lock.release()
 
         await update_task
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             response = await approve_task
@@ -634,7 +625,7 @@ class TestApprovalApprove:
             await asyncio.Future()
 
         store.async_save = AsyncMock(side_effect=_blocked_save)
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor):
             task = asyncio.create_task(
                 view.post(_make_admin_request(body=b"{}"), approval_id="appr_a")
@@ -662,7 +653,7 @@ class TestApprovalApprove:
         async def _fake_executor(name, args, tok, hass, data):
             return ({"content": [{"type": "text", "text": '{"success": true}'}]}, "allowed", "restart_ha")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
@@ -685,7 +676,7 @@ class TestApprovalApprove:
             store._pending[0]["rejected_reason"] = "admin_cancelled"
             return ({"content": [{"type": "text", "text": '{"success": true}'}]}, "allowed", "restart_ha")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_executor_that_resolves_elsewhere), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
@@ -718,7 +709,7 @@ class TestApprovalApprove:
         async def _failing_executor(name, args, tok, hass, data):
             return ({"content": [{"type": "text", "text": "Restart failed."}], "isError": True}, "denied", "restart_ha")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_failing_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
@@ -737,7 +728,7 @@ class TestApprovalApprove:
         view.hass = hass
         request = _make_admin_request(body=b"{}")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
 
@@ -757,7 +748,7 @@ class TestApprovalApprove:
         view.hass = hass
         request = _make_admin_request(body=b"{}")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
 
@@ -792,7 +783,7 @@ class TestApprovalApprove:
             assert name == MESA_APPROVED_EXECUTOR
             return ({"content": [{"type": "text", "text": '{"success": true}'}]}, "allowed", "svc")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_m")
@@ -814,7 +805,7 @@ class TestApprovalApprove:
         view.hass = hass
         request = _make_admin_request(body=b"{}")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
 
@@ -836,8 +827,7 @@ class TestApprovalApprove:
         view.hass = hass
         request = _make_admin_request(body=b"{}")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f):
-            resp = await view.post(request, approval_id="appr_a")
+        resp = await view.post(request, approval_id="appr_a")
 
         out = json.loads(resp.text)
         assert out["status"] == STATUS_APPROVED  # already terminal; returned as-is
@@ -851,8 +841,7 @@ class TestApprovalApprove:
         view.hass = hass
         request = _make_admin_request(body=b"{}")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f):
-            resp = await view.post(request, approval_id="appr_missing")
+        resp = await view.post(request, approval_id="appr_missing")
 
         assert resp.status == 404
 
@@ -912,7 +901,7 @@ class TestApprovalClaimSignal:
             return ({"content": [{"type": "text", "text": "{}"}]}, "allowed", "restart_ha")
 
         self_ref = self
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
@@ -938,7 +927,7 @@ class TestApprovalClaimSignal:
             dismissed_during_execution.append(dismiss.call_count)
             return ({"content": [{"type": "text", "text": "{}"}]}, "allowed", "restart_ha")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss") as dismiss:
             await view.post(request, approval_id="appr_a")
@@ -960,7 +949,7 @@ class TestApprovalClaimSignal:
         async def _fake_executor(name, args, tok, hass_, data_):
             return ({"content": [{"type": "text", "text": "{}"}]}, "allowed", "restart_ha")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             await view.post(request, approval_id="appr_a")
@@ -992,7 +981,7 @@ class TestApprovalClaimSignal:
         view.hass = hass
         request = _make_admin_request(body=b"{}")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool",
                    side_effect=RuntimeError("boom")), \
              patch("homeassistant.components.persistent_notification.async_dismiss"), \
@@ -1024,7 +1013,7 @@ class TestApprovalClaimSignal:
             RuntimeError("raised after the side effect landed"),
             ({"content": [{"type": "text", "text": "{}"}]}, "allowed", "restart_ha"),
         ])
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"), \
              patch("homeassistant.components.persistent_notification.async_create"):
@@ -1056,7 +1045,7 @@ class TestApprovalClaimSignal:
 
         from custom_components.phoenix_mcp.mcp_view import ExecutorNotRegistered
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool",
                    side_effect=ExecutorNotRegistered("no such tool")), \
              patch("homeassistant.components.persistent_notification.async_dismiss"), \
@@ -1097,7 +1086,7 @@ class TestApprovalClaimSignal:
             applied.append("side effect landed")
             raise KeyError("a lookup inside the executor, long after the write")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch.dict(mcp_view._EXECUTOR_REGISTRY, {"restart_ha": _executor}), \
              patch("homeassistant.components.persistent_notification.async_dismiss"), \
              patch("homeassistant.components.persistent_notification.async_create"):
@@ -1137,7 +1126,7 @@ class TestApprovalClaimSignal:
             applied.append("side effect landed")
             raise asyncio.CancelledError()
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch.dict(mcp_view._EXECUTOR_REGISTRY, {"restart_ha": _cancelled_executor}), \
              patch("homeassistant.components.persistent_notification.async_dismiss"), \
              patch("homeassistant.components.persistent_notification.async_create"):
@@ -1173,7 +1162,7 @@ class TestApprovalClaimSignal:
             applied.append("should never run")
             return ({"content": [{"type": "text", "text": "{}"}]}, "allowed", "restart_ha")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch.dict(mcp_view._EXECUTOR_REGISTRY, {"restart_ha": _executor}), \
              patch("homeassistant.components.persistent_notification.async_dismiss"), \
              patch("homeassistant.components.persistent_notification.async_create"):
@@ -1197,8 +1186,7 @@ class TestApprovalClaimSignal:
         view = PhoenixAdminApprovalsView()
         view.hass = hass
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f):
-            resp = await view.get(_make_admin_request())
+        resp = await view.get(_make_admin_request())
 
         rows = {r["id"]: r for r in json.loads(resp.text)["approvals"]}
         assert rows["appr_a"]["in_progress"] is True
@@ -1215,7 +1203,7 @@ class TestApprovalAuditLogging:
         view.hass = hass
         request = _make_admin_request(body=json.dumps({"reason": "not_safe"}).encode())
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
 
@@ -1239,7 +1227,7 @@ class TestApprovalAuditLogging:
         async def _fake_executor(name, args, tok, hass, data):
             return ({"content": [{"type": "text", "text": '{"success": true}'}]}, "allowed", "restart_ha")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request, approval_id="appr_a")
@@ -1285,7 +1273,7 @@ class TestBatchApprove:
             seen.append(name)
             return ({"content": [{"type": "text", "text": "{}"}]}, "allowed", "restart_ha")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request)
@@ -1317,7 +1305,7 @@ class TestBatchApprove:
                 return ({"content": [{"type": "text", "text": "boom"}], "isError": True}, "invalid_request", "x")
             return ({"content": [{"type": "text", "text": "{}"}]}, "allowed", "restart_ha")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"), \
              patch("homeassistant.components.persistent_notification.async_create"):
@@ -1349,7 +1337,7 @@ class TestBatchApprove:
         async def _fake_executor(name, args, tok, hass, data):
             return ({"content": [{"type": "text", "text": "nope"}], "isError": True}, "invalid_request", "x")
 
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", side_effect=_fake_executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"), \
              patch("homeassistant.components.persistent_notification.async_create"):
@@ -1367,7 +1355,7 @@ class TestBatchApprove:
             [token], ["appr_a", "appr_b"], kill_switch=True,
         )
         executor = AsyncMock()
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f), \
+        with \
              patch("custom_components.phoenix_mcp.mcp_view.async_execute_approved_tool", executor), \
              patch("homeassistant.components.persistent_notification.async_dismiss"):
             resp = await view.post(request)
@@ -1385,8 +1373,7 @@ class TestBatchApprove:
     async def test_rejects_a_malformed_id_list(self, body):
         view, request, _s, _d = self._view_and_request([], [], ["x"])
         request.content.read = AsyncMock(return_value=json.dumps(body).encode())
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f):
-            resp = await view.post(request)
+        resp = await view.post(request)
         assert resp.status == 400
 
     @pytest.mark.asyncio
@@ -1394,8 +1381,7 @@ class TestBatchApprove:
         """A duplicate would hit the already-terminal branch and halt the batch
         on the caller's own typo, so it is refused up front instead."""
         view, request, _s, _d = self._view_and_request([], [], ["appr_a", "appr_a"])
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f):
-            resp = await view.post(request)
+        resp = await view.post(request)
         assert resp.status == 400
         assert "repeat" in json.loads(resp.text)["message"]
 
@@ -1404,8 +1390,7 @@ class TestBatchApprove:
         from custom_components.phoenix_mcp.const import MAX_BATCH_APPROVALS
         ids = [f"appr_{i}" for i in range(MAX_BATCH_APPROVALS + 1)]
         view, request, _s, _d = self._view_and_request([], [], ids)
-        with patch("custom_components.phoenix_mcp.admin_view.require_admin", lambda f: f):
-            resp = await view.post(request)
+        resp = await view.post(request)
         assert resp.status == 400
 
 

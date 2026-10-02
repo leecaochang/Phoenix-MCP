@@ -23,6 +23,8 @@ from homeassistant.helpers import label_registry as lr
 from homeassistant.util.dt import utcnow
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from tests.runtime_fixtures import mesa_off_store
+
 from custom_components.phoenix_mcp.const import MAX_DIFF_INLINE_BYTES, MAX_REQUEST_BODY_BYTES
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool as _mcp_call_tool, async_restore_version
@@ -55,7 +57,7 @@ def isolated_config_dir(hass: HomeAssistant, tmp_path):
 def _data() -> tuple[PhoenixData, VersionStore]:
     versions = VersionStore()
     data = PhoenixData(
-        store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions,
+        store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions,
     )
     return data, versions
 

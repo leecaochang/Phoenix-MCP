@@ -24,15 +24,15 @@ TWO DELIBERATE LIMITS, both about keeping the Audit tab worth reading:
 2. THE LOGGER'S LEVEL IS NOT TOUCHED. Forcing ``mesa_core.audit`` to INFO would
    override an operator's explicit logging config AND put a line in
    home-assistant.log for every event, which is the exact noise this bridge
-   exists to avoid. HA's default root level is INFO, so it works out of the box.
+   exists to avoid. HA's normal root level is WARNING unless configured otherwise.
    The consequence, worth knowing before trusting an empty log: where the
-   ``logger:`` default sits above INFO (a common way to quiet the log FILE),
+   effective logger level sits above INFO,
    mesa-core emits nothing, so the tab shows no MESA rows at all, which is
    indistinguishable from "MESA blocked nothing". See docs/mesa.html for the
    one-line entry that restores it.
 
 Rows are attributed to the request that provoked them through a ContextVar set
-by mesa.async_apply_mesa_to_call, i.e. only on real actuation. The preview tools
+by the actuation gate, MESA-tool adapter and camera privacy check. The preview tools
 run the same enforcer to predict a verdict, and a preview is not a block: with
 no context set, an event is dropped rather than logged against a request that
 never happened.

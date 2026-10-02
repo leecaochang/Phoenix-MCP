@@ -1,3 +1,4 @@
+import { BusyInput } from "./BusyButton";
 import type { GlobalSettings } from "../types";
 import { t } from "../i18n";
 
@@ -24,11 +25,11 @@ export function KillSwitch({ settings, onToggle, saving }: Props) {
           </small>
         </div>
         <label className={`toggle-switch toggle-switch-danger${saving ? " disabled" : ""}`}>
-          <input
+          <BusyInput
             type="checkbox"
             aria-label={active ? t("settings.killSwitchActiveAria") : t("settings.killSwitchDisableLabel")}
             checked={active}
-            disabled={saving}
+            busy={saving}
             onChange={(e) => onToggle(e.target.checked)}
           />
           <span className="toggle-switch-track" />

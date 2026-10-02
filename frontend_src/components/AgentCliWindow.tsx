@@ -765,24 +765,24 @@ export function AgentCliWindow({
                        [kind, model, options.thinking, declaredCaps]);
 
   // Persist the selections, options, and geometry so they survive reopen/reload.
-  useEffect(() => { patchDurable({ tokenId }, persistenceOwner); }, [tokenId]);
-  useEffect(() => { patchDurable({ instanceId }, persistenceOwner); }, [instanceId]);
-  useEffect(() => { patchDurable({ model }, persistenceOwner); }, [model]);
-  useEffect(() => { patchDurable({ options }, persistenceOwner); }, [options]);
-  useEffect(() => { patchDurable({ showFooter }, persistenceOwner); }, [showFooter]);
-  useEffect(() => { patchDurable({ showTimestamps }, persistenceOwner); }, [showTimestamps]);
-  useEffect(() => { patchDurable({ textSizePt }, persistenceOwner); }, [textSizePt]);
-  useEffect(() => { patchDurable({ minimized, maximized }, persistenceOwner); }, [minimized, maximized]);
+  useEffect(() => { patchDurable({ tokenId }, persistenceOwner); }, [persistenceOwner, tokenId]);
+  useEffect(() => { patchDurable({ instanceId }, persistenceOwner); }, [instanceId, persistenceOwner]);
+  useEffect(() => { patchDurable({ model }, persistenceOwner); }, [model, persistenceOwner]);
+  useEffect(() => { patchDurable({ options }, persistenceOwner); }, [options, persistenceOwner]);
+  useEffect(() => { patchDurable({ showFooter }, persistenceOwner); }, [persistenceOwner, showFooter]);
+  useEffect(() => { patchDurable({ showTimestamps }, persistenceOwner); }, [persistenceOwner, showTimestamps]);
+  useEffect(() => { patchDurable({ textSizePt }, persistenceOwner); }, [persistenceOwner, textSizePt]);
+  useEffect(() => { patchDurable({ minimized, maximized }, persistenceOwner); }, [minimized, maximized, persistenceOwner]);
   // The prefill is one-shot: consumed into the input above, then cleared so it
   // does not reappear on a later open.
-  useEffect(() => { if (saved.prefill) patchDurable({ prefill: "" }, persistenceOwner); }, [saved.prefill]);
+  useEffect(() => { if (saved.prefill) patchDurable({ prefill: "" }, persistenceOwner); }, [persistenceOwner, saved.prefill]);
   // The transcript is session-only (survives remount within a page load).
-  useEffect(() => { setSessionTurns(turns, persistenceOwner); }, [turns]);
+  useEffect(() => { setSessionTurns(turns, persistenceOwner); }, [persistenceOwner, turns]);
   // Mirror the unsent message box into the same session tier. Done as an effect
   // rather than at each setInput call site so every path stays in sync: typing,
   // send and /clear (which set it to ""), and the cancel path that restores the
   // last query.
-  useEffect(() => { setSessionDraft(input, persistenceOwner); }, [input]);
+  useEffect(() => { setSessionDraft(input, persistenceOwner); }, [input, persistenceOwner]);
 
   useEffect(() => {
     if (inputRef.current) fitComposerTextarea(inputRef.current);
@@ -832,7 +832,7 @@ export function AgentCliWindow({
     const zero = { input: 0, output: 0, context: 0, noData: false };
     setSessionUsage(zero, persistenceOwner);
     setUsage(zero);
-  }, []);
+  }, [persistenceOwner]);
 
   // Reset the conversation when the token or account changes (tool scope /
   // message format differ), but NOT on the initial restore.
@@ -945,7 +945,7 @@ export function AgentCliWindow({
     forgetAgentCliPopup(popup);
     popup?.close();
     popupRef.current = null;
-  }, []);
+  }, [persistenceOwner]);
 
   // The popup is still part of the same React tree, but it is a second browser
   // event target. Mirror the profile-gated Shift+A listener there, keep its
@@ -1214,7 +1214,7 @@ export function AgentCliWindow({
         if (finalText) setAnnouncement(finalText);
       }
     }
-  }, [sending, turns, scrollbackLines, tokenId, tokens, instanceId, kind, model, options, caps, resetUsage]);
+  }, [sending, tokens, turns, scrollbackLines, tokenId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps]);
 
   const answerAnyway = useCallback((prompt: string) => {
     if (sending || !prompt) return;
@@ -1433,7 +1433,7 @@ export function AgentCliWindow({
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
-  }, [pos, pillPos, size, minimized, maximized, poppedOut]);
+  }, [maximized, poppedOut, minimized, pillPos, pos, size, persistenceOwner]);
 
   // --- resize ---
   const startResize = useCallback((dir: string) => (e: React.PointerEvent) => {
@@ -1460,7 +1460,7 @@ export function AgentCliWindow({
     };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
-  }, [size, pos]);
+  }, [size, pos, persistenceOwner]);
 
   // Mode transitions. The pill and the restored window each remember their own
   // position, so each transition seeds or clamps only the geometry it enters.
@@ -1483,7 +1483,7 @@ export function AgentCliWindow({
     setPillPos(np);
     patchDurable({ pillPos: np }, persistenceOwner);
     setMode("min");
-  }, [pillPos, pos]);
+  }, [persistenceOwner, pillPos, pos]);
 
   // Open the full approval in the Phoenix MCP panel's Approvals tab. A narrow
   // in-app chat fills the viewport, so minimize it before the review and restore
@@ -1550,7 +1550,7 @@ export function AgentCliWindow({
     refit();
     window.addEventListener("resize", refit);
     return () => window.removeEventListener("resize", refit);
-  }, [mode, pos, size, pillPos, poppedOut]);
+  }, [mode, pos, size, pillPos, poppedOut, persistenceOwner]);
 
   // Back to the windowed geometry, refitted to the CURRENT viewport: both were
   // remembered under a possibly different one (a phone rotated while minimized
@@ -1568,7 +1568,7 @@ export function AgentCliWindow({
     setPos(np);
     patchDurable({ size: ns, pos: np }, persistenceOwner);
     setMode("normal");
-  }, [pos, size]);
+  }, [persistenceOwner, pos, size.h, size.w]);
 
   const popIn = useCallback(() => {
     const popup = popupRef.current;

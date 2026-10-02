@@ -1,3 +1,4 @@
+import { BusyButton } from "./BusyButton";
 // The MESA tab's "Suggested profiles" section: rows computed by the backend
 // scanner (blast-radius orchestrators, naked risky devices) with Apply /
 // Review / Dismiss per row. Purely presentational; all api calls live in
@@ -117,15 +118,15 @@ export function MesaSuggestions({
                   <div className="mesa-suggest-reason">{suggestionReason(s)}</div>
                 </div>
                 <span className="preset-row-actions">
-                  <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => onApply(s)}>
+                  <BusyButton className="btn btn-primary btn-sm" busy={busy} onClick={() => onApply(s)}>
                     {busy ? t("mesa.working") : t("mesa.apply")}
-                  </button>
-                  <button className="btn btn-outline btn-sm" disabled={busy} onClick={() => onReview(s)}>
+                  </BusyButton>
+                  <BusyButton className="btn btn-outline btn-sm" busy={busy} onClick={() => onReview(s)}>
                     {t("mesa.review")}
-                  </button>
-                  <button className="btn btn-ghost btn-sm" disabled={busy} onClick={() => onDismiss(s)} aria-label={t("mesa.dismissAria", { id: s.subject_id })}>
+                  </BusyButton>
+                  <BusyButton className="btn btn-ghost btn-sm" busy={busy} onClick={() => onDismiss(s)} aria-label={t("mesa.dismissAria", { id: s.subject_id })}>
                     {t("mesa.dismiss")}
-                  </button>
+                  </BusyButton>
                 </span>
               </div>
             );

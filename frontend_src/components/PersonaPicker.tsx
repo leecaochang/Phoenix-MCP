@@ -1,3 +1,4 @@
+import { BusyButton } from "./BusyButton";
 import React from "react";
 import type { Persona, TokenRecord } from "../types";
 import { api } from "../api";
@@ -72,12 +73,12 @@ export function PersonaPicker(props: Props) {
         ).map((p) => {
           const active = activeKey === p.key;
           return (
-            <button
+            <BusyButton
               key={p.key}
               type="button"
               className={`persona-card${active ? " persona-card-active" : ""}`}
               onClick={() => !saving && !active && choose(p.key)}
-              disabled={saving}
+              busy={saving}
               aria-pressed={active}
             >
               <div className="persona-card-label">
@@ -92,7 +93,7 @@ export function PersonaPicker(props: Props) {
               {p.key === "esphome" && esphome && !esphome.integration && !esphome.builder && (
                 <div className="persona-card-note">{t("personas.noEsphome")}</div>
               )}
-            </button>
+            </BusyButton>
           );
         })}
       </div>

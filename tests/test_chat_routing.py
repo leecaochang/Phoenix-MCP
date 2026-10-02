@@ -1,5 +1,7 @@
 """Agent Chat routing preserves conversation context, dispatch and recovery."""
 import asyncio
+from contextlib import asynccontextmanager
+from types import SimpleNamespace
 from copy import deepcopy
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -18,6 +20,20 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.decision_provider import DecisionProvider
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from custom_components.phoenix_mcp.token_store import GlobalSettings, PermissionNode, PermissionTree
+
+
+@pytest.fixture(autouse=True)
+def untimed_recognition(monkeypatch):
+    """Exercise real recognition without using CPU speed as a unit-test oracle."""
+    from custom_components.phoenix_mcp import command_routing
+
+    @asynccontextmanager
+    async def no_deadline(_seconds):
+        yield
+
+    monkeypatch.setattr(command_routing, "asyncio", SimpleNamespace(
+        create_task=asyncio.create_task, shield=asyncio.shield, timeout=no_deadline,
+    ))
 
 
 @pytest.fixture

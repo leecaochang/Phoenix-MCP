@@ -22,7 +22,8 @@
       "preview": "Preview",
       "refresh": "Refresh",
       "save": "Save",
-      "saving": "Saving..."
+      "saving": "Saving...",
+      "invalidResponse": "The server returned an invalid response. Refresh and try again."
     },
     "approvals": {
       "approve": "Approve and execute",
@@ -516,7 +517,8 @@
       "killSwitchFull": "KILL SWITCH IS ACTIVE",
       "killSwitchShort": "KILL SWITCH ON",
       "agentChat": "Agent Chat",
-      "approvalsTabAria": "Approvals ({count} pending)"
+      "approvalsTabAria": "Approvals ({count} pending)",
+      "renderFailed": "This view could not be displayed. Refresh to try again, or choose another section."
     },
     "perms": {
       "addHint": "Add hint",
@@ -1237,7 +1239,7 @@
       "mesaModeAdvisory": "Advisory",
       "mesaModeAria": "MESA enforcement mode",
       "mesaModeEnforced": "Enforced",
-      "mesaModeHelp": "Advisory shows warnings but allows calls. Enforced blocks prohibited and read-only actions, and sends confirmation requests to Approvals.",
+      "mesaModeHelp": "Advisory warns about most policy limits; read-only and explicit privacy denials still block. Enforced blocks prohibited actions and queues confirmation requests.",
       "mesaModeLabel": "Enforcement mode",
       "mesaModeOff": "Off",
       "model": "Model",

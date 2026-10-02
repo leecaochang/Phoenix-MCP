@@ -1,3 +1,4 @@
+import { BusyButton } from "../components/BusyButton";
 /** Configuration version history view. */
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { VersionRecord, VersionSummary } from "../types";
@@ -280,9 +281,9 @@ export function ChangesView({ hass }: { hass: unknown }) {
       )}
       {hasMore && (
         <div className="approval-history-more">
-          <button className="btn btn-ghost btn-sm" disabled={loadingMore} onClick={() => loadFeed(feed.length)}>
+          <BusyButton className="btn btn-ghost btn-sm" busy={loadingMore} onClick={() => loadFeed(feed.length)}>
             {loadingMore ? t("common.loading") : t("common.loadMore")}
-          </button>
+          </BusyButton>
         </div>
       )}
     </div>
@@ -484,10 +485,10 @@ function ChangeDetail(
                     { side: confirmSide === "before" ? t("common.before") : t("common.after"),
                       type: record.resource_type, name: resourceLabel })}
                   <div className="change-restore-actions">
-                    <button className="btn btn-text btn-sm" onClick={() => setConfirmSide(null)} disabled={busy}>{t("common.cancel")}</button>
-                    <button className="btn btn-primary btn-sm" onClick={() => restore(confirmSide)} disabled={busy}>
+                    <BusyButton className="btn btn-text btn-sm" onClick={() => setConfirmSide(null)} busy={busy}>{t("common.cancel")}</BusyButton>
+                    <BusyButton className="btn btn-primary btn-sm" onClick={() => restore(confirmSide)} busy={busy}>
                       {busy ? t("changes.restoring") : t("changes.confirmRestore", { side: confirmSide === "before" ? t("common.before") : t("common.after") })}
-                    </button>
+                    </BusyButton>
                   </div>
                 </div>
               )}
@@ -516,9 +517,9 @@ function ChangeDetail(
                   <div className="yaml-pane-head">
                     <span className="approval-diff-label">{t("common.before")}</span>
                     {showBefore && (
-                      <button className="btn btn-primary btn-sm" onClick={() => setConfirmSide("before")} disabled={busy || confirmSide === "before"}>
+                      <BusyButton className="btn btn-primary btn-sm" onClick={() => setConfirmSide("before")} busy={busy} disabled={confirmSide === "before"}>
                         {t("changes.restoreThis")}
-                      </button>
+                      </BusyButton>
                     )}
                   </div>
                   {renderSide("before")}
@@ -527,9 +528,9 @@ function ChangeDetail(
                   <div className="yaml-pane-head">
                     <span className="approval-diff-label">{t("common.after")}</span>
                     {showAfter && (
-                      <button className="btn btn-primary btn-sm" onClick={() => setConfirmSide("after")} disabled={busy || confirmSide === "after"}>
+                      <BusyButton className="btn btn-primary btn-sm" onClick={() => setConfirmSide("after")} busy={busy} disabled={confirmSide === "after"}>
                         {t("changes.restoreThis")}
-                      </button>
+                      </BusyButton>
                     )}
                   </div>
                   {renderSide("after")}

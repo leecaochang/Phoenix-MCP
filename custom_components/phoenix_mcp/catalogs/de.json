@@ -1094,7 +1094,7 @@
       "mesaModeAdvisory": "Beratend",
       "mesaModeAria": "MESA-Erzwingungsmodus",
       "mesaModeEnforced": "Erzwungen",
-      "mesaModeHelp": "Beratend zeigt Warnungen, lässt Aufrufe aber zu. Erzwungen blockiert verbotene und Nur-Lese-Aktionen und sendet Bestätigungsanfragen an Genehmigungen.",
+      "mesaModeHelp": "Advisory warnt bei den meisten Richtliniengrenzen; Schreibschutz und ausdrückliche Datenschutzverbote blockieren weiterhin. Enforced blockiert verbotene Aktionen und fordert Bestätigung an.",
       "mesaModeLabel": "Erzwingungsmodus",
       "mesaModeOff": "Aus",
       "model": "Modell",
@@ -1747,7 +1747,8 @@
       "preview": "Vorschau",
       "refresh": "Aktualisieren",
       "save": "Speichern",
-      "saving": "Wird gespeichert..."
+      "saving": "Wird gespeichert...",
+      "invalidResponse": "Der Server hat eine ungültige Antwort zurückgegeben. Aktualisiere die Seite und versuche es erneut."
     },
     "shell": {
       "tabTokens": "Tokens",
@@ -1763,7 +1764,8 @@
       "killSwitchFull": "KILL-SCHALTER IST AKTIV",
       "killSwitchShort": "KILL-SCHALTER AN",
       "agentChat": "Agent-Chat",
-      "approvalsTabAria": "Genehmigungen ({count} ausstehend)"
+      "approvalsTabAria": "Genehmigungen ({count} ausstehend)",
+      "renderFailed": "Diese Ansicht konnte nicht angezeigt werden. Aktualisiere sie oder wähle einen anderen Bereich."
     },
     "perms": {
       "addHint": "Hinweis hinzufügen",

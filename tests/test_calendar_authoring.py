@@ -54,6 +54,7 @@ class WritableCalendar(CalendarEntity):
 @pytest.fixture
 async def calendar_env(hass):
     store = TokenStore(hass, AsyncMock())
+    store.get_settings().mesa_mode = "off"
     token, _ = await store.async_create_token('calendar-tests', 'admin', rate_limit_requests=0)
     token.pass_through = True
     token.cap_calendar_write = 'allow'

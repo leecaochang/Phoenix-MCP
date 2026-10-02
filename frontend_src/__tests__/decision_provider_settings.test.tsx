@@ -51,7 +51,7 @@ it("saves an hourly request limit and rejects empty or fractional drafts", async
   expect(change).toHaveBeenCalledExactlyOnceWith("decision_request_budget", 20);
   view.rerender(<DecisionProviderSettings {...props} settings={{ ...props.settings, decision_request_budget: 20 }} saving />);
   expect(input).toHaveValue(20);
-  expect(input).toBeDisabled();
+  expect(input).toHaveAttribute("aria-disabled", "true");
 });
 
 it("keeps remote observation opt-in and sends no completion on mount", async () => {

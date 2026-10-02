@@ -34,7 +34,7 @@
             </div>
             <div class="hero-meta reveal d4">
               <span><span class="dot"></span>Runs entirely inside Home Assistant</span>
-              <span><span class="dot"></span>No cloud, no extra software</span>
+              <span><span class="dot"></span>Permissions and approval controls</span>
               <span><span class="dot"></span>HA 2026.7+</span>
             </div>
           </div>
@@ -131,6 +131,7 @@
         <!-- ===================== WHY Phoenix MCP ===================== -->
         <section class="reveal">
           <h2>Why Phoenix MCP instead of a long-lived access token</h2>
+          <p>The gateway and permission checks run inside Home Assistant. Agent Chat, Voice, AI Task, Home Companion and decision routing can send requests and scoped results to a configured hosted provider. Choose a local provider when you need local model processing. This documentation site also loads Google Fonts.</p>
           <p class="lede">A long-lived access token (LLAT) plus the native MCP server gives every client the same all-or-nothing view of your home. Phoenix MCP keeps the same tools and adds the control layer that the native system has no place for.</p>
 
           <div class="table-wrap compare">
@@ -177,7 +178,7 @@
             <div class="card">
               <div class="card-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12.5l2 2 4-4.5"/><path d="M12 3 4 6v5c0 4.5 3.2 7.6 8 9 4.8-1.4 8-4.5 8-9V6z"/></svg></div>
               <h3>Semantic safety profiles</h3>
-              <p>MESA stores a semantic profile for each entity: what it is, how sensitive it is, and how it should be treated by your AI agent, not just allow or deny. Describe your home's nature once, and every agent inherits the safe treatment: a lock or camera stays read-only or confirmation-only because of what it is, no matter which token is asking.</p>
+              <p>MESA stores a semantic profile for each entity: what it is, how sensitive it is, and how it should be treated by your AI agent, not just allow or deny. Describe an entity's restrictions once so they apply across tokens. Advisory is the default: most restrictions warn rather than block until you enforce them.</p>
               <a class="card-go" href="mesa.html">MESA <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
             </div>
           </div>

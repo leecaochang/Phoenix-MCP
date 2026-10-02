@@ -158,12 +158,13 @@ async def test_confirm_approved_reexec_emits_no_advisory_warning(hass: HomeAssis
 
 
 @pytest.mark.asyncio
-async def test_missing_runtime_allows_all(hass: HomeAssistant):
+async def test_missing_runtime_refuses_when_mesa_is_configured(hass: HomeAssistant):
     data = await _make_data(hass, "enforced")
     data.mesa = None
     outcome = await _apply(hass, data, ["light.a"])
-    assert outcome.decision == "allow"
-    assert outcome.entities == ["light.a"]
+    assert outcome.decision == "deny"
+    assert outcome.entities == []
+    assert outcome.blocked[0][1] == "mesa:runtime_unavailable"
 
 
 @pytest.mark.asyncio

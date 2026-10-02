@@ -1389,7 +1389,7 @@
       "mesaModeAdvisory": "Consultiva",
       "mesaModeAria": "Modalità di applicazione MESA",
       "mesaModeEnforced": "Applicata",
-      "mesaModeHelp": "La modalità Consultiva mostra avvisi ma consente le chiamate. La modalità Applicata blocca le azioni vietate e di sola lettura e invia le richieste di conferma ad Approvazioni.",
+      "mesaModeHelp": "Advisory avvisa per la maggior parte dei limiti; sola lettura e divieti espliciti di privacy restano vincolanti. Enforced blocca le azioni vietate e richiede conferma.",
       "mesaModeLabel": "Modalità di applicazione",
       "mesaModeOff": "Disattivata",
       "model": "Modello",
@@ -1601,7 +1601,8 @@
       "tabAudit": "Registri di controllo",
       "tabChanges": "Modifiche",
       "tabSettings": "Impostazioni",
-      "tabTokens": "Token"
+      "tabTokens": "Token",
+      "renderFailed": "Impossibile visualizzare questa vista. Aggiorna per riprovare o scegli un’altra sezione."
     },
     "tokens": {
       "advanced": "Avanzate",
@@ -1814,7 +1815,8 @@
       "preview": "Anteprima",
       "refresh": "Aggiorna",
       "save": "Salva",
-      "saving": "Salvataggio..."
+      "saving": "Salvataggio...",
+      "invalidResponse": "Il server ha restituito una risposta non valida. Aggiorna e riprova."
     },
     "diff": {
       "blueprint.create": "Crea il progetto {domain} '{rel}'",

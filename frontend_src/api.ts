@@ -42,6 +42,8 @@ import type {
   VersionRestoreResponse,
 } from "./types";
 
+import { validApiResponse } from "./api_response";
+
 import { hasMessage, resolveLanguage, t } from "./i18n";
 
 import { setAgentCliOwner } from "./utils/agentcli_state";
@@ -116,11 +118,18 @@ async function _doReq<T>(method: string, path: string, body?: unknown, extraHead
   const res = await hass.fetchWithAuth(`${BASE}${path}`, opts);
 
   if (res.status === 204) return undefined as T;
-  const json = await res.json().catch(() => ({ error: "parse_error", message: res.statusText }));
+  let json: unknown;
+  try { json = await res.json(); }
+  catch { throw new ApiError(502, "invalid_response", t("common.invalidResponse")); }
+  const error = json !== null && typeof json === "object" && !Array.isArray(json)
+    ? json as Record<string, unknown> : {};
+
   if (!res.ok) {
-    throw new ApiError(res.status, json.error ?? "unknown", json.message ?? res.statusText,
-                       json.message_key, json.message_params);
+    throw new ApiError(res.status, typeof error.error === "string" ? error.error : "unknown", typeof error.message === "string" ? error.message : res.statusText,
+                       typeof error.message_key === "string" ? error.message_key : undefined,
+                       error.message_params as Record<string, string | number> | undefined);
   }
+  if (!validApiResponse(path, method, json)) throw new ApiError(502, "invalid_response", t("common.invalidResponse"));
   return json as T;
 }
 

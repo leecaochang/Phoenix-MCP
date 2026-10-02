@@ -566,7 +566,7 @@
   font-family: inherit;
 }
 .input:focus { outline: none; border-color: var(--phx-accent); box-shadow: 0 0 0 3px var(--phx-accent-lt); }
-.input:disabled { opacity: 0.5; cursor: not-allowed; }
+.input:disabled, .input[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
 .input.error { border-color: var(--phx-error); }
 .field-error { font-size: 12px; color: var(--phx-error); }
 select.input {
@@ -1326,7 +1326,7 @@ select.input {
 }
 .token-name-input:hover:not(:disabled):not([aria-disabled="true"]):not(:focus) { border-color: var(--phx-border); }
 .token-name-input:focus { outline: none; border-color: var(--phx-accent); background: var(--phx-surface); }
-.token-name-input:disabled { opacity: 0.65; cursor: default; }
+.token-name-input:disabled, .token-name-input[aria-disabled="true"] { opacity: 0.65; cursor: default; }
 .token-name-error { font-size: 11px; font-weight: 400; color: var(--phx-error); padding: 0 6px; }
 
 /* Token settings presets (workspace model) */
@@ -1353,7 +1353,7 @@ select.input {
 }
 .preset-name-input:hover:not(:disabled):not([aria-disabled="true"]):not(:focus) { border-color: var(--phx-border); }
 .preset-name-input:focus { outline: none; border-color: var(--phx-accent); background: var(--phx-surface); }
-.preset-name-input:disabled { opacity: 0.65; cursor: default; }
+.preset-name-input:disabled, .preset-name-input[aria-disabled="true"] { opacity: 0.65; cursor: default; }
 .preset-row-actions { display: flex; gap: 6px; flex-shrink: 0; margin-left: auto; }
 .preset-create-row { display: flex; gap: 8px; align-items: center; }
 .preset-create-row .input { flex: 1; }
@@ -1555,7 +1555,7 @@ select.input {
   display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start;
 }
 .persona-card:hover:not(:disabled):not([aria-disabled="true"]) { background: var(--phx-surface-2); }
-.persona-card:disabled { cursor: default; opacity: 0.7; }
+.persona-card:disabled, .persona-card[aria-disabled="true"] { cursor: default; opacity: 0.7; }
 .persona-card-active {
   border-color: var(--phx-accent); background: var(--phx-surface-2);
   box-shadow: 0 0 0 1px var(--phx-accent);

@@ -1,3 +1,4 @@
+import { BusyInput, BusySelect } from "./BusyButton";
 import type { ConversationStyle, DetailLevel } from "../types";
 import { t } from "../i18n";
 
@@ -61,17 +62,17 @@ export function ConversationBehaviorControls({
           <span>{t("settings.conversationStyle")}</span>
           <small>{t(STYLE_HELP[style])}</small>
         </div>
-        <select
+        <BusySelect
           className="input input-auto"
           value={style}
-          disabled={saving}
+          busy={saving}
           aria-label={t("settings.conversationStyleAria", { surface })}
           onChange={(event) => onStyleChange(event.target.value as ConversationStyle)}
         >
           {STYLES.map((value) => (
             <option key={value} value={value}>{t(STYLE_LABELS[value])}</option>
           ))}
-        </select>
+        </BusySelect>
       </div>
       <div className="toggle-row toggle-row-stacked-control">
         <div className="toggle-label">
@@ -81,17 +82,17 @@ export function ConversationBehaviorControls({
             {aiTaskFreeTextOnly ? ` ${t("settings.aiTaskBehaviorFreeTextOnly")}` : ""}
           </small>
         </div>
-        <select
+        <BusySelect
           className="input input-auto"
           value={detail}
-          disabled={saving}
+          busy={saving}
           aria-label={t("settings.detailLevelAria", { surface })}
           onChange={(event) => onDetailChange(event.target.value as DetailLevel)}
         >
           {DETAILS.map((value) => (
             <option key={value} value={value}>{t(DETAIL_LABELS[value])}</option>
           ))}
-        </select>
+        </BusySelect>
       </div>
       {homeFocused !== undefined && onHomeFocusedChange && (
         <div className="toggle-row">
@@ -100,10 +101,10 @@ export function ConversationBehaviorControls({
             <small>{t("settings.homeFocusedHelp")}</small>
           </div>
           <label className={`toggle-switch${saving ? " disabled" : ""}`}>
-            <input
+            <BusyInput
               type="checkbox"
               checked={homeFocused}
-              disabled={saving}
+              busy={saving}
               aria-label={t("settings.homeFocusedAria", { surface })}
               onChange={(event) => onHomeFocusedChange(event.target.checked)}
             />

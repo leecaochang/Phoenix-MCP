@@ -33,6 +33,9 @@
           <div class="callout-body"><p class="callout-title">Choose the shortest setup for you</p><ul><li><strong>First token:</strong> follow the <a href="quickstart.html">guided quick start</a> to grant one device and test it.</li><li><strong>No external client:</strong> use <a href="agentcli.html">Agent Chat</a> inside Home Assistant with the same scope and approvals.</li></ul></div>
         </div>
 
+        <h2 id="credential-handling">Protect the connection credentials</h2>
+        <p>Use an HTTPS Home Assistant URL for remote clients or any network you do not fully trust. Plain HTTP carries bearer credentials without transport encryption. The addresses and <code>phx_...</code> values below are placeholders: enter your own URL and use a separate, narrowly scoped token for each client.</p>
+        <p>Prefer your client's secret store or environment-variable interpolation when supported. Pasting a raw token into a terminal command can retain it in shell history; reading it interactively into a variable avoids typing the value into the command. A client may still save the expanded header in its configuration. Keep such files private, restrict file access, and exclude them from version control. Do not put real tokens in shared project configuration, screenshots or support logs. Rotate a token if its full value was disclosed.</p>
         <details class="advanced" id="claude-compatibility">
           <summary>Advanced: Claude web/app (limited beta)</summary>
           <div class="advanced-content">

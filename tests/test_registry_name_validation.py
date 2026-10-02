@@ -10,6 +10,8 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util.dt import utcnow
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from tests.runtime_fixtures import mesa_off_store
+
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import (
     _call_tool,
@@ -54,7 +56,7 @@ def registry_name_env(hass, request):
         created_at=utcnow(), created_by="test", cap_registry_write="allow",
         permissions=PermissionTree(devices={device.id: PermissionNode(state="GREEN")}),
     )
-    data = PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock())
+    data = PhoenixData(store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock())
     return kind, registry, target, name_field, other_field, token, data
 
 

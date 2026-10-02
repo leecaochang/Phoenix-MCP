@@ -110,7 +110,7 @@ describe("SettingsView request ordering", () => {
 
     fireEvent.click(killSwitch);
     await waitFor(() => expect(patchSettings).toHaveBeenCalledWith({ kill_switch: true }));
-    expect(killSwitch).toBeDisabled();
+    expect(killSwitch).toHaveAttribute("aria-disabled", "true");
     window.dispatchEvent(new CustomEvent("phx-settings-refresh"));
     expect(getSettings).not.toHaveBeenCalled();
 

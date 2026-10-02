@@ -758,19 +758,10 @@ def evaluate_registry_action(
             reason="MESA is off.",
         )
     if runtime is None:
-        if data.mesa_setup_failed is True:
-            return RegistryMesaDecision(
-                decision="deny",
-                rule="mesa:runtime_unavailable",
-                reason=(
-                    "MESA is configured but its runtime failed to initialize. "
-                    "Reload Phoenix MCP after resolving the Repairs issue."
-                ),
-            )
         return RegistryMesaDecision(
-            decision="allow",
-            rule="mesa:unavailable_in_test_context",
-            reason="MESA has no runtime in this host context.",
+            decision="deny",
+            rule="mesa:runtime_unavailable",
+            reason="MESA is configured but unavailable. Reload Phoenix MCP after resolving the Repairs issue.",
         )
 
     explanation = runtime.resolver.explain(entity_id)
@@ -1103,19 +1094,11 @@ async def async_apply_mesa_to_call(
     if settings.mesa_mode == MESA_MODE_OFF:
         return MesaGateOutcome(decision="allow", entities=list(entities))
     if runtime is None:
-        if data.mesa_setup_failed is True:
-            reason = (
-                "MESA is configured but its runtime failed to initialize. "
-                "Reload Phoenix MCP after resolving the Repairs issue."
-            )
-            return MesaGateOutcome(
-                decision="deny",
-                blocked=[
-                    (entity_id, "mesa:runtime_unavailable", reason)
-                    for entity_id in entities
-                ],
-            )
-        return MesaGateOutcome(decision="allow", entities=list(entities))
+        reason = "MESA is configured but unavailable. Reload Phoenix MCP after resolving the Repairs issue."
+        return MesaGateOutcome(
+            decision="deny",
+            blocked=[(entity_id, "mesa:runtime_unavailable", reason) for entity_id in entities],
+        )
 
     # Only this path sets the audit context: the same enforcer runs from
     # dry_run_service / find_available_actions to PREVIEW a verdict, and a

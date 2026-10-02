@@ -7,7 +7,8 @@
     "build": "vite build && vite build --config vite.inject.config.ts && vite build --config vite.agentchat.config.ts",
     "dev": "vite",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "lint": "eslint frontend_src"
   },
   "dependencies": {
     "js-yaml": "^4.3.2",
@@ -22,10 +23,20 @@
     "@types/node": "^24.13.3",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
+    "@typescript-eslint/eslint-plugin": "^8.71.0",
+    "@typescript-eslint/parser": "^8.71.0",
     "@vitejs/plugin-react": "^6.0.5",
+    "eslint": "^10.11.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "jsdom": "^29.1.1",
     "typescript": "^5.9.3",
     "vite": "^8.2.1",
     "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "overrides": {
+    "@vitest/mocker": "4.1.11"
   }
 }

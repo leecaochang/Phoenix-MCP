@@ -137,7 +137,7 @@ class PhoenixData:
     forwarded_platforms: set[str] = field(default_factory=set)
     ready: bool = True
     # Legacy Streamable HTTP sessions, keyed by the cryptographically random
-    # Mcp-Session-Id returned from initialize. Direct unit constructions leave
-    # lifecycle enforcement off; production setup enables it explicitly.
+    # Mcp-Session-Id returned from initialize. Direct constructions keep
+    # lifecycle enforcement on, matching production setup.
     mcp_sessions: dict[str, dict] = field(default_factory=dict)
-    enforce_mcp_lifecycle: bool = False
+    enforce_mcp_lifecycle: bool = True

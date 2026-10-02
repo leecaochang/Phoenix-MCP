@@ -19,6 +19,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 
+from tests.runtime_fixtures import mesa_off_store
+
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool
 from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
@@ -54,7 +56,7 @@ async def admin_user(hass: HomeAssistant):
 
 def _data() -> PhoenixData:
     return PhoenixData(
-        store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=VersionStore(),
+        store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(), versions=VersionStore(),
     )
 
 

@@ -92,7 +92,8 @@
       "tabAudit": "Dzienniki audytu",
       "tabChanges": "Zmiany",
       "tabSettings": "Ustawienia",
-      "tabTokens": "Tokeny"
+      "tabTokens": "Tokeny",
+      "renderFailed": "Nie można wyświetlić tego widoku. Odśwież, aby spróbować ponownie, lub wybierz inną sekcję."
     },
     "common": {
       "after": "Po",
@@ -116,7 +117,8 @@
       "preview": "Podgląd",
       "refresh": "Odśwież",
       "save": "Zapisz",
-      "saving": "Zapisywanie..."
+      "saving": "Zapisywanie...",
+      "invalidResponse": "Serwer zwrócił nieprawidłową odpowiedź. Odśwież i spróbuj ponownie."
     },
     "inject": {
       "mesaProfile": "Profil MESA",
@@ -1745,7 +1747,7 @@
       "mesaModeAdvisory": "Doradczy",
       "mesaModeAria": "Tryb wymuszania MESA",
       "mesaModeEnforced": "Wymuszony",
-      "mesaModeHelp": "Doradczy pokazuje ostrzeżenia, ale zezwala na wywołania. Wymuszony blokuje zabronione akcje i akcje tylko do odczytu oraz wysyła żądania potwierdzenia do Zatwierdzeń.",
+      "mesaModeHelp": "Advisory ostrzega o większości ograniczeń; tryb tylko do odczytu i wyraźne odmowy dostępu ze względu na prywatność nadal blokują działania. Enforced blokuje zabronione działania i wymaga potwierdzenia.",
       "mesaModeLabel": "Tryb wymuszania",
       "mesaModeOff": "Wyłączony",
       "model": "Model",

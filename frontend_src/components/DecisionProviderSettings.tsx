@@ -1,3 +1,5 @@
+import { BusyInput, BusySelect } from "./BusyButton";
+import { BusyButton } from "./BusyButton";
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { t } from "../i18n";
@@ -47,8 +49,9 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
   }
   useEffect(() => {
     mounted.current = true;
+    const pendingGeneration = generation;
     void load();
-    return () => { mounted.current = false; generation.current++; };
+    return () => { mounted.current = false; pendingGeneration.current++; };
   }, []);
 
   function selectAccount(id: string) {
@@ -125,8 +128,8 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
     <div className="agentcli-settings-providers" role="radiogroup" aria-label={t("routing.decisionAccount")}
       aria-describedby="routing-provider-hint">
       <label className="routing-account-choice">
-        <input type="radio" name="decision-account" checked={!settings.decision_provider_id || selectedAccountMissing}
-          disabled={saving || busy} onChange={() => selectAccount("")}
+        <BusyInput type="radio" name="decision-account" checked={!settings.decision_provider_id || selectedAccountMissing}
+          busy={saving || busy} onChange={() => selectAccount("")}
           onClick={() => {
             if (selectedAccountMissing) selectAccount("");
           }} />
@@ -135,27 +138,27 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
       {accounts.map(account => <div className="agentcli-settings-provider" key={account.id}>
         <div className="agentcli-settings-provider-main">
         <label className="routing-account-choice">
-          <input type="radio" name="decision-account" checked={account.id === settings.decision_provider_id}
-            disabled={saving || busy} onChange={() => selectAccount(account.id)} />
+          <BusyInput type="radio" name="decision-account" checked={account.id === settings.decision_provider_id}
+            busy={saving || busy} onChange={() => selectAccount(account.id)} />
           <span className="agentcli-settings-provider-head">{account.name}</span>
         </label>
         {editing === account.id ? <div className="agentcli-settings-model-edit">
-          <select className="input input-auto" value={modelDraft} autoFocus
+          <BusySelect className="input input-auto" value={modelDraft} autoFocus
             aria-label={t("routing.accountModel", { name: account.name })}
-            disabled={saving || busy || !models[account.id]?.length}
+            busy={saving || busy} disabled={!models[account.id]?.length}
             onChange={event => setModelDraft(event.target.value)}>
             {!models[account.id]?.includes(account.model ?? "") && <option value={account.model ?? ""} disabled>
               {models[account.id]?.length ? t("settings.agentcliModelUnavailable", { model: account.model ?? "" }) : account.model || t("settings.agentcliNotSet")}
             </option>}
             {models[account.id]?.map(model => <option value={model} key={model}>{model}</option>)}
-          </select>
+          </BusySelect>
           <div className="agentcli-settings-model-actions">
             <div className="agentcli-settings-form-actions">
-              <button type="button" className="btn btn-primary btn-sm"
-                disabled={saving || busy || !modelDraft || modelDraft === account.model || !models[account.id]?.includes(modelDraft)}
-                onClick={() => void changeModel(account.id, modelDraft)}>{t("common.save")}</button>
-              <button type="button" className="btn btn-text btn-sm" disabled={saving || busy}
-                onClick={() => { setEditing(null); setError(""); }}>{t("settings.cancel")}</button>
+              <BusyButton type="button" className="btn btn-primary btn-sm"
+                busy={saving || busy} disabled={!modelDraft || modelDraft === account.model || !models[account.id]?.includes(modelDraft)}
+                onClick={() => void changeModel(account.id, modelDraft)}>{t("common.save")}</BusyButton>
+              <BusyButton type="button" className="btn btn-text btn-sm" busy={saving || busy}
+                onClick={() => { setEditing(null); setError(""); }}>{t("settings.cancel")}</BusyButton>
             </div>
           </div>
         </div> : <span className="agentcli-settings-model">
@@ -186,10 +189,10 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
       <p>{t("routing.removeAccount", { name: confirmRemove.name })}?</p>
       {error && <p className="banner banner-error" role="alert">{error}</p>}
       <div className="modal-actions">
-        <button type="button" className="btn btn-danger btn-sm" disabled={saving || busy}
-          onClick={() => void remove(confirmRemove.id)}>{t("settings.remove")}</button>
-        <button type="button" className="btn btn-text" disabled={busy}
-          onClick={() => setConfirmRemove(null)}>{t("settings.cancel")}</button>
+        <BusyButton type="button" className="btn btn-danger btn-sm" busy={saving || busy}
+          onClick={() => void remove(confirmRemove.id)}>{t("settings.remove")}</BusyButton>
+        <BusyButton type="button" className="btn btn-text" busy={busy}
+          onClick={() => setConfirmRemove(null)}>{t("settings.cancel")}</BusyButton>
       </div>
     </Modal>}
     {accountsLoaded && accounts.length === 0 && <ProviderAddForm providerTypes={types} disabled={saving || busy || editing !== null}
@@ -204,8 +207,8 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
       <summary>{t("routing.connectionSettings")}</summary>
       <label className="agentcli-settings-field" htmlFor="routing-decision-timeout">
         <span>{t("routing.decisionBudget")}</span>
-        <input id="routing-decision-timeout" className="input" type="number" min={250} max={30000} step={1}
-          value={budget} disabled={saving || busy} onChange={e => setBudget(e.target.value)}
+        <BusyInput id="routing-decision-timeout" className="input" type="number" min={250} max={30000} step={1}
+          value={budget} busy={saving || busy} onChange={e => setBudget(e.target.value)}
           onBlur={() => {
             const value = Number(budget);
             if (Number.isInteger(value) && value >= 250 && value <= 30000) {
@@ -216,8 +219,8 @@ export function DecisionProviderSettings({ settings, onChange, saving }: {
       <p className="agentcli-settings-hint">{t("routing.timeoutHint")}</p>
       <label className="agentcli-settings-field" htmlFor="routing-request-limit">
         <span>{t("routing.requestLimit")}</span>
-        <input id="routing-request-limit" className="input" type="number" min={0} max={100000} step={1}
-          aria-describedby="routing-request-limit-hint" value={requestLimit} disabled={saving || busy}
+        <BusyInput id="routing-request-limit" className="input" type="number" min={0} max={100000} step={1}
+          aria-describedby="routing-request-limit-hint" value={requestLimit} busy={saving || busy}
           onChange={event => setRequestLimit(event.target.value)} onBlur={() => {
             const value = Number(requestLimit);
             if (requestLimit.trim() && Number.isInteger(value) && value >= 0 && value <= 100000) {

@@ -1,3 +1,4 @@
+import { BusyButton } from "../components/BusyButton";
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import type {
   EntityTree as EntityTreeData,
@@ -819,10 +820,10 @@ export function ProfileEditor({
                 <strong>{t(DELETE_CONFIRM[scope])}</strong>
                 <p>{t(DELETE_WARN[scope], { key: keyLabel || String(profileKey) })}</p>
                 <div className="modal-actions">
-                  <button className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(false)} disabled={saving}>{t("mesa.cancel")}</button>
-                  <button className="btn btn-danger btn-sm" onClick={remove} disabled={saving}>
+                  <BusyButton className="btn btn-ghost btn-sm" onClick={() => setConfirmDelete(false)} busy={saving}>{t("mesa.cancel")}</BusyButton>
+                  <BusyButton className="btn btn-danger btn-sm" onClick={remove} busy={saving}>
                     {saving ? t("mesa.deleting") : t(DELETE_BUTTON[scope])}
-                  </button>
+                  </BusyButton>
                 </div>
               </div>
             )}
@@ -866,15 +867,15 @@ export function ProfileEditor({
       </div>
       <div className="modal-actions">
         {!isNew && !confirmDelete && (
-          <button
+          <BusyButton
             className="btn btn-danger"
             onClick={() => (scope === "entity" ? remove() : setConfirmDelete(true))}
-            disabled={saving}
+            busy={saving}
           >
             {t("mesa.delete")}
-          </button>
+          </BusyButton>
         )}
-        <button className="btn btn-ghost" onClick={attemptClose} disabled={saving}>{t("mesa.cancel")}</button>
+        <BusyButton className="btn btn-ghost" onClick={attemptClose} busy={saving}>{t("mesa.cancel")}</BusyButton>
         <button className="btn btn-primary" onClick={save} disabled={!canSave}>
           {saving ? t("mesa.saving") : t("mesa.save")}
         </button>
@@ -970,10 +971,10 @@ export function ExportModal({ profileCount, onClose }: { profileCount: number; o
         {t("mesa.exportNote")}
       </p>
       <div className="modal-actions">
-        <button className="btn btn-ghost" onClick={onClose} disabled={busy}>{t("mesa.cancel")}</button>
-        <button className="btn btn-primary" onClick={doExport} disabled={busy}>
+        <BusyButton className="btn btn-ghost" onClick={onClose} busy={busy}>{t("mesa.cancel")}</BusyButton>
+        <BusyButton className="btn btn-primary" onClick={doExport} busy={busy}>
           {busy ? t("mesa.exporting") : t("mesa.export")}
-        </button>
+        </BusyButton>
       </div>
     </Modal>
   );
@@ -1110,14 +1111,14 @@ export function ImportModal({ onClose }: { onClose: (didImport: boolean) => void
         </p>
       )}
       <div className="modal-actions">
-        <button className="btn btn-ghost" onClick={() => onClose(false)} disabled={busy}>{t("mesa.cancel")}</button>
-        <button
+        <BusyButton className="btn btn-ghost" onClick={() => onClose(false)} busy={busy}>{t("mesa.cancel")}</BusyButton>
+        <BusyButton
           className={`btn ${replaceExisting ? "btn-danger" : "btn-primary"}`}
           onClick={doImport}
-          disabled={busy || !archive}
+          busy={busy} disabled={!archive}
         >
           {busy ? t("mesa.importing") : replaceExisting ? t("mesa.importAndReplace") : t("mesa.import")}
-        </button>
+        </BusyButton>
       </div>
     </Modal>
   );

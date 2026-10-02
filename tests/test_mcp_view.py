@@ -82,6 +82,7 @@ def _make_data(token: TokenRecord | None = None) -> PhoenixData:
         store.get_token_by_hash.return_value = None
     store.get_settings.return_value = MagicMock(
         kill_switch=False,
+        mesa_mode="off",
         disable_all_logging=False,
         log_allowed=True,
         log_denied=True,
@@ -111,6 +112,7 @@ def _make_data(token: TokenRecord | None = None) -> PhoenixData:
         rate_limiter=rate_limiter,
         audit=audit,
         rate_limit_notified={},
+        enforce_mcp_lifecycle=False,  # Isolated handler compatibility fixtures.
     )
 
 

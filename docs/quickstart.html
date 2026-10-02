@@ -45,10 +45,6 @@
             <h3>Pick a persona</h3>
             <p>A persona is a named preset that sets every capability at once: what the agent may read, what it may control, and what needs your approval. <strong>New user</strong> is preselected and is a safe starting point. It lets the agent read your home and control the devices you grant, while locks, alarms, covers, and valves ask for your confirmation.</p>
             <p>Choosing a persona modifies the entire capability set, not just a label; you can fine-tune any single capability later. The personas are described on <a href="capabilities.html#personas">Capabilities</a>.</p>
-            <figure class="screenshot">
-              <img src="assets/wizard1.png" alt="The wizard's persona step with New user selected" loading="lazy" />
-              <figcaption>The persona picker, with New user selected.</figcaption>
-            </figure>
           </div></div>
 
           <div class="step"><div class="step-body">
@@ -59,10 +55,6 @@
           <div class="step"><div class="step-body">
             <h3>Grant access to one entity</h3>
             <p>The wizard highlights your <code>light</code> domain. Expand it, find a light you can physically see, and click the <strong>W</strong> button on that row to grant full read and write access; its badge changes to "WRITE". Granting one entity is enough to prove the connection; you can grant more later from the token's detail page.</p>
-            <figure class="screenshot">
-              <img src="assets/wizard3.png" alt="The wizard access step showing WRITE on the light domain" loading="lazy" />
-              <figcaption>Illustrative permission tree. Grant only the single light you intend to test.</figcaption>
-            </figure>
           </div></div>
 
           <div class="step"><div class="step-body">
@@ -89,19 +81,11 @@
           <div class="step"><div class="step-body">
             <h3>Set up your model provider</h3>
             <p>Pick a provider you have already added, or add a new one: choose from the dropdown and click <strong>Add new provider&hellip;</strong>. Paste an API key (or, for a local Ollama server, its URL) and click <strong>Validate</strong>. Validating only tests the connection and lists its models; nothing is saved until you continue. Once validated, pick a default model.</p>
-            <figure class="screenshot">
-              <img src="assets/wizard5-cli.png" alt="The wizard's next step validates the provider's API key and selects a default model." loading="lazy" />
-              <figcaption>Enter your provider's API key and validate it.</figcaption>
-            </figure>
           </div></div>
 
           <div class="step"><div class="step-body">
             <h3>Try it</h3>
             <p>Click <strong>Try now</strong>. The wizard opens the Agent Chat window with your new token and the provider and model you just set up already selected, and a test question typed in for you: <em>"How many lights are in my home?"</em> Press <strong>Send</strong>. The wizard closes as soon as you send your first prompt, so you land in a normal chat with your new agent.</p>
-            <figure class="screenshot">
-              <img src="assets/agent-chat.png" style="width: 50%; margin: 0 auto;" alt="The Agent Chat window with a token, provider and model selected" loading="lazy" />
-              <figcaption>You can now chat with your provider about your home</figcaption>
-            </figure>
           </div></div>
 
         </div>
@@ -118,19 +102,11 @@
               <div class="callout-body"><p class="callout-title">Shown once</p><p>The token value cannot be retrieved later. Copy it now, or copy the ready-to-paste command below, which already carries it.</p></div>
             </div>
             <p>Claude Code, for example, uses a single command line; substitute your Home Assistant address. Each client has its own command or configuration format. The panel shows the form for each supported client, including DeepSeek Harness, and <a href="connect.html#client-setup">Connect an AI client</a> explains the file locations, environment variables, and verification steps. If you are not ready to connect an agent yet, <strong>Connect later</strong> skips straight to the end; the token is already created and waiting on the token page.</p>
-            <figure class="screenshot">
-              <img src="assets/wizard5.png" alt="The wizard's connect step with the MCP server URL, the token, and a ready-to-paste command per agent" loading="lazy" />
-              <figcaption>The connect step: the MCP server URL, your token, and a per-agent command.</figcaption>
-            </figure>
           </div></div>
 
           <div class="step"><div class="step-body">
             <h3>Run a test</h3>
             <p>Ask your agent to do something simple, like <em>"List my Home Assistant lights"</em>. The moment it calls Phoenix MCP, the wizard detects the connection and confirms it. That is the whole loop: a scoped token, connected and verified.</p>
-            <figure class="screenshot">
-              <img src="assets/wizard6.png" alt="The wizard's test step showing Connected after the agent reached Phoenix MCP" loading="lazy" />
-              <figcaption>The test step showing "Connected".</figcaption>
-            </figure>
           </div></div>
 
         </div>

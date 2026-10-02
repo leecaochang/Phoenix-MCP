@@ -19,6 +19,7 @@ from ..const import CAP_ALLOW, MESA_MODE_OFF
 from ..data import PhoenixData
 from ..helpers import effective_cap, str_arg
 from ..mesa import build_caller_context
+from ..mesa_audit import request_context
 from ..policy_engine import Permission, canonical_entity_id, resolve
 from ..token_store import TokenRecord
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _tool_error
@@ -52,6 +53,7 @@ async def _tool_get_camera_image(
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
+    client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: retrieve one scoped camera image as an MCP image block."""
     if effective_cap(token, "cap_camera_read") != CAP_ALLOW:
@@ -75,18 +77,18 @@ async def _tool_get_camera_image(
     if settings.mesa_mode != MESA_MODE_OFF:
         runtime = data.mesa
         if runtime is None:
-            if data.mesa_setup_failed:
-                _LOGGER.warning("MESA runtime unavailable while reading camera %s", entity_id)
-                return _camera_denied(entity_id)
+            _LOGGER.warning("MESA runtime unavailable while reading camera %s", entity_id)
+            return _camera_denied(entity_id)
         else:
             profile = runtime.resolver.resolve(entity_id)
-            decision = runtime.enforcer.privacy.evaluate(
-                profile.privacy_classification,
-                build_caller_context(token, request_id or "get_camera_image"),
-                entity_id=entity_id,
-                is_person=profile.domain == "person",
-                is_minor=profile.person_traits.is_minor is True,
-            )
+            with request_context(token, request_id, client_ip):
+                decision = runtime.enforcer.privacy.evaluate(
+                    profile.privacy_classification,
+                    build_caller_context(token, request_id or "get_camera_image"),
+                    entity_id=entity_id,
+                    is_person=profile.domain == "person",
+                    is_minor=profile.person_traits.is_minor is True,
+                )
             if not decision.allowed:
                 return _camera_denied(entity_id)
 

@@ -1,3 +1,4 @@
+import { BusyInput, BusySelect } from "../components/BusyButton";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { GlobalSettings } from "../types";
 import { api } from "../api";
@@ -195,17 +196,17 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
                   {t("settings.mesaModeHelp")}
                 </small>
               </div>
-              <select
+              <BusySelect
                 aria-label={t("settings.mesaModeAria")}
                 className="input input-auto"
                 value={settings.mesa_mode}
-                disabled={saving}
+                busy={saving}
                 onChange={(e) => patchSetting("mesa_mode", e.target.value)}
               >
                 <option value="off">{t("settings.mesaModeOff")}</option>
                 <option value="advisory">{t("settings.mesaModeAdvisory")}</option>
                 <option value="enforced">{t("settings.mesaModeEnforced")}</option>
-              </select>
+              </BusySelect>
             </div>
             {settings.mesa_mode === "enforced" && (
               <div className="banner banner-warn settings-toggle-mt">
@@ -227,11 +228,11 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
                 </small>
               </div>
               <label className={`toggle-switch${saving ? " disabled" : ""}`}>
-                <input
+                <BusyInput
                   type="checkbox"
                   aria-label={t("settings.presetsLabel")}
                   checked={settings.token_presets_enabled}
-                  disabled={saving}
+                  busy={saving}
                   onChange={(e) => patchSetting("token_presets_enabled", e.target.checked)}
                 />
                 <span className="toggle-switch-track" />
@@ -245,12 +246,12 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
                 </small>
               </div>
               <label className={`toggle-switch${saving || injectBlocked ? " disabled" : ""}`}>
-                <input
+                <BusyInput
                   type="checkbox"
                   aria-label={t("settings.injectLabel")}
                   aria-describedby="phx-inject-help"
                   checked={settings.mesa_inject_enabled && !injectBlocked}
-                  disabled={saving || injectBlocked}
+                  busy={saving} disabled={injectBlocked}
                   onChange={(e) => patchSetting("mesa_inject_enabled", e.target.checked)}
                 />
                 <span className="toggle-switch-track" />
@@ -286,11 +287,11 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
                 <span>{t("settings.flushIntervalLabel")}</span>
                 <small>{t("settings.flushIntervalHelp")}</small>
               </div>
-              <select
+              <BusySelect
                 aria-label={t("settings.flushIntervalLabel")}
                 className="input input-auto"
                 value={settings.audit_flush_interval}
-                disabled={saving || settings.disable_all_logging}
+                busy={saving} disabled={settings.disable_all_logging}
                 onChange={(e) => patchSetting("audit_flush_interval", Number(e.target.value))}
               >
                 <option value={0}>{t("common.never")}</option>
@@ -299,25 +300,25 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
                 <option value={15}>{t("settings.flushEveryMinutes", { n: 15 })}</option>
                 <option value={30}>{t("settings.flushEveryMinutes", { n: 30 })}</option>
                 <option value={60}>{t("settings.flushEveryMinutes", { n: 60 })}</option>
-              </select>
+              </BusySelect>
             </div>
             <div className={`toggle-row toggle-row-stacked-control${settings.disable_all_logging ? " toggle-row-greyed" : ""}`}>
               <div className="toggle-label">
                 <span>{t("settings.maxLogEntriesLabel")}</span>
                 <small>{t("settings.maxLogEntriesHelp")}</small>
               </div>
-              <select
+              <BusySelect
                 aria-label={t("settings.maxLogEntriesLabel")}
                 className="input input-auto"
                 value={settings.audit_log_maxlen}
-                disabled={saving || settings.disable_all_logging}
+                busy={saving} disabled={settings.disable_all_logging}
                 onChange={(e) => patchSetting("audit_log_maxlen", Number(e.target.value))}
               >
                 <option value={100}>100</option>
                 <option value={1000}>1,000</option>
                 <option value={5000}>5,000</option>
                 <option value={10000}>10,000</option>
-              </select>
+              </BusySelect>
             </div>
           </div>
 

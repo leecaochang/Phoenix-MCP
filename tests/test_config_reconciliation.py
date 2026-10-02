@@ -24,6 +24,7 @@ from custom_components.phoenix_mcp.tools.config_files import _authored_file_snap
 @pytest.fixture
 def runtime(hass):
     store = TokenStore(hass, MagicMock(async_save=AsyncMock()))
+    store.get_settings().mesa_mode = "off"
     value = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = value
     return value

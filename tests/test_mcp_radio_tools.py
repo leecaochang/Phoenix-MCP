@@ -30,6 +30,8 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 import custom_components.phoenix_mcp.radio as radio
 import custom_components.phoenix_mcp.tools.radio as radio_tools
+from tests.runtime_fixtures import mesa_off_store
+
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool, _tool_gate_map, async_execute_approved_tool
 from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
@@ -466,7 +468,7 @@ def radio_env(hass: HomeAssistant):
 
 
 def _data() -> PhoenixData:
-    return PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
+    return PhoenixData(store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
 
 
 def _token(tree: PermissionTree | None = None, **caps) -> TokenRecord:

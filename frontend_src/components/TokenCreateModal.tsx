@@ -1,3 +1,4 @@
+import { BusyButton } from "./BusyButton";
 import React, { useEffect, useRef, useState } from "react";
 import type { TokenRecord, CreateTokenBody } from "../types";
 import { api } from "../api";
@@ -338,7 +339,7 @@ export function TokenCreateModal({ existingNames, onCreated, onClose, onOpenSett
         <button className="btn btn-primary" onClick={submit} disabled={!canSubmit}>
           {saving ? t("tokens.creating") : t("tokens.create")}
         </button>
-        <button className="btn btn-text" onClick={onClose} disabled={saving}>{t("tokens.cancel")}</button>
+        <BusyButton className="btn btn-text" onClick={onClose} busy={saving}>{t("tokens.cancel")}</BusyButton>
       </div>
     </Modal>
   );

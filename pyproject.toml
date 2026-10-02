@@ -10,9 +10,9 @@ source = ["custom_components/phoenix_mcp"]
 omit = ["custom_components/phoenix_mcp/mesa_core/*"]
 
 [tool.coverage.report]
-# A ratchet, not a target: set just below the measured first-party figure so a
-# change that drops coverage fails, without requiring new tests to land today.
-# Raise it as coverage improves; never lower it to make a red build pass.
+# Minimum first-party coverage gate. This is a floor, not a claim that every
+# covered branch is qualified or that worker subprocess coverage is measured.
+# Raise it after measuring the final first-party suite; never lower it to pass.
 fail_under = 80
 
 [tool.mypy]
