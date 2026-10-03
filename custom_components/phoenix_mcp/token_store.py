@@ -18,6 +18,7 @@ from homeassistant.util.dt import parse_datetime, utcnow
 
 from .durable_storage import DurableStore
 from .const import (
+    CONVERSATION_LOG_DEFAULTS, CONVERSATION_LOG_LIMITS,
     AGENTCLI_MAX_ITERATIONS,
     AGENTCLI_MAX_ITERATIONS_MAX,
     AGENTCLI_MAX_ITERATIONS_MIN,
@@ -585,6 +586,10 @@ class GlobalSettings:
     notify_on_rate_limit: bool = False
     notify_on_approval: bool = True
     audit_flush_interval: int = 15
+    conversation_log_enabled: bool = False
+    conversation_log_max_entries: int = CONVERSATION_LOG_DEFAULTS["conversation_log_max_entries"]
+    conversation_log_max_days: int = CONVERSATION_LOG_DEFAULTS["conversation_log_max_days"]
+    conversation_log_max_mb: int = CONVERSATION_LOG_DEFAULTS["conversation_log_max_mb"]
     audit_log_maxlen: int = 10000
     mesa_mode: str = MESA_MODE_ADVISORY
     # Experimental, admin-only convenience: inject a (+)/MESA-pill control into HA's
@@ -661,6 +666,10 @@ class GlobalSettings:
             "notify_on_rate_limit": self.notify_on_rate_limit,
             "notify_on_approval": self.notify_on_approval,
             "audit_flush_interval": self.audit_flush_interval,
+            "conversation_log_enabled": self.conversation_log_enabled,
+            "conversation_log_max_entries": self.conversation_log_max_entries,
+            "conversation_log_max_days": self.conversation_log_max_days,
+            "conversation_log_max_mb": self.conversation_log_max_mb,
             "audit_log_maxlen": self.audit_log_maxlen,
             "mesa_mode": self.mesa_mode,
             "mesa_inject_enabled": self.mesa_inject_enabled,
@@ -715,6 +724,10 @@ class GlobalSettings:
             notify_on_rate_limit=bool(data.get("notify_on_rate_limit", False)),
             notify_on_approval=bool(data.get("notify_on_approval", True)),
             audit_flush_interval=_clamp_int(data.get("audit_flush_interval"), {0, 5, 10, 15, 30, 60}, 15),
+            conversation_log_enabled=data.get("conversation_log_enabled") is True,
+            conversation_log_max_entries=_clamp_range(data.get("conversation_log_max_entries"), *CONVERSATION_LOG_LIMITS["conversation_log_max_entries"], CONVERSATION_LOG_DEFAULTS["conversation_log_max_entries"]),
+            conversation_log_max_days=_clamp_range(data.get("conversation_log_max_days"), *CONVERSATION_LOG_LIMITS["conversation_log_max_days"], CONVERSATION_LOG_DEFAULTS["conversation_log_max_days"]),
+            conversation_log_max_mb=_clamp_range(data.get("conversation_log_max_mb"), *CONVERSATION_LOG_LIMITS["conversation_log_max_mb"], CONVERSATION_LOG_DEFAULTS["conversation_log_max_mb"]),
             audit_log_maxlen=_clamp_int(data.get("audit_log_maxlen"), {100, 1000, 5000, 10000}, 10000),
             mesa_mode=mesa_mode if mesa_mode in MESA_MODES else MESA_MODE_ADVISORY,
             mesa_inject_enabled=bool(data.get("mesa_inject_enabled", False)),

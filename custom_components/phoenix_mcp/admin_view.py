@@ -1910,6 +1910,68 @@ class PhoenixAdminTokenAuditView(PhoenixView):
         return _ok([e.to_dict() for e in entries], request_id=rid)
 
 
+class PhoenixAdminConversationsView(PhoenixView):
+    """Administrator-only bounded conversation summaries and explicit erasure."""
+
+    url = "/api/phoenix-mcp/admin/conversations"
+    name = "api:phoenix-mcp:admin:conversations"
+    requires_auth = True
+
+    @require_admin
+    async def get(self, request: web.Request) -> web.Response:
+        from .conversation_log import recorder
+        rid = request["phoenix_mcp_rid"]
+        paged = _parse_pagination(request, rid, default_limit=25, max_limit=100)
+        if isinstance(paged, web.Response):
+            return paged
+        since_raw = request.query.get("since", "")
+        since = parse_datetime(since_raw) if since_raw else None
+        if since_raw and since is None:
+            return _err("invalid_request", "Invalid since timestamp.", 400, rid, key="sinceTimestampInvalid")
+        log = recorder(self.hass.data[DOMAIN])
+        return _ok(log.query(limit=paged[0], offset=paged[1],
+                             search=request.query.get("search", "")[:512],
+                             source=request.query.get("source", "")[:64],
+                             outcome=request.query.get("outcome", "")[:64],
+                             since=as_utc(since).isoformat() if since else ""), request_id=rid)
+
+    @require_admin
+    async def delete(self, request: web.Request) -> web.Response:
+        from .conversation_log import recorder
+        rid = request["phoenix_mcp_rid"]
+        body = await _read_body(request, rid)
+        if isinstance(body, web.Response):
+            return body
+        if set(body) != {"confirm"} or body.get("confirm") is not True:
+            return _err("invalid_request", "Confirm clearing conversation history.", 400, rid,
+                        key="conversationClearConfirm")
+        log = recorder(self.hass.data[DOMAIN])
+        await log.async_clear()
+        if not log.available:
+            return _err("service_unavailable", "Conversation history could not be saved.", 503, rid,
+                        key="conversationStorageUnavailable")
+        _audit_admin(self.hass, request, rid, request.path)
+        return _ok({"cleared": True}, request_id=rid)
+
+
+class PhoenixAdminConversationView(PhoenixView):
+    """Fetch full sanitized evidence only when an administrator opens an entry."""
+
+    url = "/api/phoenix-mcp/admin/conversations/{entry_id}"
+    name = "api:phoenix-mcp:admin:conversation"
+    requires_auth = True
+
+    @require_admin
+    async def get(self, request: web.Request, entry_id: str) -> web.Response:
+        from .conversation_log import recorder
+        rid = request["phoenix_mcp_rid"]
+        entry = recorder(self.hass.data[DOMAIN]).detail(entry_id)
+        if entry is None:
+            return _err("not_found", "Conversation entry is no longer available.", 404, rid,
+                        key="conversationNotFound")
+        return _ok(entry, request_id=rid)
+
+
 class PhoenixAdminAuditView(PhoenixView):
     """GET /api/phoenix-mcp/admin/audit - paginated global audit log with optional filters."""
 
@@ -2010,6 +2072,9 @@ def _settings_response(settings, hass=None) -> dict:
 # statement of what this endpoint will accept.
 # ---------------------------------------------------------------------------
 
+from .const import CONVERSATION_LOG_LIMITS
+
+
 _VALID_FLUSH_INTERVALS = frozenset({0, 5, 10, 15, 30, 60})
 _VALID_LOG_MAXLENS = frozenset({100, 1000, 5000, 10000})
 
@@ -2019,7 +2084,7 @@ _BOOL_SETTINGS = frozenset({
     "notify_on_approval", "mesa_inject_enabled", "token_presets_enabled",
     "agentcli_global", "agentcli_home_focused", "voice_agent_enabled",
     "voice_agent_home_focused", "ai_task_enabled", "decision_shadow_enabled",
-    "agentcli_routing_shadow_enabled",
+    "agentcli_routing_shadow_enabled", "conversation_log_enabled",
 })
 
 _CONVERSATION_STYLE_SETTINGS = frozenset({
@@ -2044,7 +2109,7 @@ _SURFACE_TOKEN_PROVIDER_PAIRS = (
     ("ai_task_token_id", "ai_task_provider_id"),
 )
 
-_PATCHABLE_SETTINGS = _BOOL_SETTINGS | {
+_PATCHABLE_SETTINGS = _BOOL_SETTINGS | set(CONVERSATION_LOG_LIMITS) | {
     *TOOL_ROUTING_SETTINGS.values(),
     "voice_agent_routing_mode", "agentcli_routing_mode", "command_routing_languages", "command_routing_timeout_ms", "decision_timeout_ms", "decision_request_budget",
     "audit_flush_interval", "audit_log_maxlen", "mesa_mode",
@@ -2174,6 +2239,11 @@ async def _validated_settings_patch(
         if type(value) is not int or not 0 <= value <= DECISION_REQUEST_BUDGET_MAX:
             return {}, _err('invalid_request', 'Invalid decision request limit.', 400, rid, key='routingPreviewInvalid')
 
+    for key, (lo, hi) in CONVERSATION_LOG_LIMITS.items():
+        if key in patchable and (type(patchable[key]) is not int or not lo <= patchable[key] <= hi):
+            return {}, _err("invalid_request", "Invalid conversation retention limit.", 400, rid,
+                            key="conversationLimitInvalid", params={"field": key, "min": lo, "max": hi})
+
     int_checks = (
         ("audit_flush_interval", {"allowed": _VALID_FLUSH_INTERVALS}),
         ("audit_log_maxlen", {"allowed": _VALID_LOG_MAXLENS}),
@@ -2291,6 +2361,10 @@ async def _apply_settings_side_effects(
     Each block is keyed on the settings that actually moved, so an unrelated
     patch is inert. Order matters where noted; everything else is independent.
     """
+    from .conversation_log import recorder
+    recorder(data)
+    await data.conversations.async_save()
+
     if "audit_log_maxlen" in patchable:
         data.audit.resize(patchable["audit_log_maxlen"])
 
@@ -2735,6 +2809,7 @@ class PhoenixAdminWipeView(PhoenixView):
                         await data.decision_budget.async_wipe()
                         await data.routing_statistics.async_wipe()
                         await data.audit.async_wipe()
+                        await data.conversations.async_clear()
                         await data.versions.async_wipe()
                         await data.agent_recovery.async_wipe(self.hass)
                         # The card catalog is a regenerable cache of what this instance
@@ -3404,6 +3479,8 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 None if recovery_request else RequestAuthority(hass, data, token.id, token.token_hash)
             )
             policy_ctx = policy_version.set(token.settings_version)
+            conversation_scope = data.conversations.approval_scope(approval_id)
+            conversation_scope.__enter__()
             try:
                 if recovery_request:
                     tool_result, outcome, _resource = await execute_recovery_approval(record, user, hass, data)
@@ -3430,6 +3507,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                             record.tool_name, record.args, token, hass, data,
                         )
             finally:
+                conversation_scope.__exit__(None, None, None)
                 policy_version.reset(policy_ctx)
                 request_authority.reset(authority_ctx)
         except ExecutorNotRegistered:
@@ -4979,6 +5057,8 @@ ALL_ADMIN_VIEWS: list[type[PhoenixView]] = [
     PhoenixAdminTokenConnectionView,
     PhoenixAdminTokenAuditView,
     PhoenixAdminAuditView,
+    PhoenixAdminConversationsView,
+    PhoenixAdminConversationView,
     PhoenixAdminSettingsView,
     PhoenixAdminCommandPreviewView,
     PhoenixAdminRoutingStatisticsView,

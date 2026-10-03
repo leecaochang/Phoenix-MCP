@@ -11,6 +11,7 @@ import {
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { TokenListView } from "./views/TokenList";
 import { TokenDetailView } from "./views/TokenDetail";
+import { ConversationsView } from "./views/ConversationsView";
 import { AuditView } from "./views/AuditView";
 import { SettingsView } from "./views/SettingsView";
 import { ApprovalsView } from "./views/ApprovalsView";
@@ -33,7 +34,7 @@ import {
 import { Loading, ErrorMsg, RefreshIcon, DOCS_BASE_URL } from "./components/common";
 import PANEL_CSS from "./phoenix-mcp-panel.css?inline";
 
-type Tab = "tokens" | "approvals" | "changes" | "mesa" | "audit" | "settings";
+type Tab = "tokens" | "approvals" | "changes" | "mesa" | "audit" | "conversations" | "settings";
 type Theme = "light" | "dark" | "auto";
 
 export { HIGH_RISK_DOMAINS } from "./utils";
@@ -48,7 +49,7 @@ type View =
   | { name: "detail"; tokenId: string }
   | { name: "wizard" };
 
-const TAB_LABEL_KEYS: Record<Tab, string> = { tokens: "shell.tabTokens", approvals: "shell.tabApprovals", changes: "shell.tabChanges", mesa: "shell.tabMesa", audit: "shell.tabAudit", settings: "shell.tabSettings" };
+const TAB_LABEL_KEYS: Record<Tab, string> = { tokens: "shell.tabTokens", approvals: "shell.tabApprovals", changes: "shell.tabChanges", mesa: "shell.tabMesa", audit: "shell.tabAudit", conversations: "conversations.title", settings: "shell.tabSettings" };
 
 // Persist the active tab so it survives a reload or navigating away and back.
 const TAB_STORAGE_KEY = "phx-tab";
@@ -470,7 +471,7 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
     if (t === "tokens") refreshTokens();
   }, [refreshTokens, approvalsTab, pendingCount]);
 
-  const TABS: Tab[] = ["tokens", "approvals", "changes", "mesa", "audit", "settings"];
+  const TABS: Tab[] = ["tokens", "approvals", "changes", "mesa", "audit", "conversations", "settings"];
 
   function handleTabKeyDown(e: React.KeyboardEvent) {
     const idx = TABS.indexOf(tab);
@@ -623,6 +624,7 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
         )}
         {tab === "mesa" && <MesaView />}
         {tab === "audit" && <AuditView tokens={tokens} />}
+        {tab === "conversations" && <ConversationsView />}
         {tab === "changes" && <ChangesView hass={hass} />}
         {tab === "settings" && (
           <SettingsView

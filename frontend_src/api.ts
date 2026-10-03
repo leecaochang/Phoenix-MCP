@@ -1,4 +1,5 @@
 import type {
+  ConversationEntry, ConversationListResponse,
   CommandRoutePreview,
   RoutingStatisticsResponse,
   AgentCliProviderKind,
@@ -232,6 +233,14 @@ export const api = {
     req<AuditEntry[]>("GET", `/tokens/${tokenId}/audit${buildQuery(params)}`),
   getAudit: (params?: AuditQueryParams) =>
     req<AuditListResponse>("GET", `/audit${buildQuery(params)}`),
+
+  getConversations: (params: { limit?: number; offset?: number; search?: string; source?: string; outcome?: string; since?: string } = {}) => {
+    const query = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) if (value !== undefined && value !== "") query.set(key, String(value));
+    return req<ConversationListResponse>("GET", `/conversations?${query}`);
+  },
+  getConversation: (id: string) => req<ConversationEntry>("GET", `/conversations/${encodeURIComponent(id)}`),
+  clearConversations: () => req<{ cleared: boolean }>("DELETE", "/conversations", { confirm: true }),
 
   getInfo: () => req<{ version: string; min_ha_version: string; github_url: string }>("GET", "/info"),
 

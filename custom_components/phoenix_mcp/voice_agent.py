@@ -96,6 +96,10 @@ def _base_url(hass: HomeAssistant) -> str:
 from .routing_statistics import tracked_turn
 
 
+from .conversation_log import recorded_turn
+
+
+@recorded_turn("voice", "user_text", transform=lambda text: _spoken_text(text))
 async def async_voice_answer(
     hass: HomeAssistant, data: Any, user_text: str, *,
     include_review_links: bool = False, language: object = None,

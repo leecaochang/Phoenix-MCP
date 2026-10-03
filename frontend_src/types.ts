@@ -130,6 +130,10 @@ export type DetailLevel = "concise" | "balanced" | "detailed";
 export type ToolRoutingMode = "off" | "observe" | "advise";
 
 export interface GlobalSettings {
+  conversation_log_enabled?: boolean;
+  conversation_log_max_entries?: number;
+  conversation_log_max_days?: number;
+  conversation_log_max_mb?: number;
   agentcli_tool_routing_mode?: ToolRoutingMode;
   voice_agent_tool_routing_mode?: ToolRoutingMode;
   ai_task_tool_routing_mode?: ToolRoutingMode;
@@ -824,3 +828,49 @@ export interface RoutingSurfaceStatistics {
   provider_usage: RoutingSurfaceStatistics["decision_usage"];
 }
 export type RoutingStatisticsResponse = Record<"voice" | "chat", RoutingSurfaceStatistics>;
+
+export type ConversationCoverage = "full_turn" | "partial_conversation" | "tool_exchange";
+export type ConversationOutcome = "completed" | "failed" | "denied" | "pending_approval" | "cancelled"
+  | "interrupted" | "unknown" | "running" | "allowed" | "invalid_request" | "not_found"
+  | "rate_limited" | "not_implemented" | "no_tools" | "paused" | "partial" | "rejected" | "expired" | "approved";
+export type ConversationResponseOutcome = "produced" | "unavailable" | "client_unavailable" | "failed"
+  | "cancelled" | "interrupted" | "recording_stopped" | "size_limit";
+export type ConversationOmission = "privacy" | "sanitization" | "size_limit";
+
+export interface ConversationSummary {
+  id: string;
+  source: string;
+  started_at: string;
+  updated_at: string;
+  coverage: ConversationCoverage;
+  status: ConversationOutcome;
+  execution_status: ConversationOutcome;
+  response_status: ConversationResponseOutcome;
+  excerpt: string;
+  tool_count: number;
+  change_count: number;
+  omissions: ConversationOmission[];
+}
+
+export interface ConversationEvent {
+  kind: string;
+  timestamp: string;
+  tool_id: string | null;
+  payload: unknown;
+  outcome?: ConversationOutcome;
+}
+
+export interface ConversationEntry extends ConversationSummary {
+  prompt: unknown;
+  response: unknown;
+  metadata: Record<string, unknown>;
+  events: ConversationEvent[];
+}
+
+export interface ConversationListResponse {
+  entries: ConversationSummary[];
+  total: number;
+  enabled: boolean;
+  available: boolean;
+  bytes: number;
+}

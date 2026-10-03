@@ -348,6 +348,10 @@ def _parse_structured(text: str) -> Any:
         ) from err
 
 
+from .conversation_log import recorded_turn
+
+
+@recorded_turn("ai_task", "instructions")
 async def async_generate_ai_task_data(
     hass: HomeAssistant, data: Any, instructions: str, structure: Any,
 ) -> Any:

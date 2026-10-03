@@ -271,6 +271,7 @@ async def _rollback_failed_setup(
     if data is not None:
         data.ready = False
         data.shutting_down = True
+        await data.conversations.async_save()
         await data.decision_shadow.async_cancel()
         await _async_shutdown_mesa_workers()
         try:
@@ -322,6 +323,12 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     audit_store: Store[dict] = Store(hass, AUDIT_STORAGE_VERSION, AUDIT_STORAGE_KEY)
     audit = AuditLog(store=audit_store, maxlen=store.get_settings().audit_log_maxlen)
     await audit.async_load()
+    from .conversation_log import ConversationLog
+    from .const import CONVERSATION_LOG_STORAGE_KEY, CONVERSATION_LOG_FLUSH_SECONDS
+    conversations = ConversationLog(Store(hass, 1, CONVERSATION_LOG_STORAGE_KEY,
+                                           private=True, atomic_writes=True, serialize_in_event_loop=False))
+    conversations.configure(store.get_settings())
+    await conversations.async_load()
 
     versions = VersionStore(store=Store(hass, VERSION_STORAGE_VERSION, VERSION_STORAGE_KEY))
     await versions.async_load()
@@ -364,6 +371,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         agent_recovery=agent_recovery,
         config_recovery=config_recovery,
         routing_statistics=routing_statistics,
+        conversations=conversations,
         card_catalog=card_catalog,
         ready=False,
         enforce_mcp_lifecycle=True,
@@ -541,6 +549,13 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
 
     entry.async_on_unload(async_track_time_interval(hass, _reconcile_configuration, CONFIG_RECOVERY_SWEEP_INTERVAL))
 
+    async def _flush_conversations(_now=None) -> None:
+        data.conversations.configure(data.store.get_settings())
+        await data.conversations.async_save()
+
+    entry.async_on_unload(async_track_time_interval(
+        hass, _flush_conversations, timedelta(seconds=CONVERSATION_LOG_FLUSH_SECONDS)))
+
     async def _flush_statistics(_now=None) -> None:
         try:
             await data.routing_statistics.async_save()
@@ -702,6 +717,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         data.ready = False
         data.shutting_down = True
         hass.data[RUNTIME_READY_KEY] = False
+        await data.conversations.async_save()
         await data.decision_shadow.async_cancel()
         await _async_shutdown_mesa_workers()
         try:
@@ -837,6 +853,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if data is not None:
         data.ready = False
         data.shutting_down = True
+        await data.conversations.async_save()
         await data.decision_shadow.async_cancel()
         try:
             await data.routing_statistics.async_save()

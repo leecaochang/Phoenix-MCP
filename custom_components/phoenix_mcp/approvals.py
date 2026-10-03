@@ -551,6 +551,8 @@ async def async_expire_overdue_approval_records(
 
 def fire_approval_requested_event(hass: HomeAssistant, approval: PendingApproval) -> None:
     """Fire an HA event when a new approval is queued."""
+    from .conversation_log import approval_event
+    approval_event(hass, approval)
     hass.bus.async_fire(
         f"{DOMAIN}_approval_requested",
         {
@@ -568,6 +570,8 @@ def fire_approval_requested_event(hass: HomeAssistant, approval: PendingApproval
 
 def fire_approval_resolved_event(hass: HomeAssistant, approval: PendingApproval) -> None:
     """Fire an HA event when an approval reaches a terminal state."""
+    from .conversation_log import approval_event
+    approval_event(hass, approval, resolved=True)
     hass.bus.async_fire(
         f"{DOMAIN}_approval_resolved",
         {

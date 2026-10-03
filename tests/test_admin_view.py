@@ -1743,7 +1743,7 @@ async def test_entity_tree_force_reload_bypasses_cache():
 
 
 def test_all_admin_views_exported():
-    assert len(ALL_ADMIN_VIEWS) == 62
+    assert len(ALL_ADMIN_VIEWS) == 64
 
 
 def test_archived_views_before_token_view():
@@ -3269,3 +3269,55 @@ async def test_missing_integration_setup_returns_not_found(view_type, method):
     response = await getattr(view, method)(_make_admin_request(body=b"{}"))
     assert response.status == 404
     assert json.loads(response.text)["error"] == "not_found"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("admin,authenticated,status", [(False, True, 403), (True, False, 401)])
+async def test_conversation_endpoints_require_ha_admin(admin, authenticated, status):
+    from custom_components.phoenix_mcp.admin_view import PhoenixAdminConversationsView, PhoenixAdminConversationView
+    data = _make_data()
+    for cls, method, kwargs in (
+        (PhoenixAdminConversationsView, "get", {}),
+        (PhoenixAdminConversationsView, "delete", {}),
+        (PhoenixAdminConversationView, "get", {"entry_id": "missing"}),
+    ):
+        view = cls()
+        view.hass = _make_hass(data)
+        response = await getattr(view, method)(_make_admin_request(admin, authenticated=authenticated), **kwargs)
+        assert response.status == status
+
+
+@pytest.mark.asyncio
+async def test_conversation_admin_list_detail_clear():
+    from custom_components.phoenix_mcp.admin_view import PhoenixAdminConversationsView, PhoenixAdminConversationView
+    from custom_components.phoenix_mcp.conversation_log import recorder
+    data = _make_data()
+    data.store.get_settings.return_value.conversation_log_enabled = True
+    log = recorder(data)
+    handle = log.begin("voice", prompt="A recorded request")
+    log.finish(handle, response="A recorded response")
+    view = PhoenixAdminConversationsView()
+    view.hass = _make_hass(data)
+    response = await view.get(_make_admin_request())
+    assert response.status == 200
+    result = json.loads(response.text)
+    assert result["total"] == 1
+    assert "events" not in result["entries"][0]
+    detail = PhoenixAdminConversationView()
+    detail.hass = view.hass
+    response = await detail.get(_make_admin_request(), entry_id=handle[1])
+    assert json.loads(response.text)["response"] == "A recorded response"
+    assert (await view.delete(_make_admin_request(body=b'{}'))).status == 400
+    assert (await view.delete(_make_admin_request(body=b'{"confirm":true}'))).status == 200
+    assert (await detail.get(_make_admin_request(), entry_id=handle[1])).status == 404
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("key,value", [("conversation_log_max_entries", 0), ("conversation_log_max_days", True),
+                                        ("conversation_log_max_mb", 251), ("conversation_log_max_mb", 1.5)])
+async def test_conversation_settings_reject_invalid_limits(key, value):
+    data = _make_data()
+    view = PhoenixAdminSettingsView()
+    view.hass = _make_hass(data)
+    response = await view.patch(_make_admin_request(body=json.dumps({key: value}).encode()))
+    assert response.status == 400

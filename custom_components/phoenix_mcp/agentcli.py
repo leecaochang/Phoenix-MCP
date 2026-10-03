@@ -3514,6 +3514,10 @@ async def _run_tool_batch(
     )
 
 
+from .conversation_log import recorded_chat
+
+
+@recorded_chat
 @tracked_turn("chat")
 @recovery_turn
 async def async_run_agent_turn(

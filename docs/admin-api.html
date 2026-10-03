@@ -265,6 +265,9 @@ POST    /api/phoenix-mcp/agentcli/chat                                  Run one 
         <h2 id="settings-system">Settings and system</h2>
         <pre class="code" data-lang="http" data-label="Settings &amp; system"><code>GET    /api/phoenix-mcp/admin/settings                 Read global settings
 PATCH  /api/phoenix-mcp/admin/settings                 Update global settings (any subset)
+GET    /api/phoenix-mcp/admin/conversations             Conversation summaries (limit, offset, search, source, outcome, since)
+GET    /api/phoenix-mcp/admin/conversations/{id}        Full sanitized conversation evidence
+DELETE /api/phoenix-mcp/admin/conversations             Clear history with {"confirm": true}
 GET    /api/phoenix-mcp/admin/audit                     Global audit log (limit, offset, token_id, outcome, ip)
 GET    /api/phoenix-mcp/admin/info                      Version info and tool counts
 GET    /api/phoenix-mcp/admin/catalog/{language}        Panel string catalog for one language
@@ -306,6 +309,10 @@ DELETE /api/phoenix-mcp/admin/wipe                      Wipe tokens, audit log, 
   "notify_on_approval": true,
   "audit_flush_interval": 15,    // minutes: 0 (never), 5, 10, 15, 30, 60
   "audit_log_maxlen": 10000,
+  "conversation_log_enabled": false,
+  "conversation_log_max_entries": 100, // 1 to 2000
+  "conversation_log_max_days": 7,      // 1 to 365
+  "conversation_log_max_mb": 25,       // 1 to 250; decimal MB
   "mesa_mode": "advisory",       // off | advisory | enforced
   "mesa_inject_enabled": false,  // experimental in-context MESA buttons; admin-only, off by default
   "token_presets_enabled": false, // token settings presets; enabling seeds a default preset on every token
@@ -341,7 +348,8 @@ DELETE /api/phoenix-mcp/admin/wipe                      Wipe tokens, audit log, 
   "ai_task_detail_level": "balanced"
 }</code></pre>
         <p>Style and detail values are closed server-owned enums; invalid PATCH values are rejected. Older storage records load with the defaults shown above. Each surface reads its settings at the start of a model turn, so a PATCH affects the next turn without clearing Agent Chat history. AI Task omits its style and detail prompt additions whenever the task supplies a structured output schema. External MCP clients and the Assist Tool Provider do not use these settings.</p>
-        <p id="wipe">The wipe route is intentionally guarded: it requires an exact confirmation string. It is scoped by three independent flags, so you choose what to delete. <code>wipe_core</code> (default <code>true</code>) clears every token and archived token, all settings back to their defaults, global entity hints, the audit log, and the configuration/version change history, plus in-memory request-tracking state (the rate limiter's windows, per-token request counters, and rate-limit/stale-tools notification markers) and any queued pending approvals (dismissing their notifications). <code>wipe_providers</code> (default <code>true</code>) deletes all Agent Chat and decision-provider accounts, their saved model selections and stored API keys from <code>.storage/phoenix_mcp_agentcli_secrets</code>. <code>wipe_mesa</code> (default <code>false</code>) deletes all MESA profiles from <code>.storage/phoenix_mcp_mesa</code>; it is off by default so a reset keeps hand-authored safety policy unless you ask otherwise. Omitting a flag uses its default (a bare <code>{ "confirm": "WIPE" }</code> clears core data and provider keys but leaves MESA intact). The panel's Data Management card exposes all three as switches.</p>
+        <p>The <a href="operations.html#conversation-log">Conversation Log</a> endpoints require HA administrator authentication and remain separate from agent audit access. Listing returns summaries, total count, recording/storage availability, and retained size; opening an entry returns sanitized events and available prompt/response content. A missing or expired entry returns 404. Clear requires exactly <code>{"confirm": true}</code>. Recording is disabled on upgrade and starts with an empty history; old audit rows are not reconstructed into conversations.</p>
+        <p id="wipe">The wipe route is intentionally guarded: it requires an exact confirmation string. It is scoped by three independent flags, so you choose what to delete. <code>wipe_core</code> (default <code>true</code>) clears every token and archived token, all settings back to their defaults, global entity hints, the audit log, the conversation log, and the configuration/version change history, plus in-memory request-tracking state (the rate limiter's windows, per-token request counters, and rate-limit/stale-tools notification markers) and any queued pending approvals (dismissing their notifications). <code>wipe_providers</code> (default <code>true</code>) deletes all Agent Chat and decision-provider accounts, their saved model selections and stored API keys from <code>.storage/phoenix_mcp_agentcli_secrets</code>. <code>wipe_mesa</code> (default <code>false</code>) deletes all MESA profiles from <code>.storage/phoenix_mcp_mesa</code>; it is off by default so a reset keeps hand-authored safety policy unless you ask otherwise. Omitting a flag uses its default (a bare <code>{ "confirm": "WIPE" }</code> clears core data and provider keys but leaves MESA intact). The panel's Data Management card exposes all three as switches.</p>
         <pre class="code" data-lang="json" data-label="Wipe body"><code>{
   "confirm": "WIPE",
   "wipe_core": true,       // tokens, settings, audit, versions, pending approvals (default true)

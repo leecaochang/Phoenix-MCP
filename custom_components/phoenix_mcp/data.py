@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Callable
 from .agent_recovery import AgentRecovery
 from .config_recovery import ConfigurationRecovery
 from .audit import AuditLog
+from .conversation_log import ConversationLog
 from .command_routing import CommandRouting
 from .decision_shadow import DecisionShadow
 from .decision_budget import DecisionRequestBudget
@@ -44,6 +45,7 @@ class PhoenixData:
     # Configuration version history. Always present: __init__ supplies a
     # persistent store; direct constructions (tests) get an in-memory default.
     versions: VersionStore = field(default_factory=VersionStore)
+    conversations: ConversationLog = field(default_factory=ConversationLog)
     home_companion_active: set[str] = field(default_factory=set)
     command_routing: CommandRouting = field(default_factory=CommandRouting)
     decision_shadow: DecisionShadow = field(default_factory=DecisionShadow)

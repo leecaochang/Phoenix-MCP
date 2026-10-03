@@ -2583,3 +2583,20 @@ MAX_CONFIG_CHECK_MESSAGES = 50
 APPROVAL_HISTORY_LIMIT = 500
 APPROVAL_HISTORY_DAYS = 7
 APPROVAL_PAYLOAD_RETENTION_SECONDS = 3600
+
+# Optional administrator conversation history, independent of safety journals.
+CONVERSATION_LOG_STORAGE_KEY = "phoenix_mcp_conversations"
+CONVERSATION_LOG_DEFAULTS = {
+    "conversation_log_max_entries": 100,
+    "conversation_log_max_days": 7,
+    "conversation_log_max_mb": 25,
+}
+CONVERSATION_LOG_LIMITS = {
+    "conversation_log_max_entries": (1, 2000),
+    "conversation_log_max_days": (1, 365),
+    "conversation_log_max_mb": (1, 250),
+}
+CONVERSATION_LOG_RESERVE_BYTES = 16384
+CONVERSATION_LOG_MAX_NODES = 100000
+CONVERSATION_LOG_MAX_DEPTH = 25
+CONVERSATION_LOG_FLUSH_SECONDS = 5

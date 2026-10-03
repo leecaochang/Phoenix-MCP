@@ -574,6 +574,9 @@ async def _record_version(
     everything else gets the computed default (which is None for resource types
     whose alias already tells the story).
     """
+    from .conversation_log import record_event
+    record_event(data, "change", {"resource_type": resource_type, "resource_id": resource_id,
+                                  "action": action, "before": before, "after": after})
     ctx = _restore_ctx.get()
     approved_by_user_id = None
     if ctx is not None:

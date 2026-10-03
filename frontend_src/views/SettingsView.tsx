@@ -2,6 +2,7 @@ import { BusyInput, BusySelect } from "../components/BusyButton";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { GlobalSettings } from "../types";
 import { api } from "../api";
+import { ConversationSettings } from "../components/ConversationSettings";
 import { LoggingSettings } from "../components/LoggingSettings";
 import { NotificationSettings } from "../components/NotificationSettings";
 import { KillSwitch } from "../components/KillSwitch";
@@ -321,6 +322,8 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
               </BusySelect>
             </div>
           </div>
+
+          <ConversationSettings settings={settings} saving={saving} onChange={patchSetting} />
 
           <div className="card">
             <h3 className="card-header">{t("settings.infoCard")}</h3>

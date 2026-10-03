@@ -133,6 +133,8 @@ _current: ContextVar[TurnStatistics | None] = ContextVar("phoenix_routing_statis
 
 
 def local_result(reply: Any, route: str) -> None:
+    from .conversation_log import record_current
+    record_current("routing", {"route": route, "outcome": reply.outcome})
     turn = _current.get()
     if turn is not None:
         turn.route = route
@@ -143,6 +145,8 @@ def local_result(reply: Any, route: str) -> None:
 
 
 def voice_result(outcome: str, pending: bool, has_text: bool) -> None:
+    from .conversation_log import record_current
+    record_current("turn_outcome", {"outcome": outcome, "pending": pending})
     turn = _current.get()
     if turn is not None:
         turn.pending = pending
@@ -169,6 +173,8 @@ def decision_usage(scope: str, body: Any) -> None:
 
 async def provider_events(events):
     """Replace cumulative usage within each actual request, then add requests once."""
+    from .conversation_log import record_current
+    record_current("routing", {"route": "provider"})
     turn = _current.get()
     usage = None
     if turn is not None:

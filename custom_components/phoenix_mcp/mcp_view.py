@@ -8219,6 +8219,10 @@ _MCP_MODERN_METHODS = _MCP_METHODS - {
 _MCP_LEGACY_METHODS = _MCP_METHODS - {"server/discover"}
 
 
+from .conversation_log import recorded_exchange, transport_session, record_event
+
+
+@recorded_exchange
 async def _dispatch_mcp(
     method: str,
     msg_id: Any,
@@ -8280,6 +8284,7 @@ async def _dispatch_mcp(
             if completed:
                 receipt = _tool_success("Action dispatch completed, but authority changed before its response could be delivered. Response details were withheld. Do not repeat the action; verify its outcome in Home Assistant.")
                 return _jsonrpc_result(msg_id, receipt), method, name, "allowed"
+            record_event(data, "notice", {"reason": "execution_unknown"}, outcome="unknown")
             try:
                 await data.agent_recovery.retain_unknown(token.id, name, request_id)
             except Exception as recovery_error:
@@ -8294,6 +8299,8 @@ async def _dispatch_mcp(
         return _jsonrpc_error(msg_id, -32000, "Request authority changed. Check earlier actions before resubmitting with current permissions."), method, "/api/phoenix-mcp", "denied"
     except Exception as exc:
         log_internal_failure(_LOGGER, "mcp_dispatch", exc)
+        if write_entered:
+            record_event(data, "notice", {"reason": "execution_unknown"}, outcome="unknown")
         _log(data, token, request_id=request_id, method=method, resource="/api/phoenix-mcp",
              outcome="invalid_request", client_ip=client_ip)
         return _jsonrpc_error(msg_id, -32603, "Internal error."), method, "/api/phoenix-mcp", "invalid_request"
@@ -9094,7 +9101,8 @@ class PhoenixMcpView(PhoenixView):
         """Handle one request with task-local credential identity."""
         context = request_authority.set(None)
         try:
-            return await self._post(request)
+            with transport_session(request.headers.get("Mcp-Session-Id")):
+                return await self._post(request)
         finally:
             request_authority.reset(context)
 

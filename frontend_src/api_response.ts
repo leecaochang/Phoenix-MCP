@@ -22,8 +22,23 @@ export function validApiResponse(path: string, method: string, value: unknown): 
     if (field !== "profiles" && (!Number.isSafeInteger(value.total) || (value.total as number) < 0)) return false;
     if (field === "approvals" && !value[field].every(row => typeof row.id === "string" && object(row.args) && object(row.diff))) return false;
   }
+  if (route === "/conversations" && method === "GET") {
+    return records(value.entries) && Number.isSafeInteger(value.total) && (value.total as number) >= 0
+      && typeof value.enabled === "boolean" && typeof value.available === "boolean"
+      && value.entries.every(row => typeof row.id === "string" && typeof row.excerpt === "string"
+        && typeof row.started_at === "string" && typeof row.updated_at === "string"
+        && typeof row.source === "string" && typeof row.status === "string"
+        && typeof row.execution_status === "string" && typeof row.coverage === "string"
+        && typeof row.tool_count === "number" && typeof row.change_count === "number"
+        && Array.isArray(row.omissions) && row.omissions.every(v => typeof v === "string"));
+  }
+  if (route.startsWith("/conversations/") && method === "GET") {
+    return typeof value.id === "string" && typeof value.response_status === "string" && object(value.metadata)
+      && Array.isArray(value.omissions) && value.omissions.every(v => typeof v === "string")
+      && records(value.events) && value.events.every(row => typeof row.kind === "string" && typeof row.timestamp === "string");
+  }
   if (route === "/settings") {
-    for (const key of ["kill_switch", "disable_all_logging", "log_allowed", "log_denied", "token_presets_enabled", "mesa_inject_enabled", "agentcli_global"]) {
+    for (const key of ["kill_switch", "disable_all_logging", "log_allowed", "log_denied", "token_presets_enabled", "mesa_inject_enabled", "agentcli_global", "conversation_log_enabled"]) {
       if (key in value && typeof value[key] !== "boolean") return false;
     }
     if ("mesa_mode" in value && !["off", "advisory", "enforced"].includes(value.mesa_mode as string)) return false;
