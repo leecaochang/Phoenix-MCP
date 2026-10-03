@@ -89,7 +89,7 @@
       "sectionsAria": "Phoenix MCP-secties",
       "srTitle": "Phoenix MCP-tokenbeheer",
       "tabApprovals": "Goedkeuringen",
-      "tabAudit": "Auditlogboeken",
+      "tabAudit": "Auditlogboek",
       "tabChanges": "Wijzigingen",
       "tabSettings": "Instellingen",
       "tabTokens": "Tokens",
@@ -2274,7 +2274,12 @@
         "search": "Beschikbare bronnen doorzocht",
         "delegate": "Gedelegeerde hulp aangevraagd"
       },
-      "groupingUnavailable": "Er is geen betrouwbare grens van een gebruikersbeurt opgegeven. Een gedeelde sessie betekent niet dezelfde opdracht."
+      "groupingUnavailable": "Er is geen betrouwbare grens van een gebruikersbeurt opgegeven. Een gedeelde sessie betekent niet dezelfde opdracht.",
+      "sourceLabel": "Bron",
+      "tokenLabel": "Token",
+      "providerLabel": "Provider",
+      "modelLabel": "Model",
+      "identityUnavailable": "Niet beschikbaar voor Phoenix"
     }
   }
 }

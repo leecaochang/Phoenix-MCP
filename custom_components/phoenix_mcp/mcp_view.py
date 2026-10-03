@@ -49,7 +49,7 @@ from .const import AGENTCLI_CLIENT_IP, AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, PHOE
 from .data import PhoenixData
 from .tools.esphome import _tool_search_esphome_yaml, _tool_list_esphome_jobs, _tool_list_esphome_devices
 from .template_render import TemplateRenderError, async_render_template_for_token
-from .request_authority import (AuthorityChangedError, RequestAuthority, check_request_authority, policy_version, request_authority)
+from .request_authority import (AuthorityChangedError, PolicyChangedError, RequestAuthority, check_request_authority, policy_version, request_authority)
 from .household_authority import household_service_kwargs, household_tool_access
 from .request_authority import DispatchProgress, dispatch_progress, mark_dispatch_started
 from .tool_common import _create_registry_mesa_approval
@@ -8296,6 +8296,10 @@ async def _dispatch_mcp(
             return _jsonrpc_error(msg_id, -32000, "Authority changed during dispatch. The action may already have executed. Do not repeat it. Check Home Assistant and resolve the associated Repair before submitting another write."), method, name, "invalid_request"
         _log(data, token, request_id=request_id, method=method, resource="/api/phoenix-mcp",
              outcome="denied", client_ip=client_ip)
+        if isinstance(exc, PolicyChangedError) and method == "tools/call":
+            refusal = _tool_error("Permissions changed while this tool was running. Its result was withheld. The conversation can continue using current permissions.")
+            _maybe_append_stale_advisory(refusal, token, data, client_ip)
+            return _jsonrpc_result(msg_id, refusal), method, "/api/phoenix-mcp", "denied"
         return _jsonrpc_error(msg_id, -32000, "Request authority changed. Check earlier actions before resubmitting with current permissions."), method, "/api/phoenix-mcp", "denied"
     except Exception as exc:
         log_internal_failure(_LOGGER, "mcp_dispatch", exc)
@@ -8730,7 +8734,7 @@ async def _dispatch_streamable_batch(
     if authority is not None:
         try:
             current = authority.current_token()
-            if current.settings_version != batch_policy_version:
+            if not current.accepts_policy_version(batch_policy_version):
                 raise AuthorityChangedError("Permissions changed.")
         except AuthorityChangedError:
             _audit_mcp_transport(

@@ -89,7 +89,7 @@
       "sectionsAria": "Sekcje Phoenix MCP",
       "srTitle": "Zarządzanie tokenami Phoenix MCP",
       "tabApprovals": "Zatwierdzenia",
-      "tabAudit": "Dzienniki audytu",
+      "tabAudit": "Dziennik audytu",
       "tabChanges": "Zmiany",
       "tabSettings": "Ustawienia",
       "tabTokens": "Tokeny",
@@ -2298,7 +2298,12 @@
         "search": "Wyszukano dostępne zasoby",
         "delegate": "Zażądano delegowanej pomocy"
       },
-      "groupingUnavailable": "Nie podano wiarygodnej granicy tury użytkownika. Wspólna sesja nie oznacza tego samego polecenia."
+      "groupingUnavailable": "Nie podano wiarygodnej granicy tury użytkownika. Wspólna sesja nie oznacza tego samego polecenia.",
+      "sourceLabel": "Źródło",
+      "tokenLabel": "Token",
+      "providerLabel": "Dostawca",
+      "modelLabel": "Model",
+      "identityUnavailable": "Niedostępne dla Phoenix"
     }
   }
 }

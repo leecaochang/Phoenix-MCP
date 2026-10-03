@@ -1755,7 +1755,7 @@
       "tabTokens": "Tokens",
       "tabApprovals": "Genehmigungen",
       "tabChanges": "Änderungen",
-      "tabAudit": "Prüfprotokolle",
+      "tabAudit": "Prüfprotokoll",
       "tabSettings": "Einstellungen",
       "loadTokensFailed": "Tokens konnten nicht geladen werden.",
       "srTitle": "Phoenix MCP Token-Verwaltung",
@@ -2196,7 +2196,12 @@
         "search": "Verfügbare Ressourcen durchsucht",
         "delegate": "Delegierte Unterstützung angefordert"
       },
-      "groupingUnavailable": "Es wurde keine verlässliche Grenze einer Nutzereingabe übermittelt. Eine gemeinsame Sitzung bedeutet keine gemeinsame Eingabe."
+      "groupingUnavailable": "Es wurde keine verlässliche Grenze einer Nutzereingabe übermittelt. Eine gemeinsame Sitzung bedeutet keine gemeinsame Eingabe.",
+      "sourceLabel": "Quelle",
+      "tokenLabel": "Token",
+      "providerLabel": "Anbieter",
+      "modelLabel": "Modell",
+      "identityUnavailable": "Für Phoenix nicht verfügbar"
     }
   },
   "notification": {

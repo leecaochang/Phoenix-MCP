@@ -1599,7 +1599,7 @@
       "sectionsAria": "Sezioni di Phoenix MCP",
       "srTitle": "Gestione dei token di Phoenix MCP",
       "tabApprovals": "Approvazioni",
-      "tabAudit": "Registri di controllo",
+      "tabAudit": "Registro di controllo",
       "tabChanges": "Modifiche",
       "tabSettings": "Impostazioni",
       "tabTokens": "Token",
@@ -2196,7 +2196,12 @@
         "search": "Ricerca delle risorse disponibili",
         "delegate": "Assistenza delegata richiesta"
       },
-      "groupingUnavailable": "Non è stato fornito un confine affidabile del turno utente. Una sessione condivisa non implica una richiesta condivisa."
+      "groupingUnavailable": "Non è stato fornito un confine affidabile del turno utente. Una sessione condivisa non implica una richiesta condivisa.",
+      "sourceLabel": "Origine",
+      "tokenLabel": "Token",
+      "providerLabel": "Provider",
+      "modelLabel": "Modello",
+      "identityUnavailable": "Non disponibile per Phoenix"
     }
   },
   "notification": {

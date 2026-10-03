@@ -829,7 +829,7 @@ select.input {
    ============================================================ */
 /* Two-row tab bar: row 1 is Tokens/Approvals/Changes plus whichever of the
    Agent Chat button / kill-switch banner is showing (both must stay visible
-   without scrolling); row 2 is MESA/Audit Logs/Settings plus Documentation.
+   without scrolling); row 2 is MESA/Audit Log/Settings plus Documentation.
    The split point is fixed by .phx-tabs-break, not by wherever content
    happens to overflow. DOM order is untouched (desktop reading order); see
    the comment in index.tsx. */
@@ -2955,16 +2955,31 @@ button.changes-row:hover { background: var(--phx-surface-2); }
 .conversation-entry > summary:hover { background: var(--phx-hover); }
 .conversation-summary { display: grid; gap: 5px; flex: 1; min-width: 0; }
 .conversation-summary-title { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
-.conversation-status { color: var(--phx-text-2); font-size: 12px; white-space: nowrap; }
+.conversation-status { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; white-space: nowrap; }
 .conversation-detail { padding: 0 24px 24px 40px; }
 .conversation-detail section { margin-top: 24px; }
-.conversation-detail h3 { font-size: 14px; margin: 0 0 8px; }
+.conversation-detail h3 { display: flex; align-items: center; gap: 8px; font-size: 14px; margin: 0 0 8px; }
 .conversation-prose { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 75ch; }
 .conversation-evidence pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--phx-surface-2); border-radius: var(--phx-radius-xs); padding: 12px; font-family: "Roboto Mono", monospace; font-size: 13px; }
 .conversation-evidence > span { font-size: 12px; color: var(--phx-text-2); }
 .conversation-detail details > summary { cursor: pointer; color: var(--phx-accent); padding: 6px 0; }
 .conversation-timeline { margin: 0; padding-left: 20px; }
-.conversation-event { padding: 12px 0; border-bottom: 1px solid var(--phx-divider); }
+.conversation-event { position: relative; padding: 12px 8px 12px 38px; border-bottom: 1px solid var(--phx-divider); }
+.conversation-event > .conversation-icon { position: absolute; left: 8px; top: 13px; }
+.conversation-event-body { min-width: 0; }
+.conversation-event-error { background: var(--phx-error-bg); }
+.conversation-error-message { margin: 8px 0; }
+.conversation-icon { width: 20px; height: 20px; flex: 0 0 20px; fill: currentColor; }
+.conversation-signal-neutral { color: var(--phx-text-2); }
+.conversation-signal-success { color: var(--phx-success); }
+.conversation-signal-warning { color: var(--phx-warning); }
+.conversation-signal-error { color: var(--phx-error); }
+.conversation-outcome { font-size: 13px; }
+.conversation-response-status { display: flex; align-items: flex-start; gap: 8px; font-size: 13px; }
+.conversation-identity { display: flex; flex-wrap: wrap; gap: 16px 32px; margin: 12px 0 24px; }
+.conversation-identity > div { min-width: 0; max-width: 100%; }
+.conversation-identity dt { color: var(--phx-text-2); font-size: 12px; margin-bottom: 4px; }
+.conversation-identity dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
 .conversation-event code { font-size: 12px; overflow-wrap: anywhere; }
 .conversation-event time { font-variant-numeric: tabular-nums; }
 .conversation-event p { margin: 4px 0; }

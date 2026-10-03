@@ -504,7 +504,7 @@
       "tabApprovals": "Approvals",
       "tabChanges": "Changes",
       "tabMesa": "MESA",
-      "tabAudit": "Audit Logs",
+      "tabAudit": "Audit Log",
       "tabSettings": "Settings",
       "loadTokensFailed": "Failed to load tokens.",
       "srTitle": "Phoenix MCP Token Management",
@@ -2200,7 +2200,12 @@
         "search": "Searched available resources",
         "delegate": "Requested delegated assistance"
       },
-      "groupingUnavailable": "No reliable user-turn boundary was supplied. A shared session does not establish a shared prompt."
+      "groupingUnavailable": "No reliable user-turn boundary was supplied. A shared session does not establish a shared prompt.",
+      "sourceLabel": "Source",
+      "tokenLabel": "Token",
+      "providerLabel": "Provider",
+      "modelLabel": "Model",
+      "identityUnavailable": "Not available to Phoenix"
     }
   },
   "notification": {

@@ -2196,7 +2196,12 @@
         "search": "利用可能なリソースを検索",
         "delegate": "委任された支援をリクエスト"
       },
-      "groupingUnavailable": "ユーザーターンの信頼できる境界が提供されていません。同じセッションでも、同じプロンプトとは限りません。"
+      "groupingUnavailable": "ユーザーターンの信頼できる境界が提供されていません。同じセッションでも、同じプロンプトとは限りません。",
+      "sourceLabel": "ソース",
+      "tokenLabel": "トークン",
+      "providerLabel": "プロバイダー",
+      "modelLabel": "モデル",
+      "identityUnavailable": "Phoenix では取得できません"
     }
   },
   "notification": {

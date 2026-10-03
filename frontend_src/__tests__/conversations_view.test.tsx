@@ -76,6 +76,30 @@ describe("ConversationsView", () => {
     expect(title.closest("details")?.open).toBe(true);
   });
 
+  it("marks activity and failures with icons and exposes identity and error text without opening payloads", async () => {
+    vi.mocked(api.getConversations).mockResolvedValue(list([{ ...summary, status: "failed" }]));
+    vi.mocked(api.getConversation).mockResolvedValue({ ...detail, source: "agentcli", status: "failed", response_status: "failed",
+      metadata: { token_id: "token-id", token_name: "Kitchen client", provider: "openai", model: "selected-model" },
+      events: [...detail.events,
+        { kind: "approval_requested", timestamp: summary.started_at, tool_id: "review", payload: { status: "pending" } },
+        { kind: "error", timestamp: summary.updated_at, tool_id: null, payload: { code: "unauthorized", message: "This token is no longer authorized." } },
+      ],
+    });
+    const view = render(<ConversationsView />);
+    fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("summary")!);
+    const message = await view.findByText("This token is no longer authorized.");
+    expect(message.closest("details")?.className).toBe("conversation-entry");
+    expect(message.closest("li")?.className).toContain("conversation-event-error");
+    expect(view.container.querySelectorAll(".conversation-event > svg[aria-hidden='true']")).toHaveLength(4);
+    expect(view.container.querySelector(".conversation-status.conversation-signal-error svg")).toBeTruthy();
+    expect(view.getByText("Kitchen client")).toBeTruthy();
+    expect(view.getByText("selected-model")).toBeTruthy();
+    const technical = view.container.querySelector(".conversation-technical")!;
+    expect(technical.textContent).toContain('"source": "agentcli"');
+    expect(technical.textContent).toContain('"response_outcome": "failed"');
+    expect(technical.textContent).toContain('"token_id": "token-id"');
+  });
+
   it("rejects malformed API envelopes", () => {
     expect(validApiResponse("/conversations", "GET", list())).toBe(true);
     expect(validApiResponse("/conversations", "GET", { ...list(), entries: [{ id: "one" }] })).toBe(false);

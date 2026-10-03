@@ -1803,7 +1803,7 @@
       "sectionsAria": "Разделы Phoenix MCP",
       "srTitle": "Управление токенами Phoenix MCP",
       "tabApprovals": "Одобрения",
-      "tabAudit": "Журналы аудита",
+      "tabAudit": "Журнал аудита",
       "tabChanges": "Изменения",
       "tabSettings": "Настройки",
       "tabTokens": "Токены",
@@ -2294,7 +2294,12 @@
         "search": "Поиск доступных ресурсов",
         "delegate": "Запрошена делегированная помощь"
       },
-      "groupingUnavailable": "Надёжная граница хода пользователя не передана. Общая сессия не означает общий запрос."
+      "groupingUnavailable": "Надёжная граница хода пользователя не передана. Общая сессия не означает общий запрос.",
+      "sourceLabel": "Источник",
+      "tokenLabel": "Токен",
+      "providerLabel": "Провайдер",
+      "modelLabel": "Модель",
+      "identityUnavailable": "Недоступно Phoenix"
     }
   }
 }

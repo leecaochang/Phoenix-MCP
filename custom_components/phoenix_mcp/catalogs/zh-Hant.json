@@ -2201,7 +2201,12 @@
         "search": "搜尋可用資源",
         "delegate": "請求委派協助"
       },
-      "groupingUnavailable": "用戶端未提供可靠的使用者輪次邊界。同一工作階段中的呼叫不一定屬於同一則提示詞。"
+      "groupingUnavailable": "用戶端未提供可靠的使用者輪次邊界。同一工作階段中的呼叫不一定屬於同一則提示詞。",
+      "sourceLabel": "來源",
+      "tokenLabel": "權杖",
+      "providerLabel": "供應商",
+      "modelLabel": "模型",
+      "identityUnavailable": "Phoenix 未取得此資訊"
     }
   },
   "voice": {

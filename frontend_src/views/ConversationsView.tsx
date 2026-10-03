@@ -1,3 +1,4 @@
+import { mdiArrowBottomLeft, mdiArrowTopRight, mdiAlertCircleOutline, mdiAlertOutline, mdiCancel, mdiCheckCircleOutline, mdiClockOutline, mdiFileDocumentEditOutline, mdiInformationOutline, mdiPauseCircleOutline, mdiSourceBranch } from "@mdi/js";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { ConversationEntry, ConversationEvent, ConversationSummary } from "../types";
@@ -110,21 +111,56 @@ const OPERATION_KEYS: Record<string, string> = {
   delegate: "conversations.operation.delegate",
 };
 
+type Signal = "neutral" | "success" | "warning" | "error";
+function outcomeSignal(outcome: string): Signal {
+  if (["failed", "denied", "rejected", "invalid_request", "not_found", "not_implemented"].includes(outcome)) return "error";
+  if (["pending_approval", "cancelled", "interrupted", "unknown", "paused", "partial", "expired", "rate_limited", "recording_stopped", "size_limit"].includes(outcome)) return "warning";
+  if (["allowed", "approved", "completed", "produced", "ok"].includes(outcome)) return "success";
+  return "neutral";
+}
+function outcomeIcon(outcome: string): string {
+  if (["denied", "rejected"].includes(outcome)) return mdiCancel;
+  if (outcomeSignal(outcome) === "error") return mdiAlertCircleOutline;
+  if (["pending_approval", "running"].includes(outcome)) return mdiClockOutline;
+  if (["paused", "cancelled"].includes(outcome)) return mdiPauseCircleOutline;
+  if (outcomeSignal(outcome) === "warning") return mdiAlertOutline;
+  return outcomeSignal(outcome) === "success" ? mdiCheckCircleOutline : mdiInformationOutline;
+}
+function SignalIcon({ path, signal = "neutral" }: { path: string; signal?: Signal }) {
+  return <svg className={`conversation-icon conversation-signal-${signal}`} viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d={path} /></svg>;
+}
+
 function EventRow({ event }: { event: ConversationEvent }) {
   const payload = event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
     ? event.payload as Record<string, unknown> : null;
   const name = typeof payload?.name === "string" ? payload.name : typeof payload?.tool_name === "string" ? payload.tool_name : "";
-  return <li className="conversation-event">
+  const recordedOutcome = event.outcome || (typeof payload?.status === "string" ? payload.status : typeof payload?.outcome === "string" ? payload.outcome : "");
+  const candidate = recordedOutcome === "ok" ? "completed" : recordedOutcome === "pending" ? "pending_approval" : recordedOutcome;
+  const outcome = LABEL_KEYS.outcome[candidate] ? candidate : "";
+  const signal = event.kind === "error" ? (payload?.code === "cancelled" ? "warning" : "error")
+    : event.kind === "approval_requested" || event.kind === "continue_required" ? "warning" : outcomeSignal(outcome);
+  const path = signal === "error" ? outcomeIcon(outcome || "failed")
+    : event.kind === "tool_call" ? mdiArrowTopRight
+    : event.kind === "tool_result" ? (signal === "warning" ? outcomeIcon(outcome) : mdiArrowBottomLeft)
+    : event.kind === "change" ? mdiFileDocumentEditOutline
+    : event.kind === "routing" ? mdiSourceBranch
+    : event.kind === "approval_requested" ? mdiClockOutline
+    : event.kind === "continue_required" || payload?.code === "cancelled" ? mdiPauseCircleOutline : outcomeIcon(outcome);
+  return <li className={`conversation-event conversation-event-${signal}`}>
+    <SignalIcon path={path} signal={signal} />
+    <div className="conversation-event-body">
     <div className="conversation-event-heading">
       <span><strong>{event.kind === "tool_call" && OPERATION_KEYS[name] ? t(OPERATION_KEYS[name]) : label("event", event.kind)}</strong>{name && <> <code>{name}</code></>}</span>
       <time dateTime={event.timestamp}>{localeClock(event.timestamp)}</time>
     </div>
-    {event.outcome && <p className="conversation-secondary">{label("outcome", event.outcome)}</p>}
+    {outcome && <p className={`conversation-outcome conversation-signal-${signal}`}>{label("outcome", outcome)}</p>}
+    {event.kind === "error" && typeof payload?.message === "string" && <div className="conversation-prose conversation-error-message">{payload.message}</div>}
     {event.payload !== null && event.payload !== undefined
       ? <details><summary>{t(event.kind === "tool_call" ? "conversations.parameters" : event.kind === "change" ? "conversations.changeEvidence" : "conversations.details")}</summary>
           <TextEvidence value={event.kind === "tool_call" && payload ? payload.arguments : event.payload} code />
         </details>
       : <p className="conversation-secondary">{t("conversations.payloadUnavailable")}</p>}
+    </div>
   </li>;
 }
 
@@ -141,10 +177,14 @@ function EntryDetail({ id, revision }: { id: string; revision: string }) {
   if (error) return <div role="alert">{error} <button className="btn btn-text" onClick={() => setRetry(n => n + 1)}>{t("conversations.retry")}</button></div>;
   if (!entry) return <p role="status">{t("common.loading")}</p>;
   return <div className="conversation-detail">
+    <dl className="conversation-identity">
+      <div><dt>{t("conversations.sourceLabel")}</dt><dd>{label("source", entry.source)}</dd></div>
+      {([ ["token_name", "conversations.tokenLabel"], ["provider", "conversations.providerLabel"], ["model", "conversations.modelLabel"] ] as const).map(([key, title]) => <div key={key}><dt>{t(title)}</dt><dd>{typeof entry.metadata[key] === "string" ? String(entry.metadata[key]) : t("conversations.identityUnavailable")}</dd></div>)}
+    </dl>
     {entry.coverage === "tool_exchange" && <p className="conversation-secondary">{t("conversations.groupingUnavailable")}</p>}
     {entry.omissions.map(reason => <p className="banner banner-warning" key={reason}>{label("omission", reason)}</p>)}
     <section aria-label={t("conversations.prompt")}>
-      <h3>{t("conversations.prompt")}</h3>
+      <h3><SignalIcon path={mdiArrowBottomLeft} />{t("conversations.prompt")}</h3>
       {entry.prompt !== null ? <TextEvidence value={entry.prompt} /> : <p className="conversation-secondary">{t("conversations.promptUnavailable")}</p>}
     </section>
     <section aria-label={t("conversations.activity")}>
@@ -153,11 +193,15 @@ function EntryDetail({ id, revision }: { id: string; revision: string }) {
         : <p className="conversation-secondary">{t("conversations.noActivity")}</p>}
     </section>
     <section aria-label={t("conversations.response")}>
-      <h3>{t("conversations.response")}</h3>
-      <p className="conversation-secondary">{label("responseStatus", entry.response_status)}</p>
+      <h3><SignalIcon path={mdiArrowTopRight} signal={outcomeSignal(entry.response_status)} />{t("conversations.response")}</h3>
+      <p className={`conversation-response-status conversation-signal-${outcomeSignal(entry.response_status)}`}><SignalIcon path={outcomeIcon(entry.response_status)} signal={outcomeSignal(entry.response_status)} />{label("responseStatus", entry.response_status)}</p>
       {entry.response !== null ? <TextEvidence value={entry.response} /> : <p className="conversation-secondary">{t("conversations.responseUnavailable")}</p>}
     </section>
-    <details className="conversation-technical"><summary>{t("conversations.technical")}</summary><TextEvidence value={entry.metadata} code /></details>
+    <details className="conversation-technical"><summary>{t("conversations.technical")}</summary><TextEvidence value={{
+      entry_id: entry.id, source: entry.source, ...entry.metadata, started_at: entry.started_at, updated_at: entry.updated_at,
+      coverage: entry.coverage, status: entry.status, execution_outcome: entry.execution_status, response_outcome: entry.response_status,
+      tool_count: entry.tool_count, change_count: entry.change_count, omissions: entry.omissions,
+    }} code /></details>
   </div>;
 }
 
@@ -248,7 +292,7 @@ export function ConversationsView() {
             <span className="conversation-secondary">{label("source", entry.source)} · {localeDateTime(entry.started_at)} · {label("coverage", entry.coverage)}</span>
             <span className="conversation-secondary">{t("conversations.counts", { tools: localeNumber(entry.tool_count), changes: localeNumber(entry.change_count) })} · {t("conversations.execution", { outcome: label("outcome", entry.execution_status) })}</span>
           </span>
-          <span className="conversation-status">{label("outcome", entry.status)}</span>
+          <span className={`conversation-status conversation-signal-${outcomeSignal(entry.status)}`}><SignalIcon path={outcomeIcon(entry.status)} signal={outcomeSignal(entry.status)} />{label("outcome", entry.status)}</span>
         </summary>
         {open.has(entry.id) && <EntryDetail id={entry.id} revision={entry.updated_at} />}
       </details>)}

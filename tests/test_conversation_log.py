@@ -428,3 +428,36 @@ async def test_continuation_does_not_mislabel_provider_tool_envelope_as_prompt(c
     assert entry["prompt"] is None and entry["coverage"] == "partial_conversation"
     assert "provider-only-envelope" not in json.dumps(entry)
     assert entry["response"] == "Continued response"
+
+
+@pytest.mark.asyncio
+async def test_selected_identity_is_sanitized_without_copying_provider_secrets(conversation_data):
+    from custom_components.phoenix_mcp.agentcli import ProviderConfig
+    data, token = conversation_data
+    cfg = ProviderConfig(kind="openai", model="selected-model", base_url="https://secret-host.invalid",
+                         api_key="canary-provider-key")
+
+    @history.recorded_chat
+    async def chat(**kwargs):
+        history.record_identity(token=SimpleNamespace(id="delegated-id", name="Other"),
+                                config=ProviderConfig(kind="other", model="other-model", base_url=""))
+        await kwargs["emit"]("assistant_delta", {"text": "Done"})
+
+    await chat(data=data, token=token, provider=SimpleNamespace(cfg=cfg),
+               messages=[{"role": "user", "content": "Hello"}], emit=AsyncMock())
+    entry = only(data.conversations)
+    assert entry["metadata"] == {"token_id": token.id, "token_name": token.name, "provider": "openai", "model": "selected-model"}
+    assert "canary-provider-key" not in json.dumps(entry) and "secret-host" not in json.dumps(entry)
+    store = AsyncMock()
+    store.async_load.return_value = {"entries": [entry]}
+    restored = history.ConversationLog(store)
+    restored.configure(data.store.get_settings())
+    await restored.async_load()
+    assert only(restored)["metadata"] == entry["metadata"]
+    handle = data.conversations.begin("ai_task")
+    ctx = history._current.set(handle)
+    try:
+        history.record_identity(token=token, config=ProviderConfig(kind="custom", model="password=canary-model", base_url=""))
+    finally:
+        history._current.reset(ctx)
+    assert "canary-model" not in json.dumps(data.conversations.detail(handle[1]))

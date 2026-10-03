@@ -40,6 +40,7 @@ from .const import (
     CAP_DENY,
     CAP_MODES,
     CAPABILITY_NAMES,
+    CAP_GRANT_TRANSITIONS,
     CONFIRM_AVAILABLE_CAPS,
     DEFAULT_PRESET_NAME,
     DEFAULT_CONFIRM_INLINE_WAIT_SECONDS,
@@ -362,6 +363,9 @@ class TokenRecord:
     # permissions change; tools_list_version echoes it at the token's last
     # tools/list call. Stale iff settings_version > tools_list_version.
     settings_version: int = 1
+    # Runtime proof of consecutive capability-only grants. Never restored from disk.
+    capability_grant_base: int | None = None
+    capability_grant_version: int | None = None
     tools_list_version: int = 1
     # The tool-catalog fingerprint this token last saw at tools/list. The second
     # staleness axis: settings_version catches the OPERATOR changing the token,
@@ -377,6 +381,14 @@ class TokenRecord:
     def caps_dict(self) -> dict[str, str]:
         """Return the cap_*->mode mapping for this token."""
         return {name: getattr(self, name) for name in CAPABILITY_NAMES}
+
+    def accepts_policy_version(self, version: int) -> bool:
+        """Keep admitted work valid only across proven capability-only grants."""
+        return version == self.settings_version or (
+            self.capability_grant_base is not None
+            and self.capability_grant_version == self.settings_version
+            and self.capability_grant_base <= version < self.settings_version
+        )
 
     def to_dict(self) -> dict:
         d = {
@@ -470,6 +482,8 @@ class TokenRecord:
             presets=presets,
             active_preset_id=active_preset_id,
             settings_version=settings_version,
+            capability_grant_base=None,
+            capability_grant_version=None,
             # Records written before this field existed default to "not stale",
             # so an upgrade never fires a spurious advisory.
             tools_list_version=int(data.get("tools_list_version", settings_version)),
@@ -1043,6 +1057,13 @@ class TokenStore:
             "persona",
         }
         cap_fields = set(CAPABILITY_NAMES)
+        grant_only = bool(kwargs) and token.persona != PERSONA_HOME_COMPANION and all(
+            key in cap_fields and (
+                value == getattr(token, key)
+                or (getattr(token, key), value) in CAP_GRANT_TRANSITIONS
+            ) and not (token.pass_through and getattr(token, key) == "deny" and value == "confirm")
+            for key, value in kwargs.items()
+        )
         cap_changed = False
         for key, value in kwargs.items():
             if key in cap_fields:
@@ -1079,7 +1100,12 @@ class TokenStore:
         # tool list nor the caps, so like name it must not fire a spurious advisory.
         non_invalidating = {"name", "confirm_inline_wait_seconds"}
         if cap_changed or any(k not in non_invalidating for k in kwargs):
+            previous_version = token.settings_version
             token.settings_version += 1
+            if grant_only:
+                if token.capability_grant_version != previous_version:
+                    token.capability_grant_base = previous_version
+                token.capability_grant_version = token.settings_version
         token.updated_at = utcnow()
         await self.async_save()
         return token

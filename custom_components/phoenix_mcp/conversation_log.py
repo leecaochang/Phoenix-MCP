@@ -290,7 +290,7 @@ class ConversationLog:
         old = entry.get(field)
         if field == "metadata" and isinstance(value, dict):
             entry[field] = {key: self._clean(entry, item, False) for key, item in value.items()
-                            if key in {"request_id", "token_id", "token_name", "client_ip", "conversation_id", "session_ref"}
+                            if key in {"request_id", "token_id", "token_name", "client_ip", "conversation_id", "session_ref", "provider", "model"}
                             and (key != "client_ip" or self._settings.log_client_ip)}
         else:
             entry[field] = self._clean(entry, value, content)
@@ -424,7 +424,7 @@ class ConversationLog:
                 metadata = raw.get("metadata")
                 if isinstance(metadata, dict):
                     entry["metadata"] = {key: self._clean(entry, value, False) for key, value in metadata.items()
-                                         if key in {"request_id", "token_id", "token_name", "client_ip", "conversation_id", "session_ref"}
+                                         if key in {"request_id", "token_id", "token_name", "client_ip", "conversation_id", "session_ref", "provider", "model"}
                                          and (key != "client_ip" or self._settings.log_client_ip)}
                 if not all(isinstance(event, dict) and isinstance(event.get("kind"), str)
                            and isinstance(event.get("timestamp"), str) and "tool_id" in event for event in entry["events"]):
@@ -570,8 +570,9 @@ def recorded_chat(run: Callable) -> Callable:
         if isinstance(prompt, list) and not all(isinstance(block, dict) and block.get("type") in {
                 "text", "input_text", "image", "image_url", "input_image"} for block in prompt):
             prompt = None
-        handle = log.begin("agentcli", prompt=prompt, metadata={"token_id": kwargs["token"].id})
+        handle = log.begin("agentcli", prompt=prompt, metadata={"token_id": kwargs["token"].id, "token_name": kwargs["token"].name})
         ctx = _current.set(handle)
+        record_identity(token=kwargs["token"], config=getattr(kwargs.get("provider"), "cfg", None))
         emit = kwargs["emit"]
         # This transient input to the scrubber is bounded and discarded at turn end.
         # Fragment-by-fragment redaction would leak credentials split across chunks.
@@ -616,6 +617,28 @@ def recorded_chat(run: Callable) -> Callable:
             chunks.clear()
             _current.reset(ctx)
     return wrapped
+
+
+def record_identity(*, token: Any = None, config: Any = None) -> None:
+    """Copy only safe selected identities, never credentials or provider envelopes."""
+    try:
+        handle = _current.get()
+        if handle is None:
+            return
+        log = handle[0]
+        entry = log.entry(handle)
+        if entry is None:
+            return
+        metadata = dict(entry["metadata"])
+        values = {"token_id": getattr(token, "id", None), "token_name": getattr(token, "name", None),
+                  "provider": getattr(config, "kind", None), "model": getattr(config, "model", None)}
+        # Delegated work cannot replace the originating turn's selected identity.
+        for key, value in values.items():
+            if key not in metadata and isinstance(value, str):
+                metadata[key] = value
+        log.assign(handle, "metadata", metadata, content=False)
+    except Exception:
+        _LOGGER.warning("Conversation identity omitted")
 
 
 def record_current(kind: str, payload: Any = None) -> None:

@@ -2201,7 +2201,12 @@
         "search": "사용 가능한 리소스 검색",
         "delegate": "위임된 지원 요청"
       },
-      "groupingUnavailable": "신뢰할 수 있는 사용자 턴 경계가 제공되지 않았습니다. 세션이 같아도 동일한 프롬프트라고 볼 수 없습니다."
+      "groupingUnavailable": "신뢰할 수 있는 사용자 턴 경계가 제공되지 않았습니다. 세션이 같아도 동일한 프롬프트라고 볼 수 없습니다.",
+      "sourceLabel": "출처",
+      "tokenLabel": "토큰",
+      "providerLabel": "제공업체",
+      "modelLabel": "모델",
+      "identityUnavailable": "Phoenix에서 확인할 수 없음"
     }
   },
   "voice": {

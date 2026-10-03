@@ -191,6 +191,7 @@ ALLOW_IDENTICAL = frozenset({
 # Chinese value such as "Token" pass silently.
 ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
     "de": frozenset({
+        "panel.conversations.tokenLabel",  # Shared technical term or cognate.
         "voice.companion_group_targets",  # "in" and the placeholder order are shared grammar.
         # German spells these the same as English: shared loanwords, technical
         # terms, HA concepts, and units. Each is a genuine cognate, not an
@@ -234,6 +235,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.tokenLabel",             # "Token"
     }),
     "fr": frozenset({
+        "panel.conversations.sourceLabel",  # Shared technical term or cognate.
         "panel.settings.agentcliSite",  # French cognate: Site.
         "panel.approvalSummary.named.kind.script",  # HA entity type: "script"
         "panel.changes.typeBlueprint",              # HA term: "Blueprint"
@@ -249,6 +251,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.expiryMinutes",               # "Minutes"
     }),
     "es": frozenset({
+        "panel.conversations.tokenLabel",  # Shared technical term or cognate.
         "panel.agentchat.announceError",
         "panel.agentchat.approvalReason",
         "panel.agentchat.resultError",
@@ -276,6 +279,8 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.tokenLabel",
     }),
     "it": frozenset({
+        "panel.conversations.tokenLabel",  # Shared technical term or cognate.
+        "panel.conversations.providerLabel",  # Shared technical term or cognate.
         "voice.companion_group_targets",  # "in" and the placeholder order are shared grammar.
         # Italian shares these with English as loanwords, HA terms, product
         # names, and bare separator/template fragments. Each is a genuine
@@ -311,6 +316,9 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.wizard.tokenLabel",             # "Token"
     }),
     "nl": frozenset({
+        "panel.conversations.tokenLabel",  # Shared technical term or cognate.
+        "panel.conversations.providerLabel",  # Shared technical term or cognate.
+        "panel.conversations.modelLabel",  # Shared technical term or cognate.
         "voice.companion_group_targets",  # "in" and the placeholder order are shared grammar.
         # Dutch keeps these as shared loanwords, technical terms, HA concepts,
         # units, and bare separator/template fragments. Each is a genuine
@@ -369,6 +377,8 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "voice.provider_error",                # "Sorry, {reason}.", "Sorry" is a cognate
     }),
     "pl": frozenset({
+        "panel.conversations.tokenLabel",  # Shared technical term or cognate.
+        "panel.conversations.modelLabel",  # Shared technical term or cognate.
         # Polish keeps these as shared loanwords, technical terms, and bare
         # separator/template fragments. Each is a genuine cognate or machine
         # value, not an untranslated sentence.

@@ -399,6 +399,9 @@ async def _async_generate_ai_task_data(
     if cfg is None or not cfg.model:
         raise HomeAssistantError("The Phoenix MCP AI Task entity is not fully configured.")
 
+    from .conversation_log import record_identity
+    record_identity(token=token, config=cfg)
+
     structure_json = _structure_to_json(structure)
     provider = build_provider(cfg)
     session = async_get_clientsession(hass)

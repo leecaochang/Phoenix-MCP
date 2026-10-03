@@ -16,7 +16,7 @@ from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenStore
+from custom_components.phoenix_mcp.token_store import TokenRecord, PermissionNode, PermissionTree, TokenStore
 from tests.test_mcp_sse import _make_request as _transport_request, _view
 
 
@@ -102,7 +102,8 @@ async def test_watch_wait_does_not_disclose_after_authority_change(hass, change)
         callbacks[0](MagicMock(data={'new_state': MagicMock(state='never-disclose')}))
         response = await task
     assert 'never-disclose' not in response.text
-    assert 'error' in json.loads(response.text)
+    body = json.loads(response.text)
+    assert body['result']['isError'] if change == 'policy' else 'error' in body
 
 
 @pytest.mark.parametrize('number', ['1e999', '-1e999', 'NaN', 'Infinity'])
@@ -313,6 +314,9 @@ async def _internal_ingress(kind, hass, data, token, name, arguments):
 async def _change_authority(data, token, change):
     if change == 'none':
         return
+    if change == 'grant':
+        await data.store.async_patch_token(token.id, cap_search='allow')
+        return
     if change == 'revoke':
         await data.store.async_archive_token(token.id, revoked=True)
     elif change == 'rotate':
@@ -327,7 +331,7 @@ async def _change_authority(data, token, change):
 
 
 @pytest.mark.parametrize('ingress', ['assist', 'interactive', 'headless'])
-@pytest.mark.parametrize('change', ['revoke', 'rotate', 'expire', 'policy', 'kill', 'none'])
+@pytest.mark.parametrize('change', ['revoke', 'rotate', 'expire', 'policy', 'kill', 'grant', 'none'])
 async def test_internal_watch_suppresses_state_after_authority_changes(hass, ingress, change):
     from custom_components.phoenix_mcp.request_authority import request_authority, policy_version
 
@@ -348,20 +352,20 @@ async def test_internal_watch_suppresses_state_after_authority_changes(hass, ing
         hass.states.async_set('sensor.audit', 'protected-after-wait')
         callbacks[0](MagicMock(data={'new_state': hass.states.get('sensor.audit')}))
         result = await task
-    if change == 'none':
+    if change in ('none', 'grant'):
         assert 'protected-after-wait' in json.dumps(result)
     elif ingress == 'assist':
         assert 'error' in result
     else:
         assert result[0]['is_error'] is True
-    if change != 'none':
+    if change not in ('none', 'grant'):
         assert 'protected-after-wait' not in json.dumps(result)
     assert request_authority.get() is None
     assert policy_version.get() is None
 
 
 @pytest.mark.parametrize('ingress', ['assist', 'interactive', 'headless'])
-@pytest.mark.parametrize('change', ['revoke', 'rotate', 'expire', 'policy', 'kill', 'none'])
+@pytest.mark.parametrize('change', ['revoke', 'rotate', 'expire', 'policy', 'kill', 'grant', 'none'])
 async def test_internal_service_rechecks_before_side_effect(hass, ingress, change):
     data, token, _ = await _environment(hass)
     er.async_get(hass).async_get_or_create('light', 'test', 'audit', suggested_object_id='audit')
@@ -382,7 +386,7 @@ async def test_internal_service_rechecks_before_side_effect(hass, ingress, chang
             'targets': [{'kind': 'entity', 'ids': ['light.audit']}],
         })
     assert calls == 2
-    if change == 'none':
+    if change in ('none', 'grant'):
         sink.assert_awaited_once()
     else:
         sink.assert_not_called()
@@ -408,3 +412,82 @@ async def test_internal_dispatch_preserves_zero_inline_wait_and_cleans_context(h
     assert token.confirm_inline_wait_seconds == 60
     assert request_authority.get() is None
     assert policy_version.get() is None
+
+
+async def test_grants_cannot_erase_an_intervening_restriction(hass):
+    data, token, _ = await _environment(hass)
+    token.pass_through = False
+    admitted = token.settings_version
+    await data.store.async_patch_token(token.id, cap_script_write="confirm")
+    await data.store.async_patch_token(token.id, cap_script_write="allow")
+    assert token.accepts_policy_version(admitted)
+    await data.store.async_patch_token(token.id, cap_script_write="deny")
+    await data.store.async_patch_token(token.id, cap_search="allow")
+    assert not token.accepts_policy_version(admitted)
+    assert token.accepts_policy_version(token.settings_version - 1)
+    restored = TokenRecord.from_dict(token.to_storage_dict())
+    assert not restored.accepts_policy_version(token.settings_version - 1)
+
+
+async def test_pass_through_confirm_is_a_restriction_and_mixed_edits_stay_strict(hass):
+    data, token, _ = await _environment(hass)
+    admitted = token.settings_version
+    await data.store.async_patch_token(token.id, cap_script_write="confirm")
+    assert not token.accepts_policy_version(admitted)
+    admitted = token.settings_version
+    await data.store.async_patch_token(token.id, cap_script_write="allow", pass_through=False)
+    assert not token.accepts_policy_version(admitted)
+
+
+@pytest.mark.parametrize("change", ["grant", "restriction"])
+async def test_chat_continues_after_capability_edit_during_tool_wait(hass, change):
+    from custom_components.phoenix_mcp import agentcli
+
+    data, token, _ = await _environment(hass)
+    token.pass_through = False
+    token.cap_config_read = 'allow'
+    token.permissions = PermissionTree(entities={'sensor.audit': PermissionNode(state='YELLOW')})
+    data.store.get_settings().conversation_log_enabled = True
+    hass.states.async_set('sensor.audit', 'old')
+    subscribed = asyncio.Event()
+    callbacks = []
+    def subscribe(_hass, _ids, callback):
+        callbacks.append(callback)
+        subscribed.set()
+        return lambda: None
+    rounds = 0
+    async def stream(*args, **kwargs):
+        nonlocal rounds
+        rounds += 1
+        if rounds == 1:
+            yield {'type': agentcli.EV_TOOL, 'id': 'read', 'name': 'watch_entity',
+                   'input': {'entity_id': 'sensor.audit', 'timeout': 1}}
+            yield {'type': agentcli.EV_DONE, 'stop_reason': 'tool_use', 'assistant_msg': {'role': 'assistant', 'content': []}}
+        else:
+            yield {'type': agentcli.EV_TEXT, 'text': 'Conversation continued.'}
+            yield {'type': agentcli.EV_DONE, 'stop_reason': 'end_turn', 'assistant_msg': {'role': 'assistant', 'content': 'Conversation continued.'}}
+    provider = agentcli.OpenAICompatProvider(agentcli.ProviderConfig(kind='chatgpt', model='selected-test-model', base_url='https://example.invalid'))
+    emit = AsyncMock()
+    with patch.object(mcp_view, 'async_track_state_change_event', subscribe), patch.object(agentcli, '_stream_turn_resilient', stream):
+        task = asyncio.create_task(agentcli.async_run_agent_turn(
+            hass=hass, data=data, token=token, provider=provider, session=MagicMock(),
+            messages=[{'role': 'user', 'content': 'Watch the test sensor.'}], options={},
+            client_ip='agentcli', base_url='http://example.invalid', emit=emit, cancel=asyncio.Event(),
+        ))
+        await asyncio.wait_for(subscribed.wait(), 2)
+        await data.store.async_patch_token(token.id, **({'cap_search': 'allow'} if change == 'grant' else {'cap_config_read': 'deny'}))
+        hass.states.async_set('sensor.audit', 'new')
+        callbacks[0](MagicMock(data={'new_state': hass.states.get('sensor.audit')}))
+        await task
+    assert rounds == 2
+    assert not any(call.args[0] == 'error' for call in emit.call_args_list)
+    row = data.conversations.query()['entries'][0]
+    entry = data.conversations.detail(row['id'])
+    assert entry['status'] == 'completed'
+    assert entry['execution_status'] == ('allowed' if change == 'grant' else 'denied')
+    if change == 'restriction':
+        result = next(event['payload'] for event in entry['events'] if event['kind'] == 'tool_result')
+        assert result['result']['isError'] and 'Permissions changed' in json.dumps(result)
+        assert '"state": "new"' not in json.dumps(result)
+    assert entry['response'] == 'Conversation continued.'
+    assert entry['metadata']['model'] == 'selected-test-model'

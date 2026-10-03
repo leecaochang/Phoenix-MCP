@@ -22,6 +22,10 @@ class AuthorityChangedError(PermissionError):
     not_dispatched: bool = False
 
 
+class PolicyChangedError(AuthorityChangedError):
+    """An admitted operation needs current permissions, not a new credential."""
+
+
 @dataclass
 class DispatchProgress:
     """Evidence only for handlers with every execution boundary instrumented."""
@@ -83,5 +87,5 @@ def check_request_authority() -> None:
         return
     token = authority.current_token()
     version = policy_version.get()
-    if version is not None and token.settings_version != version:
-        raise AuthorityChangedError("Permissions changed. Retry with current permissions.")
+    if version is not None and not token.accepts_policy_version(version):
+        raise PolicyChangedError("Permissions changed. Retry with current permissions.")

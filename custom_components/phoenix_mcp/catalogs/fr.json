@@ -502,7 +502,7 @@
       "tabTokens": "Jetons",
       "tabApprovals": "Approbations",
       "tabChanges": "Modifications",
-      "tabAudit": "Journaux d'audit",
+      "tabAudit": "Journal d’audit",
       "tabSettings": "Paramètres",
       "loadTokensFailed": "Échec du chargement des jetons.",
       "srTitle": "Gestion des jetons Phoenix MCP",
@@ -2196,7 +2196,12 @@
         "search": "Recherche de ressources disponibles",
         "delegate": "Assistance déléguée demandée"
       },
-      "groupingUnavailable": "Aucune limite fiable du tour utilisateur n’a été fournie. Une session commune ne garantit pas une même demande."
+      "groupingUnavailable": "Aucune limite fiable du tour utilisateur n’a été fournie. Une session commune ne garantit pas une même demande.",
+      "sourceLabel": "Source",
+      "tokenLabel": "Jeton",
+      "providerLabel": "Fournisseur",
+      "modelLabel": "Modèle",
+      "identityUnavailable": "Non disponible pour Phoenix"
     }
   },
   "notification": {

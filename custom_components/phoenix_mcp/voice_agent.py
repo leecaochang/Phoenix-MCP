@@ -176,6 +176,9 @@ async def _async_voice_answer(
     if cfg is None or not cfg.model:
         return voice_text(language, "not_configured")
 
+    from .conversation_log import record_identity
+    record_identity(token=token, config=cfg)
+
     from .home_companion import is_companion
     if authority is not None and not is_companion(token):
         if authority.current(hass) is None:

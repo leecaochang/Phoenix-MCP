@@ -2196,7 +2196,12 @@
         "search": "搜索可用资源",
         "delegate": "请求委派协助"
       },
-      "groupingUnavailable": "客户端未提供可靠的用户轮次边界。同一会话中的调用不一定属于同一条提示词。"
+      "groupingUnavailable": "客户端未提供可靠的用户轮次边界。同一会话中的调用不一定属于同一条提示词。",
+      "sourceLabel": "来源",
+      "tokenLabel": "令牌",
+      "providerLabel": "提供商",
+      "modelLabel": "模型",
+      "identityUnavailable": "Phoenix 未获取此信息"
     }
   },
   "notification": {

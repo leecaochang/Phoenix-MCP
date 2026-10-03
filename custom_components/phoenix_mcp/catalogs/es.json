@@ -2021,7 +2021,7 @@
       "tabTokens": "Tokens",
       "tabApprovals": "Aprobaciones",
       "tabChanges": "Cambios",
-      "tabAudit": "Registros de auditoría",
+      "tabAudit": "Registro de auditoría",
       "tabSettings": "Configuración",
       "loadTokensFailed": "No se pudieron cargar los tokens.",
       "srTitle": "Gestión de tokens de Phoenix MCP",
@@ -2196,7 +2196,12 @@
         "search": "Búsqueda de recursos disponibles",
         "delegate": "Asistencia delegada solicitada"
       },
-      "groupingUnavailable": "No se indicó un límite fiable del turno del usuario. Compartir sesión no implica compartir la misma solicitud."
+      "groupingUnavailable": "No se indicó un límite fiable del turno del usuario. Compartir sesión no implica compartir la misma solicitud.",
+      "sourceLabel": "Origen",
+      "tokenLabel": "Token",
+      "providerLabel": "Proveedor",
+      "modelLabel": "Modelo",
+      "identityUnavailable": "No disponible para Phoenix"
     }
   },
   "notification": {

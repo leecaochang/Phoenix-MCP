@@ -726,6 +726,7 @@ CAP_DENY = "deny"
 CAP_ALLOW = "allow"
 CAP_CONFIRM = "confirm"
 CAP_MODES = frozenset({CAP_DENY, CAP_ALLOW, CAP_CONFIRM})
+CAP_GRANT_TRANSITIONS = frozenset({(CAP_DENY, CAP_CONFIRM), (CAP_DENY, CAP_ALLOW), (CAP_CONFIRM, CAP_ALLOW)})
 
 # Canonical list of all capability names. Every cap_* field on TokenRecord
 # must appear here. Adding a new cap is a three-step change: add to this list,
