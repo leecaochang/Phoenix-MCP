@@ -142,7 +142,11 @@
       "conversationLimitInvalid": "{field} 必須是 {min} 到 {max} 之間的整數。",
       "conversationClearConfirm": "請確認清除對話歷史。",
       "conversationStorageUnavailable": "無法儲存對話歷史。請重試。",
-      "conversationNotFound": "此對話項目已無法取得。"
+      "conversationNotFound": "此對話項目已無法取得。",
+      "attentionCheckRequired": "繼續前，請核對操作結果。",
+      "attentionNotReviewable": "此事項無法確認。",
+      "attentionSaveFailed": "無法儲存核對結果。此操作仍需核對。",
+      "attentionReviewConflict": "此操作正在執行或已核對。請重新整理列表。"
     },
     "agentchat": {
       "answerAnyway": "仍然回答",
@@ -194,8 +198,8 @@
         "provider_malformed": "提供方傳回了格式錯誤的回應。此回應中的工具均未執行。",
         "provider_incomplete": "提供方的回應提前結束。此回應中的工具均未執行。",
         "provider_blocked": "提供方封鎖了此回應，不會重試。",
-        "outcome_unknown": "操作可能已經執行。重試前請檢查 Home Assistant 和審批結果。請在設定 > 系統 > 修復中核實結果未知的操作。",
-        "provider_after_dispatch": "操作可能已經執行。重試前請檢查 Home Assistant 和審批結果。請在設定 > 系統 > 修復中核實結果未知的操作。",
+        "outcome_unknown": "此操作可能已執行。再次嘗試前，請核對 Home Assistant 及其核准歷史。",
+        "provider_after_dispatch": "此操作可能已執行。再次嘗試前，請核對 Home Assistant 及其核准歷史。",
         "provider_transient": "提供方暫時無法使用。",
         "network": "提供方暫時無法使用。",
         "upstream": "提供方暫時無法使用。",
@@ -2224,6 +2228,24 @@
         "one": "{count} 項變更",
         "other": "{count} 項變更"
       }
+    },
+    "attention": {
+      "title": "需要關注",
+      "intro": "再次嘗試前，請核對這些操作。",
+      "empty": "沒有需要關注的事項。",
+      "loadFailed": "無法載入需要關注的事項。請重新整理再試。",
+      "actionTitle": "核對先前的操作",
+      "received": "Home Assistant 已傳回結果，但對話在確認前結束了。繼續前，請核對操作及其核准歷史。",
+      "unknown": "此操作可能已執行。再次嘗試前，請核對 Home Assistant 及其核准歷史。",
+      "mesaTitle": "MESA 未能啟動",
+      "mesaHelp": "啟用 MESA 時，受保護的變更將暫停。請查看 Home Assistant 記錄，然後從整合頁面重新載入 Phoenix MCP。",
+      "calendar_storageTitle": "無法讀取行事曆歷史",
+      "calendar_storageHelp": "讀取到儲存的歷史前，行事曆寫入將暫停。請查看 Home Assistant 記錄並重新整理再試。",
+      "details": "請求詳細資料",
+      "checked": "我已核對操作結果",
+      "continue": "標記為已核對",
+      "noReplay": "這不會重複或復原此操作。其他操作可能仍需核對。",
+      "saveFailed": "無法儲存核對結果。此操作仍需核對。"
     }
   },
   "voice": {
@@ -2235,11 +2257,11 @@
     "not_configured": "Phoenix MCP 語音智慧體尚未完成設定。",
     "out_of_steps": "抱歉，我在完成之前用完了步驟。",
     "output_limit": "抱歉，模型輸出過多，我已經停止了。",
-    "prior_action_unresolved": "這次新請求未執行，因為先前操作的結果仍待確認。請在 Home Assistant 中檢查先前操作，並在設定 > 系統 > 修復中處理後再試。",
+    "prior_action_unresolved": "先前的操作需要核對，因此未執行此請求。 請開啟 Phoenix MCP 中的「需要關注」。",
     "provider_error": "抱歉，{reason}。",
     "token_unavailable": "Phoenix MCP 語音智慧體的權杖已不可用。",
     "unavailable": "Phoenix MCP 語音智慧體目前不可用。",
-    "outcome_unknown": "操作可能已經執行。重試前請檢查 Home Assistant 和審批結果。請在設定 > 系統 > 修復中核實結果未知的操作。",
+    "outcome_unknown": "此操作可能已執行。再次嘗試前，請核對 Home Assistant 及其核准歷史。 請開啟 Phoenix MCP 中的「需要關注」。",
     "local_pending": "此指令需要在 Phoenix MCP 面板中核准。",
     "local_review": "檢視指令",
     "local_failed": "Phoenix MCP 未能完成此指令。",

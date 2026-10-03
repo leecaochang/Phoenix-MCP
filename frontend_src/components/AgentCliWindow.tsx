@@ -2228,7 +2228,9 @@ function ChatItem({
     case "error":
       return <div className="agentcli-error">{
         serverText(entry.code, entry.message, entry.messageParams, entry.rateLimit)
-      }</div>;
+      }{(entry.code === "outcome_unknown" || entry.code === "provider_after_dispatch") && <p>
+        <a href="/phoenix-mcp#attention" target="_blank" rel="noopener noreferrer">{t("attention.title")}</a>
+      </p>}</div>;
     default:
       return null;
   }

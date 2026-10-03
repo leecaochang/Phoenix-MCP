@@ -8265,7 +8265,7 @@ async def _dispatch_mcp(
             if data.agent_recovery.blocks(token.id, request_id):
                 _log(data, token, request_id=request_id, method=params["name"], resource=params["name"],
                      outcome="denied", client_ip=client_ip)
-                recovery_error = _tool_error("This new request was not executed because an earlier agent action has an unresolved outcome. Check the earlier action in Home Assistant and resolve it in Settings > System > Repairs before trying again. Direct read-only tools remain available where this token exposes them; delegated requests are blocked.")
+                recovery_error = _tool_error("This new request was not executed because an earlier agent action has an unresolved outcome. Check the earlier action in Home Assistant and resolve it in Phoenix MCP > Needs attention before trying again. Direct read-only tools remain available where this token exposes them; delegated requests are blocked.")
                 return _jsonrpc_result(msg_id, recovery_error), method, params["name"], "denied"
         check_request_authority()
         write_entered = method == "tools/call" and isinstance(params.get("name"), str) and not tool_is_read_only(params["name"])
@@ -8291,11 +8291,7 @@ async def _dispatch_mcp(
                 await data.agent_recovery.retain_unknown(token.id, name, request_id)
             except Exception as recovery_error:
                 log_internal_failure(_LOGGER, "retain_unknown", recovery_error)
-            try:
-                data.agent_recovery.publish_issues(hass)
-            except Exception as recovery_error:
-                log_internal_failure(_LOGGER, "publish_recovery", recovery_error)
-            return _jsonrpc_error(msg_id, -32000, "Authority changed during dispatch. The action may already have executed. Do not repeat it. Check Home Assistant and resolve the associated Repair before submitting another write."), method, name, "invalid_request"
+            return _jsonrpc_error(msg_id, -32000, "Authority changed during dispatch. The action may already have executed. Do not repeat it. Check Home Assistant and review the action in Phoenix MCP > Needs attention before submitting another write."), method, name, "invalid_request"
         _log(data, token, request_id=request_id, method=method, resource="/api/phoenix-mcp",
              outcome="denied", client_ip=client_ip)
         if isinstance(exc, PolicyChangedError) and method == "tools/call":

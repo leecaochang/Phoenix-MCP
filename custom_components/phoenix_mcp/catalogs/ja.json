@@ -1031,7 +1031,11 @@
       "conversationLimitInvalid": "{field} は {min} から {max} の整数にしてください。",
       "conversationClearConfirm": "会話履歴の消去を確認してください。",
       "conversationStorageUnavailable": "会話履歴を保存できませんでした。再試行してください。",
-      "conversationNotFound": "この会話項目は取得できなくなりました。"
+      "conversationNotFound": "この会話項目は取得できなくなりました。",
+      "attentionCheckRequired": "続行する前に操作の結果を確認してください。",
+      "attentionNotReviewable": "この項目は確認済みにできません。",
+      "attentionSaveFailed": "確認結果を保存できませんでした。操作の確認が引き続き必要です。",
+      "attentionReviewConflict": "この操作は実行中か、すでに確認済みです。一覧を更新してください。"
     },
     "agentchat": {
       "answerAnyway": "そのまま回答",
@@ -1142,8 +1146,8 @@
         "provider_malformed": "プロバイダーが不正な応答を返しました。この応答のツールは実行されていません。",
         "provider_incomplete": "プロバイダーの応答が途中で終了しました。この応答のツールは実行されていません。",
         "provider_blocked": "プロバイダーがこの応答をブロックしました。再試行しません。",
-        "outcome_unknown": "操作が実行された可能性があります。再試行前に Home Assistant と承認結果を確認してください。不明な操作は設定 > システム > 修復で確認してください。",
-        "provider_after_dispatch": "操作が実行された可能性があります。再試行前に Home Assistant と承認結果を確認してください。不明な操作は設定 > システム > 修復で確認してください。",
+        "outcome_unknown": "この操作は実行された可能性があります。再試行する前に、Home Assistant と承認履歴を確認してください。",
+        "provider_after_dispatch": "この操作は実行された可能性があります。再試行する前に、Home Assistant と承認履歴を確認してください。",
         "provider_transient": "プロバイダーは一時的に利用できません。",
         "network": "プロバイダーは一時的に利用できません。",
         "upstream": "プロバイダーは一時的に利用できません。",
@@ -2219,6 +2223,24 @@
         "one": "変更 {count} 件",
         "other": "変更 {count} 件"
       }
+    },
+    "attention": {
+      "title": "確認が必要",
+      "intro": "再試行する前に、これらの操作を確認してください。",
+      "empty": "確認が必要な項目はありません。",
+      "loadFailed": "項目を読み込めませんでした。更新して再試行してください。",
+      "actionTitle": "以前の操作を確認",
+      "received": "Home Assistant は結果を返しましたが、確認前に会話が終了しました。続行する前に、操作と承認履歴を確認してください。",
+      "unknown": "この操作は実行された可能性があります。再試行する前に、Home Assistant と承認履歴を確認してください。",
+      "mesaTitle": "MESA を開始できませんでした",
+      "mesaHelp": "MESA が有効な場合、保護対象の変更は一時停止されます。Home Assistant のログを確認し、統合から Phoenix MCP を再読み込みしてください。",
+      "calendar_storageTitle": "カレンダー履歴を読み込めませんでした",
+      "calendar_storageHelp": "保存された履歴を読み込めるまで、カレンダーへの書き込みは一時停止されます。Home Assistant のログを確認し、更新して再試行してください。",
+      "details": "リクエストの詳細",
+      "checked": "操作の結果を確認しました",
+      "continue": "確認済みにする",
+      "noReplay": "操作を繰り返したり取り消したりはしません。他の操作は引き続き確認が必要な場合があります。",
+      "saveFailed": "確認結果を保存できませんでした。操作の確認が引き続き必要です。"
     }
   },
   "notification": {
@@ -2235,11 +2257,11 @@
     "not_configured": "Phoenix MCP 音声エージェントの設定が完了していません。",
     "out_of_steps": "申し訳ありません。完了する前にステップを使い切りました。",
     "output_limit": "申し訳ありません。モデルの出力が多すぎるため停止しました。",
-    "prior_action_unresolved": "以前の操作の結果が未確認のため、今回のリクエストは実行されませんでした。Home Assistantで以前の操作を確認し、設定 > システム > 修復で解決してから、もう一度お試しください。",
+    "prior_action_unresolved": "以前の操作の確認が必要なため、このリクエストは実行されませんでした。 Phoenix MCP の「確認が必要」を開いてください。",
     "provider_error": "申し訳ありません。{reason}。",
     "token_unavailable": "Phoenix MCP 音声エージェントのトークンは利用できなくなりました。",
     "unavailable": "Phoenix MCP 音声エージェントは現在利用できません。",
-    "outcome_unknown": "操作が実行された可能性があります。再試行前に Home Assistant と承認結果を確認してください。不明な操作は設定 > システム > 修復で確認してください。",
+    "outcome_unknown": "この操作は実行された可能性があります。再試行する前に、Home Assistant と承認履歴を確認してください。 Phoenix MCP の「確認が必要」を開いてください。",
     "local_pending": "このコマンドには Phoenix MCP パネルでの承認が必要です。",
     "local_review": "コマンドを確認",
     "local_failed": "Phoenix MCP はこのコマンドを完了できませんでした。",

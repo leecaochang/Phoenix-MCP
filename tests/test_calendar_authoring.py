@@ -398,7 +398,6 @@ async def test_unknown_receipt_capacity_requires_explicit_review_without_replay(
                         "requested": {}, "before": None, "after": None, "recovery": "Manual review required."}
                        for i in range(CALENDAR_RECEIPT_LIMIT)]
     await journal.save()
-    journal.publish_issues()
     blocked = await call(calendar_env, 'create_calendar_event', CREATE)
     assert blocked[1] == "invalid_request" and entity.calls == []
     assert len(journal.records) == CALENDAR_RECEIPT_LIMIT

@@ -437,7 +437,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "token's currently pending approvals (id, tool, created/expires), useful after a reconnect "
             "or to resume polling. Also returns agent_recovery records for this token's interrupted "
             "Phoenix-owned provider turns. outcome_unknown blocks further writes until an administrator "
-            "checks Home Assistant and resolves the associated Repair. dispatch_result is a receipt, not "
+            "checks Home Assistant and reviews it in Phoenix MCP > Needs attention. dispatch_result is a receipt, not "
             "proof of physical completion. Never replay an uncertain action. Tokens only see their own records."
         ),
         "inputSchema": {

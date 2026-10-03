@@ -247,7 +247,7 @@ async def test_setup_degrades_when_mesa_fails(hass: HomeAssistant):
 
     assert ir.async_get(hass).async_get_issue(
         DOMAIN, "mesa_runtime_unavailable"
-    ) is not None
+    ) is None
 
 
 async def test_mandatory_platform_failure_rolls_back_every_published_surface(
@@ -653,3 +653,20 @@ def test_template_sandbox_audit_warns_when_env_construction_fails(caplog, monkey
         "template sandbox environment failed to construct" in r.message
         for r in caplog.records if r.levelname == "WARNING"
     )
+
+
+async def test_setup_migrates_phoenix_repairs_without_discarding_receipts(hass):
+    from homeassistant.helpers import issue_registry as ir
+    from custom_components.phoenix_mcp.agent_recovery import AgentRecovery, STORAGE_KEY
+    from custom_components.phoenix_mcp.durable_storage import DurableStore
+    recovery = AgentRecovery(DurableStore(hass, 1, STORAGE_KEY, atomic_writes=True))
+    await recovery.begin("token", "call_service", "legacy")
+    for domain, issue_id in ((DOMAIN, "agent_recovery_legacy"), (DOMAIN, "calendar_recovery_old"),
+                             (DOMAIN, "mesa_runtime_unavailable"), ("other", "agent_recovery_keep")):
+        ir.async_create_issue(hass, domain, issue_id, is_fixable=False, severity=ir.IssueSeverity.ERROR,
+                              translation_key="fixture")
+    result, _, _ = await _run_setup(hass)
+    assert result is True
+    assert hass.data[DOMAIN].agent_recovery.blocks("token")
+    assert hass.data[DOMAIN].agent_recovery.admin_records()[0]["request_id"] == "legacy"
+    assert list(ir.async_get(hass).issues) == [("other", "agent_recovery_keep")]

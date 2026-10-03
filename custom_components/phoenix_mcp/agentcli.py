@@ -3588,7 +3588,7 @@ async def async_run_agent_turn(
     await data.agent_recovery.reconcile(data.store, token.id)
     if data.agent_recovery.blocks(token.id):
         await emit("error", {"code": "outcome_unknown", "retryable": False,
-                             "message": "An earlier action outcome is unknown. Check Home Assistant Repairs before continuing."})
+                             "message": "An earlier action outcome is unknown. Check Phoenix MCP > Needs attention before continuing."})
         await emit("messages", {"messages": messages})
         await emit("done", {"stop_reason": "error"})
         return messages
@@ -3769,7 +3769,7 @@ async def async_run_agent_turn(
             )
         except RecoveryRequired:
             await emit("error", {"code": "outcome_unknown", "retryable": False,
-                                 "message": "An action outcome is unknown. Check Home Assistant Repairs before retrying."})
+                                 "message": "An action outcome is unknown. Check Phoenix MCP > Needs attention before retrying."})
             turn_errored = True
             stop_reason = "error"
             break
@@ -4423,7 +4423,7 @@ async def async_run_ai_task(
     # deliberately English, like the rest of the agent-facing error text.
     if turn.outcome == TURN_OUTCOME_UNKNOWN:
         if turn.blocked_by_prior_action:
-            raise AiTaskError("This task was not executed because an earlier action has an unresolved outcome. Check Home Assistant Repairs before trying again.")
+            raise AiTaskError("This task was not executed because an earlier action has an unresolved outcome. Check Phoenix MCP > Needs attention before trying again.")
         raise AiTaskError("An action outcome is unknown. Reconcile Home Assistant and approval results before retrying.")
     if turn.outcome == TURN_PROVIDER_ERROR:
         raise AiTaskError(turn.detail)

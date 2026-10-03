@@ -1810,8 +1810,8 @@ VOICE_TEMPLATES: dict[str, str] = {
     # the provider produced: it is third-party output, not ours to translate.
     "could_not_complete": "Sorry, I could not complete that.",
     "provider_error": "Sorry, {reason}.",
-    "outcome_unknown": 'Actions may have run. Check Home Assistant and approval results before retrying. Resolve uncertain actions in Settings > System > Repairs.',
-    "prior_action_unresolved": "This new request was not executed because an earlier action has an unresolved outcome. Check the earlier action in Home Assistant and resolve it in Settings > System > Repairs before trying again.",
+    "outcome_unknown": "This action may have run. Check Home Assistant and its approval history before trying it again. Open Needs attention in Phoenix MCP.",
+    "prior_action_unresolved": "This request was not executed because a previous action needs checking. Open Needs attention in Phoenix MCP.",
     'companion_accepted_direct': 'Home Assistant accepted the command for {names}.',
     'companion_accepted_warm': 'Your command for {names} has been accepted by Home Assistant.',
     'companion_accepted_calm_guide': 'Home Assistant confirms it accepted the command for {names}.',

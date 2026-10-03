@@ -4406,6 +4406,82 @@ def _version_summary(r) -> dict:
     }
 
 
+class PhoenixAdminAttentionView(PhoenixView):
+    """Admin-only unresolved actions and unavailable Phoenix safety services."""
+
+    url = "/api/phoenix-mcp/admin/attention"
+    name = "api:phoenix-mcp:admin:attention"
+    requires_auth = True
+
+    @require_admin
+    async def get(self, request: web.Request) -> web.Response:
+        rid = request["phoenix_mcp_rid"]
+        data: PhoenixData = self.hass.data[DOMAIN]
+        items = []
+        for row in data.agent_recovery.admin_records():
+            token = data.store.get_token_by_id(row["token_id"])
+            items.append({"id": row["request_id"], "kind": "agent", "tool": row["tool"],
+                          "token_name": token.name if token else row["token_id"],
+                          "started_at": row["started_at"], "dispatch_result": row["dispatch_result"]})
+        journal = data.calendar_writes
+        if journal is not None:
+            try:
+                async with journal.lock:
+                    rows = await journal.load()
+                    for row in rows:
+                        if row["status"] != "outcome_unknown" or row["receipt_id"] in journal.active:
+                            continue
+                        token = data.store.get_token_by_id(row["token_id"])
+                        items.append({"id": row["receipt_id"], "kind": "calendar",
+                                      "tool": row["operation"] + "_calendar_event",
+                                      "token_name": token.name if token else row["token_id"],
+                                      "started_at": row["created_at"], "entity_id": row["entity_id"],
+                                      "dispatch_result": "unknown"})
+            except Exception:
+                items.append({"id": "calendar_storage", "kind": "calendar_storage"})
+        if data.mesa_setup_failed:
+            items.append({"id": "mesa", "kind": "mesa"})
+        return _ok({"items": items}, request_id=rid)
+
+
+class PhoenixAdminAttentionReviewView(PhoenixView):
+    """Release one reviewed barrier without replay, rollback, or bulk dismissal."""
+
+    url = "/api/phoenix-mcp/admin/attention/{kind}/{record_id}"
+    name = "api:phoenix-mcp:admin:attention:review"
+    requires_auth = True
+
+    @require_admin
+    async def post(self, request: web.Request, kind: str, record_id: str) -> web.Response:
+        rid = request["phoenix_mcp_rid"]
+        body = await _read_body(request, rid)
+        if isinstance(body, web.Response):
+            return body
+        if body.get("checked_outcome") is not True:
+            return _err("invalid_request", "Check the action outcome before continuing.", 400, rid,
+                        key="attentionCheckRequired")
+        user = await self.hass.auth.async_get_user(request[KEY_HASS_USER].id)
+        if user is None or not user.is_active or not user.is_admin:
+            return _err("forbidden", "Admin access required.", 403, rid, key="adminRequired")
+        data: PhoenixData = self.hass.data[DOMAIN]
+        if kind != "agent" and kind != "calendar":
+            return _err("not_found", "This item cannot be acknowledged.", 404, rid, key="attentionNotReviewable")
+        try:
+            if kind == "agent":
+                reviewed = await data.agent_recovery.reviewed(record_id)
+            else:
+                reviewed = data.calendar_writes is not None and await data.calendar_writes.reviewed(record_id)
+        except Exception:
+            _LOGGER.exception("Could not save action review")
+            return _err("service_unavailable", "The review could not be saved. The action still needs review.",
+                        503, rid, key="attentionSaveFailed")
+        if not reviewed:
+            return _err("conflict", "This action is running or has already been reviewed. Refresh the list.",
+                        409, rid, key="attentionReviewConflict")
+        _audit_admin(self.hass, request, rid, f"attention/{kind}/{record_id}")
+        return _ok({"reviewed": True}, request_id=rid)
+
+
 class PhoenixAdminConfigurationRecoveryView(PhoenixView):
     """Admin-only recovery artifacts, independent of rotating Changes history."""
 
@@ -5068,6 +5144,8 @@ ALL_ADMIN_VIEWS: list[type[PhoenixView]] = [
     PhoenixAdminApprovalApproveView,
     PhoenixAdminApprovalBatchApproveView,
     PhoenixAdminApprovalRejectView,
+    PhoenixAdminAttentionView,
+    PhoenixAdminAttentionReviewView,
     PhoenixAdminConfigurationRecoveryView,
     PhoenixAdminConfigurationRecoveryRecordView,
     PhoenixAdminVersionsView,

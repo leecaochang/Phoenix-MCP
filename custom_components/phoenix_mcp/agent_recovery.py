@@ -130,7 +130,7 @@ class AgentRecovery:
     async def begin(self, token_id: str, tool: str, rid: str) -> None:
         async with self._lock:
             if self.blocks(token_id) or len(self._records) >= MAX_RECORDS:
-                raise RecoveryRequired("Reconcile the previous agent operation in Home Assistant Repairs before retrying.")
+                raise RecoveryRequired("Reconcile the previous agent operation in Phoenix MCP > Needs attention before retrying.")
             tool = _journal_tool_name(tool)
             self._records[rid] = {"token_id": token_id, "tool": tool, "started_at": utcnow().isoformat(), "turn_id": _turn_id.get()}
             try:
@@ -190,11 +190,18 @@ class AgentRecovery:
                 break
 
     async def reviewed(self, rid: str) -> bool:
-        record = self._records.get(rid)
-        if record is None or rid in self._active or record.get("turn_id") in self._live_turns:
-            return False
-        await self.finish(rid)
-        return True
+        """Persist one explicit review while preserving active and failed claims."""
+        async with self._lock:
+            record = self._records.get(rid)
+            if record is None or rid in self._active or record.get("turn_id") in self._live_turns:
+                return False
+            del self._records[rid]
+            try:
+                await self._save()
+            except BaseException:
+                self._records[rid] = record
+                raise
+            return True
 
     async def async_wipe(self, hass: HomeAssistant | None = None) -> None:
         async with self._lock:
@@ -210,25 +217,18 @@ class AgentRecovery:
                 for rid in old:
                     ir.async_delete_issue(hass, DOMAIN, f"agent_recovery_{rid}")
 
-    def publish_issues(self, hass: HomeAssistant) -> None:
-        from homeassistant.helpers import issue_registry as ir
-
-        for rid, record in self._records.items():
-            if rid in self._active or record.get("turn_id") in self._live_turns:
-                continue
-            ir.async_create_issue(
-                hass, DOMAIN, f"agent_recovery_{rid}", is_fixable=True,
-                severity=ir.IssueSeverity.ERROR, translation_key="agent_recovery",
-                translation_placeholders={"tool": record["tool"], "request_id": rid},
-                data={"request_id": rid},
-            )
+    def admin_records(self) -> list[dict]:
+        """Return bounded dispatch metadata for the authenticated admin panel."""
+        return [dict(row, token_id=token_id)
+                for token_id in dict.fromkeys(r["token_id"] for r in self._records.values())
+                for row in self.records(token_id)
+                if row["status"] == "outcome_unknown"]
 
 
 def recovery_turn(run: Callable) -> Callable:
     """Retain dispatch receipts until the entire provider turn succeeds."""
     @functools.wraps(run)
     async def guarded(*args: Any, **kwargs: Any) -> Any:
-        hass = kwargs["hass"] if "hass" in kwargs else args[0]
         data = kwargs["data"] if "data" in kwargs else args[1]
         turn = uuid.uuid4().hex
         ctx = _turn_id.set(turn)
@@ -253,7 +253,6 @@ def recovery_turn(run: Callable) -> Callable:
         finally:
             data.agent_recovery._live_turns.discard(turn)
             _turn_id.reset(ctx)
-            data.agent_recovery.publish_issues(hass)
     return guarded
 
 
@@ -302,13 +301,12 @@ async def dispatch_agent_tool(
                   and msg["error"].get("code") == -32000):
                 msg["error"]["message"] = "Authority changed during dispatch. The action outcome is unknown; reconcile Home Assistant before retrying."
             else:
-                raise RecoveryRequired("The action outcome is unknown. Check Home Assistant Repairs before retrying.")
+                raise RecoveryRequired("The action outcome is unknown. Check Phoenix MCP > Needs attention before retrying.")
         return response
     except Exception:
         if write:
-            raise RecoveryRequired("The action outcome is unknown. Check Home Assistant Repairs before retrying.") from None
+            raise RecoveryRequired("The action outcome is unknown. Check Phoenix MCP > Needs attention before retrying.") from None
         raise
     finally:
         if write:
             recovery.interrupted(request_id)
-            recovery.publish_issues(hass)

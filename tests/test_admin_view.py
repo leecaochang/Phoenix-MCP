@@ -1743,7 +1743,7 @@ async def test_entity_tree_force_reload_bypasses_cache():
 
 
 def test_all_admin_views_exported():
-    assert len(ALL_ADMIN_VIEWS) == 64
+    assert len(ALL_ADMIN_VIEWS) == 66
 
 
 def test_archived_views_before_token_view():

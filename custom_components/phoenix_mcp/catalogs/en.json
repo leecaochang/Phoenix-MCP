@@ -1454,8 +1454,8 @@
         "provider_malformed": "The provider returned a malformed response. No tool from this response was run.",
         "provider_incomplete": "The provider response ended early. No tool from this response was run.",
         "provider_blocked": "The provider blocked this response. It will not be retried.",
-        "outcome_unknown": "Actions may have run. Check Home Assistant and approval results before retrying. Resolve uncertain actions in Settings > System > Repairs.",
-        "provider_after_dispatch": "Actions may have run. Check Home Assistant and approval results before retrying. Resolve uncertain actions in Settings > System > Repairs.",
+        "outcome_unknown": "This action may have run. Check Home Assistant and its approval history before trying it again.",
+        "provider_after_dispatch": "This action may have run. Check Home Assistant and its approval history before trying it again.",
         "provider_transient": "The provider is temporarily unavailable.",
         "network": "The provider is temporarily unavailable.",
         "upstream": "The provider is temporarily unavailable.",
@@ -1738,7 +1738,11 @@
       "conversationLimitInvalid": "{field} must be an integer between {min} and {max}.",
       "conversationClearConfirm": "Confirm clearing conversation history.",
       "conversationStorageUnavailable": "Conversation history could not be saved. Try again.",
-      "conversationNotFound": "This conversation entry is no longer available."
+      "conversationNotFound": "This conversation entry is no longer available.",
+      "attentionCheckRequired": "Check the action outcome before continuing.",
+      "attentionNotReviewable": "This item cannot be acknowledged.",
+      "attentionSaveFailed": "The review could not be saved. The action still needs review.",
+      "attentionReviewConflict": "This action is running or has already been reviewed. Refresh the list."
     },
     "mesaSuggestion": {
       "baseline_note": " Prohibited matches the built-in baseline for this domain, so the authored profile makes that intent explicit; choose confirm in Review to allow agent control behind approvals instead.",
@@ -2223,6 +2227,24 @@
         "one": "{count} change",
         "other": "{count} changes"
       }
+    },
+    "attention": {
+      "title": "Needs attention",
+      "intro": "Check these actions before trying them again.",
+      "empty": "Nothing needs attention.",
+      "loadFailed": "Could not load items needing attention. Refresh to try again.",
+      "actionTitle": "Check a previous action",
+      "received": "Home Assistant returned a result, but the conversation ended before confirmation. Check the action and its approval history before continuing.",
+      "unknown": "This action may have run. Check Home Assistant and its approval history before trying it again.",
+      "mesaTitle": "MESA could not start",
+      "mesaHelp": "When MESA is enabled, protected changes are paused. Check Home Assistant logs, then reload Phoenix MCP from Integrations.",
+      "calendar_storageTitle": "Calendar history could not be read",
+      "calendar_storageHelp": "Calendar writes are paused until their saved history can be read. Check Home Assistant logs and refresh to try again.",
+      "details": "Request details",
+      "checked": "I checked the action outcome",
+      "continue": "Mark reviewed",
+      "noReplay": "This does not repeat or undo the action. Other actions may still need review.",
+      "saveFailed": "The review could not be saved. The action still needs review."
     }
   },
   "notification": {
@@ -2297,9 +2319,9 @@
     "local_unauthorized": "This token is no longer authorized.",
     "not_configured": "The Phoenix MCP voice agent is not fully configured.",
     "out_of_steps": "Sorry, I ran out of steps before finishing that.",
-    "outcome_unknown": "Actions may have run. Check Home Assistant and approval results before retrying. Resolve uncertain actions in Settings > System > Repairs.",
+    "outcome_unknown": "This action may have run. Check Home Assistant and its approval history before trying it again. Open Needs attention in Phoenix MCP.",
     "output_limit": "Sorry, the model produced too much output, so I stopped.",
-    "prior_action_unresolved": "This new request was not executed because an earlier action has an unresolved outcome. Check the earlier action in Home Assistant and resolve it in Settings > System > Repairs before trying again.",
+    "prior_action_unresolved": "This request was not executed because a previous action needs checking. Open Needs attention in Phoenix MCP.",
     "provider_error": "Sorry, {reason}.",
     "token_unavailable": "The Phoenix MCP voice agent's token is no longer available.",
     "unavailable": "The Phoenix MCP voice agent is currently unavailable."

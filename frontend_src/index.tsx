@@ -8,6 +8,7 @@ import {
   getDurable as getAgentCliDurable,
   patchDurable as patchAgentCliDurable,
 } from "./utils/agentcli_state";
+import { AttentionPanel } from "./components/AttentionPanel";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { TokenListView } from "./views/TokenList";
 import { TokenDetailView } from "./views/TokenDetail";
@@ -576,6 +577,7 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
         role="tabpanel"
         aria-labelledby={`phx-tab-${tab}`}
       >
+        <ErrorBoundary><AttentionPanel /></ErrorBoundary>
         <h2 className="sr-only">{t(TAB_LABEL_KEYS[tab])}</h2>
         <ErrorBoundary key={`${tab}:${view.name}:${view.name === "detail" ? view.tokenId : ""}`} >
         {tab === "tokens" && view.name === "list" && (

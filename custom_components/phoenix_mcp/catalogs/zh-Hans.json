@@ -651,7 +651,11 @@
       "conversationLimitInvalid": "{field} 必须是 {min} 到 {max} 之间的整数。",
       "conversationClearConfirm": "请确认清除对话历史。",
       "conversationStorageUnavailable": "无法保存对话历史。请重试。",
-      "conversationNotFound": "此对话条目已不可用。"
+      "conversationNotFound": "此对话条目已不可用。",
+      "attentionCheckRequired": "继续前，请核对操作结果。",
+      "attentionNotReviewable": "此事项无法确认。",
+      "attentionSaveFailed": "无法保存核对结果。此操作仍需核对。",
+      "attentionReviewConflict": "此操作正在执行或已核对。请刷新列表。"
     },
     "audit": {
       "allOutcomes": "所有结果",
@@ -1564,8 +1568,8 @@
         "provider_malformed": "提供方返回了格式错误的响应。此响应中的工具均未执行。",
         "provider_incomplete": "提供方的响应提前结束。此响应中的工具均未执行。",
         "provider_blocked": "提供方拦截了此响应，不会重试。",
-        "outcome_unknown": "操作可能已经执行。重试前请检查 Home Assistant 和审批结果。请在设置 > 系统 > 修复中核实结果未知的操作。",
-        "provider_after_dispatch": "操作可能已经执行。重试前请检查 Home Assistant 和审批结果。请在设置 > 系统 > 修复中核实结果未知的操作。",
+        "outcome_unknown": "此操作可能已执行。再次尝试前，请核对 Home Assistant 及其审批历史。",
+        "provider_after_dispatch": "此操作可能已执行。再次尝试前，请核对 Home Assistant 及其审批历史。",
         "provider_transient": "提供方暂时不可用。",
         "network": "提供方暂时不可用。",
         "upstream": "提供方暂时不可用。",
@@ -2219,6 +2223,24 @@
         "one": "{count} 项更改",
         "other": "{count} 项更改"
       }
+    },
+    "attention": {
+      "title": "需要关注",
+      "intro": "再次尝试前，请核对这些操作。",
+      "empty": "没有需要关注的事项。",
+      "loadFailed": "无法加载需要关注的事项。请刷新重试。",
+      "actionTitle": "核对之前的操作",
+      "received": "Home Assistant 已返回结果，但对话在确认前结束了。继续前，请核对操作及其审批历史。",
+      "unknown": "此操作可能已执行。再次尝试前，请核对 Home Assistant 及其审批历史。",
+      "mesaTitle": "MESA 未能启动",
+      "mesaHelp": "启用 MESA 时，受保护的更改将暂停。请查看 Home Assistant 日志，然后从集成页面重新加载 Phoenix MCP。",
+      "calendar_storageTitle": "无法读取日历历史",
+      "calendar_storageHelp": "读取到保存的历史前，日历写入将暂停。请查看 Home Assistant 日志并刷新重试。",
+      "details": "请求详情",
+      "checked": "我已核对操作结果",
+      "continue": "标记为已核对",
+      "noReplay": "这不会重复或撤销此操作。其他操作可能仍需核对。",
+      "saveFailed": "无法保存核对结果。此操作仍需核对。"
     }
   },
   "notification": {
@@ -2232,14 +2254,14 @@
     "token_unavailable": "Phoenix MCP 语音智能体的令牌已不可用。",
     "error": "抱歉，Phoenix MCP 语音智能体出现错误。",
     "could_not_complete": "抱歉，我没能完成这个操作。",
-    "prior_action_unresolved": "此次新请求未执行，因为先前操作的结果仍待确认。请在 Home Assistant 中检查先前操作，并在设置 > 系统 > 修复中处理后再试。",
+    "prior_action_unresolved": "之前的操作需要核对，因此未执行此请求。 请打开 Phoenix MCP 中的“需要关注”。",
     "provider_error": "抱歉，{reason}。",
     "output_limit": "抱歉，模型输出过多，我已经停止了。",
     "out_of_steps": "抱歉，我在完成之前用完了步骤。",
     "answer_truncated": "我不得不提前停下。",
     "focus_answer_anyway": "如要继续，请重复完整请求，并明确说明仍然回答。",
     "focus_declined": "此对话处于居家专注模式，因此我只能协助处理与您的住宅和 Home Assistant 有关的请求。",
-    "outcome_unknown": "操作可能已经执行。重试前请检查 Home Assistant 和审批结果。请在设置 > 系统 > 修复中核实结果未知的操作。",
+    "outcome_unknown": "此操作可能已执行。再次尝试前，请核对 Home Assistant 及其审批历史。 请打开 Phoenix MCP 中的“需要关注”。",
     "local_pending": "此指令需要在 Phoenix MCP 面板中审批。",
     "local_review": "查看指令",
     "local_failed": "Phoenix MCP 未能完成此指令。",

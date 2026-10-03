@@ -880,3 +880,14 @@ export interface ConversationListResponse {
   bytes: number;
   max_bytes?: number;
 }
+
+/** Administrator-visible dispatch metadata, never action payloads. */
+export interface AttentionItem {
+  id: string;
+  kind: "agent" | "calendar" | "mesa" | "calendar_storage";
+  tool?: string;
+  token_name?: string;
+  started_at?: string;
+  entity_id?: string;
+  dispatch_result?: string;
+}

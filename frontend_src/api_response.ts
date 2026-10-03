@@ -15,6 +15,14 @@ export function validApiResponse(path: string, method: string, value: unknown): 
   }
   if (method === "GET" && /^\/tokens\/[^/]+\/audit$/.test(route)) return records(value);
   if (!object(value)) return false;
+  if (route.startsWith("/attention/") && method === "POST") return value.reviewed === true;
+  if (route === "/attention" && method === "GET") {
+    return records(value.items) && value.items.every(row => typeof row.id === "string"
+      && ["agent", "calendar", "mesa", "calendar_storage"].includes(row.kind as string)
+      && (row.kind !== "agent" && row.kind !== "calendar" ||
+        typeof row.tool === "string" && typeof row.token_name === "string"
+        && typeof row.started_at === "string" && typeof row.dispatch_result === "string"));
+  }
   const field = route === "/approvals" ? "approvals" : route === "/audit" ? "entries"
     : route === "/versions" ? "versions" : route === "/mesa/profiles" ? "profiles" : null;
   if (field) {

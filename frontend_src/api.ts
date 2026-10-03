@@ -1,4 +1,5 @@
 import type {
+  AttentionItem,
   ConversationEntry, ConversationListResponse,
   CommandRoutePreview,
   RoutingStatisticsResponse,
@@ -166,6 +167,9 @@ function buildQuery(params?: AuditQueryParams): string {
 }
 
 export const api = {
+  listAttention: () => req<{ items: AttentionItem[] }>("GET", "/attention"),
+  reviewAttention: (kind: "agent" | "calendar", id: string) =>
+    req<{ reviewed: boolean }>("POST", `/attention/${kind}/${encodeURIComponent(id)}`, { checked_outcome: true }),
   listTokens: () => req<TokenRecord[]>("GET", "/tokens"),
   getToken: (id: string) => req<TokenRecord>("GET", `/tokens/${id}`),
   createToken: (body: CreateTokenBody) =>

@@ -13,11 +13,11 @@
     "not_configured": "Agent głosowy Phoenix MCP nie jest w pełni skonfigurowany.",
     "out_of_steps": "Przepraszam, skończyły mi się kroki przed ukończeniem tego.",
     "output_limit": "Przepraszam, model wygenerował zbyt dużo danych wyjściowych, więc się zatrzymałem.",
-    "prior_action_unresolved": "To nowe żądanie nie zostało wykonane, ponieważ wynik wcześniejszej czynności pozostaje nierozstrzygnięty. Sprawdź wcześniejszą czynność w Home Assistant i rozwiąż problem w Ustawienia > System > Naprawy, zanim spróbujesz ponownie.",
+    "prior_action_unresolved": "Nie wykonano tego żądania, ponieważ wcześniejsze działanie wymaga sprawdzenia. Otwórz Wymaga uwagi w Phoenix MCP.",
     "provider_error": "Przepraszam, {reason}.",
     "token_unavailable": "Token agenta głosowego Phoenix MCP nie jest już dostępny.",
     "unavailable": "Agent głosowy Phoenix MCP jest obecnie niedostępny.",
-    "outcome_unknown": "Działania mogły zostać wykonane. Przed ponowieniem sprawdź Home Assistant i zatwierdzenia. Wyjaśnij niepewne działania w Ustawienia > System > Naprawy.",
+    "outcome_unknown": "To działanie mogło zostać wykonane. Przed ponowną próbą sprawdź Home Assistant i historię zatwierdzeń. Otwórz Wymaga uwagi w Phoenix MCP.",
     "local_pending": "To polecenie wymaga zatwierdzenia w panelu Phoenix MCP.",
     "local_review": "Sprawdź polecenie",
     "local_failed": "Phoenix MCP nie mógł wykonać tego polecenia.",
@@ -844,8 +844,8 @@
         "provider_malformed": "Dostawca zwrócił nieprawidłową odpowiedź. Żadne narzędzie z tej odpowiedzi nie zostało uruchomione.",
         "provider_incomplete": "Odpowiedź dostawcy zakończyła się przedwcześnie. Żadne narzędzie z tej odpowiedzi nie zostało uruchomione.",
         "provider_blocked": "Dostawca zablokował tę odpowiedź. Próba nie zostanie ponowiona.",
-        "outcome_unknown": "Działania mogły zostać wykonane. Przed ponowieniem sprawdź Home Assistant i zatwierdzenia. Wyjaśnij niepewne działania w Ustawienia > System > Naprawy.",
-        "provider_after_dispatch": "Działania mogły zostać wykonane. Przed ponowieniem sprawdź Home Assistant i zatwierdzenia. Wyjaśnij niepewne działania w Ustawienia > System > Naprawy.",
+        "outcome_unknown": "To działanie mogło zostać wykonane. Przed ponowną próbą sprawdź Home Assistant i historię zatwierdzeń.",
+        "provider_after_dispatch": "To działanie mogło zostać wykonane. Przed ponowną próbą sprawdź Home Assistant i historię zatwierdzeń.",
         "provider_transient": "Dostawca jest tymczasowo niedostępny.",
         "network": "Dostawca jest tymczasowo niedostępny.",
         "upstream": "Dostawca jest tymczasowo niedostępny.",
@@ -1052,7 +1052,11 @@
       "conversationLimitInvalid": "{field} musi być liczbą całkowitą od {min} do {max}.",
       "conversationClearConfirm": "Potwierdź wyczyszczenie historii rozmów.",
       "conversationStorageUnavailable": "Nie można zapisać historii rozmów. Spróbuj ponownie.",
-      "conversationNotFound": "Ten wpis rozmowy nie jest już dostępny."
+      "conversationNotFound": "Ten wpis rozmowy nie jest już dostępny.",
+      "attentionCheckRequired": "Sprawdź wynik działania przed kontynuacją.",
+      "attentionNotReviewable": "Nie można potwierdzić tego elementu.",
+      "attentionSaveFailed": "Nie udało się zapisać weryfikacji. Działanie nadal wymaga sprawdzenia.",
+      "attentionReviewConflict": "To działanie trwa lub zostało już sprawdzone. Odśwież listę."
     },
     "wizard": {
       "accessSub": "Rozwiń grupę <code>light</code> i wybierz światło, które możesz zweryfikować. Wybierz <strong>W</strong>, aby przyznać dostęp do odczytu i zapisu. Przyznaj całe urządzenie lub rozwiń je, aby wybrać jedną encję. Więcej uprawnień możesz dodać później.",
@@ -2325,6 +2329,24 @@
         "few": "{count} zmiany",
         "many": "{count} zmian"
       }
+    },
+    "attention": {
+      "title": "Wymaga uwagi",
+      "intro": "Sprawdź te działania przed ponowną próbą.",
+      "empty": "Nic nie wymaga uwagi.",
+      "loadFailed": "Nie udało się wczytać elementów. Odśwież, aby spróbować ponownie.",
+      "actionTitle": "Sprawdź wcześniejsze działanie",
+      "received": "Home Assistant zwrócił wynik, ale rozmowa zakończyła się przed potwierdzeniem. Przed kontynuacją sprawdź działanie i historię zatwierdzeń.",
+      "unknown": "To działanie mogło zostać wykonane. Przed ponowną próbą sprawdź Home Assistant i historię zatwierdzeń.",
+      "mesaTitle": "MESA nie uruchomił się",
+      "mesaHelp": "Przy włączonym MESA chronione zmiany są wstrzymane. Sprawdź dzienniki Home Assistant, a następnie przeładuj Phoenix MCP w Integracjach.",
+      "calendar_storageTitle": "Nie udało się odczytać historii kalendarza",
+      "calendar_storageHelp": "Zapisy w kalendarzu są wstrzymane do czasu odczytania zapisanej historii. Sprawdź dzienniki Home Assistant i odśwież, aby spróbować ponownie.",
+      "details": "Szczegóły żądania",
+      "checked": "Sprawdzono wynik działania",
+      "continue": "Oznacz jako sprawdzone",
+      "noReplay": "To nie powtarza ani nie cofa działania. Inne działania mogą nadal wymagać sprawdzenia.",
+      "saveFailed": "Nie udało się zapisać weryfikacji. Działanie nadal wymaga sprawdzenia."
     }
   }
 }

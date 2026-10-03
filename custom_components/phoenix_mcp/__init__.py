@@ -380,13 +380,16 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     # flow enforces a single Phoenix MCP instance via async_abort("already_configured"), so there
     # is always at most one entry. Keying by entry ID would add complexity for no benefit.
     hass.data[DOMAIN] = data
-    agent_recovery.publish_issues(hass)
+    # Migrate presentation only. Durable recovery records remain protected.
+    for issue_domain, issue_id in list(ir.async_get(hass).issues):
+        if issue_domain == DOMAIN and (issue_id == "mesa_runtime_unavailable"
+                                      or issue_id.startswith(("agent_recovery_", "calendar_recovery_"))):
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
     from .tools.calendar import CalendarWriteJournal
     data.calendar_writes = CalendarWriteJournal(hass)
     try:
         async with data.calendar_writes.lock:
             await data.calendar_writes.load()
-        data.calendar_writes.publish_issues()
     except Exception:
         data.calendar_writes.unavailable = True
         _LOGGER.error("Calendar recovery storage unavailable; calendar writes will retry initialization")
@@ -412,15 +415,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         )
         data.mesa = None
         data.mesa_setup_failed = True
-        ir.async_create_issue(
-            hass,
-            DOMAIN,
-            "mesa_runtime_unavailable",
-            is_fixable=False,
-            is_persistent=False,
-            severity=ir.IssueSeverity.ERROR,
-            translation_key="mesa_runtime_unavailable",
-        )
+
 
     # Record mesa-core's own denials into the audit log. Attached even when MESA
     # is off (the mode is a runtime setting an admin can flip without a restart)

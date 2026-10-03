@@ -183,7 +183,7 @@ async def test_interrupted_local_write_keeps_recovery_barrier(hass, local_home, 
                 await run_voice(hass, data, "turn on the desk lamp", language="en")
         else:
             answer, build, _ = await run_voice(hass, data, "turn on the desk lamp", language="en")
-            assert "Actions may have run" in answer
+            assert "This action may have run" in answer
             build.assert_not_called()
     call.assert_awaited_once()
     assert data.agent_recovery.blocks(token.id)
@@ -265,7 +265,7 @@ async def test_failed_write_blocks_second_local_attempt_without_provider_replay(
           patch.object(type(hass.services), "async_call", AsyncMock(side_effect=RuntimeError("uncertain"))) as call):
         first, _, _ = await run_voice(hass, data, "turn on the desk lamp", language="en")
         second, build, provider = await run_voice(hass, data, "turn on the desk lamp", language="en")
-    assert "Actions may have run" in first and "Actions may have run" in second
+    assert "This action may have run" in first and "This action may have run" in second
     assert data.agent_recovery.blocks(token.id)
     call.assert_awaited_once()
     build.assert_not_called()

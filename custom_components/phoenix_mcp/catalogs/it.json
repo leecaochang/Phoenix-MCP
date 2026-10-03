@@ -137,7 +137,11 @@
       "conversationLimitInvalid": "{field} deve essere un intero tra {min} e {max}.",
       "conversationClearConfirm": "Conferma la cancellazione della cronologia conversazioni.",
       "conversationStorageUnavailable": "Impossibile salvare la cronologia. Riprova.",
-      "conversationNotFound": "Questa voce della conversazione non è più disponibile."
+      "conversationNotFound": "Questa voce della conversazione non è più disponibile.",
+      "attentionCheckRequired": "Verifica il risultato dell’azione prima di continuare.",
+      "attentionNotReviewable": "Questo elemento non può essere confermato.",
+      "attentionSaveFailed": "Impossibile salvare la verifica. L’azione richiede ancora una verifica.",
+      "attentionReviewConflict": "Questa azione è in corso o è già stata verificata. Aggiorna l’elenco."
     },
     "agentchat": {
       "announceApproval": "L'azione {name} richiede la tua approvazione.",
@@ -189,8 +193,8 @@
         "provider_malformed": "Il fornitore ha restituito una risposta non valida. Nessuno strumento di questa risposta è stato eseguito.",
         "provider_incomplete": "La risposta del fornitore è terminata prematuramente. Nessuno strumento di questa risposta è stato eseguito.",
         "provider_blocked": "Il fornitore ha bloccato questa risposta. Non verrà ritentata.",
-        "outcome_unknown": "Le azioni potrebbero essere state eseguite. Controlla Home Assistant e le approvazioni prima di riprovare. Risolvi le azioni incerte in Impostazioni > Sistema > Riparazioni.",
-        "provider_after_dispatch": "Le azioni potrebbero essere state eseguite. Controlla Home Assistant e le approvazioni prima di riprovare. Risolvi le azioni incerte in Impostazioni > Sistema > Riparazioni.",
+        "outcome_unknown": "Questa azione potrebbe essere stata eseguita. Verifica Home Assistant e la cronologia delle approvazioni prima di riprovare.",
+        "provider_after_dispatch": "Questa azione potrebbe essere stata eseguita. Verifica Home Assistant e la cronologia delle approvazioni prima di riprovare.",
         "provider_transient": "Il fornitore è temporaneamente non disponibile.",
         "network": "Il fornitore è temporaneamente non disponibile.",
         "upstream": "Il fornitore è temporaneamente non disponibile.",
@@ -2219,6 +2223,24 @@
         "one": "{count} modifica",
         "other": "{count} modifiche"
       }
+    },
+    "attention": {
+      "title": "Richiede attenzione",
+      "intro": "Verifica queste azioni prima di riprovarle.",
+      "empty": "Nessun elemento richiede attenzione.",
+      "loadFailed": "Impossibile caricare gli elementi. Aggiorna per riprovare.",
+      "actionTitle": "Verifica un’azione precedente",
+      "received": "Home Assistant ha restituito un risultato, ma la conversazione è terminata prima della conferma. Verifica l’azione e la cronologia delle approvazioni prima di continuare.",
+      "unknown": "Questa azione potrebbe essere stata eseguita. Verifica Home Assistant e la cronologia delle approvazioni prima di riprovare.",
+      "mesaTitle": "MESA non si è avviato",
+      "mesaHelp": "Con MESA attivo, le modifiche protette sono sospese. Controlla i registri di Home Assistant, quindi ricarica Phoenix MCP da Integrazioni.",
+      "calendar_storageTitle": "Impossibile leggere la cronologia del calendario",
+      "calendar_storageHelp": "Le scritture del calendario sono sospese finché non è possibile leggere la cronologia salvata. Controlla i registri di Home Assistant e aggiorna per riprovare.",
+      "details": "Dettagli della richiesta",
+      "checked": "Ho verificato il risultato dell’azione",
+      "continue": "Segna come verificata",
+      "noReplay": "Questo non ripete né annulla l’azione. Altre azioni potrebbero ancora richiedere una verifica.",
+      "saveFailed": "Impossibile salvare la verifica. L’azione richiede ancora una verifica."
     }
   },
   "notification": {
@@ -2235,11 +2257,11 @@
     "not_configured": "L'agente vocale di Phoenix MCP non è configurato completamente.",
     "out_of_steps": "Mi dispiace, ho esaurito i passaggi prima di finire.",
     "output_limit": "Mi dispiace, il modello ha prodotto troppo output, quindi mi sono fermato.",
-    "prior_action_unresolved": "Questa nuova richiesta non è stata eseguita perché l’esito di un’azione precedente è ancora da chiarire. Controlla l’azione precedente in Home Assistant e risolvi il problema in Impostazioni > Sistema > Riparazioni prima di riprovare.",
+    "prior_action_unresolved": "Questa richiesta non è stata eseguita perché un’azione precedente deve essere verificata. Apri Richiede attenzione in Phoenix MCP.",
     "provider_error": "Mi dispiace, {reason}.",
     "token_unavailable": "Il token dell'agente vocale di Phoenix MCP non è più disponibile.",
     "unavailable": "L'agente vocale di Phoenix MCP al momento non è disponibile.",
-    "outcome_unknown": "Le azioni potrebbero essere state eseguite. Controlla Home Assistant e le approvazioni prima di riprovare. Risolvi le azioni incerte in Impostazioni > Sistema > Riparazioni.",
+    "outcome_unknown": "Questa azione potrebbe essere stata eseguita. Verifica Home Assistant e la cronologia delle approvazioni prima di riprovare. Apri Richiede attenzione in Phoenix MCP.",
     "local_pending": "Questo comando richiede l’approvazione nel pannello di Phoenix MCP.",
     "local_review": "Esamina comando",
     "local_failed": "Phoenix MCP non ha potuto completare questo comando.",

@@ -664,8 +664,8 @@
         "provider_malformed": "El proveedor devolvió una respuesta incorrecta. No se ejecutó ninguna herramienta de esta respuesta.",
         "provider_incomplete": "La respuesta del proveedor terminó antes de tiempo. No se ejecutó ninguna herramienta de esta respuesta.",
         "provider_blocked": "El proveedor bloqueó esta respuesta. No se volverá a intentar.",
-        "outcome_unknown": "Es posible que se hayan ejecutado acciones. Comprueba Home Assistant y las aprobaciones antes de reintentar. Resuelve las acciones inciertas en Ajustes > Sistema > Reparaciones.",
-        "provider_after_dispatch": "Es posible que se hayan ejecutado acciones. Comprueba Home Assistant y las aprobaciones antes de reintentar. Resuelve las acciones inciertas en Ajustes > Sistema > Reparaciones.",
+        "outcome_unknown": "Esta acción puede haberse ejecutado. Comprueba Home Assistant y su historial de aprobaciones antes de volver a intentarla.",
+        "provider_after_dispatch": "Esta acción puede haberse ejecutado. Comprueba Home Assistant y su historial de aprobaciones antes de volver a intentarla.",
         "provider_transient": "El proveedor no está disponible temporalmente.",
         "network": "El proveedor no está disponible temporalmente.",
         "upstream": "El proveedor no está disponible temporalmente.",
@@ -980,7 +980,11 @@
       "conversationLimitInvalid": "{field} debe ser un entero entre {min} y {max}.",
       "conversationClearConfirm": "Confirma el borrado del historial de conversaciones.",
       "conversationStorageUnavailable": "No se pudo guardar el historial. Reintenta.",
-      "conversationNotFound": "Esta entrada de conversación ya no está disponible."
+      "conversationNotFound": "Esta entrada de conversación ya no está disponible.",
+      "attentionCheckRequired": "Comprueba el resultado de la acción antes de continuar.",
+      "attentionNotReviewable": "Este elemento no se puede confirmar.",
+      "attentionSaveFailed": "No se pudo guardar la revisión. La acción sigue pendiente de revisión.",
+      "attentionReviewConflict": "Esta acción está en curso o ya se ha revisado. Actualiza la lista."
     },
     "tokens": {
       "advanced": "Avanzado",
@@ -2219,6 +2223,24 @@
         "one": "{count} cambio",
         "other": "{count} cambios"
       }
+    },
+    "attention": {
+      "title": "Requiere atención",
+      "intro": "Comprueba estas acciones antes de volver a intentarlas.",
+      "empty": "Nada requiere atención.",
+      "loadFailed": "No se pudieron cargar los elementos. Actualiza para volver a intentarlo.",
+      "actionTitle": "Comprobar una acción anterior",
+      "received": "Home Assistant devolvió un resultado, pero la conversación terminó antes de la confirmación. Comprueba la acción y su historial de aprobaciones antes de continuar.",
+      "unknown": "Esta acción puede haberse ejecutado. Comprueba Home Assistant y su historial de aprobaciones antes de volver a intentarla.",
+      "mesaTitle": "MESA no pudo iniciarse",
+      "mesaHelp": "Con MESA activado, los cambios protegidos están pausados. Revisa los registros de Home Assistant y vuelve a cargar Phoenix MCP desde Integraciones.",
+      "calendar_storageTitle": "No se pudo leer el historial del calendario",
+      "calendar_storageHelp": "Las escrituras del calendario están pausadas hasta poder leer su historial guardado. Revisa los registros de Home Assistant y actualiza para volver a intentarlo.",
+      "details": "Detalles de la solicitud",
+      "checked": "He comprobado el resultado de la acción",
+      "continue": "Marcar como revisada",
+      "noReplay": "Esto no repite ni deshace la acción. Otras acciones pueden seguir pendientes de revisión.",
+      "saveFailed": "No se pudo guardar la revisión. La acción sigue pendiente de revisión."
     }
   },
   "notification": {
@@ -2235,11 +2257,11 @@
     "not_configured": "El agente de voz de Phoenix MCP no está totalmente configurado.",
     "out_of_steps": "Lo siento, me quedé sin pasos antes de terminar.",
     "output_limit": "Lo siento, el modelo generó demasiada salida, así que me detuve.",
-    "prior_action_unresolved": "Esta nueva solicitud no se ejecutó porque el resultado de una acción anterior sigue sin resolverse. Revisa esa acción en Home Assistant y resuélvela en Ajustes > Sistema > Reparaciones antes de volver a intentarlo.",
+    "prior_action_unresolved": "Esta solicitud no se ejecutó porque una acción anterior necesita revisión. Abre Requiere atención en Phoenix MCP.",
     "provider_error": "Lo siento, {reason}.",
     "token_unavailable": "El token del agente de voz de Phoenix MCP ya no está disponible.",
     "unavailable": "El agente de voz de Phoenix MCP no está disponible en este momento.",
-    "outcome_unknown": "Es posible que se hayan ejecutado acciones. Comprueba Home Assistant y las aprobaciones antes de reintentar. Resuelve las acciones inciertas en Ajustes > Sistema > Reparaciones.",
+    "outcome_unknown": "Esta acción puede haberse ejecutado. Comprueba Home Assistant y su historial de aprobaciones antes de volver a intentarla. Abre Requiere atención en Phoenix MCP.",
     "local_pending": "Esta orden requiere aprobación en el panel de Phoenix MCP.",
     "local_review": "Revisar orden",
     "local_failed": "Phoenix MCP no pudo completar esta orden.",

@@ -391,19 +391,15 @@ async def test_inline_refusal_after_authority_change_does_not_claim_dispatch(lif
     assert not data.agent_recovery.blocks(token.id)
 
 
-@pytest.mark.parametrize("failure", ["save", "issues"])
-async def test_authority_recovery_double_fault_keeps_json_response_and_barrier(lifecycle_http, hass, monkeypatch, failure):
+async def test_authority_recovery_double_fault_keeps_json_response_and_barrier(lifecycle_http, hass):
     client, data, token, raw = lifecycle_http
     effects = []
     async def handler(*args, **kwargs):
         effects.append("started")
         token.settings_version += 1
         check_request_authority()
-    if failure == "save":
-        data.agent_recovery._store = AsyncMock()
-        data.agent_recovery._store.async_save.side_effect = OSError("private-path-disk-full")
-    else:
-        monkeypatch.setattr(data.agent_recovery, "publish_issues", MagicMock(side_effect=ValueError("private-path-issue")))
+    data.agent_recovery._store = AsyncMock()
+    data.agent_recovery._store.async_save.side_effect = OSError("private-path-disk-full")
     with patch.dict(mcp_view._TOOL_HANDLERS, {"call_service": (handler, (), {})}):
         response = await client.post("/api/phoenix-mcp", headers={"Authorization": f"Bearer {raw}"}, json=_write(72))
     assert response.status == 200

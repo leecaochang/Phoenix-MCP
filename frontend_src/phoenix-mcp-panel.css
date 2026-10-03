@@ -1982,6 +1982,8 @@ button.changes-row:hover { background: var(--phx-surface-2); }
 .dash-preview-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--phx-border); }
 .dash-preview-note { font-size: 12px; color: var(--phx-text-2); font-style: italic; padding: 12px; margin: 0; }
 .dash-preview-disclaimer { font-size: 11px; color: var(--phx-text-2); }
+.dash-preview-frame { border: 0; width: 100%; min-width: 0; }
+.dash-preview-source > summary { cursor: pointer; color: var(--phx-text-2); margin-bottom: 8px; }
 .dash-preview-scroll {
   overflow: auto; max-height: 45vh; padding: 10px;
   border: 1px solid var(--phx-border); border-radius: var(--phx-radius-xs); background: var(--phx-surface-2);
@@ -2996,3 +2998,25 @@ button.changes-row:hover { background: var(--phx-surface-2); }
   .conversation-toolbar .input { min-width: 0; flex-basis: 40%; }
   .conversation-toolbar input[type="search"] { flex-basis: 100%; }
 }
+
+/* Recovery stays in Phoenix, with neutral presentation and explicit review. */
+.phx-attention { border: 1px solid var(--phx-border); border-radius: var(--phx-radius-sm); background: var(--phx-surface); margin-block-end: 20px; overflow-wrap: anywhere; }
+.phx-attention-toggle { cursor: pointer; padding: 12px 16px; font: inherit; font-weight: 600; color: var(--phx-text); background: transparent; border: 0; width: 100%; text-align: start; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.phx-attention-chevron { flex-shrink: 0; }
+.phx-attention-toggle[aria-expanded="true"] .phx-attention-chevron { transform: rotate(180deg); }
+.phx-attention-toggle:hover { background: var(--phx-hover); }
+.phx-attention-count { margin-inline-start: 8px; color: var(--phx-text-2); font-variant-numeric: tabular-nums; }
+.phx-attention-body { padding: 0 16px 16px; }
+.phx-attention-refresh { display: flex; align-items: baseline; gap: 16px; justify-content: space-between; }
+.phx-attention p { max-width: 70ch; line-height: 1.5; margin-block: 8px; }
+.phx-attention-item { padding-block: 16px; border-block-start: 1px solid var(--phx-border); }
+.phx-attention-item:last-child { padding-block-end: 0; }
+.phx-attention h3 { font-size: 14px; margin: 0; }
+.phx-attention-meta { color: var(--phx-text-2); font-size: 13px; }
+.phx-attention-details { margin-block: 12px; }
+.phx-attention-details summary { cursor: pointer; color: var(--phx-text-2); }
+.phx-attention-details code { display: block; margin-block-start: 8px; }
+.phx-attention-actions { display: flex; align-items: center; gap: 12px 20px; flex-wrap: wrap; margin-block-start: 16px; }
+.phx-attention-actions label { display: flex; align-items: center; gap: 8px; min-height: 44px; cursor: pointer; }
+.phx-attention-actions input { accent-color: var(--phx-accent); width: 18px; height: 18px; }
+@media (max-width: 600px) { .phx-attention-item > p:not(.phx-attention-meta) { font-size: 16px; } .phx-attention-actions .btn { min-height: 44px; } }

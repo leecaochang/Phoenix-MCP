@@ -211,8 +211,8 @@
         "provider_malformed": "Der Anbieter hat eine fehlerhafte Antwort geliefert. Kein Werkzeug aus dieser Antwort wurde ausgeführt.",
         "provider_incomplete": "Die Anbieterantwort endete vorzeitig. Kein Werkzeug aus dieser Antwort wurde ausgeführt.",
         "provider_blocked": "Der Anbieter hat diese Antwort blockiert. Sie wird nicht erneut angefordert.",
-        "outcome_unknown": "Aktionen könnten ausgeführt worden sein. Prüfen Sie Home Assistant und die Genehmigungen vor einem erneuten Versuch. Klären Sie ungewisse Aktionen unter Einstellungen > System > Reparaturen.",
-        "provider_after_dispatch": "Aktionen könnten ausgeführt worden sein. Prüfen Sie Home Assistant und die Genehmigungen vor einem erneuten Versuch. Klären Sie ungewisse Aktionen unter Einstellungen > System > Reparaturen.",
+        "outcome_unknown": "Diese Aktion wurde möglicherweise ausgeführt. Prüfe Home Assistant und den Genehmigungsverlauf, bevor du sie erneut versuchst.",
+        "provider_after_dispatch": "Diese Aktion wurde möglicherweise ausgeführt. Prüfe Home Assistant und den Genehmigungsverlauf, bevor du sie erneut versuchst.",
         "provider_transient": "Der Anbieter ist vorübergehend nicht verfügbar.",
         "network": "Der Anbieter ist vorübergehend nicht verfügbar.",
         "upstream": "Der Anbieter ist vorübergehend nicht verfügbar.",
@@ -1445,7 +1445,11 @@
       "conversationLimitInvalid": "{field} muss eine ganze Zahl zwischen {min} und {max} sein.",
       "conversationClearConfirm": "Bestätigen Sie das Löschen des Gesprächsverlaufs.",
       "conversationStorageUnavailable": "Der Gesprächsverlauf konnte nicht gespeichert werden. Versuchen Sie es erneut.",
-      "conversationNotFound": "Dieser Gesprächseintrag ist nicht mehr verfügbar."
+      "conversationNotFound": "Dieser Gesprächseintrag ist nicht mehr verfügbar.",
+      "attentionCheckRequired": "Prüfe das Ergebnis der Aktion, bevor du fortfährst.",
+      "attentionNotReviewable": "Dieser Eintrag kann nicht bestätigt werden.",
+      "attentionSaveFailed": "Die Prüfung konnte nicht gespeichert werden. Die Aktion muss weiterhin geprüft werden.",
+      "attentionReviewConflict": "Diese Aktion läuft oder wurde bereits geprüft. Aktualisiere die Liste."
     },
     "approvalSummary": {
       "action.approve": "Genehmigen und ausführen",
@@ -2219,6 +2223,24 @@
         "one": "{count} Änderung",
         "other": "{count} Änderungen"
       }
+    },
+    "attention": {
+      "title": "Handlungsbedarf",
+      "intro": "Prüfe diese Aktionen, bevor du sie erneut versuchst.",
+      "empty": "Kein Handlungsbedarf.",
+      "loadFailed": "Einträge konnten nicht geladen werden. Aktualisiere die Liste und versuche es erneut.",
+      "actionTitle": "Eine frühere Aktion prüfen",
+      "received": "Home Assistant hat ein Ergebnis zurückgegeben, aber das Gespräch endete vor der Bestätigung. Prüfe die Aktion und ihren Genehmigungsverlauf, bevor du fortfährst.",
+      "unknown": "Diese Aktion wurde möglicherweise ausgeführt. Prüfe Home Assistant und den Genehmigungsverlauf, bevor du sie erneut versuchst.",
+      "mesaTitle": "MESA konnte nicht starten",
+      "mesaHelp": "Bei aktiviertem MESA sind geschützte Änderungen pausiert. Prüfe die Home Assistant-Protokolle und lade Phoenix MCP unter Integrationen neu.",
+      "calendar_storageTitle": "Kalenderverlauf konnte nicht gelesen werden",
+      "calendar_storageHelp": "Kalenderschreibvorgänge sind pausiert, bis der gespeicherte Verlauf gelesen werden kann. Prüfe die Home Assistant-Protokolle und aktualisiere die Liste.",
+      "details": "Anfragedetails",
+      "checked": "Ich habe das Ergebnis der Aktion geprüft",
+      "continue": "Als geprüft markieren",
+      "noReplay": "Die Aktion wird weder wiederholt noch rückgängig gemacht. Andere Aktionen müssen möglicherweise noch geprüft werden.",
+      "saveFailed": "Die Prüfung konnte nicht gespeichert werden. Die Aktion muss weiterhin geprüft werden."
     }
   },
   "notification": {
@@ -2235,11 +2257,11 @@
     "not_configured": "Der Phoenix-MCP-Sprachassistent ist nicht vollständig konfiguriert.",
     "out_of_steps": "Entschuldigung, mir sind die Schritte ausgegangen, bevor ich fertig war.",
     "output_limit": "Entschuldigung, das Modell hat zu viel Ausgabe erzeugt, daher habe ich aufgehört.",
-    "prior_action_unresolved": "Diese neue Anfrage wurde nicht ausgeführt, weil das Ergebnis einer früheren Aktion noch ungeklärt ist. Prüfen Sie die frühere Aktion in Home Assistant und klären Sie sie unter Einstellungen > System > Reparaturen, bevor Sie es erneut versuchen.",
+    "prior_action_unresolved": "Diese Anfrage wurde nicht ausgeführt, weil eine frühere Aktion geprüft werden muss. Öffne Handlungsbedarf in Phoenix MCP.",
     "provider_error": "Entschuldigung, {reason}.",
     "token_unavailable": "Das Token des Phoenix-MCP-Sprachassistenten ist nicht mehr verfügbar.",
     "unavailable": "Der Phoenix-MCP-Sprachassistent ist derzeit nicht verfügbar.",
-    "outcome_unknown": "Aktionen könnten ausgeführt worden sein. Prüfen Sie Home Assistant und die Genehmigungen vor einem erneuten Versuch. Klären Sie ungewisse Aktionen unter Einstellungen > System > Reparaturen.",
+    "outcome_unknown": "Diese Aktion wurde möglicherweise ausgeführt. Prüfe Home Assistant und den Genehmigungsverlauf, bevor du sie erneut versuchst. Öffne Handlungsbedarf in Phoenix MCP.",
     "local_pending": "Dieser Befehl benötigt eine Genehmigung im Phoenix MCP-Panel.",
     "local_review": "Befehl prüfen",
     "local_failed": "Phoenix MCP konnte diesen Befehl nicht abschließen.",

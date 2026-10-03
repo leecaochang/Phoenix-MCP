@@ -762,7 +762,7 @@ def evaluate_registry_action(
         return RegistryMesaDecision(
             decision="deny",
             rule="mesa:runtime_unavailable",
-            reason="MESA is configured but unavailable. Reload Phoenix MCP after resolving the Repairs issue.",
+            reason="MESA is configured but unavailable. Reload Phoenix MCP after checking Needs attention in the Phoenix panel.",
         )
 
     explanation = runtime.resolver.explain(entity_id)
@@ -1109,7 +1109,7 @@ async def async_apply_mesa_to_call(
     if settings.mesa_mode == MESA_MODE_OFF:
         return MesaGateOutcome(decision="allow", entities=list(entities))
     if runtime is None:
-        reason = "MESA is configured but unavailable. Reload Phoenix MCP after resolving the Repairs issue."
+        reason = "MESA is configured but unavailable. Reload Phoenix MCP after checking Needs attention in the Phoenix panel."
         return MesaGateOutcome(
             decision="deny",
             blocked=[(entity_id, "mesa:runtime_unavailable", reason) for entity_id in entities],

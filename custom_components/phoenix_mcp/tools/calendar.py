@@ -87,19 +87,6 @@ class CalendarWriteJournal:
         await self.store.async_save({"records": self.records})
 
 
-    def publish_issues(self) -> None:
-        """Expose unresolved receipts through HA's existing administrator Repair flow."""
-        from homeassistant.helpers import issue_registry as ir
-        for row in self.records or []:
-            rid = row.get("receipt_id")
-            if row.get("status") != "outcome_unknown" or not isinstance(rid, str) or rid in self.active:
-                continue
-            operation = row.get("operation")
-            tool = f"{operation}_calendar_event" if operation in ("create", "update", "delete") else "calendar_write"
-            ir.async_create_issue(self.hass, DOMAIN, f"calendar_recovery_{rid}", is_fixable=True,
-                severity=ir.IssueSeverity.ERROR, translation_key="agent_recovery",
-                translation_placeholders={"tool": tool, "request_id": rid}, data={"calendar_receipt_id": rid})
-
     async def reviewed(self, rid: str) -> bool:
         """Acknowledge manual reconciliation without replay, rollback, or eviction."""
         if rid in self.active:
@@ -441,10 +428,6 @@ async def _execute_calendar_write(args: dict, token: TokenRecord, hass: HomeAssi
                 except Exception:
                     receipt["status"] = "outcome_unknown"
                     _LOGGER.error("Could not persist the undispatched calendar receipt")
-                try:
-                    journal.publish_issues()
-                except Exception:
-                    _LOGGER.error("Could not publish calendar recovery issues")
         journal.active.add(receipt["receipt_id"])
         try:
             async with asyncio.timeout(CALENDAR_TIMEOUT_SECONDS):
@@ -483,7 +466,6 @@ async def _execute_calendar_write(args: dict, token: TokenRecord, hass: HomeAssi
             return _calendar_result(receipt, token, hass, error=True)
         finally:
             journal.active.discard(receipt["receipt_id"])
-            journal.publish_issues()
         return _calendar_result(receipt, token, hass)
 
 

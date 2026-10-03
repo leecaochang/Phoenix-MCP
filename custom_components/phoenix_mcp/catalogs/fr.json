@@ -1450,8 +1450,8 @@
         "provider_malformed": "Le fournisseur a renvoyé une réponse mal formée. Aucun outil de cette réponse n’a été exécuté.",
         "provider_incomplete": "La réponse du fournisseur s’est terminée prématurément. Aucun outil de cette réponse n’a été exécuté.",
         "provider_blocked": "Le fournisseur a bloqué cette réponse. Aucun nouvel essai ne sera effectué.",
-        "outcome_unknown": "Des actions peuvent avoir été exécutées. Vérifiez Home Assistant et les approbations avant de réessayer. Résolvez les actions incertaines dans Paramètres > Système > Réparations.",
-        "provider_after_dispatch": "Des actions peuvent avoir été exécutées. Vérifiez Home Assistant et les approbations avant de réessayer. Résolvez les actions incertaines dans Paramètres > Système > Réparations.",
+        "outcome_unknown": "Cette action a peut-être été exécutée. Vérifiez Home Assistant et son historique d’approbation avant de réessayer.",
+        "provider_after_dispatch": "Cette action a peut-être été exécutée. Vérifiez Home Assistant et son historique d’approbation avant de réessayer.",
         "provider_transient": "Le fournisseur est temporairement indisponible.",
         "network": "Le fournisseur est temporairement indisponible.",
         "upstream": "Le fournisseur est temporairement indisponible.",
@@ -1734,7 +1734,11 @@
       "conversationLimitInvalid": "{field} doit être un entier compris entre {min} et {max}.",
       "conversationClearConfirm": "Confirmez l’effacement de l’historique des conversations.",
       "conversationStorageUnavailable": "Impossible de sauvegarder l’historique. Réessayez.",
-      "conversationNotFound": "Cette entrée de conversation n’est plus disponible."
+      "conversationNotFound": "Cette entrée de conversation n’est plus disponible.",
+      "attentionCheckRequired": "Vérifiez le résultat de l’action avant de continuer.",
+      "attentionNotReviewable": "Cet élément ne peut pas être confirmé.",
+      "attentionSaveFailed": "La vérification n’a pas pu être enregistrée. L’action reste à vérifier.",
+      "attentionReviewConflict": "Cette action est en cours ou a déjà été vérifiée. Actualisez la liste."
     },
     "mesaSuggestion": {
       "baseline_note": " Interdit correspond à la ligne de base intégrée pour ce domaine, le profil créé rend donc cette intention explicite ; choisissez Confirmer dans Révision pour autoriser plutôt le contrôle de l'agent derrière les approbations.",
@@ -2219,6 +2223,24 @@
         "one": "{count} modification",
         "other": "{count} modifications"
       }
+    },
+    "attention": {
+      "title": "À vérifier",
+      "intro": "Vérifiez ces actions avant de les réessayer.",
+      "empty": "Aucun élément à vérifier.",
+      "loadFailed": "Impossible de charger les éléments à vérifier. Actualisez pour réessayer.",
+      "actionTitle": "Vérifier une action précédente",
+      "received": "Home Assistant a renvoyé un résultat, mais la conversation s’est terminée avant la confirmation. Vérifiez l’action et son historique d’approbation avant de continuer.",
+      "unknown": "Cette action a peut-être été exécutée. Vérifiez Home Assistant et son historique d’approbation avant de réessayer.",
+      "mesaTitle": "MESA n’a pas pu démarrer",
+      "mesaHelp": "Lorsque MESA est activé, les modifications protégées sont suspendues. Consultez les journaux Home Assistant, puis rechargez Phoenix MCP depuis Intégrations.",
+      "calendar_storageTitle": "Impossible de lire l’historique du calendrier",
+      "calendar_storageHelp": "Les écritures du calendrier sont suspendues tant que l’historique enregistré ne peut pas être lu. Consultez les journaux Home Assistant et actualisez pour réessayer.",
+      "details": "Détails de la demande",
+      "checked": "J’ai vérifié le résultat de l’action",
+      "continue": "Marquer comme vérifiée",
+      "noReplay": "Cela ne répète ni n’annule l’action. D’autres actions peuvent encore nécessiter une vérification.",
+      "saveFailed": "La vérification n’a pas pu être enregistrée. L’action reste à vérifier."
     }
   },
   "notification": {
@@ -2235,11 +2257,11 @@
     "not_configured": "L'agent vocal Phoenix MCP n'est pas entièrement configuré.",
     "out_of_steps": "Désolé, je n'ai pas eu assez d'étapes pour terminer.",
     "output_limit": "Désolé, le modèle a produit trop de contenu en sortie, je me suis donc arrêté.",
-    "prior_action_unresolved": "Cette nouvelle demande n’a pas été exécutée car le résultat d’une action précédente reste incertain. Vérifiez cette action dans Home Assistant et résolvez le problème dans Paramètres > Système > Réparations avant de réessayer.",
+    "prior_action_unresolved": "Cette demande n’a pas été exécutée car une action précédente doit être vérifiée. Ouvrez À vérifier dans Phoenix MCP.",
     "provider_error": "Désolé, {reason}.",
     "token_unavailable": "Le jeton de l'agent vocal Phoenix MCP n'est plus disponible.",
     "unavailable": "L'agent vocal Phoenix MCP est actuellement indisponible.",
-    "outcome_unknown": "Des actions peuvent avoir été exécutées. Vérifiez Home Assistant et les approbations avant de réessayer. Résolvez les actions incertaines dans Paramètres > Système > Réparations.",
+    "outcome_unknown": "Cette action a peut-être été exécutée. Vérifiez Home Assistant et son historique d’approbation avant de réessayer. Ouvrez À vérifier dans Phoenix MCP.",
     "local_pending": "Cette commande nécessite une approbation dans le panneau Phoenix MCP.",
     "local_review": "Examiner la commande",
     "local_failed": "Phoenix MCP n’a pas pu terminer cette commande.",

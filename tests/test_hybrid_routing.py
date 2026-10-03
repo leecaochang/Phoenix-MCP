@@ -273,7 +273,7 @@ async def test_uncertain_effect_blocks_replay_and_next_write(hass, hybrid_home):
           patch.object(type(hass.services), "async_call", AsyncMock(side_effect=TimeoutError)) as call):
         first, _, provider = await run_voice(hass, hybrid_home)
         second, _, fallback = await run_voice(hass, hybrid_home)
-    assert "Actions may have run" in first and "Actions may have run" in second
+    assert "This action may have run" in first and "This action may have run" in second
     assert data.agent_recovery.blocks(token.id)
     call.assert_awaited_once()
     provider.assert_not_called()
