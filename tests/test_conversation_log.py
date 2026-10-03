@@ -692,3 +692,117 @@ async def test_sanitized_stream_overflow_cannot_reuse_earlier_narration(conversa
     assert entry["response"] is None
     assert entry["response_status"] == "size_limit"
     assert entry["field_omissions"]["response"] == "size_limit"
+
+
+@pytest.mark.parametrize("raw", [
+    '{"entity_id":"sensor.battery",}',
+    '{"entity_id":"sensor.battery"',
+    '{not json',
+])
+def test_rejected_argument_text_keeps_broken_syntax(raw):
+    assert history._scrub_argument_text(raw, hide_ip=False) == raw
+
+
+@pytest.mark.parametrize("raw", [
+    '{"password":"canary secret with spaces',
+    '{"pass\\u0077ord":"canary secret",}',
+    '{"code":"canary code",}',
+    '{"_private":"canary internals",}',
+    '{"blob":"canary media",}',
+    '{"message":"password is canary",}',
+])
+def test_rejected_argument_text_scrubs_complete_and_incomplete_secrets(raw):
+    clean = history._scrub_argument_text(raw, hide_ip=False)
+    assert "canary" not in clean
+    assert "<redacted>" in clean
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["chatgpt", "claude"])
+@pytest.mark.parametrize("arguments,reason", [
+    ('{"entity_id":"sensor.battery","password":"canary secret",}', "not valid JSON"),
+    ('[]', "must be a JSON object"),
+])
+async def test_provider_rejected_calls_reach_history_not_client_diagnostics(conversation_data, kind, arguments, reason):
+    from custom_components.phoenix_mcp import agentcli
+    data, token = conversation_data
+    if kind == "claude":
+        frames = [
+            {"type": "content_block_start", "index": 0, "content_block": {"type": "text"}},
+            {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Let me check."}},
+            {"type": "content_block_stop", "index": 0},
+            {"type": "content_block_start", "index": 1, "content_block": {"type": "tool_use", "id": "call-one", "name": "get_state"}},
+            {"type": "content_block_delta", "index": 1, "delta": {"type": "input_json_delta", "partial_json": arguments}},
+            {"type": "content_block_stop", "index": 1},
+            {"type": "message_delta", "delta": {"stop_reason": "tool_use"}},
+            {"type": "message_stop"},
+        ]
+        provider = agentcli.ClaudeProvider(agentcli.ProviderConfig(kind, "model", "https://provider.invalid", "canary-key"))
+    else:
+        frames = [
+            {"choices": [{"delta": {"content": "Let me check.", "reasoning_content": "canary thought"}}]},
+            {"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "call-one", "function": {"name": "get_state", "arguments": arguments}}]}}]},
+            {"choices": [{"delta": {}, "finish_reason": "tool_calls"}]},
+        ]
+        provider = agentcli.OpenAICompatProvider(agentcli.ProviderConfig(kind, "model", "https://provider.invalid", "canary-key"))
+    body = "\n\n".join("data: " + json.dumps(frame) for frame in frames).encode()
+
+    async def chunks(_size):
+        for offset in range(0, len(body), 19):
+            yield body[offset:offset + 19]
+
+    response = MagicMock(status=200, headers={})
+    response.content.iter_chunked = chunks
+    response.__aenter__ = AsyncMock(return_value=response)
+    session = MagicMock()
+    session.post.return_value = response
+    emit = AsyncMock()
+
+    @history.recorded_chat
+    async def chat(**kwargs):
+        return await agentcli._consume_model_stream(provider, session, system="canary system prompt", messages=[],
+            tools=[], options={}, cancel=asyncio.Event(), emit=kwargs["emit"],
+            usage_done_input=0, usage_done_output=0, context_tokens=0)
+
+    result = await chat(data=data, token=token, messages=[{"role": "user", "content": "Graph the battery"}], emit=emit)
+    assert result.errored and not result.tool_calls
+    entry = only(data.conversations)
+    assert entry["status"] == "failed" and entry["tool_count"] == 0 and entry["execution_status"] == "no_tools"
+    rejection = next(e["payload"] for e in entry["events"] if isinstance(e["payload"], dict) and e["payload"].get("code") == "tool_call_rejected")
+    assert reason in rejection["message"]
+    assert rejection["name"] == "get_state" and rejection["call_id"] == "call-one"
+    assert rejection["executed"] is False
+    assert rejection["arguments"] == history.sanitized(arguments, max_bytes=10000)
+    if reason == "not valid JSON":
+        assert rejection["validation"]["line"] == 1 and rejection["validation"]["column"] > 1
+    kinds = [e["kind"] for e in entry["events"]]
+    assert kinds.index("assistant_text") < kinds.index("error")
+    assert next(e["payload"] for e in entry["events"] if e["kind"] == "assistant_text") == "Let me check."
+    assert "canary" not in json.dumps(entry)
+    assert "arguments" not in json.dumps(emit.call_args_list, default=str)
+
+
+@pytest.mark.asyncio
+async def test_rejected_call_recording_obeys_privacy_limits_and_failures(conversation_data, monkeypatch):
+    data, _ = conversation_data
+    log = history.recorder(data)
+    handle = log.begin("agentcli", prompt="test")
+    context = history._current.set(handle)
+    try:
+        data.store.get_settings().log_entity_names = False
+        history.record_rejected_tool("id", "get_state", 'secret content', reason="Invalid JSON.")
+        assert log.entry(handle)["events"][-1]["payload"] is None
+        data.store.get_settings().log_entity_names = True
+        history.record_rejected_tool("id", "get_state", '{"entity_id":"\\q"}', reason="Invalid JSON.")
+        payload = log.entry(handle)["events"][-1]["payload"]
+        assert payload["arguments"] is None and payload["arguments_omission"]
+        monkeypatch.setattr(history, "CONVERSATION_LOG_SCAN_BYTES", 50)
+        history.record_rejected_tool("id", "get_state", 'x' * 100, reason="Invalid JSON.")
+        assert "x" * 100 not in json.dumps(log.entry(handle))
+        monkeypatch.setattr(log, "event", MagicMock(side_effect=RuntimeError("canary")))
+        history.record_rejected_tool("id", "get_state", '{}', reason="Invalid JSON.")
+        await log.async_clear()
+        history.record_rejected_tool("id", "get_state", '{}', reason="Invalid JSON.")
+        assert not log.query()["entries"]
+    finally:
+        history._current.reset(context)

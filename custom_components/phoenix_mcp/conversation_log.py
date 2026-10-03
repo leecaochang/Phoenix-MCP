@@ -889,6 +889,77 @@ def record_current(kind: str, payload: Any = None) -> None:
         handle[0].event(handle, kind, payload)
 
 
+def _scrub_argument_text(raw: str, *, hide_ip: bool) -> str:
+    """Scrub JSON string tokens even when the surrounding arguments are invalid."""
+    if len(raw.encode("utf-8")) > CONVERSATION_LOG_SCAN_BYTES:
+        raise ValueError("payload budget")
+    decoder = json.JSONDecoder()
+    pieces: list[str] = []
+    cursor = 0
+    for count, match in enumerate(re.finditer(r'"(?:\\.|[^"\\])*(?:"|\Z)', raw)):
+        if count >= CONVERSATION_LOG_MAX_NODES:
+            raise ValueError("payload budget")
+        if match.start() < cursor:
+            continue
+        token = match[0]
+        # A broken escape cannot be decoded safely. Omit the argument payload.
+        decoded = json.loads(token if token.endswith('"') and len(token) > 1 else token + '"')
+        end = match.end()
+        colon = end
+        while colon < len(raw) and raw[colon].isspace():
+            colon += 1
+        if colon < len(raw) and raw[colon] == ":" and (sensitive_key(decoded, service=True)
+                                                       or decoded.startswith("_") or decoded in {"blob", "base64"}):
+            start = colon + 1
+            while start < len(raw) and raw[start].isspace():
+                start += 1
+            try:
+                _, end = decoder.raw_decode(raw, start)
+            except ValueError:
+                # Incomplete secret values can contain spaces or punctuation.
+                end = len(raw)
+            pieces.extend((raw[cursor:match.start()], token, raw[match.end():start], '"<redacted>"'))
+        else:
+            clean = sanitized(decoded, max_bytes=CONVERSATION_LOG_SCAN_BYTES, hide_ip=hide_ip)
+            pieces.extend((raw[cursor:match.start()], token if clean == decoded else json.dumps(clean, ensure_ascii=False)))
+        cursor = end
+    pieces.append(raw[cursor:])
+    return sanitized("".join(pieces), max_bytes=CONVERSATION_LOG_SCAN_BYTES, hide_ip=hide_ip)
+
+
+def record_rejected_tool(call_id: Any, name: Any, arguments: Any, *, reason: str,
+                         finish_reason: Any = None, error: json.JSONDecodeError | None = None) -> None:
+    """Keep rejected proposals in admin history, never in provider/SSE diagnostics."""
+    try:
+        handle = _current.get()
+        if handle is None or handle[0].entry(handle) is None:
+            return
+        log = handle[0]
+        payload = {
+            "code": "tool_call_rejected", "message": "Tool call rejected before execution. " + reason,
+            "name": name, "call_id": call_id, "executed": False,
+            "stage": "provider_validation", "finish_reason": finish_reason,
+        }
+        if error is not None:
+            # Positions refer to received text; redaction can change its length.
+            payload["validation"] = {"reason": error.msg, "line": error.lineno,
+                                     "column": error.colno, "character": error.pos}
+        if log._settings.log_entity_names:
+            try:
+                if isinstance(arguments, str):
+                    arguments = _scrub_argument_text(arguments, hide_ip=not log._settings.log_client_ip)
+                else:
+                    arguments = sanitized({"service_data": arguments}, max_bytes=CONVERSATION_LOG_SCAN_BYTES,
+                                          hide_ip=not log._settings.log_client_ip)["service_data"]
+            except Exception:
+                arguments = None
+                payload["arguments_omission"] = "Arguments could not be safely sanitized within recording limits."
+        payload["arguments"] = arguments
+        log.event(handle, "error", payload)
+    except Exception:
+        _LOGGER.warning("Rejected tool evidence omitted")
+
+
 @contextmanager
 def transport_session(session_id: Any):
     """Retain only a one-way session reference, never its bearer-like identifier."""

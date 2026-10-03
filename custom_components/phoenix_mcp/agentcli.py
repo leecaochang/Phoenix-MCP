@@ -39,6 +39,7 @@ from urllib.parse import urlparse, urlunparse
 from aiohttp import ClientError, ClientSession, ClientTimeout, web
 
 from .routing_statistics import tracked_turn, provider_events, voice_result, untracked_turn
+from .conversation_log import record_rejected_tool
 
 from .view_base import PhoenixView
 from homeassistant.core import HomeAssistant, callback
@@ -991,6 +992,16 @@ def _valid_tool_call(call_id: Any, name: Any, arguments: Any) -> bool:
     )
 
 
+def _tool_call_problem(call_id: Any, name: Any, arguments: Any) -> str:
+    """Explain the same structural checks without echoing model content."""
+    if not isinstance(call_id, str) or not 0 < len(call_id) <= 256:
+        return "The tool call ID is missing or invalid."
+    if (not isinstance(name, str) or not 0 < len(name) <= MAX_TOOL_NAME_LENGTH
+            or re.fullmatch(r"[A-Za-z0-9_.:-]+", name) is None):
+        return "The tool name is missing or invalid."
+    return "Tool arguments must be a JSON object."
+
+
 class _ThinkSplitter:
     """Split a streamed content string into ("text"|"think", segment) pieces.
 
@@ -1278,6 +1289,8 @@ class ClaudeProvider:
                 if cb.get("type") == "tool_use":
                     initial_input = cb.get("input", {})
                     if not isinstance(initial_input, dict):
+                        record_rejected_tool(cb.get("id"), cb.get("name"), initial_input,
+                                             reason="Tool arguments must be a JSON object.")
                         raise _ProviderResponseError()
                     blocks[idx] = {"type": "tool_use", "id": cb.get("id"), "name": cb.get("name"), "input": {}}
                     tool_json[idx] = json.dumps(initial_input) if initial_input else ""
@@ -1335,6 +1348,11 @@ class ClaudeProvider:
             elif etype == "error":
                 raise _ProviderResponseError("provider_blocked", retryable=False)
         if not saw_stop or not saw_reason or open_blocks:
+            for idx, block in blocks.items():
+                if block.get("type") == "tool_use":
+                    record_rejected_tool(block.get("id"), block.get("name"), tool_json.get(idx, ""),
+                                         reason="The provider response ended before the tool call was complete.",
+                                         finish_reason=stop_reason if saw_reason else None)
             raise _ProviderResponseError("provider_incomplete", retryable=stop_reason != "max_tokens")
         if stop_reason in ("refusal", "content_filter"):
             raise _ProviderResponseError("provider_blocked", retryable=False)
@@ -1345,11 +1363,23 @@ class ClaudeProvider:
         if parsed_tools and stop_reason != "tool_use":
             raise _ProviderResponseError("provider_incomplete", retryable=stop_reason != "max_tokens")
         for tool in parsed_tools:
-            tool["input"] = json.loads(tool["input"])
+            raw_arguments = tool["input"]
+            try:
+                tool["input"] = json.loads(raw_arguments)
+            except json.JSONDecodeError as exc:
+                record_rejected_tool(tool["id"], tool["name"], raw_arguments,
+                                     reason="Tool arguments are not valid JSON.", finish_reason=stop_reason, error=exc)
+                raise
             if not _valid_tool_call(tool["id"], tool["name"], tool["input"]):
+                record_rejected_tool(tool["id"], tool["name"], raw_arguments,
+                                     reason=_tool_call_problem(tool["id"], tool["name"], tool["input"]),
+                                     finish_reason=stop_reason)
                 raise _ProviderResponseError()
             blocks[tool.pop("_block_index")]["input"] = tool["input"]
         if len({tool["id"] for tool in parsed_tools}) != len(parsed_tools):
+            for tool in parsed_tools:
+                record_rejected_tool(tool["id"], tool["name"], tool["input"],
+                                     reason="The response contains duplicate tool call IDs.", finish_reason=stop_reason)
             raise _ProviderResponseError()
         for tool in parsed_tools:
             yield tool
@@ -2250,6 +2280,8 @@ class OpenAICompatProvider:
                     slot["name"] = fn["name"]
                 if "arguments" in fn:
                     if not isinstance(fn["arguments"], str):
+                        record_rejected_tool(slot["id"], slot["name"], fn["arguments"],
+                                             reason="The provider must send tool arguments as JSON text.")
                         raise _ProviderResponseError()
                     slot["args"] += fn["arguments"]
             if choice.get("finish_reason"):
@@ -2272,12 +2304,18 @@ class OpenAICompatProvider:
             try:
                 parsed = json.loads(args_str)
                 if not _valid_tool_call(slot["id"], slot["name"], parsed):
+                    record_rejected_tool(slot["id"], slot["name"], slot["args"],
+                                         reason=_tool_call_problem(slot["id"], slot["name"], parsed),
+                                         finish_reason=finish if saw_finish else None)
                     raise _ProviderResponseError(retryable=finish != "length")
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as exc:
                 bad = True
                 parsed = None
-                # Content is deliberately not logged (tool args can carry
-                # sensitive values); name/size/finish is what diagnosis needs.
+                reason = ("The output length limit interrupted the tool arguments." if finish == "length"
+                          else "The stream ended before the tool arguments were complete." if not saw_finish
+                          else "Tool arguments are not valid JSON.")
+                record_rejected_tool(slot["id"], slot["name"], slot["args"], reason=reason,
+                                     finish_reason=finish if saw_finish else None, error=exc)
             assistant_tool_calls.append({
                 "id": slot["id"], "type": "function",
                 "function": {"name": slot["name"], "arguments": args_str},
@@ -2339,6 +2377,9 @@ class OpenAICompatProvider:
                         message=message, retryable=retryable, diagnostic={'category': code})
             return
         if not saw_finish:
+            for slot in calls.values():
+                record_rejected_tool(slot["id"], slot["name"], slot["args"],
+                                     reason="The provider response ended before the tool call was complete.")
             raise _ProviderResponseError("provider_incomplete")
         if finish not in ("stop", "tool_calls", "length"):
             raise _ProviderResponseError()
@@ -2347,6 +2388,9 @@ class OpenAICompatProvider:
         if parsed_tools and finish != "tool_calls":
             raise _ProviderResponseError("provider_incomplete", retryable=finish != "length")
         if len({tool["id"] for tool in parsed_tools}) != len(parsed_tools):
+            for tool in parsed_tools:
+                record_rejected_tool(tool["id"], tool["name"], tool["input"],
+                                     reason="The response contains duplicate tool call IDs.", finish_reason=finish)
             raise _ProviderResponseError()
         for tool_call in parsed_tools:
             yield _norm(EV_TOOL, id=tool_call["id"], name=tool_call["name"],
