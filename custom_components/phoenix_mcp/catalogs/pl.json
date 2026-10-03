@@ -2177,22 +2177,22 @@
     },
     "conversations": {
       "title": "Dziennik rozmów",
-      "description": "Sprawdź, co Phoenix otrzymał, próbował wykonać, zmienił i zwrócił.",
+      "description": "Czytelny zapis pytań, działań Phoenix i odpowiedzi.",
       "unknown": "Nieznane",
       "fullText": "Pokaż pełny tekst ({count} znaków)",
       "copied": "Skopiowano",
       "copyFailed": "Kopiowanie nie powiodło się. Zaznacz tekst, aby go skopiować.",
       "copy": "Kopiuj tekst",
       "parameters": "Parametry",
-      "changeEvidence": "Treść przed zmianą i po niej oraz dostępne szczegóły",
-      "details": "Pełne zapisane dane",
-      "payloadUnavailable": "Te dane nie zostały zachowane.",
+      "changeEvidence": "Przed i po",
+      "details": "Surowe dane",
+      "payloadUnavailable": "Szczegóły nie zostały zapisane.",
       "detailFailed": "Nie można wczytać wpisu. Mógł wygasnąć lub zostać usunięty.",
       "retry": "Spróbuj ponownie",
-      "prompt": "Twoje polecenie",
+      "prompt": "Wiadomość",
       "activity": "Aktywność",
       "response": "Odpowiedź",
-      "promptUnavailable": "Oryginalne polecenie nie było dostępne dla Phoenix lub zostało pominięte ze względu na prywatność.",
+      "promptUnavailable": "Phoenix nie otrzymał użytecznej wiadomości dla tej tury.",
       "noActivity": "Nie zapisano aktywności narzędzi.",
       "responseUnavailable": "Odpowiedź końcowa nie była dostępna dla Phoenix lub nie została zachowana. Wyniki narzędzi znajdują się w sekcji Aktywność.",
       "technical": "Szczegóły techniczne",
@@ -2200,7 +2200,7 @@
       "clearFailed": "Nie można usunąć historii z pamięci. Spróbuj ponownie.",
       "recording": "Rejestrowanie włączone",
       "recordingOff": "Rejestrowanie wyłączone",
-      "disabledHelp": "Włącz dziennik rozmów w ustawieniach, aby zapisywać nową aktywność. Istniejąca historia nadal podlega limitom przechowywania.",
+      "disabledHelp": "Rejestrowanie jest wyłączone. Włącz je w Ustawieniach, aby zapisywać nowe rozmowy. Istniejące wpisy nadal podlegają limitom przechowywania.",
       "storageUnavailable": "Pamięć historii jest niedostępna. Ostatnia aktywność może zostać utracona po ponownym uruchomieniu.",
       "search": "Szukaj w zapisanym tekście",
       "sourceFilter": "Filtruj według źródła",
@@ -2215,15 +2215,14 @@
       "empty": "Brak rozmów do wyświetlenia",
       "emptyHelp": "Nowa zarejestrowana aktywność pojawi się tutaj. Zmień filtry, jeśli oczekiwano wpisu.",
       "toolExchange": "Wymiana z narzędziem; polecenie niedostępne",
-      "counts": "Wywołania narzędzi: {tools} · Zmiany: {changes}",
-      "execution": "Wykonanie: {outcome}",
+      "execution": "Narzędzia: {outcome}",
       "showing": "Wyświetlono {shown} z {total}",
       "clear": "Wyczyść historię rozmów",
-      "clearConfirm": "Wyczyścić całą historię? Rejestrowanie aktywnych wpisów zostanie zatrzymane. Istniejące kopie zapasowe Home Assistant pozostaną bez zmian.",
+      "clearConfirm": "Usunąć całą historię rozmów? Tej operacji nie można cofnąć. Trwające rozmowy przestaną być rejestrowane. Kopie w istniejących kopiach zapasowych pozostaną bez zmian.",
       "enable": "Rejestruj rozmowy",
       "enableHelp": "Zachowuj oczyszczone polecenia, aktywność narzędzi, zmiany i odpowiedzi obserwowane przez Phoenix.",
-      "retentionHelp": "Po osiągnięciu dowolnego limitu usuwane są najstarsze całe wpisy. Historia przetrwa ponowne uruchomienie; nagłe wyłączenie może spowodować utratę ostatniej aktywności.",
-      "privacyHelp": "Sekrety są filtrowane przed zapisem, ale nie można zagwarantować ich braku w dowolnym tekście. Obrazy i załączniki binarne nie są zapisywane. Wyłączenie rejestrowania nazw encji powoduje pomijanie treści rozmów.",
+      "retentionHelp": "Po osiągnięciu dowolnego limitu najpierw usuwane są najstarsze wpisy. Duże treści są skracane. Nagłe wyłączenie może spowodować utratę około 30 sekund ostatniej aktywności.",
+      "privacyHelp": "Historia jest zapisywana w Home Assistant i uwzględniana w jego kopiach zapasowych. Gdy rejestrowanie jest włączone, zapisywane są też polecenia głosowe domowników. Automatyczne maskowanie nie wykrywa wszystkich sekretów w dowolnym tekście. Media binarne są pomijane. Wyłączenie zapisywania nazw encji powoduje pomijanie treści rozmów.",
       "limit": {
         "entries": "Maksymalna liczba wpisów",
         "days": "Maksymalny wiek (dni)",
@@ -2231,9 +2230,9 @@
       },
       "source": {
         "agentcli": "Czat agenta",
-        "voice": "Głos Phoenix",
+        "voice": "Agent głosowy",
         "ai_task": "Zadanie AI",
-        "assist": "Most Assist",
+        "assist": "Dostawca narzędzi Assist",
         "mcp": "Zewnętrzny klient MCP",
         "home_companion": "Towarzysz domu"
       },
@@ -2252,7 +2251,8 @@
         "turn_outcome": "Wynik tury",
         "error": "Zgłoszono problem",
         "notice": "Powiadomienie",
-        "continue_required": "Wstrzymano do kontynuacji"
+        "continue_required": "Wstrzymano do kontynuacji",
+        "assistant_text": "Wyjaśnienie asystenta"
       },
       "outcome": {
         "completed": "Zakończono",
@@ -2276,7 +2276,7 @@
         "approved": "Zatwierdzono"
       },
       "responseStatus": {
-        "produced": "Phoenix wygenerował tę odpowiedź. Dostarczenie jej użytkownikowi nie jest potwierdzone.",
+        "produced": "Odpowiedź wygenerowana",
         "unavailable": "Odpowiedź końcowa niedostępna",
         "client_unavailable": "Klient zewnętrzny nie przekazał odpowiedzi końcowej.",
         "failed": "Odpowiedź nie powiodła się lub jest niepełna.",
@@ -2288,7 +2288,7 @@
       "omission": {
         "privacy": "Treść pominięto, ponieważ rejestrowanie nazw encji jest wyłączone.",
         "sanitization": "Niektórych treści nie można było bezpiecznie oczyścić, więc zostały pominięte.",
-        "size_limit": "Osiągnięto limit pamięci. Niektóre dane nie zostały zachowane."
+        "size_limit": "Niektóre szczegóły skrócono lub pominięto, aby zachować limity rejestrowania."
       },
       "operation": {
         "state": "Odczyt stanu encji",
@@ -2298,12 +2298,32 @@
         "search": "Wyszukano dostępne zasoby",
         "delegate": "Zażądano delegowanej pomocy"
       },
-      "groupingUnavailable": "Nie podano wiarygodnej granicy tury użytkownika. Wspólna sesja nie oznacza tego samego polecenia.",
+      "groupingUnavailable": "Nie podano granicy tury użytkownika, więc każda wymiana z narzędziem jest pokazana osobno. Wspólna sesja nie oznacza wspólnej wiadomości.",
       "sourceLabel": "Źródło",
       "tokenLabel": "Token",
       "providerLabel": "Dostawca",
       "modelLabel": "Model",
-      "identityUnavailable": "Niedostępne dla Phoenix"
+      "identityUnavailable": "Niedostępne dla Phoenix",
+      "deliveryUnverified": "Phoenix wygenerował tę odpowiedź. Dostarczenie jej użytkownikowi nie jest potwierdzone.",
+      "clientPromptUnavailable": "Ten klient nie przekazał Phoenix wiadomości użytkownika.",
+      "routeLocal": "Obsłużono lokalnie",
+      "routeProvider": "Wysłano do modelu AI",
+      "executionUnknown": "Wynik niepotwierdzony: działanie mogło zostać wykonane. Sprawdź Home Assistant przed ponowną próbą.",
+      "omittedEvents": "Osiągnięto limit zdarzeń: nie pokazano {count} zdarzeń. Zapisane wyniki są przechowywane osobno.",
+      "loggingDisabled": "Rejestrowanie jest niedostępne, gdy wszystkie dzienniki są wyłączone.",
+      "storage": "Pamięć: {used} z {limit} MB",
+      "toolCount": {
+        "one": "{count} wywołanie narzędzia",
+        "other": "{count} wywołań narzędzi",
+        "few": "{count} wywołania narzędzi",
+        "many": "{count} wywołań narzędzi"
+      },
+      "changeCount": {
+        "one": "{count} zmiana",
+        "other": "{count} zmian",
+        "few": "{count} zmiany",
+        "many": "{count} zmian"
+      }
     }
   }
 }

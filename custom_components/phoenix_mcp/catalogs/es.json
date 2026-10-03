@@ -2075,22 +2075,22 @@
     },
     "conversations": {
       "title": "Registro de conversaciones",
-      "description": "Consulta lo que Phoenix recibió, intentó, cambió y devolvió.",
+      "description": "Un registro legible de lo que se pidió, lo que hizo Phoenix y lo que respondió.",
       "unknown": "Desconocido",
       "fullText": "Mostrar texto completo ({count} caracteres)",
       "copied": "Copiado",
       "copyFailed": "No se pudo copiar. Selecciona el texto para copiarlo.",
       "copy": "Copiar texto",
       "parameters": "Parámetros",
-      "changeEvidence": "Contenido anterior, posterior y detalles disponibles del cambio",
-      "details": "Datos completos registrados",
-      "payloadUnavailable": "Estos datos no se conservaron.",
+      "changeEvidence": "Antes y después",
+      "details": "Datos sin procesar",
+      "payloadUnavailable": "No se registraron los detalles.",
       "detailFailed": "No se pudo cargar esta entrada. Puede haber caducado o haberse borrado.",
       "retry": "Reintentar",
-      "prompt": "Tu petición",
+      "prompt": "Mensaje",
       "activity": "Actividad",
       "response": "Respuesta",
-      "promptUnavailable": "Phoenix no recibió la petición original o los controles de privacidad impidieron guardarla.",
+      "promptUnavailable": "Phoenix no recibió un mensaje utilizable para este turno.",
       "noActivity": "No se registró actividad de herramientas.",
       "responseUnavailable": "Phoenix no recibió o no conservó la respuesta final. Los resultados de herramientas aparecen en Actividad.",
       "technical": "Detalles técnicos",
@@ -2098,7 +2098,7 @@
       "clearFailed": "No se pudo borrar el historial del almacenamiento. Reintenta.",
       "recording": "Registro activado",
       "recordingOff": "Registro desactivado",
-      "disabledHelp": "Activa el registro de conversaciones en Ajustes para registrar nueva actividad. El historial existente sigue sujeto a los límites de conservación.",
+      "disabledHelp": "La grabación está desactivada. Actívala en Ajustes para registrar nuevas conversaciones. Las entradas existentes siguen sujetas a los límites de conservación.",
       "storageUnavailable": "El almacenamiento del historial no está disponible. La actividad reciente podría perderse al reiniciar.",
       "search": "Buscar texto registrado",
       "sourceFilter": "Filtrar por origen",
@@ -2113,15 +2113,14 @@
       "empty": "No hay conversaciones que mostrar",
       "emptyHelp": "Aquí aparecerá la nueva actividad registrada. Prueba otros filtros si esperabas una entrada.",
       "toolExchange": "Intercambio de herramienta; petición no disponible",
-      "counts": "Llamadas: {tools} · Cambios: {changes}",
-      "execution": "Ejecución: {outcome}",
+      "execution": "Herramientas: {outcome}",
       "showing": "Mostrando {shown} de {total}",
       "clear": "Borrar historial de conversaciones",
-      "clearConfirm": "¿Borrar todo el historial? Se dejarán de registrar las entradas activas. Las copias de seguridad existentes de Home Assistant no se modifican.",
+      "clearConfirm": "¿Eliminar todo el historial de conversaciones? No se puede deshacer. Las conversaciones en curso dejarán de registrarse. Las copias en respaldos existentes no se ven afectadas.",
       "enable": "Registrar conversaciones",
       "enableHelp": "Conserva peticiones, actividad, cambios y respuestas observables por Phoenix, con los secretos ocultos.",
-      "retentionHelp": "Al alcanzar cualquier límite se eliminan las entradas completas más antiguas. El historial sobrevive a los reinicios; un apagado inesperado puede perder actividad reciente.",
-      "privacyHelp": "Los secretos se filtran antes de conservar el contenido, pero no se garantiza su ausencia en cualquier texto. No se guardan imágenes ni adjuntos binarios. Desactivar el registro de nombres de entidades impide guardar el contenido de las conversaciones.",
+      "retentionHelp": "Al alcanzar cualquier límite, se eliminan primero las entradas más antiguas. Los contenidos grandes se acortan. Un apagado repentino puede perder unos 30 segundos de actividad reciente.",
+      "privacyHelp": "El historial se guarda en Home Assistant y se incluye en sus copias de seguridad. Mientras la grabación esté activa, también se registran las solicitudes de voz de los miembros del hogar. La ocultación automática no detecta todos los secretos en texto libre. Se excluyen los medios binarios. Desactivar el registro de nombres de entidades omite el contenido de las conversaciones.",
       "limit": {
         "entries": "Máximo de entradas",
         "days": "Antigüedad máxima (días)",
@@ -2129,9 +2128,9 @@
       },
       "source": {
         "agentcli": "Chat del agente",
-        "voice": "Voz de Phoenix",
+        "voice": "Agente de voz",
         "ai_task": "Tarea de IA",
-        "assist": "Puente Assist",
+        "assist": "Proveedor de herramientas de Assist",
         "mcp": "Cliente MCP externo",
         "home_companion": "Asistente del hogar"
       },
@@ -2150,7 +2149,8 @@
         "turn_outcome": "Resultado del turno",
         "error": "Se informó de un problema",
         "notice": "Aviso",
-        "continue_required": "En pausa hasta continuar"
+        "continue_required": "En pausa hasta continuar",
+        "assistant_text": "Explicación del asistente"
       },
       "outcome": {
         "completed": "Completado",
@@ -2174,7 +2174,7 @@
         "approved": "Aprobado"
       },
       "responseStatus": {
-        "produced": "Phoenix generó esta respuesta. No se ha verificado su entrega al usuario.",
+        "produced": "Respuesta generada",
         "unavailable": "Respuesta final no disponible",
         "client_unavailable": "El cliente externo no proporcionó su respuesta final.",
         "failed": "La respuesta falló o está incompleta.",
@@ -2186,7 +2186,7 @@
       "omission": {
         "privacy": "Se omitió contenido porque el registro de nombres de entidades está desactivado.",
         "sanitization": "Se omitió contenido que no pudo sanearse de forma segura.",
-        "size_limit": "Se alcanzó el límite de almacenamiento. Algunos datos no se conservaron."
+        "size_limit": "Algunos detalles se acortaron u omitieron para respetar los límites de grabación."
       },
       "operation": {
         "state": "Lectura del estado de la entidad",
@@ -2196,12 +2196,28 @@
         "search": "Búsqueda de recursos disponibles",
         "delegate": "Asistencia delegada solicitada"
       },
-      "groupingUnavailable": "No se indicó un límite fiable del turno del usuario. Compartir sesión no implica compartir la misma solicitud.",
+      "groupingUnavailable": "No se proporcionó un límite de turno, por lo que cada intercambio de herramientas se muestra por separado. Una sesión compartida no implica un mismo mensaje.",
       "sourceLabel": "Origen",
       "tokenLabel": "Token",
       "providerLabel": "Proveedor",
       "modelLabel": "Modelo",
-      "identityUnavailable": "No disponible para Phoenix"
+      "identityUnavailable": "No disponible para Phoenix",
+      "deliveryUnverified": "Phoenix generó esta respuesta. No se ha verificado su entrega al usuario.",
+      "clientPromptUnavailable": "Este cliente no proporcionó a Phoenix el mensaje del usuario.",
+      "routeLocal": "Procesado localmente",
+      "routeProvider": "Enviado al modelo de IA",
+      "executionUnknown": "Resultado sin confirmar: la acción podría haberse ejecutado. Comprueba Home Assistant antes de reintentar.",
+      "omittedEvents": "Límite de eventos alcanzado: no se muestran {count} eventos. Los resultados registrados se conservan por separado.",
+      "loggingDisabled": "No se puede grabar mientras esté activada la opción de desactivar todos los registros.",
+      "storage": "Almacenamiento: {used} de {limit} MB",
+      "toolCount": {
+        "one": "{count} llamada a herramienta",
+        "other": "{count} llamadas a herramientas"
+      },
+      "changeCount": {
+        "one": "{count} cambio",
+        "other": "{count} cambios"
+      }
     }
   },
   "notification": {

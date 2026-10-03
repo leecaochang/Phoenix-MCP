@@ -7,6 +7,7 @@ interface Props {
   settings: GlobalSettings;
   saving: boolean;
   onChange: (key: keyof GlobalSettings, value: boolean | number) => void;
+  onSave: (patch: Partial<GlobalSettings>) => Promise<void>;
 }
 
 const LIMITS = [
@@ -15,23 +16,14 @@ const LIMITS = [
   ["conversation_log_max_mb", 25, 1, 250, "conversations.limit.mb"],
 ] as const;
 
-function Limit({ field, value, min, max, label, saving, onChange }: {
-  field: keyof GlobalSettings; value: number; min: number; max: number; label: string;
-  saving: boolean; onChange: Props["onChange"];
-}) {
-  const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
-  const valid = /^\d+$/.test(draft) && Number(draft) >= min && Number(draft) <= max;
-  return <div className="conversation-limit">
-    <label htmlFor={field}>{label}</label>
-    <BusyInput id={field} className="input" type="number" min={min} max={max} step={1} value={draft} busy={saving}
-      onChange={e => setDraft(e.target.value)} />
-    <BusyButton className="btn btn-ghost" busy={saving} disabled={!valid || Number(draft) === value}
-      onClick={() => onChange(field, Number(draft))}>{t("common.save")}</BusyButton>
-  </div>;
-}
-
-export function ConversationSettings({ settings, saving, onChange }: Props) {
+export function ConversationSettings({ settings, saving, onChange, onSave }: Props) {
+  const entries = settings.conversation_log_max_entries ?? 100;
+  const days = settings.conversation_log_max_days ?? 7;
+  const mb = settings.conversation_log_max_mb ?? 25;
+  const [draft, setDraft] = useState([String(entries), String(days), String(mb)]);
+  useEffect(() => setDraft([String(entries), String(days), String(mb)]), [entries, days, mb]);
+  const valid = LIMITS.every(([, , min, max], index) => /^\d+$/.test(draft[index]) && Number(draft[index]) >= min && Number(draft[index]) <= max);
+  const changed = draft.some((value, index) => Number(value) !== [entries, days, mb][index]);
   return <div className="card">
     <h3 className="card-header">{t("conversations.title")}</h3>
     <div className="toggle-row">
@@ -42,9 +34,16 @@ export function ConversationSettings({ settings, saving, onChange }: Props) {
         <span className="toggle-switch-track" />
       </label>
     </div>
+    {settings.disable_all_logging && <p className="conversation-secondary">{t("conversations.loggingDisabled")}</p>}
+    {!settings.log_entity_names && <p className="conversation-secondary">{t("conversations.omission.privacy")}</p>}
     <p className="conversation-secondary">{t("conversations.retentionHelp")}</p>
-    {LIMITS.map(([field, fallback, min, max, key]) => <Limit key={field} field={field} value={settings[field] ?? fallback}
-      min={min} max={max} label={t(key)} saving={saving} onChange={onChange} />)}
+    {LIMITS.map(([field, , min, max, key], index) => <div className="conversation-limit" key={field}>
+      <label htmlFor={field}>{t(key)}</label>
+      <BusyInput id={field} className="input" type="number" min={min} max={max} step={1} value={draft[index]} busy={saving}
+        onChange={e => setDraft(previous => previous.map((value, i) => i === index ? e.target.value : value))} />
+    </div>)}
+    <BusyButton className="btn btn-ghost" busy={saving} disabled={!valid || !changed}
+      onClick={() => void onSave(Object.fromEntries(LIMITS.map(([field], index) => [field, Number(draft[index])])))}>{t("common.save")}</BusyButton>
     <p className="conversation-secondary">{t("conversations.privacyHelp")}</p>
   </div>;
 }

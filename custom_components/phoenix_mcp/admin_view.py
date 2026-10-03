@@ -3479,35 +3479,33 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 None if recovery_request else RequestAuthority(hass, data, token.id, token.token_hash)
             )
             policy_ctx = policy_version.set(token.settings_version)
-            conversation_scope = data.conversations.approval_scope(approval_id)
-            conversation_scope.__enter__()
             try:
-                if recovery_request:
-                    tool_result, outcome, _resource = await execute_recovery_approval(record, user, hass, data)
-                else:
-                    if record.household_request:
-                        from .household_authority import household_scope
-                        from .request_authority import AuthorityChangedError, check_request_authority
-
-                        async with household_scope(hass, user_id=record.ha_user_id):
-                            try:
-                                check_request_authority()
-                            except AuthorityChangedError:
-                                # This check precedes the executor. A removed or
-                                # inactive requester cannot have caused effects.
-                                tool_result = {"isError": True, "content": [{"type": "text", "text":
-                                    "Requester authority changed. No action was dispatched."}]}
-                                outcome, _resource = "denied", record.tool_name
-                            else:
-                                tool_result, outcome, _resource = await async_execute_approved_tool(
-                                    record.tool_name, record.args, token, hass, data,
-                                )
+                with data.conversations.approval_scope(approval_id):
+                    if recovery_request:
+                        tool_result, outcome, _resource = await execute_recovery_approval(record, user, hass, data)
                     else:
-                        tool_result, outcome, _resource = await async_execute_approved_tool(
-                            record.tool_name, record.args, token, hass, data,
-                        )
+                        if record.household_request:
+                            from .household_authority import household_scope
+                            from .request_authority import AuthorityChangedError, check_request_authority
+
+                            async with household_scope(hass, user_id=record.ha_user_id):
+                                try:
+                                    check_request_authority()
+                                except AuthorityChangedError:
+                                    # This check precedes the executor. A removed or
+                                    # inactive requester cannot have caused effects.
+                                    tool_result = {"isError": True, "content": [{"type": "text", "text":
+                                        "Requester authority changed. No action was dispatched."}]}
+                                    outcome, _resource = "denied", record.tool_name
+                                else:
+                                    tool_result, outcome, _resource = await async_execute_approved_tool(
+                                        record.tool_name, record.args, token, hass, data,
+                                    )
+                        else:
+                            tool_result, outcome, _resource = await async_execute_approved_tool(
+                                record.tool_name, record.args, token, hass, data,
+                            )
             finally:
-                conversation_scope.__exit__(None, None, None)
                 policy_version.reset(policy_ctx)
                 request_authority.reset(authority_ctx)
         except ExecutorNotRegistered:

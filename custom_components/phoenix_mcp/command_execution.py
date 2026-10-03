@@ -350,7 +350,7 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
     if cancel is not None and cancel.is_set():
         return LocalCommandReply(voice_text(language, "local_cancelled"), "cancelled")
     if current is None or not plan_is_current(plan, hass, data, current):
-        return LocalCommandReply(voice_text(language, "token_unavailable"))
+        return LocalCommandReply(voice_text(language, "token_unavailable"), "unauthorized")
     token = replace(current, confirm_inline_wait_seconds=0)
     proposal = plan["proposal"]
     read = proposal["intent"] in COMMAND_ROUTING_READ_INTENTS
@@ -369,7 +369,7 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
         name = "call_service"
         service_args = service_arguments(proposal)
         if service_args is None:
-            return LocalCommandReply(voice_text(language, "token_unavailable"))
+            return LocalCommandReply(voice_text(language, "token_unavailable"), "unauthorized")
         arguments = {"service": {"domain": service_args["domain"], "name": service_args["service"], "data": service_args["service_data"]},
                      "targets": [{"kind": "entity", "ids": proposal["entity_ids"]}]}
     request_id = generate_request_id()
@@ -398,7 +398,7 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
             "diff": pending["record"].diff,
         })
     if result.get("isError") or outcome != "allowed":
-        return LocalCommandReply(voice_text(language, "local_failed"))
+        return LocalCommandReply(voice_text(language, "local_failed"), "failed")
     payload = None
     for item in result.get("content", []):
         if item.get("type") == "text":
@@ -410,19 +410,19 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
     if proposal['intent'] == 'PhoenixStateSummary':
         from .command_summary import summary_text
         summary_reply = summary_text(proposal, payload, language) if plan_is_current(plan, hass, data, token) else None
-        return LocalCommandReply(summary_reply or voice_text(language, 'local_read_failed'), allows_local_followup=summary_reply is not None, statistics_completed=summary_reply is not None)
+        return LocalCommandReply(summary_reply or voice_text(language, 'local_read_failed'), outcome='ok' if summary_reply is not None else 'failed', allows_local_followup=summary_reply is not None, statistics_completed=summary_reply is not None)
     if not isinstance(payload, dict):
         return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
     if read:
         if not plan_is_current(plan, hass, data, token):
-            return LocalCommandReply(voice_text(language, "token_unavailable"))
+            return LocalCommandReply(voice_text(language, "token_unavailable"), "unauthorized")
         attributes = payload.get("attributes", {})
         if not isinstance(attributes, dict):
-            return LocalCommandReply(voice_text(language, "local_read_failed"))
+            return LocalCommandReply(voice_text(language, "local_read_failed"), "failed")
         state = payload.get("state") if proposal["intent"] == "HassGetState" else attributes.get(proposal["value"])
         if proposal["intent"] != "HassGetState":
             if state is None:
-                return LocalCommandReply(voice_text(language, "local_attribute_unavailable"))
+                return LocalCommandReply(voice_text(language, "local_attribute_unavailable"), "failed")
         from .command_display import async_display_state
         domain = proposal["entity_ids"][0].split(".", 1)[0]
         temperature_unit = (hass.config.units.temperature_unit if domain in ("climate", "water_heater")
@@ -432,10 +432,10 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
             temperature_unit=temperature_unit if isinstance(temperature_unit, str) else None)
         current = authority.current(hass)
         if current is None or not plan_is_current(plan, hass, data, current):
-            return LocalCommandReply(voice_text(language, "token_unavailable"))
+            return LocalCommandReply(voice_text(language, "token_unavailable"), "unauthorized")
         if isinstance(state, str) and len(state) <= 1024:
             return LocalCommandReply(voice_text(language, "local_state", state=state), allows_local_followup=True, statistics_completed=True)
-        return LocalCommandReply(voice_text(language, "local_read_failed"))
+        return LocalCommandReply(voice_text(language, "local_read_failed"), "failed")
     if payload.get("partial") or payload.get("success") is not True:
         return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
     warnings = payload.get("mesa_advisory", [])

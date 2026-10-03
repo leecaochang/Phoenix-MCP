@@ -2075,22 +2075,22 @@
     },
     "conversations": {
       "title": "对话日志",
-      "description": "查看 Phoenix 收到、尝试执行、更改和返回的内容。",
+      "description": "以易读形式记录收到的请求、Phoenix 的操作及回复。",
       "unknown": "未知",
       "fullText": "显示全文（{count} 个字符）",
       "copied": "已复制",
       "copyFailed": "复制失败。请选中文本后复制。",
       "copy": "复制文本",
       "parameters": "参数",
-      "changeEvidence": "更改前后内容及已有的更改详情",
-      "details": "完整记录数据",
-      "payloadUnavailable": "此数据未保留。",
+      "changeEvidence": "更改前后",
+      "details": "原始数据",
+      "payloadUnavailable": "未记录详细内容。",
       "detailFailed": "无法加载此条目，可能已过期或被清除。",
       "retry": "重试",
-      "prompt": "您的提示词",
+      "prompt": "提示内容",
       "activity": "活动",
       "response": "回复",
-      "promptUnavailable": "Phoenix 未收到原始提示词，或隐私设置阻止了记录。",
+      "promptUnavailable": "Phoenix 未收到此轮可用的提示内容。",
       "noActivity": "未记录工具活动。",
       "responseUnavailable": "Phoenix 未收到或未保留最终回复。工具结果请参阅“活动”。",
       "technical": "技术详情",
@@ -2098,7 +2098,7 @@
       "clearFailed": "无法从存储中清除历史。请重试。",
       "recording": "记录已启用",
       "recordingOff": "记录已停用",
-      "disabledHelp": "在设置中启用对话日志以记录新活动。现有历史仍受保留限制约束。",
+      "disabledHelp": "记录已关闭。可在设置中开启以记录新对话。现有记录仍受保留限制约束。",
       "storageUnavailable": "历史存储不可用，近期活动可能在重启后丢失。",
       "search": "搜索已记录的文本",
       "sourceFilter": "按来源筛选",
@@ -2113,15 +2113,14 @@
       "empty": "暂无可显示的对话",
       "emptyHelp": "新记录的活动将在此显示。如果预期有条目，请尝试调整筛选条件。",
       "toolExchange": "工具交互；提示词不可用",
-      "counts": "工具调用：{tools} · 更改：{changes}",
-      "execution": "执行：{outcome}",
+      "execution": "工具：{outcome}",
       "showing": "显示 {shown} 条，共 {total} 条",
       "clear": "清除对话历史",
-      "clearConfirm": "清除所有对话历史？这将停止记录正在进行的条目，不影响现有 Home Assistant 备份。",
+      "clearConfirm": "删除全部对话历史？此操作无法撤销。正在进行的对话将停止记录。现有备份中的副本不受影响。",
       "enable": "记录对话",
       "enableHelp": "保留 Phoenix 能够观察到且已脱敏的提示词、工具活动、更改和回复。",
-      "retentionHelp": "达到任一限制时，将删除最早的完整条目。历史在重启后保留；突然关机可能丢失近期活动。",
-      "privacyHelp": "内容在保留前会过滤机密信息，但无法保证任意文本完全不含机密。不存储图片和二进制附件。关闭实体名称记录会阻止保留对话内容。",
+      "retentionHelp": "达到任一限制时，优先删除最早的记录。大型内容会被缩短。突然关机可能丢失最近约 30 秒的活动。",
+      "privacyHelp": "历史记录保存在 Home Assistant 中，并包含在其备份中。开启记录后，家庭成员的语音请求也会被记录。自动脱敏无法识别任意文本中的所有秘密。二进制媒体不予保存。关闭实体名称记录会省略对话内容。",
       "limit": {
         "entries": "最多条目数",
         "days": "最长保留时间（天）",
@@ -2129,9 +2128,9 @@
       },
       "source": {
         "agentcli": "智能体聊天",
-        "voice": "Phoenix 语音",
+        "voice": "语音智能体",
         "ai_task": "AI 任务",
-        "assist": "Assist 桥接",
+        "assist": "Assist 工具提供方",
         "mcp": "外部 MCP 客户端",
         "home_companion": "家庭伙伴"
       },
@@ -2150,7 +2149,8 @@
         "turn_outcome": "轮次结果",
         "error": "已报告问题",
         "notice": "提示",
-        "continue_required": "已暂停，等待继续"
+        "continue_required": "已暂停，等待继续",
+        "assistant_text": "助手说明"
       },
       "outcome": {
         "completed": "已完成",
@@ -2174,7 +2174,7 @@
         "approved": "已批准"
       },
       "responseStatus": {
-        "produced": "Phoenix 已生成此回复，尚未验证用户是否收到。",
+        "produced": "回复已生成",
         "unavailable": "最终回复不可用",
         "client_unavailable": "外部客户端未提供最终回复。",
         "failed": "回复失败或不完整。",
@@ -2186,7 +2186,7 @@
       "omission": {
         "privacy": "由于实体名称记录已停用，内容被省略。",
         "sanitization": "部分内容无法安全脱敏，已省略。",
-        "size_limit": "已达到存储限制，部分数据未保留。"
+        "size_limit": "为遵守记录限制，部分详细内容已缩短或省略。"
       },
       "operation": {
         "state": "读取实体状态",
@@ -2196,12 +2196,28 @@
         "search": "搜索可用资源",
         "delegate": "请求委派协助"
       },
-      "groupingUnavailable": "客户端未提供可靠的用户轮次边界。同一会话中的调用不一定属于同一条提示词。",
+      "groupingUnavailable": "未提供用户轮次边界，因此每次工具交互单独显示。共享会话不代表共享同一条提示。",
       "sourceLabel": "来源",
       "tokenLabel": "令牌",
       "providerLabel": "提供商",
       "modelLabel": "模型",
-      "identityUnavailable": "Phoenix 未获取此信息"
+      "identityUnavailable": "Phoenix 未获取此信息",
+      "deliveryUnverified": "Phoenix 已生成此回复，尚未验证用户是否收到。",
+      "clientPromptUnavailable": "此客户端未向 Phoenix 提供用户消息。",
+      "routeLocal": "由本地处理",
+      "routeProvider": "已发送至 AI 模型",
+      "executionUnknown": "结果未确认：操作可能已执行。请先检查 Home Assistant，再决定是否重试。",
+      "omittedEvents": "已达事件上限：未显示 {count} 个事件。已记录的结果会单独保留。",
+      "loggingDisabled": "开启“禁用所有日志”时无法记录对话。",
+      "storage": "存储：已使用 {used} MB，上限 {limit} MB",
+      "toolCount": {
+        "one": "{count} 次工具调用",
+        "other": "{count} 次工具调用"
+      },
+      "changeCount": {
+        "one": "{count} 项更改",
+        "other": "{count} 项更改"
+      }
     }
   },
   "notification": {

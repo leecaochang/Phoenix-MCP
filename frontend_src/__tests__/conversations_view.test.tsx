@@ -31,9 +31,9 @@ describe("ConversationsView", () => {
     const title = await view.findByText("Tool exchange; prompt unavailable");
     expect(api.getConversation).not.toHaveBeenCalled();
     fireEvent.click(title.closest("summary")!);
-    await view.findByText("Your prompt");
+    await view.findByText("Prompt");
     expect(api.getConversation).toHaveBeenCalledWith("one");
-    expect(view.getByText(/original prompt was not available/)).toBeTruthy();
+    expect(view.getByText(/did not provide the user/)).toBeTruthy();
     expect(view.getByText(/external client did not provide/)).toBeTruthy();
     expect(view.container.querySelector("script")).toBeNull();
     expect(view.getByText("<script>alert(1)</script>")).toBeTruthy();
@@ -53,24 +53,24 @@ describe("ConversationsView", () => {
     const view = render(<ConversationsView />);
     const title = await view.findByText("Tool exchange; prompt unavailable");
     fireEvent.click(title.closest("summary")!);
-    await view.findByText("Your prompt");
+    await view.findByText("Prompt");
     fireEvent.click(view.getByText("Clear conversation history"));
     expect(api.clearConversations).not.toHaveBeenCalled();
     fireEvent.click(view.getAllByText("Clear conversation history")[1]);
     await waitFor(() => expect(api.clearConversations).toHaveBeenCalledOnce());
     await view.findByText("No conversations to show");
-    expect(view.queryByText("Your prompt")).toBeNull();
+    expect(view.queryByText("Prompt")).toBeNull();
   });
 
   it("keeps expanded entries through a refresh and reports recoverable errors", async () => {
     const view = render(<ConversationsView />);
     const title = await view.findByText("Tool exchange; prompt unavailable");
     fireEvent.click(title.closest("summary")!);
-    await view.findByText("Your prompt");
+    await view.findByText("Prompt");
     vi.mocked(api.getConversations).mockRejectedValueOnce(new Error("unavailable"));
     fireEvent.click(view.getByText("Refresh"));
     await view.findByRole("alert");
-    expect(view.getByText("Your prompt")).toBeTruthy();
+    expect(view.getByText("Prompt")).toBeTruthy();
     fireEvent.click(view.getByText("Refresh"));
     await waitFor(() => expect(view.queryByRole("alert")).toBeNull());
     expect(title.closest("details")?.open).toBe(true);
@@ -106,4 +106,35 @@ describe("ConversationsView", () => {
     expect(validApiResponse("/conversations/one", "GET", { ...detail, events: [{}] })).toBe(false);
     expect(validApiResponse("/conversations/one", "GET", detail)).toBe(true);
   });
+});
+
+it("shows mixed outcomes, tool titles and storage without zero counts", async () => {
+  vi.mocked(api.getConversations).mockResolvedValue({ ...list([{ ...summary, first_tool: "call_service", execution_status: "partial", tool_count: 2 }]), bytes: 500000, max_bytes: 25000000 });
+  const view = render(<ConversationsView />);
+  await view.findByText("call_service");
+  expect(view.container.querySelector(".conversation-status")?.textContent).toBe("Mixed outcomes");
+  expect(view.getByText("Storage: 0.5 of 25 MB")).toBeTruthy();
+  expect(view.getByText(/2 tool calls/)).toBeTruthy();
+  expect(view.queryByText(/0 changes/)).toBeNull();
+});
+
+it("keeps narration, tool activity and reply in order with omissions explained", async () => {
+  vi.mocked(api.getConversation).mockResolvedValue({ ...detail, response: "The light is on.", response_status: "produced", omitted_events: 3,
+    field_omissions: { prompt: "privacy" }, events: [
+      { kind: "assistant_text", timestamp: summary.started_at, tool_id: null, payload: "Let me check." },
+      ...detail.events,
+      { kind: "assistant_text", timestamp: summary.updated_at, tool_id: null, payload: "The light is on." },
+    ],
+  });
+  const view = render(<ConversationsView />);
+  fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("summary")!);
+  await view.findByText("Let me check.");
+  const rows = view.container.querySelectorAll(".conversation-event");
+  expect(rows[0].textContent).toContain("Let me check.");
+  expect(rows[1].textContent).toContain("get_state");
+  expect(rows[3].textContent).toContain("Reply generated");
+  expect(view.getAllByText("The light is on.")).toHaveLength(1);
+  expect(view.getByText(/entity-name logging is disabled/)).toBeTruthy();
+  expect(view.getByText(/3 events are not shown/)).toBeTruthy();
+  expect(rows[0].querySelector("time")?.textContent).not.toBe("00:00:00");
 });

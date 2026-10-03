@@ -8247,6 +8247,7 @@ async def _dispatch_mcp(
         admitted_context = request_authority.set(authority)
     context = None
     write_entered = False
+    dispatch_entered = False
     result = None
     try:
         current = authority.current_token()
@@ -8268,6 +8269,7 @@ async def _dispatch_mcp(
                 return _jsonrpc_result(msg_id, recovery_error), method, params["name"], "denied"
         check_request_authority()
         write_entered = method == "tools/call" and isinstance(params.get("name"), str) and not tool_is_read_only(params["name"])
+        dispatch_entered = True
         result = await _dispatch_mcp_authorized(method, msg_id, params, token, hass, data, client_ip, base_url, request_id)
         check_request_authority()
         return result
@@ -8297,7 +8299,7 @@ async def _dispatch_mcp(
         _log(data, token, request_id=request_id, method=method, resource="/api/phoenix-mcp",
              outcome="denied", client_ip=client_ip)
         if isinstance(exc, PolicyChangedError) and method == "tools/call":
-            refusal = _tool_error("Permissions changed while this tool was running. Its result was withheld. The conversation can continue using current permissions.")
+            refusal = _tool_error("Permissions changed while this tool was running. Its result was withheld. The conversation can continue using current permissions." if dispatch_entered else "Permissions changed before dispatch. No action was executed. The conversation can continue using current permissions.")
             _maybe_append_stale_advisory(refusal, token, data, client_ip)
             return _jsonrpc_result(msg_id, refusal), method, "/api/phoenix-mcp", "denied"
         return _jsonrpc_error(msg_id, -32000, "Request authority changed. Check earlier actions before resubmitting with current permissions."), method, "/api/phoenix-mcp", "denied"

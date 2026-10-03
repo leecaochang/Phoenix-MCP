@@ -2080,22 +2080,22 @@
     },
     "conversations": {
       "title": "대화 로그",
-      "description": "Phoenix가 받은 내용, 시도한 작업, 변경 사항과 응답을 확인하세요.",
+      "description": "요청 내용, Phoenix의 작업, 응답을 읽기 쉽게 기록합니다.",
       "unknown": "알 수 없음",
       "fullText": "전체 텍스트 표시({count}자)",
       "copied": "복사됨",
       "copyFailed": "복사하지 못했습니다. 텍스트를 선택하여 복사하세요.",
       "copy": "텍스트 복사",
       "parameters": "매개변수",
-      "changeEvidence": "변경 전후 내용 및 사용 가능한 변경 세부 정보",
-      "details": "기록된 전체 데이터",
-      "payloadUnavailable": "이 데이터는 보관되지 않았습니다.",
+      "changeEvidence": "변경 전후",
+      "details": "원시 데이터",
+      "payloadUnavailable": "세부 내용이 기록되지 않았습니다.",
       "detailFailed": "이 항목을 불러올 수 없습니다. 만료되거나 삭제되었을 수 있습니다.",
       "retry": "다시 시도",
-      "prompt": "입력한 프롬프트",
+      "prompt": "메시지",
       "activity": "활동",
       "response": "응답",
-      "promptUnavailable": "Phoenix가 원래 프롬프트를 받지 못했거나 개인정보 설정으로 인해 보관하지 않았습니다.",
+      "promptUnavailable": "Phoenix가 이번 턴에 사용할 수 있는 메시지를 받지 못했습니다.",
       "noActivity": "기록된 도구 활동이 없습니다.",
       "responseUnavailable": "Phoenix가 최종 응답을 받지 못했거나 보관하지 않았습니다. 도구 결과는 활동에 표시됩니다.",
       "technical": "기술 세부 정보",
@@ -2103,7 +2103,7 @@
       "clearFailed": "저장소에서 기록을 삭제하지 못했습니다. 다시 시도하세요.",
       "recording": "기록 활성화됨",
       "recordingOff": "기록 비활성화됨",
-      "disabledHelp": "설정에서 대화 로그를 활성화하면 새 활동을 기록합니다. 기존 기록에도 보관 제한이 적용됩니다.",
+      "disabledHelp": "기록이 꺼져 있습니다. 새 대화를 기록하려면 설정에서 켜세요. 기존 항목에는 보관 제한이 계속 적용됩니다.",
       "storageUnavailable": "기록 저장소를 사용할 수 없습니다. 최근 활동은 다시 시작하면 사라질 수 있습니다.",
       "search": "기록된 텍스트 검색",
       "sourceFilter": "출처별 필터",
@@ -2118,15 +2118,14 @@
       "empty": "표시할 대화가 없습니다",
       "emptyHelp": "새로 기록된 활동이 여기에 표시됩니다. 항목이 있어야 한다면 필터를 변경해 보세요.",
       "toolExchange": "도구 교환; 프롬프트 없음",
-      "counts": "도구 호출: {tools} · 변경: {changes}",
-      "execution": "실행: {outcome}",
+      "execution": "도구: {outcome}",
       "showing": "전체 {total}개 중 {shown}개 표시",
       "clear": "대화 기록 지우기",
-      "clearConfirm": "모든 대화 기록을 지울까요? 진행 중인 항목의 기록도 중지됩니다. 기존 Home Assistant 백업에는 영향을 주지 않습니다.",
+      "clearConfirm": "모든 대화 기록을 삭제할까요? 이 작업은 되돌릴 수 없습니다. 진행 중인 대화의 기록이 중단됩니다. 기존 백업의 사본은 영향을 받지 않습니다.",
       "enable": "대화 기록",
       "enableHelp": "Phoenix가 확인할 수 있는 프롬프트, 도구 활동, 변경 사항과 응답에서 기밀 정보를 제거하여 보관합니다.",
-      "retentionHelp": "어느 제한이든 도달하면 가장 오래된 항목 전체를 삭제합니다. 기록은 다시 시작해도 유지되지만 갑작스러운 종료 시 최근 활동이 사라질 수 있습니다.",
-      "privacyHelp": "보관 전에 기밀 정보를 필터링하지만 임의의 텍스트에 기밀 정보가 없음을 보장할 수는 없습니다. 이미지와 바이너리 첨부 파일은 저장하지 않습니다. 엔티티 이름 기록을 끄면 대화 내용도 보관하지 않습니다.",
+      "retentionHelp": "어떤 제한이든 도달하면 가장 오래된 항목부터 삭제됩니다. 큰 내용은 축약됩니다. 갑작스러운 종료 시 최근 약 30초의 활동이 손실될 수 있습니다.",
+      "privacyHelp": "기록은 Home Assistant에 저장되며 백업에도 포함됩니다. 기록이 켜져 있는 동안 가족 구성원의 음성 요청도 기록됩니다. 자동 가림 처리는 임의의 텍스트에 있는 모든 비밀을 감지할 수 없습니다. 바이너리 미디어는 제외됩니다. 엔티티 이름 기록을 끄면 대화 내용이 생략됩니다.",
       "limit": {
         "entries": "최대 항목 수",
         "days": "최대 보관 기간(일)",
@@ -2134,9 +2133,9 @@
       },
       "source": {
         "agentcli": "에이전트 채팅",
-        "voice": "Phoenix 음성",
+        "voice": "음성 에이전트",
         "ai_task": "AI 작업",
-        "assist": "Assist 브리지",
+        "assist": "Assist 도구 공급자",
         "mcp": "외부 MCP 클라이언트",
         "home_companion": "홈 컴패니언"
       },
@@ -2155,7 +2154,8 @@
         "turn_outcome": "턴 결과",
         "error": "문제 보고됨",
         "notice": "알림",
-        "continue_required": "계속 진행 대기 중"
+        "continue_required": "계속 진행 대기 중",
+        "assistant_text": "어시스턴트 설명"
       },
       "outcome": {
         "completed": "완료됨",
@@ -2179,7 +2179,7 @@
         "approved": "승인됨"
       },
       "responseStatus": {
-        "produced": "Phoenix가 이 응답을 생성했습니다. 사용자에게 전달되었는지는 확인되지 않았습니다.",
+        "produced": "응답 생성됨",
         "unavailable": "최종 응답 없음",
         "client_unavailable": "외부 클라이언트가 최종 응답을 제공하지 않았습니다.",
         "failed": "응답이 실패했거나 불완전합니다.",
@@ -2191,7 +2191,7 @@
       "omission": {
         "privacy": "엔티티 이름 기록이 비활성화되어 내용을 생략했습니다.",
         "sanitization": "일부 내용에서 기밀 정보를 안전하게 제거할 수 없어 생략했습니다.",
-        "size_limit": "저장 공간 한도에 도달하여 일부 데이터를 보관하지 않았습니다."
+        "size_limit": "기록 제한을 지키기 위해 일부 세부 내용을 축약하거나 생략했습니다."
       },
       "operation": {
         "state": "엔터티 상태 읽기",
@@ -2201,12 +2201,28 @@
         "search": "사용 가능한 리소스 검색",
         "delegate": "위임된 지원 요청"
       },
-      "groupingUnavailable": "신뢰할 수 있는 사용자 턴 경계가 제공되지 않았습니다. 세션이 같아도 동일한 프롬프트라고 볼 수 없습니다.",
+      "groupingUnavailable": "사용자 턴 경계가 제공되지 않아 각 도구 교환을 개별적으로 표시합니다. 같은 세션이라고 같은 메시지는 아닙니다.",
       "sourceLabel": "출처",
       "tokenLabel": "토큰",
       "providerLabel": "제공업체",
       "modelLabel": "모델",
-      "identityUnavailable": "Phoenix에서 확인할 수 없음"
+      "identityUnavailable": "Phoenix에서 확인할 수 없음",
+      "deliveryUnverified": "Phoenix가 이 응답을 생성했습니다. 사용자에게 전달되었는지는 확인되지 않았습니다.",
+      "clientPromptUnavailable": "이 클라이언트가 사용자 메시지를 Phoenix에 제공하지 않았습니다.",
+      "routeLocal": "로컬에서 처리됨",
+      "routeProvider": "AI 모델로 전송됨",
+      "executionUnknown": "결과 미확인: 작업이 실행되었을 수 있습니다. 다시 시도하기 전에 Home Assistant를 확인하세요.",
+      "omittedEvents": "이벤트 제한에 도달하여 {count}개 이벤트가 표시되지 않습니다. 기록된 결과는 별도로 보관됩니다.",
+      "loggingDisabled": "모든 로그 비활성화가 켜져 있으면 기록할 수 없습니다.",
+      "storage": "저장 공간: {limit} MB 중 {used} MB",
+      "toolCount": {
+        "one": "도구 호출 {count}회",
+        "other": "도구 호출 {count}회"
+      },
+      "changeCount": {
+        "one": "변경 {count}건",
+        "other": "변경 {count}건"
+      }
     }
   },
   "voice": {

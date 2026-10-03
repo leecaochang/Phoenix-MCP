@@ -2987,9 +2987,10 @@ button.changes-row:hover { background: var(--phx-surface-2); }
 .conversation-footer { margin-top: 16px; }
 .conversation-empty { padding: 32px 24px; }
 .conversation-empty h3 { margin: 0 0 8px; }
-.conversation-limit { display: grid; grid-template-columns: 1fr 90px auto; align-items: center; gap: 10px; margin: 12px 0; }
+.conversation-limit { display: grid; grid-template-columns: 1fr 90px; align-items: center; gap: 10px; margin: 12px 0; }
 @media (max-width: 600px) {
   .conversation-entry > summary { padding: 14px 12px; gap: 8px; flex-wrap: wrap; }
+  .conversation-summary { flex-basis: calc(100% - 24px); }
   .conversation-status { margin-left: 16px; }
   .conversation-detail { padding: 0 14px 20px; }
   .conversation-toolbar .input { min-width: 0; flex-basis: 40%; }

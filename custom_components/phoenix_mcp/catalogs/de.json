@@ -2075,22 +2075,22 @@
     },
     "conversations": {
       "title": "Gesprächsprotokoll",
-      "description": "Verfolgen Sie, was Phoenix empfangen, versucht, geändert und zurückgegeben hat.",
+      "description": "Eine verständliche Aufzeichnung der Anfrage, der Aktionen von Phoenix und seiner Antwort.",
       "unknown": "Unbekannt",
       "fullText": "Vollständigen Text anzeigen ({count} Zeichen)",
       "copied": "Kopiert",
       "copyFailed": "Kopieren fehlgeschlagen. Markieren Sie den Text zum Kopieren.",
       "copy": "Text kopieren",
       "parameters": "Parameter",
-      "changeEvidence": "Vorheriger und neuer Inhalt sowie verfügbare Änderungsdetails",
-      "details": "Vollständige aufgezeichnete Daten",
-      "payloadUnavailable": "Diese Daten wurden nicht aufbewahrt.",
+      "changeEvidence": "Vorher und nachher",
+      "details": "Rohdaten",
+      "payloadUnavailable": "Details wurden nicht aufgezeichnet.",
       "detailFailed": "Dieser Eintrag konnte nicht geladen werden. Er ist möglicherweise abgelaufen oder wurde gelöscht.",
       "retry": "Erneut versuchen",
-      "prompt": "Ihre Anfrage",
+      "prompt": "Anfrage",
       "activity": "Aktivität",
       "response": "Antwort",
-      "promptUnavailable": "Die ursprüngliche Anfrage war für Phoenix nicht verfügbar oder wurde aus Datenschutzgründen ausgelassen.",
+      "promptUnavailable": "Phoenix hat für diesen Gesprächsschritt keine verwendbare Anfrage erhalten.",
       "noActivity": "Keine Werkzeugaktivität aufgezeichnet.",
       "responseUnavailable": "Die endgültige Antwort war für Phoenix nicht verfügbar oder wurde nicht aufbewahrt. Werkzeugergebnisse stehen unter Aktivität.",
       "technical": "Technische Details",
@@ -2098,7 +2098,7 @@
       "clearFailed": "Der Verlauf konnte nicht aus dem Speicher gelöscht werden. Versuchen Sie es erneut.",
       "recording": "Aufzeichnung aktiviert",
       "recordingOff": "Aufzeichnung deaktiviert",
-      "disabledHelp": "Aktivieren Sie das Gesprächsprotokoll in den Einstellungen, um neue Aktivitäten aufzuzeichnen. Für den vorhandenen Verlauf gelten weiterhin die Aufbewahrungsgrenzen.",
+      "disabledHelp": "Die Aufzeichnung ist aus. Aktiviere sie in den Einstellungen für neue Gespräche. Bestehende Einträge unterliegen weiterhin den Aufbewahrungsgrenzen.",
       "storageUnavailable": "Der Verlaufsspeicher ist nicht verfügbar. Neue Aktivitäten gehen bei einem Neustart möglicherweise verloren.",
       "search": "Aufgezeichneten Text durchsuchen",
       "sourceFilter": "Nach Quelle filtern",
@@ -2113,15 +2113,14 @@
       "empty": "Keine Gespräche vorhanden",
       "emptyHelp": "Neu aufgezeichnete Aktivitäten erscheinen hier. Ändern Sie die Filter, wenn Sie einen Eintrag erwartet haben.",
       "toolExchange": "Werkzeugaustausch; Anfrage nicht verfügbar",
-      "counts": "Werkzeugaufrufe: {tools} · Änderungen: {changes}",
-      "execution": "Ausführung: {outcome}",
+      "execution": "Werkzeuge: {outcome}",
       "showing": "{shown} von {total} angezeigt",
       "clear": "Gesprächsverlauf löschen",
-      "clearConfirm": "Den gesamten Verlauf löschen? Die Aufzeichnung aktiver Einträge wird beendet. Vorhandene Home Assistant-Sicherungen bleiben erhalten.",
+      "clearConfirm": "Den gesamten Gesprächsverlauf löschen? Dies kann nicht rückgängig gemacht werden. Laufende Gespräche werden nicht weiter aufgezeichnet. Kopien in bestehenden Backups bleiben erhalten.",
       "enable": "Gespräche aufzeichnen",
       "enableHelp": "Bewahren Sie bereinigte Anfragen, Werkzeugaktivitäten, Änderungen und Antworten auf, die Phoenix beobachten kann.",
-      "retentionHelp": "Sobald eine Grenze erreicht ist, werden die ältesten vollständigen Einträge gelöscht. Der Verlauf übersteht Neustarts; bei abruptem Herunterfahren können neue Aktivitäten verloren gehen.",
-      "privacyHelp": "Geheimnisse werden vor der Speicherung gefiltert; für beliebigen Text ist jedoch keine vollständige Erkennung garantiert. Bilder und Binäranhänge werden nicht gespeichert. Ohne Protokollierung von Entitätsnamen werden Gesprächsinhalte ausgelassen.",
+      "retentionHelp": "Sobald eine Grenze erreicht ist, werden die ältesten Einträge zuerst gelöscht. Große Inhalte werden gekürzt. Ein plötzlicher Ausfall kann die letzten etwa 30 Sekunden an Aktivitäten verlieren lassen.",
+      "privacyHelp": "Der Verlauf wird in Home Assistant gespeichert und in dessen Backups aufgenommen. Bei aktivierter Aufzeichnung werden auch Sprachanfragen von Haushaltsmitgliedern erfasst. Automatische Schwärzung erkennt nicht jedes Geheimnis in beliebigem Text. Binäre Medien werden ausgeschlossen. Ohne Protokollierung von Entitätsnamen werden Gesprächsinhalte ausgelassen.",
       "limit": {
         "entries": "Maximale Einträge",
         "days": "Maximales Alter (Tage)",
@@ -2129,9 +2128,9 @@
       },
       "source": {
         "agentcli": "Agent-Chat",
-        "voice": "Phoenix-Sprachassistent",
+        "voice": "Sprachagent",
         "ai_task": "KI-Aufgabe",
-        "assist": "Assist-Brücke",
+        "assist": "Assist-Tool-Anbieter",
         "mcp": "Externer MCP-Client",
         "home_companion": "Hausbegleiter"
       },
@@ -2150,7 +2149,8 @@
         "turn_outcome": "Ergebnis des Durchgangs",
         "error": "Problem gemeldet",
         "notice": "Hinweis",
-        "continue_required": "Für Fortsetzung pausiert"
+        "continue_required": "Für Fortsetzung pausiert",
+        "assistant_text": "Erläuterung des Assistenten"
       },
       "outcome": {
         "completed": "Abgeschlossen",
@@ -2174,7 +2174,7 @@
         "approved": "Genehmigt"
       },
       "responseStatus": {
-        "produced": "Phoenix hat diese Antwort erzeugt. Die Zustellung an den Benutzer ist nicht bestätigt.",
+        "produced": "Antwort erstellt",
         "unavailable": "Endgültige Antwort nicht verfügbar",
         "client_unavailable": "Der externe Client hat seine endgültige Antwort nicht übermittelt.",
         "failed": "Die Antwort ist fehlgeschlagen oder unvollständig.",
@@ -2186,7 +2186,7 @@
       "omission": {
         "privacy": "Inhalte wurden ausgelassen, da die Protokollierung von Entitätsnamen deaktiviert ist.",
         "sanitization": "Einige Inhalte konnten nicht sicher bereinigt werden und wurden ausgelassen.",
-        "size_limit": "Die Speichergrenze wurde erreicht. Einige Daten wurden nicht aufbewahrt."
+        "size_limit": "Einige Details wurden gekürzt oder ausgelassen, um die Aufzeichnungsgrenzen einzuhalten."
       },
       "operation": {
         "state": "Entitätszustand gelesen",
@@ -2196,12 +2196,28 @@
         "search": "Verfügbare Ressourcen durchsucht",
         "delegate": "Delegierte Unterstützung angefordert"
       },
-      "groupingUnavailable": "Es wurde keine verlässliche Grenze einer Nutzereingabe übermittelt. Eine gemeinsame Sitzung bedeutet keine gemeinsame Eingabe.",
+      "groupingUnavailable": "Es wurde keine Grenze zwischen Benutzereingaben übermittelt. Daher wird jeder Werkzeugaustausch einzeln angezeigt. Eine gemeinsame Sitzung belegt keine gemeinsame Anfrage.",
       "sourceLabel": "Quelle",
       "tokenLabel": "Token",
       "providerLabel": "Anbieter",
       "modelLabel": "Modell",
-      "identityUnavailable": "Für Phoenix nicht verfügbar"
+      "identityUnavailable": "Für Phoenix nicht verfügbar",
+      "deliveryUnverified": "Phoenix hat diese Antwort erzeugt. Die Zustellung an den Benutzer ist nicht bestätigt.",
+      "clientPromptUnavailable": "Dieser Client hat Phoenix die Nachricht des Benutzers nicht übermittelt.",
+      "routeLocal": "Lokal verarbeitet",
+      "routeProvider": "An das KI-Modell gesendet",
+      "executionUnknown": "Ergebnis unbestätigt: Die Aktion wurde möglicherweise ausgeführt. Prüfe Home Assistant vor einem erneuten Versuch.",
+      "omittedEvents": "Ereignisgrenze erreicht: {count} Ereignisse werden nicht angezeigt. Aufgezeichnete Ergebnisse bleiben separat erhalten.",
+      "loggingDisabled": "Die Aufzeichnung ist nicht verfügbar, solange alle Protokolle deaktiviert sind.",
+      "storage": "Speicher: {used} von {limit} MB",
+      "toolCount": {
+        "one": "{count} Werkzeugaufruf",
+        "other": "{count} Werkzeugaufrufe"
+      },
+      "changeCount": {
+        "one": "{count} Änderung",
+        "other": "{count} Änderungen"
+      }
     }
   },
   "notification": {

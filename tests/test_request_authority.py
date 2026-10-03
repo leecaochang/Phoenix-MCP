@@ -491,3 +491,22 @@ async def test_chat_continues_after_capability_edit_during_tool_wait(hass, chang
         assert '"state": "new"' not in json.dumps(result)
     assert entry['response'] == 'Conversation continued.'
     assert entry['metadata']['model'] == 'selected-test-model'
+
+
+async def test_policy_change_during_reconciliation_reports_no_dispatch(hass):
+    data, token, _ = await _environment(hass)
+
+    async def tighten(*_args):
+        token.settings_version += 1
+        token.pass_through = False
+
+    with patch.object(data.agent_recovery, "reconcile", side_effect=tighten), \
+            patch.object(mcp_view, "_dispatch_mcp_authorized", AsyncMock()) as dispatch:
+        response, _, _, outcome = await mcp_view._dispatch_mcp(
+            "tools/call", 1, {"name": "call_service", "arguments": {}},
+            token, hass, data, "agentcli", "",
+        )
+    dispatch.assert_not_called()
+    assert outcome == "denied"
+    assert "No action was executed" in json.dumps(response)
+    assert "result was withheld" not in json.dumps(response)

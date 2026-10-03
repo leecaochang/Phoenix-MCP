@@ -93,6 +93,10 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
 
   async function patchSetting(key: keyof GlobalSettings, value: boolean | number | string | string[]) {
     if (key === "mesa_inject_enabled" && injectSessionBlocked()) return;
+    return patchSettings({ [key]: value });
+  }
+
+  async function patchSettings(patch: Partial<GlobalSettings>) {
     const isLatest = beginMutation();
     // Invalidate a refresh that began before this mutation. Its snapshot can no
     // longer be authoritative once the write starts.
@@ -101,7 +105,7 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
     setSaving(true);
     setError(null);
     try {
-      const updated = await api.patchSettings({ [key]: value });
+      const updated = await api.patchSettings(patch);
       if (isLatest()) onSettingsChange(updated);
     } catch (e: unknown) {
       if (isLatest()) setError(e instanceof Error ? e.message : t("settings.saveFailed"));
@@ -323,7 +327,7 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
             </div>
           </div>
 
-          <ConversationSettings settings={settings} saving={saving} onChange={patchSetting} />
+          <ConversationSettings settings={settings} saving={saving} onChange={patchSetting} onSave={patchSettings} />
 
           <div className="card">
             <h3 className="card-header">{t("settings.infoCard")}</h3>

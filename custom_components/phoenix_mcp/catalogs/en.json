@@ -2079,22 +2079,22 @@
     },
     "conversations": {
       "title": "Conversation Log",
-      "description": "Follow what Phoenix received, attempted, changed, and returned.",
+      "description": "A readable record of what was asked, what Phoenix did, and what it replied.",
       "unknown": "Unknown",
       "fullText": "Show full text ({count} characters)",
       "copied": "Copied",
       "copyFailed": "Copy failed. Select the text to copy it.",
       "copy": "Copy text",
       "parameters": "Parameters",
-      "changeEvidence": "Before, after, and available change details",
-      "details": "Full recorded data",
-      "payloadUnavailable": "This payload was not retained.",
+      "changeEvidence": "Before and after",
+      "details": "Raw data",
+      "payloadUnavailable": "Details were not recorded.",
       "detailFailed": "This entry could not be loaded. It may have expired or been cleared.",
       "retry": "Try again",
-      "prompt": "Your prompt",
+      "prompt": "Prompt",
       "activity": "Activity",
       "response": "Response",
-      "promptUnavailable": "The original prompt was not available to Phoenix, or was omitted by privacy controls.",
+      "promptUnavailable": "Phoenix did not receive a usable prompt for this turn.",
       "noActivity": "No tool activity was recorded.",
       "responseUnavailable": "The final reply was not available to Phoenix, or was not retained. Tool results appear in Activity.",
       "technical": "Technical details",
@@ -2102,7 +2102,7 @@
       "clearFailed": "History could not be cleared from storage. Try again.",
       "recording": "Recording enabled",
       "recordingOff": "Recording disabled",
-      "disabledHelp": "Enable Conversation Log in Settings to record new activity. Existing history remains subject to retention limits.",
+      "disabledHelp": "Recording is off. Turn it on in Settings to record new conversations. Existing entries remain subject to retention limits.",
       "storageUnavailable": "History storage is unavailable. Recent activity may not survive a restart.",
       "search": "Search recorded text",
       "sourceFilter": "Filter by source",
@@ -2117,15 +2117,14 @@
       "empty": "No conversations to show",
       "emptyHelp": "New recorded activity will appear here. Try changing the filters if you expected an entry.",
       "toolExchange": "Tool exchange; prompt unavailable",
-      "counts": "Tool calls: {tools} · Changes: {changes}",
-      "execution": "Execution: {outcome}",
+      "execution": "Tools: {outcome}",
       "showing": "Showing {shown} of {total}",
       "clear": "Clear conversation history",
-      "clearConfirm": "Clear all conversation history? This stops capture for active entries. Existing Home Assistant backups are unaffected.",
+      "clearConfirm": "Delete all conversation history? This cannot be undone. Conversations in progress stop recording. Copies in existing backups are not affected.",
       "enable": "Record conversations",
       "enableHelp": "Keep sanitized prompts, tool activity, changes, and replies that Phoenix can observe.",
-      "retentionHelp": "Oldest whole entries are removed when any limit is reached. History survives restarts; a sudden shutdown can lose recent activity.",
-      "privacyHelp": "Secrets are filtered before retention, but arbitrary text cannot be guaranteed secret-free. Images and binary attachments are not stored. Disabling entity-name logging suppresses conversation content.",
+      "retentionHelp": "When any limit is reached, the oldest entries are deleted first. Large payloads are shortened. A sudden shutdown can lose about 30 seconds of recent activity.",
+      "privacyHelp": "History is stored in Home Assistant and included in its backups. While recording is enabled, household Voice requests are recorded too. Automatic redaction cannot detect every secret in arbitrary text. Binary media is excluded. Turning off entity-name logging omits conversation content.",
       "limit": {
         "entries": "Maximum entries",
         "days": "Maximum age (days)",
@@ -2133,9 +2132,9 @@
       },
       "source": {
         "agentcli": "Agent Chat",
-        "voice": "Phoenix Voice",
+        "voice": "Voice Agent",
         "ai_task": "AI Task",
-        "assist": "Assist bridge",
+        "assist": "Assist Tool Provider",
         "mcp": "External MCP client",
         "home_companion": "Home Companion"
       },
@@ -2154,7 +2153,8 @@
         "turn_outcome": "Turn outcome",
         "error": "Reported a problem",
         "notice": "Notice",
-        "continue_required": "Paused for continuation"
+        "continue_required": "Paused for continuation",
+        "assistant_text": "Assistant narration"
       },
       "outcome": {
         "completed": "Completed",
@@ -2178,7 +2178,7 @@
         "approved": "Approved"
       },
       "responseStatus": {
-        "produced": "Phoenix produced this reply. Delivery to the user is not verified.",
+        "produced": "Reply generated",
         "unavailable": "Final response unavailable",
         "client_unavailable": "The external client did not provide its final reply.",
         "failed": "The response failed or is incomplete.",
@@ -2190,7 +2190,7 @@
       "omission": {
         "privacy": "Content was omitted because entity-name logging is disabled.",
         "sanitization": "Some content could not be safely sanitized and was omitted.",
-        "size_limit": "The storage limit was reached. Some payloads were not retained."
+        "size_limit": "Some details were shortened or omitted to stay within the recording limits."
       },
       "operation": {
         "state": "Read entity state",
@@ -2200,12 +2200,28 @@
         "search": "Searched available resources",
         "delegate": "Requested delegated assistance"
       },
-      "groupingUnavailable": "No reliable user-turn boundary was supplied. A shared session does not establish a shared prompt.",
+      "groupingUnavailable": "No user-turn boundary was supplied, so each tool exchange is shown separately. A shared session does not establish a shared prompt.",
       "sourceLabel": "Source",
       "tokenLabel": "Token",
       "providerLabel": "Provider",
       "modelLabel": "Model",
-      "identityUnavailable": "Not available to Phoenix"
+      "identityUnavailable": "Not available to Phoenix",
+      "deliveryUnverified": "Phoenix produced this reply. Delivery to the user is not verified.",
+      "clientPromptUnavailable": "This client did not provide the user's message to Phoenix.",
+      "routeLocal": "Handled locally",
+      "routeProvider": "Sent to the AI model",
+      "executionUnknown": "Result unconfirmed: the action may have run. Check Home Assistant before retrying.",
+      "omittedEvents": "Event limit reached: {count} events are not shown. Recorded outcomes are retained separately.",
+      "loggingDisabled": "Recording is unavailable while Disable all logging is on.",
+      "storage": "Storage: {used} of {limit} MB",
+      "toolCount": {
+        "one": "{count} tool call",
+        "other": "{count} tool calls"
+      },
+      "changeCount": {
+        "one": "{count} change",
+        "other": "{count} changes"
+      }
     }
   },
   "notification": {

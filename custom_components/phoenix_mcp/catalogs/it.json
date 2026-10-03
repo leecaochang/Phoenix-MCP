@@ -2075,22 +2075,22 @@
     },
     "conversations": {
       "title": "Registro conversazioni",
-      "description": "Consulta ciò che Phoenix ha ricevuto, tentato, modificato e restituito.",
+      "description": "Un registro leggibile delle richieste, delle azioni di Phoenix e delle sue risposte.",
       "unknown": "Sconosciuto",
       "fullText": "Mostra testo completo ({count} caratteri)",
       "copied": "Copiato",
       "copyFailed": "Copia non riuscita. Seleziona il testo per copiarlo.",
       "copy": "Copia testo",
       "parameters": "Parametri",
-      "changeEvidence": "Contenuto precedente, successivo e dettagli disponibili della modifica",
-      "details": "Dati registrati completi",
-      "payloadUnavailable": "Questi dati non sono stati conservati.",
+      "changeEvidence": "Prima e dopo",
+      "details": "Dati grezzi",
+      "payloadUnavailable": "I dettagli non sono stati registrati.",
       "detailFailed": "Impossibile caricare questa voce. Potrebbe essere scaduta o eliminata.",
       "retry": "Riprova",
-      "prompt": "La tua richiesta",
+      "prompt": "Messaggio",
       "activity": "Attività",
       "response": "Risposta",
-      "promptUnavailable": "Phoenix non ha ricevuto la richiesta originale oppure i controlli di privacy ne hanno impedito la conservazione.",
+      "promptUnavailable": "Phoenix non ha ricevuto un messaggio utilizzabile per questo turno.",
       "noActivity": "Nessuna attività degli strumenti registrata.",
       "responseUnavailable": "Phoenix non ha ricevuto o conservato la risposta finale. I risultati degli strumenti sono in Attività.",
       "technical": "Dettagli tecnici",
@@ -2098,7 +2098,7 @@
       "clearFailed": "Impossibile eliminare la cronologia dall'archivio. Riprova.",
       "recording": "Registrazione attivata",
       "recordingOff": "Registrazione disattivata",
-      "disabledHelp": "Attiva il registro conversazioni nelle impostazioni per registrare nuove attività. La cronologia esistente resta soggetta ai limiti di conservazione.",
+      "disabledHelp": "La registrazione è disattivata. Attivala nelle Impostazioni per le nuove conversazioni. Le voci esistenti restano soggette ai limiti di conservazione.",
       "storageUnavailable": "L'archivio della cronologia non è disponibile. Le attività recenti potrebbero andare perse al riavvio.",
       "search": "Cerca nel testo registrato",
       "sourceFilter": "Filtra per origine",
@@ -2113,15 +2113,14 @@
       "empty": "Nessuna conversazione da mostrare",
       "emptyHelp": "Le nuove attività registrate appariranno qui. Prova a cambiare i filtri se ti aspettavi una voce.",
       "toolExchange": "Scambio con strumento; richiesta non disponibile",
-      "counts": "Chiamate strumenti: {tools} · Modifiche: {changes}",
-      "execution": "Esecuzione: {outcome}",
+      "execution": "Strumenti: {outcome}",
       "showing": "Visualizzate {shown} di {total}",
       "clear": "Cancella cronologia conversazioni",
-      "clearConfirm": "Cancellare tutta la cronologia? La registrazione delle voci attive si interromperà. I backup Home Assistant esistenti non verranno modificati.",
+      "clearConfirm": "Eliminare tutta la cronologia delle conversazioni? L'operazione non è reversibile. Le conversazioni in corso non saranno più registrate. Le copie nei backup esistenti non sono interessate.",
       "enable": "Registra conversazioni",
       "enableHelp": "Conserva richieste, attività, modifiche e risposte osservabili da Phoenix, dopo aver oscurato i segreti.",
-      "retentionHelp": "Al raggiungimento di qualsiasi limite vengono eliminate le voci complete più vecchie. La cronologia sopravvive ai riavvii; un arresto improvviso può perdere attività recenti.",
-      "privacyHelp": "I segreti vengono filtrati prima della conservazione, ma non è garantita la loro assenza in qualsiasi testo. Immagini e allegati binari non vengono salvati. Disattivare la registrazione dei nomi delle entità impedisce di conservare il contenuto delle conversazioni.",
+      "retentionHelp": "Quando viene raggiunto un limite, vengono eliminate prima le voci più vecchie. I contenuti grandi vengono abbreviati. Un arresto improvviso può perdere circa 30 secondi di attività recente.",
+      "privacyHelp": "La cronologia è archiviata in Home Assistant e inclusa nei suoi backup. Quando la registrazione è attiva, vengono registrate anche le richieste vocali dei membri della casa. L'oscuramento automatico non rileva ogni segreto nel testo libero. I contenuti multimediali binari sono esclusi. Disattivando la registrazione dei nomi delle entità si omette il contenuto delle conversazioni.",
       "limit": {
         "entries": "Numero massimo di voci",
         "days": "Età massima (giorni)",
@@ -2129,9 +2128,9 @@
       },
       "source": {
         "agentcli": "Chat agente",
-        "voice": "Voce Phoenix",
+        "voice": "Agente vocale",
         "ai_task": "Attività IA",
-        "assist": "Ponte Assist",
+        "assist": "Provider di strumenti Assist",
         "mcp": "Client MCP esterno",
         "home_companion": "Compagno di casa"
       },
@@ -2150,7 +2149,8 @@
         "turn_outcome": "Esito del turno",
         "error": "Problema segnalato",
         "notice": "Avviso",
-        "continue_required": "In pausa in attesa di continuare"
+        "continue_required": "In pausa in attesa di continuare",
+        "assistant_text": "Spiegazione dell'assistente"
       },
       "outcome": {
         "completed": "Completato",
@@ -2174,7 +2174,7 @@
         "approved": "Approvato"
       },
       "responseStatus": {
-        "produced": "Phoenix ha generato questa risposta. La consegna all'utente non è verificata.",
+        "produced": "Risposta generata",
         "unavailable": "Risposta finale non disponibile",
         "client_unavailable": "Il client esterno non ha fornito la risposta finale.",
         "failed": "La risposta non è riuscita o è incompleta.",
@@ -2186,7 +2186,7 @@
       "omission": {
         "privacy": "Il contenuto è stato omesso perché la registrazione dei nomi delle entità è disattivata.",
         "sanitization": "Alcuni contenuti non potevano essere depurati in sicurezza e sono stati omessi.",
-        "size_limit": "Il limite di spazio è stato raggiunto. Alcuni dati non sono stati conservati."
+        "size_limit": "Alcuni dettagli sono stati abbreviati o omessi per rispettare i limiti di registrazione."
       },
       "operation": {
         "state": "Lettura dello stato dell’entità",
@@ -2196,12 +2196,28 @@
         "search": "Ricerca delle risorse disponibili",
         "delegate": "Assistenza delegata richiesta"
       },
-      "groupingUnavailable": "Non è stato fornito un confine affidabile del turno utente. Una sessione condivisa non implica una richiesta condivisa.",
+      "groupingUnavailable": "Non è stato fornito un confine tra i turni, quindi ogni scambio con gli strumenti è mostrato separatamente. Una sessione condivisa non identifica un messaggio condiviso.",
       "sourceLabel": "Origine",
       "tokenLabel": "Token",
       "providerLabel": "Provider",
       "modelLabel": "Modello",
-      "identityUnavailable": "Non disponibile per Phoenix"
+      "identityUnavailable": "Non disponibile per Phoenix",
+      "deliveryUnverified": "Phoenix ha generato questa risposta. La consegna all'utente non è verificata.",
+      "clientPromptUnavailable": "Questo client non ha fornito a Phoenix il messaggio dell'utente.",
+      "routeLocal": "Gestito localmente",
+      "routeProvider": "Inviato al modello IA",
+      "executionUnknown": "Risultato non confermato: l'azione potrebbe essere stata eseguita. Controlla Home Assistant prima di riprovare.",
+      "omittedEvents": "Limite di eventi raggiunto: {count} eventi non sono mostrati. I risultati registrati sono conservati separatamente.",
+      "loggingDisabled": "La registrazione non è disponibile quando tutti i registri sono disattivati.",
+      "storage": "Spazio: {used} di {limit} MB",
+      "toolCount": {
+        "one": "{count} chiamata a strumento",
+        "other": "{count} chiamate a strumenti"
+      },
+      "changeCount": {
+        "one": "{count} modifica",
+        "other": "{count} modifiche"
+      }
     }
   },
   "notification": {

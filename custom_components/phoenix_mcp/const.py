@@ -2600,4 +2600,17 @@ CONVERSATION_LOG_LIMITS = {
 CONVERSATION_LOG_RESERVE_BYTES = 16384
 CONVERSATION_LOG_MAX_NODES = 100000
 CONVERSATION_LOG_MAX_DEPTH = 25
-CONVERSATION_LOG_FLUSH_SECONDS = 5
+CONVERSATION_LOG_FLUSH_SECONDS = 30
+CONVERSATION_LOG_ENTRY_BYTES = 1_000_000
+CONVERSATION_LOG_PAYLOAD_BYTES = 64_000
+CONVERSATION_LOG_SCAN_BYTES = 8_000_000
+CONVERSATION_LOG_MAX_EVENTS = 256
+CONVERSATION_LOG_MAX_OPERATIONS = 256
+CONVERSATION_LOG_MAX_APPROVALS = 128
+CONVERSATION_LOG_OUTCOMES = frozenset({
+    "allowed", "denied", "invalid_request", "not_found", "not_implemented", "rate_limited",
+    "pending_approval", "running", "unknown", "approved", "rejected", "expired", "cancelled",
+})
+CONVERSATION_LOG_METADATA = frozenset({
+    "request_id", "token_id", "token_name", "client_ip", "conversation_id", "session_ref", "provider", "model",
+})

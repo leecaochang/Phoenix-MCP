@@ -452,7 +452,8 @@ async def test_execution_policy_refusal_never_replays(hass, executing_chat, barr
         assert any(name == 'approval_required' for name, _ in events)
     else:
         assert not data.store.get_pending_approvals()
-        assert 'could not complete' in next(p['text'] for n, p in events if n == 'assistant_delta')
+        assert 'could not complete' in next(p['message'] for n, p in events if n == 'error')
+        assert not any(n == 'assistant_delta' for n, _ in events)
     assert not data.command_routing.chat_history._entries
 
 

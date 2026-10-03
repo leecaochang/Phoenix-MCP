@@ -847,6 +847,9 @@ export interface ConversationSummary {
   execution_status: ConversationOutcome;
   response_status: ConversationResponseOutcome;
   excerpt: string;
+  first_tool?: string;
+  finished_at?: string;
+  omitted_events?: number;
   tool_count: number;
   change_count: number;
   omissions: ConversationOmission[];
@@ -858,6 +861,7 @@ export interface ConversationEvent {
   tool_id: string | null;
   payload: unknown;
   outcome?: ConversationOutcome;
+  omission?: ConversationOmission;
 }
 
 export interface ConversationEntry extends ConversationSummary {
@@ -865,6 +869,7 @@ export interface ConversationEntry extends ConversationSummary {
   response: unknown;
   metadata: Record<string, unknown>;
   events: ConversationEvent[];
+  field_omissions?: Record<string, ConversationOmission>;
 }
 
 export interface ConversationListResponse {
@@ -873,4 +878,5 @@ export interface ConversationListResponse {
   enabled: boolean;
   available: boolean;
   bytes: number;
+  max_bytes?: number;
 }

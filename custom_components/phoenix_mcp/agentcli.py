@@ -3514,7 +3514,7 @@ async def _run_tool_batch(
     )
 
 
-from .conversation_log import recorded_chat
+from .conversation_log import recorded_chat, flush_assistant
 
 
 @recorded_chat
@@ -3670,6 +3670,7 @@ async def async_run_agent_turn(
             detect_focus_refusal=home_focused, dispatch_started=dispatch_started,
             write_started=write_started,
         )
+        flush_assistant()
         tool_calls = call.tool_calls
         assistant_msg = call.assistant_msg
         stop_reason = call.stop_reason

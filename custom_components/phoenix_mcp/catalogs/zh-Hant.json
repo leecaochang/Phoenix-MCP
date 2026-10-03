@@ -2080,22 +2080,22 @@
     },
     "conversations": {
       "title": "對話記錄",
-      "description": "查看 Phoenix 收到、嘗試執行、變更及傳回的內容。",
+      "description": "以易讀形式記錄收到的請求、Phoenix 的操作及回覆。",
       "unknown": "未知",
       "fullText": "顯示全文（{count} 個字元）",
       "copied": "已複製",
       "copyFailed": "複製失敗。請選取文字後複製。",
       "copy": "複製文字",
       "parameters": "參數",
-      "changeEvidence": "變更前後內容及現有變更詳情",
-      "details": "完整記錄資料",
-      "payloadUnavailable": "未保留此資料。",
+      "changeEvidence": "變更前後",
+      "details": "原始資料",
+      "payloadUnavailable": "未記錄詳細內容。",
       "detailFailed": "無法載入此項目，可能已過期或遭清除。",
       "retry": "重試",
-      "prompt": "您的提示詞",
+      "prompt": "提示內容",
       "activity": "活動",
       "response": "回覆",
-      "promptUnavailable": "Phoenix 未收到原始提示詞，或隱私設定阻止了記錄。",
+      "promptUnavailable": "Phoenix 未收到此輪可用的提示內容。",
       "noActivity": "未記錄工具活動。",
       "responseUnavailable": "Phoenix 未收到或未保留最終回覆。工具結果請參閱「活動」。",
       "technical": "技術詳情",
@@ -2103,7 +2103,7 @@
       "clearFailed": "無法從儲存空間清除歷史。請重試。",
       "recording": "記錄已啟用",
       "recordingOff": "記錄已停用",
-      "disabledHelp": "在設定中啟用對話記錄以記錄新活動。現有歷史仍受保留限制約束。",
+      "disabledHelp": "記錄已關閉。可在設定中開啟以記錄新對話。現有記錄仍受保留限制約束。",
       "storageUnavailable": "歷史儲存空間無法使用，近期活動可能在重新啟動後遺失。",
       "search": "搜尋已記錄的文字",
       "sourceFilter": "依來源篩選",
@@ -2118,15 +2118,14 @@
       "empty": "沒有可顯示的對話",
       "emptyHelp": "新記錄的活動將在此顯示。若預期有項目，請嘗試調整篩選條件。",
       "toolExchange": "工具互動；提示詞無法取得",
-      "counts": "工具呼叫：{tools} · 變更：{changes}",
-      "execution": "執行：{outcome}",
+      "execution": "工具：{outcome}",
       "showing": "顯示 {shown} 筆，共 {total} 筆",
       "clear": "清除對話歷史",
-      "clearConfirm": "清除所有對話歷史？這將停止記錄進行中的項目，不影響現有 Home Assistant 備份。",
+      "clearConfirm": "刪除全部對話歷史？此操作無法復原。進行中的對話將停止記錄。現有備份中的副本不受影響。",
       "enable": "記錄對話",
       "enableHelp": "保留 Phoenix 能觀察到且已遮蔽機密的提示詞、工具活動、變更及回覆。",
-      "retentionHelp": "達到任何限制時，將刪除最舊的完整項目。歷史會在重新啟動後保留；突然關機可能遺失近期活動。",
-      "privacyHelp": "內容在保留前會過濾機密資訊，但無法保證任意文字完全不含機密。不儲存圖片及二進位附件。關閉實體名稱記錄會阻止保留對話內容。",
+      "retentionHelp": "達到任一限制時，優先刪除最早的記錄。大型內容會被縮短。突然關機可能遺失最近約 30 秒的活動。",
+      "privacyHelp": "歷史記錄儲存在 Home Assistant 中，並包含在其備份中。開啟記錄後，家庭成員的語音請求也會被記錄。自動遮蔽無法辨識任意文字中的所有秘密。二進位媒體不予儲存。關閉實體名稱記錄會省略對話內容。",
       "limit": {
         "entries": "最多項目數",
         "days": "最長保留時間（天）",
@@ -2134,9 +2133,9 @@
       },
       "source": {
         "agentcli": "代理聊天",
-        "voice": "Phoenix 語音",
+        "voice": "語音智慧體",
         "ai_task": "AI 任務",
-        "assist": "Assist 橋接",
+        "assist": "Assist 工具提供方",
         "mcp": "外部 MCP 用戶端",
         "home_companion": "家庭夥伴"
       },
@@ -2155,7 +2154,8 @@
         "turn_outcome": "回合結果",
         "error": "已回報問題",
         "notice": "提示",
-        "continue_required": "已暫停，等待繼續"
+        "continue_required": "已暫停，等待繼續",
+        "assistant_text": "助理說明"
       },
       "outcome": {
         "completed": "已完成",
@@ -2179,7 +2179,7 @@
         "approved": "已核准"
       },
       "responseStatus": {
-        "produced": "Phoenix 已產生此回覆，尚未驗證使用者是否收到。",
+        "produced": "回覆已產生",
         "unavailable": "最終回覆無法取得",
         "client_unavailable": "外部用戶端未提供最終回覆。",
         "failed": "回覆失敗或不完整。",
@@ -2191,7 +2191,7 @@
       "omission": {
         "privacy": "由於實體名稱記錄已停用，內容已省略。",
         "sanitization": "部分內容無法安全遮蔽機密，已省略。",
-        "size_limit": "已達到儲存限制，部分資料未保留。"
+        "size_limit": "為遵守記錄限制，部分詳細內容已縮短或省略。"
       },
       "operation": {
         "state": "讀取實體狀態",
@@ -2201,12 +2201,28 @@
         "search": "搜尋可用資源",
         "delegate": "請求委派協助"
       },
-      "groupingUnavailable": "用戶端未提供可靠的使用者輪次邊界。同一工作階段中的呼叫不一定屬於同一則提示詞。",
+      "groupingUnavailable": "未提供使用者輪次邊界，因此每次工具互動分開顯示。共用工作階段不代表共用同一條提示。",
       "sourceLabel": "來源",
       "tokenLabel": "權杖",
       "providerLabel": "供應商",
       "modelLabel": "模型",
-      "identityUnavailable": "Phoenix 未取得此資訊"
+      "identityUnavailable": "Phoenix 未取得此資訊",
+      "deliveryUnverified": "Phoenix 已產生此回覆，尚未驗證使用者是否收到。",
+      "clientPromptUnavailable": "此用戶端未向 Phoenix 提供使用者訊息。",
+      "routeLocal": "由本機處理",
+      "routeProvider": "已傳送至 AI 模型",
+      "executionUnknown": "結果未確認：操作可能已執行。請先檢查 Home Assistant，再決定是否重試。",
+      "omittedEvents": "已達事件上限：未顯示 {count} 個事件。已記錄的結果會另外保留。",
+      "loggingDisabled": "開啟「停用所有日誌」時無法記錄對話。",
+      "storage": "儲存：已使用 {used} MB，上限 {limit} MB",
+      "toolCount": {
+        "one": "{count} 次工具呼叫",
+        "other": "{count} 次工具呼叫"
+      },
+      "changeCount": {
+        "one": "{count} 項變更",
+        "other": "{count} 項變更"
+      }
     }
   },
   "voice": {

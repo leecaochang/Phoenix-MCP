@@ -2153,22 +2153,22 @@
     },
     "conversations": {
       "title": "Gesprekslogboek",
-      "description": "Bekijk wat Phoenix heeft ontvangen, geprobeerd, gewijzigd en teruggestuurd.",
+      "description": "Een leesbaar overzicht van de vraag, wat Phoenix deed en het antwoord.",
       "unknown": "Onbekend",
       "fullText": "Volledige tekst tonen ({count} tekens)",
       "copied": "Gekopieerd",
       "copyFailed": "Kopiëren mislukt. Selecteer de tekst om deze te kopiëren.",
       "copy": "Tekst kopiëren",
       "parameters": "Invoerparameters",
-      "changeEvidence": "Inhoud voor en na de wijziging en beschikbare details",
-      "details": "Volledige vastgelegde gegevens",
-      "payloadUnavailable": "Deze gegevens zijn niet bewaard.",
+      "changeEvidence": "Voor en na",
+      "details": "Ruwe gegevens",
+      "payloadUnavailable": "Details zijn niet vastgelegd.",
       "detailFailed": "Dit item kon niet worden geladen. Het is mogelijk verlopen of gewist.",
       "retry": "Opnieuw proberen",
-      "prompt": "Uw verzoek",
+      "prompt": "Bericht",
       "activity": "Activiteit",
       "response": "Antwoord",
-      "promptUnavailable": "Het oorspronkelijke verzoek was niet beschikbaar voor Phoenix of werd door privacyinstellingen weggelaten.",
+      "promptUnavailable": "Phoenix ontving geen bruikbaar bericht voor deze beurt.",
       "noActivity": "Geen gereedschapsactiviteit vastgelegd.",
       "responseUnavailable": "Het definitieve antwoord was niet beschikbaar voor Phoenix of is niet bewaard. Gereedschapsresultaten staan onder Activiteit.",
       "technical": "Technische details",
@@ -2176,7 +2176,7 @@
       "clearFailed": "De geschiedenis kon niet uit de opslag worden gewist. Probeer het opnieuw.",
       "recording": "Registratie ingeschakeld",
       "recordingOff": "Registratie uitgeschakeld",
-      "disabledHelp": "Schakel het gesprekslogboek in bij Instellingen om nieuwe activiteit vast te leggen. Bestaande geschiedenis blijft onder de bewaarlimieten vallen.",
+      "disabledHelp": "Opnemen staat uit. Schakel het in bij Instellingen om nieuwe gesprekken vast te leggen. Bestaande vermeldingen blijven onder de bewaarlimieten vallen.",
       "storageUnavailable": "De opslag voor geschiedenis is niet beschikbaar. Recente activiteit kan na een herstart verloren gaan.",
       "search": "Opgenomen tekst doorzoeken",
       "sourceFilter": "Filteren op bron",
@@ -2191,15 +2191,14 @@
       "empty": "Geen gesprekken om te tonen",
       "emptyHelp": "Nieuwe vastgelegde activiteit verschijnt hier. Pas de filters aan als u een item verwachtte.",
       "toolExchange": "Gereedschapsuitwisseling; verzoek niet beschikbaar",
-      "counts": "Gereedschapsaanroepen: {tools} · Wijzigingen: {changes}",
-      "execution": "Uitvoering: {outcome}",
+      "execution": "Hulpmiddelen: {outcome}",
       "showing": "{shown} van {total} weergegeven",
       "clear": "Gespreksgeschiedenis wissen",
-      "clearConfirm": "Alle gespreksgeschiedenis wissen? De registratie van actieve items stopt. Bestaande Home Assistant-back-ups blijven behouden.",
+      "clearConfirm": "Alle gespreksgeschiedenis verwijderen? Dit kan niet ongedaan worden gemaakt. Lopende gesprekken worden niet verder opgenomen. Kopieën in bestaande back-ups blijven behouden.",
       "enable": "Gesprekken vastleggen",
       "enableHelp": "Bewaar opgeschoonde verzoeken, gereedschapsactiviteit, wijzigingen en antwoorden die Phoenix kan waarnemen.",
-      "retentionHelp": "Bij het bereiken van een limiet worden de oudste volledige items verwijderd. De geschiedenis blijft na herstarts behouden; abrupt uitschakelen kan recente activiteit verliezen.",
-      "privacyHelp": "Geheimen worden voor opslag gefilterd, maar willekeurige tekst is niet gegarandeerd vrij van geheimen. Afbeeldingen en binaire bijlagen worden niet opgeslagen. Zonder registratie van entiteitsnamen wordt gespreksinhoud weggelaten.",
+      "retentionHelp": "Zodra een limiet is bereikt, worden de oudste vermeldingen eerst verwijderd. Grote inhoud wordt ingekort. Bij plotseling afsluiten kan ongeveer 30 seconden aan recente activiteit verloren gaan.",
+      "privacyHelp": "De geschiedenis wordt in Home Assistant opgeslagen en opgenomen in de back-ups. Als opnemen aanstaat, worden ook spraakverzoeken van huisgenoten vastgelegd. Automatische afscherming herkent niet elk geheim in vrije tekst. Binaire media worden uitgesloten. Als het loggen van entiteitsnamen uitstaat, wordt gespreksinhoud weggelaten.",
       "limit": {
         "entries": "Maximumaantal items",
         "days": "Maximale leeftijd (dagen)",
@@ -2207,9 +2206,9 @@
       },
       "source": {
         "agentcli": "Agentchat",
-        "voice": "Phoenix-spraak",
+        "voice": "Spraakagent",
         "ai_task": "AI-taak",
-        "assist": "Assist-brug",
+        "assist": "Assist-toolprovider",
         "mcp": "Externe MCP-client",
         "home_companion": "Huisgenoot"
       },
@@ -2228,7 +2227,8 @@
         "turn_outcome": "Resultaat van de beurt",
         "error": "Probleem gemeld",
         "notice": "Melding",
-        "continue_required": "Gepauzeerd tot voortzetting"
+        "continue_required": "Gepauzeerd tot voortzetting",
+        "assistant_text": "Toelichting van de assistent"
       },
       "outcome": {
         "completed": "Voltooid",
@@ -2252,7 +2252,7 @@
         "approved": "Goedgekeurd"
       },
       "responseStatus": {
-        "produced": "Phoenix heeft dit antwoord gemaakt. Aflevering aan de gebruiker is niet geverifieerd.",
+        "produced": "Antwoord gegenereerd",
         "unavailable": "Definitief antwoord niet beschikbaar",
         "client_unavailable": "De externe client heeft zijn definitieve antwoord niet aangeleverd.",
         "failed": "Het antwoord is mislukt of onvolledig.",
@@ -2264,7 +2264,7 @@
       "omission": {
         "privacy": "Inhoud is weggelaten omdat registratie van entiteitsnamen is uitgeschakeld.",
         "sanitization": "Sommige inhoud kon niet veilig worden opgeschoond en is weggelaten.",
-        "size_limit": "De opslaglimiet is bereikt. Sommige gegevens zijn niet bewaard."
+        "size_limit": "Sommige details zijn ingekort of weggelaten om binnen de opnamelimieten te blijven."
       },
       "operation": {
         "state": "Entiteitsstatus gelezen",
@@ -2274,12 +2274,28 @@
         "search": "Beschikbare bronnen doorzocht",
         "delegate": "Gedelegeerde hulp aangevraagd"
       },
-      "groupingUnavailable": "Er is geen betrouwbare grens van een gebruikersbeurt opgegeven. Een gedeelde sessie betekent niet dezelfde opdracht.",
+      "groupingUnavailable": "Er is geen beurtgrens doorgegeven, dus elke uitwisseling wordt apart getoond. Een gedeelde sessie betekent niet een gedeeld bericht.",
       "sourceLabel": "Bron",
       "tokenLabel": "Token",
       "providerLabel": "Provider",
       "modelLabel": "Model",
-      "identityUnavailable": "Niet beschikbaar voor Phoenix"
+      "identityUnavailable": "Niet beschikbaar voor Phoenix",
+      "deliveryUnverified": "Phoenix heeft dit antwoord gemaakt. Aflevering aan de gebruiker is niet geverifieerd.",
+      "clientPromptUnavailable": "Deze client heeft het bericht van de gebruiker niet aan Phoenix doorgegeven.",
+      "routeLocal": "Lokaal afgehandeld",
+      "routeProvider": "Naar het AI-model gestuurd",
+      "executionUnknown": "Resultaat onbevestigd: de actie kan zijn uitgevoerd. Controleer Home Assistant voordat je het opnieuw probeert.",
+      "omittedEvents": "Gebeurtenislimiet bereikt: {count} gebeurtenissen worden niet getoond. Vastgelegde resultaten blijven apart bewaard.",
+      "loggingDisabled": "Opnemen is niet beschikbaar als alle logboeken zijn uitgeschakeld.",
+      "storage": "Opslag: {used} van {limit} MB",
+      "toolCount": {
+        "one": "{count} hulpmiddelaanroep",
+        "other": "{count} hulpmiddelaanroepen"
+      },
+      "changeCount": {
+        "one": "{count} wijziging",
+        "other": "{count} wijzigingen"
+      }
     }
   }
 }

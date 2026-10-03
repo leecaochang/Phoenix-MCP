@@ -461,3 +461,234 @@ async def test_selected_identity_is_sanitized_without_copying_provider_secrets(c
     finally:
         history._current.reset(ctx)
     assert "canary-model" not in json.dumps(data.conversations.detail(handle[1]))
+
+
+@pytest.mark.parametrize("value,secret", [
+    ({"service": {"domain": "alarm_control_panel", "name": "alarm_disarm", "data": {"code": "4821"}}}, "4821"),
+    ({"service_data": {"code": "entry-secret"}}, "entry-secret"),
+    ({"pin": "4821", "psk": "4821", "encryption_key": "4821"}, "4821"),
+    ('The code is 4821.', "4821"),
+    ('service: alarm_control_panel.alarm_disarm\nservice_data:\n  code: "entry-secret"', "entry-secret"),
+    ('{"service":{"domain":"alarm_control_panel","data":{"code":"entry-secret"}}}', "entry-secret"),
+    ('https://example.test/?psk=entry-secret&code=4821', "entry-secret"),
+])
+def test_service_credentials_are_redacted_without_losing_error_codes(value, secret):
+    assert secret not in json.dumps(history.sanitized(value, max_bytes=10000))
+    assert history.sanitized({"code": "cancelled"}, max_bytes=10000) == {"code": "cancelled"}
+
+
+def test_address_redaction_preserves_durations_and_ordinary_words():
+    source = "Spin: 1200 rpm; delay: 00:05:00; at: 07:30:00; MAC aa:bb:cc:dd:ee:ff"
+    assert history.sanitized(source, max_bytes=10000, hide_ip=True) == source
+    for address in ("192.0.2.1", "2001:db8::1", "::1"):
+        assert address not in history.sanitized(f"Address [{address}]", max_bytes=10000, hide_ip=True)
+
+
+def test_oversize_result_preserves_later_denial_and_reply(conversation_data):
+    data, _ = conversation_data
+    log = history.recorder(data)
+    handle = log.begin("agentcli", prompt="Change two things")
+    for tool_id, outcome, payload in [("one", "allowed", "x" * 2_000_000), ("two", "denied", "No access")]:
+        ctx = history._tool.set(tool_id)
+        try:
+            log.event(handle, "tool_call", {"name": "call_service", "arguments": {}})
+            log.event(handle, "tool_result", payload, outcome=outcome)
+        finally:
+            history._tool.reset(ctx)
+    log.finish(handle, response="One change succeeded and one was denied.")
+    entry = only(log)
+    assert len(entry["events"]) == 4 and entry["events"][-1]["outcome"] == "denied"
+    assert entry["execution_status"] == "partial"
+    assert entry["response"] == "One change succeeded and one was denied."
+    assert entry["events"][1]["omission"] == "size_limit"
+    assert log.query(outcome="denied")["total"] == 1
+
+
+@pytest.mark.asyncio
+async def test_event_limit_preserves_late_approval_after_reload(conversation_data):
+    data, _ = conversation_data
+    log = history.recorder(data)
+    handle = log.begin("agentcli", prompt="Change something")
+    approval = SimpleNamespace(id="retained-approval", tool_name="set_state", status="pending", diff=None, result=None, rejected_reason=None)
+    context = history._current.set(handle)
+    tool = history._tool.set("pending-call")
+    try:
+        log.event(handle, "tool_call", {"name": "set_state"})
+        log.approval(approval)
+        log.event(handle, "tool_result", {}, outcome="pending_approval")
+        for _ in range(history.CONVERSATION_LOG_MAX_EVENTS + 1):
+            log.event(handle, "routing", {"route": "provider"})
+    finally:
+        history._current.reset(context)
+        history._tool.reset(tool)
+    log.finish(handle, response="Awaiting approval")
+    persisted = AsyncMock()
+    persisted.async_load.return_value = {"entries": [only(log)]}
+    restored = history.ConversationLog(persisted)
+    restored.configure(data.store.get_settings())
+    await restored.async_load()
+    approval.status = "approved"
+    approval.result = {"outcome": "allowed"}
+    restored.approval(approval, resolved=True)
+    entry = only(restored)
+    assert entry["execution_status"] == "allowed"
+    assert entry["omitted_events"] > 0
+    assert len(entry["events"]) <= history.CONVERSATION_LOG_MAX_EVENTS
+    assert restored.query()["bytes"] < restored.entry_budget
+
+
+def test_content_search_and_multimodal_excerpt(conversation_data):
+    data, _ = conversation_data
+    log = history.recorder(data)
+    prompt = 'Describe this\npicture with "quotes"'
+    handle = log.begin("agentcli", prompt=[{"type": "text", "text": prompt}, {"type": "image", "data": "binary"}])
+    log.event(handle, "tool_result", "Service failed", outcome="invalid_request")
+    log.finish(handle, response="Unable to complete")
+    assert log.query()["entries"][0]["excerpt"] == prompt
+    assert log.query(search=prompt)["total"] == 1
+    assert log.query(search="tool_count")["total"] == 0
+    assert log.query(search="coverage")["total"] == 0
+    assert log.query(outcome="failed")["total"] == 1
+    cached = log._search[handle[1]]
+    assert log.query(search=prompt)["total"] == 1
+    assert log._search[handle[1]] is cached
+
+
+@pytest.mark.asyncio
+async def test_narration_keeps_its_place_before_tools(conversation_data):
+    data, token = conversation_data
+
+    @history.recorded_chat
+    async def chat(**kwargs):
+        await kwargs["emit"]("assistant_delta", {"text": "Let me check."})
+        history.record_event(data, "tool_call", {"name": "get_state"})
+        history.record_event(data, "tool_result", "on", outcome="allowed")
+        await kwargs["emit"]("assistant_delta", {"text": "The light is on."})
+
+    await chat(data=data, token=token, messages=[{"role": "user", "content": "Is it on?"}], emit=AsyncMock())
+    entry = only(data.conversations)
+    assert [e["kind"] for e in entry["events"]] == ["assistant_text", "tool_call", "tool_result", "assistant_text"]
+    assert entry["events"][0]["payload"] == "Let me check."
+    assert entry["response"] == "The light is on."
+
+
+@pytest.mark.asyncio
+async def test_loaded_history_resanitizes_credentials_and_payload_ips(conversation_data):
+    data, _ = conversation_data
+    log = history.recorder(data)
+    handle = log.begin("voice", prompt="hello")
+    log.finish(handle, response="done")
+    row = only(log)
+    row["prompt"] = "The code is 4821. IP 192.0.2.1. Wait 00:05:00."
+    row["events"] = [{"kind": "tool_call", "timestamp": row["started_at"], "tool_id": "one", "payload": {"service_data": {"code": "4821"}}}]
+    settings = data.store.get_settings()
+    settings.log_client_ip = False
+    persisted = AsyncMock()
+    persisted.async_load.return_value = {"entries": [row]}
+    restored = history.ConversationLog(persisted)
+    restored.configure(settings)
+    await restored.async_load()
+    entry = only(restored)
+    assert "4821" not in json.dumps(entry) and "192.0.2.1" not in json.dumps(entry)
+    assert "00:05:00" in entry["prompt"]
+    assert entry["started_at"] == row["started_at"]
+
+
+def test_one_entry_does_not_evict_other_history_and_size_accounting_is_exact(conversation_data):
+    data, _ = conversation_data
+    settings = data.store.get_settings()
+    settings.conversation_log_max_mb = 1
+    log = history.recorder(data)
+    for _ in range(10):
+        log.finish(log.begin("voice", prompt="retained"), response="done")
+    handle = log.begin("mcp")
+    for _ in range(20):
+        log.event(handle, "tool_result", "x" * 100000, outcome="allowed")
+    assert log.query()["total"] == 11
+    entry = log.detail(handle[1])
+    assert history.json_size(entry) <= log.entry_budget
+    assert log._sizes[handle[1]] == history.json_size(entry)
+
+
+@pytest.mark.asyncio
+async def test_completion_saves_coalesce_but_clear_and_shutdown_flush(conversation_data, monkeypatch):
+    data, _ = conversation_data
+    persisted = AsyncMock()
+    log = history.ConversationLog(persisted)
+    log.configure(data.store.get_settings())
+    monkeypatch.setattr(history.time, "monotonic", lambda: 1000)
+    for _ in range(10):
+        log.finish(log.begin("mcp"))
+        await log.async_save(coalesced=True)
+    assert persisted.async_save.await_count == 1
+    await log.async_save()
+    assert persisted.async_save.await_count == 2
+    await log.async_clear()
+    assert persisted.async_save.call_args.args[0] == {"entries": []}
+
+
+@pytest.mark.asyncio
+async def test_unavailable_local_voice_command_records_failure(hass, conversation_data):
+    from custom_components.phoenix_mcp.command_execution import _dispatch_command
+    from custom_components.phoenix_mcp.routing_statistics import local_result
+    data, token = conversation_data
+    authority = SimpleNamespace(current=lambda _hass: None)
+
+    @history.recorded_turn("voice", "prompt")
+    async def turn(data, prompt):
+        reply = await _dispatch_command(hass, data, token, {}, authority, "", False)
+        local_result(reply, "local")
+        return reply.text
+
+    await turn(data, "Turn on the light")
+    entry = only(data.conversations)
+    assert entry["status"] == "failed"
+    assert entry["events"][0]["payload"]["outcome"] == "unauthorized"
+    assert entry["response"]
+
+
+@pytest.mark.parametrize("snapshot", [
+    {"action": "alarm_control_panel.alarm_disarm", "data": {"code": "canary-alarm"}},
+    {"service": "lock.unlock", "data": {"code": "canary-alarm"}},
+    {"before": {"actions": [{"action": "lock.unlock", "data": {"code": "canary-alarm"}}]}},
+])
+def test_service_codes_in_configuration_snapshots(snapshot):
+    assert "canary-alarm" not in json.dumps(history.sanitized(snapshot, max_bytes=10000))
+
+
+def test_many_operations_remain_bounded_and_mixed(conversation_data):
+    data, _ = conversation_data
+    data.store.get_settings().conversation_log_max_mb = 1
+    log = history.recorder(data)
+    handle = log.begin("agentcli", prompt="p" * 100000)
+    for index in range(history.CONVERSATION_LOG_MAX_OPERATIONS + 50):
+        ctx = history._tool.set(f"operation-{index}")
+        try:
+            log.event(handle, "tool_call", {"name": "get_state"})
+            log.event(handle, "tool_result", "done", outcome="allowed" if index % 2 else "denied")
+        finally:
+            history._tool.reset(ctx)
+    log.finish(handle, response="r" * 100000)
+    entry = only(log)
+    assert entry["execution_status"] == "partial"
+    assert len(entry["receipts"]) == history.CONVERSATION_LOG_MAX_OPERATIONS
+    assert entry["omitted_events"] > 0
+    assert log._sizes[handle[1]] == history.json_size(entry) < log.entry_budget
+
+
+@pytest.mark.asyncio
+async def test_sanitized_stream_overflow_cannot_reuse_earlier_narration(conversation_data, monkeypatch):
+    data, token = conversation_data
+    monkeypatch.setattr(history, "CONVERSATION_LOG_SCAN_BYTES", 500)
+
+    @history.recorded_chat
+    async def chat(**kwargs):
+        await kwargs["emit"]("assistant_delta", {"text": "Let me check."})
+        history.flush_assistant()
+        await kwargs["emit"]("assistant_delta", {"text": "x" * 501})
+
+    await chat(data=data, token=token, messages=[{"role": "user", "content": "Hello"}], emit=AsyncMock())
+    entry = only(data.conversations)
+    assert entry["response"] is None
+    assert entry["response_status"] == "size_limit"
+    assert entry["field_omissions"]["response"] == "size_limit"
