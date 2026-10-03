@@ -1,6 +1,6 @@
-/** Suggestions create profiles without replacing a concurrent administrator edit. */
+/** MESA findings explain validation limits; suggestions preserve concurrent edits. */
 import { beforeEach, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { api, ApiError } from "../api";
 import { MesaView } from "../views/MesaView";
 import type { MesaIssuesResponse } from "../types";
@@ -39,4 +39,40 @@ it.each(["entity", "domain"] as const)("does not replace a %s profile created af
   expect(await screen.findByText("A profile already exists.")).toBeVisible();
   expect(api.getMesaIssues).toHaveBeenCalledTimes(2);
   expect(screen.queryByRole("button", { name: "Apply" })).toBeNull();
+});
+
+it("shows template inspection warnings with their explanation instead of a profile conflict", async () => {
+  const recommendation = "templates or blueprint inputs require host expansion; reference coverage is incomplete";
+  vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, issues: [{
+    entity_id: "", declared_value: "unknown", automation_id: "template_automation",
+    role: "configuration", severity: "warning", recommendation,
+  }], orphans: ["sensor.retained_profile"] });
+  const { container } = render(<MesaView />);
+  expect(await screen.findByText(recommendation)).toBeVisible();
+  const row = screen.getByText(recommendation).closest("li")!;
+  expect(within(row).getByText("Warning:")).toBeVisible();
+  expect(row).toHaveTextContent("Automation template_automation");
+  expect(row).not.toHaveTextContent("declared unknown");
+  expect(row).not.toHaveTextContent("(configuration)");
+  expect(container.querySelectorAll("code:empty")).toHaveLength(0);
+  expect(screen.getByText(/sensor.retained_profile/)).toBeVisible();
+  expect(screen.getByRole("button", { name: "Clear all orphaned profiles" })).toBeVisible();
+});
+
+it("distinguishes inspection errors and keeps entity conflicts and recommendations visible as text", async () => {
+  const conflict = "Change the declaration to 'likely'. <img src=x onerror=alert(1)>";
+  vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, issues: [{
+    entity_id: "", declared_value: "unknown", automation_id: "uninspectable",
+    role: "configuration", severity: "error", recommendation: "automation configuration cannot be inspected (MesaValidationError)",
+  }, {
+    entity_id: "input_boolean.mode", declared_value: "none", automation_id: "mode_changed",
+    role: "trigger", severity: "error", recommendation: conflict,
+  }] });
+  const { container } = render(<MesaView />);
+  const error = await screen.findByText("automation configuration cannot be inspected (MesaValidationError)");
+  expect(within(error.closest("li")!).getByText("Error:")).toBeVisible();
+  const row = screen.getByText(conflict).closest("li")!;
+  expect(row).toHaveTextContent("input_boolean.mode declared none but appears in automation mode_changed (trigger)");
+  expect(within(row).getByText("Error:")).toBeVisible();
+  expect(container.querySelector("img")).toBeNull();
 });

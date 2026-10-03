@@ -1441,7 +1441,13 @@ export function MesaView() {
               <strong>{t("mesa.triggerIssues", { count: issues.issues.length })}</strong>
               <ul>
                 {issues.issues.map((i, idx) => (
-                  <li key={idx}>{tRich("mesa.triggerIssueRow", { code: (c) => <code>{c}</code> }, { entityId: i.entity_id, declared: i.declared_value, automationId: i.automation_id, role: i.role })}</li>
+                  <li key={idx}>
+                    <strong>{i.severity === "error" ? t("mesa.validationError") : t("mesa.validationWarning")}</strong>{" "}
+                    {i.role === "configuration"
+                      ? tRich("mesa.validationAutomation", { code: (c) => <code>{c}</code> }, { automationId: i.automation_id })
+                      : tRich("mesa.triggerIssueRow", { code: (c) => <code>{c}</code> }, { entityId: i.entity_id, declared: i.declared_value, automationId: i.automation_id, role: i.role })}
+                    <div>{i.recommendation}</div>
+                  </li>
                 ))}
               </ul>
             </div>
