@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import json
 import logging
 import math
@@ -38,6 +39,7 @@ from .const import (
     DOMAIN_SERVICE_HINTS,
     PASS_THROUGH_EXEMPT_CAPS,
     SENSOR_WRITE_DEBOUNCE_SECONDS,
+    SYSTEM_LOG_MAX_RESPONSE_BYTES,
     TARGET_SELECTOR_KEYS,
     TOKEN_LENGTH,
     TOKEN_PREFIX,
@@ -53,6 +55,13 @@ from .policy_engine import (
 )
 from .locales import canonical_language
 from .request_authority import check_request_authority
+from .system_log_payload import (
+    compact_log_entry,
+    log_detail_chunk,
+    log_detail_ref,
+    log_payload_budget,
+    log_result_size,
+)
 from .token_store import token_name_slug
 
 if TYPE_CHECKING:
@@ -985,6 +994,30 @@ class LogEntryPage:
     source: dict[str, Any]
     filters: dict[str, Any]
     warnings: list[str]
+    byte_limited: bool = False
+    detail: dict[str, Any] | None = None
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return the same envelope used to enforce the serialized response budget."""
+        body: dict[str, Any]
+        if self.detail is not None:
+            body = {"source": self.source, "detail": self.detail, "payload": log_payload_budget()}
+            if self.warnings:
+                body["warnings"] = self.warnings
+            return body
+        body = {
+            "source": self.source,
+            "filters": self.filters,
+            "count": len(self.entries),
+            "matched_buckets": self.matched_buckets,
+            "has_more": self.has_more,
+            "next_cursor": self.next_cursor,
+            "entries": self.entries,
+            "payload": log_payload_budget(byte_limited=self.byte_limited),
+        }
+        if self.warnings:
+            body["warnings"] = self.warnings
+        return body
 
 
 _LOG_CURSOR_VERSION = 1
@@ -1208,6 +1241,10 @@ def collect_log_entries(
     *,
     phoenix_only: bool = False,
     token: TokenRecord | None = None,
+    detail_ref: str | None = None,
+    detail_field: str = "message",
+    message_index: int = 0,
+    detail_offset: int = 0,
 ) -> LogEntryPage:
     """Read, validate, scrub, filter, and paginate the live system-log ring."""
     min_rank = _LOG_LEVEL_RANK.get(level.upper(), _LOG_LEVEL_RANK["WARNING"])
@@ -1341,19 +1378,6 @@ def collect_log_entries(
     matched_buckets = len(entries_with_keys)
     if cursor_key is not None:
         entries_with_keys = [item for item in entries_with_keys if item[0] < cursor_key]
-    page_items = entries_with_keys[:limit]
-    has_more = len(entries_with_keys) > limit
-    next_cursor = None
-    if has_more and page_items:
-        last_key = page_items[-1][0]
-        next_cursor = _encode_log_cursor(
-            snapshot_at=snapshot_at,
-            timestamp=last_key[0],
-            bucket_id=last_key[1],
-            filter_hash=filter_hash,
-            since=since_ts,
-            until=until_ts,
-        )
     if skipped:
         warnings.append(f"Skipped {skipped} malformed system-log bucket(s).")
     if cursor:
@@ -1373,15 +1397,44 @@ def collect_log_entries(
         "read_at": _log_iso(snapshot_at),
         "recorded_levels": ["WARNING", "ERROR", "CRITICAL"],
     }
-    return LogEntryPage(
-        entries=[entry for _, entry in page_items],
-        matched_buckets=matched_buckets,
-        has_more=has_more,
-        next_cursor=next_cursor,
-        source=source,
-        filters=effective_filters,
-        warnings=warnings,
-    )
+    def reference(key: tuple[float, str], entry: dict) -> str | None:
+        return log_detail_ref(entry, token, phoenix_only=phoenix_only, bucket_id=key[1]) if token else None
+
+    if detail_ref:
+        for key, entry in entries_with_keys:
+            current_ref = reference(key, entry)
+            if current_ref is not None and hmac.compare_digest(detail_ref, current_ref):
+                detail = log_detail_chunk(entry, detail_ref, detail_field, message_index, detail_offset)
+                detail_page = LogEntryPage([], 0, False, None, source, effective_filters, warnings, detail=detail)
+                if log_result_size(detail_page.as_dict()) > SYSTEM_LOG_MAX_RESPONSE_BYTES:
+                    raise SystemLogDegradedError("system_log metadata exceeds the response budget")
+                return detail_page
+        raise ValueError("Invalid or stale log detail reference. Restart the query.")
+
+    def page(items: list[tuple[tuple[float, str], dict]], *, byte_limited: bool = False) -> LogEntryPage:
+        has_more = len(entries_with_keys) > len(items)
+        next_cursor = None
+        if has_more and items:
+            last_key = items[-1][0]
+            next_cursor = _encode_log_cursor(
+                snapshot_at=snapshot_at, timestamp=last_key[0], bucket_id=last_key[1],
+                filter_hash=filter_hash, since=since_ts, until=until_ts,
+            )
+        return LogEntryPage(
+            entries=[entry for _, entry in items], matched_buckets=matched_buckets,
+            has_more=has_more, next_cursor=next_cursor,
+            source=source, filters=effective_filters, warnings=warnings, byte_limited=byte_limited,
+        )
+
+    page_items: list[tuple[tuple[float, str], dict]] = []
+    for key, entry in entries_with_keys[:limit]:
+        candidate = [*page_items, (key, compact_log_entry(entry, reference(key, entry)))]
+        if log_result_size(page(candidate).as_dict()) > SYSTEM_LOG_MAX_RESPONSE_BYTES:
+            if not page_items:
+                raise SystemLogDegradedError("system_log metadata exceeds the response budget")
+            return page(page_items, byte_limited=True)
+        page_items = candidate
+    return page(page_items)
 
 
 @callback

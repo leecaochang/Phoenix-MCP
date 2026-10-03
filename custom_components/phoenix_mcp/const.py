@@ -1166,6 +1166,15 @@ VACUUM_CLEAN_AREA_BIT = 16384
 # Maximum number of log buckets returned by the MCP diagnostics tools.
 MAX_LOG_ENTRIES = 100
 
+# System-log preview/detail budgets use ASCII-escaped JSON byte accounting.
+SYSTEM_LOG_MAX_MESSAGE_BYTES = 2048
+SYSTEM_LOG_MAX_EXCEPTION_BYTES = 4096
+SYSTEM_LOG_MAX_METADATA_BYTES = 512
+SYSTEM_LOG_MAX_MESSAGE_VARIANTS = 5
+SYSTEM_LOG_MAX_DETAIL_BYTES = 8192
+SYSTEM_LOG_MAX_ENTRY_BYTES = 24 * 1024
+SYSTEM_LOG_MAX_RESPONSE_BYTES = 32 * 1024
+
 # Fixed crash-diagnostic source and independent input/output budgets.
 FAULT_LOG_FILENAME = "home-assistant.log.fault"
 FAULT_LOG_MAX_BYTES = 512 * 1024

@@ -225,7 +225,8 @@ async def async_fault_log_query(args, token, hass):
     resource = "get_logs"
     if any(effective_cap(token, cap) == CAP_DENY for cap in ("cap_log_read", "cap_diagnostics")):
         return _tool_error("Forbidden."), "denied", resource
-    if any(key in args for key in ("level", "integration", "logger", "since", "until", "path")):
+    if any(key in args for key in ("level", "integration", "logger", "since", "until", "path",
+                                   "detail_ref", "detail_field", "message_index", "detail_offset")):
         return _tool_error("fault_log supports search, order, limit and cursor only."), "invalid_request", resource
     search = args.get("search")
     cursor = args.get("cursor")

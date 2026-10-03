@@ -11,8 +11,18 @@ from homeassistant.components.system_log import DedupStore
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp import mcp_view
-from custom_components.phoenix_mcp.const import TOKEN_PREFIX
+from custom_components.phoenix_mcp.audit import AuditLog
+from custom_components.phoenix_mcp.const import (
+    DOMAIN,
+    SYSTEM_LOG_MAX_DETAIL_BYTES,
+    SYSTEM_LOG_MAX_EXCEPTION_BYTES,
+    SYSTEM_LOG_MAX_MESSAGE_BYTES,
+    SYSTEM_LOG_MAX_RESPONSE_BYTES,
+    TOKEN_PREFIX,
+)
+from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.policy_engine import Permission
+from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 from tests.log_fixtures import attach_log_store, make_log_entry, make_log_store
 from tests.test_mcp_view import _make_data, _make_hass, _make_token
 
@@ -35,6 +45,8 @@ async def _call(tool: str, args: dict, *, token=None, hass=None, data=None):
         "127.0.0.1",
         base_url="http://homeassistant.local",
     )
+    if "error" in response:
+        return response["error"], {"isError": True}, outcome
     text = response["result"]["content"][0]["text"]
     try:
         body = json.loads(text)
@@ -548,3 +560,308 @@ async def test_dual_cap_tool_announcement_and_gate_map_require_both_caps():
             if tool["name"] == "get_phoenix_diagnostics"
         )
         assert published["caps"] == ["cap_diagnostics", "cap_log_read"]
+
+
+def _binary_warning():
+    return (
+        "Detected blocking call to write_bytes with args (b'"
+        + "\\xff\\xd8\\x00" * 20000
+        + "') inside the event loop\n"
+        + '  File "homeassistant/components/example/camera.py", line 27, in write_image\n'
+        + "    path.write_bytes(image)\n"
+    )
+
+
+def _long_traceback():
+    return (
+        "Traceback (most recent call last):\n"
+        + ''.join(f'  File "components/example/client.py", line {index + 1}, in frame_{index}\n'
+                  for index in range(500))
+        + '  File "components/example/client.py", line 501, in innermost_failure\n'
+        + "ValueError: final diagnosis\n"
+    )
+
+
+@pytest.mark.asyncio
+async def test_binary_warning_and_traceback_have_bounded_useful_ends_and_metadata():
+    token, _ = _make_token(cap_log_read="allow")
+    entry = make_log_entry(message=_binary_warning())
+    entry.exception = _long_traceback()
+    hass, data = _hass_with_entries(token, [entry])
+    body, result, outcome = await _call("get_logs", {"limit": 1}, token=token, hass=hass, data=data)
+    assert outcome == "allowed"
+    preview = body["entries"][0]
+    assert preview["messages"][0].startswith("Detected blocking call to write_bytes")
+    assert preview["messages"][0].endswith("    path.write_bytes(image)\n")
+    assert preview["exception"].startswith("Traceback (most recent call last):")
+    assert "innermost_failure" in preview["exception"]
+    assert preview["exception"].endswith("ValueError: final diagnosis\n")
+    for text, budget, metadata in (
+        (preview["messages"][0], SYSTEM_LOG_MAX_MESSAGE_BYTES, preview["truncation"]["messages"][0]),
+        (preview["exception"], SYSTEM_LOG_MAX_EXCEPTION_BYTES, preview["truncation"]["exception"]),
+    ):
+        assert len(json.dumps(text).encode()) <= budget
+        assert metadata["omitted_chars"] > 0
+        assert metadata["original_chars"] == metadata["omitted_chars"] + metadata["head_chars"] + metadata["tail_chars"]
+    assert body["payload"]["byte_limited"] is False
+    assert body["matched_buckets"] == 1 and body["has_more"] is False
+    assert len(json.dumps(result).encode()) <= SYSTEM_LOG_MAX_RESPONSE_BYTES
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["message", "exception"])
+async def test_search_matches_text_omitted_from_previews(field):
+    token, _ = _make_token(cap_log_read="allow")
+    text = "begin " + "x" * 10000 + "needle-in-cut" + "y" * 10000 + " end"
+    entry = make_log_entry(message=text if field == "message" else "failure")
+    entry.exception = text if field == "exception" else ""
+    hass, data = _hass_with_entries(token, [entry])
+    body, _result, outcome = await _call("get_logs", {"search": "NEEDLE-IN-CUT"}, token=token, hass=hass, data=data)
+    assert outcome == "allowed" and body["matched_buckets"] == 1
+    value = body["entries"][0]["messages"][0] if field == "message" else body["entries"][0]["exception"]
+    assert "needle-in-cut" not in value
+
+
+@pytest.mark.asyncio
+async def test_phoenix_compaction_and_search_use_the_full_scrubbed_text():
+    token, _ = _make_token(cap_log_read="allow")
+    token.cap_diagnostics = "allow"
+    entry = make_log_entry(name="custom_components.phoenix_mcp", message=_binary_warning() + "retained end")
+    entry.exception = "traceback start\n" + "x " * 10000 + "needle-in-cut 192.168.1.55 " + "y " * 10000 + "innermost end"
+    hass, data = _hass_with_entries(token, [entry])
+    body, result, outcome = await _call("get_phoenix_diagnostics", {"search": "needle-in-cut"},
+                                       token=token, hass=hass, data=data)
+    assert outcome == "allowed" and body["count"] == 1
+    preview = body["entries"][0]
+    assert preview["truncation"]["messages"][0]["omitted_chars"] > 0
+    assert preview["truncation"]["exception"]["omitted_chars"] > 0
+    assert "needle-in-cut" not in preview["exception"] and preview["exception"].endswith("innermost end")
+    assert len(json.dumps(result).encode()) <= SYSTEM_LOG_MAX_RESPONSE_BYTES
+    raw, _result, _outcome = await _call("get_phoenix_diagnostics", {"search": "192.168.1.55"},
+                                        token=token, hass=hass, data=data)
+    assert raw["matched_buckets"] == 0
+
+
+@pytest.mark.asyncio
+async def test_unexpected_variant_count_is_explicit_and_omitted_variants_remain_retrievable():
+    token, _ = _make_token(cap_log_read="allow")
+    entry = make_log_entry()
+    entry.message = [f"variant {index}" for index in range(8)]
+    hass, data = _hass_with_entries(token, [entry])
+    body, _result, _outcome = await _call("get_logs", {"search": "variant 7"}, token=token, hass=hass, data=data)
+    preview = body["entries"][0]
+    assert len(preview["messages"]) == 5 and preview["truncation"]["omitted_message_variants"] == 3
+    detail, _result, outcome = await _call("get_logs", {"detail_ref": preview["detail_ref"], "message_index": 7},
+                                          token=token, hass=hass, data=data)
+    assert outcome == "allowed" and detail["detail"]["text"] == "variant 7"
+
+
+@pytest.mark.asyncio
+async def test_detail_boundaries_reject_missing_variants_and_out_of_range_offsets():
+    token, _ = _make_token(cap_log_read="allow")
+    entry = make_log_entry(message="short")
+    hass, data = _hass_with_entries(token, [entry])
+    body, _result, _outcome = await _call("get_logs", {}, token=token, hass=hass, data=data)
+    reference = body["entries"][0]["detail_ref"]
+    for arguments in ({"message_index": 1}, {"detail_offset": 6}):
+        error, result, outcome = await _call("get_logs", {"detail_ref": reference, **arguments},
+                                            token=token, hass=hass, data=data)
+        assert outcome == "invalid_request" and result["isError"] and "short" not in error
+    empty, _result, outcome = await _call("get_logs", {"detail_ref": reference, "detail_field": "exception"},
+                                          token=token, hass=hass, data=data)
+    assert outcome == "allowed" and empty["detail"]["text"] == "" and not empty["detail"]["has_more"]
+
+
+@pytest.mark.asyncio
+async def test_large_escaped_metadata_and_payload_still_allow_pagination_progress():
+    token, _ = _make_token(cap_log_read="allow")
+    entry = make_log_entry(name="homeassistant.components." + "x" * 20000,
+                           message='"' * 50000,
+                           pathname="/config/custom_components/" + "x" * 20000 + "/file.py")
+    entry.message = ['"' * 50000] * 5
+    entry.exception = '"' * 50000
+    entry.root_cause = ("/config/custom_components/" + "y" * 20000 + "/file.py", 1, "z" * 20000)
+    hass, data = _hass_with_entries(token, [entry])
+    body, result, outcome = await _call("get_logs", {}, token=token, hass=hass, data=data)
+    assert outcome == "allowed" and body["count"] == 1
+    assert body["entries"][0]["truncation"]["metadata"]["logger"]["omitted_chars"] > 0
+    assert len(json.dumps(result).encode()) <= SYSTEM_LOG_MAX_RESPONSE_BYTES
+
+
+@pytest.mark.asyncio
+async def test_all_retained_variants_and_exception_can_be_reassembled_in_bounded_chunks():
+    token, _ = _make_token(cap_log_read="allow")
+    entries = [make_log_entry(message=f"variant {index}: " + '\u4e2d"\\\n' * 3000,
+                              created=1_700_000_000 + index) for index in range(7)]
+    hass, data = _hass_with_entries(token, entries)
+    record = next(iter(hass.data["system_log"].records.values()))
+    record.exception = _long_traceback()
+    body, _result, _outcome = await _call("get_logs", {}, token=token, hass=hass, data=data)
+    preview = body["entries"][0]
+    assert len(preview["messages"]) == 5
+    assert preview["truncation"]["omitted_message_variants"] == 0
+    assert all(item["omitted_chars"] for item in preview["truncation"]["messages"])
+    for field, index, expected in [*(('message', index, value) for index, value in enumerate(record.message)),
+                                   ("exception", None, record.exception)]:
+        arguments = {"detail_ref": preview["detail_ref"], "detail_field": field}
+        if index is not None:
+            arguments["message_index"] = index
+        parts = []
+        offset = 0
+        while True:
+            chunk, result, outcome = await _call("get_logs", {**arguments, "detail_offset": offset},
+                                                 token=token, hass=hass, data=data)
+            assert outcome == "allowed"
+            detail = chunk["detail"]
+            assert detail["offset"] == offset and detail["total_chars"] == len(expected)
+            assert len(json.dumps(detail["text"]).encode()) <= SYSTEM_LOG_MAX_DETAIL_BYTES
+            assert len(json.dumps(result).encode()) <= SYSTEM_LOG_MAX_RESPONSE_BYTES
+            parts.append(detail["text"])
+            if not detail["has_more"]:
+                assert detail["next_offset"] is None
+                break
+            assert detail["next_offset"] == detail["end_offset"] > offset
+            offset = detail["next_offset"]
+        assert ''.join(parts) == expected
+        end, _result, outcome = await _call("get_logs", {**arguments, "detail_offset": len(expected)},
+                                            token=token, hass=hass, data=data)
+        assert outcome == "allowed" and end["detail"]["text"] == ""
+        assert end["detail"]["has_more"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("unit", ["x", "\u4e2d", chr(0x10000), '"\\\n', "\ud800"])
+async def test_byte_limited_pagination_visits_every_bucket_without_losing_coverage(unit):
+    token, _ = _make_token(cap_log_read="allow")
+    entries = []
+    for bucket in range(12):
+        for variant in range(5):
+            item = make_log_entry(message=f"bucket {bucket} variant {variant}: " + unit * 10000,
+                                  created=1_700_000_000 + bucket,
+                                  pathname=f"/config/custom_components/example/bucket_{bucket}.py")
+            item.exception = _long_traceback()
+            entries.append(item)
+    hass, data = _hass_with_entries(token, entries)
+    arguments = {"limit": 100}
+    seen = []
+    pages = 0
+    while True:
+        body, result, outcome = await _call("get_logs", arguments, token=token, hass=hass, data=data)
+        assert outcome == "allowed"
+        assert len(json.dumps(result).encode()) <= SYSTEM_LOG_MAX_RESPONSE_BYTES
+        assert body["matched_buckets"] == body["source"]["retained_buckets"] == 12
+        assert body["source"]["skipped_buckets"] == 0
+        assert body["source"]["status"] == "available"
+        assert body["count"] > 0
+        seen.extend(entry["detail_ref"] for entry in body["entries"])
+        pages += 1
+        if not body["has_more"]:
+            assert body["next_cursor"] is None
+            break
+        assert body["payload"]["byte_limited"] and body["next_cursor"]
+        arguments["cursor"] = body["next_cursor"]
+    assert len(seen) == len(set(seen)) == 12
+    assert pages > 1
+
+
+@pytest.mark.asyncio
+async def test_detail_references_are_bound_to_token_namespace_and_current_bucket():
+    token, _ = _make_token(cap_log_read="allow")
+    token.cap_diagnostics = "allow"
+    entry = make_log_entry(message="must-not-disclose " + "x" * 10000)
+    hass, data = _hass_with_entries(token, [entry])
+    body, _result, _outcome = await _call("get_logs", {}, token=token, hass=hass, data=data)
+    args = {"detail_ref": body["entries"][0]["detail_ref"]}
+    other, _ = _make_token(cap_log_read="allow")
+    data.store.get_token_by_hash.side_effect = lambda value: token if value == token.token_hash else other if value == other.token_hash else None
+    for tool, caller in (("get_logs", other), ("get_phoenix_diagnostics", token)):
+        error, result, outcome = await _call(tool, args, token=caller, hass=hass, data=data)
+        assert outcome == "invalid_request" and result["isError"]
+        assert "must-not-disclose" not in json.dumps(error)
+    entry.message.append("new variant")
+    error, result, outcome = await _call("get_logs", args, token=token, hass=hass, data=data)
+    assert outcome == "invalid_request" and "stale" in error and result["isError"]
+
+
+@pytest.mark.asyncio
+async def test_phoenix_detail_uses_current_strong_scrubbing_and_scope():
+    token, _ = _make_token(cap_log_read="allow")
+    token.cap_diagnostics = "allow"
+    message = "diagnosis sensor.allowed sensor.hidden http://nas.local/test 192.168.1.55 /config/secrets " + TOKEN_PREFIX + "a" * 64
+    entry = make_log_entry(name="custom_components.phoenix_mcp", message=message)
+    hass, data = _hass_with_entries(token, [entry])
+    def permission(entity_id, _token, _hass):
+        return Permission.READ if entity_id == "sensor.allowed" else Permission.NO_ACCESS
+    with patch("custom_components.phoenix_mcp.helpers.resolve", side_effect=permission):
+        body, _result, _outcome = await _call("get_phoenix_diagnostics", {}, token=token, hass=hass, data=data)
+        args = {"detail_ref": body["entries"][0]["detail_ref"]}
+        chunk, _result, outcome = await _call("get_phoenix_diagnostics", args, token=token, hass=hass, data=data)
+    assert outcome == "allowed" and "sensor.allowed" in chunk["detail"]["text"]
+    for hidden in ("sensor.hidden", "nas.local", "192.168.1.55", "/config", TOKEN_PREFIX + "a" * 64):
+        assert hidden not in chunk["detail"]["text"]
+    with patch("custom_components.phoenix_mcp.helpers.resolve", return_value=Permission.NO_ACCESS):
+        error, result, outcome = await _call("get_phoenix_diagnostics", args, token=token, hass=hass, data=data)
+    assert outcome == "invalid_request" and result["isError"] and "stale" in error
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool", ["get_logs", "get_phoenix_diagnostics"])
+async def test_detail_capability_denial_precedes_argument_validation_even_in_pass_through(tool):
+    token, _ = _make_token(cap_log_read="deny")
+    token.pass_through = True
+    token.cap_diagnostics = "allow"
+    body, result, outcome = await _call(tool, {"detail_ref": []}, token=token)
+    assert outcome == "denied" and result["isError"] and body == "Forbidden."
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("args", [
+    {"detail_ref": None}, {"detail_ref": []}, {"detail_ref": "x" * 64},
+    {"detail_field": "exception"}, {"detail_offset": 0}, {"message_index": 0},
+    {"detail_ref": "a" * 64, "limit": 1}, {"detail_ref": "a" * 64, "search": "x"},
+    {"detail_ref": "a" * 64, "cursor": "x"}, {"detail_ref": "a" * 64, "detail_field": []},
+    {"detail_ref": "a" * 64, "message_index": True}, {"detail_ref": "a" * 64, "message_index": -1},
+    {"detail_ref": "a" * 64, "detail_offset": 1.5}, {"detail_ref": "a" * 64, "detail_offset": -1},
+    {"detail_ref": "a" * 64, "detail_field": "exception", "message_index": 0},
+    {"source": "fault_log", "detail_ref": "a" * 64},
+])
+async def test_invalid_detail_arguments_fail_before_source_access(args):
+    token, _ = _make_token(cap_log_read="allow")
+    token.cap_diagnostics = "allow"
+    data = _make_data(token)
+    hass = _make_hass(data)
+    body, result, outcome = await _call("get_logs", args, token=token, hass=hass, data=data)
+    assert outcome == "invalid_request" and result["isError"] and isinstance(body, str)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["revoke", "rotate", "kill", "unload", "permissions", "capability"])
+async def test_detail_authority_changes_during_collection_block_disclosure(change, hass, token_store):
+    token, _ = await token_store.async_create_token("system-log-test", "admin", rate_limit_requests=0)
+    token.cap_log_read = "allow"
+    data = PhoenixData(store=token_store, rate_limiter=RateLimiter(), audit=AuditLog(), enforce_mcp_lifecycle=False)
+    hass.data[DOMAIN] = data
+    entry = make_log_entry(message="must-not-disclose")
+    attach_log_store(hass, make_log_store([entry]))
+    body, _result, _outcome = await _call("get_logs", {}, token=token, hass=hass, data=data)
+    original = mcp_view._collect_log_entries
+    def changed_collection(*args, **kwargs):
+        page = original(*args, **kwargs)
+        if change == "revoke":
+            token.revoked = True
+        elif change == "rotate":
+            token.token_hash = "different"
+        elif change == "kill":
+            data.store.get_settings().kill_switch = True
+        elif change == "unload":
+            data.shutting_down = True
+        elif change == "permissions":
+            token.settings_version += 1
+        else:
+            token.cap_log_read = "deny"
+        return page
+    with patch("custom_components.phoenix_mcp.mcp_view._collect_log_entries", side_effect=changed_collection):
+        error, result, outcome = await _call("get_logs", {"detail_ref": body["entries"][0]["detail_ref"]},
+                                             token=token, hass=hass, data=data)
+    assert outcome == "denied" and result["isError"]
+    assert "must-not-disclose" not in json.dumps(error)

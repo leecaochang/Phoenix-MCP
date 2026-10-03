@@ -1671,10 +1671,33 @@ async def _tool_log_query(
     phoenix_only: bool,
 ) -> tuple[dict, str, str]:
     """Run one bounded, source-truthful query over HA's system-log ring."""
+    check_request_authority()
+    authority = request_authority.get()
+    if authority is not None:
+        token = authority.current_token()
     if effective_cap(token, "cap_log_read") == CAP_DENY or (
         phoenix_only and effective_cap(token, "cap_diagnostics") == CAP_DENY
     ):
         return _tool_error("Forbidden."), "denied", tool_name
+
+    detail_ref = args.get("detail_ref")
+    detail_field = args.get("detail_field", "message")
+    message_index = args.get("message_index", 0)
+    detail_offset = args.get("detail_offset", 0)
+    if "detail_ref" in args:
+        if not isinstance(detail_ref, str) or re.fullmatch(r"[0-9a-f]{64}", detail_ref) is None:
+            return _tool_error("Invalid log detail reference."), "invalid_request", tool_name
+        if any(key in args for key in ("level", "integration", "logger", "search", "since", "until", "limit", "cursor")):
+            return _tool_error("Log detail retrieval cannot be combined with query filters or pagination."), "invalid_request", tool_name
+        if not isinstance(detail_field, str) or detail_field not in ("message", "exception"):
+            return _tool_error("detail_field must be message or exception."), "invalid_request", tool_name
+        if any(isinstance(value, bool) or not isinstance(value, int) or value < 0
+               for value in (message_index, detail_offset)):
+            return _tool_error("message_index and detail_offset must be nonnegative integers."), "invalid_request", tool_name
+        if detail_field == "exception" and "message_index" in args:
+            return _tool_error("message_index is supported only for message details."), "invalid_request", tool_name
+    elif any(key in args for key in ("detail_field", "message_index", "detail_offset")):
+        return _tool_error("Detail parameters require detail_ref."), "invalid_request", tool_name
 
     # A wrong-SHAPED level degrades to absent (str_arg), but a wrong VALUE is
     # refused rather than coerced: silently answering a WARNING query for a
@@ -1751,7 +1774,11 @@ async def _tool_log_query(
             limit,
             cursor,
             phoenix_only=phoenix_only,
-            token=token if phoenix_only else None,
+            token=token,
+            detail_ref=detail_ref,
+            detail_field=detail_field,
+            message_index=message_index,
+            detail_offset=detail_offset,
         )
     except (SystemLogUnavailableError, SystemLogDegradedError) as exc:
         body = {
@@ -1780,18 +1807,14 @@ async def _tool_log_query(
         return _tool_error(json.dumps(body)), "invalid_request", tool_name
     except ValueError as exc:
         return _tool_error(str(exc)), "invalid_request", tool_name
-    body = {
-        "source": page.source,
-        "filters": page.filters,
-        "count": len(page.entries),
-        "matched_buckets": page.matched_buckets,
-        "has_more": page.has_more,
-        "next_cursor": page.next_cursor,
-        "entries": page.entries,
-    }
-    if page.warnings:
-        body["warnings"] = page.warnings
-    return _tool_success(json.dumps(body, default=str)), "allowed", tool_name
+    check_request_authority()
+    if authority is not None:
+        token = authority.current_token()
+    if effective_cap(token, "cap_log_read") == CAP_DENY or (
+        phoenix_only and effective_cap(token, "cap_diagnostics") == CAP_DENY
+    ):
+        return _tool_error("Forbidden."), "denied", tool_name
+    return _tool_success(json.dumps(page.as_dict(), default=str)), "allowed", tool_name
 
 
 async def _tool_get_logs(

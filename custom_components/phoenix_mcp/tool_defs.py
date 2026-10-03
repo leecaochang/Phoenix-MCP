@@ -19,6 +19,25 @@ from __future__ import annotations
 
 from .const import SERVICE_TARGET_MAX_GROUPS, SERVICE_TARGET_MAX_IDS
 
+_SYSTEM_LOG_DETAIL_PROPERTIES = {
+    "detail_ref": {
+        "type": "string", "pattern": "^[0-9a-f]{64}$",
+        "description": "system_log only. Token-bound detail_ref from a returned bucket. Fetch one bounded scrubbed text chunk; omit query filters, limit and cursor. Stale references require a fresh query.",
+    },
+    "detail_field": {
+        "type": "string", "enum": ["message", "exception"], "default": "message",
+        "description": "Detail retrieval only. Select a retained message variant or the exception traceback.",
+    },
+    "message_index": {
+        "type": "integer", "minimum": 0, "default": 0,
+        "description": "Message detail only. Zero-based retained variant index in the bucket.",
+    },
+    "detail_offset": {
+        "type": "integer", "minimum": 0, "default": 0,
+        "description": "Detail retrieval only. Character offset in the full scrubbed text. Continue with detail.next_offset; detail.has_more reports remaining text.",
+    },
+}
+
 _NATIVE_TOOL_NAMES: dict[str, str] = {
     "GetLiveContext": "homeassistant__GetLiveContext",
     "GetDateTime": "llm__GetDateTime",
@@ -807,9 +826,12 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "description": (
             "Read Home Assistant's bounded, deduplicated WARNING-and-above system-log ring, newest "
             "first. Phoenix MCP's own records are excluded. The response reports source status and "
-            "coverage, effective filters, every retained message variant, and stateless cursor "
+            "coverage, effective filters, compact message/traceback previews with truncation metadata, and stateless cursor "
             "pagination. This is not a continuous raw log: repeated records share one bucket and "
-            "live bucket updates can move records between pages. Set source=fault_log for a protected "
+            "live bucket updates can move records between pages. Search matches full scrubbed text before compaction. "
+            "Response byte limits can return fewer buckets than limit; continue with next_cursor. "
+            "Use a bucket's detail_ref with detail_field, message_index and detail_offset for bounded detail chunks. "
+            "Set source=fault_log for a protected "
             "bounded tail of home-assistant.log.fault, requiring both Log read and Diagnostics. "
             "Fault dumps preserve all thread lines within each block, support scrubbed search, "
             "block order and whole-block cursor paging, and report incomplete coverage. "
@@ -819,6 +841,7 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
         "inputSchema": {
             "type": "object",
             "properties": {
+                **_SYSTEM_LOG_DETAIL_PROPERTIES,
                 "source": {
                     "type": "string", "enum": ["system_log", "fault_log"],
                     "default": "system_log",
@@ -875,12 +898,14 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "Read Phoenix MCP's own retained WARNING-and-above diagnostic buckets with stronger "
             "redaction for credentials, topology, paths, opaque identifiers, and inaccessible "
             "entities. Uses the same bounded source-status, coverage, filter, and cursor contract "
-            "as get_logs. Requires both Diagnostics and Log read capabilities."
+            "as get_logs, including compact previews, explicit truncation, full scrubbed search, "
+            "byte-bounded pages and token-bound detail_ref text chunks. Requires both Diagnostics and Log read capabilities."
         ),
         "caps": ["cap_diagnostics", "cap_log_read"],
         "inputSchema": {
             "type": "object",
             "properties": {
+                **_SYSTEM_LOG_DETAIL_PROPERTIES,
                 "level": {
                     "type": "string",
                     "enum": ["WARNING", "ERROR"],
