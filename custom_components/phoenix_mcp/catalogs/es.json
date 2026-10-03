@@ -732,7 +732,8 @@
       "verbose": "Mostrar salida detallada",
       "verboseHint": "Mostrar las llamadas a herramientas, los resultados de las herramientas y el pensamiento del agente. Desactivado muestra solo la respuesta final.",
       "workingOn": "Trabajando: {name}",
-      "workingSpinner": "Trabajando…"
+      "workingSpinner": "Trabajando…",
+      "chatEnded": "Chat finalizado."
     },
     "diff": {
       "blueprint.create": "Crear el plano {domain} '{rel}'",

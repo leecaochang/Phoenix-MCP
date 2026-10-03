@@ -262,7 +262,8 @@
       "verbose": "顯示詳細輸出",
       "verboseHint": "顯示智慧體的工具呼叫、工具結果和思考過程。關閉時只顯示最終答案。",
       "workingOn": "處理中：{name}",
-      "workingSpinner": "處理中…"
+      "workingSpinner": "處理中…",
+      "chatEnded": "聊天已結束。"
     },
     "approvalSummary": {
       "action.approve": "核准並執行",

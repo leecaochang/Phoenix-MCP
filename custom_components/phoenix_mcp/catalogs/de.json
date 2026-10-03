@@ -220,7 +220,8 @@
         "ollama_backend": "Der Anbieter ist vorübergehend nicht verfügbar.",
         "auth": "Der Anbieter hat diese Antwort blockiert. Sie wird nicht erneut angefordert.",
         "quota": "Der Anbieter hat diese Antwort blockiert. Sie wird nicht erneut angefordert."
-      }
+      },
+      "chatEnded": "Chat beendet."
     },
     "caps": {
       "cap_config_read": {

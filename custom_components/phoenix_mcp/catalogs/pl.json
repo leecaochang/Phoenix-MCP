@@ -912,7 +912,8 @@
       "verbose": "Pokaż szczegółowe dane wyjściowe",
       "verboseHint": "Pokaż wywołania narzędzi, wyniki narzędzi i myślenie agenta. Wyłączone pokazuje tylko ostateczną odpowiedź.",
       "workingOn": "Praca: {name}",
-      "workingSpinner": "Praca…"
+      "workingSpinner": "Praca…",
+      "chatEnded": "Czat zakończony."
     },
     "adminError": {
       "activeTokenRequired": "{field} musi odnosić się do aktywnego tokena.",

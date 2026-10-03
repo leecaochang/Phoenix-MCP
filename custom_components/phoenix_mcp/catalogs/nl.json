@@ -902,7 +902,8 @@
       "verbose": "Uitgebreide uitvoer weergeven",
       "verboseHint": "De toolaanroepen, toolresultaten en het nadenken van de agent weergeven. Uit toont alleen het eindantwoord.",
       "workingOn": "Bezig: {name}",
-      "workingSpinner": "Bezig…"
+      "workingSpinner": "Bezig…",
+      "chatEnded": "Chat beëindigd."
     },
     "adminError": {
       "activeTokenRequired": "{field} moet naar een actief token verwijzen.",

@@ -41,7 +41,7 @@ type ChatEntry =
   | { kind: "tool_result"; id: string; name: string; isError: boolean; summary: string }
   | { kind: "tool_image"; id: string; name: string; mimeType: string; dataUrl?: string; unavailable?: boolean }
   | { kind: "progress"; id: string; message: string; activity?: boolean }
-  | { kind: "approval"; approvalId: string; toolName: string; status: string; reason?: string }
+  | { kind: "approval"; approvalId: string; toolName: string; status: string; reason?: string; checking?: boolean }
   | { kind: "notice"; code?: string; message: string; messageParams?: Record<string, string | number> }
   | { kind: "focus_declined"; prompt: string }
   | { kind: "error"; code: string; message: string; messageParams?: Record<string, string | number>;
@@ -603,7 +603,15 @@ export function AgentCliWindow({
   const [instanceId, setInstanceId] = useState<string>(firstInstance);
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState<string>(saved.model);
-  const [turns, setTurns] = useState<Turn[]>(() => getSessionTurns() as Turn[]);
+  const restoredApprovals = useRef(new Set<string>());
+  const [turns, setTurns] = useState<Turn[]>(() => (getSessionTurns() as Turn[]).map((turn) => ({
+    ...turn,
+    entries: turn.entries.map((entry) => {
+      if (entry.kind !== "approval" || ["approved", "rejected", "cancelled", "expired", "failed", "resolved"].includes(entry.status)) return entry;
+      restoredApprovals.current.add(entry.approvalId);
+      return { ...entry, checking: true };
+    }),
+  })));
   const [live, setLive] = useState<ChatEntry[]>([]);
   // Seeded from the session draft so a half-written prompt survives the panel
   // unmounting (navigating away in HA), the same way the transcript does. The
@@ -838,6 +846,7 @@ export function AgentCliWindow({
   // message format differ), but NOT on the initial restore.
   useEffect(() => {
     if (firstRun.current) { firstRun.current = false; return; }
+    restoredApprovals.current.clear();
     setTurns([]);
     setLive([]);
     resetUsage();
@@ -911,6 +920,7 @@ export function AgentCliWindow({
   // in flight. Shared by the gear's "Clear chat history" button and the /clear
   // slash command.
   const clearHistory = useCallback(() => {
+    restoredApprovals.current.clear();
     turnGenerationRef.current += 1;
     cancelledRef.current = true;
     abortRef.current?.abort();
@@ -923,10 +933,50 @@ export function AgentCliWindow({
     setAnnouncement("");
   }, [resetUsage]);
 
+  // Cancel the running turn: abort the request, ignore any late response, and
+  // put the query back in the box so it can be edited and resent. The partial
+  // turn is folded into the transcript, not discarded (a long agentic exchange
+  // is one turn, so dropping live entries erased the whole visible chat). Any
+  // still-pending approval card flips to cancelled, matching the server's
+  // orphaned-approval cleanup. The folded turn carries no provider messages:
+  // the aborted exchange is kept for display but deliberately not replayed as
+  // model memory, since the restored query is usually edited and resent.
+  const cancel = useCallback((chatEnded = false) => {
+    turnGenerationRef.current += 1;
+    cancelledRef.current = true;
+    abortRef.current?.abort();
+    abortRef.current = null;
+    setSending(false);
+    const entries = stripActivity(liveRef.current);
+    if (entries.length) {
+      const kept: ChatEntry[] = entries.map((e) =>
+        e.kind === "approval" && e.status === "pending"
+          ? { ...e, status: "cancelled", reason: chatEnded ? "agent_chat_ended" : e.reason } : e);
+      if (!chatEnded || !kept.some((e) => e.kind === "approval" && e.reason === "agent_chat_ended")) {
+        kept.push({ kind: "notice", message: t(chatEnded ? "agentchat.chatEnded" : "agentchat.cancelledNotice") });
+      }
+      const next = trimTurns([...turns, { entries: kept, messages: [], lines: countLines(kept) }], scrollbackLines);
+      // pagehide cannot rely on React effects running before the page dies.
+      setSessionTurns(next, persistenceOwner);
+      setTurns(next);
+    }
+    liveRef.current = [];
+    setLive([]);
+    const draft = input || lastQueryRef.current;
+    setSessionDraft(draft, persistenceOwner);
+    flushSessionDraft(persistenceOwner);
+    setInput(draft);
+  }, [input, persistenceOwner, scrollbackLines, turns]);
+
+
+  const endTurnRef = useRef(cancel);
+  endTurnRef.current = cancel;
+
   // Closing the window must abort any in-flight turn, otherwise the server-side
   // agentic loop keeps running (and can still fire tool calls) after the operator
   // dismissed the chat. Same for unmount (e.g. navigating away).
   const handleClose = useCallback(() => {
+    if (abortRef.current) endTurnRef.current(true);
     turnGenerationRef.current += 1;
     cancelledRef.current = true;
     abortRef.current?.abort();
@@ -935,6 +985,7 @@ export function AgentCliWindow({
   }, [onClose]);
 
   useEffect(() => () => {
+    if (abortRef.current) endTurnRef.current(true);
     flushSessionDraft(persistenceOwner);
     turnGenerationRef.current += 1;
     cancelledRef.current = true;
@@ -985,6 +1036,20 @@ export function AgentCliWindow({
       observer.disconnect();
     };
   }, [popupMount, currentHass, handleClose, agentChatLanguage, agentChatTitle]);
+
+  // The popup's portal and request still belong to this page. Warn before a
+  // reload destroys that owner, but never cancel work unless navigation occurs.
+  useEffect(() => {
+    if (!sending) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", warnBeforeUnload);
+    };
+  }, [sending]);
 
   // One turn: either a new user message (mode "user") or a resume of a turn
   // that paused at the round-cap checkpoint (mode "continue", no new user
@@ -1251,32 +1316,26 @@ export function AgentCliWindow({
     void runTurn("continue", "");
   }, [runTurn]);
 
-  // Cancel the running turn: abort the request, ignore any late response, and
-  // put the query back in the box so it can be edited and resent. The partial
-  // turn is folded into the transcript, not discarded (a long agentic exchange
-  // is one turn, so dropping live entries erased the whole visible chat). Any
-  // still-pending approval card flips to cancelled, matching the server's
-  // orphaned-approval cleanup. The folded turn carries no provider messages:
-  // the aborted exchange is kept for display but deliberately not replayed as
-  // model memory, since the restored query is usually edited and resent.
-  const cancel = useCallback(() => {
-    turnGenerationRef.current += 1;
-    cancelledRef.current = true;
-    abortRef.current?.abort();
-    abortRef.current = null;
-    setSending(false);
-    const entries = stripActivity(liveRef.current);
-    if (entries.length) {
-      const kept: ChatEntry[] = entries.map((e) =>
-        e.kind === "approval" && e.status === "pending" ? { ...e, status: "cancelled" } : e);
-      kept.push({ kind: "notice", message: t("agentchat.cancelledNotice") });
-      setTurns((prev) => trimTurns([...prev, { entries: kept, messages: [], lines: countLines(kept) }], scrollbackLines));
-    }
-    setLive([]);
-    setInput((cur) => cur || lastQueryRef.current);
-  }, [scrollbackLines]);
+
+  useEffect(() => {
+    const handlePageHide = () => {
+      if (abortRef.current) cancel(true);
+      flushSessionDraft(persistenceOwner);
+      // Browser navigation does not unmount React. Close the portal document
+      // explicitly, without its pagehide handler clearing the restore flag.
+      closingPopupRef.current = true;
+      const popup = popupRef.current;
+      forgetAgentCliPopup(popup);
+      popupRef.current = null;
+      setPopupMount(null);
+      popup?.close();
+    };
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [cancel, persistenceOwner]);
 
   const resolvingApprovalsRef = useRef<Set<string>>(new Set());
+  const approvalEventVersions = useRef(new Map<string, number>());
 
   const resolveApproval = useCallback(async (approvalId: string, approve: boolean) => {
     // Guard against a second click landing before the optimistic re-render
@@ -1342,6 +1401,9 @@ export function AgentCliWindow({
   const updateApprovalEntry = useCallback((
     approvalId: string, update: (e: Extract<ChatEntry, { kind: "approval" }>) => ChatEntry,
   ) => {
+    if (restoredApprovals.current.has(approvalId)) {
+      approvalEventVersions.current.set(approvalId, (approvalEventVersions.current.get(approvalId) || 0) + 1);
+    }
     const mapEntry = (e: ChatEntry) =>
       e.kind === "approval" && e.approvalId === approvalId ? update(e) : e;
     setLive((prev) => prev.map(mapEntry));
@@ -1349,6 +1411,36 @@ export function AgentCliWindow({
       turn.entries.some((e) => e.kind === "approval" && e.approvalId === approvalId)
         ? { ...turn, entries: turn.entries.map(mapEntry) } : turn));
   }, []);
+
+  // Resolution events sent while this document was absent cannot reach its
+  // subscription. Verify restored cards before offering actions, and poll until
+  // terminal so a disconnect cleanup that lands just after reload is not missed.
+  useEffect(() => {
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = async () => {
+      await Promise.all([...restoredApprovals.current].map(async (id) => {
+        try {
+          const version = approvalEventVersions.current.get(id);
+          const record = await api.getApproval(id);
+          if (disposed || !restoredApprovals.current.has(id)) return;
+          if (approvalEventVersions.current.get(id) !== version) return;
+          const pending = record.status === "pending";
+          updateApprovalEntry(id, (entry) => {
+            return { ...entry, checking: false,
+              status: record.in_progress ? t("agentchat.approving") : record.status,
+              reason: record.rejected_reason || undefined };
+          });
+          if (!pending) restoredApprovals.current.delete(id);
+        } catch {
+          // Keep unverified cards inert and retry transient failures.
+        }
+      }));
+      if (!disposed && restoredApprovals.current.size) timer = setTimeout(() => { void refresh(); }, 2000);
+    };
+    void refresh();
+    return () => { disposed = true; clearTimeout(timer); };
+  }, [updateApprovalEntry]);
 
   // Learn about approvals resolved or claimed ELSEWHERE, straight off the HA bus.
   //
@@ -1851,7 +1943,7 @@ export function AgentCliWindow({
               onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
             />
             {sending ? (
-              <button className="btn btn-sm agentcli-cancel-btn" onClick={cancel} title={t("agentchat.stopRequest")}>
+              <button className="btn btn-sm agentcli-cancel-btn" onClick={() => cancel()} title={t("agentchat.stopRequest")}>
                 {t("common.cancel")}
               </button>
             ) : (
@@ -2102,10 +2194,13 @@ function ChatItem({
         </figure>
       );
     case "approval":
+      if (entry.status === "cancelled" && entry.reason === "agent_chat_ended") {
+        return <div className="agentcli-notice">{t("agentchat.chatEnded")}</div>;
+      }
       return (
         <div className="agentcli-approval">
           <div>{tRich("agentchat.approvalNeeded", { code: (c) => <code>{c}</code> }, { name: entry.toolName })}</div>
-          {entry.status === "pending" ? (
+          {entry.status === "pending" && !entry.checking ? (
             <div className="agentcli-approval-actions">
               <button className="btn btn-outline btn-sm" onClick={() => onReview(entry.approvalId)}>{t("agentchat.review")}</button>
               <button className="btn btn-primary btn-sm" onClick={() => onResolve(entry.approvalId, true)}>{t("agentchat.approve")}</button>
@@ -2113,7 +2208,7 @@ function ChatItem({
             </div>
           ) : (
             <div className="agentcli-approval-status">
-              {approvalStatusLabel(entry.status)}
+              {entry.checking ? t("common.loading") : approvalStatusLabel(entry.status)}
               {entry.reason ? <span className="agentcli-approval-reason">{t("agentchat.approvalReason", { reason: localizedApprovalReason(entry.reason) })}</span> : null}
             </div>
           )}

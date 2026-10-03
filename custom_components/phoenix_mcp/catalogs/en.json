@@ -1356,6 +1356,7 @@
       "approving": "approving…",
       "callingTool": "calling <code>{name}</code>",
       "cancelledNotice": "Cancelled.",
+      "chatEnded": "Chat ended.",
       "clearHistory": "Clear chat history",
       "configureFirst": "Configure a provider first",
       "continue": "Continue",

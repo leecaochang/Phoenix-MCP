@@ -1459,7 +1459,8 @@
         "ollama_backend": "Le fournisseur est temporairement indisponible.",
         "auth": "Le fournisseur a bloqué cette réponse. Aucun nouvel essai ne sera effectué.",
         "quota": "Le fournisseur a bloqué cette réponse. Aucun nouvel essai ne sera effectué."
-      }
+      },
+      "chatEnded": "Discussion terminée."
     },
     "diff": {
       "blueprint.create": "Créer le blueprint {domain} « {rel} »",

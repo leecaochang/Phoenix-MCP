@@ -257,7 +257,8 @@
       "verbose": "Mostra output dettagliato",
       "verboseHint": "Mostra le chiamate agli strumenti dell'agente, i risultati degli strumenti e il pensiero. Disattivato mostra solo la risposta finale.",
       "workingOn": "In corso: {name}",
-      "workingSpinner": "In corso…"
+      "workingSpinner": "In corso…",
+      "chatEnded": "Chat terminata."
     },
     "audit": {
       "allOutcomes": "Tutti gli esiti",

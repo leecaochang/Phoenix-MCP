@@ -7,6 +7,7 @@ const agentCliChat = vi.fn();
 const getAgentCliModels = vi.fn();
 const approveApproval = vi.fn();
 const rejectApproval = vi.fn();
+const getApproval = vi.fn();
 
 vi.mock("../api", () => ({
   agentCliChat: (...args: unknown[]) => agentCliChat(...args),
@@ -14,6 +15,7 @@ vi.mock("../api", () => ({
     getAgentCliModels: (...args: unknown[]) => getAgentCliModels(...args),
     approveApproval: (...args: unknown[]) => approveApproval(...args),
     rejectApproval: (...args: unknown[]) => rejectApproval(...args),
+    getApproval: (...args: unknown[]) => getApproval(...args),
   },
 }));
 
@@ -39,6 +41,7 @@ import {
   patchDurable,
   setSessionTurns,
   __resetAgentCliState,
+  __reloadFromStorage,
 } from "../utils/agentcli_state";
 import { clearReasonDraft, getReasonDraft, setReasonDraft } from "../utils/approval_reason_draft";
 import {
@@ -744,6 +747,102 @@ describe("AgentCliWindow pop-out", () => {
       "Your browser blocked the pop-out. Allow pop-ups for Home Assistant, then try again.",
     );
   });
+
+  it("warns before refresh without interrupting a pending approval, then recovers after pagehide", async () => {
+    const { popup, iframe } = createPopupWindow();
+    vi.spyOn(window, "open").mockReturnValue(popup);
+    const PopupEvent = (popup as Window & { Event: typeof Event }).Event;
+    const close = vi.spyOn(popup, "close").mockImplementation(() => {
+      popup.dispatchEvent(new PopupEvent("pagehide"));
+    });
+    let emit: (name: string, payload: unknown) => void = () => {};
+    let finish: () => void = () => {};
+    agentCliChat.mockImplementation((_body, onEvent) => {
+      emit = onEvent;
+      return new Promise<void>((resolve) => { finish = resolve; });
+    });
+    patchDurable({ open: true });
+    const onClose = vi.fn(() => patchDurable({ open: false }));
+    const props = { tokens: TOKENS, instances: INSTANCES, scrollbackLines: 500,
+      initialTokenId: "t1", onClose };
+    const view = render(<AgentCliWindow {...props} />);
+    const idleUnload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(idleUnload);
+    expect(idleUnload.defaultPrevented).toBe(false);
+    fireEvent.change(screen.getByRole("textbox", { name: "Message Agent Chat" }), {
+      target: { value: "await review" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(agentCliChat).toHaveBeenCalledOnce());
+    const signal = agentCliChat.mock.calls[0][2] as AbortSignal;
+    act(() => emit("approval_required", { approval_id: "ap-refresh", tool_name: "create_helper" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pop out to a separate window" }));
+    const popupUi = within(popup.document.body);
+    expect(popupUi.getByRole("button", { name: "Approve" })).toBeVisible();
+
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(true);
+    expect(signal.aborted).toBe(false);
+    expect(close).not.toHaveBeenCalled();
+    expect(popupUi.getByRole("button", { name: "Approve" })).toBeVisible();
+
+    act(() => window.dispatchEvent(new Event("pagehide")));
+    expect(signal.aborted).toBe(true);
+    expect(close).toHaveBeenCalledOnce();
+    expect(focusAgentCliPopup()).toBe(false);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(getDurable().open).toBe(true);
+    // Read the actual persisted snapshot, without depending on a React remount.
+    const stored = JSON.parse(localStorage.getItem("phx-agentcli-conversation:test-admin") || "{}");
+    expect(stored.draft).toBe("await review");
+    expect(stored.turns.at(-1).entries).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: "approval", approvalId: "ap-refresh", status: "cancelled" }),
+    ]));
+    expect(stored.turns.at(-1).messages).toEqual([]);
+    await act(async () => {
+      emit("assistant_delta", { text: "stale reply" });
+      finish();
+    });
+    expect(screen.queryByText("stale reply")).toBeNull();
+    // A cached page is usable too; a full reload restores the same saved state.
+    expect(screen.getByRole("button", { name: "Send" })).toBeEnabled();
+    const recoveredUnload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(recoveredUnload);
+    expect(recoveredUnload.defaultPrevented).toBe(false);
+    view.unmount();
+    __reloadFromStorage();
+    render(<AgentCliWindow {...props} />);
+    expect(screen.getAllByRole("dialog", { name: "Agent Chat" })).toHaveLength(1);
+    expect(screen.getByRole("textbox", { name: "Message Agent Chat" })).toHaveValue("await review");
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+    expect(screen.getByText("Chat ended.")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(agentCliChat).toHaveBeenCalledTimes(2));
+    expect(agentCliChat.mock.calls[1][0].messages).toEqual([]);
+    iframe.remove();
+  });
+
+  it("closes an idle popout on pagehide and removes navigation listeners on unmount", () => {
+    const { popup, iframe } = createPopupWindow();
+    vi.spyOn(window, "open").mockReturnValue(popup);
+    const close = vi.spyOn(popup, "close").mockImplementation(() => {});
+    const view = render(
+      <AgentCliWindow tokens={TOKENS} instances={INSTANCES} scrollbackLines={500}
+                      initialTokenId="t1" onClose={() => {}} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Pop out to a separate window" }));
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(false);
+    act(() => window.dispatchEvent(new Event("pagehide")));
+    expect(close).toHaveBeenCalledOnce();
+    expect(screen.getByRole("dialog", { name: "Agent Chat" })).toBeVisible();
+    view.unmount();
+    window.dispatchEvent(new Event("pagehide"));
+    expect(close).toHaveBeenCalledOnce();
+    iframe.remove();
+  });
 });
 
 describe("AgentCliWindow streaming", () => {
@@ -753,6 +852,69 @@ describe("AgentCliWindow streaming", () => {
     clearReasonDraft("ap9");
     clearReasonDraft("ap10");
     getAgentCliModels.mockResolvedValue({ models: ["claude-opus-4-8"] });
+  });
+
+  it("verifies restored approvals before showing actions and replaces an ended chat card", async () => {
+    setSessionTurns([{ entries: [{ kind: "approval", approvalId: "old-chat", toolName: "create_helper", status: "pending" }], messages: [], lines: 1 }]);
+    let resolve: (record: unknown) => void = () => {};
+    getApproval.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+    render(<AgentCliWindow tokens={TOKENS} instances={INSTANCES} scrollbackLines={500}
+                           initialTokenId="t1" onClose={() => {}} />);
+    expect(getApproval).toHaveBeenCalledWith("old-chat");
+    for (const name of ["Review", "Approve", "Reject"]) {
+      expect(screen.queryByRole("button", { name: new RegExp(`^${name}`) })).toBeNull();
+    }
+    await act(async () => resolve({ id: "old-chat", status: "cancelled", rejected_reason: "agent_chat_ended" }));
+    expect(screen.getByText("Chat ended.")).toBeVisible();
+    expect(document.querySelector(".agentcli-approval")).toBeNull();
+    expect(getSessionTurns()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ entries: [expect.objectContaining({ status: "cancelled", reason: "agent_chat_ended" })] }),
+    ]));
+  });
+
+  it("retains server-confirmed pending approvals and catches delayed disconnect cleanup", async () => {
+    vi.useFakeTimers();
+    try {
+      setSessionTurns([{ entries: [{ kind: "approval", approvalId: "pending-chat", toolName: "create_helper", status: "pending" }], messages: [], lines: 1 }]);
+      getApproval.mockResolvedValueOnce({ id: "pending-chat", status: "pending", rejected_reason: null });
+      getApproval.mockResolvedValueOnce({ id: "pending-chat", status: "cancelled", rejected_reason: "agent_chat_ended" });
+      const view = render(<AgentCliWindow tokens={TOKENS} instances={INSTANCES} scrollbackLines={500}
+                                         initialTokenId="t1" onClose={() => {}} />);
+      await act(async () => {});
+      expect(screen.getByRole("button", { name: /^Review/ })).toBeVisible();
+      await act(async () => vi.advanceTimersByTimeAsync(2000));
+      expect(screen.getByText("Chat ended.")).toBeVisible();
+      expect(screen.queryByRole("button", { name: /^Review/ })).toBeNull();
+      expect(getApproval).toHaveBeenCalledTimes(2);
+      view.unmount();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not let a stale restored approval read undo a newer execution claim", async () => {
+    const handlers: Record<string, (ev: unknown) => void> = {};
+    const el = document.createElement("home-assistant");
+    (el as unknown as { hass: unknown }).hass = { connection: {
+      subscribeEvents: (cb: (ev: unknown) => void, event: string) => {
+        handlers[event] = cb;
+        return Promise.resolve(() => {});
+      },
+    } };
+    document.body.appendChild(el);
+    try {
+      setSessionTurns([{ entries: [{ kind: "approval", approvalId: "claimed-chat", toolName: "create_helper", status: "pending" }], messages: [], lines: 1 }]);
+      let resolve: (record: unknown) => void = () => {};
+      getApproval.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+      const view = render(<AgentCliWindow tokens={TOKENS} instances={INSTANCES} scrollbackLines={500}
+                                         initialTokenId="t1" onClose={() => {}} />);
+      act(() => handlers.phoenix_mcp_approval_claimed({ data: { approval_id: "claimed-chat", claimed: true } }));
+      await act(async () => resolve({ id: "claimed-chat", status: "pending", rejected_reason: null }));
+      expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
+      view.unmount();
+    } finally {
+      el.remove();
+    }
   });
 
   it("resizes only chat text in half-point steps and remembers the selection", async () => {
@@ -999,7 +1161,7 @@ describe("AgentCliWindow streaming", () => {
     const statuses = Array.from(document.querySelectorAll(".agentcli-approval-status"));
     expect(statuses.map((n) => n.textContent).join(" ")).toContain("approved, but execution failed");
     expect(screen.getByText(/changed since you last read it/)).toBeInTheDocument();
-    expect(screen.getByText(/Agent Chat ended before approval/)).toBeInTheDocument();
+    expect(screen.getByText("Chat ended.")).toBeInTheDocument();
   });
 
   it("localizes a keyed server error in both the transcript and live announcement", async () => {
@@ -1805,6 +1967,11 @@ describe("agentCLI cancellation on close/unmount", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(signal.aborted).toBe(true);
     expect(onClose).toHaveBeenCalled();
+    expect(getSessionTurns()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ entries: expect.arrayContaining([
+        expect.objectContaining({ kind: "notice", message: "Chat ended." }),
+      ]), messages: [] }),
+    ]));
   });
 
   it("unmount aborts the in-flight request", async () => {
@@ -1812,6 +1979,9 @@ describe("agentCLI cancellation on close/unmount", () => {
     expect(signal.aborted).toBe(false);
     utils.unmount();
     expect(signal.aborted).toBe(true);
+    const unload = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(unload);
+    expect(unload.defaultPrevented).toBe(false);
   });
 });
 
