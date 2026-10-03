@@ -290,13 +290,14 @@ async def async_remove_token_sensors(
     hass: HomeAssistant,
     token_slug: str,
 ) -> None:
-    """Remove sensor entities for a revoked/archived token and clean up the entity registry.
+    """Remove a token's sensor entities, registries, and Recorder statistics.
 
     Removing from the entity registry prevents 'unavailable' ghost entries after
     the token is gone. The associated device is also removed from the device registry.
     """
     from homeassistant.helpers import device_registry as dr
     from homeassistant.helpers import entity_registry as er
+    from homeassistant.helpers.recorder import DATA_INSTANCE, get_instance
     data: PhoenixData = hass.data[DOMAIN]
     sensors = data.platform_entities.pop(token_slug, [])
     if sensors:
@@ -304,15 +305,17 @@ async def async_remove_token_sensors(
     entity_reg = er.async_get(hass)
     device_reg = dr.async_get(hass)
 
-    # Capture device_id before entering the removal loop so we don't rely on
-    # registry entries still being present after sensor.async_remove() runs.
+    # Capture registered IDs before removal, including operator-renamed entities.
+    # Statistics are keyed by entity_id, not the token name or sensor unique_id.
     device_id = None
+    statistic_ids = []
     for sensor in sensors:
-        if sensor.unique_id and device_id is None:
+        if sensor.unique_id:
             entity_id = entity_reg.async_get_entity_id("sensor", DOMAIN, sensor.unique_id)
             if entity_id:
+                statistic_ids.append(entity_id)
                 entry = entity_reg.async_get(entity_id)
-                if entry:
+                if entry and device_id is None:
                     device_id = entry.device_id
 
     for sensor in sensors:
@@ -323,3 +326,8 @@ async def async_remove_token_sensors(
                 entity_reg.async_remove(entity_id)
     if device_id:
         device_reg.async_remove_device(device_id)
+
+    if statistic_ids and DATA_INSTANCE in hass.data:
+        # Recorder owns the queued database work after the entities stop writing.
+        # Include all sensors: expires_in can also have measurement statistics.
+        get_instance(hass).async_clear_statistics(statistic_ids)

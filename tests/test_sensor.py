@@ -603,6 +603,59 @@ class TestTokenRenameKeepsSensorIdentity:
         assert "alpha" not in data.platform_entities
         assert data.platform_entities["beta"] is sensors
 
+    @pytest.mark.parametrize("recorder_enabled", [True, False])
+    async def test_removal_clears_actual_registered_sensor_statistics(self, hass, recorder_enabled):
+        """Delete only this token's statistics, using IDs captured before removal."""
+        from homeassistant.components.recorder.core import Recorder
+        from homeassistant.components.recorder.tasks import ClearStatisticsTask
+        from homeassistant.helpers import device_registry as dr
+        from homeassistant.helpers import entity_registry as er
+        from homeassistant.helpers.recorder import DATA_INSTANCE, DATA_RECORDER, RecorderData
+        from homeassistant.util.dt import utcnow
+        from custom_components.phoenix_mcp.sensor import async_rename_token_sensors
+
+        token = _make_token(name="alpha", expires_at=utcnow() + timedelta(days=1))
+        other = _make_token(name="unrelated")
+        data = _make_data(tokens=[token, other])
+        hass.data[DOMAIN] = data
+        ids, device_id = self._register(hass, token)
+        other_ids, other_device_id = self._register(hass, other)
+        registry = er.async_get(hass)
+        # The operator can change the entity ID independently of the token name.
+        registry.async_update_entity(ids["request_count"], new_entity_id="sensor.custom_token_requests")
+        ids["request_count"] = "sensor.custom_token_requests"
+        sensors = _make_sensors(token, data)
+        for sensor in sensors:
+            sensor.async_remove = AsyncMock()
+        data.platform_entities["alpha"] = sensors
+        data.token_id_sensors[token.id] = sensors
+
+        hass.data[DATA_RECORDER] = RecorderData()
+        recorder = Recorder(hass, False, False, 10, 5, "sqlite://", 1, 1, None, set())
+        if recorder_enabled:
+            hass.data[DATA_INSTANCE] = recorder
+        with patch.object(recorder, "queue_task") as queue_task:
+            await async_rename_token_sensors(hass, "alpha", replace(token, name="beta"))
+            queue_task.assert_not_called()
+            await async_remove_token_sensors(hass, "beta")
+            if recorder_enabled:
+                queue_task.assert_called_once()
+                task = queue_task.call_args.args[0]
+                assert isinstance(task, ClearStatisticsTask)
+                assert set(task.statistic_ids) == set(ids.values())
+                assert ids["expires_in"] in task.statistic_ids
+            else:
+                queue_task.assert_not_called()
+
+            await async_remove_token_sensors(hass, "missing_token")
+            assert queue_task.call_count == int(recorder_enabled)
+
+        assert all(registry.async_get(entity_id) is None for entity_id in ids.values())
+        assert dr.async_get(hass).async_get(device_id) is None
+        assert all(registry.async_get(entity_id) is not None for entity_id in other_ids.values())
+        assert dr.async_get(hass).async_get(other_device_id) is not None
+        assert token.id not in data.token_id_sensors
+
 # --- the entity IDs Home Assistant actually generates -------------------------
 
 
