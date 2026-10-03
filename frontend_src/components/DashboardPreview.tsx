@@ -1,6 +1,7 @@
-/** Display dashboard proposals as text without instantiating card code. */
-import { useEffect, useMemo, useState } from "react";
+/** Required visual dashboard review with an isolated renderer and text fallback. */
+import { useEffect, useMemo, useRef, useState } from "react";
 import { t } from "../i18n";
+import { connectPreviewFrame, previewFrameDocument } from "../utils/dashboard_preview_sandbox";
 
 export type PreviewCardEntry =
   | { kind: "card"; config: Record<string, unknown> }
@@ -163,11 +164,16 @@ export function SegmentedToggle<T extends string>({ value, options, onChange, ar
   );
 }
 
-/** Review configuration as escaped text without access to the HA client. */
+/** Shared dashboard card preview for Approvals and Changes.
+ * Visual preview is required: do not disable or remove the card renderer,
+ * because that breaks preview before approval and in configuration history.
+ * Security hardening must preserve visual rendering and keep controls inert;
+ * configuration text is a fallback for cards that cannot be rendered. */
 export function DashboardPreview({ config }: {
   config: unknown;
 }) {
   const views = useMemo(() => collectPreviewViews(config), [config]);
+  const frameKey = useMemo(() => config ? crypto.getRandomValues(new Uint32Array(2)).join("-") : "empty", [config]);
   const [active, setActive] = useState(0);
   useEffect(() => { setActive(0); }, [config]);
   if (views === null) return <p className="dash-preview-note">{t("changes.previewNoLayout")}</p>;
@@ -188,16 +194,69 @@ export function DashboardPreview({ config }: {
       {view.kind === "strategy" && <p className="dash-preview-note">{t("changes.previewStrategyView")}</p>}
       {view.kind === "invalid" && <p className="dash-preview-note">{t("changes.previewBadView")}</p>}
       {view.kind === "empty" && <p className="dash-preview-note">{t("changes.previewNoCards")}</p>}
-      {view.sections.map((section, sIdx) => (
-        <section key={sIdx}>
-          {section.title && <div className="dash-preview-section-title">{section.title}</div>}
-          <div className="dash-preview-grid">
-            {section.cards.map((card, cIdx) => card.kind === "card"
-              ? <pre key={cIdx} className="dash-preview-config">{JSON.stringify(card.config, null, 2)}</pre>
-              : <p key={cIdx} className="dash-preview-card-error">{t("changes.previewBadCard")}</p>)}
-          </div>
-        </section>
-      ))}
+      {view.kind === "cards" && <IsolatedCards key={`${frameKey}:${active}`} config={config} sections={view.sections} />}
     </div>
+  );
+}
+
+function IsolatedCards({ config, sections }: { config: unknown; sections: PreviewSection[] }) {
+  const ref = useRef<HTMLIFrameElement>(null);
+  const [state, setState] = useState<"loading" | "rendered" | "failed">("loading");
+  const [height, setHeight] = useState(120);
+  const [errors, setErrors] = useState<string[]>([]);
+  const [loaded, setLoaded] = useState(false);
+  const documentSource = useMemo(() => previewFrameDocument(), []);
+  useEffect(() => {
+    const frame = ref.current;
+    if (!frame || !loaded) return;
+    const controller = new AbortController();
+    let dispose: (() => void) | undefined;
+    setState("loading"); setErrors([]);
+    const timeout = window.setTimeout(() => {
+      if (!controller.signal.aborted) { setState("failed"); controller.abort(); }
+    }, 15000);
+    connectPreviewFrame(frame, config, sections, {
+        card: t("common.preview"), failed: t("changes.previewCardFailed"), badCard: t("changes.previewBadCard"),
+      }, (result) => {
+        if (controller.signal.aborted) return;
+        window.clearTimeout(timeout);
+        setState(result.kind === "rendered" ? "rendered" : "failed");
+        if (result.kind === "failed") controller.abort();
+        if (result.height) setHeight(result.height);
+        setErrors(result.errors ?? []);
+      }, controller.signal).then((cleanup) => {
+        if (controller.signal.aborted) cleanup(); else dispose = cleanup;
+      }).catch((error) => {
+        if (!controller.signal.aborted) {
+          console.warn("Phoenix MCP: dashboard preview unavailable", error);
+          window.clearTimeout(timeout); setState("failed"); controller.abort();
+        }
+      });
+    return () => {
+      controller.abort(); dispose?.(); window.clearTimeout(timeout);
+    };
+  }, [config, sections, loaded]);
+  return (
+    <>
+      {state === "loading" && <p className="dash-preview-note" role="status">{t("common.loading")}</p>}
+      {state === "failed" && <p className="dash-preview-note">{t("changes.previewUnavailableLayout")}</p>}
+      {state !== "failed" && <iframe ref={ref} className="dash-preview-frame" title={t("common.preview")} sandbox="allow-scripts"
+        referrerPolicy="no-referrer" srcDoc={documentSource} onLoad={() => setLoaded(true)}
+        style={{ height, display: "block" }} />}
+      {errors.map((error, index) => <pre key={index} className="dash-preview-error-msg">{error}</pre>)}
+      <details className="dash-preview-source" open={state === "failed" || errors.length > 0}>
+        <summary>{t("changes.previewConfig")}</summary>
+        {sections.map((section, sIdx) => (
+          <section key={sIdx}>
+            {section.title && <div className="dash-preview-section-title">{section.title}</div>}
+            <div className="dash-preview-grid">
+              {section.cards.map((card, cIdx) => card.kind === "card"
+                ? <pre key={cIdx} className="dash-preview-config">{JSON.stringify(card.config, null, 2)}</pre>
+                : <p key={cIdx} className="dash-preview-card-error">{t("changes.previewBadCard")}</p>)}
+            </div>
+          </section>
+        ))}
+      </details>
+    </>
   );
 }
