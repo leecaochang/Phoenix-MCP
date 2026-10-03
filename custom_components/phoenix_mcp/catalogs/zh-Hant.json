@@ -1052,9 +1052,6 @@
       "chooseValidDomain": "請選擇一個有效的域。",
       "chooseValidEntity": "請選擇一個有效的實體。",
       "chooseValidIntegration": "請選擇一個有效的整合。",
-      "clearAllOrphans": "清除所有孤立策略",
-      "clearOrphansFailed": "清除孤立策略失敗。",
-      "clearing": "清除中…",
       "colEffective": "生效值",
       "colField": "欄位",
       "colFrom": "層級",
@@ -1086,7 +1083,6 @@
       "currentFilter": "目前篩選：",
       "currently": "目前生效",
       "delete": "刪除",
-      "deleteAllOrphans": "刪除全部 {count} 條孤立策略？",
       "deleteAreaConfirm": "確定刪除此分區策略？",
       "deleteAreaProfile": "刪除分區策略",
       "deleteAreaWarn": "「{key}」分區中繼承此策略的每個實體都將回退到下一層級（整合、域、部署預設設定，最後是內建安全基線）。",
@@ -1255,13 +1251,21 @@
       "validationWarning": "警告：",
       "validationError": "錯誤：",
       "validationAutomation": "自動化 <code>{automationId}</code>",
+      "advisoryOnly": "這僅是提示，無需採取任何操作。",
+      "dismissInspectionNotice": "永久關閉檢查提示",
+      "dismissValidationNotice": "永久關閉驗證提示",
+      "dismissOrphanNotice": "永久關閉孤立設定檔提示",
+      "partialInspection": {
+        "one": "{count} 個自動化因包含範本或使用藍圖，僅能完成部分檢查。",
+        "other": "{count} 個自動化因包含範本或使用藍圖，僅能完成部分檢查。"
+      },
+      "viewAutomationDetails": "查看自動化",
       "unset": "（未設定）",
       "vendorBadge": "供應商",
       "vendorTitle": "由整合提供（mesa_profile.json）。儲存後會建立您自己的覆蓋策略。",
       "warningRow": "{recommendation}（自動化 {automationId}，{role}）",
       "working": "處理中…",
-      "yes": "是",
-      "yesDelete": "確認刪除"
+      "yes": "是"
     },
     "mesaSuggestion": {
       "baseline_note": "「禁止」與該域的內建基線一致，因此顯式編寫策略只是把這一意圖寫明；如果希望智慧體在核准後仍可控制，請在「檢視」中改選「確認」。",

@@ -776,6 +776,14 @@ select.input {
 .mesa-resolution-warnings li { margin-top: 4px; line-height: 1.45; }
 .banner-info  { background: var(--phx-info-bg);    border-color: var(--phx-info);    color: var(--phx-text); }
 .banner-error { background: var(--phx-error-bg);   border-color: var(--phx-error);   color: var(--phx-error); }
+.mesa-notice { display: flex; align-items: flex-start; gap: 12px; overflow-wrap: anywhere; }
+.mesa-notice-content { flex: 1; min-width: 0; }
+.mesa-notice-dismiss { flex: none; min-width: 32px; min-height: 32px; }
+.mesa-notice p { margin: 6px 0 0; }
+.mesa-notice p:first-child { margin-top: 0; }
+.mesa-notice-details { margin-top: 8px; }
+.mesa-notice-details summary { cursor: pointer; }
+.mesa-notice-details ul { margin: 6px 0 0; padding-left: 20px; }
 
 /* Reconnect reminder banner: info banner with a flexible text column + dismiss. */
 .reconnect-banner { display: flex; align-items: flex-start; gap: 12px; }

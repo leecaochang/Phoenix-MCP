@@ -905,9 +905,6 @@
       "chooseValidDomain": "유효한 도메인을 선택하세요.",
       "chooseValidEntity": "유효한 엔티티를 선택하세요.",
       "chooseValidIntegration": "유효한 통합 구성 요소를 선택하세요.",
-      "clearAllOrphans": "고아 프로필 모두 정리",
-      "clearOrphansFailed": "고아 프로필을 정리하지 못했습니다.",
-      "clearing": "정리 중...",
       "colEffective": "적용 값",
       "colField": "필드",
       "colFrom": "상속 출처",
@@ -939,7 +936,6 @@
       "currentFilter": "현재 필터: ",
       "currently": "현재",
       "delete": "삭제",
-      "deleteAllOrphans": "고아 프로필 {count}개를 모두 삭제하시겠습니까?",
       "deleteAreaConfirm": "이 영역 프로필을 삭제하시겠습니까?",
       "deleteAreaProfile": "영역 프로필 삭제",
       "deleteAreaWarn": "“{key}” 영역에서 이 프로필을 상속하는 모든 엔티티는 다음 단계(통합 구성 요소, 도메인, 배포 기본값, 그다음 기본 제공 안전 기준)로 폴백됩니다.",
@@ -1108,13 +1104,21 @@
       "validationWarning": "경고:",
       "validationError": "오류:",
       "validationAutomation": "자동화 <code>{automationId}</code>",
+      "advisoryOnly": "참고용 안내이며, 별도의 조치가 필요하지 않습니다.",
+      "dismissInspectionNotice": "검사 알림 영구적으로 숨기기",
+      "dismissValidationNotice": "검증 알림 영구적으로 숨기기",
+      "dismissOrphanNotice": "고아 프로필 알림 영구적으로 숨기기",
+      "partialInspection": {
+        "one": "템플릿을 포함하거나 블루프린트를 사용하는 자동화 {count}개를 부분적으로만 검사할 수 있었습니다.",
+        "other": "템플릿을 포함하거나 블루프린트를 사용하는 자동화 {count}개를 부분적으로만 검사할 수 있었습니다."
+      },
+      "viewAutomationDetails": "자동화 보기",
       "unset": "(설정 안 됨)",
       "vendorBadge": "공급업체",
       "vendorTitle": "통합 구성 요소가 제공한 프로필입니다(mesa_profile.json). 저장하면 자체 재정의가 생성됩니다.",
       "warningRow": "{recommendation} (자동화 {automationId}, {role})",
       "working": "작업 중...",
-      "yes": "예",
-      "yesDelete": "예, 삭제합니다"
+      "yes": "예"
     },
     "settings": {
       "addProviderFirst": "먼저 에이전트 채팅에서 공급자 계정을 추가하세요.",

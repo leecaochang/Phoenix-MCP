@@ -730,9 +730,6 @@
       "chooseValidDomain": "Wählen Sie eine gültige Domäne.",
       "chooseValidEntity": "Wählen Sie eine gültige Entität.",
       "chooseValidIntegration": "Wählen Sie eine gültige Integration.",
-      "clearAllOrphans": "Alle verwaisten Profile löschen",
-      "clearOrphansFailed": "Verwaiste Profile konnten nicht gelöscht werden.",
-      "clearing": "Wird gelöscht...",
       "colEffective": "Effektiv",
       "colField": "Feld",
       "colFrom": "Von",
@@ -764,7 +761,6 @@
       "currentFilter": "Aktueller Filter: ",
       "currently": "Aktuell",
       "delete": "Löschen",
-      "deleteAllOrphans": "Alle {count} verwaisten Profile löschen?",
       "deleteAreaConfirm": "Dieses Bereichsprofil löschen?",
       "deleteAreaProfile": "Bereichsprofil löschen",
       "deleteAreaWarn": "Jede Entität im Bereich \"{key}\", die von diesem Profil erbt, fällt auf die nächste Ebene zurück (Integration, Domäne, Standardwerte der Bereitstellung, dann die integrierte Sicherheitsgrundlinie).",
@@ -933,13 +929,21 @@
       "validationWarning": "Warnung:",
       "validationError": "Fehler:",
       "validationAutomation": "Automatisierung <code>{automationId}</code>",
+      "advisoryOnly": "Dies ist nur ein Hinweis; es ist keine Aktion erforderlich.",
+      "dismissInspectionNotice": "Prüfhinweis dauerhaft ausblenden",
+      "dismissValidationNotice": "Validierungshinweis dauerhaft ausblenden",
+      "dismissOrphanNotice": "Hinweis auf verwaiste Profile dauerhaft ausblenden",
+      "partialInspection": {
+        "one": "{count} Automatisierung konnte nur teilweise geprüft werden, weil sie Vorlagen enthält oder einen Blueprint verwendet.",
+        "other": "{count} Automatisierungen konnten nur teilweise geprüft werden, weil sie Vorlagen enthalten oder Blueprints verwenden."
+      },
+      "viewAutomationDetails": "Automatisierungen anzeigen",
       "unset": "(nicht gesetzt)",
       "vendorBadge": "Anbieter",
       "vendorTitle": "Von der Integration bereitgestellt (mesa_profile.json). Durch Speichern erstellen Sie Ihre eigene Überschreibung.",
       "warningRow": "{recommendation} (Automatisierung {automationId}, {role})",
       "working": "Wird verarbeitet...",
-      "yes": "Ja",
-      "yesDelete": "Ja, löschen"
+      "yes": "Ja"
     },
     "settings": {
       "addProviderFirst": "Fügen Sie zuerst ein Anbieterkonto im Agent-Chat hinzu.",

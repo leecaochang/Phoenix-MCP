@@ -1370,9 +1370,6 @@
       "chooseValidDomain": "Kies een geldig domein.",
       "chooseValidEntity": "Kies een geldige entiteit.",
       "chooseValidIntegration": "Kies een geldige integratie.",
-      "clearAllOrphans": "Alle verweesde profielen opruimen",
-      "clearOrphansFailed": "Verweesde profielen opruimen is mislukt.",
-      "clearing": "Opruimen...",
       "colEffective": "Effectief",
       "colField": "Veld",
       "colFrom": "Van",
@@ -1404,7 +1401,6 @@
       "currentFilter": "Huidig filter: ",
       "currently": "Momenteel",
       "delete": "Verwijderen",
-      "deleteAllOrphans": "Alle {count} verweesde profielen verwijderen?",
       "deleteAreaConfirm": "Dit ruimteprofiel verwijderen?",
       "deleteAreaProfile": "Ruimteprofiel verwijderen",
       "deleteAreaWarn": "Elke entiteit in de ruimte \"{key}\" die van dit profiel erft, valt terug naar het volgende niveau (integratie, domein, implementatiestandaarden en vervolgens de ingebouwde veiligheidsbasislijn).",
@@ -1573,13 +1569,21 @@
       "validationWarning": "Waarschuwing:",
       "validationError": "Fout:",
       "validationAutomation": "Automatisering <code>{automationId}</code>",
+      "advisoryOnly": "Dit is alleen een advies; u hoeft niets te doen.",
+      "dismissInspectionNotice": "Inspectiemelding permanent verbergen",
+      "dismissValidationNotice": "Validatiemelding permanent verbergen",
+      "dismissOrphanNotice": "Melding over verweesde profielen permanent verbergen",
+      "partialInspection": {
+        "one": "{count} automatisering kon slechts gedeeltelijk worden gecontroleerd omdat deze sjablonen bevat of een blueprint gebruikt.",
+        "other": "{count} automatiseringen konden slechts gedeeltelijk worden gecontroleerd omdat ze sjablonen bevatten of blueprints gebruiken."
+      },
+      "viewAutomationDetails": "Automatiseringen bekijken",
       "unset": "(niet ingesteld)",
       "vendorBadge": "Leverancier",
       "vendorTitle": "Geleverd door de integratie (mesa_profile.json). Opslaan maakt je eigen overschrijving aan.",
       "warningRow": "{recommendation} (automatisering {automationId}, {role})",
       "working": "Bezig...",
-      "yes": "Ja",
-      "yesDelete": "Ja, verwijderen"
+      "yes": "Ja"
     },
     "settings": {
       "addProviderFirst": "Voeg eerst een provideraccount toe in Agent Chat.",

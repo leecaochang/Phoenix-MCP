@@ -259,9 +259,6 @@
       "chooseValidDomain": "请选择一个有效的域。",
       "chooseValidEntity": "请选择一个有效的实体。",
       "chooseValidIntegration": "请选择一个有效的集成。",
-      "clearAllOrphans": "清除所有孤立策略",
-      "clearOrphansFailed": "清除孤立策略失败。",
-      "clearing": "清除中…",
       "colEffective": "生效值",
       "colField": "字段",
       "colFrom": "层级",
@@ -293,7 +290,6 @@
       "currentFilter": "当前筛选：",
       "currently": "当前生效",
       "delete": "删除",
-      "deleteAllOrphans": "删除全部 {count} 条孤立策略？",
       "deleteAreaConfirm": "确定删除此区域策略？",
       "deleteAreaProfile": "删除区域策略",
       "deleteAreaWarn": "“{key}”区域中继承此策略的每个实体都将回退到下一层级（集成、域、部署默认设置，最后是内置安全基线）。",
@@ -462,13 +458,21 @@
       "validationWarning": "警告：",
       "validationError": "错误：",
       "validationAutomation": "自动化 <code>{automationId}</code>",
+      "advisoryOnly": "这仅是提示，无需采取任何操作。",
+      "dismissInspectionNotice": "永久关闭检查提示",
+      "dismissValidationNotice": "永久关闭验证提示",
+      "dismissOrphanNotice": "永久关闭孤立配置档案提示",
+      "partialInspection": {
+        "one": "{count} 个自动化由于包含模板或使用蓝图，仅能完成部分检查。",
+        "other": "{count} 个自动化由于包含模板或使用蓝图，仅能完成部分检查。"
+      },
+      "viewAutomationDetails": "查看自动化",
       "unset": "（未设置）",
       "vendorBadge": "供应商",
       "vendorTitle": "由集成提供（mesa_profile.json）。保存后会创建您自己的覆盖策略。",
       "warningRow": "{recommendation}（自动化 {automationId}，{role}）",
       "working": "处理中…",
-      "yes": "是",
-      "yesDelete": "确认删除"
+      "yes": "是"
     },
     "selectBy": {
       "apply": "应用",

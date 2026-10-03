@@ -827,9 +827,6 @@
       "chooseValidDomain": "Choisissez un domaine valide.",
       "chooseValidEntity": "Choisissez une entité valide.",
       "chooseValidIntegration": "Choisissez une intégration valide.",
-      "clearAllOrphans": "Supprimer tous les profils orphelins",
-      "clearOrphansFailed": "Échec de la suppression des profils orphelins.",
-      "clearing": "Suppression...",
       "colEffective": "Effectif",
       "colField": "Champ",
       "colFrom": "Depuis",
@@ -861,7 +858,6 @@
       "currentFilter": "Filtre actuel : ",
       "currently": "Actuellement",
       "delete": "Supprimer",
-      "deleteAllOrphans": "Supprimer les {count} profil(s) orphelin(s) ?",
       "deleteAreaConfirm": "Supprimer ce profil de pièce ?",
       "deleteAreaProfile": "Supprimer le profil de pièce",
       "deleteAreaWarn": "Chaque entité de la pièce « {key} » qui hérite de ce profil retombera au niveau suivant (intégration, domaine, valeurs par défaut de déploiement, puis la ligne de base de sécurité intégrée).",
@@ -1030,13 +1026,21 @@
       "validationWarning": "Avertissement :",
       "validationError": "Erreur :",
       "validationAutomation": "Automatisation <code>{automationId}</code>",
+      "advisoryOnly": "Cet avis est uniquement informatif ; aucune action n’est requise.",
+      "dismissInspectionNotice": "Masquer définitivement l’avis d’inspection",
+      "dismissValidationNotice": "Masquer définitivement l’avis de validation",
+      "dismissOrphanNotice": "Masquer définitivement l’avis de profils orphelins",
+      "partialInspection": {
+        "one": "{count} automatisation n’a pu être inspectée que partiellement, car elle contient des modèles ou utilise un blueprint.",
+        "other": "{count} automatisations n’ont pu être inspectées que partiellement, car elles contiennent des modèles ou utilisent des blueprints."
+      },
+      "viewAutomationDetails": "Voir les automatisations",
       "unset": "(non défini)",
       "vendorBadge": "Fournisseur",
       "vendorTitle": "Fourni par l'intégration (mesa_profile.json). L'enregistrement crée votre propre remplacement.",
       "warningRow": "{recommendation} (automatisation {automationId}, {role})",
       "working": "Traitement...",
-      "yes": "Oui",
-      "yesDelete": "Oui, supprimer"
+      "yes": "Oui"
     },
     "selectBy": {
       "apply": "Appliquer",

@@ -1380,9 +1380,6 @@
       "chooseValidDomain": "Wybierz prawidłową domenę.",
       "chooseValidEntity": "Wybierz prawidłową encję.",
       "chooseValidIntegration": "Wybierz prawidłową integrację.",
-      "clearAllOrphans": "Wyczyść wszystkie osierocone profile",
-      "clearOrphansFailed": "Nie udało się wyczyścić osieroconych profili.",
-      "clearing": "Czyszczenie...",
       "colEffective": "Efektywne",
       "colField": "Pole",
       "colFrom": "Od",
@@ -1424,7 +1421,6 @@
       "currentFilter": "Bieżący filtr: ",
       "currently": "Obecnie",
       "delete": "Usuń",
-      "deleteAllOrphans": "Usunąć wszystkie {count} osieroconych profili?",
       "deleteAreaConfirm": "Usunąć ten profil obszaru?",
       "deleteAreaProfile": "Usuń profil obszaru",
       "deleteAreaWarn": "Każda encja w obszarze \"{key}\", która dziedziczy z tego profilu, powróci do następnego poziomu (integracja, domena, domyślne ustawienia wdrożenia, a następnie wbudowana linia bazowa bezpieczeństwa).",
@@ -1597,13 +1593,23 @@
       "validationWarning": "Ostrzeżenie:",
       "validationError": "Błąd:",
       "validationAutomation": "Automatyzacja <code>{automationId}</code>",
+      "advisoryOnly": "To tylko informacja; nie jest wymagane żadne działanie.",
+      "dismissInspectionNotice": "Ukryj na stałe powiadomienie o inspekcji",
+      "dismissValidationNotice": "Ukryj na stałe powiadomienie o walidacji",
+      "dismissOrphanNotice": "Ukryj na stałe powiadomienie o osieroconych profilach",
+      "partialInspection": {
+        "one": "{count} automatyzację można było sprawdzić tylko częściowo, ponieważ zawiera szablony lub korzysta ze schematu.",
+        "other": "{count} automatyzacji można było sprawdzić tylko częściowo, ponieważ zawierają szablony lub korzystają ze schematów.",
+        "few": "{count} automatyzacje można było sprawdzić tylko częściowo, ponieważ zawierają szablony lub korzystają ze schematów.",
+        "many": "{count} automatyzacji można było sprawdzić tylko częściowo, ponieważ zawierają szablony lub korzystają ze schematów."
+      },
+      "viewAutomationDetails": "Pokaż automatyzacje",
       "unset": "(nieustawione)",
       "vendorBadge": "Dostawca",
       "vendorTitle": "Dostarczone przez integrację (mesa_profile.json). Zapisanie tworzy własne zastąpienie.",
       "warningRow": "{recommendation} (automatyzacja {automationId}, {role})",
       "working": "Praca...",
-      "yes": "Tak",
-      "yesDelete": "Tak, usuń"
+      "yes": "Tak"
     },
     "settings": {
       "addProviderFirst": "Najpierw dodaj konto dostawcy w Czacie agenta.",

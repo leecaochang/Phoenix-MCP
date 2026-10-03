@@ -1201,9 +1201,6 @@
       "chooseValidDomain": "Seleccione un dominio válido.",
       "chooseValidEntity": "Seleccione una entidad válida.",
       "chooseValidIntegration": "Seleccione una integración válida.",
-      "clearAllOrphans": "Eliminar todos los perfiles huérfanos",
-      "clearOrphansFailed": "No se pudieron eliminar los perfiles huérfanos.",
-      "clearing": "Eliminando...",
       "colEffective": "Efectivo",
       "colField": "Campo",
       "colFrom": "De",
@@ -1235,7 +1232,6 @@
       "currentFilter": "Filtro actual: ",
       "currently": "Actualmente",
       "delete": "Eliminar",
-      "deleteAllOrphans": "¿Eliminar los {count} perfiles huérfanos?",
       "deleteAreaConfirm": "¿Eliminar este perfil de área?",
       "deleteAreaProfile": "Eliminar perfil de área",
       "deleteAreaWarn": "Cada entidad del área «{key}» que hereda de este perfil volverá al siguiente nivel (integración, dominio, valores predeterminados de despliegue y, por último, la línea base de seguridad integrada).",
@@ -1404,13 +1400,21 @@
       "validationWarning": "Advertencia:",
       "validationError": "Error de validación:",
       "validationAutomation": "Automatización <code>{automationId}</code>",
+      "advisoryOnly": "Este aviso es solo informativo; no es necesario realizar ninguna acción.",
+      "dismissInspectionNotice": "Descartar permanentemente el aviso de inspección",
+      "dismissValidationNotice": "Descartar permanentemente el aviso de validación",
+      "dismissOrphanNotice": "Descartar permanentemente el aviso de perfiles huérfanos",
+      "partialInspection": {
+        "one": "{count} automatización solo pudo inspeccionarse parcialmente porque contiene plantillas o utiliza un plano.",
+        "other": "{count} automatizaciones solo pudieron inspeccionarse parcialmente porque contienen plantillas o utilizan planos."
+      },
+      "viewAutomationDetails": "Ver automatizaciones",
       "unset": "(sin definir)",
       "vendorBadge": "Proveedor",
       "vendorTitle": "Proporcionado por la integración (mesa_profile.json). Al guardar se crea su propia anulación.",
       "warningRow": "{recommendation} (automatización {automationId}, {role})",
       "working": "Trabajando...",
-      "yes": "Sí",
-      "yesDelete": "Sí, eliminar"
+      "yes": "Sí"
     },
     "settings": {
       "addProviderFirst": "Añadir primero una cuenta de proveedor en Chat de agente.",

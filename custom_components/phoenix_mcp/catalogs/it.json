@@ -986,9 +986,6 @@
       "chooseValidDomain": "Seleziona un dominio valido.",
       "chooseValidEntity": "Seleziona un'entità valida.",
       "chooseValidIntegration": "Seleziona un'integrazione valida.",
-      "clearAllOrphans": "Rimuovi tutti i profili orfani",
-      "clearOrphansFailed": "Impossibile rimuovere i profili orfani.",
-      "clearing": "Rimozione...",
       "colEffective": "Effettivo",
       "colField": "Campo",
       "colFrom": "Da",
@@ -1020,7 +1017,6 @@
       "currentFilter": "Filtro attuale: ",
       "currently": "Attualmente",
       "delete": "Elimina",
-      "deleteAllOrphans": "Eliminare tutti i {count} profili orfani?",
       "deleteAreaConfirm": "Eliminare questo profilo area?",
       "deleteAreaProfile": "Elimina profilo area",
       "deleteAreaWarn": "Ogni entità nell'area \"{key}\" che eredita da questo profilo passerà al livello successivo (integrazione, dominio, valori predefiniti della distribuzione, poi la base di sicurezza integrata).",
@@ -1189,13 +1185,21 @@
       "validationWarning": "Avviso:",
       "validationError": "Errore:",
       "validationAutomation": "Automazione <code>{automationId}</code>",
+      "advisoryOnly": "Questo avviso è solo informativo; non è richiesta alcuna azione.",
+      "dismissInspectionNotice": "Nascondi definitivamente l’avviso di ispezione",
+      "dismissValidationNotice": "Nascondi definitivamente l’avviso di convalida",
+      "dismissOrphanNotice": "Nascondi definitivamente l’avviso sui profili orfani",
+      "partialInspection": {
+        "one": "{count} automazione è stata ispezionata solo parzialmente perché contiene modelli o utilizza un progetto.",
+        "other": "{count} automazioni sono state ispezionate solo parzialmente perché contengono modelli o utilizzano progetti."
+      },
+      "viewAutomationDetails": "Mostra automazioni",
       "unset": "(non impostato)",
       "vendorBadge": "Fornitore",
       "vendorTitle": "Fornito dall'integrazione (mesa_profile.json). Salvando crei la tua versione.",
       "warningRow": "{recommendation} (automazione {automationId}, {role})",
       "working": "In corso...",
-      "yes": "Sì",
-      "yesDelete": "Sì, elimina"
+      "yes": "Sì"
     },
     "selectBy": {
       "apply": "Applica",

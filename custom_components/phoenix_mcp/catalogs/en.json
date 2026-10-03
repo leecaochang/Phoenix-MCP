@@ -830,9 +830,6 @@
       "chooseValidDomain": "Choose a valid domain.",
       "chooseValidEntity": "Choose a valid entity.",
       "chooseValidIntegration": "Choose a valid integration.",
-      "clearAllOrphans": "Clear all orphaned profiles",
-      "clearOrphansFailed": "Failed to clear orphaned profiles.",
-      "clearing": "Clearing...",
       "colEffective": "Effective",
       "colField": "Field",
       "colFrom": "From",
@@ -864,7 +861,6 @@
       "currentFilter": "Current filter: ",
       "currently": "Currently",
       "delete": "Delete",
-      "deleteAllOrphans": "Delete all {count} orphaned profile(s)?",
       "deleteAreaConfirm": "Delete this area profile?",
       "deleteAreaProfile": "Delete area profile",
       "deleteAreaWarn": "Every entity in the \"{key}\" area that inherits from this profile will fall back to the next level (integration, domain, deployment defaults, then the built-in safety baseline).",
@@ -1033,13 +1029,21 @@
       "validationWarning": "Warning:",
       "validationError": "Error:",
       "validationAutomation": "Automation <code>{automationId}</code>",
+      "advisoryOnly": "This is advisory only; no action is required.",
+      "dismissInspectionNotice": "Dismiss inspection notice permanently",
+      "dismissValidationNotice": "Dismiss validation notice permanently",
+      "dismissOrphanNotice": "Dismiss orphaned-profile notice permanently",
+      "partialInspection": {
+        "one": "{count} automation could only be partially inspected because it contains templates or uses a blueprint.",
+        "other": "{count} automations could only be partially inspected because they contain templates or use blueprints."
+      },
+      "viewAutomationDetails": "View automations",
       "unset": "(unset)",
       "vendorBadge": "Vendor",
       "vendorTitle": "Supplied by the integration (mesa_profile.json). Saving creates your own override.",
       "warningRow": "{recommendation} (automation {automationId}, {role})",
       "working": "Working...",
-      "yes": "Yes",
-      "yesDelete": "Yes, delete"
+      "yes": "Yes"
     },
     "selectBy": {
       "apply": "Apply",

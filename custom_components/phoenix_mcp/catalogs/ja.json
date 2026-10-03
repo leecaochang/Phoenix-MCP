@@ -1554,9 +1554,6 @@
       "chooseValidDomain": "有効なドメインを選択してください。",
       "chooseValidEntity": "有効なエンティティを選択してください。",
       "chooseValidIntegration": "有効なインテグレーションを選択してください。",
-      "clearAllOrphans": "孤立したプロファイルをすべて消去",
-      "clearOrphansFailed": "孤立したプロファイルを消去できませんでした。",
-      "clearing": "消去中...",
       "colEffective": "有効値",
       "colField": "フィールド",
       "colFrom": "継承元",
@@ -1588,7 +1585,6 @@
       "currentFilter": "現在のフィルター: ",
       "currently": "現在",
       "delete": "削除",
-      "deleteAllOrphans": "孤立した{count}件のプロファイルをすべて削除しますか?",
       "deleteAreaConfirm": "このエリアプロファイルを削除しますか?",
       "deleteAreaProfile": "エリアプロファイルを削除",
       "deleteAreaWarn": "このプロファイルを継承している「{key}」エリア内のすべてのエンティティは、次のレベル (インテグレーション、ドメイン、デプロイ環境のデフォルト設定、組み込みの安全基準の順) にフォールバックします。",
@@ -1757,13 +1753,21 @@
       "validationWarning": "警告:",
       "validationError": "エラー:",
       "validationAutomation": "オートメーション <code>{automationId}</code>",
+      "advisoryOnly": "これは参考情報です。対応は必要ありません。",
+      "dismissInspectionNotice": "検査のお知らせを今後表示しない",
+      "dismissValidationNotice": "検証のお知らせを今後表示しない",
+      "dismissOrphanNotice": "孤立したプロファイルのお知らせを今後表示しない",
+      "partialInspection": {
+        "one": "{count} 件のオートメーションにテンプレートまたはブループリントが含まれるため、一部のみ検査できました。",
+        "other": "{count} 件のオートメーションにテンプレートまたはブループリントが含まれるため、一部のみ検査できました。"
+      },
+      "viewAutomationDetails": "オートメーションを表示",
       "unset": "(未設定)",
       "vendorBadge": "ベンダー",
       "vendorTitle": "インテグレーションから提供されています (mesa_profile.json)。保存すると独自の上書きが作成されます。",
       "warningRow": "{recommendation} (オートメーション {automationId}、{role})",
       "working": "処理中...",
-      "yes": "はい",
-      "yesDelete": "はい、削除します"
+      "yes": "はい"
     },
     "approvalSummary": {
       "action.approve": "承認して実行",

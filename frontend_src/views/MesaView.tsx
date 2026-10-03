@@ -11,7 +11,7 @@ import type {
   MesaIssuesResponse,
   MesaValidationIssue,
 } from "../types";
-import { api, ApiError } from "../api";
+import { api, ApiError, currentHass } from "../api";
 import { Modal } from "../components/Modal";
 import { TagInput } from "../components/TagInput";
 import { MesaSuggestions } from "../components/MesaSuggestions";
@@ -1126,6 +1126,47 @@ export function ImportModal({ onClose }: { onClose: (didImport: boolean) => void
 
 type Editing = { scope: ProfileScope; key: string | null; isNew: boolean; seedControlMode?: string; lockedKey?: boolean };
 
+// mesa-core exposes this inspection limit through its recommendation text.
+// Only the known warning is advisory; other findings retain their severity.
+const PARTIAL_INSPECTION_RECOMMENDATION = "templates or blueprint inputs require host expansion; reference coverage is incomplete";
+
+// Dismiss exact findings, so refreshes and reordering cannot resurrect them.
+// Browser preferences are scoped to the authenticated HA account.
+function noticeStorageKey(): string | null {
+  const owner = (currentHass() as { user?: { id?: string } } | null)?.user?.id;
+  return typeof owner === "string" && owner ? `phx-mesa-dismissed:${encodeURIComponent(owner)}` : null;
+}
+
+function readDismissedNotices(key: string | null): string[] {
+  try {
+    const value: unknown = JSON.parse(key ? localStorage.getItem(key) ?? "[]" : "[]");
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+  } catch { return []; }
+}
+
+function MesaNotice({ findings, tone, label, children }: {
+  findings: string[]; tone: "info" | "warn"; label: string; children: React.ReactNode;
+}) {
+  const key = noticeStorageKey();
+  const [session, setSession] = useState<{ key: string | null; findings: string[] } | null>(null);
+  const dismissed = new Set([...readDismissedNotices(key), ...(session?.key === key ? session.findings : [])]);
+  if (findings.every((finding) => dismissed.has(finding))) return null;
+  const dismiss = () => {
+    if (noticeStorageKey() !== key) return;
+    const next = [...new Set([...readDismissedNotices(key), ...dismissed, ...findings])];
+    try { if (key) localStorage.setItem(key, JSON.stringify(next)); } catch { /* retain dismissal for this visit if storage is unavailable */ }
+    setSession({ key, findings: next });
+  };
+  return (
+    <div className={`banner banner-${tone} mesa-notice`}>
+      <div className="mesa-notice-content">{children}</div>
+      <button type="button" className="btn btn-ghost btn-sm btn-icon mesa-notice-dismiss" onClick={dismiss} aria-label={label} title={label}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+      </button>
+    </div>
+  );
+}
+
 export function MesaView() {
   const [profiles, setProfiles] = useState<MesaProfileListItem[]>([]);
   const [issues, setIssues] = useState<MesaIssuesResponse>({ issues: [], orphans: [], orphan_devices: [], orphan_areas: [], orphan_integrations: [], suggestions: [], dismissed_suggestions: [] });
@@ -1143,12 +1184,24 @@ export function MesaView() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("");  // "" = all; a control_mode value; or "enforced"
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [confirmClearOrphans, setConfirmClearOrphans] = useState(false);
-  const [clearingOrphans, setClearingOrphans] = useState(false);
   const [showExport, setShowExport] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [suggestBusyKey, setSuggestBusyKey] = useState<string | null>(null);
   const [rescanning, setRescanning] = useState(false);
+
+  const { partialInspectionAutomations, validationIssues } = useMemo(() => {
+    const automations = new Set<string>();
+    const findings: MesaValidationIssue[] = [];
+    for (const issue of issues.issues) {
+      if (issue.severity === "warning" && issue.role === "configuration" && !issue.entity_id
+        && issue.recommendation === PARTIAL_INSPECTION_RECOMMENDATION) {
+        automations.add(issue.automation_id);
+      } else {
+        findings.push(issue);
+      }
+    }
+    return { partialInspectionAutomations: [...automations], validationIssues: findings };
+  }, [issues.issues]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -1181,20 +1234,6 @@ export function MesaView() {
       setLoading(false);
     }
   }, []);
-
-  const clearOrphans = useCallback(async () => {
-    setClearingOrphans(true);
-    setError(null);
-    try {
-      await api.clearMesaOrphans();
-      setConfirmClearOrphans(false);
-      await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : t("mesa.clearOrphansFailed"));
-    } finally {
-      setClearingOrphans(false);
-    }
-  }, [refresh]);
 
   // Apply a suggestion as-is: create the profile with the suggested mode, the
   // reason preserved as control_reason so future admins (and agents, via
@@ -1434,24 +1473,43 @@ export function MesaView() {
 
       {error && <ErrorMsg msg={error} />}
 
-      {(issues.issues.length > 0 || issues.orphans.length > 0 || issues.orphan_devices.length > 0 || issues.orphan_areas.length > 0 || issues.orphan_integrations.length > 0) && (
-        <div className="banner banner-warn">
-          {issues.issues.length > 0 && (
-            <div>
-              <strong>{t("mesa.triggerIssues", { count: issues.issues.length })}</strong>
-              <ul>
-                {issues.issues.map((i, idx) => (
-                  <li key={idx}>
-                    <strong>{i.severity === "error" ? t("mesa.validationError") : t("mesa.validationWarning")}</strong>{" "}
-                    {i.role === "configuration"
-                      ? tRich("mesa.validationAutomation", { code: (c) => <code>{c}</code> }, { automationId: i.automation_id })
-                      : tRich("mesa.triggerIssueRow", { code: (c) => <code>{c}</code> }, { entityId: i.entity_id, declared: i.declared_value, automationId: i.automation_id, role: i.role })}
-                    <div>{i.recommendation}</div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
+      {partialInspectionAutomations.length > 0 && (
+        <MesaNotice tone="info" label={t("mesa.dismissInspectionNotice")} findings={partialInspectionAutomations.map((id) => JSON.stringify(["inspection", id]))}>
+          <p>{tn("mesa.partialInspection", partialInspectionAutomations.length)}</p>
+          <p>{t("mesa.advisoryOnly")}</p>
+          <details className="mesa-notice-details">
+            <summary>{t("mesa.viewAutomationDetails")}</summary>
+            <ul>
+              {partialInspectionAutomations.map((id) => <li key={id}><code>{id}</code></li>)}
+            </ul>
+          </details>
+        </MesaNotice>
+      )}
+
+      {validationIssues.length > 0 && (
+        <MesaNotice tone="warn" label={t("mesa.dismissValidationNotice")} findings={validationIssues.map((i) => JSON.stringify(["validation", i.entity_id, i.declared_value, i.automation_id, i.role, i.severity, i.recommendation]))}>
+          <strong>{t("mesa.triggerIssues", { count: validationIssues.length })}</strong>
+          <ul>
+            {validationIssues.map((i, idx) => (
+              <li key={idx}>
+                <strong>{i.severity === "error" ? t("mesa.validationError") : t("mesa.validationWarning")}</strong>{" "}
+                {i.role === "configuration"
+                  ? tRich("mesa.validationAutomation", { code: (c) => <code>{c}</code> }, { automationId: i.automation_id })
+                  : tRich("mesa.triggerIssueRow", { code: (c) => <code>{c}</code> }, { entityId: i.entity_id, declared: i.declared_value, automationId: i.automation_id, role: i.role })}
+                <div>{i.recommendation}</div>
+              </li>
+            ))}
+          </ul>
+        </MesaNotice>
+      )}
+
+      {(issues.orphans.length > 0 || issues.orphan_devices.length > 0 || issues.orphan_areas.length > 0 || issues.orphan_integrations.length > 0) && (
+        <MesaNotice tone="info" label={t("mesa.dismissOrphanNotice")} findings={[
+          ...issues.orphans.map((id) => JSON.stringify(["orphan", "entity", id])),
+          ...issues.orphan_devices.map((id) => JSON.stringify(["orphan", "device", id])),
+          ...issues.orphan_areas.map((id) => JSON.stringify(["orphan", "area", id])),
+          ...issues.orphan_integrations.map((id) => JSON.stringify(["orphan", "integration", id])),
+        ]}>
           {issues.orphans.length > 0 && (
             <div>
               {tRich("mesa.orphanEntities", { strong: (c) => <strong>{c}</strong> }, { count: issues.orphans.length, list: issues.orphans.join(t("common.listSeparator")) })}
@@ -1472,22 +1530,8 @@ export function MesaView() {
               {tRich("mesa.orphanIntegrations", { strong: (c) => <strong>{c}</strong> }, { count: issues.orphan_integrations.length, list: issues.orphan_integrations.join(t("common.listSeparator")) })}
             </div>
           )}
-          {(issues.orphans.length > 0 || issues.orphan_devices.length > 0 || issues.orphan_areas.length > 0 || issues.orphan_integrations.length > 0) && (
-            <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "10px" }}>
-              {confirmClearOrphans ? (
-                <>
-                  <span>{t("mesa.deleteAllOrphans", { count: issues.orphans.length + issues.orphan_devices.length + issues.orphan_areas.length + issues.orphan_integrations.length })}</span>
-                  <button className="btn btn-danger btn-sm" onClick={clearOrphans} disabled={clearingOrphans}>
-                    {clearingOrphans ? t("mesa.clearing") : t("mesa.yesDelete")}
-                  </button>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setConfirmClearOrphans(false)} disabled={clearingOrphans}>{t("mesa.cancel")}</button>
-                </>
-              ) : (
-                <button className="btn btn-sm" onClick={() => setConfirmClearOrphans(true)}>{t("mesa.clearAllOrphans")}</button>
-              )}
-            </div>
-          )}
-        </div>
+          <p>{t("mesa.advisoryOnly")}</p>
+        </MesaNotice>
       )}
 
       <MesaSuggestions
