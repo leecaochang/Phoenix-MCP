@@ -51,3 +51,6 @@ mypy==2.3.1
 
 # Locale-aware routing replies; matches the integration manifest.
 Babel==2.18.0
+
+# Subprocess instrumentation uses coverage.py's supported patch mechanism.
+coverage==7.15.4

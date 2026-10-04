@@ -349,3 +349,54 @@ async def test_real_worker_returns_template_location(hass):
     token, data = _env()
     with pytest.raises(template_render.TemplateRenderError, match='Line 2:'):
         await template_render.async_render_template_for_token('\n{{ 1 / 0 }}', token, hass, data)
+
+
+def test_coverage_records_disposable_worker_without_importing_it_in_parent(tmp_path):
+    """Measure the real child entry point, including fail-closed OS startup."""
+    import os
+    from pathlib import Path
+    import subprocess
+
+    from coverage import CoverageData
+
+    root = Path(__file__).resolve().parents[1]
+    worker = root / 'custom_components/phoenix_mcp/template_worker.py'
+    config = tmp_path / 'coverage.toml'
+    config.write_text(
+        '[tool.coverage.run]\npatch = ["subprocess"]\n'
+        f'data_file = "{tmp_path / ".coverage"}"\n'
+        f'source = ["{worker.parent}"]\n'
+    )
+    probe = tmp_path / 'parent.py'
+    probe.write_text(
+        'import json, subprocess, sys\n'
+        'result = subprocess.run([sys.executable, sys.argv[1]], '
+        'input=json.dumps({"template": "{{ 6 * 7 }}", "states": [], '
+        '"time_zone": "UTC"}), capture_output=True, text=True, timeout=15)\n'
+        'print(json.dumps({"code": result.returncode, "output": result.stdout, '
+        '"diagnostic": result.stderr}))\n'
+    )
+    env = {key: value for key, value in os.environ.items()
+           if not key.startswith(('COVERAGE_', 'COV_CORE_'))}
+    env.update(PYTHONPATH=os.pathsep.join(sys.path), PYTHONMALLOC='pymalloc')
+    result = subprocess.run(
+        [sys.executable, '-m', 'coverage', 'run', f'--rcfile={config}',
+         str(probe), str(worker)],
+        env=env, capture_output=True, text=True, timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    reply = json.loads(result.stdout)
+    if sys.platform == 'linux':
+        assert reply == {'code': 0, 'output': '42', 'diagnostic': ''}
+    else:
+        assert reply['code'] in (0, 70), reply
+        if reply['code'] == 70:
+            assert reply['output'] == ''
+            assert reply['diagnostic'].startswith(('resource_limits:', 'imports:'))
+    measured = set()
+    for path in tmp_path.glob('.coverage.*'):
+        data = CoverageData(basename=str(path))
+        data.read()
+        measured.update(data.lines(str(worker)) or [])
+    # These lines run only in the disposable child, never in the parent probe.
+    assert {15, 21, 25, 72} <= measured

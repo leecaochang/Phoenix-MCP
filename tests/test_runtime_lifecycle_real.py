@@ -49,6 +49,88 @@ async def _setup_runtime(hass):
     return entry, hass.data[DOMAIN]
 
 
+async def test_reload_detaches_mesa_audit_handler(hass, enable_custom_integrations):
+    """Entry-owned logging handlers must not accumulate across real reloads."""
+    from custom_components.phoenix_mcp.mesa_audit import audit_logger, detach_mesa_audit_bridge
+
+    baseline = set(audit_logger.handlers)
+    entry = None
+    try:
+        entry, _ = await _setup_runtime(hass)
+        assert len(set(audit_logger.handlers) - baseline) == 1
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
+        assert len(set(audit_logger.handlers) - baseline) == 1
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        assert set(audit_logger.handlers) == baseline
+    finally:
+        if entry is not None and entry.state is ConfigEntryState.LOADED:
+            await hass.config_entries.async_unload(entry.entry_id)
+        for handler in set(audit_logger.handlers) - baseline:
+            detach_mesa_audit_bridge(handler)
+
+
+async def test_unload_drains_owned_decision_job(hass, enable_custom_integrations):
+    """Unload must await cancellation before discarding the runtime owner."""
+    entry, data = await _setup_runtime(hass)
+    entered, finished = asyncio.Event(), asyncio.Event()
+
+    async def provider_job():
+        entered.set()
+        try:
+            await asyncio.Future()
+        finally:
+            finished.set()
+
+    job = hass.async_create_background_task(provider_job(), 'qualification_decision')
+    data.decision_shadow.task = job
+    try:
+        await entered.wait()
+        assert await hass.config_entries.async_unload(entry.entry_id)
+        assert job.cancelled() and finished.is_set()
+    finally:
+        job.cancel()
+        await asyncio.gather(job, return_exceptions=True)
+        if entry.state is ConfigEntryState.LOADED:
+            await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_unload_persists_dirty_routing_statistics(hass, hass_storage, enable_custom_integrations):
+    """An unsaved completed turn survives a real entry unload and reload."""
+    from custom_components.phoenix_mcp.const import ROUTING_STATISTICS_STORAGE_KEY
+    from custom_components.phoenix_mcp.routing_statistics import TurnStatistics
+
+    entry, data = await _setup_runtime(hass)
+    statistics = data.routing_statistics
+    statistics.finish(TurnStatistics('chat', statistics.surfaces['chat']['generation'],
+                                     route='local', completed=True))
+    assert statistics.revision != statistics.saved_revision
+    expected = statistics.summary()
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    assert hass_storage[ROUTING_STATISTICS_STORAGE_KEY]['data'] == expected
+    assert await hass.config_entries.async_setup(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.data[DOMAIN].routing_statistics.summary() == expected
+    assert await hass.config_entries.async_unload(entry.entry_id)
+
+
+async def test_startup_archives_expired_tokens_and_schedules_future_expiry(hass, enable_custom_integrations):
+    """Startup enforces expiry without waiting for a request or interval sweep."""
+    store = await TokenStore.async_create(hass)
+    expired, _ = await store.async_create_token('expired', 'admin',
+                                               expires_at=utcnow() - timedelta(minutes=1))
+    future, _ = await store.async_create_token('future', 'admin',
+                                              expires_at=utcnow() + timedelta(minutes=5))
+    entry, data = await _setup_runtime(hass)
+    try:
+        assert data.store.get_token_by_id(expired.id) is None
+        assert any(token.id == expired.id for token in data.store.list_archived())
+        assert data.store.get_token_by_id(future.id) is not None
+        assert set(data.expiry_timers) == {future.id}
+    finally:
+        assert await hass.config_entries.async_unload(entry.entry_id)
+
+
 async def test_real_entry_reload_has_stable_routes_and_deletion_retires_credentials(hass, enable_custom_integrations, caplog):
     from homeassistant.components import conversation
     from homeassistant.helpers import llm
@@ -147,6 +229,31 @@ async def test_unload_flushes_usage_and_audit_added_during_platform_unload(hass,
     persisted = next(row for row in hass_storage[DOMAIN]["data"]["tokens"] if row["id"] == token.id)
     assert persisted["last_used_at"] == stamp.isoformat()
     assert any(row["request_id"] == "last-unload-row" for row in hass_storage["phoenix_mcp_audit"]["data"]["entries"])
+
+
+async def test_failed_platform_unload_persists_audit_and_keeps_runtime_available(hass, hass_storage, enable_custom_integrations, monkeypatch):
+    """A refused platform unload does not reach the final successful-unload save."""
+    entry, data = await _setup_runtime(hass)
+    data.audit.record(request_id='failed-unload-row', token_id='fixture', token_name='fixture',
+                      method='get_state', resource='fixture', outcome='allowed', client_ip='',
+                      settings=data.store.get_settings())
+    original = hass.config_entries.async_unload_platforms
+
+    async def refuse(*args, **kwargs):
+        return False
+
+    monkeypatch.setattr(hass.config_entries, 'async_unload_platforms', refuse)
+    try:
+        assert not await hass.config_entries.async_unload(entry.entry_id)
+        assert hass.data[DOMAIN] is data and data.ready and not data.shutting_down
+        assert any(row['request_id'] == 'failed-unload-row'
+                   for row in hass_storage['phoenix_mcp_audit']['data']['entries'])
+    finally:
+        monkeypatch.setattr(hass.config_entries, 'async_unload_platforms', original)
+        # Reset the synthetic failure after restoring the real platform owner.
+        # HA otherwise rejects further teardown of a FAILED_UNLOAD entry.
+        entry._async_set_state(hass, ConfigEntryState.LOADED, None)
+        assert await hass.config_entries.async_unload(entry.entry_id)
 
 
 async def test_stop_gates_real_http_admission_before_persistence(hass, enable_custom_integrations, hass_client_no_auth):

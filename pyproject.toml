@@ -4,6 +4,8 @@ asyncio_mode = "auto"
 
 [tool.coverage.run]
 source = ["custom_components/phoenix_mcp"]
+# Instrument disposable workers without changing their runtime or OS limits.
+patch = ["subprocess"]
 # mesa_core is a vendored copy of a separate, read-only project. Its coverage
 # is not ours to move, and including it drags the measured total below what our
 # own tests actually cover, which would make the CI threshold meaningless.
@@ -11,9 +13,10 @@ omit = ["custom_components/phoenix_mcp/mesa_core/*"]
 
 [tool.coverage.report]
 # Minimum first-party coverage gate. This is a floor, not a claim that every
-# covered branch is qualified or that worker subprocess coverage is measured.
-# Raise it after measuring the final first-party suite; never lower it to pass.
-fail_under = 80
+# covered branch is qualified. Killed workers cannot flush coverage data.
+# Ratchet below the measured 88.75 percent first-party statement baseline.
+# Never lower it to pass; subprocess instrumentation also runs in Linux CI.
+fail_under = 88
 
 [tool.mypy]
 # Phoenix MCP's coupling to HA internals is its top maintenance risk, and until
