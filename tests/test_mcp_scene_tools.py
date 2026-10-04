@@ -43,9 +43,11 @@ def _json(content: dict) -> dict:
 
 @pytest.fixture(autouse=True)
 def isolated_config_dir(hass: HomeAssistant, tmp_path):
-    """Scene executors resolve configuration.yaml (yaml_includes); isolate from
-    the shared testing config dir (which other tests pollute) and use the
-    real HA-default include layout."""
+    """Point scene executors at a private config dir with the HA-default include layout.
+
+    The executors resolve configuration.yaml (yaml_includes), and the shared
+    testing config dir is polluted by other tests.
+    """
     hass.config.config_dir = str(tmp_path)
     (tmp_path / "configuration.yaml").write_text(
         "automation: !include automations.yaml\n"
@@ -107,9 +109,7 @@ class TestCreateScene:
         assert outcome == "invalid_request"
 
     async def test_invalid_config_confirm_mode_rejected_before_pending(self, hass, scene_env):
-        """An invalid scene config must fail before a pending approval is
-        created, even under confirm mode, otherwise it sails through as a false
-        pending that can only fail once an admin approves it."""
+        """An invalid scene config fails before any approval is created, even in confirm mode."""
         content, outcome, _ = await _call(
             "create_scene", {"config": {"name": "NoEntities"}}, _token(cap_scene_write="confirm"), hass)
         assert outcome == "invalid_request"
@@ -140,10 +140,10 @@ class TestEditScene:
         assert outcome == "denied"
 
     async def test_missing_and_out_of_scope_same_reason(self, hass, scene_env):
-        # No-oracle: an out-of-scope scene gives the same generic reason as a missing
-        # one (the write-scope hint), and never leaks the existing member name. The
-        # attacker can write sensor.secret (so the new-member check passes) but not
-        # the existing member light.kitchen.
+        # No oracle: an out-of-scope scene gives the same generic reason as a
+        # missing one (the write-scope hint) and never leaks the existing member
+        # name. The caller can write sensor.secret (so the new-member check
+        # passes) but not the existing member light.kitchen.
         created = _json((await _call(
             "create_scene", {"config": {"name": "Movie", "entities": {"light.kitchen": "on"}}}, _token(), hass))[0])
         sid = created["scene_id"]

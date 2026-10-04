@@ -71,7 +71,8 @@ export function PermissionSimulator({ tokenId, externalEntityId, resolveDepth = 
     }
   }, [tokenId]);
 
-  // External entity set: update input and suppress debounce (simulation handled by Effect 2)
+  // External entity set: update input and suppress the typing debounce (the
+  // simulate effect below handles it).
   useEffect(() => {
     if (externalEntityId) {
       externalUpdateRef.current = true;
@@ -80,8 +81,8 @@ export function PermissionSimulator({ tokenId, externalEntityId, resolveDepth = 
   }, [externalEntityId]);
 
   // Simulate when entity selection or permissions version changes.
-  // Uses externalEntityId directly (not stale entityInputRef) when it just changed,
-  // preventing the race where entityInputRef still holds the previous entity.
+  // Uses externalEntityId directly when it just changed, because entityInputRef
+  // may still hold the previous entity.
   useEffect(() => {
     const entity = externalEntityId?.trim() || entityInputRef.current.trim();
     if (!entity) return;

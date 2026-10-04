@@ -1,15 +1,11 @@
-/** Accessible names under the Italian catalog.
+/**
+ * Accessible names under the Italian catalog.
  *
- * accessibility.test.tsx renders against the English catalog that setup.ts
- * primes, so it proves an accessible name EXISTS but never that it is
- * localized. accessibility_zh.test.tsx proves the same for Simplified Chinese.
- * Neither covers Italian, whose composed names are the ones most able to fall
- * back to English unnoticed, because the two languages share a script.
- *
- * This file primes the Italian catalog and asserts the accessible names
- * actually change, on the controls where the name is built rather than simply
- * passed through. The catalog is imported as `itCatalog` because `it` is
- * Vitest's own test function.
+ * Rendering against the English catalog proves a name exists, not that it is
+ * localized. Italian shares a script with English, so a composed name that falls
+ * back to English goes unnoticed; these tests assert the names change on the
+ * controls that build them. The catalog is imported as `itCatalog` because `it`
+ * is Vitest's own test function.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { render, screen } from "@testing-library/react";

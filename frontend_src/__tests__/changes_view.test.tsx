@@ -174,9 +174,9 @@ describe("ChangesView", () => {
 });
 
 // A device YAML version is a raw text snapshot ({content}), the same shape as
-// yaml_config and file. Rendering it through the structured path instead dumped
-// {content, path} back as YAML, burying the file inside a "content: |-" block
-// with every line re-indented.
+// yaml_config and file. Rendering it through the structured path would dump
+// {content, path} as YAML, burying the file inside a "content: |-" block with
+// every line re-indented.
 describe("ChangesView device YAML detail", () => {
   const DEVICE = 'esphome:\n  name: rf-blaster2\nlogger:\n  level: WARN\n';
 

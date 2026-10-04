@@ -29,13 +29,10 @@ def canonical_language(language: object) -> str:
     """Return the closest shipped Phoenix locale, with English as last resort.
 
     Home Assistant normally uses the same script-aware codes as Phoenix, but
-    browsers, operating-system settings, older profile data, and voice
-    pipelines can provide regional BCP 47 tags instead. Exact matches win,
-    then Chinese script or regional equivalents, then the base language.
-
-    This function deliberately uses only in-memory constants. It runs on the
-    Home Assistant event loop while serving catalog requests, so filesystem
-    discovery here would create a blocking scandir warning.
+    browsers, OS settings and voice pipelines can provide regional BCP 47 tags.
+    Exact matches win, then Chinese script or regional equivalents, then the base
+    language. Uses only in-memory constants: this runs on the event loop, where
+    filesystem discovery would raise a blocking scandir warning.
     """
     normalized = _normalize(language)
     if normalized is None:

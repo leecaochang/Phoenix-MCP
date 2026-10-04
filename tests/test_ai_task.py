@@ -1,8 +1,8 @@
 """Tests for the Phoenix MCP AI Task entity (ai_task.py + agentcli.async_run_ai_task).
 
-The pinned HA environment provides the real AITaskEntity base. Missing-platform
-coverage explicitly blocks its import in an isolated Phoenix module, so the
-feature-detection guard is tested independently of installed dependencies.
+The installed HA provides the real AITaskEntity base. The missing-platform case
+blocks its import in an isolated Phoenix module, so the feature-detection guard
+is tested independently of what is installed.
 """
 from __future__ import annotations
 
@@ -198,7 +198,7 @@ async def test_sync_removes_registry_entry_when_not_configured(hass):
     reg.async_get_or_create("ai_task", "phoenix_mcp", "e1_ai_task")
     assert reg.async_get_entity_id("ai_task", "phoenix_mcp", "e1_ai_task") is not None
 
-    data = _make_data(ai_task_enabled=False)  # not fully configured -> should not exist
+    data = _make_data(ai_task_enabled=False)  # not fully configured, so it should not exist
     data.ai_task_entity = None
     with patch.object(ai_task, "_AI_TASK_AVAILABLE", True):
         ai_task.async_sync_ai_task(hass, SimpleNamespace(entry_id="e1"), data, MagicMock())
@@ -229,7 +229,7 @@ def test_preferred_status_without_preferences(hass):
 
 
 def test_set_preferred_requires_entity(hass):
-    # No Phoenix MCP AI Task entity registered -> setup error before touching prefs.
+    # No Phoenix MCP AI Task entity registered: setup error before touching prefs.
     with pytest.raises(ai_task.AiTaskSetupError):
         ai_task.set_ai_task_preferred(hass, SimpleNamespace(entry_id="nope"))
 
@@ -343,7 +343,7 @@ def test_sync_clears_preference_when_removing_preferred_entity(hass):
     reg = er.async_get(hass)
     ent = reg.async_get_or_create("ai_task", "phoenix_mcp", "e1_ai_task")
     fake = _FakePrefs(ent.entity_id)  # Phoenix MCP is HA's default data-gen entity
-    data = _make_data(ai_task_enabled=False)  # not configured -> entity removed
+    data = _make_data(ai_task_enabled=False)  # not configured, so the entity is removed
     data.ai_task_entity = None
     with patch.object(ai_task, "_AI_TASK_AVAILABLE", True), \
          patch.object(ai_task, "_ai_task_preferences", return_value=fake):
@@ -421,11 +421,10 @@ def test_parse_structured_plain_and_fenced_and_bad():
 async def test_ai_task_raises_when_the_provider_blows_the_output_budget():
     """The output ceiling is a failure here, not a degraded answer.
 
-    Voice degrades to a spoken sentence because someone is listening; an
-    automation asked for data, so the only honest outcome is an error the caller
-    turns into a HomeAssistantError. Shares AGENTCLI_MAX_TURN_OUTPUT_BYTES with
-    the interactive loop, which had enforced it while both headless surfaces
-    retained an unbounded transcript across every round.
+    Voice degrades to a spoken sentence because someone is listening; an automation
+    asked for data, so the only honest outcome is an error the caller turns into a
+    HomeAssistantError. Shares AGENTCLI_MAX_TURN_OUTPUT_BYTES with the interactive
+    loop.
     """
     token = _make_token()
     data = _make_data()
@@ -446,14 +445,13 @@ async def test_ai_task_raises_when_the_provider_blows_the_output_budget():
 
 @pytest.mark.asyncio
 async def test_ai_task_raises_when_it_runs_out_of_steps():
-    """Exhaustion must not masquerade as a formatting problem.
+    """Running out of steps raises instead of masquerading as a formatting problem.
 
-    Running out of rounds left final_text as "" (the round that exhausts the
-    budget is a tool round, which resets it). With a structure, _parse_structured
-    then reported "could not parse structured output" - blaming the model for
-    JSON it never got the chance to write, and pointing the operator at the
-    prompt instead of at Steps before check-in. Without a structure it returned
-    an empty string to the automation silently.
+    The round that exhausts the budget is a tool round, which leaves final_text
+    empty. With a structure that must not be reported as "could not parse structured
+    output" (blaming the model for JSON it never got to write and pointing the
+    operator at the prompt instead of Steps before check-in); without one it must not
+    return an empty string to the automation.
     """
     token = _make_token()
     data = _make_data()
@@ -472,11 +470,11 @@ async def test_ai_task_raises_when_it_runs_out_of_steps():
 
 @pytest.mark.asyncio
 async def test_ai_task_raises_on_a_truncated_result():
-    """Half a result is not a result: an automation would store it as one.
+    """A truncated result raises instead of being returned.
 
-    With a structure this previously surfaced as a JSON parse error (true, but
-    it named the wrong cause); without one it returned a half-written answer
-    that looked complete.
+    An automation would store half a result as a complete one. With a structure it
+    must not surface as a JSON parse error (the wrong cause), and without one it
+    must not return a half-written answer that looks complete.
     """
     token = _make_token()
     data = _make_data()

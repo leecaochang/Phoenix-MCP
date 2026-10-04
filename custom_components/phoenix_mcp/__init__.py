@@ -169,24 +169,19 @@ def _listen_once_until_unload(
 ) -> None:
     """Listen for one event, unregistering on unload ONLY if it never fired.
 
-    `hass.bus.async_listen_once` already removes its own listener when the event
+    `hass.bus.async_listen_once` removes its own listener when the event
     arrives, so handing its remove-callback straight to `entry.async_on_unload`
-    asks Home Assistant to remove the same listener twice: once by firing, once
-    by unloading. The second removal raises `ValueError: list.remove(x): x not in
-    list`, which HA catches and logs as "Unable to remove unknown job listener"
-    with a traceback naming Phoenix.
+    removes the same listener twice (once by firing, once by unloading). The
+    second removal raises `ValueError: list.remove(x): x not in list`, which HA
+    logs as "Unable to remove unknown job listener" with a traceback naming
+    Phoenix. On a config-entry reload `homeassistant_started` fired once at boot,
+    so its listener is already gone when the entry unloads; the
+    `homeassistant_stop` registration has the same shape at shutdown. Nothing
+    breaks, but every reload would log an ERROR, and a log that cries wolf hides
+    a real fault.
 
-    LIVE-FOUND on a config-entry reload, and only there: `homeassistant_started`
-    fires once at boot, so the listener is already gone by the time any later
-    reload unloads the entry. Nothing breaks, which is why it survived, but it
-    puts an ERROR with a Phoenix traceback in the operator's log on every reload,
-    and a log that cries wolf is where a real fault goes unnoticed. The
-    `homeassistant_stop` registration has the same shape and the same defect at
-    shutdown.
-
-    The listener is wrapped rather than the removal being made
-    exception-tolerant: swallowing the error would also hide a genuine
-    double-remove somewhere else.
+    The listener is wrapped rather than the removal made exception-tolerant:
+    swallowing the error would also hide a genuine double-remove elsewhere.
     """
     fired = False
 
@@ -195,8 +190,8 @@ def _listen_once_until_unload(
         fired = True
 
     # inspect, not asyncio: asyncio.iscoroutinefunction is deprecated for 3.16.
-    # This reads the function's own coroutine flag and evaluates no annotations,
-    # so it is not the inspect.signature hazard documented for HA internals.
+    # inspect.iscoroutinefunction reads the function's own coroutine flag and
+    # evaluates no annotations.
     #
     # The two wrappers have DISTINCT names rather than one conditional `_once`,
     # because a coroutine and a callback are different signatures and a shared
@@ -229,19 +224,17 @@ def _listen_once_until_unload(
 def _register_views(hass: HomeAssistant, view_classes: list) -> None:
     """Register each view class once per Home Assistant process.
 
-    Registration is permanent: aiohttp has no way to remove a route, so HA's
-    register_view is one-way and unload leaves every Phoenix route in place. It
-    does not RAISE on a repeat, which is the part worth knowing, because it makes
-    the bug silent: aiohttp reuses a resource only when it is the last one added,
-    so re-registering the whole set builds a second complete set of resources
-    that shadow the first and can never be reached. A config-entry reload leaked
-    about 93 dead route objects, every time, for the life of the process.
+    aiohttp cannot remove a route, so HA's register_view is one-way and unload
+    leaves every Phoenix route in place. It does not RAISE on a repeat, which
+    makes the bug silent: aiohttp reuses a resource only when it is the last one
+    added, so re-registering the whole set builds a second set of resources that
+    shadow the first and can never be reached, leaking one dead route object per
+    view on every config-entry reload.
 
-    Skipping the ones already present is correct rather than merely tidy: the
-    views hold no per-setup state (they read hass.data[DOMAIN] fresh on every
-    request), so the routes registered by the previous setup serve the new one
-    with no change. The kill switch works the same way, refusing at request time
-    rather than by removing routes.
+    Skipping the ones already present is correct, not merely tidy: the views hold
+    no per-setup state (they read hass.data[DOMAIN] on every request), so routes
+    from the previous setup serve the new one unchanged. The kill switch works
+    the same way, refusing at request time rather than by removing routes.
     """
     registered: set[str] = hass.data.setdefault(_VIEWS_REGISTERED_KEY, set())
     for view_cls in view_classes:
@@ -397,8 +390,8 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     data.logger_control = await async_get_logger_override_manager(hass)
 
     # Build the MESA runtime unconditionally (even under the kill switch): the
-    # admin profile API must work regardless, and the enforcement gate is simply
-    # never reached when no client routes are registered. A failure here must
+    # admin profile API must work regardless, and the enforcement gate is never
+    # reached when no client routes are registered. A failure here must
     # not block Phoenix MCP setup. The integration remains available for reads
     # and recovery, while state-changing MESA gates fail closed unless the
     # operator explicitly selected off mode.
@@ -787,8 +780,8 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
         entry.async_on_unload(_cancel_mesa_startup)
 
         # Suggestions scan entity STATES, which are still loading while Phoenix MCP sets
-        # up (a scan now would see a near-empty state machine and cache zero
-        # findings). Prime once HA has fully started; on a reload HA is already
+        # up (a scan at that point would see a near-empty state machine and cache
+        # zero findings). Prime once HA has fully started; on a reload HA is already
         # running with populated states, so prime immediately.
         @callback
         def _prime_suggestions(_event: Event | None = None) -> None:
@@ -812,7 +805,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
             refresh_suggestions(hass, mesa_runtime)
 
         # "automation_reloaded" is fired by HA's automation component on reload;
-        # listen by string so we do not force-import that component.
+        # listen by string to avoid importing that component.
         entry.async_on_unload(
             hass.bus.async_listen("automation_reloaded", _on_automation_reloaded)
         )
@@ -831,16 +824,14 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Tear down Phoenix MCP: unload sensor platform, remove panel.
+    """Tear down Phoenix MCP: unload the platforms, then remove the panel.
 
-    EVERY step before the platform unload is best-effort, and that is the whole
-    shape of this function. `shutting_down` is set first and `helpers` gates every
-    token request on it, so anything that raises between here and the unload
-    leaves the worst possible state: the entry still loaded, every route still
-    registered, and every request answering 503 until the next restart, with a
-    logged store error as the only clue. Persisting the last few audit rows and
-    removing the panel are both worth attempting and neither is worth that, so a
-    failure in either is logged and stepped over.
+    EVERY step before the platform unload is best-effort. `shutting_down` is set
+    first and `helpers` gates every token request on it, so anything that raises
+    between there and the unload would leave the entry still loaded, every route
+    still registered, and every request answering 503 until the next restart,
+    with a logged store error as the only clue. Persisting the last few rows is
+    worth attempting but not worth that, so a failure is logged and stepped over.
     """
     data: PhoenixData | None = hass.data.get(DOMAIN)
     if data is not None:
@@ -860,8 +851,8 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # The platform unload runs BEFORE the frontend comes down, and that order is
     # load-bearing: HA keeps a FAILED unload loaded, so tearing the panel down
-    # first left a still-running integration with no administrative UI, and the
-    # only ways back were a later successful reload or a restart. Nothing in the
+    # first would leave a still-running integration with no administrative UI,
+    # recoverable only by a later successful reload or a restart. Nothing in the
     # teardown depends on the frontend already being gone, so waiting until the
     # outcome is known costs nothing.
     unload_ok = await hass.config_entries.async_unload_platforms(entry, _entry_platforms())
@@ -912,8 +903,8 @@ def _remove_frontend(hass: HomeAssistant) -> None:
     """Take down the panel and both injected modules, one failure at a time.
 
     Guarded INDIVIDUALLY rather than as a block. They are three unrelated
-    removals, and sharing one `try` meant an unexpected failure in the first
-    silently skipped the other two, leaving modules injected into every Home
+    removals, and a shared `try` would let an unexpected failure in the first
+    silently skip the other two, leaving modules injected into every Home
     Assistant page with nothing left to service them.
     """
     from .panel import (  # noqa: PLC0415

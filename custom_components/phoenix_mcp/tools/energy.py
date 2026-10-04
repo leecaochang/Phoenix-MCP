@@ -1,45 +1,22 @@
-"""Energy dashboard tools: the preferences read and the addressed write.
+"""Energy dashboard tools: get_energy_config, get_solar_forecast, edit_energy_config.
 
-get_energy_config (cap_config_read) and edit_energy_config (cap_energy_write).
+Reads need cap_config_read; edit_energy_config needs cap_energy_write. The Energy
+preferences (statistics mapped to roles: grid, solar, battery, gas, water, or an
+individual device) live in .storage/energy and are reachable ONLY through the
+energy/get_prefs WebSocket command, so this module is the single path to them.
+That command runs under the resolved admin user and names every statistic, so
+results pass through filter_service_response, which replaces an entity the token
+cannot resolve with the redaction sentinel and drops entity-keyed entries.
 
-The Energy dashboard's preferences are the mapping from a statistic to its role
-(grid / solar / battery / gas / water, or an individual device). They live in
-.storage/energy and are reachable ONLY through the energy/get_prefs WebSocket
-command, so this module is the single path to them; no state read, registry
-read or filesystem tool can see them.
-
-The gap that motivated it: nothing in Home Assistant records that an Energy
-source depends on an integration. Removing that integration orphans the source
-silently, the dashboard keeps its configuration pointing at a statistic that no
-longer produces data, and no other read Phoenix MCP offers would have shown the
-dependency beforehand.
-
-Scoping is the whole reason this is not a passthrough. energy/get_prefs runs
-under the resolved admin user (ws_dispatch has no other mode), so the raw result
-names every statistic on the instance regardless of the calling token. The
-result is therefore passed through filter_service_response before it is
-returned, which replaces an entity the token cannot resolve with the redaction
-sentinel and drops entity-keyed entries outright.
-
-THE WRITE IS ADDRESSED, NEVER WHOLESALE, and that shape is the whole design.
-energy/save_prefs full-replaces each top-level key it receives, so a caller that
-composed "device_consumption" from a read would delete every device the read had
-redacted. edit_energy_config therefore never accepts a preferences blob. It takes
-ONE addressed operation, re-reads the current preferences UNREDACTED inside the
-executor, applies that operation, checks the result differs from the original in
-exactly the intended way (`_verify_structure`), and sends only the top-level keys
-that actually changed. The agent's redacted view is never a write input, so the
-rule 32 hazard cannot arise from the config at all, only from a literal value the
-caller supplied, which is refused explicitly.
-
-Every write records a version, and a restore writes the snapshot back wholesale.
-That is the one legitimate whole-prefs write: reproducing the operator's chosen
-snapshot IS the operation, the same exemption rule 31 grants a YAML restore.
-
-mcp_view owns the transport, the dispatch registry and the executor registry, and
-imports the names it registers or calls from here. The dependency runs one way:
-this module never imports the transport that dispatches it. Shared primitives
-come from ..tool_common.
+THE WRITE IS ADDRESSED, NEVER WHOLESALE. energy/save_prefs full-replaces each
+top-level key it receives, so a caller composing "device_consumption" from a
+redacted read would delete every device the read hid. edit_energy_config takes
+ONE addressed operation, re-reads the preferences UNREDACTED inside the executor,
+applies it, checks the result differs only as intended (`_verify_structure`), and
+sends only the top-level keys that changed. The redacted view is never a write
+input, so a placeholder is never written back as configuration; a literal one in
+the caller's arguments is refused. A version restore is the one wholesale write:
+reproducing the snapshot IS the operation. mcp_view registers these tools.
 """
 
 from __future__ import annotations
@@ -108,10 +85,9 @@ _NO_CONFIG_ERRORS = ("not_found", "not available")
 def _default_prefs() -> dict[str, Any]:
     """Return the empty preferences structure for a never-configured instance.
 
-    Mirrors EnergyManager.default_preferences() in HA's energy/data.py. Reported
-    with configured=False so a caller can tell "the operator has not set Energy
-    up" from "they set it up and then removed everything", which are different
-    situations and would otherwise both arrive as three empty lists.
+    Mirrors EnergyManager.default_preferences() in HA's energy/data.py. Callers
+    pair it with configured=False so "never set up" is distinguishable from "set
+    up, then everything removed", which would both read as empty lists.
     """
     return {key: [] for key in _PREFS_KEYS}
 
@@ -119,16 +95,13 @@ def _default_prefs() -> dict[str, Any]:
 def _referenced_entities(prefs: Any, _depth: int = 0) -> list[str]:
     """Collect every entity id the preferences reference, sorted and deduplicated.
 
-    Walks the whole structure rather than reading a fixed list of key names
-    (stat_energy_from, stat_consumption, entity_energy_price, ...) because those
-    differ per source type and HA adds to them; a name list would go stale
-    silently, reporting no dependency where one exists, which is the exact
-    failure this tool is meant to prevent.
+    Walks the whole structure instead of a fixed list of key names, because the
+    keys differ per source type and HA adds to them; a name list would go stale
+    silently and report no dependency where one exists.
 
     Call this on the REDACTED preferences, never the raw ones: the sentinel is
-    skipped here, so an entity the token cannot resolve is absent from the result
-    instead of being named in it. External statistics ("domain:name") are not
-    entity ids and are correctly not collected.
+    skipped, so an entity the token cannot resolve is absent rather than named.
+    External statistics ("domain:name") are not entity ids and are not collected.
     """
     if _depth > 10:
         return []
@@ -178,10 +151,8 @@ async def _tool_get_energy_config(
         prefs, configured = _default_prefs(), False
 
     body = _scoped_body(prefs, configured, token, hass)
-    # Included on every read rather than behind a flag: the caller asking what the
-    # Energy dashboard depends on is exactly the caller who needs to know which of
-    # those dependencies is ALREADY dead, and a flag defaulting off would have to
-    # be discovered before it could help.
+    # Included on every read rather than behind a flag: a caller asking what the
+    # dashboard depends on needs to know which dependencies are ALREADY dead.
     body["issues"] = await _energy_issues(prefs, token, hass) if configured else []
     return _tool_success(json.dumps(body, default=str)), "allowed", "get_energy_config"
 
@@ -233,12 +204,10 @@ def _scoped_body(prefs: dict, configured: bool, token: TokenRecord, hass: HomeAs
 def _plain(value: Any) -> Any:
     """Recursively turn sets and tuples into lists.
 
-    Two things need this, and both fail SILENTLY without it. HA's ValidationIssue
-    carries `affected_entities` as a set of TUPLES: json.dumps cannot serialize a
-    set at all, and filter_service_response walks dicts, lists and strings only, so
-    a tuple falls straight through its recursion and would return entity ids the
-    token cannot see. Normalising first is what puts those ids somewhere the
-    redactor actually looks.
+    HA's ValidationIssue carries `affected_entities` as a set of TUPLES.
+    json.dumps cannot serialize a set, and filter_service_response walks dicts,
+    lists and strings only, so a tuple would fall through it and return entity ids
+    the token cannot see. Normalising first puts them where the redactor looks.
     """
     if isinstance(value, dict):
         return {k: _plain(v) for k, v in value.items()}
@@ -441,11 +410,9 @@ def _replace_everywhere(prefs: dict, old: str, new: str) -> int:
 # solar/battery have no cost fields at all.
 #
 # WHY THESE ARE MIRRORED rather than left to HA: per-field validation cannot see
-# them, so a call that sets both a price entity AND a price number passes every
-# check here, becomes a PendingApproval, waits for an admin to review it, and only
-# then fails at save. Live-hit exactly that way on 2026-08-03, costing a real
-# approval click. Rule 29 is about not spending a human's attention on a write
-# that was never going to land.
+# them, so a call that sets both a price entity AND a price number would pass every
+# other check, become a pending approval, and only fail at save after an admin
+# approved it. Validating before the approval is created avoids that.
 # HA-VERSION-SENSITIVE: re-verify the validators on upgrades.
 _PRICE_GROUPS: dict[str, tuple[tuple[str, str, str, str], ...]] = {
     "grid": (
@@ -522,8 +489,8 @@ def _check_writable_statistic(value: Any, field: str, token: TokenRecord, hass: 
     if not valid_entity_id(statistic):
         raise _OpError(f"{field}: {statistic!r} is not a valid entity id or external statistic id.")
     if resolve(statistic, token, hass) in (Permission.NO_ACCESS, Permission.DENY, Permission.NOT_FOUND):
-        # Byte-identical for out-of-scope and nonexistent (rule 12). Naming the
-        # field is safe: it is the caller's own argument, not hidden state.
+        # Byte-identical for out-of-scope and nonexistent, so the refusal is not an
+        # existence oracle. Naming the field is safe: it is the caller's own argument.
         raise _OpError(
             f"{field}: {statistic!r} is not an entity this token can use. "
             "Check the entity id with search_entities."
@@ -751,10 +718,11 @@ async def _read_prefs_raw(hass: HomeAssistant) -> dict:
 
 
 def _sentinel_refusal(args: dict) -> str | None:
-    """Refuse a caller-supplied value carrying the redaction placeholder (rule 32).
+    """Refuse a caller-supplied value carrying the redaction placeholder.
 
-    Only the caller's own arguments can introduce one, because no part of the
-    stored configuration is ever resent through this tool.
+    A redacted placeholder is never written back as configuration. Only the
+    caller's own arguments can introduce one, because no part of the stored
+    configuration is resent through this tool.
     """
     for field in ("statistic", "new_statistic", "name", "device_name", "stat_energy_from", "stat_energy_to"):
         if field in args and redaction_sentinel_path(args[field]) is not None:
@@ -769,15 +737,13 @@ def _sentinel_refusal(args: dict) -> str | None:
 def _preview_rows(prefs: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
     """A compact, scoped view of the preferences for the panel's visual preview.
 
-    STRUCTURED, not a JSON string, deliberately. The panel could reparse
-    diff.before/after instead, but those go through _truncate, and a truncated
-    JSON string does not parse: exactly the bug the card preview hit when a large
-    card exceeded the bound. These rows are small enough that the question never
-    arises, and they are the shape the preview actually renders.
+    Structured rows rather than a JSON string: diff.before/after go through
+    _truncate, and a truncated JSON string does not parse. These rows are small
+    enough never to be truncated.
 
-    Scoped through filter_service_response like every other read here, so a
-    statistic the token cannot resolve previews as the sentinel rather than being
-    disclosed to whoever opens the approval.
+    Scoped through filter_service_response, so a statistic the token cannot
+    resolve previews as the sentinel rather than being disclosed to whoever opens
+    the approval.
     """
     scoped = filter_service_response(prefs, token, hass)
     sources = []
@@ -842,10 +808,10 @@ async def _tool_edit_energy_config(
 ) -> tuple[dict, str, str]:
     """MCP tool: change ONE addressed part of the Energy dashboard (Confirm-gated).
 
-    Never takes a preferences blob. See the module docstring for why that is the
-    whole design rather than a stylistic choice. Validated against the CURRENT
-    preferences pre-gate (rule 29, after the cap-deny check so a denied token
-    learns nothing about its own payload), and re-validated at apply time so a
+    Never takes a preferences blob (see the module docstring). Validated against
+    the CURRENT preferences before the approval is created, after the cap-deny
+    check so a denied token learns nothing about its payload, so an invalid
+    request never becomes a pending approval. Re-validated at apply time so a
     change during the approval window is caught.
     """
     tool = "edit_energy_config"
@@ -1096,10 +1062,10 @@ async def async_restore_energy_prefs(
 ) -> tuple[dict, str, str]:
     """Restore a whole Energy preferences snapshot (admin version rollback only).
 
-    The ONE legitimate wholesale write: reproducing the operator's chosen snapshot
-    byte for byte IS the operation, so the addressed-write rule the rest of this
-    module enforces does not apply, exactly as rule 31 exempts a YAML restore from
-    its removal check. Reached only from async_restore_version, never from a tool.
+    The one wholesale write: reproducing the chosen snapshot IS the operation, so
+    the addressed-write rule the rest of this module enforces does not apply (a
+    YAML version restore is exempt from its removal check for the same reason).
+    Reached only from async_restore_version, never from a tool.
     """
     tool = "edit_energy_config"
     if not isinstance(snapshot, dict):

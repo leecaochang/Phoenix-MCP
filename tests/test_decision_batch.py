@@ -908,7 +908,7 @@ async def test_temporal_catalog_pools_repeated_attributes_without_losing_competi
     snapshot = capture_batch_targets(hass, token, extended=True, temporal=True)
     targets, catalogs = snapshot
     attributes = catalogs['attribute_read'].targets
-    # Packing also fits the historical 16 KiB operation budget without dropping metadata.
+    # Packing also fits the per-operation DECISION_MAX_TARGET_BYTES budget without dropping metadata.
     assert len(json.dumps(attributes, ensure_ascii=False).encode()) > DECISION_MAX_TARGET_BYTES
     assert len(json.dumps(catalog_state(attributes), ensure_ascii=False).encode()) <= DECISION_MAX_TARGET_BYTES
     expected = {state.entity_id for state in hass.states.async_all() if state.domain in ('light', 'timer')}

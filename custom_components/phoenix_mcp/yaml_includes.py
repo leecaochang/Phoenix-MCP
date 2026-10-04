@@ -1,36 +1,22 @@
-"""Include-graph-aware YAML reading and surgical editing for Phoenix MCP authoring tools.
+"""Include-graph-aware YAML reading and surgical editing for the authoring tools.
 
-Home Assistant's own YAML loader resolves !include directives eagerly (inlining
-the referenced file's content) and resolves !secret to plaintext, so any
-load-then-dump edit of a split configuration flattens the user's include layout
-and can leak secret values into the written file. This module gives the
-automation/script/scene authoring executors a safe alternative:
+HA's YAML loader resolves !include eagerly and !secret to plaintext, so a
+load-then-dump edit of a split configuration flattens the includes and can leak
+secrets. This is the safe alternative for the automation/script/scene executors:
 
-- A Phoenix-owned PyYAML SafeLoader/SafeDumper pair that keeps the HA custom tags
-  (!include family, !secret, !env_var, !input) as opaque TaggedValue scalars.
-  Nothing is resolved, so nothing can be flattened or leaked. The constructors
-  and representers are registered ONLY on these subclasses, never on HA's
-  shared loader/dumper classes.
-- A layout resolver that parses configuration.yaml to find where a domain key
-  (automation:, script:, scene:, including labeled keys like "automation manual")
-  actually points, following include directives with realpath containment
-  checks against the config directory.
-- A locator that walks the include graph to the physical leaf file containing
-  a given entry id, using compose-level start/end marks for the exact line span.
-- A reverse mount scan (scan_mount_points) answering which top-level
-  configuration.yaml keys can reach a given file, which is how the raw-YAML
-  write tools decide whether a file may be written at all: an include target
-  inherits the trust of the key it is LOADED at, not of its own filename.
-- Splice-based edit/delete that rewrites ONLY the located entry's lines,
-  preserving every untouched byte (comments, formatting, other entries), plus
-  flavor-aware create routing. Before any write, the spliced text is re-parsed
-  and verified entry-by-entry; any mismatch aborts without writing, so a span
-  bug can only ever produce a refusal, never a corrupted file.
+- A Phoenix-owned SafeLoader/SafeDumper pair keeps !include*, !secret, !env_var
+  and !input as opaque TaggedValue scalars; constructors and representers are
+  registered ONLY on these subclasses, never on HA's own classes.
+- A layout resolver follows configuration.yaml includes with realpath containment
+  checks against the config directory; a locator finds an entry's leaf and span.
+- Edit/delete splice ONLY those lines, after re-parsing and verifying the result
+  entry-by-entry, so a span bug is a refusal, never a corrupted file.
+- scan_mount_points reports which top-level configuration.yaml keys can reach a
+  file: an include target inherits the trust of the key it is LOADED at, not of
+  its own filename; the raw-YAML write tools decide on that.
 
-Callers (mcp_view executors) run the perform_* / read_entry wrappers in an
-executor job under the per-domain asyncio lock. When configuration.yaml is
-missing or unparseable the wrappers report fallback=True and the caller runs
-the legacy hardcoded-file path unchanged.
+The perform_* / read_entry wrappers run in an executor job under the per-domain
+asyncio lock and report fallback=True when configuration.yaml cannot be read.
 """
 
 from __future__ import annotations
@@ -63,8 +49,8 @@ INCLUDE_TAGS = frozenset({
 })
 OPAQUE_TAGS = INCLUDE_TAGS | frozenset({"!secret", "!env_var", "!input"})
 
-# Hardcoded default files, used by read_entry's fallback when configuration.yaml
-# cannot be parsed (mirrors the legacy mcp_view constants).
+# Default-layout files, used by read_entry's fallback when configuration.yaml is
+# missing or unparseable.
 DEFAULT_FILES = {
     "automation": "automations.yaml",
     "script": "scripts.yaml",
@@ -82,9 +68,9 @@ _DOMAIN_SHAPES = {
     "group": "named",
 }
 
-# The leaf each domain uses in HA's default layout, and the only file the read
-# side used to open. read_all_entries falls back to it when configuration.yaml
-# itself cannot be parsed, matching OpResult.fallback on the write side.
+# The leaf each domain uses in HA's default layout. read_all_entries falls back to
+# it when configuration.yaml itself cannot be parsed, matching OpResult.fallback
+# on the write side.
 _LEGACY_LEAF = {
     "automation": "automations.yaml",
     "script": "scripts.yaml",
@@ -95,8 +81,8 @@ _LEGACY_LEAF = {
 _LIST_FLAVORS = frozenset({"!include", "!include_dir_list", "!include_dir_merge_list"})
 _NAMED_FLAVORS = frozenset({"!include", "!include_dir_named", "!include_dir_merge_named"})
 
-# Refusal / error message templates. Tests pin these; mcp_view may override
-# per-domain (the scene executor substitutes its oracle-safe wording).
+# Refusal / error message templates. The scene executor pre-checks existence and
+# uses its own wording for missing and out-of-scope scenes (no existence oracle).
 MSG_INCLUDE_REFUSAL = (
     "{name} uses !include directives. Phoenix MCP cannot safely edit it "
     "without destroying the include structure."
@@ -144,7 +130,11 @@ class TaggedValue:
 
 
 class PhoenixSafeLoader(yaml.SafeLoader):
-    """Bounded SafeLoader keeping HA custom tags as opaque TaggedValue scalars."""
+    """SafeLoader keeping HA custom tags as opaque TaggedValue scalars.
+
+    Bounded: file size, nesting depth and expanded node count are capped and alias
+    cycles are refused, so a hostile document cannot exhaust memory or the stack.
+    """
 
     allow_aliases = True
 
@@ -237,14 +227,14 @@ PhoenixSafeDumper.add_representer(
 
 
 class PhoenixLenientLoader(PhoenixSafeLoader):
-    """PhoenixSafeLoader that also tolerates local tags it has never heard of.
+    """PhoenixSafeLoader that also tolerates unknown local tags.
 
-    The strict loader knows only HA's own tag set, so a third-party integration's
-    custom tag raises. That is right for the authoring paths (an unknown tag in an
-    automation body is a reason to refuse the edit), but wrong for whole-file reads
-    and for the protected-key comparison: one unrecognized tag anywhere in
-    configuration.yaml would make the file permanently unreadable and unwritable.
-    Unknown tags round-trip as TaggedValue like the known ones.
+    The strict loader knows only HA's own tag set, so a third-party custom tag
+    raises. That is right for the authoring paths (an unknown tag in an automation
+    body is a reason to refuse the edit) but wrong for whole-file reads and the
+    protected-key comparison: one unrecognized tag anywhere in configuration.yaml
+    would make it permanently unreadable and unwritable. Unknown tags become
+    TaggedValue like the known ones.
     """
 
 
@@ -384,9 +374,10 @@ def _resolve_include_path(containing_file: str, value: str, config_dir: str) -> 
 def resolve_domain_layout(config_dir: str, domain: str) -> DomainLayout | None:
     """Parse configuration.yaml and resolve the include branches for a domain.
 
-    Returns None when configuration.yaml is missing or unparseable (caller
-    falls back to the legacy hardcoded-file behavior). A structurally
-    unresolvable layout returns a DomainLayout with error set.
+    Labeled keys such as "automation manual" count as the domain. Returns None when
+    configuration.yaml is missing or unparseable (the caller falls back to the
+    default file). A structurally unresolvable layout returns a DomainLayout with
+    error set.
     """
     config_path = os.path.join(config_dir, CONFIGURATION_YAML)
     if not os.path.isfile(config_path):
@@ -442,11 +433,11 @@ def resolve_domain_layout(config_dir: str, domain: str) -> DomainLayout | None:
 
 
 def _iter_dir_files(directory: str) -> list[str]:
-    """Enumerate a !include_dir_* directory exactly like annotatedyaml._find_files.
+    """Enumerate a !include_dir_* directory as HA's loaders do.
 
-    Recursive os.walk (topdown), dot-prefixed dirs pruned, files sorted per
-    directory (subdirectory order is filesystem order), *.yaml only, dot-files
-    and secrets.yaml skipped.
+    Mirrors annotatedyaml._find_files plus its secrets.yaml skip: recursive
+    os.walk (topdown), dot-prefixed dirs pruned, files sorted per directory
+    (subdirectory order is filesystem order), *.yaml only, dot-files skipped.
     """
     found: list[str] = []
     for root_dir, dirs, files in os.walk(directory, topdown=True):
@@ -466,23 +457,21 @@ def _iter_dir_files(directory: str) -> list[str]:
 class MountScan:
     """Which configuration.yaml top-level keys can reach a given file.
 
-    The write side of the raw-YAML tools is bounded by WHERE a file's content
-    lands in the configuration tree, not by the file's own shape: an ordinary
-    looking include target mounted at `http:` puts trusted_proxies at its top
-    level, and a packages file carries whole integration configs. So a caller
-    deciding whether a file may be written asks this, and refuses on anything
-    it cannot prove.
+    A raw-YAML write is bounded by WHERE the file's content lands in the
+    configuration tree, not by its own shape: an ordinary-looking include target
+    mounted at `http:` puts trusted_proxies at its top level, and a packages file
+    carries whole integration configs. A caller deciding whether a file may be
+    written asks this, and refuses on anything it cannot prove.
 
-    `keys` are label-stripped (`automation manual` reports as `automation`),
-    because the trust question is about the integration a key configures and
-    HA merges the labeled variants into the same one.
+    `keys` are label-stripped (`automation manual` reports as `automation`):
+    the trust question is about the integration a key configures, and HA merges
+    labeled variants into the same one.
 
-    `opaque` is the half that makes fail-closed possible. A branch whose files
-    cannot be read might route the target somewhere this scan never saw, so a
-    caller must treat an opaque protected key exactly as it treats a reached
-    one. Empty `keys` with `readable` True is a real negative (nothing routes
-    this file); `readable` False means configuration.yaml itself is missing or
-    unparseable and NOTHING here is known.
+    `opaque` makes fail-closed possible: a branch whose files cannot be read might
+    route the target somewhere this scan never saw, so a caller must treat an
+    opaque protected key exactly like a reached one. Empty `keys` with `readable`
+    True is a real negative; `readable` False means configuration.yaml itself is
+    missing or unparseable and NOTHING is known.
     """
 
     keys: frozenset[str]
@@ -493,10 +482,9 @@ class MountScan:
 def _load_lenient_file(path: str) -> Any:
     """Parse a file for the mount scan, tolerating unknown third-party tags.
 
-    Deliberately the LENIENT loader, unlike the authoring paths: a vendor tag
-    anywhere in an included file would otherwise make its branch opaque and
-    refuse writes to unrelated files, which is the same reasoning that put the
-    lenient loader behind get_yaml_config.
+    Deliberately the LENIENT loader, unlike the authoring paths: a vendor tag in
+    an included file would otherwise make its branch opaque and refuse writes to
+    unrelated files.
     """
     with open(path, "r", encoding="utf-8") as f:
         return load_tagged_lenient(f.read())
@@ -505,12 +493,12 @@ def _load_lenient_file(path: str) -> Any:
 def _collect_directives(
     containing_file: str, node: Any, config_dir: str
 ) -> list[tuple[str, str]]:
-    """Every (flavor, realpath) an include directive anywhere under `node` names.
+    """Return every (flavor, realpath) an include directive under `node` names.
 
-    Walks the whole value rather than its top level, since a directive can sit
-    at any depth (`http: {trusted_proxies: !include proxies.yaml}`). A target
-    resolving outside the configuration directory is dropped: it cannot name a
-    file the caller is allowed to write, which is jailed to config_dir already.
+    Walks the whole value, since a directive can sit at any depth (`http:
+    {trusted_proxies: !include proxies.yaml}`). A target resolving outside the
+    configuration directory is dropped: it cannot name a file the caller may write,
+    which is jailed to config_dir already.
     """
     found: list[tuple[str, str]] = []
     stack = [node]
@@ -542,12 +530,11 @@ def _reaches_target(
 ) -> tuple[bool, bool]:
     """Walk an include branch. Returns (target is reachable, branch is opaque).
 
-    A directory include matches by CONTAINMENT rather than by enumerating the
-    files HA would load, which is the fail-closed direction twice over: it
-    covers a file the caller is about to create inside that directory, and it
-    covers a name HA's own `*.yaml` filter would skip. Traversal still walks
-    only the files HA actually loads, since a file HA never reads cannot route
-    anything.
+    A directory include matches by CONTAINMENT rather than by enumerating the files
+    HA would load, which fails closed twice over: it covers a file the caller is
+    about to create inside that directory and a name HA's `*.yaml` filter would
+    skip. Traversal still walks only files HA actually loads, since a file HA never
+    reads cannot route anything.
     """
     if depth > MAX_INCLUDE_DEPTH:
         return False, True
@@ -585,11 +572,10 @@ def _reaches_target(
 def scan_mount_points(config_dir: str, target: str) -> MountScan:
     """Which top-level configuration.yaml keys route to `target`.
 
-    Every key is walked independently, with its own `seen` set, so one file
-    shared between two keys is reported under BOTH. That is the case the whole
-    scan exists for: a file mounted at an ordinary domain key AND reachable
-    from a protected one is not safe to write, and a first-match answer would
-    report only whichever key happened to come first in the document.
+    Every key is walked independently with its own `seen` set, so a file shared
+    between two keys is reported under BOTH. That is the case the scan exists for:
+    a file mounted at an ordinary domain key AND reachable from a protected one is
+    not safe to write, and a first-match answer would report only the first key.
     """
     config_path = os.path.join(config_dir, CONFIGURATION_YAML)
     if not os.path.isfile(config_path):
@@ -624,13 +610,11 @@ def scan_mount_points(config_dir: str, target: str) -> MountScan:
 class DomainEntries:
     """Every entry a domain defines, and every branch that could not be read.
 
-    `unreadable` is the load-bearing half. The READ side of the tool surface used
-    to open one hardcoded file per domain (automations.yaml and siblings), so an
-    installation routing a domain any other way read as EMPTY and its callers
-    reported that nothing referenced an entity. That is a confident wrong answer
-    to the one question those callers exist to ask, and no caller could tell it
-    from a genuinely unused entity. Anything this cannot read is now named
-    instead of silently contributing nothing.
+    `unreadable` is the load-bearing half. Reading one hardcoded file per domain
+    would make an installation that routes a domain any other way read as EMPTY,
+    so callers would report that nothing references an entity: a confident wrong
+    answer indistinguishable from a genuinely unused entity. Anything that cannot
+    be read is named instead of silently contributing nothing.
     """
 
     entries: Any                # list for automation/scene, dict for script
@@ -648,20 +632,16 @@ def _load_branch(path: str) -> Any:
 def read_all_entries(config_dir: str, domain: str) -> DomainEntries:
     """Read every entry a domain defines, following configuration.yaml's includes.
 
-    The counterpart to locate_entry, which finds ONE entry to splice: this reads
-    them all, for the reverse-reference walks that ask what references an entity.
-    It has no need of spans, so it parses values rather than tracking source
-    positions.
+    The counterpart to locate_entry (ONE entry, with spans) for the
+    reverse-reference walks that ask what references an entity; it parses values
+    and tracks no source positions.
 
-    Falls back to the legacy hardcoded leaf (automations.yaml / scripts.yaml /
-    scenes.yaml) when configuration.yaml is missing or unparseable, matching what
-    perform_create/edit/delete do with OpResult.fallback: a configuration.yaml
-    that cannot be read must not make the default layout unreadable too.
-
-    Packages are reported as unreadable rather than guessed at. HA merges them
-    into the domain and Phoenix cannot see which ones without resolving the whole
-    package tree, so a caller is told its answer is incomplete instead of being
-    handed one that looks whole.
+    Falls back to the default leaf (automations.yaml / scripts.yaml / scenes.yaml)
+    when configuration.yaml is missing or unparseable, matching OpResult.fallback
+    on the write side. Packages are reported as unreadable rather than guessed at:
+    HA merges them into the domain and Phoenix cannot see which ones without
+    resolving the whole package tree, so the caller is told its answer is
+    incomplete instead of being handed one that looks whole.
     """
     shape = _DOMAIN_SHAPES[domain]
     empty: Any = [] if shape == "list" else {}
@@ -764,7 +744,7 @@ def _entry_matches(domain: str, item: Any, entry_id: str) -> bool:
     if not isinstance(item, dict):
         return False
     if domain == "scene":
-        # Mirror mcp_view._scene_write: scene ids compare str-coerced.
+        # Scene ids compare str-coerced (a YAML id may parse as an int).
         return str(item.get("id")) == entry_id
     return item.get("id") == entry_id
 
@@ -1050,9 +1030,8 @@ def _splice(text: str, start: int, end: int, replacement: str | None) -> str:
     lines = text.splitlines(keepends=True)
     before = lines[:start]
     after = lines[end:]
-    # If the content preceding the splice point lost its trailing newline
-    # (only possible at EOF), restore it so the replacement starts on its
-    # own line.
+    # Content before the splice point may lack a trailing newline (only at EOF);
+    # restore it so the replacement starts on its own line.
     if replacement is not None:
         if before and not before[-1].endswith("\n"):
             before[-1] += "\n"
@@ -1085,7 +1064,7 @@ def _verify_splice(
     """Verify a spliced file: all other entries unchanged, target as expected.
 
     expect is the new (key, config) tuple for an edit, or None for a delete.
-    Returns False on any mismatch, including a file that no longer parses.
+    Returns False on any mismatch, including a file that fails to parse.
     """
     try:
         old_entries = _entries_of_text(domain, old_text)
@@ -1127,7 +1106,10 @@ def _entry_index(text: str, start_line: int) -> int | None:
 
 @dataclass(frozen=True)
 class OpResult:
-    """Outcome of a perform_* call. fallback=True means run the legacy path."""
+    """Outcome of a perform_* call.
+
+    fallback=True means the caller uses the default file.
+    """
 
     ok: bool
     fallback: bool = False
@@ -1141,10 +1123,9 @@ class OpResult:
     def error_text(self) -> str:
         """The failure message, never None.
 
-        message is None on success and on a fallback result, but the tool layer
-        turns a failed op straight into _tool_error(...), and an MCP content item
-        whose text is None is malformed: the agent receives a broken frame rather
-        than a reason. Callers use this instead so that cannot happen.
+        `message` is None on success and on a fallback result, but a failed op goes
+        straight into _tool_error(...) and an MCP content item whose text is None
+        is malformed. Callers use this instead.
         """
         return self.message or "The change could not be applied."
 
@@ -1165,12 +1146,9 @@ def _locate_error_result(exc: LocateError) -> OpResult:
 def _layout_or_result(config_dir: str, domain: str) -> DomainLayout | OpResult:
     """Resolve the domain's include layout, or the OpResult that ends the call.
 
-    Returns one or the other rather than a (layout, early) pair: the pair form
-    guaranteed a non-None layout only via the SECOND element, which a reader (and
-    a type checker) cannot see, so every caller then passed a `DomainLayout |
-    None` into code that requires a layout. Single-return matches the
-    `_read_body` idiom used by the view modules, and callers narrow with
-    isinstance.
+    A single return value (callers narrow with isinstance) rather than a
+    (layout, early) pair, so a type checker sees a non-None layout; the same idiom
+    as `_read_body` in the view modules.
     """
     layout = resolve_domain_layout(config_dir, domain)
     if layout is None:
@@ -1406,12 +1384,11 @@ def perform_create(config_dir: str, domain: str, entry_id: str, config: dict, *,
             assert conflict is not None
             return conflict
 
-    # Graph-wide duplicate check for named entries (scripts): mirrors the
-    # legacy "already exists" refusal. Automation identities are checked above.
-    # Refuse ONLY if the id already exists in the editable include files. Both
-    # "not_found" and "ambiguous" (id absent from the include files, though the
-    # config also has packages/inline that Phoenix MCP does not read) mean it is not a
-    # duplicate Phoenix MCP can act on, so creation proceeds; a config the walker cannot
+    # Graph-wide duplicate check for named entries (scripts); automation identities
+    # are checked above. Refuse ONLY if the id already exists in the editable
+    # include files. "not_found" and "ambiguous" (id absent from the include files,
+    # though packages or inline config that Phoenix MCP does not read exist) are not
+    # a duplicate it can act on, so creation proceeds; a config the walker cannot
     # parse (unresolvable/parse_error) still blocks.
     if _DOMAIN_SHAPES[domain] == "named":
         exists_msg = f"A script with id '{entry_id}' already exists. Use edit_script to update it."
@@ -1508,21 +1485,21 @@ def _create_append(path: str, shape: str, entry_id: str, config: dict) -> OpResu
         line_count = len(text.splitlines(keepends=True))
         new_text = _splice(text, line_count, line_count, rendered)
     else:
-        # No block entries to preserve: an empty/whitespace/comments-only file,
-        # or a bare inline "[]" / "{}" (HA's default for an empty automations or
-        # scenes file, and scripts). A text append after an inline "[]" would
-        # produce invalid YAML ("[]" is a complete flow document, so a following
-        # "- ..." is a second document). Keep any comment/blank lines, drop the
-        # lone empty-collection token, and write the entry as a clean block doc.
+        # No block entries to preserve: an empty, whitespace- or comments-only file,
+        # or a bare inline "[]" / "{}" (HA's default for an empty automations,
+        # scenes or scripts file). Appending after an inline "[]" would be invalid
+        # YAML ("[]" is a complete flow document, so a following "- ..." is a second
+        # document). Keep comment/blank lines, drop the lone empty-collection token,
+        # and write the entry as a clean block document.
         kept = [ln for ln in text.splitlines(keepends=True) if ln.strip() not in ("[]", "{}")]
         prefix = "".join(kept)
         if prefix and not prefix.endswith("\n"):
             prefix += "\n"
         new_text = prefix + rendered
 
-    # Post-write verification: the result must parse and contain the new entry,
-    # so a malformed append is refused rather than written (the file is never
-    # left in a state HA cannot load).
+    # Verify before writing: the result must parse and contain the new entry, so a
+    # malformed append is refused and the file is never left in a state HA cannot
+    # load.
     try:
         reparsed = yaml.load(new_text, Loader=PhoenixSafeLoader)
     except yaml.YAMLError:
@@ -1544,12 +1521,12 @@ def _create_append(path: str, shape: str, entry_id: str, config: dict) -> OpResu
 def read_entry(config_dir: str, domain: str, entry_id: str) -> Any:
     """Best-effort read of an entry's current config, tag-encoded. None if absent.
 
-    Used by _resource_exists and the approval diff builders. Falls back to the
-    hardcoded default file (parsed with the tag-tolerant loader) ONLY when
-    configuration.yaml is missing or unparseable, matching _layout_or_result.
-    A layout error (e.g. an include routed outside the config directory) is an
-    authoritative refusal: the write paths refuse, so reading a stale default
-    file here would desync diffs and existence checks from what is editable.
+    Used by existence checks and the approval diff builders. Falls back to the
+    default file ONLY when configuration.yaml is missing or unparseable, matching
+    _layout_or_result. A layout error (e.g. an include routed outside the config
+    directory) is an authoritative refusal: the write paths refuse, so reading the
+    default file here would desync diffs and existence checks from what is
+    editable.
     """
     layout = resolve_domain_layout(config_dir, domain)
     if layout is not None and layout.error:

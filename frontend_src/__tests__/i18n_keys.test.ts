@@ -92,8 +92,8 @@ describe("i18n keys", () => {
 
   it("every catalog-shaped literal resolves, including indirect ones", () => {
     // collectUses only sees a direct t("key") call. Keys reached through a map
-    // (`{ labelKey: "settings.someTypo" }` then `t(k.labelKey)`) were invisible:
-    // a typo there renders the raw key at runtime and nothing reported it.
+    // (`{ labelKey: "settings.someTypo" }` then `t(k.labelKey)`) is invisible to
+    // it, and a typo there renders the raw key at runtime with nothing reporting it.
     //
     // A literal counts as catalog-shaped when its first segment is a real
     // top-level section, which distinguishes "settings.someTypo" from
@@ -111,11 +111,11 @@ describe("i18n keys", () => {
     // An orphan is usually a rename that left the old entry behind, or the
     // other half of a typo the previous check already flagged.
     //
-    // diff.* and version.* are exempt: those keys are named by the BACKEND, which puts one on
-    // each approval record as summary_key, and the panel looks it up at runtime.
-    // No literal for them exists in this source tree. They have their own guard
-    // in tests/test_diff_summary_contract.py, which pins them against
-    // const.DIFF_SUMMARY_TEMPLATES in both directions.
+    // The BACKEND_NAMED prefixes are exempt: the backend names those keys (for
+    // example an approval's summary_key) and the panel looks them up at runtime,
+    // so no literal for them exists in this source tree. A backend contract test
+    // pins the diff summary entries against const.DIFF_SUMMARY_TEMPLATES in both
+    // directions.
     const used = new Set([...uses.map((u) => u.key), ...literals]);
     const orphans = Object.keys(catalog)
       .filter((k) => !BACKEND_NAMED.some((p) => k.startsWith(p)))

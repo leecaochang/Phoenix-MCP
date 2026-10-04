@@ -80,12 +80,11 @@ from .recorder_queries import (
     statistic_timestamp,
     parse_recorder_window,
 )
-# Shared tool primitives live in tool_common (extracted so per-domain tool
-# modules can use them without importing this transport module).
-# Per-domain tools live under tools/; this module keeps the transport, the
-# dispatch registry and the executor registry, and imports the names it
-# registers or calls. A few domain adapters use local imports of shared
-# dispatch or recovery helpers from this module.
+# Shared tool primitives live in tool_common so per-domain tool modules do not
+# import this transport module. Per-domain tools live under tools/; this module
+# keeps the transport, the dispatch registry and the executor registry, and
+# imports the names it registers or calls. A few domain adapters import shared
+# dispatch or recovery helpers from this module locally (inside functions).
 from .tools.authoring import _execute_create_automation, _execute_create_scene, _execute_create_script, _execute_delete_automation, _execute_delete_scene, _execute_delete_script, _execute_edit_automation, _execute_edit_scene, _execute_edit_script, _tool_create_automation, _tool_create_scene, _tool_create_script, _tool_delete_automation, _tool_delete_scene, _tool_delete_script, _tool_edit_automation, _tool_edit_scene, _tool_edit_script, _tool_get_automation, _tool_get_automation_traces, _tool_get_scene, _tool_get_script, _tool_list_automations, _tool_list_scenes, _tool_list_scripts
 from .tools.config_files import (
     _execute_patch_yaml_config,
@@ -221,9 +220,9 @@ from .tools.lovelace import (
 from .tools.camera import _tool_get_camera_image
 from .tools.esphome import _ESPHOME_DOMAIN, _execute_delete_esphome_yaml, _execute_install_esphome_firmware, _execute_rename_esphome_device, _execute_set_esphome_yaml, _tool_cancel_esphome_job, _tool_clean_esphome_build, _tool_compile_esphome_firmware, _tool_decode_esphome_backtrace, _tool_delete_esphome_yaml, _tool_get_esphome_automations, _tool_get_esphome_board, _tool_get_esphome_component, _tool_get_esphome_device_logs, _tool_get_esphome_job, _tool_get_esphome_overview, _tool_get_esphome_yaml, _tool_install_esphome_firmware, _tool_rename_esphome_device, _tool_set_esphome_yaml, _tool_validate_esphome_yaml, _tool_wait_for_esphome_job
 # The published tool catalog (schemas + MCP annotations) is declarative data
-# and lives in tool_defs.py; this module reads it to answer tools/list, build
-# the per-token gate map, and compute the catalog fingerprint. Re-exported
-# here, so mcp_view._SYSTEM_TOOL_DEFS and friends keep resolving.
+# in tool_defs.py; this module reads it to answer tools/list, build the
+# per-token gate map, and compute the catalog fingerprint. The names are
+# re-exported here so mcp_view._SYSTEM_TOOL_DEFS and friends resolve.
 from .tool_defs import (
     _ENTITY_TOOL_DEFS,
     _NATIVE_TOOL_DEFS,
@@ -248,14 +247,13 @@ from .logger_control import (
 _LOGGER = logging.getLogger(__name__)
 
 # What this server can do, answered identically by initialize and
-# server/discover. One definition because the two are the same claim made to
-# two eras of client, and a client that reads only one of them must not learn
-# something different from the one that reads the other.
+# server/discover: one definition, because both make the same claim to two
+# generations of client and must never disagree.
 #
-# listChanged and subscribe are FALSE on purpose, not as a placeholder: this
-# transport is stateless and holds no connection to push a notification down.
-# The tool list moving under a connected client is instead reported in-band, on
-# that client's next call, by the staleness advisories.
+# listChanged and subscribe are FALSE on purpose: this transport is stateless
+# and holds no connection to push a notification down. A tool list that moves
+# under a connected client is reported in-band, on that client's next call, by
+# the staleness advisories.
 _SERVER_CAPABILITIES: dict[str, dict] = {
     "tools": {"listChanged": False},
     "resources": {"subscribe": False},
@@ -272,20 +270,16 @@ del _def
 def _catalog_fingerprint() -> str:
     """Hash of every tool NAME and inputSchema this build defines.
 
-    The second staleness signal, alongside settings_version. That one tracks the
-    operator changing a token; this one tracks the CODE changing underneath a
-    client that already fetched its tool list, which the transport cannot push
-    and settings_version never notices. A client enforces its cached schema
-    before sending, so an argument added after that fetch is unusable to it: the
-    omission is enforced on ITS side, which no amount of server-side leniency
-    reaches, and advising a reconnect is the only remedy.
+    The second staleness signal, alongside settings_version: that one tracks the
+    operator changing a token, this one tracks the code changing under a client
+    that already fetched its tool list. A client enforces its cached schema
+    before sending, so an argument added after that fetch is unusable to it and
+    no server-side leniency helps; advising a reconnect is the only remedy.
 
     Hashes the FULL static catalog, never the per-token announced subset, so a
-    permission change does not masquerade as a deploy (settings_version already
-    covers that and prescribes a different fix). Descriptions are deliberately
-    excluded: reworded guidance is not something a client must refetch to keep
-    calling tools correctly, so treating prose edits as staleness would fire the
-    notice constantly and train operators to ignore it.
+    permission change does not masquerade as a deploy. Descriptions are excluded:
+    reworded guidance needs no refetch, and counting prose edits as staleness
+    would fire the notice constantly and train operators to ignore it.
     """
     catalog = [
         (d["name"], d.get("inputSchema"))
@@ -300,8 +294,8 @@ _TOOL_CATALOG_FINGERPRINT = _catalog_fingerprint()
 def tool_catalog_counts() -> dict[str, int]:
     """The tool count, from the registry itself. The ONLY place it is defined.
 
-    Every other statement of the count derives from here: the docs-count test,
-    the admin info endpoint, and scripts/count_tools.py. Native means HA's own
+    Every other statement of the count derives from here: the docs contract
+    tests, the admin info endpoint, and scripts/count_tools.py. Native means HA's own
     domain-prefixed MCP tool names, which Phoenix implements 1:1; additional is
     everything Phoenix defines beyond them, mesa_* included.
     """
@@ -315,9 +309,10 @@ def tool_catalog_counts() -> dict[str, int]:
 
 # Tools that perform writes/actions. They are announced in tools/list only when
 # the token has write scope (any GREEN grant or pass_through). Cap-tied tools
-# (those with a "cap" key) gate on their capability instead; all remaining tools
-# (reads, GetDateTime, get_approval_status) are always announced. The
-# announce_all_tools token flag overrides this gating entirely.
+# (those with a "cap", "caps" or "caps_any" key) gate on their capability
+# instead; all remaining tools (reads, GetDateTime, get_approval_status) are
+# always announced. The announce_all_tools token flag overrides this gating
+# entirely.
 _WRITE_GATED_TOOLS = frozenset({
     "call_service",
     "HassTurnOn", "HassTurnOff", "HassLightSet", "HassFanSetSpeed",
@@ -348,7 +343,6 @@ def _tool_any_caps(tool_def: dict) -> tuple[str, ...]:
 
 
 def _tool_caps(tool_def: dict) -> tuple[str, ...]:
-    """Return every capability named by a tool definition."""
     return _tool_required_caps(tool_def) + _tool_any_caps(tool_def)
 
 
@@ -384,43 +378,25 @@ def _tool_is_announced(
 def _tool_gate_map(
     token: TokenRecord, data: PhoenixData, hass: HomeAssistant
 ) -> dict[str, Any]:
-    """Classify every tool by how it would behave for this token, at the tool level.
+    """Classify every tool for this token at the tool level (no entity oracle).
 
-    Buckets (token's own data, no entity oracle):
-      usable        - announced and executes directly.
-      needs_approval - cap-tied tool whose cap is Confirm AND which actually gates:
-                      returns pending_approval.
-      unavailable   - not usable (cap denied, a write/action tool without write
-                      scope, or a tool whose required system surface is absent).
+    Buckets: usable (announced, executes directly); needs_approval (a cap-tied
+    tool whose cap is Confirm and which actually gates, so returns
+    pending_approval); unavailable (cap denied, a write/action tool without write
+    scope, a household-restricted tool, or a missing system surface).
 
-    THE `_EXECUTOR_REGISTRY` CHECK IS LOAD-BEARING, not a belt-and-braces extra.
-    A Confirm cap does NOT mean every tool tied to it gates: a cap-tied READ
-    (get_automation, get_dashboard_config, get_yaml_config, read_file, and 50-odd
-    others) checks `effective_cap(...) == CAP_DENY` and never calls `_gate`, so it
-    executes directly no matter what mode the cap is in. Bucketing by cap mode
-    alone therefore reported every one of those as needing approval. That is not
-    a cosmetic mislabel: this map IS `get_capability_summary`, the call the server
-    instructions tell an agent to make FIRST to orient, so it mis-plans the whole
-    session downstream. Live-found when an agent avoided free reads for an entire
-    migration because the summary said they would queue for approval.
+    The `_EXECUTOR_REGISTRY` check is load-bearing: a cap-tied read checks for
+    CAP_DENY and never calls `_gate`, so bucketing by cap mode alone would report
+    reads as queued for approval and mis-plan an agent that orients with
+    get_capability_summary. A registered executor is the right proxy because the
+    Confirm flow applies an approved call through `_EXECUTOR_REGISTRY`; a catalog
+    test pins the registry against the handlers that really call `_gate`.
 
-    Registering an executor is the right proxy because it is exactly what the
-    Confirm flow requires: `async_execute_approved_tool` dispatches through
-    `_EXECUTOR_REGISTRY`, so a tool that gates without one could never be applied
-    after approval. `tests/test_mcp_tool_catalog.py` pins the registry against the
-    handlers that really call `_gate`, in both directions, so the proxy cannot
-    drift into a lie of its own.
-
-    A tool unavailable because the system lacks its surface (no ESPHome, no
-    Device Builder) also gets an entry in unavailable_reasons, which is emitted
-    only when non-empty. That distinction matters to an agent: a denied
-    capability is something the operator can grant, a missing add-on is not.
-
-    This is a static, tool-level view. call_service and the native Hass* action
-    tools appear "usable" when the token has write scope even though a specific
-    target may still hit a physical/dual gate or MESA confirm at call time; use
-    dry_run_service to preview an individual call. Mirrors _tool_is_announced so
-    the summary and tools/list agree.
+    A tool missing its system surface (no ESPHome, no Device Builder) also gets an
+    unavailable_reasons entry: an operator can grant a denied capability but not
+    a missing add-on. The view is static, so call_service and the native Hass*
+    action tools show as usable with write scope even though a target may still
+    hit a physical/dual gate or MESA confirm. Mirrors _tool_is_announced.
     """
     from .home_companion import is_companion
     if is_companion(token):
@@ -470,7 +446,6 @@ def _tool_gate_map(
 
 
 def _jsonrpc_result(msg_id: Any, result: Any) -> dict:
-    """Wrap a result in a JSON-RPC 2.0 success envelope."""
     return {"jsonrpc": "2.0", "id": msg_id, "result": result}
 
 
@@ -500,7 +475,6 @@ def _sanitize_jsonrpc_id(raw_id: Any) -> str | int | None:
 def _jsonrpc_error(
     msg_id: Any, code: int, message: str, *, data: dict | None = None
 ) -> dict:
-    """Wrap an error in a JSON-RPC 2.0 error envelope."""
     error: dict[str, Any] = {"code": code, "message": message}
     if data is not None:
         error["data"] = data
@@ -670,7 +644,11 @@ def _validate_modern_request(
 
 
 def _modernize_response(response_msg: dict | None, method: str) -> dict | None:
-    """Add wire-only 2026-07-28 result fields without touching legacy replies."""
+    """Add wire-only 2026-07-28 result fields in place; legacy replies never pass here.
+
+    Also remaps the legacy unknown-resource code (-32002) to -32602 and the
+    authority-changed code (-32000) to MCP_AUTHORITY_CHANGED_ERROR.
+    """
     if response_msg is None:
         return None
     error = response_msg.get("error")
@@ -698,42 +676,36 @@ def _modernize_response(response_msg: dict | None, method: str) -> dict | None:
 def _classify_jsonrpc_message(body: dict) -> tuple[str, Any]:
     """Validate one JSON-RPC message envelope (jsonrpc == "2.0" already checked).
 
-    A malformed client (or a browser cross-origin probe) can send a `params`
-    that is not an object or a `method` that is not a string; the tools/call
-    dispatcher does `params.get(...)` and would raise before the per-call
-    exception net, escaping to an aiohttp 500 rather than a clean JSON-RPC error.
-    It can also send an `id` that is an object, an array or a boolean, which was
-    coerced to None and DISPATCHED anyway, so a malformed message could apply a
-    side effect and then answer with an id its sender could not correlate.
-    This gate runs before dispatch in BOTH the single-request and batch paths so
-    the shape is validated once. Returns one of:
-      ("dispatch", (method, params)) - a well-formed request to hand to _dispatch_mcp.
-      ("accepted", None)             - a JSON-RPC response object (no method,
-                                       carries result/error): retain the legacy
-                                       transport's accept-without-reply behavior.
-                                       The modern transport rejects these before
-                                       this classification can be honored.
-      ("unsupported", (code, message)) - a STRUCTURALLY VALID request Phoenix MCP cannot
-                                       dispatch (positional/array params). A caller
-                                       must error a real request but STAY SILENT for
-                                       a notification, since the envelope is valid.
-      ("error", (code, message))     - a malformed envelope; the caller emits the
-                                       JSON-RPC error with the message's own id.
+    Runs before dispatch in BOTH the single-request and batch paths, so the shape
+    is validated once. A non-object `params` or non-string `method` would make
+    the tools/call dispatcher raise before the per-call exception net and escape
+    as an aiohttp 500, and a malformed `id` must never be coerced to None and
+    dispatched: the side effect would apply and be answered with an id the
+    sender cannot correlate. Returns one of:
+      ("dispatch", (method, params)) - a well-formed request for _dispatch_mcp.
+      ("accepted", None) - a JSON-RPC response object (no method, carries
+          result/error): the legacy transport accepts it without a reply; the
+          modern transport rejects it before this classification.
+      ("unsupported", (code, message)) - a STRUCTURALLY VALID request that cannot
+          be dispatched (positional params): error a real request, STAY SILENT
+          for a notification, since the envelope is valid.
+      ("error", (code, message)) - a malformed envelope; the caller emits the
+          JSON-RPC error with the message's own id.
     """
     method = body.get("method")
     # A response object carries result/error and no method. The legacy transport
-    # accepted these without a reply; post() rejects them when a modern protocol
-    # signal is present because modern clients may only POST requests or
+    # accepts these without a reply; post() rejects them when a modern protocol
+    # signal is present, because modern clients may only POST requests or
     # notifications.
     if method is None and ("result" in body or "error" in body):
         return "accepted", None
     if not isinstance(method, str) or not method:
         return "error", (-32600, "Invalid Request.")
-    # A present MCP id must be a String or Integer. A malformed one used to be
-    # coerced to None and then DISPATCHED, so `{"id": {}, "method": "tools/call"}`
-    # ran its side effect and answered with an id the caller could not match to
-    # its request, which is exactly the shape that makes a client retry a
-    # non-idempotent call. Refusing costs a conforming client nothing.
+    # A present MCP id must be a String or Integer. A malformed one must not be
+    # coerced to None and dispatched: `{"id": {}, "method": "tools/call"}` would
+    # run its side effect and answer with an id the caller cannot match to its
+    # request, the shape that makes a client retry a non-idempotent call.
+    # Refusing costs a conforming client nothing.
     if "id" in body and not _valid_jsonrpc_id(body["id"]):
         return "error", (-32600, "Invalid Request.")
     raw_params = body.get("params")
@@ -852,8 +824,9 @@ def _lean_state(scrubbed: dict) -> dict:
 def _project_state(scrubbed: dict, fields: Any, detailed: bool) -> dict:
     """Apply presentation-only field projection to a scrubbed state dict.
 
-    detailed -> full dict; explicit fields -> requested subset; otherwise the
-    domain-aware lean view. Never bypasses scrubbing (the input is already scrubbed).
+    `detailed` returns the full dict, explicit fields the requested subset,
+    otherwise the domain-aware lean view. Never bypasses scrubbing (the input is
+    already scrubbed).
     """
     if detailed:
         return scrubbed
@@ -866,7 +839,6 @@ def _project_state(scrubbed: dict, fields: Any, detailed: bool) -> dict:
 async def _tool_get_state(
     args: dict, token: TokenRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """MCP tool: return the current state of a single entity."""
     args, error = normalize_tool_args("get_state", args)
     if error:
         return _tool_error(error), "invalid_request", "get_state"
@@ -1139,7 +1111,7 @@ async def _tool_get_calendar_events(
         return _tool_error(error), "invalid_request", "get_calendar_events"
     try:
         entity = _calendar_entity(args.get("entity_id"), token, hass)
-        # Preserve the existing relative-time argument contract.
+        # Normalize via the shared parser so relative times ("24h") work.
         for key in ("start_time", "end_time"):
             if key in args:
                 if not isinstance(args[key], str):
@@ -1427,8 +1399,8 @@ async def _execute_call_service(
         )
 
     # NO_TARGET_SERVICES are domain-wide config reloads that take no entity target.
-    # The normal path below always attaches an explicit entity_id list (rule 15),
-    # which these services' schemas reject, so call them with bare service_data.
+    # The normal path below always attaches an explicit entity_id list, which
+    # these services' schemas reject, so call them with bare service_data.
     # The cap_yaml_edit gate above is the only permission check required; any
     # entity/device/area the caller passed is ignored (these services have no
     # target semantics). MESA does not apply (no entities to govern).
@@ -1444,8 +1416,8 @@ async def _execute_call_service(
 
     # ESPHome user-defined actions (esphome.<device>_<action>) take NO entity
     # target: HA builds their schema from only the arguments the device declared,
-    # so attaching the flattened entity_id list (rule 15) makes voluptuous reject
-    # the call outright, and routing them through resolve_service_targets yields
+    # so attaching the flattened entity_id list makes voluptuous reject the call
+    # outright, and routing them through resolve_service_targets yields
     # an empty list and a spurious 403. Authorization is the owning DEVICE's write
     # scope rather than a capability: the action is defined by that device's own
     # firmware and can only act on it, so a token that may already actuate the
@@ -1495,9 +1467,10 @@ async def _execute_call_service(
         return _tool_error(TARGETS_CHANGED), "denied", resource
 
     # MESA enforcement runs last, on the flattened entity list Phoenix MCP already
-    # permitted (rule 15: never pass device_id/area_id/"all" to HA). MESA never
-    # sees entities Phoenix MCP denied; it can drop entities, gate the whole call for
-    # confirmation, or block outright.
+    # permitted (targets are always flattened to explicit entity_ids; device_id,
+    # area_id and "all" never reach HA). MESA never sees entities Phoenix MCP
+    # denied; it can drop entities, gate the whole call for confirmation, or
+    # block outright.
     from .const import APPROVAL_TARGETS_KEY
     exact_approval = APPROVAL_TARGETS_KEY in args or _approved_exec_ctx.get()
     local_constraints: dict[str, Any] = {"require_all": True} if local_plan or exact_approval else {}
@@ -1601,13 +1574,13 @@ async def _execute_call_service(
         # service's own schema with plain voluptuous, and re-raises vol.Invalid/
         # MultipleInvalid unwrapped rather than as a HomeAssistantError (e.g. a
         # service whose schema does not accept entity_id at all, called with a
-        # resolved entity target still attached). Not caught by the
-        # ServiceValidationError/HomeAssistantError handlers above since
-        # vol.Invalid does not subclass either; without this it fell through to
-        # the dispatch-level safety net as a bare "Internal error", losing the
-        # actionable detail voluptuous provides. Safe to surface for the same
-        # reason as ServiceValidationError: describes the caller's own argument
-        # shape, not hidden state.
+        # resolved entity target still attached). The ServiceValidationError/
+        # HomeAssistantError handlers above do not catch it, since vol.Invalid
+        # subclasses neither; unhandled it would reach the dispatch-level safety
+        # net as a bare "Internal error" and lose the actionable detail
+        # voluptuous provides. Safe to surface for the same reason as
+        # ServiceValidationError: it describes the caller's own argument shape,
+        # not hidden state.
         return _tool_error(_validation_error_message(err)), "invalid_request", resource
     except HomeAssistantError:
         return _tool_error("Forbidden."), "denied", resource
@@ -1701,9 +1674,9 @@ async def _tool_log_query(
 
     # A wrong-SHAPED level degrades to absent (str_arg), but a wrong VALUE is
     # refused rather than coerced: silently answering a WARNING query for a
-    # caller that asked for INFO is what made the dropped level invisible in the
-    # first place. Safe to surface because the cap check above already ran, so a
-    # denied token never reaches a message about its own argument (rule 29(a)).
+    # caller that asked for INFO would hide the dropped level. Safe to surface
+    # because the cap check above already ran, so a denied token never reaches
+    # a message about its own argument.
     raw_level = str_arg(args.get("level"), "WARNING").strip().upper() or "WARNING"
     if raw_level not in LOG_LEVELS:
         return _tool_error(LOG_LEVEL_ERROR_MESSAGE), "invalid_request", tool_name
@@ -1850,7 +1823,7 @@ async def _tool_get_phoenix_diagnostics(
 
 
 def _logbook_string_list(args: dict, key: str) -> tuple[list[str], str | None]:
-    """Validate, trim, and deduplicate one narrowing list without widening drift."""
+    """Validate, trim and deduplicate one id list; returns (values, error or None)."""
     raw = args.get(key)
     if raw is None:
         return [], None
@@ -2012,8 +1985,8 @@ async def _tool_get_logbook(
         return _tool_error(f"Failed to read logbook: {exc}"), "invalid_request", "get_logbook"
 
     if not isinstance(result, list):
-        # An unexpected shape used to fall through as an empty logbook, which reads
-        # as "nothing happened" rather than "the read did not work".
+        # An unexpected shape must not pass as an empty logbook, which reads as
+        # "nothing happened" rather than "the read did not work".
         return _tool_error(
             "Unexpected logbook response from Home Assistant."
         ), "invalid_request", "get_logbook"
@@ -3120,8 +3093,8 @@ def _device_mesa_service_data(args: dict) -> dict[str, Any]:
     device_id and area_id are Home Assistant target selectors. Passing either
     while asking mesa-core to evaluate one already-resolved entity is correctly
     rejected as contradictory: the selector could expand to other entities.
-    Area/label changes are not MESA actions in this stage, so only the fields
-    that describe rename or enable/disable belong in the synthetic call.
+    Area/label changes are not MESA actions, so only the fields that describe
+    rename or enable/disable belong in the synthetic call.
     """
     return {
         field: args[field]
@@ -4607,10 +4580,10 @@ def _commit_set_entity(
         updates["aliases"] = new_aliases
     # A restore re-applies the snapshot's alias list ABSOLUTELY, which the tool
     # itself deliberately cannot do. Reproducing the admin's chosen snapshot is
-    # the whole operation, exactly as rule 31 exempts a YAML restore from its
-    # removal guard, and the raw wire form carries the sentinel and the order
-    # back unchanged. _restore_ctx is read here in the event loop, not passed by
-    # the caller, so no agent-reachable path can set it.
+    # the whole operation (a YAML restore is likewise exempt from the dropped-key
+    # guard), and the raw wire form carries the sentinel and the order back
+    # unchanged. _restore_ctx is read here in the event loop, not passed by the
+    # caller, so no agent-reachable path can set it.
     if "aliases" in args and restoring:
         updates["aliases"] = _alias_unwire(args["aliases"])
     label_add: list[str] = []
@@ -4930,11 +4903,11 @@ async def _execute_restart_ha(
 async def _tool_get_approval_status(
     args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    """MCP tool: poll an approval the token previously created, or list the
-    token's own outstanding (pending) approvals when no approval_id is given.
+    """MCP tool: poll one of the token's own approvals, or list its pending ones.
 
-    Cross-token reads return 404 (matching the missing-record response) to avoid
-    a token-existence oracle.
+    With no approval_id it lists this token's outstanding approvals. A record
+    owned by another token answers exactly like a missing one ("Approval not
+    found."), so a refusal is not an existence oracle.
     """
     from .approvals import STATUS_PENDING, get_approval, list_approvals  # noqa: PLC0415
 
@@ -4979,17 +4952,15 @@ def _approval_status_result(record: Any, *, resolved: bool) -> dict:
     """The status body, plus the operator-accepted note when the action ran.
 
     The note tells an agent that the operator reviewed and accepted this exact
-    change, so it stops proposing variations of it. Until now it reached ONLY
-    the two INTERACTIVE paths (`_await_inline_confirm` and Agent Chat), and a
-    poll returned the bare status. That left the loop the note exists to prevent
-    fully reachable by the agents most likely to hit it: every approval that
-    outlived the inline window, which is to say the slow ones, and every MESA
-    confirm before this change gave them an inline wait at all.
+    change, so it stops proposing variations of it. Polls must carry it as well
+    as the interactive paths (`_await_inline_confirm` and Agent Chat): an
+    approval that outlived the inline window is exactly the case where the
+    agent would otherwise keep revising an accepted change.
 
     Only an APPROVED record with a stored `tool_result` qualifies. An
     approved-but-execution-failed record transitions to failed with the
-    `execution_failed` slug, so it is not this branch, and a plain rejection has
-    no stored result: neither is something the operator accepted.
+    `execution_failed` slug, and a plain rejection has no stored result; neither
+    is something the operator accepted.
 
     Never double-appends: the inline path builds its own copy from the stored
     record and never writes the note back, so the record read here is always the
@@ -5028,12 +4999,11 @@ def _approval_batch_payload(record: Any, *, resolved: bool) -> dict:
 
     The `result` a single-id call returns is the executor's whole
     CallToolResult, which for an authoring tool is the config it just wrote.
-    That is the right answer for one record and the wrong one for a set: twelve
-    approved `edit_automation` records came back as 80KB and exceeded the
-    caller's output limit, so a batch could not report its own outcome. What
-    survives is what a caller acts on: whether each one errored, and the text
-    if it did, because an agent told only "rejected" with the executor's reason
-    buried retries the same doomed call.
+    That suits one record, but a batch of them can exceed a caller's output
+    limit and fail to report its own outcome. What survives is what a caller
+    acts on: whether each one errored, and the text if it did, because an agent
+    told only "rejected" with the executor's reason buried retries the same
+    doomed call.
     """
     payload = _approval_status_payload(record, resolved=resolved)
     payload.pop("result", None)
@@ -5091,8 +5061,8 @@ async def _wait_for_many_approvals(
     records = {}
     for approval_id in ids:
         record = get_approval(data.store, approval_id)
-        # Unknown and belonging-to-another-token answer identically, so this
-        # cannot become an oracle for another token's queue (rule 12).
+        # Unknown and belonging-to-another-token answer identically, so a refusal
+        # is not an existence oracle for another token's queue.
         if record is None or record.token_id != token.id:
             return _tool_error("Approval not found."), "not_found", "wait_for_approval"
         records[approval_id] = record
@@ -5122,8 +5092,8 @@ async def _wait_for_many_approvals(
             unsub()
             _set_progress_status(None)
 
-    # Re-read every record: some may have resolved without an event reaching us
-    # (the expiry sweep), and a batch approve resolves several at once.
+    # Re-read every record: some may have resolved without an event reaching
+    # this listener (the expiry sweep), and a batch approve resolves several at once.
     latest = {i: (get_approval(data.store, i) or records[i]) for i in ids}
     still_pending = [i for i, r in latest.items() if r.status == STATUS_PENDING]
     payload = {
@@ -5157,18 +5127,16 @@ async def _tool_wait_for_approval(
     """MCP tool: block until the token's own approval(s) resolve, or until timeout.
 
     A bounded server-side wait (not a stream): returns immediately if already
-    resolved, else waits on the phoenix_mcp_approval_resolved event filtered to this
-    approval IDs. Own-data only (cross-token lookups 404, matching
-    get_approval_status); no capability required.
+    resolved, else waits on the phoenix_mcp_approval_resolved event filtered to
+    the requested approval ids. Own-data only (another token's id answers like a
+    missing one, as in get_approval_status); no capability required.
 
     Accepts `approval_ids` (a list), including a one-item list for a single
-    approval. This makes staged approvals workable. Confirm-gated calls
-    return pending_approval immediately by default (see
-    DEFAULT_CONFIRM_INLINE_WAIT_SECONDS), so an agent making a run of writes ends
-    up holding N approval ids and wanting ONE place to block until the operator
-    has dealt with them, however they choose to: one at a time, or in a batch. A
-    caller waiting on each id in turn would serialise itself right back into the
-    stall the staged model exists to remove.
+    approval. Confirm-gated calls return pending_approval immediately by default
+    (see DEFAULT_CONFIRM_INLINE_WAIT_SECONDS), so an agent making a run of writes
+    holds N approval ids and needs ONE place to block until the operator has dealt
+    with them, one at a time or in a batch. Waiting on each id in turn would
+    serialise it back into the stall the staged model exists to remove.
     """
     args, error = normalize_tool_args("wait_for_approval", args)
     if error:
@@ -5194,23 +5162,23 @@ def _register_executor(tool_name: str, fn: Any) -> None:
 # handler is defined.
 _TOOL_HANDLERS: dict[str, tuple[Any, tuple[str, ...], dict[str, Any]]] = {}
 
-# Request context a handler may opt into simply by naming the parameter. Reads
-# come as (args, token, hass); gated writes add all three of these.
+# Request context a handler opts into by naming the parameter. Reads take
+# (args, token, hass); gated writes add all three of these.
 _TOOL_CONTEXT_PARAMS = ("data", "request_id", "client_ip")
 
 
 def _register_tool(name: str, handler: Any, /, **bound: Any) -> None:
     """Bind a tool name to its handler. Called once per tool at module import.
 
-    The handler's parameter names are read from its code object (never inspect,
-    per the ws_dispatch rule) so the dispatcher can pass just the context each
-    one takes, instead of every handler having to accept a uniform signature it
-    mostly ignores. bound supplies per-registration constants, which is how the
-    three dashboard card ops and the six mesa_* tools share one handler.
+    The handler's parameter names are read from its code object (not
+    inspect.signature, which can evaluate annotations eagerly on Python 3.14) so
+    the dispatcher passes just the context each one takes, instead of every
+    handler accepting a uniform signature it mostly ignores. bound supplies
+    per-registration constants, which is how the dashboard card ops and the
+    mesa_* tools share one handler each.
 
-    name and handler are positional-only: a bound kwarg is itself called
-    tool_name (the card ops pass their own), which would otherwise collide with
-    this function's own parameter.
+    name and handler are positional-only so that no bound kwarg (the card ops
+    bind their own tool_name) can collide with this function's own parameters.
     """
     if name in _TOOL_HANDLERS:
         raise ValueError(f"duplicate tool registration: {name}")
@@ -5221,7 +5189,7 @@ def _register_tool(name: str, handler: Any, /, **bound: Any) -> None:
 
 
 def _restore_token(user_id: str) -> TokenRecord:
-    """Synthetic pass-through token used to re-apply a config under admin authority.
+    """Synthetic pass-through token for re-applying a config under admin authority.
 
     pass_through makes policy_engine.resolve() return WRITE for every entity, so the
     per-entity scope checks inside the scene/helper executors pass for an admin who
@@ -5445,8 +5413,8 @@ async def async_restore_version(
         if resource_type == "energy":
             # Energy is restore-only and deliberately WHOLESALE: the snapshot IS
             # the operator's chosen state, so reproducing it is the operation. The
-            # addressed-write rule edit_energy_config enforces does not apply here,
-            # exactly as rule 31 exempts a YAML restore from its removal check.
+            # addressed-write rule edit_energy_config enforces does not apply here
+            # (a YAML restore is likewise exempt from the dropped-key check).
             return await async_restore_energy_prefs(target, token, hass, data)
         if resource_type in ("yaml_config", "file", "esphome_yaml", "blueprint"):
             restorable = target.get("content")
@@ -5468,10 +5436,10 @@ async def async_restore_version(
                     return await _execute_edit_blueprint(bp_args, token, hass, data)
                 return await _execute_create_blueprint(bp_args, token, hass, data)
             if resource_type == "yaml_config":
-                # resource_id is the config-relative path. Records written before
-                # set_yaml_config took a file argument all carry
-                # "configuration.yaml", which resolves the same way, so old
-                # versions restore unchanged.
+                # resource_id is the config-relative path. Older records, written
+                # before set_yaml_config took a file argument, all carry
+                # "configuration.yaml", which resolves the same way, so they
+                # restore unchanged.
                 return await _execute_set_yaml_config(
                     {"file": resource_id, "content": restorable}, token, hass, data)
             if resource_type == "esphome_yaml":
@@ -5481,17 +5449,17 @@ async def async_restore_version(
                 # by the caller below) and waives the three LITERAL credential
                 # refusals for this path only: raw text re-writes the file's inline
                 # credentials verbatim, which those rules read as an agent changing
-                # a frozen value, so every restore of a file with any inline
-                # credential used to fail. See splice_esphome_text.
+                # a frozen value, so without the waiver every restore of a file
+                # with an inline credential would fail. See splice_esphome_text.
                 return await _execute_set_esphome_yaml(
                     {"file": resource_id, "content": restorable}, token, hass, data)
             return await _execute_write_file({"path": resource_id, "content": restorable}, token, hass, data)
         if resource_type in {"area", "floor"}:
             return await restore_location_version(resource_type, resource_id, target, token, hass, data)
         if resource_type == "entity":
-            # Re-apply the registry metadata. Restoring a deleted
-            # entry's snapshot lands here too and fails cleanly in set_entity if the
-            # entity no longer exists (a deleted registry entry cannot be recreated).
+            # Re-apply the registry metadata. Restoring a deleted entry's snapshot
+            # lands here too and fails cleanly in set_entity, because a deleted
+            # registry entry cannot be recreated.
             fields = {
                 key: target[key]
                 for key in (
@@ -5559,12 +5527,12 @@ async def async_restore_version(
 class ExecutorNotRegistered(LookupError):
     """No executor is registered for a tool name.
 
-    Its own type, rather than the bare KeyError this used to raise, because the
-    approve path treats "nothing could have run" as retryable and everything else
-    as possibly-applied. A KeyError raised INSIDE an executor (a dict lookup on a
-    service response, a missing config key) is indistinguishable from the lookup
-    failing, so the caller cleared the durable marker and re-offered an approval
-    whose side effect had already begun.
+    Distinct from a bare KeyError because the approve path treats "nothing could
+    have run" as retryable and everything else as possibly applied. A KeyError
+    raised INSIDE an executor (a dict lookup on a service response, a missing
+    config key) would be indistinguishable from the lookup failing, and the
+    caller would clear the durable marker and re-offer an approval whose side
+    effect had already begun.
     """
 
 
@@ -5575,10 +5543,12 @@ async def async_execute_approved_tool(
     hass: HomeAssistant,
     data: PhoenixData,
 ) -> tuple[dict, str, str]:
-    """Run the side-effect path for a previously-gated tool. Returns the tool result tuple.
+    """Run the executor for a tool call that was gated and then approved.
 
-    Raises ExecutorNotRegistered if no executor is registered for the tool_name,
-    which is the ONLY failure here that proves nothing was dispatched.
+    Refuses stored arguments that fail validation and an approval whose bound
+    entity targets changed (TARGETS_CHANGED), then runs under confirm-approved
+    MESA semantics. Raises ExecutorNotRegistered if no executor is registered
+    for the tool_name, the ONLY failure here that proves nothing was dispatched.
     """
     if error := tool_arguments_error(args):
         return _tool_error(error), "invalid_request", tool_name
@@ -5603,7 +5573,6 @@ async def async_execute_approved_tool(
 
 
 def _build_diff_restart_ha(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
-    """Diff payload for restart_ha approvals."""
     return {
         "kind": "system_action",
         **_summary("restart_ha"),
@@ -5615,7 +5584,7 @@ def _build_diff_restart_ha(args: dict, token: TokenRecord, hass: HomeAssistant) 
 
 
 # ---------------------------------------------------------------------------
-# Discovery and registry read tools (cap_registry_read)
+# Capability summary (no capability required)
 # ---------------------------------------------------------------------------
 
 
@@ -5701,9 +5670,6 @@ async def _tool_watch_entity(
     return _tool_success(json.dumps(body, default=str)), "allowed", entity_id
 
 
-# ---------------------------------------------------------------------------
-# ESPHome device YAML (cap_esphome_yaml)
-# ---------------------------------------------------------------------------
 
 
 
@@ -5737,13 +5703,6 @@ async def _tool_watch_entity(
 
 
 
-# ---------------------------------------------------------------------------
-# ESPHome Device Builder reads (cap_esphome_yaml)
-#
-# Validation and reference lookups run against the add-on's WebSocket API. All
-# four are reads, so they are never approval-gated even when the capability is
-# set to confirm, matching the get_automation/get_dashboard_config precedent.
-# ---------------------------------------------------------------------------
 
 
 
@@ -5771,15 +5730,6 @@ async def _tool_watch_entity(
 
 
 
-# ---------------------------------------------------------------------------
-# ESPHome firmware jobs (cap_esphome_yaml to build, cap_esphome_flash to flash)
-#
-# A build takes minutes and the admin Approve POST runs its executor inline, so
-# nothing here ever waits for one: compile and install ENQUEUE a job in the
-# add-on and return its id, and get_esphome_job polls it afterwards. The jobs are
-# the add-on's, durable and connection-independent, so Phoenix MCP keeps no job
-# state of its own and stays as stateless as the rest of the transport.
-# ---------------------------------------------------------------------------
 
 
 
@@ -6067,7 +6017,7 @@ def _config_entry_write_error(
     *,
     force_registry_only: bool = False,
 ) -> tuple[dict, str, str] | None:
-    """Require complete entry coverage without revealing hidden entries."""
+    """Require WRITE on all entities and devices the entry owns, else not found."""
     permission = resolve_config_entry_registry_write(
         entry_id, token, hass, force_registry_only=force_registry_only
     )
@@ -6656,7 +6606,7 @@ async def _tool_set_integration_enabled(
     args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
-    """MCP tool: enable/disable an integration with complete coverage."""
+    """MCP tool: enable or disable an integration (needs WRITE on all it owns)."""
     if effective_cap(token, "cap_integration_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_integration_enabled"
     entry_id = str(args.get("entry_id") or "").strip()
@@ -7584,8 +7534,7 @@ async def _backup_agent_ids(hass: HomeAssistant) -> list[str]:
 
     Raises WsDispatchError rather than degrading to []: an empty list means "this
     install has no backup agents", which callers act on (create_backup refuses,
-    list_backups reports none). Swallowing a dispatch failure into the same value
-    turned a transport error into that wrong diagnosis.
+    list_backups reports none), so a transport error must not masquerade as it.
     """
     info = await async_ws_command(hass, "backup/agents/info", {})
     agents = info.get("agents") if isinstance(info, dict) else None
@@ -7742,9 +7691,9 @@ async def _call_tool(
 
     The middle element is the audit outcome, narrowed to audit.Outcome so the
     _dispatch_mcp call site that feeds it straight into log_request type-checks.
-    Note this does NOT statically constrain the handlers: _TOOL_HANDLERS stores
-    them as Any, so their own returns are erased here. A valid outcome per tool
-    is enforced by an adversarial sweep over the whole surface instead.
+    This does NOT statically constrain the handlers (_TOOL_HANDLERS stores them
+    as Any, erasing their own returns); a sweep test over the whole tool surface
+    enforces a valid outcome per tool.
     """
     try:
         check_request_authority()
@@ -7820,18 +7769,13 @@ async def _call_tool(
 async def _get_ha_assist_api(hass: HomeAssistant) -> Any:
     """Return HA's Assist LLM APIInstance, or raise if unavailable.
 
-    HA-COUPLING POINT. LLMContext's fields have changed across HA versions:
-    `user_prompt` existed when this was written and has since been removed, so
-    passing it raised TypeError and BOTH callers (prompts/list and prompts/get,
-    pass-through tokens only) swallowed it in a bare `except Exception` and
-    silently reported no prompts. Nothing failed loudly; the feature just went
-    quiet. Found by type checking, not by anyone noticing.
-
-    So the kwargs are now built against the live dataclass and filtered to the
-    fields it actually declares, the same "supply the intersection with the live
-    signature" approach ws_dispatch uses for ActiveConnection. Old and new HA
-    both work, and a future field removal degrades to omitting it rather than
-    to a silent empty result.
+    HA-COUPLING POINT. LLMContext's fields differ across HA versions (older
+    ones declare `user_prompt`), and a TypeError from an unknown field would be
+    swallowed by BOTH callers (prompts/list and prompts/get, pass-through tokens
+    only) and silently reported as no prompts. So the kwargs are filtered to the
+    fields the live dataclass declares, the same "supply the intersection with the
+    live signature" approach ws_dispatch uses for ActiveConnection: a future
+    field removal degrades to omitting it rather than a silent empty result.
     """
     import dataclasses  # noqa: PLC0415
 
@@ -8011,12 +7955,12 @@ def _build_context_json(token: TokenRecord, hass: HomeAssistant) -> dict:
 
 
 def _build_instructions(token: TokenRecord, data: PhoenixData, base_url: str) -> str:
-    """Token-aware MCP `instructions` primer (skills Channel A).
+    """Token-aware MCP `instructions` primer, sent at every session start.
 
-    Short, injected every session: the etiquette that prevents the common
-    failure modes (treating pending_approval as an error, retrying, ignoring the
-    per-entity safety layer) plus this token's gated capabilities and a link to
-    the full guide at /api/phoenix-mcp/skill.
+    Short: the etiquette that prevents the common failure modes (treating
+    pending_approval as an error, retrying, ignoring the per-entity safety layer)
+    plus this token's gated capabilities and a link to the full guide at
+    /api/phoenix-mcp/skill.
     """
     from .home_companion import is_companion
     if is_companion(token):
@@ -8085,23 +8029,19 @@ def _maybe_append_stale_advisory(
     """Append the one-time stale-tools/catalog notices to a result, in place.
 
     Returns whether an advisory was added, which the caller records on the audit
-    row. This is Phoenix's "soft tools/list_changed": the stateless transport
-    cannot push notifications, so the notice rides in-band on the next
-    tools/call, once per staleness epoch (a fresh tools/list resets it).
+    row. This is the stateless transport's substitute for tools/list_changed: the
+    notice rides in-band on the next tools/call, once per staleness epoch (a fresh
+    tools/list resets it). The epoch key spans two independent axes, so resolving
+    one does not re-fire the other: the OPERATOR changed this token
+    (settings_version moved past the version echoed at the last tools/list), and
+    the BUILD changed under a client that already fetched its schemas (catalog
+    fingerprint differs; an empty stored fingerprint means never recorded, so
+    never stale).
 
-    TWO independent axes, and the epoch key spans both so resolving one does not
-    re-fire the other:
-      - the OPERATOR changed this token (settings_version moved past the version
-        echoed at the last tools/list), and
-      - the BUILD changed under a client that already fetched its schemas
-        (catalog fingerprint differs). An empty stored fingerprint means never
-        recorded, so never stale.
-
-    Skipped entirely for Phoenix's own internal surfaces (the sentinel client
-    IPs): they rebuild their tool list every turn from the live token, so it is
-    never stale, and there is no external MCP server to reconnect. Deliberately
-    NOT marking the epoch for them either, so a real external client sharing the
-    token still gets advised.
+    Skipped for Phoenix's own internal surfaces (the sentinel client IPs): they
+    rebuild their tool list every turn from the live token and have no external
+    MCP server to reconnect. The epoch is deliberately NOT marked for them, so a
+    real external client sharing the token still gets advised.
     """
     internal = client_ip in (
         AGENTCLI_CLIENT_IP, ASSIST_CLIENT_IP, VOICE_AGENT_CLIENT_IP, AI_TASK_CLIENT_IP, HOME_COMPANION_CLIENT_IP)
@@ -8165,11 +8105,11 @@ async def _dispatch_tools_call(
         raise
     except Exception:
         # _call_tool is a bare dispatcher with no exception handling of its own,
-        # and post() has none either: an unhandled exception here previously
-        # propagated to aiohttp's default error handling, which the MCP client
-        # cannot parse cleanly. It manifests as a multi-minute client HANG rather
-        # than a fast error. Log the real exception server-side for diagnosis,
-        # never leak it to the client, return something self-correctable.
+        # and post() has none either: an unhandled exception here would reach
+        # aiohttp's default error handling, which the MCP client cannot parse
+        # cleanly, and shows up as a multi-minute client HANG rather than a fast
+        # error. Log the real exception server-side for diagnosis, never leak it
+        # to the client, return something self-correctable.
         _LOGGER.exception(
             "Unhandled exception in tool %s for token %s rid=%s",
             tool_name, token.name, request_id,
@@ -8195,10 +8135,10 @@ async def _dispatch_tools_call(
 # to be decided BEFORE the response framing is picked, because preparing an SSE
 # stream puts a 200 on the wire; an unknown method has nothing to stream anyway.
 #
-# This mirrors the dispatcher's own branches, so test_mcp_protocol.py reads them
-# back off its AST and fails on any drift. A method added to one and not the
-# other is the failure that matters: answering a real method with 404, or
-# streaming an unknown one.
+# This mirrors the dispatcher's own branches: a protocol test reads them back off
+# the AST and fails on any drift. A method added to one and not the other is the
+# failure that matters: answering a real method with 404, or streaming an
+# unknown one.
 _MCP_METHODS: frozenset[str] = frozenset({
     "server/discover",
     "initialize",
@@ -8321,11 +8261,10 @@ async def _dispatch_mcp_authorized(
     """Dispatch with current request authority established by the outer boundary."""
     if method == "server/discover":
         # The stateless-era replacement for initialize: identity, versions and
-        # capabilities in one call, with no handshake to establish. It matters
-        # more than a duplicate of initialize looks, because a client speaking a
-        # revision that HAS no initialize would otherwise never receive the
-        # token-aware primer at all, and that primer is the only place an agent
-        # is told which of its capabilities are approval-gated.
+        # capabilities in one call, with no handshake to establish. A client
+        # speaking a revision that has no initialize would otherwise never receive
+        # the token-aware primer, which is the only place an agent is told which
+        # of its capabilities are approval-gated.
         resp = _jsonrpc_result(msg_id, {
             "resultType": "complete",
             "supportedVersions": list(MCP_PROTOCOL_VERSIONS),
@@ -8347,10 +8286,9 @@ async def _dispatch_mcp_authorized(
         return resp, "server/discover", "/api/phoenix-mcp", "allowed"
 
     if method == "initialize":
-        # Echo the client's version when it is one we implement, otherwise name
-        # the one we prefer and let the client decide. Membership on a tuple
-        # compares rather than hashes, so a client sending a non-string here
-        # (live-observed shapes are not always what a schema declares) falls to
+        # Echo the client's version when it is a supported one, otherwise name
+        # the preferred one and let the client decide. Membership on a tuple
+        # compares rather than hashes, so a non-string protocolVersion falls to
         # the preferred version instead of raising.
         requested = params.get("protocolVersion")
         version = (
@@ -8403,9 +8341,9 @@ async def _dispatch_mcp_authorized(
             from .home_companion import wrapper_tool
             tools = [wrapper_tool()]
         resp = _jsonrpc_result(msg_id, {"tools": tools})
-        # The client's tool list is now current: echo the settings version (in
-        # memory; persisted by the periodic flush, like last_used_at) and clear
-        # the advised marker so a later change advises again.
+        # After this response the client's tool list is current: echo the settings
+        # version (in memory; persisted by the periodic flush, like last_used_at)
+        # and clear the advised marker so a later change advises again.
         token.tools_list_version = token.settings_version
         token.tools_catalog_fingerprint = _TOOL_CATALOG_FINGERPRINT
         data.stale_tools_advised.pop(token.id, None)
@@ -8487,12 +8425,11 @@ async def _dispatch_mcp_authorized(
                 prompt_name = f"Default prompt for Home Assistant {api_inst.api.name}"
                 prompts = [{"name": prompt_name, "description": f"Default prompt for Home Assistant {api_inst.api.name} API"}]
             except Exception:
-                # Never silent: this same catch hid a real defect for months when HA
-                # removed LLMContext.user_prompt, because an empty prompt list is a
-                # valid answer and nothing distinguished "no prompts" from "the
-                # Assist lookup is broken". Degrading is still right (a missing
-                # prompt must not fail the request), but the operator gets a
-                # traceback for it.
+                # Never silent: an empty prompt list is a valid answer, so nothing
+                # would otherwise distinguish "no prompts" from "the Assist lookup
+                # is broken" (as when HA removed LLMContext.user_prompt). Degrading
+                # is still right (a missing prompt must not fail the request), but
+                # the operator gets a traceback for it.
                 _LOGGER.exception("prompts/list: the HA Assist API lookup failed")
                 prompts = []
         else:
@@ -8580,9 +8517,8 @@ async def _handle_streamable_batch(
 
     # Rate limiting for a batch is charged PER ITEM and preflighted against both
     # the minute and burst ceilings by RateLimiter.charge_batch, in post() before
-    # anything here runs. This comment used to say the opposite, that one batch
-    # cost one unit and the 50x multiplier was an acceptable trade for usability;
-    # it is not, since it let a token spend fifty times its configured ceiling.
+    # anything here runs; charging one unit per batch would let a token spend
+    # MAX_BATCH_ITEMS times its configured ceiling.
     # Items are dispatched sequentially (not via asyncio.gather) so a batch can never
     # run up to MAX_BATCH_ITEMS side-effecting tools concurrently and interleave
     # writes; order is preserved and one item's failure stays isolated.
@@ -8620,8 +8556,8 @@ def _batch_expects_response(items: list) -> bool:
 
     Mirrors the per-item suppression rules in _dispatch_streamable_batch so the
     SSE path can decide between a stream and a bare 202 BEFORE preparing a
-    response. Any change to those rules must change this too; the agreement is
-    pinned by test.
+    response. Any change to those rules must change this too; a test holds the
+    two in agreement.
     """
     for item in items:
         if not isinstance(item, dict) or item.get("jsonrpc") != "2.0":
@@ -8992,9 +8928,10 @@ def _origin_rejected(hass: HomeAssistant, request: web.Request, request_id: str)
     non-browser MCP client) is allowed; a PRESENT Origin is accepted only when it
     matches one of Home Assistant's own configured URLs. It is validated against
     HA's configured URLs via is_hass_url, never the request's own Host header,
-    which a rebinding attacker also forges. This is defense in depth: Phoenix MCP already
-    requires its bearer token, which such a page cannot know, so a rebound request
-    still gets the uniform 401; the Origin check refuses it one step earlier.
+    which a rebinding attacker also forges. This is defense in depth: Phoenix MCP
+    already requires its bearer token, which such a page cannot know, so a rebound
+    request still gets the uniform 401; the Origin check refuses it one step
+    earlier.
     """
     origin = request.headers.get("Origin")
     if not origin:
@@ -9371,14 +9308,14 @@ class PhoenixMcpView(PhoenixView):
                     "Batch exceeds the configured request capacity; split it into smaller requests.", request_id),
                     body=parsed, resource="mcp:batch")
             # A batch is ONE HTTP request carrying up to MAX_BATCH_ITEMS calls,
-            # and the auth check above charged it as one, so a token on the
-            # default 60/min could issue 3,000 tool calls a minute by batching.
-            # The items are the work, so the other N-1 are charged here, now that
-            # the count is known, and the whole batch is REFUSED if the budget
-            # will not cover it. Preflighting is what makes the ceiling real:
-            # charging without refusing let a token limited to 10/min run all 50
-            # items and only then be throttled. Nothing has been dispatched yet,
-            # so there is no half-applied batch to worry about.
+            # and the auth check above charged it as one, so batching would
+            # multiply a token's effective rate by MAX_BATCH_ITEMS. The items are
+            # the work, so the other N-1 are charged here, once the count is
+            # known, and the whole batch is REFUSED if the budget will not cover
+            # it. Preflighting is what makes the ceiling real: charging without
+            # refusing would let a token run every item and only then be
+            # throttled. Nothing has been dispatched yet, so there is no
+            # half-applied batch to worry about.
             batch_rl = data.rate_limiter.charge_batch(
                 token.id, token.rate_limit_requests, token.rate_limit_burst,
                 min(len(parsed), MAX_BATCH_ITEMS) - 1,
@@ -9394,9 +9331,9 @@ class PhoenixMcpView(PhoenixView):
                 return resp
             # From here on the batch's own result is what the client is told, on
             # BOTH paths: the single-request result above was computed before the
-            # other N-1 items were charged, so it reported a budget the token no
-            # longer has (a 50-item batch answered X-RateLimit-Remaining: 59).
-            # This covers the SSE framing; the JSON path takes batch_rl directly.
+            # other N-1 items were charged, so it would report a budget the token
+            # no longer has. This covers the SSE framing; the JSON path takes
+            # batch_rl directly.
             if batch_rl.rate_limiting_enabled:
                 rl_headers = _rate_limit_headers(token, batch_rl)
             if wants_sse and _batch_expects_response(parsed) and 0 < len(parsed) <= MAX_BATCH_ITEMS:
@@ -9540,7 +9477,7 @@ class PhoenixMcpView(PhoenixView):
             # Still routed through the dispatcher rather than answered here, so
             # the error body and the audit row keep one definition; only the
             # HTTP status is decided at this layer. A notification for a method
-            # we do not implement is accepted and dropped (202), not refused:
+            # that is not implemented is accepted and dropped (202), not refused:
             # the envelope is valid and the sender is not owed a reply.
             if method in _MCP_METHODS:
                 _log(
@@ -9903,11 +9840,11 @@ _register_executor(MESA_APPROVED_EXECUTOR, _execute_call_service_mesa_approved)
 # ---------------------------------------------------------------------------
 # Tool dispatch registry.
 #
-# Replaces a 127-branch if/elif chain whose agreement with the published tool
-# catalog was maintained purely by hand. Handlers differ in which pieces of
+# Maps each published tool name to its handler; a catalog test checks the
+# registry against the published tool catalog. Handlers differ in which pieces of
 # request context they need, so _register_tool reads each one's parameter names
-# once at import (from the code object, never inspect: the ws_dispatch
-# precedent) and _call_tool passes exactly those by keyword.
+# once at import (from the code object, not inspect.signature) and _call_tool
+# passes exactly those by keyword.
 # ---------------------------------------------------------------------------
 
 _register_tool("get_state", _tool_get_state)
@@ -10008,6 +9945,10 @@ _register_tool("find_available_actions", _tool_find_available_actions)
 _register_tool("get_automation_traces", _tool_get_automation_traces)
 _register_tool("get_system_health", _tool_get_system_health)
 _register_tool("get_repairs", _tool_get_repairs)
+# ESPHome firmware jobs: a build takes minutes and the admin Approve POST runs its
+# executor inline, so compile and install ENQUEUE a job in the add-on and return
+# its id, and get_esphome_job polls it. The jobs are the add-on's, durable and
+# connection-independent, so Phoenix MCP keeps no job state of its own.
 _register_tool("get_esphome_overview", _tool_get_esphome_overview)
 _register_tool("get_esphome_yaml", _tool_get_esphome_yaml)
 _register_tool("search_esphome_yaml", _tool_search_esphome_yaml)

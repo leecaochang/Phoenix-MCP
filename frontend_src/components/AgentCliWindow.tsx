@@ -32,8 +32,8 @@ import { registerAgentChatShortcut } from "../utils/agentchat_shortcut";
 import PANEL_CSS from "../phoenix-mcp-panel.css?inline";
 
 // One rendered item in the transcript. ts (epoch ms, stamped at creation) is
-// optional: restored session entries from before the field existed lack it,
-// and the timestamp display simply skips those.
+// optional: restored session entries may lack it, and the timestamp display
+// skips those.
 type ChatEntry =
   | { kind: "user"; text: string; ts?: number }
   | { kind: "assistant"; text: string; thinking: string; ts?: number }
@@ -175,10 +175,9 @@ function fmtClock(ts: number): string {
   return localeClock(ts);
 }
 
-// Compact token counts for the usage footer. Was a hand-rolled 48.2k/1.2M
-// ladder, which is not translatable: Chinese groups by 10^4, so the right
-// answer is 4.8万, not a translated "k". CLDR owns both the scale and the
-// suffix, so this defers to it entirely.
+// Compact token counts for the usage footer. CLDR owns both the scale and the
+// suffix (Chinese groups by 10^4, so the right answer is 4.8万, not a
+// translated "k"), so this defers to it entirely.
 export function fmtTokens(n: number): string {
   return localeCompactNumber(n);
 }
@@ -189,8 +188,8 @@ export interface ThinkOption { value: string; label: string }
 // The thinking/effort options a given provider+model actually exposes at the
 // API level, so the gear shows the real levels for each backend rather than a
 // generic scale. `style` says how a selected value maps to request options:
-//   "effort"  -> the value is an effort level (or "off"); Claude/DeepSeek/OpenAI
-//   "boolean" -> the value is on/off only; Ollama's `think` flag
+//   "effort"  -> the value is an effort level (or "off"), as for Claude and OpenAI
+//   "boolean" -> the value is on/off only, as for Ollama's `think` flag
 export interface ModelCaps {
   thinking: ThinkOption[];   // dropdown entries; [] => no thinking control
   style: "effort" | "boolean";
@@ -205,13 +204,12 @@ function thinkOpts(values: string[]): ThinkOption[] {
 
 /** Narrow the shipped table by what the provider DECLARED about this model.
  *
- *  Declared capabilities only ever REMOVE a control, never add one. A provider
- *  saying a model has no reasoning is authoritative; a provider saying nothing
- *  (which is most of them, and Ollama for temperature specifically) leaves the
- *  table's answer standing. That asymmetry is the whole safety property: an
- *  absent field can never be read as a limit, so a failed or unsupported
- *  lookup degrades to today's behaviour instead of stripping a working model's
- *  controls.
+ *  Declared capabilities REMOVE a control; only probed effort levels (below) may
+ *  add one. A provider saying a model has no reasoning is authoritative; a
+ *  provider saying nothing (most of them, and Ollama for temperature) leaves
+ *  the table's answer standing. That asymmetry is the safety property: an
+ *  absent field is never read as a limit, so a failed or unsupported lookup
+ *  cannot strip a working model's controls.
  */
 function applyDeclared(
   caps: ModelCaps, declared: DeclaredModelCaps | undefined,
@@ -222,22 +220,16 @@ function applyDeclared(
   if (declared.thinking === false) out.thinking = [];
   if (declared.temperature === false) out.temperature = false;
   // Probed effort levels REPLACE the table's guess rather than narrowing it, and
-  // this is the one place discovery may add something. It is sound only because
-  // the probe proved the field was validated before trusting any level: an
-  // unvalidated field records nothing at all, so a list here means the API
-  // accepted exactly these and refused the rest. "off" is kept if the table had
-  // it, since that is Phoenix not sending the field rather than a level.
-  // A control already using effort can be narrowed directly. Ollama is the one
-  // deliberate conversion: its fallback is boolean for older servers, but a
-  // successful per-model probe proves that this endpoint validates effort
-  // levels, so the backend knows how to send the resulting dropdown values.
-  //
-  // Probed levels may also CREATE a control the table does not offer, which is
-  // the aggregator case: one key fronting many vendors, where no single built-in
-  // answer fits and a reasoning model was therefore losing its reasoning
-  // altogether. Creating one is justified by the same evidence as narrowing one,
-  // since the probe proved the field is validated AND which values pass. A
-  // created control always gets "off", or the operator could not decline it.
+  // may even CREATE a control the table does not offer (the aggregator case: one
+  // key fronting many vendors, so no single built-in answer fits). That is sound
+  // only because the probe proved the field is validated: an unvalidated field
+  // records nothing, so a list here means the API accepted exactly these levels
+  // and refused the rest. "off" is kept if the table had it (it is Phoenix not
+  // sending the field, not a level), and a created control always gets "off" so
+  // the operator can decline it.
+  // Ollama is the one deliberate conversion: its fallback is boolean for older
+  // servers, but a successful per-model probe proves the endpoint validates
+  // effort levels, so the backend knows how to send the resulting dropdown values.
   if (declared.effort_levels?.length
       && (out.style === "effort" || kind === "ollama" || kind === "ollama_cloud")) {
     out.style = "effort";
@@ -269,11 +261,9 @@ function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: bool
                style: "effort", defaultLevel: "high", temperature: false };
     case "deepseek":
       // A thinking on/off toggle plus reasoning_effort low/high/max, default high;
-      // thinking mode ignores temperature. `low` was added when the v4 models
-      // replaced the retired deepseek-chat / deepseek-reasoner aliases, which had
-      // remapped low and medium to high. Nothing about the model NAME says which
-      // set it takes, which is why this table is a starting point that the
-      // provider card's capability refresh corrects rather than the last word.
+      // thinking mode ignores temperature. Nothing about the model NAME says which
+      // effort set it takes, so this table is a starting point that the provider
+      // card's capability refresh corrects rather than the last word.
       return { thinking: thinkOpts(["off", "low", "high", "max"]), style: "effort",
                defaultLevel: "high", temperature: !thinkingOn };
     case "chatgpt": {
@@ -351,11 +341,10 @@ function shippedCaps(kind: AgentCliProviderKind, model: string, thinkingOn: bool
     case "opencode":
     case "tencent":
       // Aggregators: one key fronting many vendors' models, so no built-in
-      // answer fits and none is guessed at. This is the starting point rather
-      // than the verdict: checking a model's options establishes its real levels
-      // per model, and those CREATE the control here rather than only narrowing
-      // it. Until then the model still reasons at its own default; what is
-      // missing is the ability to choose.
+      // answer fits and none is guessed at. Checking a model's options
+      // establishes its real levels per model, and those CREATE the control here
+      // rather than only narrowing it. Until then the model still reasons at its
+      // own default; only the ability to choose is missing.
       return { thinking: [], style: "effort", defaultLevel: "high", temperature: true };
     case "mimo":
     case "zai":
@@ -936,7 +925,7 @@ export function AgentCliWindow({
   // Cancel the running turn: abort the request, ignore any late response, and
   // put the query back in the box so it can be edited and resent. The partial
   // turn is folded into the transcript, not discarded (a long agentic exchange
-  // is one turn, so dropping live entries erased the whole visible chat). Any
+  // is one turn, so dropping live entries would erase the whole visible chat). Any
   // still-pending approval card flips to cancelled, matching the server's
   // orphaned-approval cleanup. The folded turn carries no provider messages:
   // the aborted exchange is kept for display but deliberately not replayed as
@@ -1311,7 +1300,7 @@ export function AgentCliWindow({
     void runTurn("user", text);
   }, [input, sending, runTurn, clearHistory]);
 
-  // Grant the agent another N rounds from where it paused (idea b): resends the
+  // Grant the agent another batch of rounds from where it paused: resends the
   // held conversation with continue:true, no new user message.
   const continueTurn = useCallback(() => {
     void runTurn("continue", "");
@@ -1370,13 +1359,11 @@ export function AgentCliWindow({
       // success; nothing else to do here.
     } catch (err: unknown) {
       // A failure (the capability having been denied since, a transient
-      // network error, ...) was previously swallowed silently: the card kept
-      // showing Approve/Reject with no indication the click did nothing,
-      // which read as "the tab never updates" when actually the request
-      // never succeeded in the first place. Surface it and restore the
-      // buttons so the admin can see what happened and retry. Restore only
-      // from our own marker: if the SSE event resolved the card meanwhile
-      // (say, an admin approved it in the panel while our reject failed),
+      // network error, ...) must be visible: otherwise the card keeps showing
+      // Approve/Reject with no sign that the click did nothing. Surface it and
+      // restore the buttons so the admin can retry. Restore only from this
+      // handler's own marker: if the SSE event resolved the card meanwhile
+      // (say, an admin approved it in the panel while this reject failed),
       // that final status wins.
       setLive((prev) => prev.map((e) =>
         e.kind === "approval" && e.approvalId === approvalId && e.status === marker
@@ -1447,11 +1434,11 @@ export function AgentCliWindow({
   //
   // The SSE stream also carries approval_resolved, but that frame rides the agent
   // loop resuming and can be several seconds behind a click made in the panel or
-  // a notification, during which this bubble kept offering Approve and Reject on
-  // an approval already acted on. A claim (an admin's Approve executing its saved
-  // action, which is inline and slow) has no SSE frame at all. Both now land here
-  // immediately, and the SSE path is left exactly as it was: whichever arrives
-  // first wins, and both write the same status, so the duplicate is harmless.
+  // a notification, leaving this bubble offering Approve and Reject on an
+  // approval already acted on. A claim (an admin's Approve executing its saved
+  // action, which is inline and slow) has no SSE frame at all. Both land here
+  // immediately; whichever of the bus and SSE paths arrives first wins, and both
+  // write the same status, so the duplicate is harmless.
   useEffect(() => subscribeApprovalEvents(null, {
     onResolved: (approvalId, status) => {
       // Unconditional for a matching id, exactly like the SSE handler: an
@@ -2003,8 +1990,8 @@ export function AgentCliWindow({
  *
  *  The event carries a stable `code` and the English `message`. Codes Phoenix
  *  itself raises have a catalog entry; a provider-relayed message (a model API's
- *  own error text) has none and shows verbatim, which is what you want for text
- *  Phoenix did not write. */
+ *  own error text) has none and shows verbatim, as is right for text Phoenix
+ *  did not write. */
 function serverText(
   code: string | undefined,
   message: string,
@@ -2111,8 +2098,8 @@ function ChatItem({
   onAnswerAnyway: (prompt: string) => void;
   showAnswerAnyway: boolean;
 }) {
-  // Wall-clock label under a message bubble; entries predating the ts field
-  // (a restored session transcript) simply show none.
+  // Wall-clock label under a message bubble; entries without a ts (restored
+  // from a session transcript) show none.
   const copyText = (entry.kind === "user" || entry.kind === "assistant") && entry.text.trim()
     ? entry.text
     : null;
@@ -2140,8 +2127,8 @@ function ChatItem({
             <details className="agentcli-thinking">
               <summary>{t("agentchat.reasoning")}</summary>
               {/* Same sanitizing renderer as the reply body: models emit
-                  markdown in their reasoning too, and a raw <pre> showed the
-                  literal ** and # markup. */}
+                  markdown in their reasoning too, which a raw <pre> would
+                  show as literal ** and # markup. */}
               <div
                 className="agentcli-md agentcli-thinking-body"
                 dangerouslySetInnerHTML={{ __html: renderMarkdown(entry.thinking) }}

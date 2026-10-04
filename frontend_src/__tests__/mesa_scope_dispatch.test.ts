@@ -1,16 +1,11 @@
 /** Guard: each MESA scope reaches its OWN endpoints.
  *
- * The editor routes load/save/delete per inheritance level. That routing used to
- * be an if-chain ending in an untyped `return` for area, so any scope it did not
- * name was silently written to the AREA endpoint: no compile error, no runtime
- * complaint, just a profile stored against the wrong level. The injector had the
- * same shape, coercing any unrecognised scope to entity.
- *
- * Both are now exhaustive lookups, which tsc checks. What tsc cannot check is
- * that each entry calls the RIGHT endpoint, since every entry has the same
- * shape, so a copy-paste that leaves a device entry pointing at the area API
- * type-checks perfectly. These assertions read the URL that was actually
- * requested.
+ * The editor routes load/save/delete per inheritance level through an
+ * exhaustive lookup, which tsc checks, so a scope it does not name cannot be
+ * silently written to the AREA endpoint. What tsc cannot check is that each
+ * entry calls the RIGHT endpoint, since every entry has the same shape, so a
+ * copy-paste that leaves a device entry pointing at the area API type-checks
+ * perfectly. These assertions read the URL that was actually requested.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 

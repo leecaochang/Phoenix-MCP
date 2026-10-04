@@ -42,9 +42,8 @@ export function PersonaPicker(props: Props) {
     setSaving(true);
     setError(null);
     try {
-      // Fetch the persona's cap defaults from a hardcoded mirror of personas.py.
-      // Backend validation is the source of truth; this is a UX shortcut so we
-      // can patch all caps in one request.
+      // Cap defaults come from a hardcoded mirror of personas.py so all caps
+      // patch in one request. Backend validation stays the source of truth.
       const caps = PERSONA_CAP_DEFAULTS[persona];
       const body: Record<string, unknown> = { persona };
       if (caps) {

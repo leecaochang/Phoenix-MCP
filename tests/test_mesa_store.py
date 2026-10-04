@@ -1,4 +1,4 @@
-"""Tests for MESA storage, runtime construction, and settings."""
+"""MESA storage, runtime construction, and settings."""
 
 from __future__ import annotations
 
@@ -151,7 +151,10 @@ async def test_refresh_orphans_flags_unknown_entities(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 async def test_refresh_orphans_accepts_new_device_registry_view(hass: HomeAssistant):
-    """Device registry iteration works with HA 2026.9 DeviceEntry values."""
+    """Orphan detection reads a `devices` collection of DeviceEntry values.
+
+    HA 2026.9 iterates entries, not only an id-keyed mapping.
+    """
     runtime = await async_setup_mesa(hass, "advisory")
     runtime.store.set_device_profile("device.live", _profile("device.live"))
     runtime.store.set_device_profile("device.deleted", _profile("device.deleted"))

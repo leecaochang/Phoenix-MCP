@@ -1,15 +1,13 @@
 """const.REDACTION_SENTINEL must stay equal to what the redacting readers emit.
 
-The constant exists so a WRITE path can refuse to persist a placeholder (see
-tool_common.redaction_sentinel_path). The four PRODUCERS still spell the literal
-inline, which was deliberate: rewriting working redaction code carries more risk
-than the duplication. This file is what makes the duplication safe. If a producer
-ever changes its placeholder, the write guard would silently stop matching and
-patch_dashboard would start accepting redacted values again, which is precisely
-the failure the guard exists to prevent, and nothing else would notice.
+The constant lets a WRITE path refuse to persist a placeholder (see
+tool_common.redaction_sentinel_path), but the redacting readers spell the
+literal inline. This file makes that duplication safe: if a reader changed its
+placeholder, the write guard would silently stop matching and patch_dashboard
+would accept redacted values again, and nothing else would notice.
 
-Asserting against the real filter_service_response rather than re-stating the
-string: comparing a constant to a copy of itself is the vacuous-assertion trap.
+Assertions run against the real filter_service_response rather than a restated
+string, because comparing a constant to a copy of itself is vacuous.
 """
 
 from __future__ import annotations
@@ -40,11 +38,10 @@ async def test_filter_service_response_emits_the_constant(hass: HomeAssistant) -
 
 
 async def test_ghost_entity_redacts_identically(hass: HomeAssistant) -> None:
-    """Rule 8: absent from states AND registry is NO_ACCESS before any resolution.
+    """A ghost entity (absent from states and the registry) is NO_ACCESS at once.
 
-    This is why widening a token's permissions cannot make a dashboard carrying
-    dead references writable again, and therefore why patch_dashboard had to
-    exist rather than the read simply being made faithful for an admin token.
+    It redacts like any inaccessible entity, so a dashboard carrying dead references
+    stays redacted even for a token whose permissions are widened.
     """
     out = filter_service_response({"entity": "lock.deleted_long_ago"}, _token(), hass)
     assert out["entity"] == REDACTION_SENTINEL

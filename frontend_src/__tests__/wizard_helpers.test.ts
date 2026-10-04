@@ -38,9 +38,9 @@ describe("codexTokenEnv", () => {
 
 describe("buildClaudeCommand", () => {
   it("uses --transport http and an Authorization: Bearer header", () => {
-    const cmd = buildClaudeCommand("http://192.168.1.11:8123/api/phoenix-mcp", "phx_abc", "phx-voice");
+    const cmd = buildClaudeCommand("http://192.0.2.10:8123/api/phoenix-mcp", "phx_abc", "phx-voice");
     expect(cmd).toContain("claude mcp add --transport http phx-voice");
-    expect(cmd).toContain("http://192.168.1.11:8123/api/phoenix-mcp");
+    expect(cmd).toContain("http://192.0.2.10:8123/api/phoenix-mcp");
     expect(cmd).toContain("--header 'Authorization: Bearer phx_abc'");
     expect(cmd).not.toContain("X-API-Key");
   });
@@ -229,8 +229,8 @@ describe("buildBearerValue", () => {
 
 describe("skillUrlFromMcp", () => {
   it("swaps the MCP path for the skill path on the same host", () => {
-    expect(skillUrlFromMcp("http://192.168.1.11:8123/api/phoenix-mcp")).toBe(
-      "http://192.168.1.11:8123/api/phoenix-mcp/skill",
+    expect(skillUrlFromMcp("http://192.0.2.10:8123/api/phoenix-mcp")).toBe(
+      "http://192.0.2.10:8123/api/phoenix-mcp/skill",
     );
   });
   it("tolerates a trailing slash on the MCP path", () => {

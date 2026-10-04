@@ -16,9 +16,9 @@ from custom_components.phoenix_mcp.esphome_yaml import (
 )
 from custom_components.phoenix_mcp.yaml_includes import YamlParseError
 
-# Mirrors the real shapes on a live box: inline api key, LIST-form ota (the
-# modern syntax a legacy-only path list would miss), a !lambda C++ block, and
-# wifi behind !secret.
+# A representative device file: inline api key, LIST-form ota (the modern syntax
+# a legacy-only path list would miss), a !lambda C++ block, and wifi behind
+# !secret.
 LIVE_SHAPE = '''esphome:
   name: rf-blaster1
 
@@ -101,7 +101,7 @@ class TestLayer1CuratedPaths:
             redact_esphome_text("api:\n  key: [unclosed\n")
 
     def test_bare_api_and_passwordless_ota_walk_cleanly(self):
-        # esphome-web-31fca4.yaml's real shape: no encryption block at all.
+        # A stock web-flashed device file: no encryption block at all.
         text = "api:\n\n# Allow OTA\nota:\n- platform: esphome\n"
         red, paths = redact_esphome_text(text)
         assert paths == []
@@ -155,7 +155,7 @@ class TestLayer2KeyNameHeuristic:
 
 class TestLayer3SecretsCrossCheck:
     def test_value_matching_secrets_yaml_at_an_unknown_path(self):
-        # The real pattern: 9 files use !secret for wifi while 2 inline the same
+        # Most files reference a secret via !secret while another inlines the same
         # value, so the inline copy must be caught even where the path is not a
         # known credential location.
         text = "substitutions:\n  wifi_pass: housepassword1\n"
@@ -258,11 +258,11 @@ class TestWriteFreeze:
 
 
 class TestRestoreWaiver:
-    """A version restore re-applies RAW text, which carries the file's inline
-    credentials as literals. The three literal refusals read that as an agent
-    authoring credentials, which would make any device file carrying an inline
-    credential impossible to restore, and inline credentials are the normal case
-    in these files. The waiver is scoped to restore, never to a caller.
+    """A version restore re-applies RAW text, which carries inline credentials as literals.
+
+    The three literal refusals would read that as an agent authoring credentials
+    and make any device file with an inline credential impossible to restore.
+    The waiver is scoped to restore, never to a caller.
     """
 
     DISK = 'api:\n  encryption:\n    key: "REALKEY123456="\nwifi:\n  password: "housepassword1"\n  ssid: "MyNet"\n'
@@ -279,7 +279,7 @@ class TestRestoreWaiver:
         assert out == self.DISK
 
     def test_rolling_back_to_a_snapshot_that_predates_a_credential(self):
-        # The other real shape: the snapshot has no OTA password, disk now does.
+        # The snapshot has no OTA password; the file on disk now does.
         disk = 'ota:\n  - platform: esphome\n    password: "Kx9fQ2mVb7"\nwifi:\n  password: "housepassword1"\n'
         before = 'ota:\n  - platform: esphome\nwifi:\n  password: "housepassword1"\n'
         out = splice_esphome_text(

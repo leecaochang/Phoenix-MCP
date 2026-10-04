@@ -1,29 +1,22 @@
 """MESA profile suggestions: scan for under-protected entities, admin-confirmed.
 
-Two v1 signals, engine kept pluggable:
+Two signals, with a pluggable engine:
+- blast_radius: automation, script and scene entities with no operator-authored
+  MESA coverage whose referenced entities touch a risky domain, or whose fan-out
+  exceeds a threshold. The profile goes ON the orchestrator entity: an
+  automation's ACTIONS run natively in HA and are never re-gated per entity, so
+  covering the referenced lock does not stop the automation (docs/permissions.html).
+- naked_risky: entities in a curated risky-domain list with no operator-authored
+  coverage at any inheritance level. lock and alarm_control_panel suggest
+  "prohibited" (mesa-core's zero-profile baseline, so applying is never a
+  relaxation under enforced mode); the rest suggest "confirm".
 
-- blast_radius: automation./script./scene.* entities with no operator-
-  authored MESA coverage whose referenced entities touch a risky domain, or
-  whose fan-out exceeds a threshold. The suggested profile goes ON the
-  orchestrator entity, gating the agent's trigger through the existing
-  async_apply_mesa_to_call path (an automation's ACTIONS run natively in HA and are
-  never re-gated per entity, so covering the referenced lock does not protect
-  against triggering the automation; see docs/permissions.html#indirect-control-risk).
-- naked_risky: entities in a curated risky-domain list with no operator-
-  authored coverage at any inheritance level. lock/alarm_control_panel suggest
-  "prohibited" (matching mesa-core's zero-profile baseline, so applying is never
-  a relaxation under enforced mode); the rest suggest "confirm".
-
-Suggestions are computed admin-side (startup priming, automation reload, and
-explicit refresh), cached on the MesaRuntime like the orphan lists, and NEVER
-auto-applied: MESA profiles are operator-authored intent, the admin applies,
-reviews, or dismisses each suggestion in the panel. Dismissals persist in the
-phoenix_mcp_mesa store. Blast radii come from HA's public entities_in_automation /
-entities_in_script callbacks (which resolve device/area/label targets and cover
-UI, package, blueprint, and split-layout configs); this is an HA-coupling point,
-wrapped so a moved API degrades to "signal skipped", never an error. Static/live
-extraction is a LOWER BOUND: templated or computed service targets are invisible,
-so suggestions are a floor, not a guarantee.
+Suggestions are computed admin-side (startup priming, automation reload, explicit
+refresh), cached on the MesaRuntime like the orphan lists, and NEVER auto-applied:
+profiles are operator-authored intent, so the admin applies, reviews or dismisses
+each in the panel. Blast radii come from HA's public entities_in_automation /
+entities_in_script callbacks, an HA-coupling point wrapped so a moved API skips
+the signal. Extraction is a LOWER BOUND: templated targets are invisible.
 """
 
 from __future__ import annotations
@@ -160,8 +153,8 @@ def _is_risky_ref(hass: HomeAssistant, entity_id: str) -> bool:
 def _default_covered(defaults: DeploymentDefaults | None, domain: str) -> bool:
     """Whether deployment defaults already restrict unprofiled entities of a domain.
 
-    When they do (Rule E resolves the domain to a non-autonomous mode before the
-    built-in baseline is consulted), suggesting a profile is redundant noise.
+    When they do (the domain resolves to a non-autonomous mode before the built-in
+    baseline is consulted), suggesting a profile is redundant noise.
     """
     if defaults is None:
         return False
@@ -297,9 +290,9 @@ def refresh_suggestions(hass: HomeAssistant, runtime: MesaRuntime) -> None:
 
     Mirrors refresh_orphans: synchronous, admin-initiated (startup priming,
     automation reload, explicit refresh), never on an agent request path.
-    Dismissed keys are filtered out, and dismissed keys whose subject no longer
-    exists are pruned in memory (persisted by the next save). Computed
-    regardless of mesa_mode: the MESA tab is where profiles are authored.
+    Dismissed keys are filtered out, and those whose subject is gone are pruned in
+    memory (persisted by the next save). Computed regardless of mesa_mode: the
+    MESA tab is where profiles are authored.
     """
     defaults = runtime.store.get_deployment_defaults()
     computed = _suggest_blast_radius(hass, runtime, defaults) + _suggest_naked_risky(

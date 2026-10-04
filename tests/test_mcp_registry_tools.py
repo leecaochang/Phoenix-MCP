@@ -529,11 +529,12 @@ class TestSearchEntities:
         assert ids == {"light.kitchen", "light.bedroom"}
 
     async def test_comma_joined_domain_string_is_split(self, hass, reg_env):
-        """A model that wants multiple domains sometimes joins them into one
-        comma-separated string instead of sending an array. domain accepts
-        oneOf[string, array], so a single comma-joined string must be split into
-        multiple domains, not treated as one literal (nonexistent) domain name
-        that matches nothing."""
+        """A comma-joined domain string is split into multiple domains.
+
+        domain accepts oneOf[string, array], and a model may join several domains
+        into one string; treating it as one literal (nonexistent) domain would
+        match nothing.
+        """
         content, _, _ = await _call("search_entities", {"domain": "light,zone"}, _token(), hass)
         ids = {e["entity_id"] for e in _result_json(content)["entities"]}
         assert ids == {"light.kitchen", "light.bedroom", "zone.home"}
@@ -548,9 +549,9 @@ class TestSearchEntities:
         ids = [e["entity_id"] for e in _result_json(content)["entities"]]
         assert ids == ["light.kitchen"]
 
-    # Each filter's SKIP branch (the `continue`) was uncovered: every existing
-    # test asserted what a filter keeps, none asserted what it drops. A filter
-    # that silently stopped excluding would have passed the whole suite.
+    # Each filter's skip branch (the `continue`) needs a test asserting what the
+    # filter DROPS, not only what it keeps: a filter that silently stopped
+    # excluding would otherwise pass.
 
     async def test_device_class_filter_excludes_non_matching(self, hass, reg_env):
         hass.states.async_set("light.kitchen", "on",
@@ -580,11 +581,12 @@ class TestSearchEntities:
         assert ids == {"light.bedroom"}
 
     async def test_empty_string_device_class_is_not_a_filter(self, hass, reg_env):
-        """A schema-completing tool caller sends every declared optional field on
-        every call, including unset ones as an explicit empty string rather than
-        omitting them. device_class="" must behave identically to omitting it,
-        not as a filter for device_class == "" (which no real entity has, so it
-        silently zeroes every result)."""
+        """device_class="" behaves like omitting it.
+
+        A schema-completing caller sends every declared optional field, unset ones
+        as an empty string. Treating "" as a filter for device_class == "" (which
+        no real entity has) would silently zero every result.
+        """
         content, _, _ = await _call(
             "search_entities", {"domain": "light", "device_class": ""}, _token(), hass)
         ids = {e["entity_id"] for e in _result_json(content)["entities"]}
@@ -602,10 +604,12 @@ class TestSearchEntities:
         assert ids == {"light.kitchen", "light.bedroom", "zone.home"}
 
     async def test_stale_hours_does_not_crash_on_real_state(self, hass, reg_env):
-        """last_changed on a real HA state dict is an ISO string (State.as_dict()
-        serializes it, never a datetime), so stale_hours filtering must parse it
-        back before subtracting. Subtracting from the string raises TypeError and
-        fails every call that passes this argument."""
+        """stale_hours parses last_changed from a real state dict.
+
+        State.as_dict() serializes last_changed as an ISO string, never a datetime,
+        so stale_hours filtering must parse it before subtracting; subtracting
+        from the string raises TypeError and fails every call with this argument.
+        """
         content, outcome, _ = await _call(
             "search_entities", {"query": "kitchen", "stale_hours": 999999}, _token(), hass)
         assert outcome == "allowed"
@@ -1108,10 +1112,10 @@ class TestEntityAliases:
         )
 
     async def test_ha_seeds_the_sentinel_on_a_real_entity(self, hass, reg_env):
-        """The premise the whole design rests on, pinned against real HA.
+        """HA seeds [COMPUTED_NAME] on a real entity.
 
-        async_get_or_create seeds [COMPUTED_NAME]; if that ever stops being
-        true, add/remove alone no longer guarantees own-name matching.
+        The design relies on it: if async_get_or_create stopped seeding the
+        sentinel, add/remove alone would no longer guarantee own-name matching.
         """
         assert self._aliases(hass, reg_env["light_kitchen"]) == [er.COMPUTED_NAME]
 
@@ -1220,10 +1224,10 @@ class TestEntityAliases:
         assert "at most" in content["content"][0]["text"]
 
     async def test_a_caller_supplied_absolute_list_is_refused(self, hass, reg_env):
-        """The exemption in test_tool_arg_schema.py depends on this.
+        """`aliases` is read by the executor for the restore path only.
 
-        `aliases` is read by the executor for the restore path only. If a caller
-        could reach it, the whole-set write this design refuses would be back.
+        If a caller could reach it, the whole-set write this design refuses would
+        be back. The tool-argument schema guard exempts it on that basis.
         """
         eid = reg_env["light_kitchen"]
         content, outcome, _ = await self._set(hass, eid, aliases=[])

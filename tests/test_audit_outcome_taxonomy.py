@@ -3,23 +3,19 @@
 `denied` is the one outcome an operator reads to see what Phoenix MCP's own
 permission rules stopped. A disk error filed under it corrupts that signal: the
 Audit tab shows a refusal that no rule made, and the real cause (a full disk, a
-permission problem on the config dir) is invisible because the branch also tends
-not to log. The outcome vocabulary is a closed set, so an internal failure uses
-`invalid_request` rather than gaining an eighth value.
+permission problem on the config dir) stays invisible. The outcome vocabulary is
+a closed set, so an internal failure uses `invalid_request` rather than gaining
+a new value.
 
-The rule is written in the root CLAUDE.md audit-outcome list and was applied to
-the authoring executors on 2026-07-31, but nothing enforced it, and six sites
-across the file and ESPHome tools kept filing OSError as `denied` until this
-guard was added. That is the second time this class drifted, which is why it is
-pinned by an AST walk over the whole package rather than by a test per site: an
-error branch that is hard to trigger is exactly the branch a behavioural test
-does not cover, and the next one would be added the same way.
+This is pinned by an AST walk over the whole package rather than a test per
+site: an error branch that is hard to trigger is exactly the branch a
+behavioural test does not cover.
 
 Scope is deliberately narrow. Only `except OSError` (and its `IOError` alias) is
-checked, because that handler unambiguously means the filesystem failed, not that
-a rule fired. Broader exception types can legitimately carry a denial: a
-`HomeAssistantError` from a service call may be a real refusal, and deciding that
-needs the surrounding context this walk does not have.
+checked, because that handler unambiguously means the filesystem failed, not
+that a rule fired. Broader exception types can legitimately carry a denial (a
+`HomeAssistantError` from a service call may be a real refusal), and deciding
+that needs context this walk does not have.
 """
 
 from __future__ import annotations
@@ -91,9 +87,9 @@ def test_no_io_error_is_audited_as_denied():
 def test_the_walk_actually_finds_denied_returns():
     """The guard above asserts an ABSENCE, so prove it is not vacuous.
 
-    A walk that silently matched nothing (a renamed AST field, a tuple shape it
-    does not recognise) would pass forever while the defect it exists to catch
-    walked straight back in.
+    A walk that silently matched nothing (a renamed AST field, an unrecognised
+    tuple shape) would pass forever while the defect it exists to catch walked back
+    in.
     """
     tree = ast.parse(
         "def f():\n"
@@ -109,8 +105,11 @@ def test_the_walk_actually_finds_denied_returns():
 
 
 def test_the_walk_covers_the_modules_that_regressed():
-    """The two modules whose OSError branches were the found offenders are
-    really in the scanned set, so a path-filter change cannot quietly drop them."""
+    """The config-file and ESPHome tool modules are scanned; mesa_core is not.
+
+    A path-filter change must not quietly drop the modules whose OSError branches
+    handle disk failures.
+    """
     scanned = {str(p.relative_to(PACKAGE)) for p in _source_files()}
     assert {"tools/config_files.py", "tools/esphome.py"} <= scanned
     assert not any(s.startswith("mesa_core/") for s in scanned)

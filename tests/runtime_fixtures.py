@@ -6,7 +6,10 @@ from custom_components.phoenix_mcp.token_store import GlobalSettings, TokenStore
 
 
 def mesa_off_store() -> MagicMock:
-    """Use a real off-mode setting instead of an absent-runtime safety bypass."""
+    """TokenStore mock whose settings put MESA in off mode.
+
+    For tests that isolate non-MESA behavior.
+    """
     store = MagicMock(spec=TokenStore)
     store.get_settings.return_value = GlobalSettings(mesa_mode="off")
     return store

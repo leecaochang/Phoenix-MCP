@@ -1,10 +1,9 @@
 """Integration tests for include-graph-aware YAML authoring (yaml_includes wiring).
 
-Exercises the create/edit/delete automation/script/scene executors end-to-end on
-split configurations (!include / !include_dir_* layouts): correct leaf routing,
-byte-preservation of untouched files, pinned refusal messages, legacy fallback
-parity when configuration.yaml is absent, tag handling in version capture, the
-async_restore_version tag guard, and approval-replay determinism.
+Runs the create/edit/delete automation/script/scene executors on split
+configurations (!include / !include_dir_* layouts): leaf routing, byte
+preservation of untouched files, refusal messages, the legacy fallback without
+configuration.yaml, tag handling in version capture and restore, replay determinism.
 """
 
 from __future__ import annotations
@@ -151,7 +150,7 @@ class TestAutomationSplitLayout:
         """)
 
     async def test_create_refuses_when_unrouted(self, hass, env):
-        """The silent no-op bug is fixed: an unroutable create refuses honestly."""
+        """An unroutable create is refused rather than silently writing nothing."""
         write(env, "configuration.yaml", "default_config:\nfrontend:\n")
         token = _token(cap_automation_write="allow")
         content, outcome, _ = await _call_tool(
@@ -333,8 +332,7 @@ class TestLegacyFallbackParity:
             "without destroying the include structure.")
 
     async def test_create_into_bare_empty_list_file(self, hass, env):
-        """Regression: HA's default empty automations.yaml is a bare '[]'. Creating
-        the first automation must produce a loadable file (not '[]' + block list)."""
+        """Creating into HA's default bare '[]' automations.yaml yields a loadable file."""
         write(env, "configuration.yaml", "automation: !include automations.yaml\n")
         write(env, "automations.yaml", "[]\n")
         token = _token(cap_automation_write="allow")

@@ -2,35 +2,22 @@
 
 An argument a handler acts on but the `inputSchema` never declares is invisible
 to the caller, and a client that validates against the schema cannot send it at
-all: the omission is enforced on its side, which no amount of server leniency
-reaches. That is the same class as the stale-catalog case in mcp_view, arriving
-through a different door.
+all, which no server leniency reaches. A removal guard that tells the agent to
+pass `remove_entries` is useless if the schema omits it.
 
-It shipped once. `set_yaml_config` grew a `remove_entries` argument, the removal
-guard refused a write and told the agent to pass it, and the schema did not list
-it, so a well-behaved agent was handed an instruction it could not follow and
-fell back to asking the operator to edit the file by hand. Nothing caught it:
-test_mcp_tool_catalog.py pins the registry against the def lists, not the
-arguments against the schema, and every behavioural test passed the argument
-directly rather than through a schema.
+The walk is per MODULE, not per tool, deliberately. Arguments are read far from
+the handler that received them (`remove_entries` is read in
+`_declared_entry_removals`, called through helpers from `_tool_set_yaml_config`),
+so attributing a read to one tool would need dataflow analysis. Comparing the
+union a module reads with the union its tools declare is coarser but answers the
+question that matters: is this argument published ANYWHERE.
 
-The walk is per MODULE rather than per tool, deliberately. Arguments are read
-far from the handler that received them (`remove_entries` is read in
-`_declared_entry_removals`, three calls down from `_tool_set_yaml_config`), so
-attributing a read to one tool would need real dataflow analysis. The union of
-what a module reads against the union of what its tools declare is coarser but
-answers the question that matters: is this argument published ANYWHERE. That is
-exactly the check the shipped defect would have failed.
-
-Two kinds of read are legitimately unpublished and are exempted by name with a
-reason. An ALIAS is a spelling a model might guess, accepted quietly so a near
-miss still works. An INTERNAL argument is one only Phoenix passes to an executor
-(a restore replaying a snapshot), deliberately withheld because publishing it
-would hand callers a capability the tool refuses on purpose. Both are the
-opposite of the defect above, where the tool names an argument it does not
-publish.
+Two kinds of read are exempted by name, with a reason. An ALIAS is a spelling a
+model might guess, accepted quietly so a near miss still works. An INTERNAL
+argument is passed only by Phoenix to an executor (a restore replaying a
+snapshot) and withheld on purpose: publishing it would hand callers a capability
+the tool refuses.
 """
-
 from __future__ import annotations
 
 import ast
@@ -52,7 +39,7 @@ from custom_components.phoenix_mcp.tool_contracts import (
 
 PACKAGE = pathlib.Path(__file__).resolve().parent.parent / "custom_components" / "phoenix_mcp"
 
-# (module filename, argument) -> why it is read but not published.
+# (module filename, argument) maps to why it is read but not published.
 UNPUBLISHED_ARGS = {
     ("calendar.py", "_calendar_plan"): "INTERNAL server-created calendar identity, exact event fields and snapshot binding; public inputs are rebuilt before gating.",
     ("mcp_view.py", "aliases"): (
@@ -102,7 +89,7 @@ UNPUBLISHED_ARGS = {
     ),
 }
 
-# Catalog v2 handlers normalize structured public inputs to the mature executor
+# Catalog v2 handlers normalize structured public inputs to the internal executor
 # shape after the public-schema boundary. These keys are deliberately internal.
 NORMALIZED_ARGS = {
     "mcp_view.py": {"add_aliases", "add_labels", "area_id", "categories", "context_id", "detailed", "device_class", "domain", "fields", "hidden", "icon", "new_entity_id", "remove_aliases", "remove_labels", "service_data", "title"},
@@ -118,7 +105,10 @@ def _tool_defs() -> dict[str, dict]:
 
 
 def test_set_entity_exposes_only_validated_registry_reference_fields():
-    """A new registry reference needs pre-gate and apply-time validation."""
+    """set_entity publishes only registry references validated before the gate and at apply time.
+
+    A new reference field must add that validation first.
+    """
     schema = _tool_defs()["set_entity"]["inputSchema"]
     assert set(schema["properties"]) == {"entity_id", "changes"}
     properties = set(schema["properties"]["changes"]["properties"])
@@ -278,10 +268,10 @@ def _modules() -> list[pathlib.Path]:
 
 
 def _registered_handlers() -> dict[str, str]:
-    """tool name -> the handler function name, read off mcp_view's own registry.
+    """Map tool name to its handler function name, read off mcp_view's own registry.
 
-    The registry is the source of truth rather than a list kept here, so a tool
-    added tomorrow is covered without this file being touched.
+    The registry is the source of truth, so a new tool is covered without editing
+    this file.
     """
     tree = ast.parse((PACKAGE / "mcp_view.py").read_text(encoding="utf-8"))
     found: dict[str, str] = {}
@@ -299,7 +289,7 @@ def _registered_handlers() -> dict[str, str]:
 
 
 def _module_of_function() -> dict[str, pathlib.Path]:
-    """Top-level function name -> the module defining it."""
+    """Map top-level function name to the module defining it."""
     out: dict[str, pathlib.Path] = {}
     for path in _modules():
         for node in ast.parse(path.read_text(encoding="utf-8")).body:
@@ -322,7 +312,7 @@ def _args_read(path: pathlib.Path) -> set[str]:
     """Every literal key the module reads off a dict named `args`.
 
     Covers both `args.get("x")` and `args["x"]`. A non-literal key cannot be
-    checked and is skipped; none of the tool surface uses one today.
+    checked and is skipped.
     """
     keys: set[str] = set()
     for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
@@ -368,11 +358,10 @@ def test_every_argument_read_is_published_by_some_tool(module):
 
 
 def test_the_walk_actually_finds_arguments():
-    """A guard that stops matching passes silently, so pin that it still reads.
+    """The walk still finds arguments, so the guard cannot pass while checking nothing.
 
-    If the AST shapes ever stop matching (a refactor to a helper that takes the
-    dict under another name), every module would come back with an empty set and
-    this suite would go green while checking nothing.
+    If the AST shapes stop matching (a helper that takes the dict under another
+    name), every module comes back with an empty set and the suite stays green.
     """
     found = {m.name: _args_read(m) for m in MODULES_WITH_TOOLS}
     assert sum(len(v) for v in found.values()) > 100, found
@@ -384,8 +373,10 @@ def test_the_walk_actually_finds_arguments():
 
 
 def test_exemptions_are_all_still_real():
-    """An exemption for an argument nobody reads any more is dead weight that
-    would quietly excuse a future argument of the same name."""
+    """Every exemption names an argument its module still reads.
+
+    A stale exemption would quietly excuse a future argument of the same name.
+    """
     for (name, arg), reason in UNPUBLISHED_ARGS.items():
         module = next((m for m in MODULES_WITH_TOOLS if m.name == name), None)
         assert module is not None, f"UNPUBLISHED_ARGS names a module that has no tools: {name}"

@@ -2,30 +2,22 @@
  * One subscriber for Phoenix approval events on the Home Assistant bus.
  *
  * An approval is shown in three places at once: the Approvals tab, the Agent
- * Chat bubble, and an HA persistent notification. Each one used to learn that an
- * approval was acted on by a different route, and Agent Chat's route was the
- * slowest by far: it had no `hass` at all and updated only from its own SSE
- * stream, which rides the agent's turn resuming. Clicking Reject in the panel
- * left the chat bubble offering Approve and Reject until the model answered,
- * which could be seconds.
+ * Chat bubble, and an HA persistent notification. Agent Chat has no `hass` of
+ * its own and otherwise updates only from its SSE stream, which rides the
+ * agent's turn resuming, so a Reject in the panel would leave the chat bubble
+ * offering Approve and Reject until the model answered. The backend refuses the
+ * second action either way (the store-lock claim answers 409); this keeps the
+ * operator from being shown a control that cannot work.
  *
- * The backend refuses the second action either way (the store-lock claim answers
- * 409), so this was never a correctness problem. It was an operator being shown
- * a control that could not work.
+ * The panel and the injected Agent Chat window are SEPARATE bundles sharing no
+ * module state, so both use this module rather than separate copies.
  *
- * Both bundles use this module so they cannot drift apart again: the panel and
- * the injected Agent Chat window run as SEPARATE bundles sharing no module
- * state, which is the same reason the rejection-reason draft goes through
- * localStorage rather than a shared variable.
- *
- * `hass` is resolved from the document when the caller has none. Both surfaces
- * live inside an HA page, so the top-level `<home-assistant>` element is
- * reachable from either; the injector already locates it this way. A connection
- * without `subscribeEvents` degrades to no subscription at all rather than
- * throwing, and the callers keep their existing polling.
+ * `hass` is resolved from the top-level `<home-assistant>` element when the
+ * caller has none. A connection without `subscribeEvents` yields no subscription
+ * and never throws; callers keep their existing polling.
  */
 
-/** The two events this module understands, unprefixed by the integration domain. */
+/** The two events this module understands (`<domain>_approval_*` on the HA bus). */
 const RESOLVED_EVENT = "phoenix_mcp_approval_resolved";
 const CLAIMED_EVENT = "phoenix_mcp_approval_claimed";
 
@@ -34,15 +26,15 @@ type EventConnection = {
 };
 
 export interface ApprovalEventHandlers {
-  /** An approval reached a terminal state (approved / rejected / cancelled / expired). */
+  /** An approval reached a terminal state (approved, rejected, failed, cancelled or expired). */
   onResolved?: (approvalId: string, status: string) => void;
   /**
    * An approval was claimed for execution, or released back to pending.
    *
-   * Claimed means an admin's Approve is running its saved action right now, so
-   * no surface should still offer Approve or Reject. Released means that
-   * execution failed and the approval is pending and actionable again, which is
-   * why this is a pair and not a second kind of "resolved".
+   * Claimed: an admin's Approve is running its saved action right now, so no
+   * surface should still offer Approve or Reject. Released: execution failed and
+   * the approval is pending and actionable again, so this is a pair and not a
+   * second kind of "resolved".
    */
   onClaimChanged?: (approvalId: string, claimed: boolean) => void;
 }

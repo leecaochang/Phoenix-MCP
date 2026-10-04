@@ -49,8 +49,8 @@ describe("MesaSuggestions", () => {
       <MesaSuggestions {...baseProps} suggestions={[lockRow, domainRow]} />,
     );
     expect(getByText("lock.front")).toBeTruthy();
-    // The mode pill shows the translated label now, not the raw slug it used to
-    // render; the slug still drives the badge colour and the apply payload.
+    // The mode pill shows the translated label, not the raw slug; the slug still
+    // drives the badge colour and the apply payload.
     expect(getByText("Prohibited")).toBeTruthy();
     expect(getByText(/physical security boundary/)).toBeTruthy();
     // Domain-scope rows are labelled as such.

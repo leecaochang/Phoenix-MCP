@@ -1,20 +1,18 @@
-"""Two things the native action tools must not report as the same refusal.
+"""Native action tools keep argument-shape refusals distinct from access refusals.
 
 `resolve_intent_entities` returns an empty list for three unrelated reasons: the
 caller gave nothing usable to select on, the selectors matched nothing, and the
-token may not touch what matched. All three came back as
-"No accessible entities matched your request.", so an agent that had sent a
-malformed argument read its own mistake as a permission decision and retried it
-unchanged.
+token may not touch what matched. Collapsing all three into "No accessible
+entities matched your request." makes an agent that sent a malformed argument
+read its own mistake as a permission decision and retry it unchanged.
 
-Only the FIRST is separated, and only because it is decided entirely from the
-caller's own arguments before anything is resolved, so it can never become an
-oracle. The other two stay byte-identical, and the test that pins that is the
-one that must never be relaxed.
+Only the FIRST is separated, because it is decided entirely from the caller's own
+arguments before anything is resolved, so it can never become an oracle. The other
+two stay byte-identical, and the test that pins that must never be relaxed.
 
-The second half covers the mixed-target drop: a call resolving a light and a
-lock under cap_physical_control deny actuates the light and silently discarded
-the lock, which is indistinguishable from a room with no lock in it.
+The second half covers the mixed-target drop: a call resolving a light and a lock
+under cap_physical_control deny actuates the light, so the dropped lock is named;
+otherwise the caller cannot tell it from a room with no lock in it.
 """
 
 from __future__ import annotations
@@ -105,7 +103,7 @@ async def _call_targeted_action(handler, args: dict, needs_data: bool):
     "args",
     [
         {},
-        {"name": ["Front Door Lock", "Rear door lock"]},  # the observed shape
+        {"name": ["Front Door Lock", "Rear door lock"]},  # a list where a string belongs
         {"name": True, "area": 3, "floor": {"a": 1}},
         {"domain": "not-an-array"},
         {"domain": ["light", 7]},
@@ -128,7 +126,7 @@ def test_normalizer_never_stringifies_a_wrong_shape():
 
 
 # ---------------------------------------------------------------------------
-# Item 1: the caller-argument case is separated
+# The caller-argument case is separated
 # ---------------------------------------------------------------------------
 
 
@@ -319,7 +317,7 @@ async def test_numeric_relative_volume_preserves_magnitude_and_clamps(step, expe
 
 
 # ---------------------------------------------------------------------------
-# Item 3: a capability-dropped target is named
+# A capability-dropped target is named
 # ---------------------------------------------------------------------------
 
 
@@ -381,10 +379,10 @@ async def test_the_declined_list_never_rides_on_a_refusal():
 def test_declined_targets_are_never_added_to_a_non_allowed_result():
     """Pins the outcome check itself, not the JSON guard standing behind it.
 
-    A refusal body is plain text today, so a mistakenly annotated refusal would
-    fail to parse and be left alone by accident. That accident is not the
-    guarantee being made: only an ALLOWED action names what it dropped, and that
-    has to hold for a non-allowed result that parses perfectly well.
+    A refusal body is plain text, so a mistakenly annotated refusal would fail to
+    parse and be left alone by accident. That accident is not the guarantee: only an
+    ALLOWED action names what it dropped, and that must hold for a non-allowed
+    result that parses perfectly well.
     """
     parseable = (
         {"content": [{"type": "text", "text": json.dumps({"speech": {}})}]},

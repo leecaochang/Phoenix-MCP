@@ -13,9 +13,8 @@ import { EnergyPreview } from "../views/ApprovalsView";
  *
  * The property worth pinning is the KEYING. Rows pair by statistic (devices) and
  * by type (sources), never by display name, so a rename reads as one substitution
- * rather than an unrelated removal plus addition. That is the whole reason an
- * operator would rather look at this than at eighty lines of JSON where one
- * string differs.
+ * rather than an unrelated removal plus addition. That is why an operator would
+ * rather look at this than at a long JSON document where one string differs.
  */
 
 const SOURCES = [

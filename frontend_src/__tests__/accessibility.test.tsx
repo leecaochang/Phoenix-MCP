@@ -121,12 +121,10 @@ describe("accessibility regressions", () => {
   });
 
   it("wires the whole row as a single accessible click target, not one per cell", () => {
-    // The row's mouse-clickable-anywhere behavior comes from a CSS overlay
-    // (the button's ::after stretched via position:relative on the <tr>,
-    // see .row-open in phoenix-mcp-panel.css) that jsdom cannot paint or hit-test, so
-    // this checks what unit tests actually can: there is exactly one
-    // focusable control per row (no per-cell tab stops, the accessibility
-    // anti-pattern this must avoid), and the CSS hooks it depends on are wired.
+    // Mouse clicks anywhere in the row reach the <tr> onClick by bubbling, which
+    // jsdom hit-testing cannot exercise. This checks the accessible part: exactly
+    // one focusable control per row (no per-cell tab stops) and the .row-open
+    // button that the panel CSS styles.
     const entry: AuditEntry = {
       request_id: "req-2",
       timestamp: "2026-06-30T00:00:00Z",

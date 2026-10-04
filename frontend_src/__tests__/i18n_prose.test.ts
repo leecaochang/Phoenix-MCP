@@ -1,10 +1,8 @@
 // Nothing user-visible may be a bare literal in source.
 //
-// This replaces a regex scan that looked only for capitalized, multi-word JSX
-// text. That scan passed while thirteen real strings were shipping in English
-// inside a Chinese panel, because they were short, lowercase, template
-// literals, or routed through a data object. Every miss was a shape the regex
-// could not express, so this walks the TypeScript AST instead.
+// This walks the TypeScript AST rather than regex-scanning for capitalized,
+// multi-word JSX text: a regex misses short, lowercase, template-literal, or
+// data-object strings, which would ship in English inside a translated panel.
 //
 // Checked: JSX text, the four user-visible attributes, string and template
 // expressions rendered inside JSX, and UI-ish object properties.
@@ -57,8 +55,8 @@ function sourceFiles(dir: string): string[] {
  *
  *  `minWords` is 2 everywhere except the four visible attributes, which pass 1.
  *  A template literal is scanned one fragment at a time, so `Collapse ${name}`
- *  reaches here as the single word "Collapse" and the two-word floor silently
- *  spared it: interpolation splits a real label below the threshold. That is
+ *  reaches here as the single word "Collapse", which a two-word floor would
+ *  spare: interpolation splits a real label below the threshold. That is
  *  fine for JSX text and UI object properties, where a lone word is usually an
  *  identifier being rendered, but aria-label/title/placeholder/alt carry nothing
  *  BUT human-facing prose, so one untranslated word there is already a defect.
@@ -148,7 +146,7 @@ function scan(file: string): Finding[] {
         return;
       }
       // Stop at nested JSX: its own attributes and children are visited by the
-      // main walk, and descending here reported every className in a
+      // main walk, and descending here would report every className in a
       // conditionally-rendered element as if it were the rendered text.
       if (ts.isJsxElement(n) || ts.isJsxSelfClosingElement(n) || ts.isJsxFragment(n)) return;
       // A ternary's CONDITION is code, never rendered: `tabKey === "approvals"`
@@ -157,8 +155,8 @@ function scan(file: string): Finding[] {
       if (ts.isStringLiteral(n) || ts.isNoSubstitutionTemplateLiteral(n)) { found.push(n); return; }
       if (ts.isTemplateExpression(n)) {
         // Collect every fragment and let the caller's own threshold judge it.
-        // Filtering here applied the 2-word default regardless of context, which
-        // is what hid `Collapse ${name}` from the visible-attribute check.
+        // Filtering here would apply the 2-word default regardless of context and
+        // hide `Collapse ${name}` from the visible-attribute check.
         for (const span of [n.head, ...n.templateSpans.map((s) => s.literal)]) {
           found.push(span as unknown as ts.StringLiteralLike);
         }

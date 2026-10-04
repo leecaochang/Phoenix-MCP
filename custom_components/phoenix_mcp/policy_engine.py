@@ -109,14 +109,16 @@ def _resolve_token_access(entity_id: str, token: TokenRecord, hass: HomeAssistan
         Permission.NO_ACCESS  - no grant found; audit outcome: denied
         Permission.NOT_FOUND  - ghost entity (not in states or registry); audit outcome: not_found
 
-    Pass-through tokens return WRITE for all entities (after Phoenix MCP blocklist check).
-    The DUAL_GATE_SERVICES check is NOT performed here; it is the caller's responsibility.
+    Pass-through tokens return WRITE for all entities (after the Phoenix MCP
+    blocklist check). Home Companion tokens are limited to the companion control
+    and read domains and sensor classes, and are never pass-through. The
+    DUAL_GATE_SERVICES check is NOT performed here; it is the caller's responsibility.
     """
     # A non-string cannot name an entity, and a model does not always follow the
-    # tool schema (a list where a string was declared is live-observed). Treated
-    # as a ghost so the answer is byte-identical to any other absent entity and
-    # fails closed, instead of raising out of the single choke point every
-    # permission decision runs through.
+    # tool schema (for example a list where a string was declared). Treated as a
+    # ghost so the answer is byte-identical to any other absent entity and fails
+    # closed, instead of raising out of the single choke point every permission
+    # decision runs through.
     if not isinstance(entity_id, str):
         return Permission.NOT_FOUND
 
@@ -192,15 +194,15 @@ def resolve_registry_access(
 ) -> Permission:
     """Resolve access to an entity, requiring inherited scope when registry-only.
 
-    A disabled entry, or an entry whose integration currently publishes no
-    State, is manageable only through its owning device or domain.  An explicit
-    entity grant may still *restrict* that inherited access (RED and YELLOW are
-    preserved by the ordinary resolver), but it cannot create positive access
-    after the entity has disappeared from the live permission tree.
+    A disabled entry, or an entry whose integration currently publishes no State,
+    is manageable only through its owning device or domain. An explicit entity
+    grant may still *restrict* that inherited access (RED and YELLOW are preserved
+    by the ordinary resolver) but cannot create positive access once the entity
+    has left the live permission tree.
 
-    Live, enabled entities retain the existing resolve() semantics.  Pass-through
-    tokens also retain WRITE after the ordinary blocklist/ghost checks; Assist
-    exposure remains the caller's shared enumeration filter.
+    Live, enabled entities get plain resolve() semantics. Pass-through tokens keep
+    WRITE after the ordinary blocklist/ghost checks; Assist exposure remains the
+    caller's shared enumeration filter.
     """
     ordinary = resolve(entity_id, token, hass)
     if ordinary not in (Permission.READ, Permission.WRITE):
@@ -501,7 +503,7 @@ def is_sensitive_key(key: Any) -> bool:
     """Whether an attribute/response key name marks its value as sensitive.
 
     True when the key is in the fixed SENSITIVE_ATTRIBUTES list or contains any
-    SENSITIVE_KEY_SUBSTRINGS marker (case-insensitive). Used to drop secrets that
+    SENSITIVE_KEY_SUBSTRINGS marker (case-insensitive), which catches secrets that
     third-party integrations surface under arbitrary keys.
     """
     if not isinstance(key, str):
@@ -535,11 +537,11 @@ def scrub_state_dict(d: dict) -> dict:
 def assist_expose_check(token: TokenRecord, hass: HomeAssistant) -> Callable[[str], bool] | None:
     """Return the Assist-exposure predicate for a pass-through token, or None.
 
-    Non-None only for pass_through tokens with use_assist_exposure;
-    scoped tokens are filtered by their permission tree alone. This is the one
-    shared implementation for every entity-filter path (filter_entities_for_token,
+    Non-None only for pass_through tokens with use_assist_exposure; scoped tokens
+    are filtered by their permission tree alone. This is the one shared
+    implementation for every entity-filter path (filter_entities_for_token,
     build_permitted_states/entity_ids, resolve_intent_entities). The rest of the
-    filter predicate (Phoenix MCP domain blocklist, Phoenix-platform sensors, pass-through
+    filter predicate (domain blocklist, Phoenix-platform sensors, pass-through
     WRITE) lives in resolve() itself, so those paths need only this plus resolve().
     """
     if not (token.pass_through and token.use_assist_exposure):
@@ -769,22 +771,18 @@ def service_target_binding_valid(
 def physical_gate_applies(domain: str, service: str, targets: list[str]) -> bool:
     """The physical-gate predicate over an ALREADY-RESOLVED target list.
 
-    Split out of call_needs_physical_gate so the enforcing path and the PREVIEW
-    path (dry_run_service) share one definition instead of encoding it twice.
-    dry_run_service has already resolved its targets and must not resolve them
-    again, but its prediction has to be the same verdict the real call will
-    reach; when this lived in two places, a new case added to one would have
-    made the preview quietly disagree with reality, which is the single thing a
-    preview tool must never do.
+    The enforcing path (call_needs_physical_gate) and the PREVIEW path
+    (dry_run_service, which has already resolved its targets) share this one
+    definition, so a preview never disagrees with the verdict the real call
+    reaches.
 
     Any service on a physical actuator domain (lock/alarm_control_panel/cover/
     valve) qualifies: every service those domains expose is an actuation, so
-    gating the whole domain is safe and future-proof against new services an
-    exact service-name list would miss (cover.toggle, the *_cover_tilt family,
-    valve.toggle, alarm_arm_custom_bypass). The generic homeassistant.toggle
-    redispatches to the target domain's own toggle (cover.toggle/valve.toggle
-    exist), so it qualifies when a resolved WRITE-target is physical;
-    homeassistant.turn_on/off verifiably no-op on those domains and are excluded.
+    gating the whole domain is safe and covers new services an exact service-name
+    list would miss (cover.toggle, the *_cover_tilt family, valve.toggle,
+    alarm_arm_custom_bypass). The generic homeassistant.toggle redispatches to the
+    target domain's own toggle, so it qualifies when a resolved WRITE-target is
+    physical; homeassistant.turn_on/off no-op on those domains and are excluded.
     HA-version-sensitive: re-verify the redispatch behavior on HA upgrades.
     """
     if domain in PHYSICAL_GATE_DOMAINS:
@@ -843,7 +841,7 @@ def filter_service_response(
     were denied. Dropping also matches the no-oracle convention used elsewhere
     (get_logbook drops out-of-scope entries rather than marking them). Services
     that key their response by entity_id (weather.get_forecasts, calendar
-    .get_events) are the reason this matters.
+    .get_events) depend on this.
     """
     if _depth > 10:
         # Depth limit reached. Still redact entity ID strings, but truncate
@@ -932,7 +930,7 @@ def template_blocklist_vars() -> dict:
     - 'hass' replaced with None (safe subset is impractical to implement; None causes
       AttributeError on any access, which HA's template engine surfaces as a template error)
     - 'config_entry_attr()' blocked (returns None, preventing integration metadata leaks)
-    - 'device_attr()' blocked (already present; prevents device metadata enumeration)
+    - 'device_attr()' blocked (returns None, preventing device metadata enumeration)
     - Enumeration helpers blocked (return empty iterables)
     """
     return {
@@ -1063,11 +1061,9 @@ def normalize_intent_selectors(
 ) -> IntentSelectors:
     """Coerce the five targeting selectors. ONE definition, two callers.
 
-    resolve_intent_entities normalises through this, and the native tools that
-    can be left with no selector at all call it first to answer the caller
-    properly. A second copy of the coercion in the caller would be a mirror of
-    this policy with nothing keeping the two in agreement, which is the pattern
-    physical_gate_applies was split out to remove.
+    resolve_intent_entities normalises through this, and the native tools that can
+    be left with no selector at all call it first to answer the caller properly,
+    so there is no second copy of the coercion to drift out of agreement.
     """
     return IntentSelectors(
         name=name if isinstance(name, str) else None,
@@ -1103,20 +1099,13 @@ def resolve_intent_entities(
         async_match_targets,
     )
 
-    # A model does not always follow the tool schema exactly (observed live: a
-    # local model targeting two locks by name sent name=["Front Door Lock",
-    # "Rear door lock"], a list, instead of a single string). HA's own
-    # async_match_targets assumes name/area/floor are plain strings and calls
-    # .strip() on them; a list raises an unhandled AttributeError that, before
-    # the dispatch-level safety net in mcp_view._dispatch_mcp existed, escaped
-    # all the way to the transport and manifested as a multi-minute hang for
-    # the MCP client rather than a clean error. The same applies to the LIST
-    # selectors, which HA iterates. A wrong-shaped value degrades to "not
+    # A model does not always follow the tool schema (for example a list for name
+    # where a string was declared). HA's async_match_targets assumes name/area/floor
+    # are plain strings and calls .strip() on them, so a list raises AttributeError;
+    # it likewise iterates the LIST selectors. A wrong-shaped value degrades to "not
     # provided" and falls through to the zero-selector fail-closed check below.
-    #
-    # The coercion itself lives in normalize_intent_selectors so the native tools
-    # can ask whether anything usable was given WITHOUT keeping a second copy of
-    # these rules that could drift out of agreement with this one.
+    # The coercion lives in normalize_intent_selectors so the native tools can ask
+    # whether anything usable was given without a second copy of these rules.
     selectors = normalize_intent_selectors(
         name=name, area=area, floor=floor,
         domains=domains, device_classes=device_classes,
@@ -1132,10 +1121,10 @@ def resolve_intent_entities(
         # matching, matching HA's primary_entities_only default. Phoenix MCP passes
         # assistant=None (bypassing Assist exposure), so without this an area or
         # domain match would sweep in same-domain config entities native HA never
-        # targets. Applied to name matches too (decision A): an operator who
-        # really wants one drives it via call_service with an explicit entity_id,
-        # the direct path that stays unfiltered. Unregistered states have no
-        # category, so they are kept.
+        # targets. Applied to name matches too: an operator who really wants one
+        # drives it via call_service with an explicit entity_id, the direct path
+        # that stays unfiltered. Unregistered states have no category, so they are
+        # kept.
         entry = registry.async_get(entity_id)
         return entry is None or _eligible_for_indirect_expansion(entry)
 

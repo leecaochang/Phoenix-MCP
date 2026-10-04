@@ -128,8 +128,8 @@ class TestGetRelationships:
         assert outcome == "denied"
 
     async def test_consumers_are_grouped_by_consumer(self, hass, rel_env):
-        """The grouping IS the point: entity -> consumers made a caller union N
-        results by hand to learn which automations to edit."""
+        """Results group by consumer, so a caller reads which automations to edit
+        without unioning per-entity results by hand."""
         content, outcome, _ = await _call("get_relationships", {"entity_id": "light.kitchen"}, _token(), hass)
         assert outcome == "allowed"
         body = _json(content)
@@ -280,8 +280,7 @@ class TestGetRelationships:
 
 
 class TestRelationshipSelectors:
-    """One call per SCOPE, not per entity. Sweeping six devices' worth of
-    entities took ~74 calls against a 60/min rate limit, 63 of them empty."""
+    """One call per SCOPE, not per entity: a selector covers every entity it names at once."""
 
     async def test_exactly_one_selector_is_required(self, hass, rel_env):
         for args in ({}, {"entity_id": "light.kitchen", "integration": "test_integration"}):
@@ -346,8 +345,11 @@ class TestRelationshipSelectors:
         assert _json(content)["scope"]["entity_ids"] == ["light.kitchen"]
 
     async def test_an_empty_scope_is_the_same_answer_however_it_got_there(self, hass, rel_env):
-        """Rule 12: a device that does not exist and one whose entities are out
-        of this token's tree must not be distinguishable."""
+        """A scope that matches nothing answers the same however it got there.
+
+        A missing device and an unknown integration are byte-identical, so an
+        empty scope is not an existence oracle.
+        """
         missing, out1, _ = await _call(
             "get_relationships", {"device_id": "no_such_device"}, _token(), hass)
         unknown_platform, out2, _ = await _call(
@@ -486,7 +488,7 @@ class TestRelationshipCoverage:
     async def test_reference_graph_queries_every_entity_in_a_broad_scope(
         self, hass, rel_env, monkeypatch,
     ):
-        """The broad selector must not regain the exact-entity graph blind spot."""
+        """A broad selector queries the reference graph for every entity in scope."""
         import custom_components.phoenix_mcp.tools.discovery as disc
 
         queried = []
@@ -642,34 +644,68 @@ class TestRelationshipCoverage:
         assert "dashboard" in body["searched"]
         assert not [n for n in body.get("not_searched", []) if n["kind"] == "dashboard"]
 
-    async def test_a_config_entry_built_on_an_entity_is_found(self, hass, rel_env):
-        """The live gap this closes: a helper config entry keeps an integration
-        alive, and nothing in HA records that dependency."""
+    @pytest.mark.parametrize("hidden", [False, True])
+    async def test_a_config_entry_built_on_an_entity_is_found(self, hass, rel_env, hidden):
+        """A config entry built on an entity is scanned, but never named to a token
+        that cannot access it.
+
+        A helper config entry keeps an integration alive and nothing in HA records
+        that dependency, so config entries are searched; a reference never grants
+        visibility of the consumer's identity.
+        """
         helper = MockConfigEntry(
             domain="attribute_as_sensor", entry_id="helper1", title="Kitchen brightness",
             options={"entity_id": "light.kitchen", "attribute": "brightness"},
         )
         helper.add_to_hass(hass)
+        entity = er.async_get(hass).async_get_or_create(
+            "sensor", helper.domain, "brightness", config_entry=helper,
+            suggested_object_id="kitchen_brightness")
+        hass.states.async_set(entity.entity_id, "10")
+        token = _token(cap_integration_write="allow")
+        token.permissions.entities[entity.entity_id] = PermissionNode(state="RED" if hidden else "GREEN")
         content, _, _ = await _call(
             "get_relationships", {"entity_id": "light.kitchen"},
-            _token(cap_integration_write="allow"), hass)
+            token, hass)
         body = _json(content)
         assert "config_entry" in body["searched"]
-        assert not any(c["id"] == "helper1" for c in body["consumers"])
+        matches = [c for c in body["consumers"] if c["id"] == "helper1"]
+        if hidden:
+            assert matches == []
+        else:
+            assert len(matches) == 1
+            assert matches[0]["kind"] == "config_entry"
+            assert matches[0]["entities"] == [{"entity_id": "light.kitchen", "roles": [helper.domain]}]
 
-    async def test_a_config_entry_key_name_is_never_assumed(self, hass, rel_env):
-        """Integrations store their source entity under whatever key they like
-        (entity_id, source, entity_ids); matching the VALUE is what keeps this
-        from silently reporting no dependency."""
+    @pytest.mark.parametrize("hidden", [False, True])
+    async def test_a_config_entry_key_name_is_never_assumed(self, hass, rel_env, hidden):
+        """Config entries are matched by entity-id-shaped VALUE, not by key name.
+
+        Integrations store their source entity under whatever key they like
+        (entity_id, source, entity_ids). An entry the token cannot access is still
+        never named.
+        """
         helper = MockConfigEntry(
             domain="derivative", entry_id="helper2", title="Rate",
             options={"source": "light.kitchen"},
         )
         helper.add_to_hass(hass)
+        entity = er.async_get(hass).async_get_or_create(
+            "sensor", helper.domain, "rate", config_entry=helper,
+            suggested_object_id="kitchen_rate")
+        hass.states.async_set(entity.entity_id, "1")
+        token = _token(cap_integration_write="allow")
+        token.permissions.entities[entity.entity_id] = PermissionNode(state="RED" if hidden else "GREEN")
         content, _, _ = await _call(
             "get_relationships", {"entity_id": "light.kitchen"},
-            _token(cap_integration_write="allow"), hass)
-        assert not any(c["id"] == "helper2" for c in _json(content)["consumers"])
+            token, hass)
+        matches = [c for c in _json(content)["consumers"] if c["id"] == "helper2"]
+        if hidden:
+            assert matches == []
+        else:
+            assert len(matches) == 1
+            assert matches[0]["kind"] == "config_entry"
+            assert matches[0]["entities"] == [{"entity_id": "light.kitchen", "roles": [helper.domain]}]
 
     async def test_dangling_references_come_free_with_the_walk(self, hass, rel_env):
         """An id referenced by something but present in neither hass.states nor
@@ -683,11 +719,12 @@ class TestRelationshipCoverage:
         assert "lock.front_door" in _dangling(_json(content))
 
     async def test_a_dead_reference_in_a_domain_that_is_gone_is_still_reported(self, hass, rel_env):
-        """The first filter tried was a domain-existence check on everything,
-        and this is what it got wrong: a reference into a domain the instance no
-        longer has at all can never resolve, which makes it MORE dangling.
-        `lock` has no entities and no services here, and lock.front_door must
-        still be reported."""
+        """Typed holders are trusted without a domain check.
+
+        A reference into a domain the instance no longer has at all can never
+        resolve, which makes it MORE dangling. `lock` has no entities and no
+        services here, and lock.front_door must still be reported.
+        """
         _write(os.path.join(hass.config.config_dir, "automations.yaml"), [
             {"id": "a", "alias": "Dead", "trigger": [
                 {"platform": "state", "entity_id": "light.kitchen"}], "action": [
@@ -700,8 +737,8 @@ class TestRelationshipCoverage:
         "{{ trigger.entity_id }}", "input_boolean.{{ fan | lower }}_state", "all",
     ])
     async def test_a_runtime_computed_target_is_not_a_dead_reference(self, hass, rel_env, value):
-        """Live-found: scripts targeting a templated entity_id, and HA's `all`
-        wildcard, filled most of the first real dangling list."""
+        """A templated entity_id and HA's `all` wildcard are computed at runtime,
+        so they are never reported as dead references."""
         _write(hass.config.path("scripts.yaml"), {
             "greet": {"alias": "Greet", "sequence": [
                 {"service": "light.turn_on", "target": {"entity_id": "light.kitchen"}},
@@ -736,9 +773,8 @@ class TestRelationshipCoverage:
     async def test_a_dashboard_reference_to_a_removed_entity_is_still_reported(
         self, hass, rel_env, monkeypatch,
     ):
-        """The domain check must not cost the case it exists to serve: a
-        dashboard pointing at an entity that no longer exists is exactly the
-        ghost that makes a layout unwritable."""
+        """The domain check must not hide a dashboard reference to a removed
+        entity: that is exactly the ghost that makes a layout unwritable."""
         import custom_components.phoenix_mcp.tools.discovery as disc
 
         async def _list(hass_, cmd, payload):
@@ -759,11 +795,12 @@ class TestRelationshipCoverage:
     async def test_a_domain_with_services_but_no_entities_still_counts(
         self, hass, rel_env, monkeypatch,
     ):
-        """The domain set unions services precisely for this: an integration is
-        loaded but its last entity has been removed, so a dashboard still
-        pointing at one is a real dead reference and the domain must not read as
-        made-up. Without the services union the check falls back on entities
-        alone and this reference disappears."""
+        """A domain with services but no entities still counts as a real domain.
+
+        The domain set unions services, so when an integration is loaded but its
+        last entity is gone, a dashboard still pointing at one is a real dead
+        reference rather than a made-up domain.
+        """
         import custom_components.phoenix_mcp.tools.discovery as disc
 
         hass.services.async_register("lock", "lock", lambda call: None)
@@ -784,9 +821,9 @@ class TestRelationshipCoverage:
         assert "lock.front_door" in _dangling(_json(content))
 
     async def test_a_card_calling_a_service_is_not_a_dead_entity(self, hass, rel_env, monkeypatch):
-        """Live-found. A card's perform_action holds `button.press`, which has
-        the exact shape of an entity id in the exact position the value walk
-        reads. Registration is what separates it from a real dead reference."""
+        """A card's perform_action holds `button.press`, which has the shape of an
+        entity id in a position the value walk reads. Its POSITION (a service
+        field) marks it as a verb, so it is not reported as a dead entity."""
         import custom_components.phoenix_mcp.tools.discovery as disc
 
         hass.services.async_register("button", "press", lambda call: None)
@@ -810,10 +847,12 @@ class TestRelationshipCoverage:
     async def test_a_card_calling_a_script_that_is_gone_is_still_reported(
         self, hass, rel_env, monkeypatch,
     ):
-        """The reason the rule is registration and not the field name: running a
-        script IS its service name, so a card pointing at a deleted script looks
-        exactly like the service call above and is the most valuable find here.
-        A field-name rule would discard it with the noise."""
+        """A card calling a deleted script is still reported.
+
+        Running a script IS its service name, so the service-position exclusion
+        spares the `script` domain: a card pointing at a deleted script looks like
+        the service call above and is the most valuable find here.
+        """
         import custom_components.phoenix_mcp.tools.discovery as disc
 
         # Any instance that can have a dead script reference has the script
@@ -854,8 +893,10 @@ class TestRelationshipCoverage:
     async def test_a_dangling_reference_names_what_still_points_at_it(
         self, hass, rel_env, monkeypatch,
     ):
-        """"script.x is dead" sends someone hunting; naming the dashboard and
-        the card path is a repair. The walk already had the holder in hand."""
+        """A dangling entry names the consumer, and the card path, still pointing at it.
+
+        "script.x is dead" sends someone hunting; the holder makes it a repair.
+        """
         import custom_components.phoenix_mcp.tools.discovery as disc
 
         _write(os.path.join(hass.config.config_dir, "automations.yaml"), [
@@ -923,9 +964,11 @@ class TestRelationshipCoverage:
     async def test_many_hits_on_one_consumer_group_into_one_holder(
         self, hass, rel_env, monkeypatch,
     ):
-        """Live: one deleted script was called from 18 sub-buttons on a single
-        dashboard, so an ungrouped list spent most of the response repeating that
-        dashboard's identity. The operator's question is WHICH thing to open."""
+        """Many hits on one consumer group into one holder with its paths.
+
+        The operator's question is WHICH thing to open, so an ungrouped list that
+        repeats one dashboard's identity per hit would bury the answer.
+        """
         import custom_components.phoenix_mcp.tools.discovery as disc
         from custom_components.phoenix_mcp.const import MAX_DANGLING_PATHS
 
@@ -957,7 +1000,7 @@ class TestRelationshipCoverage:
         assert holder["truncated"] is True
 
     async def test_one_consumer_referencing_a_dead_id_twice_is_listed_once(self, hass, rel_env):
-        """An automation naming the same dead entity in two roles appeared twice."""
+        """One consumer naming the same dead entity in two roles is listed once."""
         _write(os.path.join(hass.config.config_dir, "automations.yaml"), [
             {"id": "auto1", "alias": "Morning",
              "trigger": [{"platform": "state", "entity_id": "light.gone"},
@@ -971,10 +1014,11 @@ class TestRelationshipCoverage:
         assert entry["referenced_by"][0]["name"] == "Morning"
 
     async def test_a_non_default_yaml_layout_is_still_read(self, hass, rel_env):
-        """Both walks used to open automations.yaml and nothing else, so an
-        install routing the domain through !include_dir_list read as EMPTY and
-        the tool reported that nothing referenced the entity. Indistinguishable
-        from a genuinely unused entity, which is the worst answer here."""
+        """A non-default layout is still read.
+
+        A domain routed through !include_dir_list must not read as EMPTY, which is
+        indistinguishable from a genuinely unused entity and the worst answer here.
+        """
         os.remove(os.path.join(hass.config.config_dir, "automations.yaml"))
         with open(hass.config.path("configuration.yaml"), "w", encoding="utf-8") as f:
             f.write("automation: !include_dir_list automations/\n")
@@ -1018,7 +1062,7 @@ class TestDescribeEntity:
         assert body["writable"] is True
         kinds = {r["kind"] for r in body["referenced_by"]}
         assert kinds == {"automation", "script", "scene"}
-        assert "mesa_control_mode" not in body  # MagicMock data => skipped via mode check below
+        assert "mesa_control_mode" not in body  # MagicMock data, so skipped via the mode check below
 
     async def test_describe_reports_unreadable_reference_branches(self, hass, rel_env):
         """A short reverse-reference list must not hide package coverage gaps."""
@@ -1039,10 +1083,12 @@ class TestDescribeEntity:
         assert outcome == "not_found"
 
     async def test_referenced_by_states_its_own_limit(self, hass, rel_env):
-        """This field covers three consumer kinds; get_relationships reaches five.
-        Unqualified, a short list here reads as PROOF nothing else uses the
-        entity, which is the confident wrong answer get_relationships exists to
-        avoid. The difference in coverage is fine; hiding it is not."""
+        """referenced_by covers only automations, scripts and scenes, and says so.
+
+        Unqualified, a short list here reads as PROOF nothing else uses the entity,
+        the confident wrong answer get_relationships exists to avoid. The
+        difference in coverage is fine; hiding it is not.
+        """
         content, _, _ = await _call("describe_entity", {"entity_id": "light.kitchen"}, _token(), hass)
         note = _json(content)["referenced_by_note"]
         assert "get_relationships" in note

@@ -1,9 +1,10 @@
 import { ErrorBoundary } from "../components/ErrorBoundary";
 /** In-context MESA profile quick-add modal, injected into HA's native config
- * pages. Defines <phx-mesa-quick-add>, which mounts the panel's ProfileEditor in
- * its own shadow root so an admin can create or edit an entity profile without
- * leaving the page. Lazy-loaded by inject/index.ts on first use; reuses the real
- * editor, validation, and admin API with no duplication.
+ * pages. Defines a build-suffixed <phx-mesa-quick-add-*> element (QUICK_ADD_TAG),
+ * which mounts the panel's ProfileEditor in its own shadow root so an admin can
+ * create or edit a profile without leaving the page. Lazy-loaded by
+ * inject/index.ts on first use; reuses the real editor, validation, and admin
+ * API with no duplication.
  *
  * The host element is fixed and full-viewport so the injected dialog stays
  * independent of the native configuration page's layout and stacking context.
@@ -51,10 +52,10 @@ export const QUICK_ADD_SCOPES: readonly QuickAddScope[] = ["entity", "device", "
 
 /** The scope named by the host element, or entity when it named nothing usable.
  *
- * Read back from an attribute, so it is a string until proven otherwise. The
- * previous form was `=== "area" ? "area" : "entity"`, which silently opened an
- * ENTITY editor for any scope it did not know: a device or integration target
- * would have been written to the wrong level with nothing reporting it.
+ * Read back from an attribute, so it is a string until matched against
+ * QUICK_ADD_SCOPES. Every known scope must round-trip: collapsing a device or
+ * integration target to the entity editor would write it to the wrong level
+ * with nothing reporting it.
  */
 export function parseQuickAddScope(raw: string | null): QuickAddScope {
   return QUICK_ADD_SCOPES.find((s) => s === raw) ?? "entity";

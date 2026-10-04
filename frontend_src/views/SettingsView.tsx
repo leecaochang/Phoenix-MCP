@@ -134,7 +134,7 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
       {error && <div className="banner banner-error">{error}</div>}
 
       <div className="settings-grid">
-        {/* Left column: Agent Chat, Voice Agent, AI Task, Assist Bridge */}
+        {/* Left column: Agent Chat, Voice Agent, Command Routing, AI Task, Assist Bridge */}
         <div>
           <AgentCliSettings
             routingMode={settings.agentcli_routing_mode}

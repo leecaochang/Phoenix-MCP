@@ -3,12 +3,12 @@
 import type { EntityTree, PermissionTree } from "./types";
 import { t } from "./i18n";
 
-// The Phoenix MCP MCP endpoint, built from the origin the admin is currently browsing.
+// The Phoenix MCP endpoint, built from the origin the admin is currently browsing.
 export function buildMcpUrl(origin: string): string {
   return `${origin.replace(/\/+$/, "")}/api/phoenix-mcp`;
 }
 
-// The unauthenticated Agent Skill guide endpoint (Channel B).
+// The unauthenticated Agent Skill guide endpoint.
 export const SKILL_PATH = "/api/phoenix-mcp/skill";
 
 // Derive the skill guide URL from the (possibly admin-edited) MCP URL so both
@@ -49,8 +49,8 @@ function shellArg(value: string): string {
     : `'${value.replace(/'/g, "'\\''")}'`;
 }
 
-// The verified `claude mcp add` command. Phoenix MCP authenticates via
-// `Authorization: Bearer phx_<token>` (NOT X-API-Key, NOT OAuth) and the modern
+// The `claude mcp add` command. Phoenix MCP authenticates via
+// `Authorization: Bearer phx_<token>` (NOT X-API-Key, NOT OAuth) and the
 // Streamable HTTP transport is `--transport http`.
 export function buildClaudeCommand(url: string, token: string, serverName: string): string {
   return `claude mcp add --transport http ${serverName} ${shellArg(url)} --header ${shellArg(`Authorization: ${buildBearerValue(token)}`)}`;
@@ -126,10 +126,10 @@ export interface AgentTab {
   blocks: AgentBlock[];
 }
 
-// Per-agent connection instructions, default first (Claude Code). Verified
-// against each tool's current docs. tokenName drives each client's per-token
-// server name (and Codex env var), so entries can coexist without replacing one
-// another. Harness is an external client, separate from Agent Chat providers.
+// Per-agent connection instructions, default first (Claude Code). tokenName
+// drives each client's per-token server name (and Codex env var), so entries can
+// coexist without replacing one another. Harness is an external client, separate
+// from Agent Chat providers.
 export function buildAgentTabs(url: string, token: string, tokenName: string): AgentTab[] {
   const serverName = mcpServerName(tokenName);
   const envVar = codexTokenEnv(tokenName);
@@ -210,10 +210,11 @@ export function buildAgentTabs(url: string, token: string, tokenName: string): A
   ];
 }
 
-// Per-agent "install the Phoenix MCP skill" guidance (Channel B). Channel A already
-// links every connection to the same guide, so installing it locally is
-// optional. Native skills expose their metadata first and load the guide when
-// activated; Cursor uses a project rule that references the downloaded guide.
+// Per-agent "install the Phoenix MCP skill" guidance. The server's MCP
+// instructions already link every connection to the same guide, so installing it
+// locally is optional. Native skills expose their metadata first and load the
+// guide when activated; Cursor uses a project rule that references the
+// downloaded guide.
 export function buildSkillInstall(skillUrl: string, agentKey: string): AgentBlock[] {
   const title = t("wizard.skillInstallTitle");
   switch (agentKey) {

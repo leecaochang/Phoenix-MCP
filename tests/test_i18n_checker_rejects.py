@@ -1,13 +1,9 @@
-"""Prove the locale checker REJECTS each defect it claims to catch.
+"""The locale checker must REJECT each defect it claims to catch.
 
-tests/test_i18n_locales.py only shows that the checker approves the files that
-happen to be in the repo right now. That passes just as happily if a check is
-silently broken, which is the failure mode worth guarding: every problem this
-tool exists for is invisible at runtime, so a guard that stopped working would
-not be noticed by anything else.
-
-Each test here builds a minimal two-file catalog in a tmp dir, points the
-checker at it, and asserts on the specific problem reported.
+Approving the shipped catalogs passes just as happily if a check is silently
+broken, and every problem the checker exists for is invisible at runtime. Each
+test builds a minimal two-file catalog in a tmp dir, points the checker at it,
+and asserts on the specific problem reported.
 """
 
 from __future__ import annotations
@@ -35,10 +31,9 @@ def checker():
 def catalogs(tmp_path, checker, monkeypatch):
     """Write an en.json / xx.json pair and aim the checker at them.
 
-    BOTH directory constants are redirected. The real catalog is split across
+    BOTH directory constants are redirected: the catalog is split across
     catalogs/ and translations/ and the checker reads both, so patching one
-    would leave it merging these fixtures with the shipped strings from the
-    other and judging a document no test ever wrote.
+    would merge these fixtures with the shipped strings from the other.
     """
     monkeypatch.setattr(checker, "CATALOGS", tmp_path)
     monkeypatch.setattr(checker, "TRANSLATIONS", tmp_path)
@@ -66,7 +61,7 @@ def run(checker, capsys) -> tuple[int, str]:
 
 
 def test_clean_pair_passes(checker, catalogs, capsys):
-    """The happy path, so every negative below is a real signal."""
+    """A consistent pair passes, so every negative case is a real signal."""
     catalogs({"greet": "Hello {name}"}, {"greet": "你好 {name}"})
     code, out = run(checker, capsys)
     assert code == 0, out

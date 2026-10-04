@@ -379,9 +379,9 @@ describe("AgentCliSettings", () => {
 });
 
 
-// The account's default model used to be frozen at creation, and the model list is
-// the free half of staleness detection: a cheap authenticated GET, run exactly when
-// the operator is looking at providers and can act on what it says.
+// The default model can be changed after creation, and the provider's model list
+// (a cheap authenticated GET) is fetched when the card is shown, so a retired model
+// is flagged where the operator can act on it.
 describe("AgentCliSettings default model", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -402,8 +402,8 @@ describe("AgentCliSettings default model", () => {
     fireEvent.change(select, { target: { value: "deepseek-v4-pro" } });
     fireEvent.click(screen.getByText("Save"));
     await waitFor(() => expect(setAgentCliProviderModel).toHaveBeenCalledWith("i1", "deepseek-v4-pro"));
-    // Changing a model must never go near the account's credential, which the
-    // delete-and-recreate workaround did every time.
+    // Changing a model must never touch the account's credential, so neither
+    // delete nor create may be called.
     expect(deleteAgentCliProvider).not.toHaveBeenCalled();
     expect(createAgentCliProvider).not.toHaveBeenCalled();
   });
@@ -449,12 +449,10 @@ describe("AgentCliSettings default model", () => {
   });
 
   it("shows the retired model but does not let it be picked again", async () => {
-    // Both halves matter and the first attempt only had one. It has to be
-    // PRESENT, or a select whose value matches no option silently displays some
-    // other model as though it were the configured one. It has to be DISABLED,
-    // or the card offers the very model it has just finished warning about,
-    // which is what happened live: a model deleted from the server was still
-    // selectable and saveable.
+    // The retired model must be PRESENT, or a select whose value matches no
+    // option silently displays some other model as though it were the configured
+    // one. It must also be DISABLED, or the card offers the very model it has just
+    // warned about.
     getAgentCliProviders.mockResolvedValue({
       instances: [{ id: "i1", kind: "ollama", name: "Ollama", model: "gone:8b" }],
     });
@@ -467,8 +465,8 @@ describe("AgentCliSettings default model", () => {
     expect(stale).toBeTruthy();
     expect(stale!.disabled).toBe(true);
     expect(stale!.text).toContain("no longer available");
-    // Nothing changed, so there is nothing to save: with the option disabled,
-    // pressing Save is the only way left to re-commit the dead model.
+    // Nothing changed, so there is nothing to save: Save would only re-commit
+    // the dead model.
     expect((screen.getByText("Save") as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -486,8 +484,8 @@ describe("AgentCliSettings default model", () => {
   });
 });
 
-// Both reports from the same live session. A BANNER now means only "this account
-// is broken, fix it"; anything else belongs on the option it describes.
+// A banner means only "this account is broken, fix it"; anything else belongs on
+// the option it describes.
 describe("AgentCliSettings tool-calling capability", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -513,9 +511,8 @@ describe("AgentCliSettings tool-calling capability", () => {
   });
 
   it("shows no banner when the account's own model is fine", async () => {
-    // The live report: a permanent banner naming every unusable model, none of
-    // which the operator could select, and with nothing to fix it could not be
-    // dismissed either.
+    // A banner naming unusable models the operator cannot select offers nothing
+    // to fix and nothing to dismiss, so it must not appear.
     withCaps("good", ["good", "notools"], { good: { tools: true }, notools: { tools: false } });
     renderCard();
     await screen.findByLabelText("Change default model");
@@ -562,8 +559,7 @@ describe("AgentCliSettings dismissible warnings", () => {
     expect(await screen.findByText(/no longer offers gone:8b/)).toBeTruthy();
 
     // Close it again and prove the dismissal SURVIVES a remount: an in-memory
-    // one would come straight back on the next card open, which is the whole
-    // complaint the X exists to answer.
+    // one would return on the next card open.
     fireEvent.click(screen.getByLabelText("Dismiss this warning"));
     await waitFor(() => expect(screen.queryByText(/no longer offers/)).toBeNull());
     unmount();
@@ -574,8 +570,8 @@ describe("AgentCliSettings dismissible warnings", () => {
   });
 
   it("a dismissal does not cover a warning about a different model", async () => {
-    // Dismissing is acknowledging one statement about one model, not silencing
-    // the category: a NEW broken model has to speak up on its own.
+    // Dismissing acknowledges one statement about one model, not the whole
+    // category: a NEW broken model must warn on its own.
     const { unmount } = renderCard();
     fireEvent.click(await screen.findByLabelText("Dismiss this warning"));
     await waitFor(() => expect(screen.queryByText(/no longer offers/)).toBeNull());
@@ -619,8 +615,8 @@ describe("AgentCliSettings capability probe", () => {
   it("asks before spending anything, and says so", async () => {
     renderCard();
     fireEvent.click(await screen.findByLabelText("Check options"));
-    // The confirmation has to name the cost: it is the one thing that separates
-    // this button from the free refresh beside it.
+    // The confirmation must name the cost: it is what separates this button
+    // from the free refresh beside it.
     expect(await screen.findByText(/uses your own API credit/)).toBeTruthy();
     expect(probeAgentCliCapabilities).not.toHaveBeenCalled();
   });
@@ -644,7 +640,7 @@ describe("AgentCliSettings capability probe", () => {
 
   it("says plainly when nothing could be established", async () => {
     // Not a failure: a provider that ignores unknown parameters cannot be asked
-    // this way, and reporting that as an error would send someone debugging.
+    // this way, and reporting an error would send the operator debugging.
     probeAgentCliCapabilities.mockResolvedValue({
       model: "m", probed: {}, calls: 2, checked_at: "2026-08-04T00:00:00Z", effort_checkable: true, answered: true,
     });
@@ -663,10 +659,9 @@ describe("AgentCliSettings capability probe", () => {
   });
 
   it("says there was nothing to check, not that the provider ignored us", async () => {
-    // Live-found on a backend whose thinking control is a boolean flag: the probe
-    // correctly skipped the effort stage, and the panel reported that as "this
-    // provider does not validate the options", blaming it for ignoring a question
-    // nobody had asked.
+    // A backend whose thinking control is a boolean flag has no effort stage to
+    // probe. That must not read as "this provider does not validate the options",
+    // which would blame it for ignoring a question nobody asked.
     probeAgentCliCapabilities.mockResolvedValue({
       model: "gemma", probed: {}, calls: 1, checked_at: "2026-08-04T00:00:00Z",
       effort_checkable: false, answered: true,
@@ -683,11 +678,10 @@ describe("AgentCliSettings capability probe", () => {
     ["effort_levels holding non-strings", { model: "m", probed: { effort_levels: [1, 2] }, calls: 2, checked_at: "x", effort_checkable: true, answered: true }],
     ["effort_levels as an object", { model: "m", probed: { effort_levels: { a: 1 } }, calls: 2, checked_at: "x", effort_checkable: true, answered: true }],
   ])("survives %s inside an otherwise well-formed response", async (_label, response) => {
-    // A level deeper than the container check. `probed` IS an object here, so the
-    // outer guard passes; a string has a truthy `.length` but no `.map`, so
-    // cardResultText threw during render, which is the same unhandled render
-    // error one nesting level down. A malformed levels list reads as "no levels
-    // reported", which this card already renders, rather than as a failure.
+    // The container check passes here (`probed` is an object), but a string has
+    // a truthy `.length` and no `.map`, which would throw in cardResultText during
+    // render. A malformed levels list must read as "no levels reported", not as
+    // a failure or a crash.
     probeAgentCliCapabilities.mockResolvedValue(response);
     renderCard();
     fireEvent.click(await screen.findByLabelText("Check options"));
@@ -705,11 +699,11 @@ describe("AgentCliSettings capability probe", () => {
     ["a null probed block", { probed: null, calls: 1, answered: true }],
   ])("survives %s", async (_label, response) => {
     // A response the return type does not admit must read as a failed check
-    // rather than take the card down. The card result used to be assembled
-    // INSIDE the setRefreshResult updater, which React runs during the next
-    // render: the throw landed outside the try, so it was an unhandled render
-    // error, not a caught failure. Assert what renders, because the suite
-    // reported every assertion passing while vitest exited non-zero on it.
+    // rather than take the card down. The card result is built synchronously
+    // inside the try, not inside the setRefreshResult updater: React runs the
+    // updater during the next render, where a throw is an unhandled render error.
+    // Assert what renders, because such an error can leave every assertion
+    // passing while vitest still exits non-zero.
     probeAgentCliCapabilities.mockResolvedValue(response);
     renderCard();
     fireEvent.click(await screen.findByLabelText("Check options"));
@@ -721,9 +715,8 @@ describe("AgentCliSettings capability probe", () => {
   });
 });
 
-// Four labelled buttons plus a status line outgrew the card, so the actions
-// became icons. An icon carries no name, which makes the accessible name the
-// only name there is.
+// The actions are icon buttons, and an icon carries no name, so the accessible
+// name is the only name there is.
 describe("AgentCliSettings account actions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -748,7 +741,7 @@ describe("AgentCliSettings account actions", () => {
   });
 
   it("the last-checked time rides on the button it belongs to", async () => {
-    // It used to be its own line, which is what made the card too busy.
+    // It is not a separate status line.
     renderCard();
     const probe = await screen.findByLabelText(/^Check options \(last checked/);
     expect(probe.getAttribute("title")).toBe(probe.getAttribute("aria-label"));
@@ -776,8 +769,8 @@ describe("AgentCliSettings account actions", () => {
   });
 
   it("checks the new model's options as part of adding an account", async () => {
-    // The point of doing it here is that it matters BEFORE the first
-    // conversation, not after one behaves oddly.
+    // The check is offered while adding, so the options are known before the
+    // first conversation.
     createAgentCliProvider.mockResolvedValue({ instance: { id: "new1", kind: "claude", name: "Anthropic", model: "claude-opus-4-8" } });
     probeAgentCliCapabilities.mockResolvedValue({
       model: "claude-opus-4-8", probed: {}, calls: 2, checked_at: "x", effort_checkable: true, answered: true,
@@ -830,9 +823,9 @@ describe("AgentCliSettings probe could not run", () => {
   });
 
   it("says the provider declined, not that it does not validate options", async () => {
-    // Live-hit with a key that had no credit: every probe came back refused for
-    // an ACCOUNT reason, and reporting that as a finding about the model blames
-    // the provider for something it never got to answer.
+    // Every probe refused for an ACCOUNT reason (for example a key with no
+    // credit). Reporting that as a finding about the model would blame the
+    // provider for something it never got to answer.
     probeAgentCliCapabilities.mockResolvedValue({
       model: "openai/gpt-5", probed: {}, calls: 2, checked_at: "x",
       effort_checkable: false, answered: false,
@@ -874,8 +867,8 @@ describe("AgentCliSettings probe could not run", () => {
   });
 });
 
-// Whoever asked for the check gets the answer. Running it silently on the add
-// and save paths meant paying for an answer and not being shown it.
+// Whoever asked for the check gets the answer: running it silently on the add and
+// save paths would pay for an answer and never show it.
 describe("AgentCliSettings reports every check", () => {
   beforeEach(() => {
     vi.clearAllMocks();

@@ -1,13 +1,12 @@
 """Pin the approval-diff summary templates against the panel catalog.
 
 The summary an admin reads before approving is the confirm gate's safety
-property. It is produced by Python and rendered by the panel, so the two must be
-the same sentence. These tests are what make that mechanical rather than a
-convention someone has to remember.
-
-They are deliberately cheap and pure: no hass, no builders invoked. What they
-check is the CONTRACT between const.DIFF_SUMMARY_TEMPLATES, the generated
-en.json entries, and the keys the builders actually name.
+property. Python produces it and the panel renders it, so the two must be the
+same sentence. These tests are cheap and pure (no hass, no builders invoked) and
+check the contract between const.DIFF_SUMMARY_TEMPLATES, the generated en.json
+entries, and the keys the builders name. When one fails, regenerate the catalog
+from the const templates (scripts/gen_diff_catalog.py) rather than editing
+en.json.
 """
 
 from __future__ import annotations
@@ -38,11 +37,9 @@ ALL_TEMPLATES = {**DIFF_SUMMARY_TEMPLATES, **VERSION_SUMMARY_TEMPLATES}
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 CATALOG = REPO / "custom_components" / "phoenix_mcp" / "catalogs" / "en.json"
-# Every module in the package, not a hand-listed pair: a summary call moving to
-# another module (as _version_change_summary did when the shared tool primitives
-# were extracted to tool_common.py) silently emptied the scan and reported every
-# template it names as an orphan. The vendored mesa_core is excluded; it has its
-# own catalog and Phoenix never edits it.
+# Every module in the package, not a hand-listed set: a summary call moving to
+# another module would silently empty the scan and report every template it
+# names as an orphan. The vendored mesa_core is excluded (its own catalog).
 SOURCES = sorted(
     p for p in (REPO / "custom_components" / "phoenix_mcp").rglob("*.py")
     if "mesa_core" not in p.parts
@@ -54,7 +51,7 @@ def _catalog_diff_section() -> dict[str, str]:
 
 
 def test_catalog_matches_templates_exactly() -> None:
-    """Both generated sections; drift means someone hand-edited en.json.
+    """Both generated sections match the const templates; drift means a hand edit to en.json.
 
     Regenerate with scripts/gen_diff_catalog.py rather than editing en.json.
     """
@@ -86,11 +83,10 @@ def test_every_diff_summary_has_friendly_title_and_body() -> None:
 
 
 def test_placeholders_are_plain_names() -> None:
-    """Both str.format and the panel's interpolation only understand {name}.
+    """Placeholders are plain names, the only form the panel's interpolation understands.
 
-    Positional or attribute-style fields ({0}, {a.b}) would format fine in
-    Python and render as literal text in the panel. HA also validates a
-    translated string's placeholder set against English, and only sees these.
+    Positional or attribute-style fields ({0}, {a.b}) format fine in Python but
+    render as literal text in the panel.
     """
     for key, template in ALL_TEMPLATES.items():
         fields = [f for _, f, _, _ in string.Formatter().parse(template) if f is not None]
@@ -98,7 +94,7 @@ def test_placeholders_are_plain_names() -> None:
 
 
 def test_no_disallowed_characters() -> None:
-    """Same house rule the panel catalog test enforces."""
+    """Templates contain no em dashes, en dashes or arrows."""
     for key, template in ALL_TEMPLATES.items():
         assert not re.search(r"[—–→]", template), key
 
@@ -107,8 +103,8 @@ def _keys_named_in_source() -> set[str]:
     """Every literal key passed as the first argument of a summary call.
 
     Parsed rather than grepped because the key is often a conditional
-    (`_summary("call_service.mesa" if mesa_note else "call_service", ...)`), and
-    a regex anchored on the opening paren only ever sees the first branch.
+    (`_summary("call_service.mesa" if mesa_note else "call_service", ...)`), which
+    a regex anchored on the opening paren would only see the first branch of.
     """
     def literals(node: ast.AST):
         # Do not descend into an f-string: its fragments ("blueprint.",
@@ -141,8 +137,8 @@ def _keys_named_in_source() -> set[str]:
 def test_every_key_named_in_source_exists() -> None:
     """A builder naming a key that no template defines would raise at gate time.
 
-    diff_summary_fields raises KeyError by design rather than degrading to a
-    blank summary, so this catches it here instead of on an approval card.
+    diff_summary_fields raises KeyError by design instead of degrading to a blank
+    summary, so the test catches it before an approval card does.
     """
     assert sorted(_keys_named_in_source() - set(ALL_TEMPLATES)) == []
 
@@ -150,12 +146,9 @@ def test_every_key_named_in_source_exists() -> None:
 def test_every_template_is_reachable() -> None:
     """No orphan templates.
 
-    Keys assembled at runtime (f"blueprint.{op}", f"dashboard.{verb.lower()}",
-    f"hass_turn.{verb}", f"dashboard_card.{op}", and the two patch tools'
-    f"patch_dashboard.{op}" / f"patch_yaml_config.{op}" / the shared
-    f"patch.{op}") have no literal to match, so they are covered by prefix. That
-    list doubles as the record of which keys are computed rather than written
-    out.
+    Keys assembled at runtime (f"blueprint.{op}", f"hass_turn.{verb}",
+    f"patch.{op}" and similar) have no literal to match, so the prefix list below
+    covers them and doubles as the record of which keys are computed.
     """
     computed_prefixes = (
         "location.", "blueprint.", "dashboard.", "dashboard_card.", "hass_turn.",
@@ -183,8 +176,8 @@ def test_helper_reproduces_the_template() -> None:
 def test_every_template_formats_with_its_own_placeholders() -> None:
     """Every template survives a real format() call.
 
-    Guards a stray literal brace, which str.format raises on and which would
-    otherwise only surface when that particular approval was created.
+    A stray literal brace makes str.format raise, which would otherwise surface
+    only when that particular approval is created.
     """
     for namespace, templates, builder in NAMESPACES:
         for key, template in templates.items():
@@ -207,9 +200,8 @@ def test_version_summary_builds_the_changes_line() -> None:
 def test_admin_error_keys_exist_in_the_catalog() -> None:
     """Every key an _err call names has a panel entry.
 
-    _err is deliberately lenient: no key means the panel shows the English, so a
-    typo'd key would not raise anywhere. It would just silently stop localizing,
-    which is exactly the kind of quiet regression a test should hold.
+    _err is lenient (no key means the panel shows the English), so a typo'd key
+    would not raise anywhere and would silently stop localizing.
     """
     admin = REPO / "custom_components" / "phoenix_mcp" / "admin_view.py"
     named = set(re.findall(r'_err\([^\n]*?key="(\w+)"', admin.read_text()))
@@ -255,12 +247,11 @@ def test_mesa_suggestion_templates_match_the_catalog() -> None:
 
 
 def test_every_suggestion_sub_phrase_has_a_catalog_entry() -> None:
-    """A sentence splices these in, so a missing one is a half-translated line.
+    """Every spliced sub-phrase has its own catalog entry.
 
     The panel resolves noun_key / concern_key / baseline_key against the same
-    section. If a template interpolates a clause with no entry of its own, the
-    translated sentence keeps the English clause inside it, which reads as a
-    partial translation rather than as a bug.
+    section; a clause with no entry keeps its English text inside the translated
+    sentence.
     """
     from custom_components.phoenix_mcp.const import (
         MESA_SUGGEST_RISKY_DOMAINS,
@@ -283,11 +274,10 @@ def test_every_suggestion_sub_phrase_has_a_catalog_entry() -> None:
 
 
 def test_suggestion_reason_reproduces_from_key_and_params() -> None:
-    """The stored English and the key/params must be the same sentence.
+    """The stored English and the key/params render the same sentence.
 
-    Same contract as a diff summary: the panel re-renders from the key, so if
-    the two ever diverge an operator reads one thing and the record holds
-    another.
+    The panel re-renders from the key, so a divergence would show an operator
+    something other than what the record holds.
     """
     from custom_components.phoenix_mcp.const import MESA_SUGGESTION_TEMPLATES
     from custom_components.phoenix_mcp.mesa_suggestions import _reason

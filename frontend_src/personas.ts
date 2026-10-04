@@ -1,8 +1,9 @@
 // Persona presets shared by the PersonaPicker (Token Detail) and the onboarding
-// wizard. PERSONA_CAP_DEFAULTS mirrors personas.py PERSONA_DEFINITIONS and is
-// used to pre-fill cap values when applying a persona via PATCH so the matrix
-// updates in one round-trip. tests/test_personas.py pins every value against
-// the backend because valid overrides can otherwise silently change a preset.
+// wizard. PERSONA_CAP_DEFAULTS mirrors personas.py PERSONA_DEFINITIONS and
+// pre-fills cap values when a persona is applied via PATCH, so the matrix
+// updates in one round-trip. Both must change together: a contract test pins
+// every value against the backend because a drifted override silently changes
+// a preset.
 import type { Persona } from "./types";
 
 export interface PersonaDef {

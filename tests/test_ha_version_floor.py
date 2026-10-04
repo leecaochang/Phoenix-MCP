@@ -1,40 +1,22 @@
 """Guard: the declared Home Assistant floor must match what the code imports.
 
-`MIN_HA_VERSION` is a compatibility CLAIM, and nothing checked it. It said
-2024.5.0 while `panel.py` imported `StaticPathConfig`,
-`async_register_static_paths` and `remove_extra_js_url`, none of which exist
-before 2024.7.0, so the two advertised releases raised `ImportError` before
-setup finished. HACS reads the number out of `hacs.json` and lets the install
-proceed, which is the whole failure: the claim was checked by nobody and
-believed by the installer.
+`MIN_HA_VERSION` is a compatibility claim that HACS reads from `hacs.json` and
+trusts. If it names a release that lacks an API imported at module level, the
+install proceeds and then raises `ImportError` before setup finishes. The suite
+runs on one modern HA, so the checks here are the ones that work offline:
 
-Neither half of that is catchable by the rest of the suite. The Python floor
-guard parses SYNTAX and says nothing about which HA APIs exist; the suite itself
-runs on one pinned modern HA, where every import resolves. So the checks here
-are the ones that can be made offline, without a second HA installed:
+  1. The number is stated identically in every file that restates it.
+  2. Every UNGUARDED module-level `from homeassistant...` import is listed in
+     `KNOWN_IMPORTS` with the release that introduced that name, and none is
+     newer than the floor. A new import fails until someone records when it landed.
 
-  1. The number is stated identically everywhere it is stated. Four files
-     restate it and they drifted independently before.
-  2. Every module-level `from homeassistant...` import in the package is listed
-     in `KNOWN_IMPORTS` below with the release that introduced it, and none of
-     those releases is newer than the floor. A new module-level HA import fails
-     here until someone writes down when it landed, which is the step that was
-     skipped.
-
-Rule 2 covers only UNGUARDED module-level imports, which is deliberate and is
-the boundary that matters: those run during setup and an absent name is a failed
-integration. An import inside a function or a `try` degrades to a clean error at
-call time, so the four post-floor APIs the package does reach that way
-(`lovelace.const.LOVELACE_DATA` before 2025.2, `condition.async_get_all_descriptions`,
-`websocket_api.automation`, and the ai_task / conversation / llm feature probes)
-are correctly out of scope here and are documented as optional-feature floors
-instead.
-
-Verifying an introduction version needs the upstream tag and is therefore a
-human step, not something this test can do offline. `KNOWN_IMPORTS` is where
-that verification is recorded; check a new entry against
-`https://raw.githubusercontent.com/home-assistant/core/<tag>/<path>` before
-adding it.
+Imports inside a function, a `try` or a `TYPE_CHECKING` block degrade to a clean
+error at call time, so the scan skips them; optional-feature floors are
+documented instead. The exception is an API behind a feature in the base
+compatibility claim (`LOVELACE_DATA`), which `MANDATORY_FEATURE_IMPORTS` lists by
+hand. Introduction versions come from the upstream tag, so recording one is a
+human step: check it against
+`https://raw.githubusercontent.com/home-assistant/core/<tag>/<path>`.
 """
 
 from __future__ import annotations
@@ -57,23 +39,19 @@ def _version(text: str) -> tuple[int, ...]:
 
 FLOOR = _version(MIN_HA_VERSION)
 
-# (module, imported name) -> the HA release that introduced that NAME.
+# (module, imported name) maps to the HA release that introduced that NAME.
 #
-# Keyed by SYMBOL, not by module, and that is the whole point of the table. The
-# first version keyed on the module alone, so a new API imported from a module
-# already listed inherited that module's recorded version and the guard stayed
-# green. Demonstrated with a real symbol: `from homeassistant.config_entries
-# import ConfigSubentry` (absent from 2025.2.0) passed all 27 tests, which is
-# exactly the "green guard on the drift it exists to catch" failure this file was
-# written to prevent, reproduced inside the prevention.
+# Keyed by SYMBOL, not by module: a table keyed on the module alone would let a
+# new API imported from an already-listed module inherit that module's recorded
+# version, leaving the guard green on exactly the drift it exists to catch.
 #
-# "0.0.0" means the name predates any release this project has ever claimed, so
+# "0.0.0" means the name is older than any release this project has claimed, so
 # it can never constrain the floor. Anything with a real version was checked
 # against that tag's source at
 # https://raw.githubusercontent.com/home-assistant/core/<tag>/<path>.
 KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     # Entity-command feature exports verified in each component's 2024.5.0
-    # __init__.py, before the supported runtime floor.
+    # __init__.py, older than any claimed floor.
     "homeassistant.components.alarm_control_panel": {"AlarmControlPanelEntityFeature": "0.0.0"},
     "homeassistant.components.climate": {"ClimateEntityFeature": "0.0.0"},
     "homeassistant.components.fan": {"FanEntityFeature": "0.0.0"},
@@ -84,11 +62,11 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     "homeassistant.components.vacuum": {"VacuumEntityFeature": "0.0.0"},
     "homeassistant.components.valve": {"ValveEntityFeature": "0.0.0"},
     "homeassistant.components.water_heater": {"WaterHeaterEntityFeature": "0.0.0"},
-    # Verified exported in 2024.5.0, the earliest original claim.
+    # Verified exported in 2024.5.0, the earliest claimed floor.
     "homeassistant.components.repairs": {"RepairsFlow": "0.0.0"},
     "homeassistant": {
-        # Integration loading predates Phoenix's minimum HA version and is the
-        # same public module used by HA's 2025.2 device-removal endpoint.
+        # Integration loading is older than any claimed floor and is the same
+        # public module HA's own device-removal endpoint uses.
         "loader": "0.0.0",
     },
     "homeassistant.components.automation.config": {
@@ -103,8 +81,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     },
     "homeassistant.components.http": {
         "HomeAssistantView": "0.0.0",
-        # Verified absent in 2024.6.0, present in 2024.7.0. With
-        # async_register_static_paths, this is why the old 2024.5 claim was false.
+        # Verified absent in 2024.6.0, present in 2024.7.0.
         "StaticPathConfig": "2024.7.0",
     },
     "homeassistant.components.http.const": {
@@ -149,8 +126,8 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "ConfigFlowResult": "0.0.0",
         "SOURCE_RECONFIGURE": "0.0.0",
         "SOURCE_USER": "0.0.0",
-        # Public helper used by HA's own 2025.2 config-entry/device removal
-        # surfaces; predates Phoenix MCP's current minimum version.
+        # Public helper used by HA's own config-entry and device removal
+        # surfaces; older than any claimed floor.
         "support_entry_unload": "0.0.0",
     },
     "homeassistant.const": {
@@ -168,7 +145,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "Context": "2024.5.0",
         "CoreState": "0.0.0",
         # Re-exported into core from homeassistant.util.event_type. Verified
-        # present in 2024.7.0, so it predates the floor rather than setting it.
+        # present in 2024.7.0, so it is older than the floor rather than setting it.
         "EventType": "2024.7.0",
         "Event": "0.0.0",
         "HomeAssistant": "0.0.0",
@@ -194,8 +171,8 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "entity_registry": "0.0.0",
         "floor_registry": "0.0.0",
         "intent": "0.0.0",
-        # Both the issue registry and its helper-module import predate the
-        # earliest Home Assistant release Phoenix has claimed.
+        # Both the issue registry and its helper-module import are older than
+        # the earliest HA release claimed.
         "issue_registry": "0.0.0",
         # Verified absent in 2024.2.5, present in 2024.3.0.
         "label_registry": "2024.3.0",
@@ -221,7 +198,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
         "Store": "0.0.0",
     },
     "homeassistant.helpers.service": {
-        # Present in 2024.1.0, before Phoenix's earliest claimed HA floor.
+        # Present in 2024.1.0, older than any claimed floor.
         "async_get_all_descriptions": "0.0.0",
     },
     "homeassistant.loader": {
@@ -230,8 +207,8 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     },
     "homeassistant.util": {
         "dt": "0.0.0",
-        # Core helper/entity ID generation has used this public utility since
-        # well before Phoenix's earliest supported Home Assistant release.
+        # Public utility that core's helper and entity ID generation has long
+        # used, far older than any claimed floor.
         "slugify": "0.0.0",
     },
     "homeassistant.util.color": {
@@ -251,7 +228,7 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
     "homeassistant.util.json": {"SerializationError": "2026.7.0"},
     "homeassistant.util.ulid": {
         # Re-exported from ulid_transform. Verified absent in 2024.7.0 and
-        # present in 2024.8.0, before Phoenix MCP's supported runtime floor.
+        # present in 2024.8.0.
         "ulid_to_bytes_or_none": "2024.8.0",
     },
     "homeassistant.util.yaml": {
@@ -263,23 +240,18 @@ KNOWN_IMPORTS: dict[str, dict[str, str]] = {
 
 # Symbols that are NOT imported at module level but whose absence still breaks a
 # documented part of the base product. Nothing discovers these, so they are listed
-# by hand, and the list is the point of this table.
+# by hand.
 #
-# This is the gap the symbol-level fix did not close. The automatic scan covers
-# UNGUARDED module-level imports, because those crash setup; a guarded import
-# degrades to a clean error instead, so it is deliberately out of scope. But
+# The automatic scan covers UNGUARDED module-level imports, because those crash
+# setup; a guarded import degrades to a clean error and is out of its scope. But
 # `LOVELACE_DATA` is guarded AND load-bearing: without it every dashboard tool
-# answers "lovelace is not loaded", which is a documented part of the tool
-# surface, and it is the actual reason the floor is 2025.2 rather than 2024.7.
-# With only the automatic scan, lowering every claim to 2024.7.0 passed all 62
-# tests, i.e. the guard was green on precisely the regression it was written to
-# stop, for the second time.
+# answers "lovelace is not loaded", a documented part of the tool surface, so the
+# floor must not be lowered below its release.
 #
 # Add an entry here when a feature named in the BASE compatibility claim depends
-# on an API newer than the previous floor. Assist and AI Task are also exercised
-# by the full suite on the supported base release.
+# on an API newer than the previous floor.
 MANDATORY_FEATURE_IMPORTS: dict[str, str] = {
-    # tools/lovelace.py + ws_dispatch.py, via a guarded import. Verified absent in
+    # Reached through a guarded import by the dashboard tools. Verified absent in
     # 2025.1.4 and present in 2025.2.0.
     "homeassistant.components.lovelace.const.LOVELACE_DATA": "2025.2.0",
 }
@@ -289,9 +261,8 @@ def test_mandatory_feature_imports_are_not_newer_than_the_floor(symbol: str) -> 
     """A documented feature must not need HA newer than the declared minimum.
 
     Unlike the scanned imports, these do not crash setup. They fail at CALL time
-    with a clean error, which is worse for this purpose rather than better: the
-    integration starts, HACS is satisfied, and the operator discovers the hole one
-    tool at a time.
+    with a clean error, so the integration starts, HACS is satisfied, and the
+    operator discovers the hole one tool at a time.
     """
     introduced = _version(MANDATORY_FEATURE_IMPORTS[symbol])
     assert introduced <= FLOOR, (
@@ -312,12 +283,10 @@ def test_injector_floor_matches_the_supported_base() -> None:
 def _unguarded_module_level_ha_imports() -> dict[tuple[str, str], set[str]]:
     """Map each (module, imported name) to the files importing it at module level.
 
-    The NAME is what matters and dropping it was the original defect: a guard
-    keyed on the module alone lets a brand-new API ride in on an already-recorded
-    module and says nothing.
-
-    Guarded means nested in a function, a `try`, or a `TYPE_CHECKING` block: none
-    of those runs at import time, so an absent name there cannot fail setup.
+    The NAME matters: a guard keyed on the module alone lets a new API ride in on
+    an already-recorded module. Guarded means nested in a function, a `try`, or a
+    `TYPE_CHECKING` block: none of those runs at import time, so an absent name
+    there cannot fail setup.
     """
     found: dict[tuple[str, str], set[str]] = {}
     for path in sorted(PKG.rglob("*.py")):
@@ -364,9 +333,8 @@ def _recorded_pairs() -> set[tuple[str, str]]:
 def test_every_module_level_ha_import_is_recorded() -> None:
     """A new setup-time HA import must state which release introduced it.
 
-    Per SYMBOL. Keyed by module alone, this passed while
-    `from homeassistant.config_entries import ConfigSubentry` (absent from
-    2025.2.0) sat in the package, because that module was already recorded.
+    Checked per SYMBOL: a new name imported from an already-recorded module still
+    needs its own entry.
     """
     imports = _unguarded_module_level_ha_imports()
     recorded = _recorded_pairs()
@@ -419,7 +387,7 @@ def test_known_imports_has_no_stale_entries() -> None:
 
 
 def test_the_floor_is_stated_identically_everywhere() -> None:
-    """Four files restate the number and they drifted independently before."""
+    """Every file that restates the floor must match `MIN_HA_VERSION`."""
     major_minor = ".".join(MIN_HA_VERSION.split(".")[:2])
 
     hacs = json.loads((ROOT / "hacs.json").read_text(encoding="utf-8"))

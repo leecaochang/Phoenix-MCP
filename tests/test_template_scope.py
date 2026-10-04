@@ -1,4 +1,7 @@
-"""Static dependency and real HA helper ingress/executor scope regressions."""
+"""Template helper authoring is scoped to what the token may read.
+
+Static dependency analysis, plus ingress and executor checks against real HA helpers.
+"""
 
 import json
 import uuid

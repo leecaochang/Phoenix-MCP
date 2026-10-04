@@ -451,7 +451,7 @@ async def test_openai_inline_think_tags_are_split_out():
     )
     cfg = ProviderConfig(kind="ollama", model="r1", base_url="http://h:11434", api_key=None)
     provider = OpenAICompatProvider(cfg)
-    # show_thinking on -> thinking captured, reply excludes it
+    # show_thinking on: thinking captured, reply excludes it
     events = await _collect(provider.stream_turn(
         _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[],
         options={"show_thinking": True}))
@@ -461,7 +461,7 @@ async def test_openai_inline_think_tags_are_split_out():
     assert thinking == "secret"
     done = next(e for e in events if e["type"] == agentcli.EV_DONE)
     assert done["assistant_msg"]["content"] == "Hello there."
-    # show_thinking off -> thinking dropped, reply still excludes the tags
+    # show_thinking off: thinking dropped, reply still excludes the tags
     events2 = await _collect(provider.stream_turn(
         _FakeSession(_FakeResp(200, body)), system_prompt="s", messages=[], tools=[], options={}))
     assert "".join(e["text"] for e in events2 if e["type"] == agentcli.EV_TEXT) == "Hello there."
@@ -764,7 +764,7 @@ async def test_minimax_runs_through_claude_provider_bearer_and_adaptive():
     assert h["Authorization"] == "Bearer mkey"
     assert "x-api-key" not in h
     assert h["anthropic-version"]
-    # Thinking on -> plain adaptive; none of Anthropic's display/output_config extras.
+    # Thinking on: plain adaptive; none of Anthropic's display/output_config extras.
     body = _sse('data: {"type":"message_stop"}')
     session = _FakeSession(_FakeResp(200, body))
     await _collect(provider.stream_turn(
@@ -969,7 +969,7 @@ async def test_minimax_validate_soft_accepts_and_list_models_fallback():
     cfg = ProviderConfig(kind="minimax", model="MiniMax-M2",
                          base_url="https://api.minimax.io/anthropic", api_key="k")
     provider = ClaudeProvider(cfg)
-    # A missing models endpoint (404) is not an auth failure -> soft-accept.
+    # A missing models endpoint (404) is not an auth failure, so soft-accept.
     ok, _ = await provider.validate(_FakeSession(_FakeResp(404, b"", text_data="not found")))
     assert ok is True
     # A real auth failure still rejects.
@@ -1085,10 +1085,10 @@ async def test_ollama_malformed_tool_args_is_bad_tool_call():
 
 @pytest.mark.asyncio
 async def test_truncated_tool_args_at_output_limit_reports_truncation():
-    # Live-observed with DeepSeek: a whole-dashboard write's JSON arguments hit
-    # the provider's output-token limit mid-stream (finish_reason "length"), so
-    # the args never parse. That is truncation, not model syntax; the error must
-    # say so instead of the generic "invalid tool call".
+    # A whole-dashboard write's JSON arguments can hit the provider's output-token
+    # limit mid-stream (finish_reason "length"), so the args never parse. That is
+    # truncation, not model syntax; the error must say so instead of the generic
+    # "invalid tool call".
     body = _sse(
         'data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"c1","function":{"name":"set_dashboard_config","arguments":"{\\"config\\": {\\"views\\": [{\\"ca"}}]},"finish_reason":null}]}',
         'data: {"choices":[{"delta":{},"finish_reason":"length"}]}',
@@ -1109,7 +1109,7 @@ async def test_truncated_tool_args_at_output_limit_reports_truncation():
 
 @pytest.mark.asyncio
 async def test_tool_args_cut_off_mid_stream_reports_a_dropped_connection():
-    # The response simply stops arriving: partial arguments, and no chunk ever
+    # The response stops arriving: partial arguments, and no chunk ever
     # carries a finish_reason. Every provider reports one when it finishes, so
     # its absence is the signal that the connection dropped rather than the
     # model emitting bad syntax. Reported as its own case because the other
@@ -1156,8 +1156,8 @@ async def test_clean_stream_with_bad_json_is_not_reported_as_a_dropped_connectio
 
 @pytest.mark.asyncio
 async def test_deepseek_gets_explicit_max_tokens_other_kinds_do_not():
-    # DeepSeek's undocumented default output cap truncated a large tool call;
-    # Phoenix MCP now pins an explicit ceiling for DeepSeek only. ChatGPT must NOT get
+    # DeepSeek's undocumented default output cap can truncate a large tool call, so
+    # Phoenix MCP pins an explicit ceiling for DeepSeek only. ChatGPT must NOT get
     # max_tokens (OpenAI reasoning models reject the field).
     body = _sse('data: {"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}', "data: [DONE]")
     ds = OpenAICompatProvider(ProviderConfig(kind="deepseek", model="deepseek-v4-flash", base_url="https://d", api_key="k"))
@@ -1343,9 +1343,9 @@ def test_parse_pending_strict():
 def test_resolved_result_reports_execution_failure_with_the_executor_error():
     # An admin APPROVED the action but the executor failed (the approve path
     # stores the error and resolves the record as failed/"execution_failed").
-    # Live-found loop: reporting that as a bare "rejected" made the agent treat
-    # an approval as a refusal and retry the same doomed call forever. The
-    # feedback must say approved-but-failed and carry the executor's error.
+    # Reporting that as a bare "rejected" would make the agent treat an approval
+    # as a refusal and retry the same doomed call forever, so the feedback must
+    # say approved-but-failed and carry the executor's error.
     from types import SimpleNamespace
     approval = SimpleNamespace(
         rejected_reason="execution_failed",
@@ -1393,11 +1393,10 @@ def test_resolved_result_admin_rejection_keeps_reason_and_status():
 
 
 def test_resolved_result_approved_carries_operator_accepted_note():
-    # Live-found: an agent iterating toward a goal read an approval as merely
-    # "this step landed" and kept proposing variations of a change the operator
-    # had already reviewed and settled on. The approved result must tell it the
-    # operator accepted this exact change, appended without mutating the stored
-    # record's result.
+    # An approval read as merely "this step landed" leads an agent iterating toward
+    # a goal to keep proposing variations of a change the operator already settled
+    # on. The approved result must tell it the operator accepted this exact
+    # change, appended without mutating the stored record's result.
     applied = {"content": [{"type": "text", "text": '{"saved": true}'}]}
     out = agentcli._resolved_result(STATUS_APPROVED, applied)
     assert out["content"][0] == {"type": "text", "text": '{"saved": true}'}
@@ -1981,10 +1980,10 @@ async def test_run_agent_turn_repeated_rejections_stay_iteration_friendly(hass):
     # Reject-with-reason is the operator STEERING the next proposal; iterating
     # through several rejections is the normal card-building workflow. A
     # stricter contract (forbid variations, hard "stop proposing" escalation on
-    # the second rejection) was live-tested and reverted: models turned
-    # pedantic, gave up, or side-stepped the tools (dumped raw data into chat,
-    # built an HTML chart instead). Every rejection's feedback must present the
-    # reason as direction, and no rejection count may escalate to a stop order.
+    # the second rejection) makes models pedantic, give up, or side-step the tools
+    # (dumping raw data into chat, building an HTML chart instead). Every
+    # rejection's feedback must present the reason as direction, and no rejection
+    # count may escalate to a stop order.
     provider = _ScriptedProvider([
         [{"type": agentcli.EV_TOOL, "id": "tu1", "name": "add_dashboard_card", "input": {}},
          _done("tool_use")],
@@ -2247,7 +2246,7 @@ async def test_sse_lines_caps_cumulative_newline_delimited_output(monkeypatch):
     class _ManyFrames:
         async def iter_chunked(self, _n):
             for _ in range(50):
-                yield b"data: x\n"  # 8 bytes each -> 400 > 100
+                yield b"data: x\n"  # 8 bytes each: 400 total, over the cap of 100
 
     resp = MagicMock()
     resp.content = _ManyFrames()
@@ -2323,13 +2322,13 @@ async def test_chat_view_refuses_revoked_or_missing_token():
         d.store.get_token_by_id.return_value = token
         return d
 
-    # Missing token -> 404.
+    # Missing token: 404.
     view.hass = MagicMock()
     view.hass.data = {agentcli.DOMAIN: _data(None)}
     resp = await view.post(_make_chat_request(json.dumps({"token_id": "t"}).encode()))
     assert resp.status == 404
 
-    # Revoked/expired token -> 400 (never opens the stream).
+    # Revoked/expired token: 400 (never opens the stream).
     revoked = MagicMock()
     revoked.is_valid.return_value = False
     view.hass = MagicMock()
@@ -2868,16 +2867,16 @@ async def test_turn_emits_notice_on_output_limit_and_empty_reply(hass):
             )
         return events
 
-    # Truncated at the output limit -> a notice explains why it stopped.
+    # Truncated at the output limit: a notice explains why it stopped.
     ev = await run([{"type": agentcli.EV_TEXT, "text": "half a sen"}, _done("max_tokens")])
     notice = next(p for n, p in ev if n == "notice")
     assert "output length limit" in notice["message"]
 
-    # An empty end_turn reply -> a notice, not a silent stop.
+    # An empty end_turn reply: a notice, not a silent stop.
     ev = await run([_done("end_turn")])
     assert any(n == "notice" for n, _ in ev)
 
-    # A normal reply with text -> NO notice.
+    # A normal reply with text: NO notice.
     ev = await run([{"type": agentcli.EV_TEXT, "text": "All done."}, _done("end_turn")])
     assert not any(n == "notice" for n, _ in ev)
 
@@ -3040,12 +3039,12 @@ async def test_delete_provider_clears_ai_task_binding(hass):
 
 @pytest.mark.asyncio
 async def test_instances_sort_by_display_name_not_kind(hass):
-    """Panel dropdowns list accounts alphabetically by what the user reads.
+    """Provider dropdowns list accounts alphabetically by display name.
 
-    The sort key must be the display NAME, not the kind key: the two diverge
-    (kind "claude" displays as "Anthropic", "chatgpt" as "OpenAI"), so keying
-    on kind silently lists them out of order in both the Settings card and the
-    Agent Chat provider dropdown.
+    The sort key is the display NAME, not the kind key: the two diverge (kind
+    "claude" displays as "Anthropic", "chatgpt" as "OpenAI"), so keying on kind
+    would list them out of order in both the Settings card and the Agent Chat
+    provider dropdown.
     """
     store = agentcli.AgentCliStore(AsyncMock())
     await store.add("openrouter", {"api_key": "sk-or"})
@@ -3133,18 +3132,16 @@ class TestDispatchProgress:
 
 
 class TestHeadlessSurfacesShareOneLoop:
-    """The two headless surfaces must keep delegating to one shared loop.
+    """The two headless surfaces keep delegating to one shared loop.
 
-    async_run_voice_turn and async_run_ai_task were 63 and 61 lines that differed
-    in six: the provider-error policy, the audit sentinel, and collecting review
-    URLs. Everything else, including the token re-resolution before each dispatch
-    and the shape of every tool result, was duplicated, so a fix could land on one
-    surface and miss the other. That is not hypothetical: the total-output ceiling
-    existed on the interactive loop and on neither of these.
+    async_run_voice_turn and async_run_ai_task differ only in the provider-error
+    policy, the audit sentinel, and collecting review URLs. Everything else,
+    including the token re-resolution before each dispatch and the shape of every
+    tool result, lives once, so a fix cannot land on one surface and miss the other.
 
     These read the AST rather than the behaviour because the failure mode is
-    structural. A future change that re-inlines a loop into one surface passes
-    every behavioural test it was written against and silently restores the fork.
+    structural: re-inlining a loop into one surface passes every behavioural test
+    it was written against and silently restores the fork.
     """
 
     HEADLESS = ("async_run_voice_turn", "async_run_ai_task")
@@ -3195,7 +3192,7 @@ class TestHeadlessSurfacesShareOneLoop:
         assert "AGENTCLI_MAX_TURN_OUTPUT_BYTES" in names
 
 
-# --- changing an account's default model (it used to be frozen at creation) ---
+# --- changing an account's default model ---
 
 
 def _admin_request(body: dict | None = None):
@@ -3342,10 +3339,12 @@ async def test_probe_provider_returns_conflict_before_listing_models(hass):
 
 
 class TestSetDefaultModel:
-    """The default model was frozen at creation, so correcting it meant deleting
-    the account and re-entering the API key. That is the wrong cost for a value
-    that goes stale on the PROVIDER's schedule: a shipped default id can be
-    retired out from under a working install, which is what happened here."""
+    """The default model of an existing account can be changed in place.
+
+    Correcting it must not mean deleting the account and re-entering the API key:
+    a shipped default id can be retired by the provider, so the value goes stale on
+    the PROVIDER's schedule.
+    """
 
     @pytest.mark.asyncio
     async def test_store_updates_only_the_model(self, hass):
@@ -3733,8 +3732,10 @@ class TestLearnedRefusals:
             {"temperature": 0.7}) == "temperature"
 
     def test_ignores_an_option_phoenix_did_not_send(self):
-        """The guard that stops an unrelated error mentioning a knob from
-        teaching us the knob is unsupported."""
+        """An error naming an option Phoenix did not send teaches nothing.
+
+        It must not mark that knob unsupported.
+        """
         assert agentcli._refused_option(
             400, "temperature must be provided by the caller", {"model": "m"}) is None
 
@@ -3816,10 +3817,9 @@ class TestLearnedRefusals:
 class TestProbeAnswered:
     """A provider that declines every question has said nothing about the model.
 
-    Live-hit with an OpenRouter key that had no credit: every probe came back
-    refused for an ACCOUNT reason, and the panel reported it as a finding about
-    the model. Only 200 and 400 are answers; everything else is the provider
-    declining to be asked.
+    An account-level refusal (for example a key with no credit) answers every probe
+    with a refusal, which must not be reported as a finding about the model. Only
+    200 and 400 are answers; everything else is the provider declining to be asked.
     """
 
     async def _probe(self, hass, answer):
@@ -3847,8 +3847,9 @@ class TestProbeAnswered:
 
 
 class TestAggregatorEffort:
-    """An aggregator fronts many vendors behind one key, so no built-in answer
-    fits every model. Excluding them from probing was backwards: a probe runs
+    """An aggregator fronts many vendors behind one key.
+
+    No built-in answer fits every model, so aggregators are probed: a probe runs
     against ONE selected model, which is exactly what per-model variation needs.
     """
 

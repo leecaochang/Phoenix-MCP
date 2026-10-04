@@ -188,7 +188,7 @@ def parity_problems(source: str, translated: str) -> list[str]:
 
 
 def language_link_problems(path: pathlib.Path, text: str) -> list[str]:
-    """Every README links to both of the other language editions."""
+    """Each README's relative link targets are exactly the other language editions."""
     expected = {
         candidate.name
         for candidate in [SOURCE, *TRANSLATIONS.values()]

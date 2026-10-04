@@ -1,29 +1,22 @@
 """Authoring tools: automation, script and scene CRUD over the YAML config store.
 
-The three domains share one shape and therefore one module: each stores its
-configs in a top-level YAML file (automations.yaml / scripts.yaml / scenes.yaml)
-that HA also lets a human edit by hand, each is edited under its own
-asyncio.Lock keyed into hass.data. Edits use a caller-provided content_hash
-before gating and at apply time; deletes capture the reviewed entry's hash and
-compare it again under that lock. Splitting them into three modules would only
-move the shared plumbing into a fourth.
+The three domains share one shape and one module: each stores its configs in a
+top-level YAML file (automations.yaml, scripts.yaml, scenes.yaml) that a human may
+also edit by hand, and is written under its own asyncio.Lock keyed into hass.data.
+An edit may carry an expected_hash (a content_hash from the matching read tool),
+checked before gating and again at apply time; a delete captures the reviewed
+entry's hash and compares it again under that lock.
 
-`yaml_includes` is the reason the reads and writes are not a plain file load: a
-domain can be split across !include files, so a write has to splice into the
-leaf file that actually holds the entry. It fails closed with LocateError when a
-domain is inline in configuration.yaml, which is why nothing here ever writes
-that file.
+`yaml_includes` does the reads and writes because a domain can be split across
+!include files: a write splices into the leaf file that actually holds the entry
+and fails closed rather than touching configuration.yaml, so a domain defined
+inline there or in a package is not edited.
 
-Scene writes carry one extra check the other two do not: a scene captures member
-entities' states, so `_unwritable_scene_members` refuses a scene naming an
-entity the token cannot WRITE. Without it, a token could snapshot and later
-restore entities outside its own scope.
-
-mcp_view owns the transport, the dispatch registry and the executor registry,
-and imports the names it registers or calls from here (async_restore_version
-takes the six create/edit executors, and the reference walkers take the three
-readers and their path constants). The dependency runs one way: this module
-never imports the transport that dispatches it.
+Scene writes add one check: a scene captures member entities' states, so
+`_unwritable_scene_members` refuses a scene naming an entity the token cannot
+WRITE; otherwise a token could snapshot and later restore entities outside its
+scope. mcp_view owns the transport and the registries and imports from here;
+this module does not import it.
 """
 
 from __future__ import annotations
@@ -306,7 +299,7 @@ async def _tool_get_automation(
 
 
 # The guidance an agent gets when its own config does not validate, one per
-# authored domain. Agent-facing error text is deliberately English (CLAUDE.md).
+# authored domain. Agent-facing error text is deliberately English.
 _AUTOMATION_INVALID_MESSAGE = "Automation config failed validation. Check trigger, condition, and action fields."
 _SCRIPT_INVALID_MESSAGE = "Script config failed validation. Check sequence, mode, and field definitions."
 
@@ -322,16 +315,12 @@ async def _config_validation_error(
 ) -> tuple[dict, str, str] | None:
     """Run an HA config validator; return an error triple, or None when the config validates.
 
-    HA calls its automation and script validators with raise_on_errors=True, so a
-    config the caller got wrong arrives as vol.Invalid or HomeAssistantError.
-    That is the routine case during authoring, so it stays quiet (debug) and
-    returns the domain's own guidance.
-
-    Anything else is HA drift or a Phoenix bug wearing the same clothes. Reporting
-    that as a validation failure tells an agent to rewrite a config that was never
-    the problem, so it is logged with a traceback and reported as an internal
-    error instead. The distinction matters because these validators are HA
-    internals: the exception a version bump introduces arrives here first.
+    HA's automation and script validators raise vol.Invalid or HomeAssistantError
+    for a config the caller got wrong: the routine case, logged at debug and
+    answered with the domain's own guidance. Any other exception is HA drift or a
+    Phoenix bug, so it is logged with a traceback and reported as an internal
+    error; calling it a validation failure would send the agent to rewrite a
+    config that was never the problem.
     """
     try:
         if await validator(hass, config_key, config) is None:
@@ -434,8 +423,8 @@ async def _execute_create_automation(
         return _tool_error("config must be an object."), "invalid_request", "create_automation"
 
     # A restore of a deleted automation recreates it under its original id (passed
-    # explicitly) so it returns in place and re-restoring is idempotent;
-    # a fresh create mints a new id.
+    # explicitly) so it returns in place and re-restoring is idempotent; a fresh
+    # create mints a new id.
     automation_id = str(args.get("automation_id") or "").strip() or "phoenix_mcp_" + uuid.uuid4().hex[:16]
     config = {k: v for k, v in config.items() if k != "id"}
     config["id"] = automation_id
@@ -505,7 +494,7 @@ async def _execute_edit_automation(
     error = _automation_argument_error(args, create=False)
     if error:
         return _tool_error(error), "invalid_request", "edit_automation"
-    # HA async_validate_config_item validates automation IDs.
+    # The stored `id` key, not an entity_id.
     automation_id = args.get("automation_id", "").strip()
     if not automation_id:
         return _tool_error("automation_id is required."), "invalid_request", "edit_automation"
@@ -948,12 +937,12 @@ async def _execute_delete_script(
     return _tool_success(f"Script '{script_id}' deleted successfully."), "allowed", "delete_script"
 
 
-# HA-COUPLING POINT. Up to HA 2026.6 hass.data[DATA_TRACE][key] was a plain
-# LimitedSizeDict of run_id -> trace. HA 2026.7 replaced it with TraceBuckets,
-# which holds two separately size-limited dicts: `runs` (the automation actually
+# HA-COUPLING POINT. From HA 2026.7 hass.data[DATA_TRACE][key] is a TraceBuckets
+# holding two separately size-limited dicts: `runs` (the automation actually
 # fired) and `not_triggered` (a trigger evaluated a relevant change and did NOT
-# fire), so the latter can never evict the former. Both accessors below read
-# either installed shape within the supported HA floor. Re-verify on upgrades.
+# fire), so the latter can never evict the former. Before that it was a plain
+# LimitedSizeDict of run_id to trace. Both accessors below read either shape.
+# Re-verify on HA upgrades.
 #
 # Not-triggered traces are deliberately INCLUDED: "why did it not run" is the
 # usual reason to read traces at all, and each trace self-reports via a
@@ -1017,8 +1006,8 @@ async def _tool_get_automation_traces(
         return _tool_error("Automation not found."), "not_found", raw
 
     from homeassistant.components.trace.const import DATA_TRACE  # noqa: PLC0415
-    # An absent DATA_TRACE key means the trace component is not loaded at all, which
-    # produces the same empty listing as an automation that has simply never run.
+    # An absent DATA_TRACE key means the trace component is not loaded, which would
+    # otherwise look like an automation that never ran; it is reported as a warning.
     trace_loaded = DATA_TRACE in hass.data
     runs: Any = hass.data.get(DATA_TRACE, {}).get(f"automation.{unique_id}", {})
     summary = bool(args.get("summary"))
@@ -1448,10 +1437,9 @@ async def _build_diff_delete_automation(
 def _yaml_entry(hass: HomeAssistant, domain: str, entry_id: str) -> dict | None:
     """Read one automation/script/scene entry's stored config, or None.
 
-    Fail-quiet on purpose: this only ever feeds a diff's `before` side, and an
-    unreadable entry must not stop an approval from being raised for the write
-    the caller actually asked for. The executor re-reads and re-validates for
-    real at apply time.
+    Fail-quiet on purpose: this only feeds a diff's `before` side, and an
+    unreadable entry must not stop the approval for the requested write. The
+    executor re-reads and re-validates at apply time.
     """
     try:
         return yaml_includes.read_entry(hass.config.config_dir, domain, entry_id)
@@ -1470,12 +1458,12 @@ async def _entry_before_json(
     """Truncated JSON of an entry's current config for a diff's `before`, or None.
 
     wrap_key reproduces the shape each domain's `after` side uses, so both panes
-    of the diff stay comparable: scripts render as {script_id: config}, while
-    automations and scenes render the config bare.
+    stay comparable: scripts render as {script_id: config}, automations and scenes
+    bare. A passed `current` (the reviewed entry, for deletes) skips the read.
 
-    Fail-quiet end to end, including the executor dispatch and the serialization,
-    not just the read: a diff is advisory, and nothing here may stop the write it
-    describes from being gated.
+    Fail-quiet end to end, including the executor dispatch and serialization: a
+    diff is advisory and nothing here may stop the write it describes from being
+    gated.
     """
     try:
         if current is _ENTRY_NOT_CAPTURED:

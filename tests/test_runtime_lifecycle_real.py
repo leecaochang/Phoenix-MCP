@@ -232,7 +232,7 @@ async def test_unload_flushes_usage_and_audit_added_during_platform_unload(hass,
 
 
 async def test_failed_platform_unload_persists_audit_and_keeps_runtime_available(hass, hass_storage, enable_custom_integrations, monkeypatch):
-    """A refused platform unload does not reach the final successful-unload save."""
+    """A refused platform unload still persists the audit log and leaves the runtime available."""
     entry, data = await _setup_runtime(hass)
     data.audit.record(request_id='failed-unload-row', token_id='fixture', token_name='fixture',
                       method='get_state', resource='fixture', outcome='allowed', client_ip='',

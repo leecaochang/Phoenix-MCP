@@ -1,18 +1,16 @@
 """The published MCP tool catalog: schemas and annotations.
 
-Declarative data only, no behaviour. Three def lists (entity / native HA /
-system tools) and the `_TOOL_ANNOTATIONS` map that stamps every def with its four
-MCP hints at import, so a tool added without one raises KeyError here rather than
-silently shipping the spec's unsafe defaults.
+Declarative data only, no behaviour: three def lists (entity, native HA and
+system tools) and the `_TOOL_ANNOTATIONS` map holding every tool's four MCP
+hints. mcp_view, which owns the transport and the dispatch and executor
+registries, re-exports these names and stamps the annotations onto the defs at
+import, so a tool added without an entry raises KeyError there rather than
+shipping the spec's unsafe defaults. The conventions for each hint are in the
+comment above the map.
 
-Kept out of mcp_view, which owns the transport, the dispatch registry and the
-executor registry and simply reads this catalog. Conventions for choosing each
-hint live in the comment above the map.
-
-Nothing here imports the transport, and mcp_view re-exports these names. Adding
-a tool means adding a def here AND registering a handler in mcp_view; the two
-are pinned against each other, and against the annotations and executor
-registries, in both directions.
+Nothing here imports the transport. Adding a tool means adding a def here AND
+registering a handler in mcp_view; guard tests pin the two against each other,
+and against the annotations and executor registries, in both directions.
 """
 
 from __future__ import annotations
@@ -3018,9 +3016,10 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
             "whose source is gone keeps existing and quietly produces nothing, and no other tool "
             "can repoint it. Read get_helper_settings first and send back its "
             "editable_settings with your change applied, NOT the full settings: your input is "
-            "merged over what is stored, a key the flow does not offer is rejected if you send "
-            "it and left alone if you do not, and an OPTIONAL key the flow does offer is CLEARED "
-            "if you omit it. Pass that read's content_hash as expected_hash so the write is "
+            "merged over the form's current suggested values. Omitted fields retain those "
+            "values; a key the flow does not offer is rejected if you send it. To clear an "
+            "optional field with no default, explicitly send null; other fields follow the "
+            "form's validation. Pass that read's content_hash as expected_hash so the write is "
             "refused if something else changed the settings meanwhile. Any "
             "entity you name must be one this token could already control. May require admin "
             "approval. Inherited MESA is resolved across every entity owned by the helper and "
@@ -3431,9 +3430,8 @@ _SYSTEM_TOOL_DEFS: list[dict] = [
 # These are Phoenix MCP's own text rather than a mirror of Home Assistant's: HA
 # builds each tool's schema from an intent slot schema, which carries a type per
 # field and no prose, so there is nothing upstream to copy. The tool-level
-# descriptions ARE HA's verbatim and are pinned that way by
-# tests/test_native_intent_parity.py; this divergence is deliberately confined to
-# the parameters.
+# descriptions ARE HA's verbatim (a parity test pins that); the divergence is
+# confined to the parameters.
 #
 # The shape restatement ("as a string", "as an array of strings") is not
 # redundant with the declared type. A model that sends a list where a string was
@@ -3818,7 +3816,7 @@ def _annot(read_only: bool, destructive: bool, idempotent: bool, open_world: boo
 #
 # The conventions, since several are judgment calls:
 #   readOnlyHint  false for anything with a side effect, which is every name in
-#                 _EXECUTOR_REGISTRY and _WRITE_GATED_TOOLS (pinned by test).
+#                 _EXECUTOR_REGISTRY and _WRITE_GATED_TOOLS (a guard test pins it).
 #   destructiveHint  false only for genuinely ADDITIVE writes (create_*, card add,
 #                 backup create, permit-join). A whole-object replace (edit_*,
 #                 set_*, write_file) and physical actuation are destructive: they
@@ -3851,9 +3849,9 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     "get_config": _annot(True, False, True),
     "get_energy_config": _annot(True, False, True),
     "get_solar_forecast": _annot(True, False, True),
-    # Destructive: replace_statistic, set_source and remove_device all overwrite or
-    # drop something that was in another state. Idempotent: repeating any of the
-    # four leaves the same end state (a repeat is refused as already-applied).
+    # Destructive: replace_statistic, set_source, remove_device and remove_source
+    # overwrite or drop something that was in another state. Idempotent: repeating
+    # an operation leaves the same end state.
     "edit_energy_config": _annot(False, True, True),
     "render_template": _annot(True, False, True),
     "list_automations": _annot(True, False, True),
@@ -3900,8 +3898,8 @@ _TOOL_ANNOTATIONS: dict[str, dict] = {
     # Destructive: it discards work (a warm build cache), even though nothing it
     # can reach is a device or a configuration file.
     "clean_esphome_build": _annot(False, True, True),
-    # Not idempotent: running it twice renames twice, and the second call is
-    # against a device that no longer answers to the name in the first.
+    # Not idempotent: running it twice renames twice, and the second call
+    # addresses the device by its old name, which matches nothing.
     "rename_esphome_device": _annot(False, True, False),
     "install_esphome_firmware": _annot(False, True, False),
     "get_esphome_job": _annot(True, False, True),

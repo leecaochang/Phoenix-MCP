@@ -1,26 +1,20 @@
 """The panel's string catalog, and the endpoint that serves it.
 
-Phoenix serves these strings itself. They used to arrive over HA's own
-frontend/get_translations websocket command, which reads translations/ and
-nothing else, and they had to leave that directory: hassfest validates
-translations/en.json against a CLOSED set of Home Assistant categories and
-errors on any other top-level key, which fails the HACS submission. So
-catalogs/ holds Phoenix's own sections and translations/ holds only HA's.
-
-That move cost two behaviours HA was providing for free, and helpers.panel_catalog
-reimplements both. They are what this file pins, because both fail SILENTLY:
+Phoenix serves these strings itself from catalogs/: hassfest validates
+translations/en.json against a CLOSED set of Home Assistant categories, so only HA's own
+sections may live in translations/. helpers.panel_catalog therefore reimplements two
+behaviours HA's translation loader would otherwise provide, and this file pins both
+because both fail SILENTLY:
 
   - English backing. A key a translator has not reached must resolve to the
     English string, not to a raw dotted key rendered in the panel.
   - Placeholder mismatch drops the translation. The panel interpolates by name,
-    so a translation that renamed a placeholder renders a broken sentence and one
-    that invented a placeholder prints a token no caller passes. HA compared the
-    sets and dropped the translated key; so does this.
+    so a renamed placeholder renders a broken sentence and an invented one
+    prints a token no caller passes; the English string is kept instead.
 
-scripts/i18n_check_locale.py refuses to let a mismatched locale ship in the first
-place, so the drop rule is the runtime backstop for a hand-edited install rather
-than the primary guard. It is tested here anyway: a backstop that never runs in a
-test is a backstop nobody knows is broken.
+A locale-validation script already refuses to ship a mismatched locale, so the
+drop rule is the runtime backstop for a hand-edited install. It is tested
+anyway: a backstop that never runs in a test is one nobody knows is broken.
 """
 
 from __future__ import annotations
@@ -161,10 +155,10 @@ def test_only_the_panel_section_is_served() -> None:
 
 
 def test_catalogs_dir_is_not_the_translations_dir() -> None:
-    """The whole point of the split: hassfest must never see these sections.
+    """hassfest must never see Phoenix's own catalog sections.
 
-    A future edit that pointed CATALOGS_DIR back at translations/ would pass
-    every other test in this file and fail the HACS submission instead.
+    Pointing CATALOGS_DIR back at translations/ would pass every other test in this file
+    and fail HACS validation instead.
     """
     assert CATALOGS_DIR.name == "catalogs"
     translations = CATALOGS_DIR.parent / "translations"

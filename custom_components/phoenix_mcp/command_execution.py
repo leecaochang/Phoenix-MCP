@@ -39,7 +39,10 @@ def _digest(value: Any) -> str:
 
 def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str, *,
                         devices: DeviceRegistrySnapshot | None = None) -> str | None:
-    """Check current eligibility, sharing device metadata only within one synchronous capture."""
+    """Return a digest of the target's identity and command state, or None if ineligible.
+
+    Device metadata may be shared via `devices` only within one synchronous capture.
+    """
     from homeassistant.components.homeassistant.exposed_entities import async_should_expose
     from homeassistant.helpers import entity_registry as er
 
@@ -328,7 +331,7 @@ def service_plan_is_current(args: dict, hass: Any, data: Any, token: Any,
 
 @dataclass
 class LocalCommandReply:
-    """Recovery completes only when the dispatched result is certain."""
+    """Result of one local command turn: reply text, outcome, and any pending approval."""
 
     text: str
     outcome: str = "ok"

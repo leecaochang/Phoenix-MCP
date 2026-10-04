@@ -47,7 +47,7 @@ REASON_REVOKED = "token_revoked"
 REASON_TOKEN_EXPIRED = "token_expired"
 REASON_WIPED = "phoenix_mcp_data_wiped"
 # The execution claim was persisted but Home Assistant stopped before its
-# outcome was saved, so whether the side effect landed is genuinely UNKNOWN.
+# outcome was saved, so whether the side effect landed is UNKNOWN.
 # See async_reconcile_interrupted_approvals for why that resolves as failed.
 REASON_EXECUTION_INTERRUPTED = "execution_interrupted"
 REASON_AGENT_CHAT_ENDED = "agent_chat_ended"
@@ -89,9 +89,9 @@ class PendingApproval:
     # Set on disk immediately BEFORE the executor runs and cleared when its
     # outcome is persisted. It is the only durable trace that a side effect may
     # already have been applied: the in-memory claim in data.approvals_in_progress
-    # answers the same question for concurrent requests in this process, but it
-    # dies with the process, so a crash mid-execution left a still-pending record
-    # that an admin could approve again and apply twice.
+    # covers concurrent requests in this process but dies with it, so without
+    # this marker a crash mid-execution would leave a pending record an admin
+    # could approve again and apply twice.
     execution_started_at: datetime | None = None
     household_request: bool = False
     ha_user_id: str | None = None
@@ -235,7 +235,7 @@ async def async_create_pending_approval(
 
 
 def get_approval(store: TokenStore, approval_id: str) -> PendingApproval | None:
-    """Return the approval record for an ID, or None if not found."""
+    """Return the approval, or None if it is missing or its stored record is corrupt."""
     for entry in store.get_pending_approvals():
         if entry.get("id") == approval_id:
             try:
@@ -276,10 +276,10 @@ async def async_update_approval_status(
     rejected_reason: str | None = None,
     result: Any = None,
 ) -> PendingApproval | None:
-    """Transition an approval to a terminal state and persist.
+    """Transition a pending approval to a terminal state and persist.
 
-    Returns the updated record. Returns None if the approval is missing.
-    Caller must hold store.async_lock.
+    Returns the updated record, the unchanged record if it is no longer pending, or
+    None if the approval is missing. Caller must hold store.async_lock.
     """
     raw = store.get_pending_approvals()
     for entry in raw:
@@ -295,8 +295,8 @@ async def async_update_approval_status(
             entry["rejected_reason"] = rejected_reason
         if result is not None:
             entry["result"] = result
-        # The record is terminal now, so the "may be mid-execution" marker has
-        # done its job and must not survive into the stored history.
+        # The record is terminal, so the "may be mid-execution" marker has done
+        # its job and must not survive into the stored history.
         entry.pop("execution_started_at", None)
         store.set_pending_approvals(raw)
         await store.async_save()
@@ -312,23 +312,19 @@ async def async_mark_execution_started(
 ) -> bool:
     """Record on DISK that the admin approved and execution is about to run.
 
-    The in-memory claim in data.approvals_in_progress answers "is another request
-    already running this?" and is enough for a double-click, but it dies with the
-    process. The executor runs outside the store lock and its outcome is written
-    afterwards, so a stop or crash in that window left an untouched pending record
-    whose side effect may already have been applied, and an admin could approve it
-    again. This marker is what async_reconcile_interrupted_approvals reads at
-    startup and during periodic recovery.
+    The in-memory claim in data.approvals_in_progress stops a double-click but dies
+    with the process. The executor runs outside the store lock and its outcome is
+    written afterwards, so a stop or crash in that window would leave an untouched
+    pending record whose side effect may already have applied and could be approved
+    again. async_reconcile_interrupted_approvals reads this marker at startup and
+    during periodic recovery.
 
     Returns True when the marker is durable. A False return MUST stop the caller
-    from executing, and that is a FAIL-CLOSED choice replacing an earlier
-    best-effort one. The best-effort version reasoned that an unwritable store
-    should not block an approval the admin had already authorized, which sounds
-    right and is wrong: the very same store has to persist the terminal status
-    afterwards, so a disk that cannot take the marker cannot record the outcome
-    either. Executing anyway buys nothing and leaves a pending record whose action
-    HAS run, with no trace saying so, i.e. exactly the replay this marker exists to
-    prevent, made permanent instead of crash-dependent. Refusing costs a retry.
+    from executing: this FAILS CLOSED. Executing anyway on an unwritable store buys
+    nothing, because the same store must persist the terminal status, so a disk that
+    cannot take the marker cannot record the outcome either. The action would run
+    with no trace and stay re-approvable, the exact replay this marker prevents,
+    made permanent. Refusing costs a retry.
 
     Caller must hold store.async_lock.
     """
@@ -367,10 +363,10 @@ async def async_clear_execution_marker(
 ) -> None:
     """Undo async_mark_execution_started for an attempt that provably never ran.
 
-    Only for failures that happen BEFORE the executor could apply anything (today
-    just an unregistered tool name, which the registry lookup raises on before
-    doing any work). Leaving the marker there would make recovery resolve a
-    perfectly good pending approval as interrupted.
+    Only for failures that happen BEFORE the executor could apply anything (an
+    unregistered tool name, which the registry lookup raises on before doing any
+    work). Leaving the marker would make recovery resolve a good pending approval
+    as interrupted.
 
     Never call this after a failure that might have applied something: that is the
     case the marker exists for, and the caller resolves the record instead.
@@ -406,19 +402,16 @@ async def async_reconcile_interrupted_approvals(
 
     Called at startup and by the periodic approval sweep. A record still PENDING
     while carrying execution_started_at has no live in-process executor, so
-    whether its side effect landed is genuinely unknown. Active executions are
-    skipped by ID.
+    whether its side effect landed is unknown. Active executions are skipped by ID.
 
-    It resolves to FAILED rather than being left pending, and the asymmetry is
-    the whole point: leaving it pending offers the admin a button that may apply a
-    service call, a restart or a configuration write for the SECOND time, whereas
-    failing it means at worst an action the agent can request again and the
-    admin can approve again, with the reason naming exactly what is uncertain.
-    Duplicating an unknown side effect silently is the one outcome with no
-    recovery.
+    It resolves to FAILED rather than staying pending: a pending record offers the
+    admin a button that may apply a service call, restart or configuration write a
+    SECOND time, whereas failing it costs at worst a re-request and re-approval,
+    with the reason naming what is uncertain. Silently duplicating an unknown side
+    effect is the one outcome with no recovery.
 
-    Returns the records it changed so the caller can dismiss their notifications
-    and fire the resolved event. Caller must hold store.async_lock.
+    Returns the changed records so the caller can dismiss their notifications and
+    fire the resolved event. Caller must hold store.async_lock.
     """
     skip_ids = skip_ids or frozenset()
     raw = store.get_pending_approvals()
@@ -494,13 +487,12 @@ def collect_pending_approvals_for_wipe(
 ) -> list[PendingApproval]:
     """Return the currently-pending approvals as cancelled records, read-only.
 
-    Used by the admin wipe: TokenStore.async_wipe clears the whole approval
-    queue wholesale, so this does NOT mutate or persist the store. It only
-    builds the terminal records the caller needs to dismiss notifications and
-    fire phoenix_mcp_approval_resolved after the wipe (matching revocation/expiry).
-    Unlike those paths there is no skip_ids: the wipe deletes every record
-    regardless, so an in-progress approval cannot be spared anyway. Caller
-    holds async_lock and must call this before async_wipe.
+    Used by the admin wipe: TokenStore.async_wipe clears the whole approval queue,
+    so this does NOT mutate or persist the store. It builds the terminal records
+    the caller needs to dismiss notifications and fire phoenix_mcp_approval_resolved
+    after the wipe. There is no skip_ids: the wipe deletes every record, so an
+    in-progress approval cannot be spared. Caller holds async_lock and must call
+    this before async_wipe.
     """
     now_iso = utcnow().isoformat()
     out: list[PendingApproval] = []
@@ -591,22 +583,19 @@ def fire_approval_claim_event(hass: HomeAssistant, approval_id: str, *, claimed:
     """Fire an HA event when an approval is claimed for execution, or released.
 
     Approve runs the saved action INLINE in the admin's own request, so the
-    resolved event cannot fire until the tool has finished, which is seconds for
-    a real write. For all of that time every surface showing the approval stays
-    actionable: an admin who clicks Approve in Agent Chat can still click Reject
-    in the panel, and the reverse. The store-lock claim already refuses the
-    second action with a 409, so the OUTCOME was never wrong, but the operator
-    was being shown a control that could not work and no signal that their first
-    click had landed.
+    resolved event cannot fire until the tool has finished, which can take seconds
+    for a real write. Until then every surface showing the approval would stay
+    actionable (Approve in Agent Chat, Reject in the panel), although the
+    store-lock claim refuses the second action with a 409.
 
-    This fires the moment the claim is taken, so every surface can go
-    non-actionable immediately rather than waiting on the execution. It fires
-    again with claimed=False when execution failed and left the approval pending
-    and retryable, which is why this is a claim/release pair and not a second
-    "resolved": a released approval is actionable again and must come back.
+    This fires the moment the claim is taken so every surface can go
+    non-actionable immediately. It fires again with claimed=False when execution
+    failed and left the approval pending and retryable: a released approval is
+    actionable again and must come back, which is why this is a claim/release pair
+    and not a second "resolved".
 
-    Reject needs no counterpart. It resolves inside the store lock with nothing
-    to execute, so its resolved event already fires promptly.
+    Reject needs no counterpart: it resolves inside the store lock with nothing to
+    execute, so its resolved event already fires promptly.
     """
     hass.bus.async_fire(
         f"{DOMAIN}_approval_claimed",
@@ -619,7 +608,6 @@ def fire_approval_claim_event(hass: HomeAssistant, approval_id: str, *, claimed:
 
 
 def notification_id_for_approval(approval_id: str) -> str:
-    """Return the persistent_notification ID used for an approval."""
     return f"{DOMAIN}_approval_{approval_id}"
 
 
@@ -648,7 +636,6 @@ def create_approval_notification(hass: HomeAssistant, approval: PendingApproval)
 
 
 def dismiss_approval_notification(hass: HomeAssistant, approval_id: str) -> None:
-    """Dismiss the persistent notification for an approval after resolution."""
     from homeassistant.components import persistent_notification  # noqa: PLC0415
 
     persistent_notification.async_dismiss(

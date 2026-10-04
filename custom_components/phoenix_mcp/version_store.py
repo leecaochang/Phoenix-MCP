@@ -1,15 +1,16 @@
 """Configuration version history store.
 
-Immutable before/after snapshots of agent-driven create/edit/delete of
-automations, scripts, scenes, and helpers, with admin-only rollback. Records are
-captured at the executor (Phoenix MCP's single execution chokepoint), so both
+Immutable before/after snapshots of agent-driven create/edit/delete of the
+resource types in `VERSIONED_RESOURCE_TYPES`, with admin-only rollback. Records
+are captured at the executor (Phoenix MCP's single execution chokepoint), so both
 directly-allowed and Confirm-approved changes are recorded exactly once.
 
-Storage is a separate HA Store from tokens (``phoenix_mcp_versions``) holding a flat list
-of records. Retention is per-resource FIFO: the newest ``MAX_VERSIONS_PER_RESOURCE``
-versions per ``(resource_type, resource_id)`` are kept; older ones are evicted on
-write. Records are stored raw (un-redacted) because a rollback must round-trip the
-exact config; the data is admin-only and no more sensitive than the YAML it mirrors.
+Storage is a separate HA Store from tokens (``phoenix_mcp_versions``) holding a
+flat list of records. Retention is per-resource FIFO: the newest
+``MAX_VERSIONS_PER_RESOURCE`` versions per ``(resource_type, resource_id)`` are
+kept; older ones are evicted on write. Records are stored raw (un-redacted)
+because a rollback must round-trip the exact config; the data is admin-only and
+no more sensitive than the YAML it mirrors.
 """
 
 from __future__ import annotations
@@ -53,13 +54,12 @@ class VersionRecord:
     request_id: str | None
     approved_by_user_id: str | None
     timestamp: str
-    # One-line human description of what changed (e.g. "25 cards (was 24)" or
-    # "changed: name, area_id"), computed at capture time. Optional: records
-    # from before the field existed load as None and simply show no summary.
+    # One-line description of what changed (e.g. "25 cards (was 24)" or
+    # "changed: name, area_id"), computed at capture time. None shows no summary.
     summary: str | None = None
     # Catalog key + params that produced `summary`, so the Changes tab can render
-    # it in the operator's language. The English above stays authoritative and is
-    # what a record written before these existed still shows.
+    # it in the operator's language. The English summary stays authoritative and
+    # is what a record without a key shows.
     summary_key: str | None = None
     summary_params: dict | None = None
 
@@ -90,9 +90,9 @@ class VersionRecord:
 class VersionStore:
     """In-memory version history with optional persistence to an HA Store.
 
-    When a Store is provided, mutations are persisted immediately (config changes
-    are low-frequency, so there is no flush cycle). Passing no store keeps the
-    history in memory only.
+    With a Store, every mutation is persisted immediately (config changes are
+    low-frequency, so there is no flush cycle); without one, history is in memory
+    only.
     """
 
     def __init__(self, store: Store | None = None) -> None:
@@ -178,7 +178,7 @@ class VersionStore:
         return recent[offset:offset + limit] if limit >= 0 else recent[offset:]
 
     def count_recent(self) -> int:
-        """Total number of version records across all resources (for pagination)."""
+        """Return the total number of records across all resources."""
         return len(self._versions)
 
     def get(self, version_id: str) -> VersionRecord | None:

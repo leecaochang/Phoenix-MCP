@@ -1,4 +1,4 @@
-"""Tests for the unauthenticated skill route (skill_view.py)."""
+"""The unauthenticated skill route serves the Markdown guide and answers 503 when unavailable."""
 
 from __future__ import annotations
 
@@ -55,17 +55,14 @@ async def test_503_when_data_missing():
 
 
 def test_skill_directs_card_discovery_before_authoring():
-    """Pin the wording, not just the tool name.
+    """The guide's wording is load-bearing, so it is pinned, not just the tool name.
 
-    Wording here is load-bearing and has measurably changed behaviour before: an
-    alternative reads as permission and an early return reads as success. Three
-    things must survive a reword. The instruction has to be to call the tool
-    BEFORE building, or a model discovers cards only after it has already picked
-    one. It has to say an uninstalled type is not refused at write time, since a
-    model reasonably assumes a bad type would be rejected like any other bad
-    argument and so treats guessing as safe. And an un-harvested catalog has to
-    read as UNKNOWN, because "no custom cards" makes a model avoid every custom
-    card on the instance with no way to find out otherwise.
+    An alternative reads as permission and an early return reads as success. Three
+    things must survive a reword. The tool is called BEFORE building, or a model
+    discovers cards only after picking one. An uninstalled type is not refused at
+    write time, or a model treats guessing as safe. An un-harvested catalog reads
+    as UNKNOWN, because "no custom cards" makes a model avoid every custom card
+    with no way to check.
     """
     assert "Call `list_dashboard_cards` before building a card" in PHOENIX_SKILL_MARKDOWN
     assert "renders as a broken card" in PHOENIX_SKILL_MARKDOWN
@@ -73,15 +70,14 @@ def test_skill_directs_card_discovery_before_authoring():
     # The choice-or-offer instruction is the user's stated workflow; keep both halves.
     assert "pick the best-suited card yourself" in PHOENIX_SKILL_MARKDOWN
     assert "with a recommendation" in PHOENIX_SKILL_MARKDOWN
-    # The old blanket discouragement must not come back: it steered models away
-    # from custom cards entirely, which is the opposite of the intent now that
-    # they can check.
+    # A blanket discouragement must not return: it steers models away from custom
+    # cards entirely, the opposite of the intent now that they can check.
     assert "Do not assume custom cards" not in PHOENIX_SKILL_MARKDOWN
 
 
 def test_skill_includes_domain_authoring_recipes():
-    # The modular domain-authoring recipes (v2.1) are the skill's authoring value;
-    # guard their headers against accidental removal.
+    # The modular domain-authoring recipes are the skill's authoring value; guard
+    # their headers against accidental removal.
     for header in (
         "### Automations",
         "### Scripts and scenes",

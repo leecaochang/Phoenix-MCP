@@ -1,4 +1,4 @@
-"""Tests for the bounded statistics MCP contract."""
+"""Tests for the bounded get_statistics tool contract."""
 
 from __future__ import annotations
 

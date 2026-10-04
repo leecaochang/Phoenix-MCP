@@ -1,37 +1,22 @@
 """Credential masking for ESPHome device YAML.
 
-ESPHome device files routinely carry credentials inline rather than behind
-`!secret`: an API encryption key, an OTA password, a wifi password. Phoenix MCP
-must be able to read and edit those files without ever handing the values to an
-agent or writing them into an approval record, and without a blind write being
-able to repoint a device at an attacker's network.
+Device files routinely carry credentials inline rather than behind `!secret`.
+Phoenix MCP must read and edit them without exposing the values to an agent or
+an approval record, or letting a blind write repoint a device at another network.
 
-The approach is span-surgical. `yaml.compose` gives every scalar's exact source
-span, so a placeholder is spliced into the RAW file text at those offsets and
-nothing else moves. Comments, ordering, and formatting survive byte-for-byte,
-which matters because these files are heavily commented; a parse-and-re-dump
-round trip would silently destroy that.
+Masking is span-surgical: `yaml.compose` gives each scalar's exact source span,
+so a placeholder is spliced into the RAW text and comments, ordering and
+formatting survive byte-for-byte (a parse-and-re-dump would destroy them). Three
+layers feed one span set: curated paths (api.encryption.key, ...); any scalar
+whose KEY looks like a credential, at any depth; any scalar whose whole value
+matches a secrets.yaml value.
 
-Three detection layers feed one span set:
-
-  1. Curated paths      known credential locations (api.encryption.key, ...).
-  2. Key-name heuristic any scalar whose KEY looks like a credential, at any
-                        depth, so a bindkey or a custom auth header is covered
-                        without waiting for the curated list to learn about it.
-  3. secrets.yaml       any scalar whose whole value matches a secrets.yaml
-                        value, catching the same credential inlined in one file
-                        while referenced by `!secret` in another.
-
-Over-redaction is the accepted failure direction. Redacted spans are also
-WRITE-FROZEN: a caller may replace one with a `!secret` reference (the supported
-migration) but never with a different literal. Freezing is not only about
-disclosure. `api.encryption.key` must match the noise PSK stored in HA's config
-entry, and `ota[].password` governs the next upload's authentication, so a blind
-change can leave a device unreachable, which is a physical-access problem for
-anything mounted out of reach.
-
-`secrets.yaml` itself is never readable or writable through any tool. Its values
-are parsed here, internally, only to know what NOT to emit.
+Over-redaction is the accepted failure direction. Redacted spans are WRITE-FROZEN:
+a caller may replace one with a `!secret` reference but never a different
+literal, because `api.encryption.key` must match the noise PSK in HA's config
+entry and `ota[].password` governs the next upload, so a blind change can leave a
+device unreachable (a physical-access problem). `secrets.yaml` is never readable
+or writable through any tool; it is parsed here only to know what NOT to emit.
 """
 
 from __future__ import annotations
@@ -67,7 +52,8 @@ ESPHOME_SECRET_PATHS: tuple[tuple[str, ...], ...] = (
 # Layer 2: key names that mark their value as a credential wherever they appear.
 _SECRET_KEY_RE = re.compile(r"(password|passwd|psk|bindkey|api_key|token|secret)", re.IGNORECASE)
 
-# Layer 3 floor. A short secrets.yaml value (a pin number, a small integer)
+# Layer 3 floor. It catches a credential inlined in one file but referenced by
+# `!secret` in another. A short secrets.yaml value (a pin number, a small integer)
 # would match unrelated scalars all over a device file and mangle it, so only
 # values of at least this length are cross-checked, and only as whole scalars.
 MIN_CROSS_CHECK_LENGTH = 8
@@ -118,9 +104,10 @@ def placeholder_for(path: str) -> str:
 def esphome_rel_path_ok(rel: str) -> bool:
     """Whether a config-relative path may be read or written as device YAML.
 
-    Mirrors _yaml_read_path_ok's rules and adds two of its own: `archive/` is the
-    Device Builder's trash, and secrets.yaml is never reachable in either
-    direction.
+    Same hidden-path, extension and secrets.yaml rules as the generic YAML reader
+    (_yaml_read_path_ok), except that `archive/` (the Device Builder's trash) is
+    refused and the `esphome/` directory is admitted. secrets.yaml is never
+    reachable in either direction.
     """
     if not isinstance(rel, str) or not rel.strip():
         return False
@@ -378,36 +365,26 @@ def splice_esphome_text(
 ) -> str:
     """Return the raw text to write, restoring credentials behind placeholders.
 
-    The frozen span set is recomputed from DISK content on every call, so what is
-    frozen always derives from the file rather than from anything the caller
-    claims about it.
+    The frozen span set is recomputed from DISK content on every call, never from
+    anything the caller claims about the file.
 
     Raises EsphomeSecretViolation when a write would change a credential,
     duplicate one into another location, introduce a new inline one, or reference
     a `!secret` key that does not exist.
 
-    allow_literal_credentials waives the three LITERAL refusals (changing a masked
-    value, repeating a secrets.yaml value, a new inline credential) and is for the
-    version-restore path ONLY. Those three exist to stop an AGENT authoring
-    credentials; a restore re-applies raw text Phoenix itself recorded from a file
-    Phoenix itself wrote, so they buy nothing there and cost correctness: a version
-    snapshot carries the file's inline credentials as literals, which is byte-for-
-    byte what restore must reproduce, so without the waiver every restore of a
-    file with any inline credential is refused for "changing" a value it is
-    rewriting unaltered. Inline credentials are the normal case in these files,
-    so that covers nearly all of them.
-
-    Scoping the waiver to restore rather than accepting a byte-identical literal
-    generally is deliberate: accepted-versus-refused would otherwise tell a caller
-    whether a guessed credential was correct, which is a guessing oracle. The
-    placeholder rules and the !secret existence check still apply on both paths.
+    allow_literal_credentials is for the version-restore path ONLY. It waives the
+    three LITERAL refusals (changing a masked value, repeating a secrets.yaml
+    value, a new inline credential), which exist to stop an AGENT authoring
+    credentials. A restore re-applies raw text Phoenix itself recorded, inline
+    credentials included as literals, so without the waiver nearly every restore
+    would be refused for "changing" a value it rewrites unaltered. The waiver is
+    scoped to restore rather than accepting a byte-identical literal generally,
+    because accepted-versus-refused would tell a caller whether a guessed
+    credential was correct. Placeholder rules and the !secret existence check
+    still apply on both paths.
     """
     secret_values = secret_values or set()
     disk_spans = {dotted: (start, end) for start, end, dotted in _secret_spans(disk_text, secret_values)}
-    disk_root = _compose(disk_text)
-    disk_scalars = (
-        {dotted: node for dotted, _, _, node in _walk(disk_root, ())} if disk_root is not None else {}
-    )
 
     new_root = _compose(new_text)
     if new_root is None:
@@ -435,7 +412,7 @@ def splice_esphome_text(
 
             # A !secret reference is the supported way to replace an inline
             # credential, so it is never a violation. Validate the target exists:
-            # Tier 2 has no compile step, so a dangling reference would otherwise
+            # a write does not compile, so a dangling reference would otherwise
             # only surface as a broken build much later.
             if node.tag == "!secret" and secret_keys is not None:
                 name = str(node.value).strip()
@@ -460,10 +437,7 @@ def splice_esphome_text(
                     f"'{dotted}' has no masked value on disk to restore. In new content, use a "
                     "!secret reference at this path instead of a placeholder."
                 )
-            disk_node = disk_scalars.get(dotted)
             original = disk_text[span[0]:span[1]]
-            if disk_node is not None and not isinstance(disk_node.value, str):
-                original = disk_text[span[0]:span[1]]
             replacements.append((node.start_mark.index, node.end_mark.index, original))
             continue
 

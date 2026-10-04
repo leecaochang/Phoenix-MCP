@@ -1,16 +1,12 @@
 """Tests for patch_dashboard, the path-addressed single-value dashboard write.
 
-It exists because set_dashboard_config demands the WHOLE layout while a read of
-that layout is lossy: rule 12 redacts entities the token cannot resolve, and rule
-8 redacts GHOSTS (absent from both hass.states and the registry) before any
-permission resolution runs. A dashboard carrying a few dead references therefore
-cannot be written back by any token at any permission level without persisting
-the placeholder over them. Patching never resends untouched bytes, so redaction
-stops being a write barrier, and the sentinel guard makes the failure that
-motivated this tool structurally impossible rather than merely avoidable.
+set_dashboard_config needs the WHOLE layout, but a read of that layout is lossy:
+entities the token cannot resolve are redacted, as are ghosts (absent from both
+hass.states and the registry). A dashboard with a few dead references therefore
+cannot be written back without persisting the placeholder over them. Patching
+never resends untouched bytes, and the sentinel guard refuses a placeholder value.
 
-Also covers what the card ops cannot address at all: views[].badges[], which is
-where the live migration that produced this tool actually got stuck.
+Also covers views[].badges[], which the card ops cannot address at all.
 """
 
 from __future__ import annotations
@@ -73,8 +69,8 @@ async def _call(args, token=None, hass=None, data=None):
         "patch_dashboard", args, token, hass, data if data is not None else MagicMock())
 
 
-# A layout shaped like the one that motivated the tool: a view-level badge (no
-# card op can reach it) whose visibility names an entity that no longer exists.
+# A layout with a view-level badge (no card op can reach it) whose visibility
+# names an entity that no longer exists.
 LAYOUT = {
     "views": [
         {
@@ -157,7 +153,7 @@ class TestRedactionSentinelDetection:
 
 class TestPatchDashboard:
     async def test_deny_without_cap_never_echoes_the_payload(self, hass, lovelace_env):
-        """Rule 29(a): a denied token learns nothing about its own arguments."""
+        """A denied token learns nothing about its own arguments."""
         h, _l = lovelace_env
         await _seed(h)
         content, outcome, _ = await _call(
@@ -188,7 +184,7 @@ class TestPatchDashboard:
         assert len(hist) == 1 and hist[0].summary == "set views[0].badges[0].entity"
 
     async def test_refuses_a_value_carrying_the_redaction_sentinel(self, hass, lovelace_env):
-        """The failure this whole tool exists to make impossible.
+        """A value carrying the redaction sentinel is refused.
 
         A caller that reads a layout and hands part of it back would otherwise
         persist the placeholder over real configuration, silently and

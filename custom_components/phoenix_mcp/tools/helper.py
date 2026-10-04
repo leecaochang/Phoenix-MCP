@@ -2,20 +2,19 @@
 
 The storage-based helper domains only, listed in HELPER_TYPES: each publishes a
 uniform {type}/create|update|delete WS command whose item id key is
-"{type}_id", which is what makes one set of handlers cover all twelve.
+"{type}_id", which is what lets one set of handlers cover them all.
 Config-flow helpers use HA's config-entry flow manager instead. create_helper
 can replay their cumulative form steps, returning the next real schema until a
 last step is supplied; only that last step is approval-gated and submitted.
 
-The precheck here hoists only the cheap structural checks (type known, id
-present, config a mapping). A helper write validates by way of the WS command
-that IS the write, so there is no side-effect-free validator to run pre-gate;
-the rest stays at execution time.
+The precheck hoists only the cheap structural checks (type known, id present,
+config a mapping). A helper write validates by way of the WS command that IS the
+write, so there is no side-effect-free validator to run before the gate; the
+rest happens at execution time.
 
-mcp_view owns the transport, the dispatch registry and the executor registry, and
-imports the names it registers or calls from here. The dependency runs one way:
-this module never imports the transport that dispatches it. Shared primitives
-come from ..tool_common.
+mcp_view registers these tools; this module imports it lazily, inside
+_tool_delete_helper only, to reach the integration removal tool. Shared
+primitives come from ..tool_common.
 """
 
 from __future__ import annotations
@@ -74,8 +73,8 @@ from ..template_scope import HelperScopeError, template_entities, validate_templ
 
 _LOGGER = logging.getLogger(__name__)
 
-# One message for "no such entry" and "not a helper" (rule 12): whether an
-# entry_id names a real integration is not something this tool should disclose.
+# One message for "no such entry" and "not a helper", so the refusal is not an
+# existence oracle for integration entries.
 _NOT_A_HELPER_ENTRY = (
     "No helper configuration entry with that id. This tool edits HELPER entries only "
     "(the ones Home Assistant classifies as helpers, such as threshold, derivative, "
@@ -85,7 +84,7 @@ _NOT_A_HELPER_ENTRY = (
 
 # Storage-based helper domains managed via the in-process WS command dispatch
 # ({type}/create|update|delete, item id key = "{type}_id"). Config-entry helper
-# types (template, group, utility_meter, etc.) are out of scope for now.
+# types (template, group, utility_meter, etc.) go through the config-flow path.
 HELPER_TYPES = frozenset({
     "input_boolean", "input_number", "input_text",
     "input_select", "input_datetime", "input_button", "counter", "timer", "schedule", "zone", "tag", "person",
@@ -659,9 +658,9 @@ async def _prepare_config_flow_helper(
             if result.get("type") == FlowResultType.ABORT:
                 return "error", f"Home Assistant refused this helper flow: {result.get('reason')}."
             if result.get("type") == FlowResultType.CREATE_ENTRY:
-                # last_step=False promised this could not happen. If an
-                # integration violates that contract, creation already occurred;
-                # surface it loudly rather than pretending preflight was clean.
+                # last_step=False promises this cannot happen. If an integration
+                # breaks that contract the entry already exists: it is removed and
+                # reported rather than letting the preflight pass as clean.
                 entry = result.get("result")
                 if entry is not None:
                     await hass.config_entries.async_remove(entry.entry_id)
@@ -689,10 +688,8 @@ def _resolve_helper_entity_id(hass: HomeAssistant, helper_type: str, helper_id: 
     """Map a storage-helper id back to its entity_id via the registry, or None.
 
     list_helpers exposes entry.unique_id as the editable helper_id, so the reverse
-    lookup matches on (domain == helper_type, unique_id == helper_id). Used by
-    edit/delete as an existence check (the helper must resolve to a real
-    entity). Ordinary authoring is cap-gated; sensitive zone/tag/person writes add
-    entity scope and storage-membership checks.
+    lookup matches on (domain == helper_type, unique_id == helper_id). Edit and
+    delete use it as the existence check: the helper must resolve to a real entity.
     """
     registry = er.async_get(hass)
     for entry in registry.entities.values():
@@ -2092,23 +2089,18 @@ def _build_diff_delete_helper(args: dict, token: TokenRecord, hass: HomeAssistan
 
 
 async def _helper_config_entry(hass: HomeAssistant, entry_id: Any) -> Any | None:
-    """A config entry that is a HELPER, or None. The gate for both tools here.
+    """A config entry that is a HELPER, or None. The gate for both settings tools.
 
-    "Is this a helper" is HA's OWN classification, `integration_type: helper` in
-    the integration's manifest, not a list of domain names maintained here. Every
-    core helper declares it (threshold, derivative, switch_as_x, min_max,
-    utility_meter, group, template) and a hub declares something else, so a
-    third-party helper installed tomorrow is covered without a code change and
-    cannot be mistaken for an integration.
+    "Is this a helper" is HA's OWN classification (`integration_type: helper` in
+    the manifest), not a domain list kept here, so a third-party helper is covered
+    and cannot be mistaken for an integration.
 
-    That distinction carries the whole security argument for this pair of tools.
-    A helper's options are entity references and numbers, so every entity in a
-    write can be checked against the token's tree before it lands. An arbitrary
-    integration's options flow can carry a HOSTNAME AND CREDENTIALS, and
-    repointing one at a server the operator does not control is a
-    data-exfiltration primitive that no scope check would catch. Widening past
-    helpers is therefore a separate decision with its own capability, not
-    something to reach by relaxing this predicate.
+    That carries the security argument: a helper's options are entity references
+    and numbers, so every entity in a write can be checked against the token's
+    tree, while an arbitrary integration's options flow can carry a HOSTNAME AND
+    CREDENTIALS, and repointing one at a server the operator does not control is a
+    data-exfiltration primitive no scope check catches. Widening past helpers
+    needs its own capability, not a relaxed predicate here.
     """
     if not isinstance(entry_id, str) or not entry_id.strip():
         return None
@@ -2159,8 +2151,8 @@ def _config_entry_helper_mesa_entities(
 # reconfigure flow writes entry.data and finishes with ABORT carrying
 # reason "reconfigure_successful", because it updates an entry rather than making
 # one. Reading a success as a failure (or the reverse) is the whole hazard here,
-# so every mechanism-specific difference is funnelled through the four helpers
-# below rather than spread across the tools.
+# so every mechanism-specific difference is funnelled through the _settings_*
+# and flow helpers below rather than spread across the tools.
 _OPTIONS = "options"
 _RECONFIGURE = "reconfigure"
 _RECONFIGURE_OK = "reconfigure_successful"
@@ -2370,13 +2362,13 @@ def _options_schema_json(result: Any) -> list | None:
 
 
 async def _abort_flow(hass: HomeAssistant, mechanism: str | None, flow_id: str | None) -> None:
-    """Drop a settings flow we opened but will not finish.
+    """Abort a settings flow that was opened but will not be finished.
 
     Every early return between async_init and a successful configure has to come
-    through here: the flow lives in HA's own manager, not in the request, so
-    abandoning one leaks it into config_entries/flow/progress where it shows up
-    in the operator's UI as a half-finished dialog. The two mechanisms have
-    separate managers, so aborting on the wrong one silently leaves the flow open.
+    through here: the flow lives in HA's own manager, so an abandoned one leaks
+    into config_entries/flow/progress and shows in the operator's UI as a
+    half-finished dialog. The two mechanisms have separate managers, so aborting
+    on the wrong one silently leaves the flow open.
     """
     if not flow_id:
         return
@@ -2392,11 +2384,10 @@ async def _tool_get_config_entry_options(
 ) -> tuple[dict, str, str]:
     """MCP tool: read one helper config entry's options and the schema for them.
 
-    A read, so never approval-gated even when cap_helper_write is confirm (the
-    get_dashboard_config precedent). It opens an options flow to obtain the
-    schema, because the schema is what the flow declares rather than something
-    stored, and aborts it immediately: this must not leave a dialog open in the
-    operator's UI just because something asked what the fields are.
+    A read, so never approval-gated even when cap_helper_write is confirm. It
+    opens the settings flow to obtain the schema, which the flow declares rather
+    than stores, and aborts it immediately so no dialog is left open in the
+    operator's UI.
     """
     tool = "get_helper_settings"
     if effective_cap(token, "cap_helper_write") == CAP_DENY:
@@ -2434,16 +2425,13 @@ async def _tool_get_config_entry_options(
             )
             return _tool_success(json.dumps(body, default=str)), "allowed", tool
         body["schema"] = schema
-        # THE FIELD A CALLER ACTUALLY SENDS BACK, taken from the SCHEMA's own
-        # suggested values rather than from the stored settings.
-        #
-        # Intersecting stored keys with field names was the first attempt and it
-        # is wrong whenever a flow TRANSFORMS its input, which is common: a real
-        # time_off helper stores {"entities": [id]} while its form field is
-        # "entity" (singular, one id), so the intersection was EMPTY and the tool
-        # reported that nothing could be changed on a helper that reconfigures
-        # fine. The stored shape is the integration's business; the form's shape
-        # is the caller's.
+        # THE FIELDS A CALLER ACTUALLY SENDS BACK, taken from the SCHEMA's own
+        # suggested values rather than from the stored settings. Intersecting
+        # stored keys with field names fails whenever a flow TRANSFORMS its input
+        # (a helper may store {"entities": [id]} while its form field is "entity",
+        # one id), which would report nothing editable on a helper that
+        # reconfigures fine. The stored shape is the integration's business; the
+        # form's shape is the caller's.
         #
         # suggested_value is authoritative because the FLOW puts it there: HA's
         # schema flows seed it from the stored options, and a hand-written flow
@@ -2461,8 +2449,9 @@ async def _tool_get_config_entry_options(
             "Send editable_settings back with your change applied; those are the form's "
             "own fields and current values, which may be named or shaped differently from "
             "settings above (that is what this helper stores, and it is left alone). A "
-            "field in schema but not here has no current value. Omitting an OPTIONAL field "
-            "the form offers clears it."
+            "field in schema but not here has no current value. Omitted fields retain the "
+            "form's current suggested values. To clear an optional field with no default, "
+            "explicitly send null; other fields follow the form's validation."
         )
     except Exception:  # noqa: BLE001 - a flow that will not start is not a Phoenix bug
         _LOGGER.exception("Could not open the settings flow for %s", entry.entry_id)
@@ -2475,12 +2464,11 @@ async def _tool_get_config_entry_options(
 def _entities_in_options(options: Any) -> set[str]:
     """Whole entity IDs and statically established template dependencies.
 
-    Matched by VALUE, never by key name, for the reason the relationship walk
-    learned the hard way: each helper names its source differently (`entity_id`
-    on threshold, `source` on derivative, `entity_ids` on min_max, whatever a
-    third-party helper chose), so a key list would go stale silently and let an
-    unchecked entity through. Over-matching a coincidental string only costs a
-    scope check the caller would pass anyway.
+    Matched by VALUE, never by key name: each helper names its source differently
+    (`entity_id` on threshold, `source` on derivative, `entity_ids` on min_max,
+    whatever a third-party helper chose), so a key list would go stale silently
+    and let an unchecked entity through. Over-matching a coincidental string only
+    costs a scope check the caller would pass anyway.
     """
     found: set[str] = set()
 
@@ -2516,13 +2504,12 @@ def _unwritable_option_entities(
 ) -> list[str]:
     """Entities in an options payload the token may not WRITE.
 
-    WRITE rather than READ, matching _unwritable_scene_members, and the strictness
-    is deliberate. A helper both EXPOSES its source (a token that cannot read
-    sensor.secret could otherwise point a helper at it and read the helper's own
-    entity instead, which is in scope) and can ACTUATE it (switch_as_x wraps a
-    switch so the new entity turns the old one on), and nothing in the serialized
-    schema says which of the two a given field does. The failure direction is
-    refusing a legitimate edit rather than handing over a scope escape.
+    WRITE rather than READ, matching _unwritable_scene_members. A helper both
+    EXPOSES its source (a token that cannot read sensor.secret could otherwise
+    point a helper at it and read the helper's own in-scope entity instead) and
+    can ACTUATE it (switch_as_x wraps a switch so the new entity turns the old one
+    on), and nothing in the serialized schema says which a given field does. The
+    failure direction is refusing a legitimate edit, not handing over a scope escape.
     """
     if template_type is not None:
         validate_template_selectors(options, template_type)
@@ -2536,7 +2523,7 @@ def _config_entry_settings_precheck(
     settings: Any, entry: Any, mechanism: str | None, token: TokenRecord,
     hass: HomeAssistant, tool: str,
 ) -> tuple[dict, str, str] | None:
-    """Rule 29: refuse a doomed reconfigure before an approval exists."""
+    """Refuse a doomed reconfigure before an approval is created."""
     if not isinstance(settings, dict) or not settings:
         return _tool_error("settings must be a non-empty object of the values to apply."), "invalid_request", tool
     if mechanism is None:
@@ -2627,17 +2614,15 @@ async def _tool_set_config_entry_options(
 ) -> tuple[dict, str, str]:
     """MCP tool: change one helper config entry's settings (Confirm-gated).
 
-    The tool that lets an agent finish a migration. When the entity a helper was
-    built on goes away, nothing else on this surface can repoint it: the helper
-    keeps existing, keeps its own entity, and quietly produces nothing.
+    Lets an agent repoint a helper whose source entity went away; nothing else on
+    this surface can, and the helper otherwise keeps existing and quietly produces
+    nothing.
 
-    `options` is MERGED over the entry's stored options by HA's own schema flow,
-    not swapped for them, and the difference matters in both directions: a key
-    the flow does not declare is left untouched (and is REJECTED if sent, since
-    the step validates against its schema), while an OPTIONAL key the flow does
-    declare and the caller omits is CLEARED, which is how a field gets emptied.
-    So the set to send is `editable_options` from get_config_entry_options, which
-    is exactly the stored options intersected with what the flow offers.
+    `settings` goes through the entry's own flow, so a key the flow does not
+    declare is REJECTED by its schema. Fields the caller omits are submitted with
+    their current values, taken from the form's suggested values, and an explicit
+    null clears an optional field that has no default. The set to send is
+    `editable_settings` from get_helper_settings with the change applied.
     """
     tool = "set_helper_settings"
     if effective_cap(token, "cap_helper_write") == CAP_DENY:
@@ -2690,7 +2675,7 @@ async def _tool_set_config_entry_options(
 async def _execute_set_config_entry_options(
     args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    """Protect qualified Template writes before invoking the existing executor."""
+    """Run a helper settings write, wrapping Template entries in configuration recovery."""
     from ..config_recovery import ConfigurationRecoveryError
     from ..template_recovery import protect_template, template_snapshot
 

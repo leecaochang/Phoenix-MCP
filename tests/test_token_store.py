@@ -1,4 +1,4 @@
-"""Tests for token_store.py."""
+"""Token store: permissions, token and settings records, hardened load, patching and presets."""
 
 from __future__ import annotations
 
@@ -156,9 +156,9 @@ class TestTokenRecord:
         assert token.announce_all_tools is False
 
     def test_from_dict_fills_new_caps_to_deny(self):
-        # A token persisted before the capability expansion carries only the
-        # original caps. Loading it must default every newly-added cap to deny
-        # (the no-storage-bump upgrade path), never raise or leave it unset.
+        # A record persisted before a capability existed carries only the older
+        # caps. Loading must default every missing cap to deny (no storage version
+        # bump is involved), never raise or leave it unset.
         token = TokenRecord.from_dict({
             "id": "x",
             "name": "x",
@@ -187,11 +187,10 @@ class TestTokenRecord:
         assert restored.announce_all_tools is True
 
     def test_from_dict_naive_expires_at_normalized_to_utc(self):
-        # A timezone-less expires_at (hand-edited storage, or a record written
-        # before API input normalization) must load aware: a naive value makes
-        # every comparison against aware UTC raise TypeError, and the startup
-        # expiry sweep runs during setup, so one bad record aborted the whole
-        # integration.
+        # A timezone-less expires_at (hand-edited or legacy storage) must load
+        # aware: a naive value makes every comparison against aware UTC raise
+        # TypeError, and the startup expiry sweep runs during setup, so one bad
+        # record would abort the whole integration.
         token = TokenRecord.from_dict({
             "id": "x", "name": "x", "token_hash": "x",
             "created_at": utcnow().isoformat(), "created_by": "user1",
@@ -235,7 +234,7 @@ class TestTokenRecord:
     def test_from_dict_non_dict_permissions_load_empty(self):
         # Fail closed: a corrupt (non-object) permission tree loads as an empty
         # tree granting nothing, instead of raising AttributeError and killing
-        # the record (or, pre-hardening, the whole store load).
+        # the record.
         for garbage in (None, "corrupt", [1, 2], 7):
             token = TokenRecord.from_dict({
                 "id": "x", "name": "x", "token_hash": "x",
@@ -440,8 +439,8 @@ class TestTokenStoreLoad:
     async def test_load_skips_unparseable_records_and_keeps_siblings(self, hass):
         # The corrupt-record handler must skip ANY record from_dict cannot
         # parse, whatever the exception type. Nested garbage inside the
-        # permission tree raises AttributeError, which the old
-        # (KeyError, TypeError, ValueError) catch let escape, aborting setup.
+        # permission tree raises AttributeError, which a narrower
+        # (KeyError, TypeError, ValueError) catch would let escape, aborting setup.
         now = utcnow()
         good = {
             "id": "tok-good", "name": "good", "token_hash": "h1",
@@ -472,13 +471,12 @@ class TestTokenStoreLoad:
     async def test_load_skips_a_record_whose_required_datetime_is_unparseable(
         self, hass, bad_created_at
     ):
-        """created_at is non-optional, so an unparseable one must skip the record.
+        """An unparseable created_at (non-optional) skips the record.
 
         _parse_dt returns None for anything it cannot parse, which would build a
-        TokenRecord whose non-optional created_at is None. That does not raise at
-        construction, so the record loads looking valid and crashes much later at
-        an arbitrary expiry comparison or .isoformat(). Raising routes it into
-        the same skip-and-warn handler as every other corruption.
+        TokenRecord with a None created_at: it loads looking valid and crashes
+        later at an expiry comparison or .isoformat(). Raising routes it into the
+        same skip-and-warn handler as every other corruption.
         """
         now = utcnow()
         good = {
@@ -536,9 +534,10 @@ class TestTokenStoreLoad:
 
     async def test_load_wrong_typed_collections_reset(self, hass):
         # Each top-level collection of the wrong type is reset to an empty
-        # container instead of crashing (tokens:int -> TypeError during loading;
-        # settings/entity_hints of the wrong type -> AttributeError; a string
-        # pending_approvals would silently become a list of characters).
+        # container instead of crashing (an int `tokens` raises TypeError during
+        # loading; `settings` or `entity_hints` of the wrong type raise
+        # AttributeError; a string `pending_approvals` would silently become a
+        # list of characters).
         existing = {
             "version": STORAGE_VERSION,
             "tokens": 7,
@@ -873,9 +872,7 @@ class TestTokenPatch:
         assert updated.cap_template_render == "allow"
 
     async def test_patch_cap_change_after_persona_drops_to_custom(self, token_store):
-        """Applying a persona and then changing any cap should auto-switch persona to custom
-        (or to another matching preset if the new state happens to match one).
-        """
+        """Changing a cap after applying a persona switches the persona to custom."""
         from custom_components.phoenix_mcp.personas import get_persona_caps
 
         record, _ = await token_store.async_create_token("t1", "u")
@@ -896,7 +893,7 @@ class TestTokenPatch:
         assert updated.persona == "custom"
 
     async def test_patch_cap_change_can_promote_to_matching_persona(self, token_store):
-        """If post-change caps happen to match a different preset exactly, detect that preset."""
+        """If the post-change caps match a different preset exactly, that preset is detected."""
         from custom_components.phoenix_mcp.personas import get_persona_caps
 
         record, _ = await token_store.async_create_token("t1", "u")
@@ -917,7 +914,7 @@ class TestTokenPatch:
         assert updated.persona == "power_user"
 
     async def test_patch_non_cap_change_does_not_touch_persona(self, token_store):
-        """Patching only rate-limit fields should NOT trigger persona re-derivation."""
+        """Patching only rate-limit fields does not re-derive the persona."""
         from custom_components.phoenix_mcp.personas import get_persona_caps
 
         record, _ = await token_store.async_create_token("t1", "u")
@@ -944,7 +941,7 @@ class TestTokenPatch:
         record, _ = await token_store.async_create_token("t1", "u")
         await token_store.async_patch_token(record.id, name="renamed-x", created_by="hacker")
         fetched = token_store.get_token_by_id(record.id)
-        assert fetched.name == "renamed-x"   # name is now mutable (rename)
+        assert fetched.name == "renamed-x"   # name is mutable (rename)
         assert fetched.created_by == "u"     # created_by stays immutable (ignored)
 
     async def test_name_slug_exists_excludes_self(self, token_store):

@@ -20,10 +20,10 @@ import { Loading, ErrorMsg, RefreshIcon, ExportIcon, ImportIcon } from "../compo
 import { compareStrings, localeNumber, t, tn } from "../i18n";
 import { tRich } from "../i18n/rich";
 
-// HA domain -> the canonical tag namespace roots that describe an ENTITY of that
-// domain, used to surface "Suggested" tags. Intent namespaces (automation, scene)
-// describe automations/scenes, not entities, so they're only suggested for those
-// domains. Falls back to a general set when unmapped.
+// Maps an HA domain to the canonical tag namespace roots that describe an ENTITY
+// of that domain, used to surface "Suggested" tags. Intent namespaces
+// (automation, scene) describe automations/scenes, not entities, so they are
+// only suggested for those domains. Falls back to a general set when unmapped.
 const DOMAIN_TAG_ROOTS: Record<string, string[]> = {
   light: ["lighting"],
   switch: ["energy", "resource"],
@@ -264,11 +264,9 @@ function editorToDoc(s: EditorState): MesaProfileDocument {
 }
 
 // One endpoint trio per scope, as an exhaustive table rather than an if-chain.
-// The chain these replace ended in an untyped `return` for area, so a scope it
-// did not name was silently written to the AREA endpoint: adding one to the
-// union produced no compile error and no runtime complaint, just a profile
-// stored against the wrong level. A Record keyed by the union makes a missing
-// scope a build failure instead.
+// A Record keyed by the scope union makes a scope with no entry a build failure;
+// a chain would silently route an unnamed scope to another level's endpoint and
+// store the profile against the wrong level.
 const SCOPE_API: Record<ProfileScope, {
   load: (key: string) => Promise<MesaProfileDocument | null>;
   save: (key: string, doc: MesaProfileDocument, createOnly?: boolean) => Promise<MesaValidationIssue[]>;
@@ -368,9 +366,9 @@ function Combo({
   const [open, setOpen] = useState(false);
   // What to SHOW for a stored value. The parent stores the option's slug, and
   // for a device that slug is an opaque 32-character registry id, so echoing it
-  // back into the input after a pick replaced the name the admin had just
-  // chosen with something they cannot read. Falls back to the value itself,
-  // which is right for free-typed text and for a slug no longer in the options.
+  // back into the input after a pick would replace the name the admin just chose
+  // with something they cannot read. Falls back to the value itself, which is
+  // right for free-typed text and for a slug no longer in the options.
   const labelFor = useCallback(
     (v: string) => options.find((o) => o.value === v)?.label ?? v,
     [options],
@@ -832,10 +830,10 @@ export function ProfileEditor({
             {/* Resolution warnings say that a rule fired and changed the outcome:
                 an override that was ignored, a malformed field that was dropped,
                 a vendor-declared capability that overrode an operator decision.
-                They arrive on every profile read and were displayed nowhere, so
-                an operator whose deliberate setting did not take effect had no
-                signal at all. The text is mesa-core's own and stays English, like
-                the resolution table below it. */}
+                They arrive on every profile read and are the only signal an
+                operator gets when a deliberate setting did not take effect. The
+                text is mesa-core's own and stays English, like the resolution
+                table below it. */}
             {!isNew && scope === "entity" && detail && detail.explanation.warnings.length > 0 && (
               <div className="banner banner-warn mesa-resolution-warnings">
                 <strong>{t("mesa.resolutionWarnings")}</strong>
@@ -1332,20 +1330,17 @@ export function MesaView() {
   }, [entityTree, hassStates, friendly]);
   const automationName = (id: string) => friendly(id) || automationNames.get(id) || "";
 
-  // What to CALL a cascading-scope profile key, per scope.
-  //
-  // A device key is an opaque 32-character registry id, so a row or a modal
-  // title showing the raw key names nothing an operator can recognise: that is
-  // the whole reason this exists. Area and integration keys are readable slugs
-  // rather than opaque, but their registries carry a real display name, so
-  // resolving those through the same map keeps one rule instead of a
-  // device-only special case. Domain is deliberately absent: its key IS its
-  // name, so there is nothing to resolve.
+  // What to CALL a cascading-scope profile key, per scope. A device key is an
+  // opaque 32-character registry id, so a row or modal title showing the raw key
+  // names nothing an operator can recognise. Area and integration keys are
+  // readable slugs, but their registries carry a real display name, so they
+  // resolve through the same map (one rule, no device-only special case). Domain
+  // is deliberately absent: its key IS its name.
   //
   // Built from the same sources the pickers already load, so no extra request.
-  // A key the registry does not know is simply absent, and every caller falls
-  // back to the key itself, which is what keeps an ORPHANED profile (its device
-  // or area deleted) readable and therefore deletable.
+  // A key the registry does not know is absent and every caller falls back to
+  // the key itself, which keeps an ORPHANED profile (its device or area deleted)
+  // readable and therefore deletable.
   const scopeKeyName = useMemo(() => {
     const areaNames = new Map<string, string>();
     for (const dt of Object.values(entityTree ?? {})) {
@@ -1461,9 +1456,7 @@ export function MesaView() {
         {/* Ordered by inheritance specificity (entity > device > area >
             integration > domain, i.e. mesa_core's SCOPE_RANK), so the toolbar
             reads as the cascade the whole tab is organised around. Entity leads
-            because it is the most specific level AND the most common action;
-            it previously sat last, where being the primary-styled button put
-            the most specific scope after the least specific one. */}
+            because it is the most specific level AND the most common action. */}
         <div className="filter-row-right mesa-toolbar-add">
           <button className="btn btn-primary btn-sm" onClick={() => setEditing({ scope: "entity", key: null, isNew: true })}>
             <span className="btn-label-full">{t("mesa.addEntityProfile")}</span>

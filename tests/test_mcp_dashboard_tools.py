@@ -279,7 +279,7 @@ class TestDashboardReadFailureIsNotAbsence:
         assert "Could not read dashboard" in content["content"][0]["text"]
 
     async def test_cas_pregate_treats_not_found_as_absence(self, hass, lovelace_env):
-        # Unknown dashboard: absence is real, so the CAS guard conflicts (as before).
+        # Unknown dashboard: absence is real, so the CAS guard conflicts.
         h, _light = lovelace_env
         with self._patch_read(WsDashboardNotFoundError("unknown dashboard")):
             _, outcome, _ = await _call(
@@ -330,7 +330,7 @@ class TestSetDashboardDiff:
         data, _v = _data()
         await _call("set_dashboard_config", {"config": {"views": [{"title": "A"}]}}, token, h, data)
         # The approval diff for a subsequent set must show the CURRENT layout as
-        # "before" (regression: it used to hard-code before=None).
+        # "before", not a hard-coded None.
         diff = await _build_diff_set_dashboard_config(
             {"config": {"views": [{"title": "B"}]}}, token, h)
         assert diff["before"] is not None and "A" in diff["before"]

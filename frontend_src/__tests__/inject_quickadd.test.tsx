@@ -91,14 +91,14 @@ describe("QuickAddApp", () => {
 /** A device id is 32 hex characters and names nothing an operator recognises.
  *
  * The injected modal has no picker source to look a name up in (it always
- * supplies a locked key), so the editor rendered whatever key it was handed:
- * from an HA device page that meant a hex id in both the title and the target
- * field. The injector already resolves a display name for the button tooltip,
- * so the fix is to pass it; these assert it reaches the rendered output.
+ * supplies a locked key), so the editor shows whatever key it is handed: from an
+ * HA device page, a hex id in both the title and the target field. The injector
+ * resolves a display name for the button tooltip and passes it; these assert it
+ * reaches the rendered output.
  *
  * The hex is asserted ABSENT rather than only asserting the name is present,
- * because showing both would be the same defect with extra steps: the operator
- * still cannot tell which device they are editing at a glance.
+ * because showing both would be the same defect: the operator still cannot tell
+ * which device they are editing at a glance.
  */
 describe("QuickAddApp device targets", () => {
   const DEVICE_ID = "0a79f96eaa7cb72d762280a0bafbfaed";

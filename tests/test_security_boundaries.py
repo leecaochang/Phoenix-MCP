@@ -1,4 +1,9 @@
-"""Regression coverage for identity, redaction, YAML and execution boundaries."""
+"""Identity, redaction, YAML and execution boundaries.
+
+Mixed-case entity ids resolve to one identity, secrets stay redacted in snapshots, YAML
+alias graphs and secret references are bounded, service calls recheck capability and
+selectors before dispatch or approval, and storage versions load or refuse safely.
+"""
 
 from __future__ import annotations
 

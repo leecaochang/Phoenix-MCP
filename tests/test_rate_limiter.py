@@ -1,4 +1,4 @@
-"""Tests for rate_limiter.py."""
+"""RateLimiter: sliding window, burst ceiling, per-token isolation and batch charging."""
 
 from __future__ import annotations
 
@@ -25,7 +25,6 @@ def _check(rl: RateLimiter, token_id: str = "tok", requests: int = 5, burst: int
 
 
 def _make_times(start: float, count: int, step: float = 0.5) -> list[float]:
-    """Generate a list of evenly-spaced timestamps."""
     return [start + i * step for i in range(count)]
 
 
@@ -305,7 +304,7 @@ class TestBurstLimit:
         assert result.retry_after == 1
 
     def test_burst_allowed_after_some_entries_age_out(self):
-        """Once older burst entries leave the 1 s window, new requests should be allowed."""
+        """Once older burst entries leave the 1 s window, new requests are allowed."""
         t0 = 1_000_000.0
         rl = _rl()
         with patch("custom_components.phoenix_mcp.rate_limiter.time.time", return_value=t0), \
@@ -477,13 +476,12 @@ class TestRateLimitResult:
 
 
 class TestChargeBatch:
-    """A JSON-RPC batch is one HTTP request carrying up to 50 calls.
+    """A JSON-RPC batch is one HTTP request carrying up to MAX_BATCH_ITEMS calls.
 
-    check() charged it once, so a token on the default 60/min could issue 3,000
-    tool calls a minute by batching. The items are the work, so the window has to
-    count the items AND the ceiling has to hold: charging without refusing was
-    the first attempt and left a token limited to 10/min able to run all 50 items
-    before throttling began.
+    check() charges it once, so a token on a 60/min limit could issue thousands of
+    tool calls a minute by batching. The items are the work, so charge_batch must
+    count the items AND refuse when the ceiling would be exceeded: charging without
+    refusing lets every item run before throttling begins.
     """
 
     def test_a_batch_spends_one_unit_per_item(self):
@@ -492,13 +490,13 @@ class TestChargeBatch:
 
         assert limiter.charge_batch("t1", 60, 0, 49).allowed  # a 50-item batch
 
-        # 50 spent, 10 left, rather than 59 left.
+        # The batch spent 50 and this check spends one more: 9 left, not 58.
         assert limiter.check("t1", 60, 0).remaining == 9
 
     def test_a_batch_over_the_ceiling_is_refused_outright(self):
-        # The whole point: with a limit of 10 a 50-item batch used to EXECUTE all
-        # 50 and only then throttle, 40 operations past a ceiling the operator
-        # set deliberately. Nothing has been dispatched yet, so refusing is clean.
+        # A 50-item batch under a limit of 10 must be refused outright, not executed
+        # and then throttled: that would run 40 operations past the operator's
+        # ceiling. Nothing has been dispatched yet, so refusing is clean.
         limiter = RateLimiter()
         assert limiter.check("t1", 10, 0).allowed
 
@@ -539,10 +537,9 @@ class TestChargeBatch:
     def test_a_batch_over_the_burst_ceiling_is_refused(self):
         """Burst is the setting that exists to stop exactly this shape.
 
-        A batch lands in one instant, so its whole cost falls inside a single
-        burst window. Checking only the minute limit let 60/min + burst 10/sec
-        admit a 50-item batch, exceeding the per-second ceiling fivefold while
-        satisfying the per-minute one.
+        A batch lands in one instant, so its whole cost falls inside a single burst
+        window. Checking only the minute limit would admit a 50-item batch at 60/min
+        with burst 10/sec, exceeding the per-second ceiling fivefold.
         """
         limiter = RateLimiter()
         assert limiter.check("t1", 60, 10).allowed
@@ -566,8 +563,8 @@ class TestChargeBatch:
         assert limiter.charge_batch("t1", 60, 0, 49).allowed
 
     def test_the_returned_result_describes_the_batch_not_the_request(self):
-        # The caller puts this in its response headers. The result from check()
-        # was computed before the items were charged, so it reported a budget the
+        # The caller puts this in its response headers. The result from check() was
+        # computed before the items were charged, so it would report a budget the
         # token no longer has (59 of 60 remaining after spending 50).
         limiter = RateLimiter()
         limiter.check("t1", 60, 0)

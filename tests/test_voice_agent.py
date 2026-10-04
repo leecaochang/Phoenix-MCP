@@ -1,8 +1,9 @@
-"""Tests for the Phoenix MCP voice agent (voice_agent.py + agentcli.async_run_voice_turn).
+"""The voice agent (voice_agent.py and agentcli.async_run_voice_turn).
 
-Covers the headless voice loop (gated dispatch, pending -> queued degradation,
-mid-turn authority loss), the config-resolution wrapper (async_voice_answer), the
-conversation-agent response shape, and register/unregister lifecycle.
+Covers the headless voice loop (gated dispatch, a pending approval degrading to
+queued, mid-turn authority loss), the config-resolution wrapper
+(async_voice_answer), the conversation-agent response shape, register/unregister
+lifecycle, spoken-sentence localization and one-click Assist pipeline setup.
 """
 from __future__ import annotations
 
@@ -41,8 +42,10 @@ class _MockProvider:
 
 
 def _staged_stream(*batches):
-    """An async-generator stand-in for _stream_turn_resilient yielding successive
-    event batches, one per model turn."""
+    """Stand-in for _stream_turn_resilient yielding one event batch per model turn.
+
+    The last batch repeats once the batches run out.
+    """
     state = {"i": 0}
 
     async def gen(provider, session, **kwargs):
@@ -288,13 +291,11 @@ async def test_voice_turn_authority_loss_skips_side_effect():
 
 @pytest.mark.asyncio
 async def test_voice_turn_stops_when_the_provider_blows_the_output_budget():
-    """The headless surfaces share the interactive loop's total-output ceiling.
+    """The headless surfaces enforce the interactive loop's total-output ceiling.
 
-    Voice and AI Task retained assistant and tool messages across every round and
-    re-sent the growing transcript on each one, with no ceiling at all, while
-    async_run_agent_turn had enforced AGENTCLI_MAX_TURN_OUTPUT_BYTES since it was
-    written. A faulty or hostile provider could therefore accumulate several
-    stream-sized responses in memory on the two surfaces with no operator watching.
+    Voice and AI Task re-send the growing transcript on every round, so a faulty or
+    hostile provider could otherwise accumulate several stream-sized responses in
+    memory with no operator watching. AGENTCLI_MAX_TURN_OUTPUT_BYTES bounds it.
     """
     token = _make_token()
     data = _make_data()
@@ -339,10 +340,9 @@ async def test_voice_turn_stops_after_one_round_when_authority_is_lost():
     """A dead token buys exactly one more model call, not max_iterations of them.
 
     The round that discovers the loss still feeds the refusals back, so the model
-    gets a turn to tell the user what happened (the round asserted by
-    test_voice_turn_authority_loss_skips_side_effect). If it asks for tools AGAIN
-    instead of answering, every call would be refused identically, so the loop
-    stops rather than spending its remaining rounds re-reporting one refusal.
+    gets a turn to tell the user what happened. If it asks for tools AGAIN instead
+    of answering, every call would be refused identically, so the loop stops rather
+    than spending its remaining rounds re-reporting one refusal.
     """
     token = _make_token()
     data = _make_data()
@@ -360,8 +360,8 @@ async def test_voice_turn_stops_after_one_round_when_authority_is_lost():
             max_iterations=20)
 
     assert dispatch.calls == []
-    # One refusal batch, from the round that discovered the loss. Without the
-    # stop this reached 20, one per remaining round.
+    # One refusal batch, from the round that discovered the loss; without the
+    # stop there would be one per remaining round (20).
     assert len(provider.tool_result_batches) == 1
 
 
@@ -611,9 +611,8 @@ async def test_agent_process_includes_review_links_for_text_not_voice():
 async def test_decline_sentences_follow_the_conversation_language(language: str):
     """A spoken decline is rendered in the CALLER's language, not the server's.
 
-    These sentences were hardcoded English literals; a Chinese Assist pipeline
-    got an English reply. The whole point of routing them through the catalog is
-    that the language HA already hands async_process is the one used.
+    The language HA hands async_process is the one routed through the catalog, so a
+    Chinese Assist pipeline does not get an English reply.
     """
     data = _make_data(kill_switch=True, **_FULL_CFG)
     english = await voice_agent.async_voice_answer(MagicMock(), data, "hi", language="en")
@@ -629,7 +628,7 @@ async def test_decline_sentences_follow_the_conversation_language(language: str)
 @pytest.mark.asyncio
 @pytest.mark.parametrize("language", ["zh-Hans", "ko"])
 async def test_agent_process_threads_the_conversation_language_through(language: str):
-    """Without this thread-through the catalog lookup would always see None."""
+    """async_process passes the conversation language on; otherwise the lookup sees None."""
     agent = voice_agent.PhoenixConversationAgent(MagicMock(), _make_data())
     with patch.object(voice_agent, "async_voice_answer", AsyncMock(return_value="ok")) as va:
         await agent.async_process(
@@ -641,13 +640,12 @@ async def test_agent_process_threads_the_conversation_language_through(language:
 def test_every_voice_template_is_reachable_from_the_modules_that_speak():
     """No orphan keys, and no literal left behind: the two sets must agree.
 
-    Scans the modules that produce spoken text. voice_agent.py owns the four
-    declines it answers with before the loop starts; agentcli.py owns how a turn
-    that did not finish cleanly is said, which used to be English literals inside
-    async_run_voice_turn. command_execution.py owns localized routed replies, and
-    chat_routing.py uses the same catalog for cancellation and authorization replies.
-    Checking only voice_agent would let a new key be added
-    to const and used nowhere, or a spoken sentence be hardcoded in the loop again.
+    Scans the modules that produce spoken text: voice_agent.py (declines before the
+    loop starts), agentcli.py (how a turn that did not finish cleanly is said),
+    command_execution.py (localized routed replies) and chat_routing.py
+    (cancellation and authorization replies), among others. Checking only
+    voice_agent would let a new key be defined and used nowhere, or a spoken
+    sentence be hardcoded in the loop.
     """
     import ast
     import pathlib
@@ -762,7 +760,7 @@ async def test_create_pipeline_requires_full_config():
 @pytest.mark.asyncio
 async def test_remove_pipeline_reassigns_preferred_then_deletes():
     store = _FakePipelineStore()
-    phoenix = await store.async_create_item({"name": "Phoenix MCP"})  # first item -> preferred
+    phoenix = await store.async_create_item({"name": "Phoenix MCP"})  # first item is preferred
     other = await store.async_create_item({"name": "Home Assistant"})
     store.async_set_preferred_item(phoenix.id)
     data = _make_pipeline_data(voice_agent_pipeline_id=phoenix.id, **_FULL_CFG)

@@ -7,7 +7,7 @@ version capture, and the scoped file read/write plus compare-and-swap helpers.
 
 These live here rather than in mcp_view so a per-domain tool module (see
 tools/) can depend on them without importing the transport that dispatches it,
-which would be a cycle. mcp_view re-exports every name here.
+which would be a cycle. mcp_view imports the names it uses from here.
 """
 
 
@@ -47,7 +47,7 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def serialize_ha_schema(schema: Any, custom_serializer: Any) -> Any:
-    """Serialize a Home Assistant form schema across HA's serializer eras."""
+    """Serialize an HA form schema with probatio when HA ships it, else voluptuous_serialize."""
     try:
         import probatio  # noqa: PLC0415
     except ImportError:
@@ -76,30 +76,24 @@ def _tool_error(message: str) -> dict:
 
 
 def _tool_pending(approval: Any, waited_seconds: int | None = None) -> dict:
-    """Return an MCP tool result indicating a pending admin approval.
+    """Return an MCP tool result for a pending admin approval.
 
     isError is False because pending is a valid outcome, not a failure.
 
-    THE WORDING IS LOAD-BEARING AND HAS TO MATCH THE STAGING MODEL. Approvals
-    now queue and are cleared in one operator action, so the agent's job after
-    a gate is to KEEP GOING and collect the outcomes together at the end. This
-    message told it the opposite twice over: it pointed at wait_for_approval
-    with "this approval_id", singular, from before that tool took a LIST, so an
-    agent following it literally serialises on the first id and no later
-    approval can even be created until that one stops waiting; and "you may
-    tell the user it is pending and finish now" reads as an instruction to
-    stop, which is the early-return-reads-as-success failure. Both were written
-    when the inline wait was on by default and every gate resolved one at a
-    time. Any edit here must keep the order: continue first, wait ONCE second,
-    finish only if nothing depends on the outcome.
+    THE WORDING IS LOAD-BEARING AND MUST MATCH THE STAGING MODEL. Approvals queue
+    and are cleared in one operator action, so after a gate the agent should KEEP
+    GOING and collect the outcomes together at the end. Keep the order: continue
+    first, wait ONCE second (wait_for_approval takes a LIST of approval_ids;
+    waiting on a single id serialises the agent, since no later approval can be
+    created until that wait ends), finish only if nothing depends on the outcome.
+    Wording that reads as "tell the user and finish now" makes an early return
+    look like success. The agent primer in mcp_view must say the same.
 
-    `waited_seconds` is set only on the inline-wait timeout path and states a
-    FACT rather than giving different advice: that hold already spent its
-    budget without resolving, so an agent that immediately blocks on the same
-    id is very likely to spend another. The advice itself is identical in all
-    three paths that reach here, deliberately, because the agent cannot see
-    which one it is in (the inline wait is a token setting) and the right next
-    move does not depend on it.
+    `waited_seconds` is set only on the inline-wait timeout path and states a FACT
+    rather than different advice: that hold already spent its budget, so blocking
+    again on the same id would likely spend it twice. The advice is otherwise
+    identical on every path that reaches here, because the agent cannot tell
+    which it is on (the inline wait is a token setting).
     """
     waited = (
         f"This call already held for {waited_seconds} seconds without resolving, so the operator "
@@ -127,16 +121,12 @@ def _tool_pending(approval: Any, waited_seconds: int | None = None) -> dict:
 
 
 def _tool_inline_resolved(approval: Any) -> dict:
-    """Result for an inline-waited confirm that resolved without applying.
+    """Result for an inline-waited confirm that resolved without applying; isError is True.
 
-    Used when a token with confirm_inline_wait_seconds set waited out the gate
-    and the approval came back rejected or cancelled: tell the agent the outcome
-    (with any reason) and that it must not retry, rather than handing back a
-    stale pending stub. isError is True because the action did not happen.
-    An admin APPROVAL whose executor then failed lands here too (the approve
-    path stores the error result and resolves the record as failed with the
-    "execution_failed" slug); that case must read as a failure to fix, never
-    as a refusal, or the agent treats an approval as a refusal and loops
+    Tells the agent the outcome (with any reason) and not to retry, rather than
+    handing back a stale pending stub. An APPROVED action whose executor then
+    failed ("execution_failed") lands here too and must read as a failure to fix,
+    never as a refusal, or the agent treats an approval as a refusal and loops
     retrying the same doomed call.
     """
     reason = getattr(approval, "rejected_reason", None)
@@ -172,10 +162,11 @@ def _tool_inline_resolved(approval: Any) -> dict:
             ),
         })
         return {"content": [{"type": "text", "text": body}], "isError": True}
-    # A rejection with a reason is the operator steering the next proposal, not
-    # a stop signal (iterating through reject-with-reason rounds is the normal
-    # card-building workflow; a stricter forbid-variations wording live-tested
-    # badly, see agentcli._resolved_result). Reasonless rejection = ask first.
+    # A rejection with a reason is the operator steering the next proposal, not a
+    # stop signal: iterating through reject-with-reason rounds is the normal
+    # card-building workflow, and stricter forbid-variations wording would stall
+    # it (agentcli._resolved_result words the same case). A reasonless rejection
+    # means ask first.
     if approval.status == "rejected" and reason:
         message = (
             f"This action was not applied (it was rejected). Reason: {reason}. "
@@ -213,9 +204,8 @@ class _ProgressBus:
     """What an in-flight SSE-framed request reports while it is still running.
 
     Single-writer by design: only the response writer touches the stream, and
-    handler code deep in a tool only sets fields here. Two coroutines writing to
-    one StreamResponse would interleave frames, so this trades a shared object for
-    a class of bug that does not exist.
+    handler code deep in a tool only sets fields here, because two coroutines
+    writing to one StreamResponse would interleave frames.
 
     `token` is the client's MCP progressToken. It is None unless the client asked
     for progress on THIS request, and no token means no progress notifications are
@@ -266,13 +256,11 @@ _CAP_FORBIDDEN_MESSAGE = (
 
 
 # Appended to the executed result when an interactive wait returns an
-# operator-APPROVED action. Live-found: without it, an agent iterating toward a
-# goal reads an approval as merely "this step landed" and keeps proposing
-# variations of a change the operator already reviewed and settled on. A second
-# live loop shaped the wording: a model whose card landed on a different view
-# than it intended (its own arguments were off) filed corrective re-adds
-# through two explicit rejections, so the note forbids corrective follow-ups
-# outright and makes a noticed discrepancy a say-it-and-stop, not a fix-it.
+# operator-APPROVED action. Without it an agent iterating toward a goal reads an
+# approval as merely "this step landed" and keeps proposing variations of a change
+# the operator already reviewed and settled on. The note forbids corrective
+# follow-ups outright and makes a noticed discrepancy a say-it-and-stop, not a
+# fix-it, so a model whose own arguments were off does not file corrective re-adds.
 _OPERATOR_ACCEPTED_NOTE = (
     "Note: the operator reviewed this exact change and approved it. What was "
     "applied, exactly as it landed, is what the operator accepted: treat it as "
@@ -285,10 +273,11 @@ _OPERATOR_ACCEPTED_NOTE = (
 
 
 def _operator_accepted_result(tool_result: dict) -> dict:
-    """The executed result of an operator-approved action, with the accepted
-    note appended as an extra text content item (same in-band pattern as
-    _STALE_TOOLS_ADVISORY). Shallow-copies so the stored approval record's
-    result is never mutated."""
+    """Return the executed result with the operator-accepted note appended as a text item.
+
+    Same in-band pattern as mcp_view._STALE_TOOLS_ADVISORY. Shallow-copies, so the
+    stored approval record's result is never mutated.
+    """
     out = dict(tool_result)
     out["content"] = list(out.get("content") or []) + [
         {"type": "text", "text": _OPERATOR_ACCEPTED_NOTE}
@@ -364,7 +353,7 @@ async def _await_inline_confirm(
 
     unsub = hass.bus.async_listen(f"{DOMAIN}_approval_resolved", _on_resolved)
     # This is the longest hold in the whole surface. On an SSE-framed request the
-    # keepalive ticks now carry the reason, so the client shows "waiting for the
+    # keepalive ticks carry the reason, so the client shows "waiting for the
     # operator" instead of an unexplained silence.
     _set_progress_status(
         f"Waiting for operator approval: {approval.tool_name}", total=float(wait),
@@ -402,43 +391,23 @@ async def _pending_or_inline(
     token: TokenRecord,
     approval: Any,
 ) -> tuple[dict, str, str]:
-    """A pending approval, held inline when the token is configured to wait.
+    """Return a pending approval, held inline when the token is configured to wait.
 
-    ONE definition, because there is more than one kind of confirm gate and they
-    must not answer differently. `_gate` had this logic inline for a CAPABILITY
-    confirm; the MESA confirm gates (call_service and the native tools) reached
-    their own `_tool_pending` returns and never consulted
-    `confirm_inline_wait_seconds` at all. So an operator who configured an inline
-    wait got it for one kind of confirm and not the other, which is not a
-    distinction anything states or intends.
+    One definition for every confirm gate (capability, and the MESA gates of
+    call_service and the native tools), so they answer identically and all
+    deliver _OPERATOR_ACCEPTED_NOTE when an approval resolves inline.
 
-    The second consequence was the worse one: `_OPERATOR_ACCEPTED_NOTE` is
-    appended only when an approval resolves INLINE (here) or through Agent Chat,
-    so a MESA confirm could never deliver it. That note exists to stop an agent
-    revising a change the operator already accepted, which is exactly the loop a
-    MESA-gated actuation invites.
+    The wait is SKIPPED when the token already has another approval pending. The
+    hold blocks the request and tool calls arrive one at a time, so approval N+1
+    cannot be created until approval N finishes waiting; a batch of writes would
+    spend one full wait per approval just to fill the queue the operator reviews
+    in one go. An operator with an unresolved approval is not approving instantly,
+    so blocking buys the agent nothing. The first call still waits, and with
+    instant approval the queue is empty again by the next call.
 
-    THE WAIT IS SKIPPED WHEN A BACKLOG ALREADY EXISTS, and that is what makes
-    batch approval usable at all. The hold is a per-request block, and tool calls
-    arrive one at a time, so approval N+1 cannot even be CREATED until approval N
-    has finished waiting. Live-measured at a 60s wait: consecutive approvals
-    appeared 62.8 seconds apart, i.e. a twenty-write migration would have taken
-    twenty minutes just to fill the queue an operator is being asked to review in
-    one go. The wait and batching were working against each other.
-
-    So: if this token already has another approval pending, do not hold. The
-    reasoning is not merely mechanical - an operator with something already
-    unresolved is demonstrably not in instant-approve mode, so blocking buys the
-    agent nothing and costs the queue everything. The FIRST call still waits,
-    which is what preserves the interactive feel for a lone confirm, and the
-    instant-approve workflow is untouched: there each approval resolves within
-    seconds, so the queue is empty again by the next call and every call still
-    waits. Twenty writes go from ~20 minutes to ~60 seconds.
-
-    Inferred rather than declared by the caller deliberately. An explicit per-call
-    flag would have to land on 40-odd write tools (moving the catalog fingerprint
-    for every connected client), or ride in `params._meta`, which not every client
-    can set; and an agent that forgot it would silently reintroduce the stall.
+    The skip is inferred, not a per-call flag: a flag would have to land on dozens
+    of write tools (changing the catalog fingerprint for every client) or ride in
+    `params._meta`, which not every client can set.
     """
     if token.confirm_inline_wait_seconds > 0 and not _token_has_other_pending(data, token, approval):
         return await _await_inline_confirm(hass, data, token, approval)
@@ -448,12 +417,10 @@ async def _pending_or_inline(
 def _token_has_other_pending(data: PhoenixData, token: TokenRecord, approval: Any) -> bool:
     """True when this token has a pending approval OTHER than this one.
 
-    Excluding the current approval is load-bearing: `async_evaluate_capability`
-    has already created and stored it by the time we get here, so counting it
-    would make the queue never look empty and no call would ever wait.
-
-    Fail-quiet: an unreadable store means we cannot prove a backlog, and the safe
-    default is the existing behaviour (wait), not a silent change of it.
+    The current approval is excluded because `async_evaluate_capability` has
+    already stored it, so counting it would make the queue never look empty and no
+    call would ever wait. Fail-quiet: an unreadable store cannot prove a backlog,
+    so the default is to wait.
     """
     from .approvals import STATUS_PENDING, list_approvals  # noqa: PLC0415
 
@@ -564,15 +531,14 @@ async def _record_version(
 ) -> None:
     """Best-effort capture of a config change into the version history.
 
-    Called from each _execute_* at Phoenix MCP's single execution chokepoint, so it
-    records both directly-allowed and Confirm-approved changes exactly once.
-    Never raises: a version-store failure must not fail the user's actual write.
-    request_id is intentionally not threaded (versions correlate to the audit log
-    by token + resource + timestamp); approved_by_user_id is set only on the admin
-    restore path. summary is a one-line what-changed description for the panel's
-    Changes list; callers with op context (the card tools) pass their own, and
-    everything else gets the computed default (which is None for resource types
-    whose alias already tells the story).
+    Called from each _execute_* at Phoenix MCP's single execution chokepoint, so
+    directly-allowed and Confirm-approved changes are each recorded exactly once.
+    Never raises: a version-store failure must not fail the user's write.
+    request_id is not threaded (versions correlate to the audit log by token,
+    resource and timestamp); approved_by_user_id is set only on the admin restore
+    path. `summary` is a one-line what-changed description for the panel's Changes
+    list; callers with op context (the card tools) pass their own, and everything
+    else gets the computed default (None where the alias already tells the story).
     """
     from .conversation_log import record_event
     record_event(data, "change", {"resource_type": resource_type, "resource_id": resource_id,
@@ -615,12 +581,10 @@ async def _record_version(
 def _version_content_payload(content: str | None, **extra: Any) -> dict | None:
     """Build a before/after payload for raw file / configuration.yaml version capture.
 
-    Stores the content verbatim when it is within MAX_DIFF_INLINE_BYTES so an admin
-    can restore it later; larger content is recorded as a non-restorable marker
-    (metadata only) to bound .storage growth. Returns None when there was no prior
-    content (a fresh create). Content is stored raw, like other version records, so
-    the restore is byte-faithful; the version store is admin-only and lives in
-    .storage alongside the rest of Phoenix MCP's at-rest data.
+    Content within MAX_DIFF_INLINE_BYTES is stored verbatim (raw, like other
+    version records, so an admin restore is byte-faithful); larger content is a
+    non-restorable metadata marker, bounding .storage growth. Returns None when
+    there was no prior content (a fresh create).
     """
     if content is None:
         return None
@@ -638,9 +602,8 @@ def _usable_path_arg(value: Any) -> str | None:
 
     The NUL check is why this exists rather than a bare isinstance at each jail:
     os.path.realpath RAISES ValueError on an embedded NUL instead of returning
-    something the containment check could refuse, so the classic truncation
-    probe escapes every path jail below as an unhandled error rather than the
-    clean refusal each one promises.
+    something the containment check could refuse, so the classic truncation probe
+    would escape every path jail as an unhandled error rather than a clean refusal.
     """
     if not isinstance(value, str) or not value.strip() or "\x00" in value:
         return None
@@ -665,18 +628,18 @@ def _cas_conflict(
     """Optimistic-concurrency check for a Confirm-gated whole-blob write.
 
     When the caller supplied expected_hash (from the matching read tool), refuse
-    the write if the target's current content no longer hashes to it, meaning an
-    admin or another agent changed it since the read. This runs both before
-    gating (fail fast, so a stale write never becomes a doomed pending approval)
-    and inside the executor (to catch drift during the approval window).
-    A whole-blob replace must be re-read and merged, so the new hash is
-    deliberately not echoed back. None (no expected_hash) skips the check.
+    the write if the target's content hashes differently now, meaning an admin or
+    another agent changed it since the read. It runs both before gating (fail
+    fast, so a stale write never becomes a doomed pending approval) and inside the
+    executor (to catch drift during the approval window). A whole-blob replace
+    must be re-read and merged, so the new hash is deliberately not echoed back.
+    None (no expected_hash) skips the check.
 
-    `current` is the target's current content normalized so an absent target
-    hashes the same way its read tool reports it: "" for a missing raw file
-    (get_yaml_config/read_file return content ""), None for an absent dashboard
-    (get_dashboard_config returns not_found with no hash, so any expected_hash
-    for it is a genuine conflict).
+    `current` is the target's content normalized so an absent target hashes the
+    way its read tool reports it: "" for a missing raw file (get_yaml_config and
+    read_file return content ""), None for an absent dashboard
+    (get_dashboard_config returns not_found with no hash, so any expected_hash for
+    it is a genuine conflict).
     """
     if not expected:
         return None
@@ -699,16 +662,15 @@ async def _text_file_cas_conflict(
     """Pre-gate CAS check for a raw-text-file writer (set_yaml_config, write_file).
 
     Reads the target's current text (an absent or unreadable file counts as "",
-    matching what its read tool reports) and refuses if expected_hash no longer
-    matches. Skips the read entirely when expected_hash is absent.
+    matching what its read tool reports) and refuses if it does not hash to
+    expected_hash. Skips the read entirely when expected_hash is absent.
     """
     if not expected:
         return None
     current = ""
-    # Split rather than combined into one condition: async_add_executor_job is
-    # generic over the callable's return type, and folding both calls into a
-    # single expression makes the checker bind that variable once for two
-    # differently-typed callables.
+    # Two separate executor calls: async_add_executor_job is generic over the
+    # callable's return type, so one combined expression would make the type
+    # checker bind a single variable to two differently-typed callables.
     if path:
         exists = await hass.async_add_executor_job(os.path.isfile, path)
         if exists:
@@ -748,19 +710,15 @@ def resolve_json_path(root: Any, path: Any) -> tuple[Any, Any, str | None]:
     """Walk `path` to the CONTAINER holding its last segment.
 
     Returns (container, key, None) so the caller can read, assign or delete the
-    leaf itself, or (None, None, reason) when the path does not address anything.
-    Surface-agnostic on purpose: the same addressing works for a Lovelace layout,
-    a parsed YAML mapping, or an automation body, so a future patch tool on those
-    surfaces reuses this rather than growing a second copy of the rules.
+    leaf itself, or (None, None, reason) when the path addresses nothing.
+    Surface-agnostic: the same addressing serves a Lovelace layout, a parsed YAML
+    mapping, or an automation body.
 
     Segments are dict keys (str) or list indices (int). NEGATIVE INDICES ARE
     REFUSED even though Python accepts them: a caller that computed -1 from a
-    stale read silently edits the wrong end of a list, and there is no legible
-    reason to address a config that way.
-
-    NOTHING IS CREATED. A path whose parent is missing is a typo, not an
-    instruction to build the intervening structure, and inventing containers is
-    how a wrong path becomes a mangled config instead of an error message.
+    stale read would silently edit the wrong end of a list. NOTHING IS CREATED: a
+    missing parent is a typo, not an instruction to build structure, and inventing
+    containers turns a wrong path into a mangled config instead of an error.
     """
     if not isinstance(path, list) or not path:
         return None, None, "path must be a non-empty array of keys and indices."
@@ -807,12 +765,10 @@ def _descend(node: Any, segment: Any, depth: int) -> tuple[Any, str | None]:
 def _truncate(text: str, max_chars: int = MAX_DIFF_INLINE_BYTES) -> str:
     """Bound a diff string stored on an approval record.
 
-    The cap exists because approval diffs are persisted in .storage alongside
-    the pending queue, not because the panel cannot render them. It matches the
-    version store's inline cap so an admin sees the SAME content before
-    approving that the Changes tab shows afterwards. A smaller display cap
-    clips a real automation mid-config, which is exactly the content an
-    approver needs to read in full to decide.
+    The cap exists because approval diffs are persisted in .storage alongside the
+    pending queue. It matches the version store's inline cap so an admin sees the
+    SAME content before approving that the Changes tab shows afterwards; a smaller
+    cap would clip a real automation mid-config.
     """
     if len(text) <= max_chars:
         return text
@@ -826,13 +782,13 @@ def _truncate(text: str, max_chars: int = MAX_DIFF_INLINE_BYTES) -> str:
 _mesa_advisory_ctx: ContextVar[bool] = ContextVar("phoenix_mcp_mesa_advisory", default=False)
 
 
-# Set while async_execute_approved_tool runs an admin-approved action, so the MESA gate
-# treats that approval as the human confirmation it asks for (confirm-approved
+# Set while async_execute_approved_tool runs an admin-approved action, so the MESA
+# gate treats that approval as the human confirmation it asks for (confirm-approved
 # semantics: confirm-mode entities proceed, prohibited/read_only entities are
-# still rejected). Without this, an action gated by BOTH a confirm-mode
-# capability and a MESA confirm-mode entity needed two sequential admin
-# approvals: approving the capability gate re-ran the call, which then queued a
-# second, separate MESA approval for the same action the admin just reviewed.
+# still rejected). Without it, an action gated by BOTH a confirm-mode capability
+# and a MESA confirm-mode entity would need two sequential approvals: approving
+# the capability gate re-runs the call, which would then queue a second, separate
+# MESA approval for the action the admin just reviewed.
 # asyncio-safe: scoped to the approving request's task.
 _approved_exec_ctx: ContextVar[bool] = ContextVar("phoenix_mcp_approved_exec", default=False)
 

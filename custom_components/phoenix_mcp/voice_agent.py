@@ -1,21 +1,19 @@
 """Phoenix MCP as a Home Assistant conversation agent.
 
-Registers Phoenix MCP directly as a conversation agent (conversation.async_set_agent), so
-"Phoenix MCP" appears in Settings > Voice assistants and drives HA's native Assist/voice
-pipeline using Phoenix MCP's OWN model loop, no separate LLM integration required. This is
-the self-contained counterpart to the llm.API bridge (assist_api.py, which hands
-Phoenix MCP's tools to a model supplied by another integration).
+Registers Phoenix MCP via conversation.async_set_agent so it appears in Settings >
+Voice assistants and drives HA's Assist pipeline with Phoenix MCP's OWN model loop,
+the self-contained counterpart to the llm.API bridge (assist_api.py), which hands
+Phoenix MCP's tools to a model from another integration. The module is NOT named
+conversation.py so HA does not treat it as a conversation ENTITY platform.
 
-Everything model-side is reused from agentcli.py (the Agent Chat engine): the
-provider accounts + keys (AgentCliStore), provider construction, and the gated
-tool loop (async_run_voice_turn dispatches every tool through mcp_view._dispatch_mcp, so
-per-token scope, MESA, approvals, and audit apply identically). A confirm-gated
-action degrades to "queued, approve in the Phoenix MCP panel" (voice has no inline Approve
-button); the turn never blocks. The bound token, provider, and model are configured
-in Phoenix MCP's own panel (GlobalSettings.voice_agent_*), not an HA config-entry options flow.
+Model-side work is reused from agentcli.py: provider accounts and keys, provider
+construction, and the gated tool loop (async_run_voice_turn), which dispatches
+every tool through mcp_view._dispatch_mcp so per-token scope, MESA, approvals and
+audit apply identically. A confirm-gated action degrades to "queued, approve in the
+Phoenix MCP panel" (voice has no inline Approve button), so a turn never blocks.
+The bound token, provider and model are GlobalSettings.voice_agent_*, set in the
+panel rather than a config-entry options flow.
 
-This module is deliberately NOT named conversation.py so HA does not treat it as a
-conversation ENTITY platform; Phoenix MCP uses the lighter non-entity async_set_agent path.
 HA-COUPLING POINT alongside ws_dispatch / assist_api: the conversation agent API
 (AbstractConversationAgent / ConversationResult / IntentResponse) can shift across
 HA versions; re-verify on upgrades.
@@ -71,9 +69,9 @@ def _spoken_text(text: str) -> str:
     spoken = re.sub(r"\n{3,}", "\n\n", spoken)
     return spoken.strip()
 
-# conversation is a guaranteed core integration in any real HA, but guard the
-# import so Phoenix MCP setup never hard-crashes if its deps are ever unavailable (and so
-# the module imports in a minimal env). Mirrors assist_api's feature-detect.
+# conversation is a core integration, but the import is guarded so setup never
+# hard-crashes and the module imports in a minimal env (same feature-detect as
+# assist_api).
 try:
     from homeassistant.components import conversation as _conversation
 
@@ -84,7 +82,7 @@ except ImportError:  # pragma: no cover - conversation absent only in broken env
 
 
 def _base_url(hass: HomeAssistant) -> str:
-    """Best-effort external URL for the skill link in the primer; "" if none."""
+    """Return HA's best available URL for approval/skill links, or "" if none."""
     try:
         from homeassistant.helpers.network import get_url  # noqa: PLC0415
 
@@ -106,7 +104,10 @@ async def async_voice_answer(
     satellite_id: object = None, device_id: object = None,
     conversation_id: object = None, context: Context | None = None,
 ) -> str:
-    """Keep the requesting HA user's authority around the whole voice turn."""
+    """Run one voice turn inside the requesting HA user's authority scope.
+
+    A change to that user mid-turn ends the turn with the "token unavailable" sentence.
+    """
     from .household_authority import household_scope
     from .request_authority import AuthorityChangedError
 
@@ -133,13 +134,12 @@ async def _async_voice_answer(
     device_id: object = None,
     conversation_id: object = None,
 ) -> str:
-    """Resolve config + token + provider, then run the gated voice loop; return text.
+    """Resolve config, token and provider, then route or run the gated voice loop.
 
-    The real work, kept independent of the conversation base class so it is testable
-    without the (heavy) conversation component. Never raises: every failure degrades
-    to a spoken sentence. include_review_links is passed through to async_run_voice_turn
-    (True only for a text surface; see async_process). Every decline sentence is
-    spoken back to the caller, so it is rendered in the CONVERSATION's language
+    Independent of the conversation base class. A provider or loop failure degrades
+    to a spoken sentence instead of raising. include_review_links is passed through
+    to the executors (True only when no satellite_id is set; see async_process).
+    Decline sentences are rendered in the CONVERSATION's language
     (helpers.voice_text), not the server's; language=None falls back to English.
     """
     from .agentcli import (  # noqa: PLC0415
@@ -160,9 +160,9 @@ async def _async_voice_answer(
     if not (settings.voice_agent_token_id and settings.voice_agent_provider_id):
         return voice_text(language, "not_configured")
 
-    # Re-resolve the token fresh every turn (never cache state); also zeroes the
-    # inline-confirm wait so a confirm gate returns pending immediately and the loop
-    # reports it queued rather than blocking a voice turn.
+    # Re-resolve the token every turn (never cache it). This also zeroes the
+    # inline-confirm wait, so a confirm gate returns pending immediately and the
+    # loop reports it queued instead of blocking the turn.
     token = _current_dispatch_token(data, settings.voice_agent_token_id)
     if token is None:
         return voice_text(language, "token_unavailable")
@@ -225,7 +225,8 @@ async def _async_voice_answer(
             return voice_text(language, "token_unavailable")
         if (settings.voice_agent_routing_mode in ("local", "local_shadow") and settings.decision_shadow_enabled and settings.decision_provider_id
                 and observation["reason"] in ("no_match", "unsupported", "no_target")):
-            # Single-flight background observation cannot delay or influence the provider turn.
+            # Single-flight background observation: it cannot delay or influence
+            # the provider turn.
             data.decision_shadow.start(hass, data, token, user_text, language or "en", observe=True)
         if routing_mode in ("local", "hybrid") and observation["proposal"]:
             from .command_execution import async_execute_local_command
@@ -277,7 +278,7 @@ if _CONVERSATION_AVAILABLE:
 
         @property
         def supported_languages(self) -> list[str] | Literal["*"]:
-            # Phoenix MCP does not gate on language; the underlying model handles it.
+            # No language gate; the underlying model handles it.
             return MATCH_ALL
 
         async def async_process(
@@ -285,10 +286,10 @@ if _CONVERSATION_AVAILABLE:
         ) -> "_conversation.ConversationResult":
             """Answer one utterance, spoken as the final assistant text."""
             # A hardware satellite sets satellite_id, so approval links are suppressed
-            # there. Companion-app STT does not: HA discards the pipeline's start_stage
-            # before calling the agent, making app voice and typed turns indistinguishable.
-            # Sanitize every response because HA uses this one plain-speech value for
-            # both its visible Assist reply and TTS input.
+            # there. Companion-app STT does not set it, and HA discards the pipeline's
+            # start_stage before calling the agent, so app voice and typed turns are
+            # indistinguishable. Every response is sanitized because HA uses this one
+            # plain-speech value for both its visible Assist reply and TTS input.
             satellite_id = getattr(user_input, "satellite_id", None)
             from uuid import uuid4
             conversation_id = user_input.conversation_id or uuid4().hex
@@ -315,7 +316,7 @@ else:  # pragma: no cover - conversation absent only in broken envs
 def async_register_voice_agent(hass: HomeAssistant, entry: Any, data: Any) -> None:
     """Register (or replace) Phoenix MCP's conversation agent for this config entry.
 
-    Idempotent (async_set_agent replaces by entry_id); never raises. Absent when
+    Idempotent (async_set_agent replaces by entry_id); never raises. A no-op when
     the conversation component is unavailable.
     """
     if not _CONVERSATION_AVAILABLE:
@@ -339,28 +340,26 @@ def async_unregister_voice_agent(hass: HomeAssistant, entry: Any) -> None:
 def async_sync_voice_agent(hass: HomeAssistant, entry: Any, data: Any) -> None:
     """Register or unregister the agent to match current settings.
 
-    Registered when fully configured (enabled + token + provider + model), so "Phoenix MCP"
-    never appears as a conversation agent that answers "not configured"; a deleted
-    provider or revoked token clears its field and unregisters the agent.
+    Registered only when fully configured (enabled + token + provider + model) and
+    not shutting down, so Phoenix MCP never appears as an agent that answers "not
+    configured"; a deleted provider or revoked token clears its field and
+    unregisters it.
 
-    The kill switch is deliberately NOT part of this gate. When it is on the agent
-    stays registered but async_voice_answer declines every turn ("currently unavailable")
-    before resolving the token or dispatching any tool, so nothing runs. Keeping it
-    registered means an Assist pipeline pointed at Phoenix MCP (the one-click setup, which
-    can be the operator's preferred assistant) degrades to a spoken "unavailable"
-    during a kill switch instead of a hard "agent not found" error, and recovers on
-    its own when the kill switch is turned back off. This matches how Phoenix MCP's other
-    in-process, admin-only surfaces (the panel, the admin API) are unaffected by the
-    kill switch, which gates the network route surface, not in-process helpers.
+    The kill switch is deliberately NOT part of this gate. With it on, the agent
+    stays registered but async_voice_answer declines every turn before resolving
+    the token or dispatching any tool, so nothing runs. An Assist pipeline pointed
+    at Phoenix MCP then degrades to a spoken "unavailable" instead of a hard "agent
+    not found" error, and recovers when the kill switch is turned off. The kill
+    switch gates the network route surface, not in-process helpers.
     """
     s = data.store.get_settings()
     fully_configured = bool(
         s.voice_agent_enabled and s.voice_agent_token_id
         and s.voice_agent_provider_id and s.voice_agent_model
     )
-    # Phoenix wires this agent before publishing its final ready flag. The
-    # per-turn async_voice_answer gate keeps it unavailable until startup ends;
-    # requiring ready here skipped registration on every HA restart.
+    # Do not require data.ready: the agent is wired before the final ready flag is
+    # published, so requiring it would skip registration on every HA restart. The
+    # per-turn async_voice_answer gate keeps it unavailable until startup ends.
     if fully_configured and not data.shutting_down:
         async_register_voice_agent(hass, entry, data)
     else:
@@ -369,12 +368,12 @@ def async_sync_voice_agent(hass: HomeAssistant, entry: Any, data: Any) -> None:
 
 # --- One-click Assist pipeline setup -------------------------------------------------
 #
-# Phoenix MCP can create an Assist pipeline that points at its own conversation agent so the
-# operator does not have to wire it up by hand in Settings > Voice assistants. This
+# Phoenix MCP can create an Assist pipeline that points at its own conversation
+# agent, so the operator need not wire it up in Settings > Voice assistants. This
 # reaches into assist_pipeline internals (the Pipeline store, the private default
-# settings resolver), a HA-COUPLING POINT re-verified on upgrades; every access is
+# settings resolver), a HA-COUPLING POINT re-verified on upgrades. Every access is
 # guarded and degrades to a clean error, and the private resolver has a hand-built
-# text-only fallback so a resolver rename only loses STT/TTS auto-population.
+# text-only fallback, so a resolver rename only loses STT/TTS auto-population.
 
 try:  # assist_pipeline is a default HA integration but guard like the rest.
     from homeassistant.components.assist_pipeline.pipeline import (  # noqa: PLC0415
@@ -415,11 +414,10 @@ def _resolve_pipeline_settings(hass: HomeAssistant, entry_id: str) -> dict:
             hass, conversation_engine_id=entry_id, pipeline_name="Phoenix MCP"
         )
     except Exception:  # noqa: BLE001 - private helper drift: fall back to text-only
-        # WARNING, not debug: the fallback silently produces a pipeline with no
-        # speech-to-text and no text-to-speech, so an operator who asked for a
-        # voice assistant gets a text-only one and has no signal that anything
-        # degraded. The broad catch stays (the resolver is private and may raise
-        # for reasons beyond an import failure), but it stops being invisible.
+        # WARNING, not debug: the fallback yields a pipeline with no STT or TTS, and
+        # the operator would otherwise get no signal that anything degraded. The
+        # catch is broad because the resolver is private and may raise for reasons
+        # beyond an import failure.
         _LOGGER.warning(
             "Assist pipeline settings resolver unavailable; creating a text-only "
             "pipeline with no STT/TTS. Set these in Settings > Voice assistants.",
@@ -451,8 +449,8 @@ async def async_create_assist_pipeline(
     """Create (or return the existing) Phoenix MCP Assist pipeline; optionally set preferred.
 
     Requires the voice agent to be fully configured so its conversation agent is
-    registered and the pipeline resolves to a live agent. Persists the created
-    pipeline id on settings so teardown can remove it. Raises VoicePipelineError on
+    registered and the pipeline resolves to a live agent. The created pipeline id is
+    persisted on settings so teardown can remove it. Raises VoicePipelineError on
     any problem the caller should surface.
     """
     store = _pipeline_store(hass)

@@ -1,9 +1,9 @@
-"""Tests for the optional in-context profile injector registration (panel.py).
+"""Registration of the optional in-context injectors (panel.py).
 
-Covers async_sync_mesa_inject: it adds the extra ES-module URL only when the
-mesa_inject_enabled setting is on AND the HA version meets the soft baseline, and
-removes it when the setting is toggled off. The actual DOM injection is frontend
-code (covered by vitest); this is just the registration gate.
+async_sync_mesa_inject and async_sync_agentchat_inject add their extra ES-module URL
+only when the matching setting is on AND the HA version meets the soft baseline, and
+remove it when the setting is toggled off. The DOM injection itself is frontend code;
+this file covers the registration gate.
 """
 
 from __future__ import annotations
@@ -72,11 +72,10 @@ async def test_sync_does_nothing_when_disabled():
 
 @pytest.mark.asyncio
 async def test_sync_skips_below_version_baseline():
-    """Driven by raising the declared floor, not by inventing a hass attribute.
+    """A floor above the running HA withholds the injector.
 
-    This test used to set hass.config.version on a MagicMock, which accepts any
-    attribute, so it created the value the gate was failing to read in
-    production and proved only that the test's own world was consistent.
+    The declared floor is raised rather than a hass attribute invented: a MagicMock
+    accepts any attribute, so it would manufacture the value the gate reads.
     """
     hass = _make_hass(True)
     with patch.object(panel_mod, "MESA_INJECT_MIN_HA", "9999.1.0"), \
@@ -154,7 +153,7 @@ async def test_agentchat_sync_does_nothing_when_disabled():
 
 @pytest.mark.asyncio
 async def test_agentchat_sync_skips_below_version_baseline():
-    """Same baseline, same correction as the injector's own version test."""
+    """The Agent Chat injector honors the same version baseline."""
     hass = _make_hass_agentchat(True)
     with patch.object(panel_mod, "MESA_INJECT_MIN_HA", "9999.1.0"), \
          patch.object(panel_mod, "add_extra_js_url") as add:
@@ -195,11 +194,9 @@ async def test_remove_agentchat_inject_clears_registration():
 def test_version_gate_actually_compares():
     """The baseline must decide something, not merely be declared.
 
-    This gate read a Config attribute that does not exist, and its fail-open
-    catch swallowed the resulting error, so it returned True on every version and
-    the declared baseline was never applied. A test that only asserted "True on
-    current HA" would have passed throughout, so the assertion that matters is
-    the one below it: raising the floor above the running version must flip it.
+    The gate reads the package version constant (hass.config has no version attribute)
+    and fails open on error, so a gate that raised internally would return True for
+    every version. Raising the floor above the running version must flip it.
     """
     from custom_components.phoenix_mcp import panel as panel_mod
 
@@ -212,9 +209,9 @@ def test_version_gate_actually_compares():
 def test_version_gate_fails_open_on_an_unparseable_baseline():
     """A version that cannot be parsed leaves the feature enabled.
 
-    The in-page feature detection self-disables on a DOM it does not recognise,
-    so the worst case of a wrong answer here is a script that adds nothing;
-    withholding it on a parse failure would disable a working feature instead.
+    The in-page feature detection self-disables on a DOM it does not recognise, so the
+    worst case of a wrong answer here is a script that adds nothing; withholding it on a
+    parse failure would disable a working feature instead.
     """
     from custom_components.phoenix_mcp import panel as panel_mod
 
@@ -223,10 +220,8 @@ def test_version_gate_fails_open_on_an_unparseable_baseline():
 
 
 def test_the_baseline_is_below_the_home_assistant_under_test():
-    """Otherwise the suite would be exercising the withheld path everywhere.
-
-    A floor above the pinned Home Assistant would silently turn every injector
-    test into a test of the disabled branch.
+    """A floor above the pinned Home Assistant would turn every injector test into a
+    test of the disabled branch.
     """
     from awesomeversion import AwesomeVersion
     from homeassistant.const import __version__ as ha_version

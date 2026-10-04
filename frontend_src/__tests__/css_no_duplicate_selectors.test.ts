@@ -4,13 +4,12 @@ import path from "node:path";
 
 // A class defined twice in one stylesheet does not fail: the later block simply
 // wins, on whatever properties it happens to set, for every element wearing that
-// name. It cost a day of "the titlebar icons look shifted" when a new provider
-// card reused .agentcli-icon-btn, a name the chat window's titlebar had held all
-// along. Nothing errored; the buttons just grew a border and a fixed box.
+// name. Nothing errors: a new component reusing a class the chat window's
+// titlebar already defines just gives its buttons a stray border and a fixed box.
 //
 // A shared prefix is not a namespace. This fails on any class whose top-level
-// rule block appears more than once, so the next collision is a red test rather
-// than something someone notices in a screenshot.
+// rule block appears more than once, so a collision is a red test rather than
+// something noticed in a screenshot.
 
 const CSS = fs.readFileSync(
   path.join(__dirname, "..", "phoenix-mcp-panel.css"), "utf8");

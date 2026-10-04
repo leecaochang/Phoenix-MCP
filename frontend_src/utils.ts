@@ -7,11 +7,10 @@ export const HIGH_RISK_DOMAINS = new Set([
 ]);
 
 // Mirrors const.py's MESA_APPROVED_EXECUTOR: the non-dispatchable executor key
-// every MESA-gated confirm (whatever real tool triggered it - call_service,
-// HassTurnOn, etc) is stored under as its approval's tool_name. Shown verbatim
-// it reads like a real tool name a client could call, which it isn't - so any
-// display of a tool_name or an "approval:<tool_name>:<id>" resource string maps
-// it to a readable label instead.
+// every MESA-gated confirm is stored under as its approval's tool_name, whatever
+// real tool triggered it. Shown verbatim it reads like a tool a client could
+// call, so any display of a tool_name or an "approval:<tool_name>:<id>" resource
+// string maps it to a readable label instead.
 const MESA_APPROVED_EXECUTOR = "call_service_mesa_approved";
 const MESA_GATED_LABEL = () => t("common.mesaGatedAction");
 
@@ -24,20 +23,20 @@ export function friendlyToolName(toolName: string): string {
  *  string, humanizing an embedded MESA sentinel. Any other resource string
  *  passes through unchanged. */
 export function friendlyResource(resource: string): string {
-  // Defensive: a legacy poisoned audit entry could carry a non-string resource
-  // (the backend now coerces at record() time, but old ring-buffer entries may
-  // linger). Coerce so .startsWith and rendering never throw.
+  // Defensive: an audit entry persisted before the backend coerced resource to a
+  // string could carry a non-string value. Coerce so .startsWith and rendering
+  // never throw.
   const res = typeof resource === "string" ? resource : String(resource ?? "");
   const prefix = `approval:${MESA_APPROVED_EXECUTOR}:`;
   return res.startsWith(prefix) ? `approval:${MESA_GATED_LABEL()}:${res.slice(prefix.length)}` : res;
 }
 
-// Approval status slugs arrive raw from the server (both the approvals API and
-// the Agent Chat stream send the stored value), so anything rendering one to
-// the operator resolves it through the catalog first - a raw "approved" dropped
-// into a translated sentence stays English in every locale. Unknown values pass
-// through unchanged: Agent Chat parks its own already-translated in-flight
-// markers ("approving...") in the same field.
+// Approval status slugs arrive raw from the server (the approvals API and the
+// Agent Chat stream both send the stored value), so anything rendering one
+// resolves it through the catalog first: a raw "approved" in a translated
+// sentence stays English in every locale. Unknown values pass through unchanged
+// because Agent Chat parks its own already-translated in-flight markers
+// ("approving...") in the same field.
 const APPROVAL_STATUS_KEYS: Record<string, string> = {
   pending: "approvals.statusPending",
   approved: "approvals.statusApproved",
@@ -86,7 +85,6 @@ export function tokenStatus(token: TokenRecord): string {
   return "Active";
 }
 
-/** Display labels for tokenStatus()'s stable internal values. */
 // The resolver's Permission verdict, for display. The raw value is what the
 // audit payload and the REST API carry; these are the labels beside it.
 export const PERMISSION_LABEL_KEYS: Record<string, string> = {
@@ -97,6 +95,7 @@ export const PERMISSION_LABEL_KEYS: Record<string, string> = {
   NOT_FOUND: "perms.stateNotFound",
 };
 
+/** Display labels for tokenStatus()'s stable internal values. */
 export const TOKEN_STATUS_KEYS: Record<string, string> = {
   Active: "tokens.statusActive",
   Expired: "tokens.statusExpired",

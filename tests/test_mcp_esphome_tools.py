@@ -49,11 +49,10 @@ async def _call(name, args, token, hass):
 
 
 def _device_info(**overrides):
-    """A stand-in for aioesphomeapi DeviceInfo.
+    """A stand-in for aioesphomeapi DeviceInfo, read by the tool via getattr.
 
-    Duck-typed on purpose: aioesphomeapi is an esphome integration requirement
-    rather than a Phoenix one and is not installed here, and the tool reads
-    these by getattr.
+    Duck-typed because aioesphomeapi is an ESPHome integration requirement, not
+    a Phoenix one, and is not installed in the test environment.
     """
     base = {
         "name": "rf-blaster1",
@@ -193,10 +192,9 @@ class TestOverviewUnloadedEntries:
         assert "available" not in device
 
     async def test_unloaded_entry_never_reports_live_fields(self, hass, esphome_entries):
-        # A non-loaded entry can still be CARRYING runtime_data (setup that failed
-        # after populating it, or a later state change). The LOADED guard is what
-        # stops stale live data being reported as current, so this is the case
-        # that makes the guard load-bearing rather than decorative.
+        # A non-loaded entry can still carry runtime_data (setup that failed
+        # after populating it, or a later state change). The LOADED guard is
+        # what stops stale live data being reported as current.
         _esphome_entry(hass, esphome_entries, state=ConfigEntryState.SETUP_ERROR,
                        runtime=_runtime())
         with patch(_DASHBOARD_PATCH, return_value=None):
@@ -341,7 +339,7 @@ class TestUserServiceDispatch:
         assert outcome == "allowed"
         assert _json(content) == {"success": True}
         assert len(calls) == 1
-        # Rule 15 flattening must NOT apply: the device-declared schema has no
+        # Target flattening must NOT apply: the device-declared schema has no
         # entity_id field and voluptuous would reject the call outright.
         assert "entity_id" not in calls[0].data
         assert calls[0].data == {"timings": [1, 2, 3], "repeats": 2}
@@ -372,10 +370,9 @@ class TestUserServiceDispatch:
         assert calls == []
 
     async def test_stale_service_of_a_still_loaded_device_refused(self, hass, esphome_entries):
-        # The sharper case: the device IS loaded and its name prefixes the stale
-        # service, but its current firmware no longer declares that action. Prefix
-        # matching alone would happily dispatch it, so the owning entry's declared
-        # action set is what has to decide.
+        # The device is loaded and its name prefixes the stale service, but its
+        # current firmware no longer declares that action. Prefix matching alone
+        # would dispatch it, so the owning entry's declared action set decides.
         _esphome_entry(hass, esphome_entries,
                        runtime=_runtime(services={1: _user_service("transmit_raw")}))
         calls = await self._register(hass, "rf_blaster1_legacy_blast")
@@ -644,11 +641,11 @@ async def test_ambiguous_yaml_owners_require_all_scopes(hass, esphome_entries):
 
 
 class TestDeviceYamlDelete:
-    """Phoenix MCP owns the delete rather than allowlisting the add-on's
-    devices/delete, for one reason: the add-on's delete bypasses version capture,
-    so a mistaken delete of a heavily worked configuration is unrecoverable.
-    Going through an executor snapshots first and makes it an ordinary Changes
-    entry.
+    """Phoenix owns the delete rather than allowlisting the add-on's devices/delete.
+
+    The add-on's delete bypasses version capture, so a mistaken delete would be
+    unrecoverable; going through an executor snapshots first and makes it an
+    ordinary Changes entry.
     """
 
     async def test_cap_denied_touches_nothing_and_reveals_nothing(self, hass, esphome_dir):
@@ -723,9 +720,9 @@ class TestDeviceYamlDelete:
         assert "entities" in note
 
     async def test_a_doomed_delete_never_becomes_a_pending_approval(self, hass, esphome_dir):
-        # Rule 29, and the ONLY thing the pre-gate check buys: the executor
-        # re-checks existence too, so without a confirm-mode capability in play
-        # removing the precheck changes nothing observable. Found by mutation.
+        # A confirm-gated delete validates before the approval is created. The
+        # executor re-checks existence too, so the precheck is observable only
+        # with a confirm-mode capability in play.
         data = MagicMock()
         data.store.get_pending_approvals.return_value = []
         _c, outcome, _ = await _call_tool(
@@ -760,15 +757,13 @@ class TestDeviceYamlDelete:
 
 
 class TestDeviceYamlRestore:
-    """Restoring a device file must work for a file carrying an inline
-    credential, which is nearly all of them: the raw snapshot re-writes that
-    literal at a frozen path, and the write-freeze would otherwise read
-    rewriting it unchanged as changing it.
+    """Restoring a file that carries an inline credential must work.
 
-    This pins the WIRING, not just the waiver. Unit tests that exercise the
-    splice directly stay green through the whole failure, because the executor
-    is what has to notice it is restoring and say so; a ContextVar cannot cross
-    into the executor thread on its own.
+    The raw snapshot re-writes that literal at a frozen path, and the
+    write-freeze would otherwise read an unchanged rewrite as a change. The
+    executor must notice it is restoring (a ContextVar cannot cross into the
+    executor thread on its own), so these tests pin the wiring, not just the
+    waiver.
     """
 
     async def test_a_file_with_inline_credentials_can_be_rolled_back(self, hass, esphome_dir):
@@ -834,7 +829,7 @@ class TestDeviceYamlWrite:
             "set_esphome_yaml", {"file": "rf-blaster1.yaml", "content": bad},
             _yaml_token(cap_esphome_yaml="confirm"), hass, data)
         assert outcome == "invalid_request"
-        # Rule 29: a doomed write must not become a pending approval.
+        # A doomed write must not become a pending approval.
         data.store.set_pending_approvals.assert_not_called()
         msg = content["content"][0]["text"]
         assert "!secret" in msg and "secrets.yaml" in msg

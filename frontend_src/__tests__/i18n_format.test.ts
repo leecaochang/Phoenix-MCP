@@ -88,8 +88,8 @@ describe("setFormatLocale", () => {
   });
 
   it("leaves the locale undefined when hass carries nothing", () => {
-    // Undefined means the browser default, which is today's behaviour: the
-    // pre-load state must not invent a language.
+    // Undefined means the browser default: the pre-load state must not invent a
+    // language.
     setFormatLocale(null);
     expect(getFormatLocale()).toBeUndefined();
   });

@@ -1,13 +1,10 @@
-"""Hold every locale against the English it was actually translated from.
+"""Every locale must match the English it was translated from.
 
-The completeness, placeholder and identical-to-English checks all judge a locale
-against en.json as it is now, so a translation of a since-reworded English
-string passes all of them and keeps stating the old behaviour. This is the guard
-for that class; the stamps live in tests/contract/i18n_source_hashes.json and
-scripts/i18n_source_stamp.py writes them.
-
-The synthetic cases matter as much as the real one: an audit that silently
-classified nothing would leave this file green forever.
+The completeness, placeholder and identical-to-English checks judge a locale
+against the current en.json, so a translation of a reworded English string passes
+all of them while stating the old behaviour. Source stamps (a baseline written by
+scripts/i18n_source_stamp.py) catch that drift. The synthetic cases keep the
+audit honest: one that classified nothing would leave the real check green.
 """
 
 from __future__ import annotations
@@ -43,7 +40,7 @@ def test_locale_matches_the_english_it_was_translated_from(language: str, capsys
 
 
 def test_every_shipped_locale_is_stamped() -> None:
-    """Guards the parametrize above, and a baseline that lost a locale wholesale."""
+    """Every shipped locale has stamps, so a baseline missing a whole locale fails."""
     baseline = _stamper().load_baseline()
     assert _locales(), "no locale files found; did the translations directory move?"
     for language in _locales():

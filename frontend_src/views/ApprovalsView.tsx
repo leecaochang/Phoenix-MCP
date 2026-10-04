@@ -54,11 +54,10 @@ const FILTER_LABEL_KEYS: Record<string, string> = {
 
 /** The approval's summary in the operator's language.
  *
- *  The backend stores the English sentence (it doubles as the audit trail) and,
- *  since the diff-summary work, the catalog key and params that produced it.
- *  Falls back to the stored English for records written before that, and for a
- *  key this bundle does not know, which is what a newer backend behind a cached
- *  panel looks like. */
+ *  The backend stores the English sentence (it doubles as the audit trail) plus
+ *  the catalog key and params that produced it. Falls back to the stored English
+ *  for older records and for a key this bundle does not know (a newer backend
+ *  behind a cached panel). */
 export function diffSummary(diff: ApprovalDiff | undefined): string {
   if (diff?.summary_key && hasMessage(diff.summary_key)) {
     return t(diff.summary_key, diff.summary_params);
@@ -99,9 +98,9 @@ function structuredErrorText(value: unknown): string | null {
 
 /** Pull one concise tool error out of a resolved approval's saved result.
  *
- * Older integration failures stored a JSON document containing the short
- * `error` plus complete MESA explanations. Summary must extract the sentence,
- * never render that diagnostic document as prose. Details retains it verbatim.
+ * A failure may be saved as a JSON document holding the short `error` plus
+ * complete MESA explanations. Summary must extract the sentence, never render
+ * that diagnostic document as prose; Details retains it verbatim.
  */
 export function extractResultErrorText(result: unknown): string | null {
   if (!result || typeof result !== "object") return null;
@@ -184,8 +183,7 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
   // rather than a boolean beside `selected`: two states would have to be kept in
   // sync by every open path, and comparing ids cannot desync. An operator who
   // opened the modal from the list already has the queue and its batch controls
-  // on screen behind it, so the "others are waiting" banner would repeat what
-  // they can see, and a signal that is always present is one that gets skipped.
+  // on screen behind it, so the "others are waiting" banner would only repeat it.
   const [deepLinkedId, setDeepLinkedId] = useState<string | null>(null);
   const consumedDeepLink = useRef<string | null>(null);
   // Pre-slice total from the pending fetch, not shown.length: the list pages at
@@ -372,9 +370,8 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
   }, [openApprovalId, onConsumedDeepLink, onTabChange]);
 
   // Clear the route only after React has committed the requested record as the
-  // open modal. This prevents the first navigation from being consumed by the
-  // panel mount itself, which previously made both chat and notification links
-  // require a second click.
+  // open modal, so the panel mount itself cannot consume the first navigation
+  // (a chat or notification link would then need a second click).
   useEffect(() => {
     if (!openApprovalId
       || selected?.id !== openApprovalId
@@ -443,14 +440,14 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
   const allPicked = selectableIds.length > 0 && pickedCount === selectableIds.length;
   // Batching one thing is meaningless, so BOTH the bar and the per-row tick boxes
   // appear only from two selectable rows up. Showing a lone tick box with no
-  // button to press reads as a broken control (reported).
+  // button to press reads as a broken control.
   const batchable = selectableIds.length > 1;
 
   // The result banner describes ONE completed run. Clear it as soon as the queue
   // moves underneath it, otherwise it sits above a list it no longer describes
-  // and an operator reads a stale "Approved 2" over two freshly-arrived rows
-  // (reported). The first render after a result captures the list it belongs to;
-  // any change to that list retires it.
+  // and an operator reads a stale "Approved 2" over two freshly-arrived rows.
+  // The first render after a result captures the list it belongs to; any change
+  // to that list retires it.
   const listKey = records.map((r) => r.id).join(",");
   const bannerListKey = useRef<string | null>(null);
   useEffect(() => {
@@ -687,12 +684,11 @@ function StatusBadge({ status }: { status: ApprovalStatus }) {
   return <span className={`badge ${cls[status]}`}>{t(labelKeys[status])}</span>;
 }
 
-/** Reports what a batch run did. Deliberately three separate facts.
+/** Reports what a batch run did, as three separate facts.
  *
- * "Approved 6" alone would read as a success on a run that stopped at item 7,
- * and "failed" alone would hide the six that really did apply. The remaining
- * count is the one an operator acts on: those are untouched and still pending,
- * not lost.
+ * "Approved 6" alone would read as success on a run that stopped at item 7, and
+ * "failed" alone would hide the six that applied. The remaining count is the one
+ * an operator acts on: those are untouched and still pending, not lost.
  */
 function BatchResultMsg({ result, onDismiss }: { result: BatchApproveResult; onDismiss: () => void }) {
   const failed = result.failed;
@@ -1106,12 +1102,11 @@ const CARD_OP_TOOLS = new Set(["add_dashboard_card", "edit_dashboard_card", "del
 
 /** True when a patch_dashboard record addresses a CARD, so the card preview applies.
  *
- * patch_dashboard can target anything in a layout, and most of it is not a card:
- * a view title is a string, and a badge is its own config shape that would render
- * as something else entirely if fed to hui-card. Previewing those would show the
- * approver a picture of something that is not what they are approving, which is
- * worse than showing no picture, so the preview is offered only when the path
- * runs through a "cards" list. Everything else falls back to the text diff.
+ * patch_dashboard can target anything in a layout (a view title, a badge), and
+ * feeding a non-card to hui-card would show the approver a picture of something
+ * other than what they are approving, which is worse than no picture. So the
+ * preview is offered only when the path runs through a "cards" list; everything
+ * else falls back to the text diff.
  */
 function isCardPatchRecord(record: { tool_name: string; args?: Record<string, unknown> | null }): boolean {
   if (record.tool_name !== "patch_dashboard") return false;
@@ -1158,9 +1153,9 @@ function DiffView({ record }: {
   // Card ops: the After side comes from args.card, the full untruncated
   // object the approval carries for the executor (a single big card, e.g. a
   // multi-series chart, can exceed the diff string's truncation bound, and a
-  // truncated diff.after does not parse; live-found). The Before side (the
-  // prior card on edit/delete) only exists in diff.before, wrapped from its
-  // JSON; unparseable disables just that side.
+  // truncated diff.after does not parse). The Before side (the prior card on
+  // edit/delete) only exists in diff.before, wrapped from its JSON;
+  // unparseable disables just that side.
   const beforeCardConfig = isCardOp ? singleCardPreviewConfig(diff.before ?? null) : null;
   // patch_dashboard carries its card under args.value rather than args.card; both
   // are the full untruncated object the executor will apply.
@@ -1316,9 +1311,8 @@ type EnergyRow = { key: string; state: "added" | "removed" | "changed" | "same";
 /** Pair before/after rows into one ordered, diffed list.
  *
  * Keyed by STATISTIC for devices and by TYPE for sources, never by display name:
- * a rename would otherwise read as an unrelated removal plus addition instead of
- * the one substitution it is. Removed keys keep their original position so the
- * old and new values render adjacent rather than pages apart.
+ * a rename would otherwise read as an unrelated removal plus addition. Removed
+ * keys keep their original position so old and new values render adjacent.
  */
 function diffEnergyRows<T>(
   before: T[], after: T[], key: (r: T) => string, title: (r: T) => string, line: (r: T) => string,

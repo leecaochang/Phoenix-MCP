@@ -2,37 +2,21 @@
 /**
  * In-context MESA profile injector.
  *
- * Loaded on every HA page via the frontend extra-module mechanism, but only when
- * the admin enabled `mesa_inject_enabled` (the Python side registers this module
- * conditionally). It adds a compact "+" / "✓" control (create / already profiled)
- * so an admin can author a MESA profile in place, on two kinds of surface:
- *
- *  - Entity scope: one control per ROW of the data-table config pages listed in
- *    `ENTITY_PAGE_PREFIXES` (./dom), covering Entities, Automations, Scripts,
- *    Scenes and Helpers, plus People list items. Entities is the broad one,
- *    since every entity is listed there; the per-domain pages provide convenience.
+ * Loaded on every HA page via the frontend extra-module mechanism, only when
+ * the admin enabled `mesa_inject_enabled` (the Python side registers it
+ * conditionally). It scans HA's native config pages (MutationObservers on the
+ * body and on each table's open shadow root, plus a poll) and adds a compact
+ * "+" / check control (create / already profiled) for authoring a MESA profile:
+ *  - Entity scope: one control per ROW of the data tables on the pages in
+ *    `ENTITY_PAGE_PREFIXES` (./dom), plus People list items.
  *  - Device, area and integration scope: one control in a detail page's HEADER,
- *    keyed from the URL rather than from a DOM id, which makes these three far
- *    less fragile than the row adapter. They share one scanner, including its
- *    stale-key check: navigating between two pages of the same kind reuses the
- *    DOM, so a leftover button would edit the previously viewed target.
- *
- * Domain scope has no injected surface, because Home Assistant has no per-domain
- * page for a control to live on; domain profiles are authored in the panel's
- * MESA tab. The scope set here derives from the modal's own union rather than
- * being restated, so the two cannot disagree.
- *
- * Design rules:
- *  - Admin only: does nothing unless `hass.user.is_admin`.
- *  - Fully sandboxed: caught startup/scan errors log and disable this browser
- *    session's injector and Settings toggle; they must never break HA.
- *  - Single current-HA path with feature-detection: if the data-table DOM does
- *    not match, nothing is injected (the feature self-disables). This is the
- *    intended behaviour on older HA or after a breaking HA frontend release.
- *  - The heavy modal (React + ProfileEditor) is lazy-imported on first click.
- *
- * HA-specific identities and insertion anchors live in ./dom. People uses a
- * separate list adapter; the other entity pages use ha-data-table rows.
+ *    keyed from the URL, not a DOM id. Navigating between two pages of the same
+ *    kind reuses the DOM, so these share a stale-key check.
+ * Domain scope has no surface (HA has no per-domain page); it is authored in the
+ * panel's MESA tab. Rules: admin only; sandboxed (a caught error disables this
+ * session's injector, never HA); feature-detected (an unrecognised DOM injects
+ * nothing, the intended behaviour on older or changed HA frontends); the heavy
+ * modal (React + ProfileEditor) is lazy-imported on first click.
  */
 
 import { api, setHass } from "../api";
@@ -121,7 +105,7 @@ function buildButton(scope: Scope, key: string, placement: Placement = "cell"): 
   const btn = document.createElement("button");
   btn.className = BTN_CLASS;
   btn.type = "button";
-  btn.dataset.phxKey = key; // used to detect a stale button when the area changes
+  btn.dataset.phxKey = key; // used to detect a stale button when the target changes
   btn.dataset.phxPlace = placement; // so a scan can tell a fallback from the real thing
   const toolbar = placement === "toolbar";
   // Fixed compact size: in a cell it shares the narrow icon column (often with
@@ -183,8 +167,8 @@ function displayKey(scope: Scope, key: string): string {
 }
 
 /** Set the +/MESA appearance for the entity's current profiled state. No-op (no
- *  DOM writes) when already in the right state, so our own table observer does
- *  not feed back into an endless rescan loop. */
+ *  DOM writes) when already in the right state, so the injector's own table
+ *  observer does not feed back into an endless rescan loop. */
 function applyButtonState(btn: HTMLButtonElement, scope: Scope, key: string): void {
   const has = profiled[scope].has(key);
   const want = has ? "has" : "new";
@@ -231,7 +215,7 @@ function decorateRow(row: HTMLElement): void {
   point.parent.insertBefore(buildButton("entity", entityId), point.before);
 }
 
-/** Widen the first (icon) column of a data table so our button has room and does
+/** Widen the first (icon) column of a data table so the button has room and does
  *  not collide with the name. Injected once per table shadow root. Targets both
  *  the header and body first cells so the columns stay aligned. This is the one
  *  deliberately invasive bit (it overrides HA's column width), so it is kept
@@ -240,9 +224,9 @@ function ensureColumnWidth(sr: ShadowRoot): void {
   if (sr.querySelector(`#${WIDEN_STYLE_ID}`)) return;
   const style = document.createElement("style");
   style.id = WIDEN_STYLE_ID;
-  // Body: only cells we actually decorate (marked with data-phx-widen), so the
-  // full-width group-header rows (e.g. "Ungrouped") are left alone. Header: the
-  // first column header, to keep the columns aligned.
+  // Body: only decorated cells (marked with data-phx-widen), so the full-width
+  // group-header rows (e.g. "Ungrouped") are left alone. Header: the first
+  // column header, to keep the columns aligned.
   style.textContent =
     "[data-phx-widen],.mdc-data-table__header-cell:first-child{" +
     "width:96px !important;min-width:96px !important;max-width:96px !important;flex:0 0 96px !important;}";
@@ -250,9 +234,8 @@ function ensureColumnWidth(sr: ShadowRoot): void {
 }
 
 // The subpage scopes, each resolving its key from the URL. Explicit rather than
-// an else-branch: scanAreaPage used to be the fallback for every non-table page,
-// so a device page reached it and only escaped because areaIdFromPath returned
-// null. A new surface added that way would silently claim the wrong scope.
+// an else-branch, so a new surface can never silently claim the wrong scope by
+// falling through to another scope's scanner.
 function scan(): void {
   if (onEntityPage()) {
     scanDataTables();
@@ -291,7 +274,7 @@ function scanPeople(): void {
         continue;
       }
       // MWC list items omit the meta slot entirely unless hasMeta is enabled.
-      // Track only our own change so disposal preserves HA's existing setting.
+      // Track only the injector's own change so disposal preserves HA's setting.
       if (!(row as HTMLElement & { hasMeta?: boolean }).hasMeta && !row.hasAttribute("hasmeta")) {
         row.setAttribute("data-phx-meta", "");
         row.setAttribute("hasmeta", "");
@@ -334,8 +317,7 @@ function scanDataTables(): void {
  *  Those actions are LIGHT-DOM children of hass-subpage carrying
  *  slot="toolbar-icon", which the component projects to the right of the
  *  toolbar; adding one more is the same mechanism Home Assistant's own pages
- *  use. The title is the FALLBACK, for a subpage with no actions of its own,
- *  which is the only reason the control ever appeared next to the name.
+ *  use. The title is the FALLBACK, for a subpage with no actions of its own.
  *
  *  The stale-button check is load-bearing: navigating between two pages of the
  *  same kind reuses the DOM, so a button left from the previously viewed target
@@ -348,17 +330,16 @@ function scanSubpage(scope: Exclude<Scope, "entity">, key: string): void {
     const sr = host.shadowRoot;
     if (!sr) continue;
     const title = sr.querySelector<HTMLElement>(".main-title");
-    // BOTH spellings, because this is Home Assistant's name and not ours: the
-    // slot is "toolbar-icon" (singular) on the version verified here, and the
-    // plural is the obvious thing to assume and was wrong. Matching either means
-    // a rename in one direction degrades to the title fallback rather than to a
-    // missing control. querySelector returns the first in DOCUMENT order, so a
-    // page mixing them still yields its leading action.
+    // BOTH spellings, because the slot name is Home Assistant's: "toolbar-icon"
+    // (singular) in the HA version this targets, but matching the plural too
+    // means a rename in one direction degrades to the title fallback rather than
+    // to a missing control. querySelector returns the first in DOCUMENT order, so
+    // a page mixing them still yields its leading action.
     const firstAction = host.querySelector<HTMLElement>(
       ':scope > [slot="toolbar-icon"], :scope > [slot="toolbar-icons"]',
     );
     if (!title && !firstAction) continue;
-    // Direct children only on the host: a data-table subpage has our own row
+    // Direct children only on the host: a data-table subpage has injected row
     // buttons deeper inside, and a loose descendant search would adopt one.
     const existing =
       host.querySelector<HTMLButtonElement>(`:scope > .${BTN_CLASS}`) ??
@@ -366,10 +347,9 @@ function scanSubpage(scope: Exclude<Scope, "entity">, key: string): void {
       null;
     // Home Assistant renders the header's action buttons asynchronously, the same
     // way it renders row icons (see nameInsertionPoint), so an early scan can find
-    // no action row and legitimately fall back to the title. Comparing the key
-    // ALONE then made that fallback permanent: every later scan matched and
-    // returned, so the control stayed beside the name even once the action row
-    // existed. Placement is part of "is this button still right".
+    // no action row and legitimately fall back to the title. A key-only
+    // comparison would make that fallback permanent, so placement is part of "is
+    // this button still right".
     // "cell" is what the title fallback builds (it wants the compact styling),
     // so the names must agree here or every scan would rebuild the button.
     const preferred: Placement = firstAction ? "toolbar" : "cell";
@@ -426,9 +406,9 @@ function observeRoot(sr: ShadowRoot): void {
   observedRoots.add(sr);
   try {
     const observer = new MutationObserver((records) => {
-      // Ignore our own button/style writes so applyButtonState's glyph swap cannot
-      // ping-pong with HA's row re-render into an endless loop (the "+/check
-      // toggles until reload" bug after adding or deleting a profile).
+      // Ignore the injector's own button/style writes so applyButtonState's
+      // glyph swap cannot ping-pong with HA's row re-render into an endless
+      // loop after a profile is added or deleted.
       if (!isSelfMutation(records)) debouncedScan("table-observer");
     });
     observer.observe(sr, {
@@ -555,10 +535,9 @@ function start(): void {
   }
   setHass(hass);
   // Opportunistic card-catalog harvest. This module loads on EVERY HA page, so
-  // it sees dashboards where the Lovelace resources are already imported, which
-  // keeps the catalog fresher than the panel alone can. Rate-limited internally
-  // and fire-and-forget: it must never delay or fail the profile injection this
-  // module actually exists to do.
+  // it sees dashboards whose Lovelace resources are already imported, keeping
+  // the catalog fresher than the panel alone can. Rate-limited internally and
+  // fire-and-forget: it must never delay or fail the profile injection.
   void syncCardCatalog();
   // Strings ride along with the profile reads this already waits on, so the
   // first scan paints its buttons with labels rather than raw keys.
@@ -623,7 +602,7 @@ controller = {
     observers.clear();
     listeners.length = 0;
     observedRoots = new WeakSet<ShadowRoot>();
-    for (const element of deepQueryAll(`.${BTN_CLASS},#${WIDEN_STYLE_ID},phx-mesa-quick-add,[data-phx-mesa-modal]`)) element.remove();
+    for (const element of deepQueryAll(`.${BTN_CLASS},#${WIDEN_STYLE_ID},[data-phx-mesa-modal]`)) element.remove();
     for (const element of deepQueryAll("[data-phx-widen]")) {
       element.removeAttribute("data-phx-widen");
     }

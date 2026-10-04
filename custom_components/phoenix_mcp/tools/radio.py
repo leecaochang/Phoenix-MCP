@@ -338,18 +338,14 @@ def _resolve_radio_device(
 ) -> _ResolvedRadioDevice | tuple[dict, str, str]:
     """Resolve a device_id to a _ResolvedRadioDevice, or the tool error to return.
 
-    Returns one or the other, not an (error, device, backend, ieee) 4-tuple. The
-    tuple form guaranteed the three values were non-None only via the FIRST
-    element, so every caller then passed `str | None` into code needing a str.
-    This is the same single-return shape as _read_body, _validate_preset_name and
-    yaml_includes._layout_or_result; a frozen dataclass rather than a NamedTuple
-    so `isinstance(..., tuple)` discriminates the two cases cleanly. Visibility mirrors get_device: the device must have at least one
-    accessible entity, and a ghost device and an out-of-scope device return
-    identical not_found bodies (no existence oracle). Write ops additionally
-    require WRITE on at least one of the device's entities; a visible but
-    READ-only device gets a specific message, since the token can already see
-    it. A visible non-radio device (including the Z2M bridge itself, which
-    never detects as a radio device, protecting the coordinator) is
+    Callers narrow with `isinstance(result, tuple)`, which is why the success value
+    is a frozen dataclass rather than a NamedTuple. Visibility mirrors get_device:
+    the device must have at least one accessible entity, and a ghost device and an
+    out-of-scope device return identical not_found bodies (no existence oracle).
+    Write ops additionally require WRITE on at least one of the device's entities;
+    a visible but READ-only device gets a specific message, since the token can
+    already see it. A visible non-radio device (including the Z2M bridge itself,
+    which never detects as a radio device, protecting the coordinator) is
     invalid_request.
     """
     device_id = str(args.get("device_id") or "").strip()
@@ -1380,7 +1376,7 @@ def _resolve_topology_scan(
 def _resolve_permit_join(
     args: dict, token: TokenRecord, hass: HomeAssistant
 ) -> _ResolvedPermitJoin | tuple[dict, str, str]:
-    """Validate permit_zigbee_join args to (backend, duration, router_ieee, router_label).
+    """Validate permit_zigbee_join args into a _ResolvedPermitJoin, or the tool error.
 
     Shared by the pre-gate check, the diff builder, and the executor so all
     three see the same resolution. The optional router device needs only READ
@@ -2396,7 +2392,10 @@ async def _tool_set_zigbee_device_property(
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
-    """MCP tool: direct Z2M exposed-property fallback (dual-gated)."""
+    """MCP tool: direct Z2M exposed-property write.
+
+    Gated by cap_radio_write and cap_physical_control, then MESA.
+    """
     caps = ("cap_radio_write", "cap_physical_control")
     if any(effective_cap(token, cap) == CAP_DENY for cap in caps):
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_zigbee_device_property"
@@ -2567,7 +2566,10 @@ async def _tool_set_zigbee_binding(
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
-    """MCP tool: bind/unbind two scoped Zigbee devices (dual-gated)."""
+    """MCP tool: bind/unbind two scoped Zigbee devices.
+
+    Gated by cap_radio_write and cap_physical_control, then MESA.
+    """
     caps = ("cap_radio_write", "cap_physical_control")
     if any(effective_cap(token, cap) == CAP_DENY for cap in caps):
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_zigbee_binding"
@@ -2920,7 +2922,10 @@ async def _tool_zigbee_group_change(
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
-    """Shared dual-capability and MESA gate for group topology changes."""
+    """Shared gate for group topology changes.
+
+    cap_radio_write and cap_physical_control, then MESA.
+    """
     caps = ("cap_radio_write", "cap_physical_control")
     if any(effective_cap(token, cap) == CAP_DENY for cap in caps):
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name

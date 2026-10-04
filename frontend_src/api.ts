@@ -61,12 +61,12 @@ export function setHass(hass: any) {
   setAgentCliOwner(typeof hass?.user?.id === "string" ? hass.user.id : null);
 }
 
-// The hass to authenticate with. Normally the one passed to setHass, but the
-// in-context inject modal can run in a module realm where setHass was never
-// called (a second injector copy, or one stood down by the singleton guard), so
-// fall back to the live hass on the page's <home-assistant> element. Without this
-// a request would go out with no Authorization header and HA would 401 + ban-log
-// it. Harmless for the panel, which reads the same object.
+// The hass to authenticate with: the live one on the page's <home-assistant>
+// element, else the one passed to setHass. The in-context inject modal can run
+// in a module realm where setHass was never called (a second injector copy, or
+// one stood down by the singleton guard); without the live lookup its requests
+// would carry no Authorization header and HA would 401 and ban-log them. The
+// panel reads the same object either way.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function authHass(): any {
   try {

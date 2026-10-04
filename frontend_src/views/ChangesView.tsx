@@ -15,13 +15,10 @@ import { tRich } from "../i18n/rich";
 
 // Resource types whose before/after payload is a raw text blob ({content, ...})
 // rather than a structured config; these render as a line diff, not YAML.
-// esphome_yaml belongs here with the other two: its payload is the same
-// {content, bytes} shape. Left out, a device file rendered through the
-// STRUCTURED path instead, which dumps {content, path} back as YAML and so
-// buries the whole file inside a "content: |-" block with every line
-// re-indented, on exactly the files most worth reading; it also made the
-// too-large marker invisible and offered Restore on a snapshot the backend
-// would refuse.
+// esphome_yaml must be listed: its payload has the same {content, bytes} shape,
+// and the structured path would dump it as YAML, burying the whole file inside a
+// "content: |-" block, hiding the too-large marker and offering Restore on a
+// snapshot the backend would refuse.
 const RAW_CONTENT_TYPES = new Set(["yaml_config", "file", "esphome_yaml", "blueprint"]);
 
 /** Extract the raw-text snapshot from a version side, or null. content is null
@@ -41,8 +38,8 @@ const ACTION_BADGE: Record<string, string> = {
   rollback: "badge-amber",
 };
 
-// The backend records the action as a slug. Unknown slugs fall through to the
-// raw value rather than a blank pill, the same way REASON_LABELS degrades.
+// The backend records resource types and actions as slugs. An unknown slug falls
+// through to the raw value rather than a blank label or pill.
 export const RESOURCE_TYPE_LABEL_KEYS: Record<string, string> = {
   automation: "changes.typeAutomation",
   script: "changes.typeScript",
@@ -166,9 +163,9 @@ export function ChangesView({ hass }: { hass: unknown }) {
   useEffect(() => { loadTokens(); }, [loadTokens]);
 
   // offset === 0 always replaces the feed (a fresh top page: initial load, manual
-  // refresh, or a background poll/event - the feed is a live list, so a poll
-  // tick shows what's live now rather than preserving a stale "loaded more"
-  // window). A manual "Load more" click passes the next offset and appends.
+  // refresh, or a background poll or event), because the feed is a live list and
+  // a poll tick should show what is live now, not a stale "loaded more" window.
+  // A manual "Load more" click passes the next offset and appends.
   // The feed is loaded from four places with no ordering between them (mount,
   // manual refresh, config-changed event, poll tick) plus Load more, all writing
   // the same state. A superseded response is dropped rather than allowed to put
@@ -229,8 +226,8 @@ export function ChangesView({ hass }: { hass: unknown }) {
         onBack={() => { setSelected(null); loadFeed(0); }}
         onRestored={async () => {
           // Keep the detail mounted (and its Restoring state visible) until one
-          // authoritative reload has the rollback row. Previously onRestored
-          // and onBack launched competing background/foreground requests.
+          // authoritative reload has the rollback row, so onRestored and onBack
+          // do not launch competing background and foreground requests.
           await loadFeed(0);
           setSelected(null);
         }}
@@ -396,8 +393,7 @@ function ChangeDetail(
   const showPreview = canPreview && mode === "preview";
 
   // One place deciding how a pane renders, across raw-vs-structured payloads and
-  // line-diff-vs-code view; the four inlined branches this replaces were already
-  // the reason the code view was missed on this tab.
+  // line-diff-vs-code view, so no branch can miss the code view.
   const renderSide = (which: "before" | "after") => {
     const tone = which === "before" ? "remove" : "add";
     if (isRaw) {

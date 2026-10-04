@@ -185,7 +185,7 @@ export interface DiffLine {
   changed: boolean;
 }
 
-// Above this combined line count we skip the O(m*n) LCS and render both sides
+// Above this combined line count the O(m*n) LCS is skipped and both sides render
 // plainly (no per-line highlight), so a large raw file cannot stall the panel.
 const MAX_DIFF_LINES = 3000;
 

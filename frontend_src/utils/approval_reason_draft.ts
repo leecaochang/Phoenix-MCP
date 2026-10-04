@@ -1,15 +1,15 @@
 // Rejection-reason drafts, shared across the two surfaces that can reject the
 // same approval: the panel's approval detail modal (where the reason box lives)
 // and the Agent Chat window's inline approval bubble (which has only
-// Approve/Reject/Review). Typing a reason in the modal and then clicking Reject
-// on the chat bubble used to drop the reason silently, which matters because a
-// rejection reason is the operator's steering channel for the next proposal.
+// Approve/Reject/Review). A reason typed in the modal must survive a Reject
+// click on the chat bubble, because a rejection reason is the operator's
+// steering channel for the next proposal.
 //
-// Storage is localStorage, not a module variable: when the global Agent Chat
-// window is enabled it runs in its own bundle (phoenix-mcp-agentchat.js) with a
-// separate module graph from the panel bundle, so nothing in-memory is shared.
-// Drafts are short-lived by nature (an approval expires in an hour), so stale
-// entries are pruned on every write.
+// Storage is localStorage, not a module variable: the global Agent Chat window
+// runs in its own bundle (phoenix-mcp-agentchat.js) with a separate module graph
+// from the panel bundle, so nothing in-memory is shared. Drafts are short-lived
+// (an approval expires after an hour by default), so stale entries are pruned on
+// every write.
 
 const LS_KEY = "phx-approval-reason-drafts";
 const MAX_AGE_MS = 3_600_000; // one approval TTL; a draft older than that is dead

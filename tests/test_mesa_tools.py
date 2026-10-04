@@ -1,8 +1,8 @@
-"""Tests for the token-scoped mesa_* MCP tools.
+"""Token-scoped mesa_* MCP tools.
 
-The priority is the no-enumeration-oracle guarantee: query counts, get, and
-explain must all be filtered to the token's permission scope, and an
-out-of-scope entity must be byte-identical to a nonexistent one.
+The priority is the no-enumeration-oracle guarantee: query counts, get, and explain
+are all filtered to the token's permission scope, and an out-of-scope entity is
+byte-identical to a nonexistent one.
 """
 
 from __future__ import annotations
@@ -234,7 +234,7 @@ async def test_authored_restrictions_empty_without_authored_profiles(hass: HomeA
 
 
 # ---------------------------------------------------------------------------
-# Semantic moments (mesa-core 1.2, HA purpose-specific triggers)
+# Semantic moments (HA purpose-specific triggers)
 # ---------------------------------------------------------------------------
 
 
@@ -242,10 +242,10 @@ def _patch_semantic_schema_lookups(
     monkeypatch, *, trigger_schemas=None, condition_schemas=None,
     trigger_error=None, condition_error=None,
 ):
-    """Monkeypatch the schema-enrichment lookups async_semantic_moments makes.
+    """Patch the schema-enrichment lookups async_semantic_moments makes.
 
-    Separate from the id lookups (async_get_triggers/conditions_for_target),
-    tested elsewhere: these back the per-moment "schema" field.
+    They back the per-moment "schema" field and are separate from the id lookups
+    (async_get_triggers/conditions_for_target).
     """
 
     async def _triggers(hass):
@@ -268,8 +268,10 @@ def _patch_semantic_schema_lookups(
 
 @pytest.mark.asyncio
 async def test_get_profile_includes_semantic_moments(env, monkeypatch):
-    """include_semantic_moments=True returns the live HA vocabulary, tagged by
-    kind, with each moment's schema (target/fields) attached when HA has one."""
+    """include_semantic_moments=True returns the live HA vocabulary, tagged by kind.
+
+    Each moment's schema (target/fields) is attached when HA has one.
+    """
 
     async def _fake_triggers(hass, target, expand_group):
         assert target == {"entity_id": "light.a"}
@@ -364,10 +366,8 @@ async def test_get_profile_semantic_moments_flag_off_no_lookup(env, monkeypatch)
     assert "semantic_moments" not in payload
 
 
-# The numeric_threshold selector shapes below are the two real forms observed
-# live: temperature carries the unit as a selector-level list, percentage carries
-# it as a string inside the number spec. Both config outputs were verified valid
-# against HA's own validate_config.
+# The numeric_threshold selector has two shapes: temperature carries the unit as a
+# selector-level list, percentage carries it as a string inside the number spec.
 _TEMP_THRESHOLD_SCHEMA = {
     "fields": {
         "threshold": {
@@ -399,14 +399,15 @@ _VOLUME_THRESHOLD_SCHEMA = {
 
 
 def test_numeric_threshold_example_temperature_unit_from_list():
-    # Unit is a selector-level list -> take the first; no min/max -> placeholder 20.
+    # Unit is a selector-level list, so take the first; with no min/max the number
+    # is the placeholder 20.
     assert _numeric_threshold_example(
         _TEMP_THRESHOLD_SCHEMA["fields"]["threshold"]["selector"]["numeric_threshold"]
     ) == {"type": "above", "value": {"number": 20, "unit_of_measurement": "°C"}}
 
 
 def test_numeric_threshold_example_percent_unit_from_number_and_midpoint():
-    # Unit is a string inside number; min/max present -> midpoint number.
+    # Unit is a string inside number; min/max present gives the midpoint number.
     assert _numeric_threshold_example(
         _VOLUME_THRESHOLD_SCHEMA["fields"]["threshold"]["selector"]["numeric_threshold"]
     ) == {"type": "above", "value": {"number": 50, "unit_of_measurement": "%"}}
@@ -419,9 +420,8 @@ def test_moment_example_config_builds_valid_shape_for_numeric_threshold_trigger(
         "climate.home_office_ac",
         _TEMP_THRESHOLD_SCHEMA,
     )
-    # The config shape HA actually accepts: options.threshold.{type, value:{...}},
-    # NOT a bare threshold value (which is what the selector schema misleadingly
-    # suggests and what a model fails to reverse-engineer).
+    # The config shape HA accepts: options.threshold.{type, value:{...}}, NOT a bare
+    # threshold value, which the selector schema misleadingly suggests.
     assert example == {
         "trigger": "climate.target_temperature_crossed_threshold",
         "target": {"entity_id": "climate.home_office_ac"},
@@ -432,9 +432,9 @@ def test_moment_example_config_builds_valid_shape_for_numeric_threshold_trigger(
 
 
 def test_moment_example_config_condition_uses_condition_key():
-    # A condition moment serializes identically but under a "condition" key (both
-    # verified valid against HA's validate_config); the is_* conditions are
-    # above/below threshold checks, not exact-equality, so they take a type too.
+    # A condition moment serializes identically but under a "condition" key; the
+    # is_* conditions are above/below threshold checks, not exact-equality, so they
+    # take a type too.
     example = _moment_example_config(
         "media_player.is_volume",
         "condition",
@@ -483,15 +483,13 @@ async def test_get_profile_semantic_moments_degrades_on_ha_failure(env, monkeypa
 
 @pytest.mark.asyncio
 async def test_get_profile_semantic_moments_skips_lookup_when_out_of_scope(env, monkeypatch):
-    """An out-of-scope entity must never reach the HA trigger/condition lookup.
+    """An out-of-scope entity never reaches the HA trigger/condition lookup.
 
     async_call_mesa_tool's visibility check runs before the semantic-moments lookup
-    specifically so an out-of-scope or ghost entity never pays for (or leaks
-    through) the HA call; this pins that ordering so a future refactor cannot
-    silently swap it. Uses a call counter, not a raising mock: async_semantic_moments
-    catches every exception broadly (degrade to None, never break the tool), so a
-    raising mock would be silently swallowed there and this test would pass even
-    if the ordering regressed and the wasted call happened.
+    so an out-of-scope or ghost entity never pays for (or leaks through) the HA
+    call. A call counter is used, not a raising mock: async_semantic_moments catches
+    every exception broadly (degrading to None), so a raising mock would be
+    swallowed and the test would pass even if the ordering regressed.
     """
     calls = []
 
@@ -558,7 +556,7 @@ async def test_get_profile_semantic_moments_empty_result_is_present_not_omitted(
 
 
 # ---------------------------------------------------------------------------
-# Advisory lease tools (mesa-core 1.1, Enrichment Section 21)
+# Advisory lease tools
 # ---------------------------------------------------------------------------
 
 
@@ -566,10 +564,8 @@ async def test_get_profile_semantic_moments_empty_result_is_present_not_omitted(
 async def test_lease_request_release_round_trip_across_calls(env):
     """A token can release its own lease in a LATER stateless call.
 
-    Proves the token-id-as-session design: the two async_call_mesa_tool invocations
-    carry different transport session ids ("sess" both times here, but a fresh
-    request id in production), yet the release matches because leases key on
-    the token.
+    Leases key on the token, not the transport session, so a release made in a
+    different request still matches.
     """
     events = []
     env.bus.async_listen("phoenix_mcp_mesa_lease_expired", lambda e: events.append(e.data))
@@ -670,8 +666,8 @@ async def test_lease_cross_token_isolation(env):
 async def test_component_type_is_derived_from_the_entity_domain(env):
     """An automation, a helper and a person are not reported as plain entities.
 
-    The field is agent-facing and was a hardcoded "entity" for every row, so an
-    agent could not tell an orchestrator from the thing it orchestrates.
+    The field is agent-facing; a hardcoded "entity" for every row would leave an
+    agent unable to tell an orchestrator from the thing it orchestrates.
     """
     for eid in ("automation.morning", "input_boolean.guest", "person.sam", "light.a"):
         env.states.async_set(eid, "on", {})
@@ -725,11 +721,11 @@ def _integration_hint_profile(mode: str) -> SemanticProfile:
 
 @pytest.mark.asyncio
 async def test_integration_capability_hint_tightens_an_entity_with_no_profile(env):
-    """A vendor sidecar's declared capability now participates in resolution.
+    """A vendor sidecar's declared capability participates in resolution.
 
-    It contributes only where the same profile declares no operational
-    control_mode of its own, and it enters as an ordinary most-restrictive-wins
-    candidate, so it can tighten an entity and can never loosen one.
+    It contributes only where the same profile declares no operational control_mode
+    of its own, and it enters as an ordinary most-restrictive-wins candidate, so it
+    can tighten an entity and can never loosen one.
     """
     runtime = await async_setup_mesa(env, "advisory")
     runtime.store.set_integration_profile("demo", _integration_hint_profile("read_only"))
@@ -742,12 +738,12 @@ async def test_integration_capability_hint_tightens_an_entity_with_no_profile(en
 
 @pytest.mark.asyncio
 async def test_a_restrictive_hint_defeats_an_operator_loosening_override(env):
-    """The case worth knowing by name: a sidecar can override an operator.
+    """A sidecar's restrictive hint can override an operator's loosening.
 
     A read_only or prohibited hint populates the never-loosened branch, so an
-    operator's deliberate entity-scope loosening override is ignored. It still
-    fails closed, and a resolution warning names it, which is the only signal an
-    operator gets that their decision did not take effect.
+    operator's deliberate entity-scope loosening override is ignored. It still fails
+    closed, and a resolution warning names it, which is the only signal an operator
+    gets that their decision did not take effect.
     """
     runtime = await async_setup_mesa(env, "advisory")
     runtime.store.set_integration_profile("demo", _integration_hint_profile("read_only"))
@@ -873,9 +869,8 @@ async def test_validity_context_omits_a_version_it_cannot_know(env):
     """A core integration has no manifest version, so the key is left out.
 
     Home Assistant requires ``version`` only for custom integrations. Filling the
-    gap with a stand-in would either never match, invalidating every such
-    profile, or always match, invalidating none; absent means the trigger is
-    simply not evaluated, which is the honest answer.
+    gap with a stand-in would either never match, invalidating every such profile,
+    or always match, invalidating none; absent means the trigger is not evaluated.
     """
     from custom_components.phoenix_mcp.mesa_tools import _build_validity_context
 

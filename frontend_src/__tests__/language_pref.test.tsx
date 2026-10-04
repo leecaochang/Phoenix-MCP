@@ -121,10 +121,10 @@ describe("syncTranslations", () => {
   // one back for the render tests below (setup.ts primes it once per file).
   afterAll(() => primeTranslations(en.panel));
 
-  // Live-found: with the window open, changing the Home Assistant profile
-  // language left Agent Chat in the language it opened with, because the
-  // catalog was fetched once and nothing re-checked. Under "auto" the answer
-  // changes without the panel dropdown ever being touched.
+  // With the window open, a change of the Home Assistant profile language must
+  // re-resolve the catalog for Agent Chat rather than leave it in the language it
+  // opened with. Under "auto" the answer changes without the panel dropdown ever
+  // being touched.
   // The catalog is fetched from Phoenix's own admin API; the requested language
   // is the last path segment, which is what these assert on.
   let fetchMock: ReturnType<typeof vi.fn>;
@@ -223,7 +223,7 @@ describe("the dropdown in Settings", () => {
   });
 
   it("sits next to the theme control", async () => {
-    // The user asked for it beside the light/dark toggle; if it drifts into
+    // The row sits beside the light/dark toggle; if it drifts into
     // another card this fails rather than quietly moving.
     await renderSettings();
     const row = screen.getByLabelText("Language").closest(".toggle-row");

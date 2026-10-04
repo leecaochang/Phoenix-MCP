@@ -1,13 +1,10 @@
 /** A response a newer request superseded must never reach the screen.
  *
- *  Both list views load from six or so places with no ordering between them
+ *  Both list views load from several places with no ordering between them
  *  (mount, poll tick, HA event, manual refresh, tab or filter change, Load
- *  more), all writing the same state. Every existing test resolves its mocks in
- *  call order, which is the one ordering that cannot show the bug: the failure
- *  is a slow OLD request landing after a fast NEW one and putting the previous
- *  filter's rows back, where they sit until something happens to reload.
- *
- *  So these resolve the promises out of order, deliberately.
+ *  more), all writing the same state. Resolving mocks in call order cannot show
+ *  the failure, so these resolve the promises out of order: a slow OLD request
+ *  landing after a fast NEW one would put the previous filter's rows back.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";

@@ -1,4 +1,8 @@
-"""Tests for the in-process WebSocket command dispatcher (ws_dispatch)."""
+"""The in-process WebSocket command dispatcher (ws_dispatch).
+
+Covers the command allowlist, error wrapping, the HA compatibility probe and the
+Lovelace helpers.
+"""
 
 from __future__ import annotations
 
@@ -39,7 +43,7 @@ async def test_delete_input_boolean_in_process(hass, hass_admin_user):
 
     await async_ws_command(hass, "input_boolean/delete", {"input_boolean_id": created["id"]})
     await hass.async_block_till_done()
-    # The deleted helper should no longer exist as an entity (verified via states).
+    # The deleted helper is gone as an entity.
     ids = [s.entity_id for s in hass.states.async_all() if s.entity_id.startswith("input_boolean.")]
     assert not ids, "the deleted input_boolean should no longer appear as an entity"
 
@@ -53,8 +57,8 @@ async def test_unknown_command_raises(hass):
 async def test_command_not_on_allowlist_rejected(hass, hass_admin_user):
     # A real, registered HA command that Phoenix MCP never dispatches must still be
     # refused by the allowlist guard, before any handler lookup or execution.
-    # (input_boolean/list is now allowlisted for version-history capture, so a
-    # freshly registered throwaway command stands in for "registered but blocked".)
+    # (input_boolean/list is allowlisted for version-history capture, so a freshly
+    # registered throwaway command stands in for "registered but blocked".)
     from homeassistant.components import websocket_api
 
     @websocket_api.websocket_command({"type": "phx_test/registered_but_blocked"})
@@ -75,7 +79,7 @@ async def test_invalid_payload_raises(hass, hass_admin_user):
 
 async def test_handler_side_error_wrapped(hass, hass_admin_user):
     # Deleting a nonexistent item makes the handler fail; that must surface as a
-    # clean WsDispatchError, not a raw HA exception (the broad-wrap hardening).
+    # clean WsDispatchError, not a raw HA exception.
     assert await async_setup_component(hass, "input_boolean", {"input_boolean": {}})
     with pytest.raises(WsDispatchError):
         await async_ws_command(hass, "input_boolean/delete", {"input_boolean_id": "missing"})
@@ -85,7 +89,7 @@ async def test_result_via_send_message_bytes_is_captured(hass, hass_admin_user, 
     # Some handlers (notably logbook/get_events) deliver their result through
     # connection.send_message with a pre-serialized JSON result message, not via
     # send_result. _CapturingConnection must capture that too, or the dispatch
-    # times out. Regression for the get_logbook timeout.
+    # times out.
     import json
 
     import custom_components.phoenix_mcp.ws_dispatch as wd
@@ -164,7 +168,7 @@ async def test_zha_leaky_write_commands_are_not_allowlisted():
 
 
 async def test_zha_reconfigure_unavailable_without_zha(hass):
-    # zigpy/zha are not installed in the test env, so the import seam inside
+    # With zigpy/zha not importable, the import seam inside
     # async_zha_reconfigure_device must degrade to a clean WsDispatchError.
     from custom_components.phoenix_mcp.ws_dispatch import async_zha_reconfigure_device
 
@@ -229,8 +233,8 @@ async def test_compat_probe_passes_on_current_ha(hass):
 
 
 async def test_compat_probe_reports_unsupported_required_param(hass, monkeypatch):
-    # Drift detection: a NEW required constructor param Phoenix MCP cannot supply (the
-    # exact class of break that HA 2026.6 caused by adding `remote`).
+    # Drift detection: a NEW required constructor param Phoenix MCP cannot supply
+    # would break every dispatch, so the probe must report it.
     import custom_components.phoenix_mcp.ws_dispatch as wd
 
     class _Extra:
@@ -247,7 +251,7 @@ async def test_compat_probe_reports_unsupported_required_param(hass, monkeypatch
 
 
 async def test_compat_probe_tolerates_added_param_we_supply(hass, monkeypatch):
-    # A new param we DO know how to supply (like `remote`) is not flagged.
+    # A new param Phoenix MCP does know how to supply (like `remote`) is not flagged.
     import custom_components.phoenix_mcp.ws_dispatch as wd
 
     class _WithRemote:
@@ -263,10 +267,10 @@ async def test_compat_probe_tolerates_added_param_we_supply(hass, monkeypatch):
 
 
 async def test_compat_probe_reports_unsupported_required_kwonly_param(hass, monkeypatch):
-    # Blind-spot regression: a required KEYWORD-ONLY constructor param Phoenix MCP cannot
-    # supply fails construction per-call exactly like a positional one, so the
-    # probe must flag it too (it previously derived requiredness from positional
-    # args + __defaults__ only and reported such an HA compatible).
+    # A required KEYWORD-ONLY constructor param Phoenix MCP cannot supply fails
+    # construction per call exactly like a positional one, so the probe must flag
+    # it too (requiredness is not derived from positional args and __defaults__
+    # alone).
     import custom_components.phoenix_mcp.ws_dispatch as wd
 
     class _KwOnlyRequired:
@@ -301,9 +305,9 @@ async def test_compat_probe_tolerates_kwonly_param_with_default_or_supplied(hass
 
 
 async def test_compat_probe_never_raises_on_introspection_failure(hass, monkeypatch):
-    # Regression: on Python 3.14, inspect.signature(ActiveConnection.__init__)
-    # raised NameError while evaluating a TYPE_CHECKING-only annotation, which
-    # aborted Phoenix MCP setup. The advisory probe must degrade to a string, never raise.
+    # On Python 3.14, inspect.signature(ActiveConnection.__init__) can raise
+    # NameError while evaluating a TYPE_CHECKING-only annotation. The advisory
+    # probe must degrade to a string, never raise, or setup aborts.
     import custom_components.phoenix_mcp.ws_dispatch as wd
 
     class _BadCode:
@@ -333,8 +337,8 @@ async def test_compat_probe_never_raises_on_introspection_failure(hass, monkeypa
 # The probe also has to cover the CALL async_ws_command makes, not just the
 # connection object it builds: the registry entry unpacking as (handler, schema)
 # and the handler taking (hass, connection, msg). Neither is visible to the
-# constructor/method checks above, so an arity change would have reported
-# "compatible" at startup and then failed every dispatch at runtime.
+# constructor/method checks above, so an arity change would report "compatible"
+# at startup and then fail every dispatch at runtime.
 # ---------------------------------------------------------------------------
 
 
@@ -372,8 +376,8 @@ async def test_compat_probe_reports_handler_arity_change(hass, monkeypatch):
 
 
 async def test_compat_probe_tolerates_decorated_varargs_handler(hass, monkeypatch):
-    # A handler wrapped by a decorator forwards *args and tells us nothing about
-    # the real arity, so it must not be reported as drift.
+    # A handler wrapped by a decorator forwards *args and reveals nothing about the
+    # real arity, so it must not be reported as drift.
     import custom_components.phoenix_mcp.ws_dispatch as wd
     from homeassistant.components.websocket_api import const as ws_const
 
@@ -401,8 +405,8 @@ async def test_compat_probe_quiet_when_nothing_registered_yet(hass):
 # ---------------------------------------------------------------------------
 # Lovelace helpers: "not loaded" and "unknown dashboard" are different failures.
 #
-# Both used to return None, so an unreadable lovelace looked like a missing
-# dashboard and the write paths treated it as "nothing to preserve".
+# They must not collapse into one None, or an unreadable lovelace looks like a
+# missing dashboard and the write paths treat it as "nothing to preserve".
 # ---------------------------------------------------------------------------
 
 
@@ -434,3 +438,32 @@ async def test_save_to_unknown_dashboard_raises_not_found(hass):
     assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
     with pytest.raises(wd_module.WsDashboardNotFoundError):
         await wd_module.async_save_lovelace_config(hass, "no-such-dashboard", {"views": []})
+
+
+async def test_lovelace_save_preserves_authority_refusal(hass, monkeypatch):
+    from unittest.mock import AsyncMock, Mock
+    from custom_components.phoenix_mcp.request_authority import AuthorityChangedError
+
+    assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+    config = wd_module._lovelace_dashboard(hass, None)
+    save = AsyncMock()
+    monkeypatch.setattr(config, "async_save", save)
+    refusal = AuthorityChangedError("Unauthorized.")
+    monkeypatch.setattr(wd_module, "check_request_authority", Mock(side_effect=refusal))
+
+    with pytest.raises(AuthorityChangedError) as exc:
+        await wd_module.async_save_lovelace_config(hass, None, {"views": []})
+    assert exc.value is refusal
+    save.assert_not_awaited()
+
+
+async def test_lovelace_save_wraps_storage_failure(hass, monkeypatch):
+    from unittest.mock import AsyncMock
+
+    assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
+    config = wd_module._lovelace_dashboard(hass, None)
+    failure = OSError("storage unavailable")
+    monkeypatch.setattr(config, "async_save", AsyncMock(side_effect=failure))
+    with pytest.raises(WsDispatchError, match="failed to save") as exc:
+        await wd_module.async_save_lovelace_config(hass, None, {"views": []})
+    assert exc.value.__cause__ is failure

@@ -9,13 +9,13 @@
 
 export const ENTITY_ID_RE = /^[a-z_]+\.[a-z0-9_]+$/;
 export const BTN_CLASS = "phx-mesa-inject-btn";
-// id of the per-table <style> we inject to widen the icon column. Lives here so
-// isSelfMutation can recognise it as one of our own nodes.
+// id of the per-table <style> injected to widen the icon column. Lives here so
+// isSelfMutation can recognise it as one of the injector's own nodes.
 export const WIDEN_STYLE_ID = "phx-mesa-col-widen";
 
-// URL prefixes whose data-table rows are entity rows we can profile. The
+// URL prefixes whose data-table rows are profilable entity rows. The
 // /config/entities list covers every entity (including person.*), so it is the
-// broadest surface; the per-domain pages are kept for in-context convenience.
+// broadest surface; the per-domain pages are for in-context convenience.
 export const ENTITY_PAGE_PREFIXES = [
   "/config/entities",
   "/config/automation",
@@ -57,11 +57,10 @@ export function integrationDomainFromPath(path: string = window.location.pathnam
 /**
  * Which scope owns which detail page, in the order the scan tries them.
  *
- * Pure data, and here rather than in the entry module so it can be tested: the
- * pairing is the one part of this that type-checks perfectly when wrong. A scope
- * pointed at another scope's extractor still compiles, and the result is a
- * button that either never appears or appears with the wrong level, which is
- * exactly the class of mistake nothing else would report.
+ * Pure data, and here rather than in the entry module so it can be tested: a
+ * scope pointed at another scope's extractor still type-checks, and the result
+ * is a button that never appears or appears with the wrong level, which nothing
+ * else would report.
  */
 export const SUBPAGE_SURFACES: {
   scope: "device" | "area" | "integration";
@@ -81,8 +80,8 @@ export const SUBPAGE_SURFACES: {
  *
  * Returns null when there is no icon yet. HA renders row icons asynchronously
  * (virtualized rows), so injecting before the icon exists would drop the control
- * at the cell's start and the icon would then render after it (the cause of the
- * left/right "swap"). Refusing here makes a later scan retry once the icon is in.
+ * at the cell's start with the icon rendering after it. Refusing here makes a
+ * later scan retry once the icon is in.
  */
 export function nameInsertionPoint(row: HTMLElement): { parent: HTMLElement; before: Node | null } | null {
   const firstCell = row.querySelector<HTMLElement>('[role="cell"]:not(.mdc-data-table__cell--checkbox)');
@@ -112,34 +111,34 @@ export function personEntityId(
   return matches.length === 1 ? matches[0][0] : null;
 }
 
-/** Is this node one we injected (our +/MESA button or our column-width style)? */
+/** Is this node injected by this module (the +/MESA button or the column-width style)? */
 function isOurNode(n: Node): boolean {
   const el = n as HTMLElement;
   return el.nodeType === 1 && (el.classList?.contains(BTN_CLASS) || el.id === WIDEN_STYLE_ID);
 }
 
 /**
- * True when every mutation in the batch was caused by our own injected DOM, so
- * reacting to it would feed an endless rescan -> repaint -> rescan loop.
+ * True when every mutation in the batch was caused by the injector's own DOM,
+ * so reacting to it would feed an endless rescan -> repaint -> rescan loop.
  *
  * The per-table observer fires on any childList change in the table's shadow
- * root, including our own writes: inserting the button, swapping its glyph in
- * applyButtonState, and appending the width <style>. applyButtonState is guarded
- * against redundant writes, but a real state change (right after an add or delete)
- * still mutates the DOM, the observer sees it, and that ping-pongs with HA's own
- * row re-render until the page is reloaded (the "+/check toggles forever" bug).
- * Filtering our own mutations here breaks our half of that loop.
+ * root, including the injector's own writes: inserting the button, swapping its
+ * glyph in applyButtonState, and appending the width <style>. applyButtonState
+ * skips redundant writes, but a real state change (right after an add or delete)
+ * still mutates the DOM and would ping-pong with HA's own row re-render until
+ * the page is reloaded. Filtering own mutations here breaks the injector's half
+ * of that loop.
  *
- * A record that REMOVES our button is NOT self: HA reclaimed the cell, and we
- * want a later scan to re-add the button.
+ * A record that REMOVES the button is NOT self: HA reclaimed the cell, and a
+ * later scan should re-add it.
  */
 export function isSelfMutation(records: MutationRecord[]): boolean {
   for (const r of records) {
     const target = r.target as HTMLElement;
-    // Glyph/text churn on our own button (applyButtonState swapping + and check).
+    // Glyph/text churn on the injected button (applyButtonState swapping + and check).
     if (target?.nodeType === 1 && target.classList?.contains(BTN_CLASS)) continue;
-    // Our button or width-style being ADDED by us. Pure additions only; a removal
-    // means HA dropped our node, which we must react to.
+    // The button or width-style being ADDED by the injector. Pure additions only;
+    // a removal means HA dropped the node, which must be reacted to.
     if (
       r.removedNodes.length === 0 &&
       r.addedNodes.length > 0 &&
@@ -178,8 +177,8 @@ export function deepQueryAll(selector: string, root: Document | ShadowRoot | Ele
  *
  * HA's ha-data-table stores each row's configured id as a `.rowId` property on
  * the `role="row"` element (the same property its own row-click handler reads).
- * On the entity picker pages that id is the entity_id. We validate the shape, so a
- * non-entity table (numeric id, config-entry id, etc.) yields null and is skipped.
+ * On the entity picker pages that id is the entity_id. The shape is validated, so
+ * a non-entity table (numeric id, config-entry id, etc.) yields null and is skipped.
  * Returns null when no plausible entity_id is found, which makes the whole feature
  * self-disable on a DOM it does not recognise.
  */

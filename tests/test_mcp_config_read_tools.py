@@ -1,10 +1,10 @@
-"""Tests for the automation/script/scene configuration READ tools.
+"""The automation/script/scene configuration READ tools.
 
 get_automation / get_script / get_scene close a read-modify-write gap: the edit
-tools replace a whole config, so without a read an agent had to reconstruct one
-blind and silently destroyed anything it did not resend. Each read returns the
+tools replace a whole config, so without a read an agent must reconstruct one
+blind and silently destroys anything it does not resend. Each read returns the
 current config plus a content_hash the matching edit accepts as expected_hash,
-the same compare-and-swap contract get_dashboard_config already used.
+the same compare-and-swap contract as get_dashboard_config.
 """
 
 from __future__ import annotations
@@ -30,8 +30,10 @@ pytestmark = pytest.mark.usefixtures("immediate_authoring_observation")
 
 @pytest.fixture(autouse=True)
 def isolated_config_dir(hass: HomeAssistant, tmp_path):
-    """The authoring paths resolve configuration.yaml; isolate from the shared
-    shared testing config dir and use the real HA-default include layout."""
+    """Isolate the authoring paths, which resolve configuration.yaml, from the shared config dir.
+
+    The file uses the real HA-default include layout.
+    """
     hass.config.config_dir = str(tmp_path)
     (tmp_path / "configuration.yaml").write_text(
         "automation: !include automations.yaml\n"
@@ -67,7 +69,7 @@ def _cfg(**overrides) -> dict:
     """A fresh automation config per call.
 
     Deliberately a factory, not a shared constant: HA's config validator
-    normalizes in place (trigger -> triggers and so on), so tests sharing one
+    normalizes in place (trigger to triggers and so on), so tests sharing one
     dict would leak a mutated nested list into each other.
     """
     base = {
@@ -98,8 +100,8 @@ class TestGetAutomation:
         body = _json(result)
         assert body["automation_id"] == aid
         # Every authored part comes back, which is the whole point: an edit that
-        # omits one of these would destroy it. HA normalizes trigger -> triggers
-        # and action -> actions when it saves, so the stored form differs from
+        # omits one of these would destroy it. HA normalizes trigger to triggers
+        # and action to actions when it saves, so the stored form differs from
         # what was sent: another reason an agent must read before replacing.
         cfg = body["config"]
         assert cfg["alias"] == "Porch"
@@ -207,9 +209,9 @@ class TestApprovalDiffCompleteness:
     async def test_big_automation_diff_is_not_display_truncated(self, hass, automation_env):
         # The approval diff is what an admin reads to decide, so clipping it
         # mid-config defeats the Confirm gate. A real automation easily exceeds
-        # the old 4000-char display default; both sides must stay whole up to
-        # the version-snapshot bound, so Approvals shows the same content the
-        # Changes tab shows afterwards.
+        # 4000 characters (asserted below); both sides must stay whole up to the
+        # version-snapshot bound, so Approvals shows the same content the Changes
+        # tab shows afterwards.
         from custom_components.phoenix_mcp.tools.authoring import _build_diff_edit_automation
 
         # Built literal here rather than derived from the shared module-level
@@ -239,13 +241,12 @@ class TestApprovalDiffCompleteness:
         assert "step 59 of a long automation body" in diff["before"]
 
     async def test_diff_truncation_never_affected_what_was_written(self, hass, automation_env):
-        """Truncation was always display-only, never data loss.
+        """Diff truncation is display-only and never changes what is written.
 
         The approval record keeps `args` (what the executor re-runs) and `diff`
-        (what the panel renders) as SEPARATE fields, and the approve path
-        executes from args. So even a clipped diff approved under the old cap
-        still wrote the complete automation. Pinned here so no future change
-        makes the rendered diff the source of truth for execution.
+        (what the panel renders) as SEPARATE fields, and the approve path executes
+        from args, so even a clipped diff approves the complete automation. The
+        rendered diff must never become the source of truth for execution.
         """
         import asyncio as _asyncio
         from unittest.mock import AsyncMock as _AsyncMock
@@ -295,7 +296,7 @@ class TestApprovalDiffCompleteness:
         appr = store._p[0]
 
         # The stored args hold the config in FULL. (HA's validator normalizes
-        # keys in place, action -> actions, so assert on content, not shape.)
+        # keys in place, action to actions, so assert on content, not shape.)
         args_json = json.dumps(appr["args"]["config"])
         assert appr["args"]["config"]["alias"] == "Replaced"
         assert "step 59 of a long automation body" in args_json

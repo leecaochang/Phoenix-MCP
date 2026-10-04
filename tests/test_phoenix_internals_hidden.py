@@ -1,19 +1,15 @@
-"""Phoenix's own entities are invisible everywhere, on all four surfaces.
+"""Phoenix's own entities are invisible on every surface that lists entities.
 
-The domain blocklist covers the phoenix_mcp DOMAIN, but Phoenix's telemetry
-sensors are not in it: they are `sensor.*` entities registered to the
-phoenix_mcp PLATFORM, so the blocklist never sees them and a separate
-`entry.platform == DOMAIN` check does the real work. That check exists in four
-places: the canonical policy_engine.resolve, plus three pass-through FAST PATHS
-that skip resolve() for performance (the admin permission tree, the admin
-token-scope endpoint, and the MCP context endpoint).
+The domain blocklist covers the phoenix_mcp DOMAIN, but the telemetry sensors
+are `sensor.*` entities registered to the phoenix_mcp PLATFORM, so the blocklist
+never sees them and a separate `entry.platform == DOMAIN` check does the real
+work. That check lives in policy_engine.resolve and again in each pass-through
+FAST PATH that skips resolve() for speed (the admin permission tree, the admin
+token-scope endpoint, the MCP context endpoint). A re-implementation of a policy
+drifts, so each copy is pinned here rather than only the canonical one.
 
-An optimisation that re-implements the policy it is optimising is the shape that
-drifts, so each of the four is pinned here rather than only the canonical one.
-
-Every test here asserts the DROP. A test that checks the ordinary entity is
-present passes unchanged when the filter stops excluding anything, which is the
-assertion shape this pass exists to find.
+Every test asserts the DROP: a check that the ordinary entity is present passes
+unchanged when the filter stops excluding anything.
 """
 
 from __future__ import annotations
@@ -165,9 +161,11 @@ class TestPassThroughFastPaths:
 
     async def test_the_fast_path_agrees_with_resolve(
             self, hass, registry_with_a_phoenix_sensor):
-        """The invariant itself: the optimisation must not see more than the
-        enforcement would. Checked as a set comparison rather than one entity, so
-        a future exclusion added to resolve and forgotten here fails too."""
+        """The fast path must not see more than resolve() would allow.
+
+        Checked as a set comparison rather than one entity, so an exclusion
+        added to resolve and forgotten here fails too.
+        """
         from custom_components.phoenix_mcp.mcp_view import _build_context_json
 
         data = MagicMock()
@@ -193,9 +191,8 @@ class TestPassThroughFastPaths:
 def test_every_blocked_domains_filter_also_checks_the_platform():
     """BLOCKED_DOMAINS alone is not the rule, and looks like it is.
 
-    Phoenix's sensors are in the sensor domain, so any filter that checks only
-    the domain lets them through. Four places implement the pair today; this
-    fails if a fifth implements half of it.
+    Phoenix's sensors are in the sensor domain, so a filter that checks only the
+    domain lets them through. This fails when a filter implements only that half.
     """
     offenders: list[str] = []
     for path in sorted(PKG.rglob("*.py")):
@@ -213,7 +210,7 @@ def test_every_blocked_domains_filter_also_checks_the_platform():
             # a function that never touches entities (PhoenixServicesView
             # filters service domains) and a predicate answering a question
             # about one entity rather than returning a list of them
-            # (mesa_suggestions._is_risky_ref -> bool).
+            # (mesa_suggestions._is_risky_ref returns bool).
             if "entity_id" not in body and ".states" not in body:
                 continue
             returns_bool = (isinstance(node.returns, ast.Name)

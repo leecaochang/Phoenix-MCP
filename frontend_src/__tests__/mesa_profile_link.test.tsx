@@ -3,9 +3,8 @@
  * The tree renders three levels an operator can profile (domain group, device
  * group, entity row) and this one component serves all three. Nothing about the
  * markup differs between them, so a wrong or missing `scope` produces a button
- * that looks perfect and writes the profile at the wrong inheritance level. That
- * is the same silent-fallthrough class that once routed every unknown scope to
- * the area endpoint, and tsc cannot see it because every call has valid types.
+ * that looks perfect and writes the profile at the wrong inheritance level. tsc
+ * cannot see this silent-fallthrough class because every call has valid types.
  *
  * So these assert the ARGUMENTS the click delivers, not that a click happened.
  */

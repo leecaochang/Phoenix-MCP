@@ -1,13 +1,11 @@
 /**
  * The shared approval-event subscriber, used by BOTH bundles.
  *
- * An approval is shown in three places and each one used to learn it had been
- * acted on by a different route. Agent Chat's route was the slowest: it had no
- * `hass` at all and updated only from its own SSE stream, which rides the agent's
- * turn resuming, so a reject in the panel left the chat bubble offering Approve
- * and Reject for seconds. The panel and the injected chat window are separate
- * bundles sharing no module state, so the only way they cannot drift apart again
- * is for both to go through this one module; these pin its contract.
+ * The panel and the injected Agent Chat window are separate bundles sharing no
+ * module state, so both must learn that an approval was acted on elsewhere
+ * through this one module. Agent Chat has no `hass` of its own, and its SSE
+ * stream only reports a resolution once the agent's turn resumes. These tests
+ * pin the subscriber's contract.
  */
 
 import { describe, it, expect, vi, afterEach } from "vitest";

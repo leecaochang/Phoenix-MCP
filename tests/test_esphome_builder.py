@@ -1,9 +1,8 @@
 """Tests for the ESPHome Device Builder WebSocket client (esphome_builder.py).
 
-The transport is exercised against a REAL local aiohttp server rather than a
-stubbed ws_connect: the framing, the close behaviour, and the interaction with
-asyncio.timeout are exactly what a hand-rolled fake would have to guess at, and
-the harness already allows 127.0.0.1 sockets and ships an aiohttp client fixture.
+The transport runs against a REAL local aiohttp server rather than a stubbed
+ws_connect, because the framing, the close behaviour and the interaction with
+asyncio.timeout are what a hand-rolled fake would have to guess at.
 """
 
 from __future__ import annotations
@@ -27,9 +26,8 @@ from custom_components.phoenix_mcp.esphome_builder import (
     version_mismatch_note,
 )
 
-# Announces the VERIFIED version by default, so the ordinary tests model a
-# deployment Phoenix has actually been checked against and no version note is
-# appended to their errors. The mismatch case gets its own tests below.
+# Announces the VERIFIED version by default, so ordinary tests model a verified
+# deployment and no version note is appended to their errors.
 SERVER_INFO = {
     "server_version": ESPHOME_BUILDER_VERIFIED_VERSION,
     "esphome_version": ESPHOME_COMPILER_VERIFIED_VERSION,
@@ -49,10 +47,10 @@ class FakeDeviceBuilder:
         self.replies = replies or {}
         self.hang = hang
         # keep_open models an open-ended stream like devices/logs: frames are
-        # sent and then the socket just stays up, with no result frame ever.
+        # sent, then the socket stays up and no result frame ever arrives.
         self.keep_open = keep_open
         self.received: list[dict] = []
-        # Overridable per test so the unverified-version path can be exercised.
+        # Overridable per test to exercise the unverified-version path.
         self.server_version = SERVER_INFO["server_version"]
 
     async def handler(self, request):
@@ -173,11 +171,10 @@ async def test_ansi_escapes_stripped_from_output(hass, aiohttp_client, monkeypat
 
 
 async def test_literal_backslash_ansi_stripped(hass, aiohttp_client, monkeypatch, socket_enabled):
-    """The live add-on sends the escape as the literal characters \\033[, not a 0x1b byte.
+    """The add-on sends the escape as the literal characters \\033[, not a 0x1b byte.
 
-    Found by smoke-testing against a real Device Builder: a regex matching only
-    the real byte stripped nothing, and every line of validator output arrived
-    wrapped in visible colour codes.
+    A regex matching only the real byte would leave visible colour codes on every
+    line of validator output.
     """
     fake = FakeDeviceBuilder(replies={
         "devices/validate": stream(r"\033[32mINFO ESPHome 2026.7.3\033[0m"),
@@ -196,10 +193,10 @@ async def test_literal_backslash_ansi_stripped(hass, aiohttp_client, monkeypatch
 async def test_line_structure_survives_terminatorless_chunks(
     hass, aiohttp_client, monkeypatch, socket_enabled
 ):
-    """The live add-on sends one event per line with the newline already stripped.
+    """The add-on sends one event per line with the newline already stripped.
 
-    Concatenating verbatim collapsed a whole config dump into one unreadable
-    line. Chunks are re-terminated only when they did not bring their own.
+    Chunks are re-terminated only when they did not bring their own terminator,
+    so a config dump keeps its line structure.
     """
     fake = FakeDeviceBuilder(replies={
         "devices/validate": stream("esphome:", "  name: dev", "  board: esp32dev"),
@@ -269,20 +266,18 @@ async def test_error_frame_raises_command_error_with_code_and_details(
         )
 
     assert err.value.error_code == "not_found"
-    # No version note: this add-on announces the version Phoenix was verified
-    # against, so the failure is a genuine one and blaming a version difference
-    # would send the operator to upgrade something that was never the problem.
+    # No version note: the add-on announces the verified version, so the failure
+    # is genuine and a version difference must not be blamed for it.
     assert err.value.details == "no such configuration"
 
 
 async def test_a_failure_from_an_unverified_version_says_so(
     hass, aiohttp_client, monkeypatch, socket_enabled
 ):
-    """The version arrives free on every handshake, so it is worth keeping.
+    """A failure from an unverified add-on version names that version.
 
-    An add-on that no longer has a command refuses it in its own words, which
-    reads as a Phoenix bug. Naming the version turns "not_found" into a
-    diagnosis the operator can act on.
+    An add-on that dropped a command refuses it in its own words, which reads as
+    a Phoenix bug; the version turns that into an actionable diagnosis.
     """
     fake = FakeDeviceBuilder(replies={
         "devices/validate": {
@@ -307,8 +302,7 @@ async def test_the_announced_version_rides_the_result(
     hass, aiohttp_client, monkeypatch, socket_enabled
 ):
     # Carried so a caller that cannot parse a reply can name the version that
-    # produced it, which is the difference between "unexpected reply" and a
-    # diagnosis. See the rename executor's unreadable-job branch.
+    # produced it.
     fake = FakeDeviceBuilder(replies={
         "devices/validate": {"message_id": "1", "result": {"ok": True}},
     })
@@ -323,8 +317,7 @@ async def test_the_announced_version_rides_the_result(
 
 def test_a_matching_version_is_never_mentioned():
     # A version difference on its own is NOT worth saying out loud: a warning
-    # whose consequence never arrives teaches operators to click past it, the
-    # same reason the install diff refuses to flag a patch bump.
+    # whose consequence never arrives teaches operators to click past it.
     assert version_mismatch_note("devices/validate", ESPHOME_BUILDER_VERIFIED_VERSION) is None
     assert version_mismatch_note("devices/validate", "") is None
     assert "2099.1.0" in version_mismatch_note("devices/validate", "2099.1.0")
@@ -366,12 +359,10 @@ async def test_message_id_is_a_string_and_args_pass_through(hass, aiohttp_client
 
 
 async def test_follow_job_speaks_the_same_output_result_envelope(hass, aiohttp_client, monkeypatch, socket_enabled):
-    """The singular follow uses the generic envelope, not the job_* frame names.
+    """The singular follow uses the generic output/result envelope, not job_* frames.
 
-    This is the fact that lets the existing streaming client fetch a finished
-    build's log with no new framing code, so it is worth pinning: the add-on's
-    own API.md documents the job_output / job_completed names, which belong to
-    the PLURAL follow_jobs and would need a different reader.
+    That lets the existing streaming client fetch a finished build's log; the
+    job_output / job_completed names belong to the plural follow_jobs.
     """
     fake = FakeDeviceBuilder(replies={
         "firmware/follow_job": [
@@ -490,10 +481,10 @@ async def test_capture_bounds_its_output(hass, aiohttp_client, monkeypatch, sock
     "devices/archive",
     "devices/get_config",
     "devices/get_api_key",
-    # firmware/clean is deliberately NOT here any more: it takes a configuration
-    # and discards only that build. reset_build_env stays, and the distinction is
-    # the whole point, since it takes no argument, cancels every in-flight job on
-    # both lanes, and wipes the shared environment for every device.
+    # firmware/clean is deliberately NOT here: it takes a configuration and
+    # discards only that build. reset_build_env stays, since it takes no
+    # argument, cancels every in-flight job on both lanes, and wipes the shared
+    # environment for every device.
     "firmware/reset_build_env",
     "firmware/compile_bulk",
     "firmware/install_bulk",
@@ -514,7 +505,7 @@ async def test_disallowed_commands_raise_before_any_network_io(hass, monkeypatch
 
 @pytest.mark.parametrize("command", ["firmware/install_bulk", "devices/get_api_key"])
 async def test_capture_checks_the_allowlist_before_any_network_io(hass, monkeypatch, command):
-    """async_builder_capture is a second entry point and gets the same boundary."""
+    """async_builder_capture is a second entry point with the same allowlist boundary."""
     def explode(_hass):
         raise AssertionError("the allowlist must be checked before any session work")
 
@@ -527,35 +518,21 @@ async def test_capture_checks_the_allowlist_before_any_network_io(hass, monkeypa
 
 
 def test_allowlist_is_exactly_the_reads_plus_the_firmware_job_model():
-    """Pin what this client can reach.
+    """Pin exactly what this client can reach.
 
     The Device Builder has no permission model of its own, so widening this set
-    is the entire security decision. Any addition must be a deliberate diff here.
-
-    The firmware band was added deliberately for Tier 3: compile and install
-    enqueue a job and return, and the rest poll or stop one. The bulk variants
-    are excluded on purpose, because Phoenix MCP authorizes one configuration at
-    a time and a bulk call would flash every device in one unscoped request.
-
-    devices/stop_stream was added deliberately too. It reaches nothing new: it
-    ends a stream on the CURRENT connection, and one connection per request means
-    the only stream it can ever hit is the one this client just opened. It earns
-    its place by letting a capture end politely, since yanking the socket makes
-    the DEVICE log a CONNECTION_CLOSED warning on every single capture.
-
-    firmware/clean was added deliberately as well, and its sibling
-    reset_build_env is the reason the line is drawn where it is: clean takes a
-    configuration and discards only that build, while reset_build_env takes no
-    argument at all, cancels every in-flight job on both lanes, and wipes the
-    shared environment for every device. One is scoped to what the caller was
-    already authorized for; the other is not scoped to anything.
-
-    devices/rename is here last, and only because its single caller is gated on
-    cap_esphome_flash. It compiles a renamed image and OTA-flashes it, so under
-    the authoring capability it would be a way to flash a device without holding
-    the capability that governs flashing. The allowlist cannot express that
-    condition, so the pin below is not the whole control: test_mcp_esphome_rename
-    pins the capability, and both are required.
+    is the entire security decision and must be a deliberate diff here.
+    - Firmware band: compile and install enqueue a job and return; the rest poll
+      or stop one. Bulk variants are excluded because Phoenix authorizes one
+      configuration at a time.
+    - devices/stop_stream reaches nothing new: it ends a stream on the current
+      connection, and one connection per request means only this client's own.
+    - firmware/clean takes a configuration and discards only that build, unlike
+      reset_build_env (no argument, cancels every in-flight job, wipes the shared
+      environment), which stays out.
+    - devices/rename compiles and OTA-flashes, so its only caller must be gated
+      on cap_esphome_flash. The allowlist cannot express that, so a separate
+      capability pin on the rename tool is also required.
     """
     assert ESPHOME_BUILDER_ALLOWED_COMMANDS == {
         # Reads.
@@ -585,9 +562,10 @@ def test_allowlist_is_exactly_the_reads_plus_the_firmware_job_model():
 async def test_capture_ends_the_stream_politely_when_the_addon_names_one(
     hass, aiohttp_client, monkeypatch, socket_enabled
 ):
-    """Closing the socket also ends the stream, but the DEVICE then logs a
-    CONNECTION_CLOSED warning on every capture, which pollutes the operator's
-    own logs with a scary line for a completely normal end of a window.
+    """A capture ends with devices/stop_stream, not by dropping the socket.
+
+    Closing the socket makes the DEVICE log a CONNECTION_CLOSED warning on every
+    capture.
     """
     fake = FakeDeviceBuilder(keep_open=True, replies={"devices/logs": [
         {"message_id": "1", "event": "output", "data": "boot"},
@@ -599,7 +577,7 @@ async def test_capture_ends_the_stream_politely_when_the_addon_names_one(
     )
 
     assert res.output == "boot\n"
-    # The stop is best-effort and the client closes straight after sending it, so
+    # The stop is best-effort and the client closes right after sending it, so
     # let the server's task run before inspecting what it received.
     for _ in range(50):
         if any(f["command"] == "devices/stop_stream" for f in fake.received):

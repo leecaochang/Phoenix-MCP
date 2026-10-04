@@ -1,7 +1,7 @@
-"""Tests for the capability evaluation helpers in helpers.py.
+"""Capability evaluation helpers: effective_cap(s) and deferred diff builders.
 
-Covers effective_cap (the deny/allow/confirm formula with pass-through interaction)
-and the import-level wiring of async_evaluate_capability.
+Covers the deny/allow/confirm formula with its pass-through interaction and
+async_evaluate_capability's lazy diff construction.
 """
 
 from __future__ import annotations
@@ -35,10 +35,7 @@ def _token(**overrides) -> TokenRecord:
 
 
 class TestNonExemptCap:
-    """cap_config_read is NOT in PASS_THROUGH_EXEMPT_CAPS.
-
-    Pass-through tokens should bypass deny on this cap, but confirm is still honored.
-    """
+    """cap_config_read is NOT pass-through exempt: pass-through bypasses deny, not confirm."""
 
     def test_scoped_deny(self):
         tok = _token(cap_config_read=CAP_DENY)
@@ -61,10 +58,7 @@ class TestNonExemptCap:
 
 
 class TestExemptCap:
-    """cap_restart IS in PASS_THROUGH_EXEMPT_CAPS.
-
-    Pass-through is irrelevant; raw value is used as-is.
-    """
+    """cap_restart IS pass-through exempt, so its configured value is used as-is."""
 
     def test_scoped_deny(self):
         tok = _token(cap_restart=CAP_DENY)
@@ -91,11 +85,11 @@ class TestExemptCap:
 
 
 class TestConfirmHonoredUnderPassThrough:
-    """Confirm mode is preserved for non-exempt caps under pass_through."""
+    """Confirm survives pass_through on non-exempt caps."""
 
     def test_non_exempt_confirm_routes_through_gate(self):
-        # cap_config_read is non-exempt and the test asserts confirm survives
-        # the pass-through bypass that normally upgrades deny to allow.
+        # cap_config_read is non-exempt: pass-through upgrades deny to allow
+        # but must leave confirm alone.
         tok = _token(cap_config_read=CAP_CONFIRM, pass_through=True)
         assert effective_cap(tok, "cap_config_read") == CAP_CONFIRM
 
@@ -104,7 +98,7 @@ class TestConfirmHonoredUnderPassThrough:
 
 
 class TestPassThroughExemptCapsContents:
-    """Sanity check on PASS_THROUGH_EXEMPT_CAPS contents."""
+    """Caps that pass-through must never upgrade from deny are in PASS_THROUGH_EXEMPT_CAPS."""
 
     def test_restart_is_exempt(self):
         assert "cap_restart" in PASS_THROUGH_EXEMPT_CAPS
@@ -163,10 +157,8 @@ class TestEffectiveCaps:
 class TestDeferredDiff:
     """A diff is only read when an approval is created, so builders are deferred.
 
-    Every _gate call site passes `diff=lambda: _build_diff_x(...)`. Many of those
-    builders read configuration off disk, load a lovelace config, or call the
-    ESPHome add-on, and about half are awaited. Building them eagerly meant every
-    allowed and every denied write paid for a result that was discarded.
+    Builders passed as callables may read configuration off disk or call the
+    ESPHome add-on; an allowed or denied write must not pay for a discarded diff.
     """
 
     async def test_builder_not_called_on_allow(self):
@@ -206,7 +198,7 @@ class TestDeferredDiff:
         assert calls == []
 
     async def test_resolve_diff_accepts_sync_async_and_dict(self):
-        """Builders are mixed: some call sites are sync, some async."""
+        """A deferred diff may be a dict, a sync callable or an async callable."""
         from custom_components.phoenix_mcp.helpers import _resolve_diff
 
         async def _async_builder():

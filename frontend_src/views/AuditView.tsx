@@ -35,9 +35,8 @@ export function AuditView({ tokens }: Props) {
   const [resourceFilter, setResourceFilter] = useState("");
   const [ipFilter, setIpFilter] = useState("");
 
-  // Method/resource/ip are now server-side filters (they used to filter an
-  // already-fetched batch client-side); debounce them so typing doesn't fire a
-  // request per keystroke.
+  // Method/resource/ip are server-side filters; debounce them so typing does
+  // not fire a request per keystroke.
   const [debouncedMethod, setDebouncedMethod] = useState("");
   const [debouncedResource, setDebouncedResource] = useState("");
   const [debouncedIp, setDebouncedIp] = useState("");
@@ -50,7 +49,7 @@ export function AuditView({ tokens }: Props) {
     return () => clearTimeout(timer);
   }, [methodFilter, resourceFilter, ipFilter]);
 
-  // Current id -> name map so renamed tokens show their current name on existing
+  // Current id to name map so renamed tokens show their current name on existing
   // audit rows (falls back to the row's stored name for archived/admin entries).
   const tokenNames = useMemo(
     () => Object.fromEntries(tokens.map((t) => [t.id, t.name])),

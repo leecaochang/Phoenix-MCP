@@ -1,30 +1,22 @@
 """MESA semantic-safety runtime for Phoenix MCP.
 
-This module wires the vendored mesa-core library (custom_components.phoenix_mcp.mesa_core)
-into the Phoenix MCP integration. mesa-core is per-ENTITY policy (what is safe to touch
-at all); Phoenix MCP tokens are per-CALLER policy (who may touch what). The two layer:
-Phoenix MCP resolves and flattens targets first, then MESA evaluates the explicit entity
-list. MESA is orthogonal to the token permission tree and applies even to
-pass-through tokens.
+Wires the vendored mesa-core (custom_components.phoenix_mcp.mesa_core) into the
+integration. mesa-core is per-ENTITY policy (what is safe to touch); tokens are
+per-CALLER policy (who may touch what). Phoenix MCP flattens targets first, then
+MESA evaluates the explicit entity list. MESA is orthogonal to the permission tree
+and binds pass-through tokens too.
 
-Design notes that are easy to get wrong:
+- The profile store is an in-memory dict (PhoenixMesaBackend) persisted through
+  HA's Store. It never blocks, so enforcement runs mesa-core's synchronous APIs on
+  the event loop; the retrieval tools (mesa_tools.py) use mesa-core's worker pool.
+- The MesaEnforcer is built with ``interactive=False``: a ``control_mode: confirm``
+  entity is blocked with rule ``control_mode:confirm_no_channel`` BEFORE any
+  challenge is issued, so mesa-core's ConfirmationManager stays empty. Phoenix MCP
+  interprets that block itself: a warning in advisory mode, a route to its own
+  admin approval gate in enforced mode.
+- Enforced-ness is recomputed host-side per entity from public settings and profile data.
 
-- The profile store is backed by an in-memory dict (PhoenixMesaBackend) persisted
-  through HA's Store. Because the backend never blocks, mesa-core's synchronous
-  APIs run directly on the event loop; the ``a*`` (to_thread) variants are never
-  used here.
-- The MesaEnforcer is constructed with ``interactive=False``. With no
-  interaction channel, a ``control_mode: confirm`` entity is blocked with rule
-  ``control_mode:confirm_no_channel`` BEFORE any confirmation challenge is
-  issued, so mesa-core's ConfirmationManager stays empty and we never touch its
-  private state. Phoenix MCP interprets that block itself: in advisory mode it becomes a
-  warning, in enforced mode it routes to Phoenix MCP's admin approval gate.
-- "enforced-ness" is recomputed host-side per entity from public data
-  (``settings.mesa_mode == enforced`` or the effective profile's
-  ``enforcement_mode``), mirroring MesaEnforcer._is_enforced.
-
-mesa-core is a read-only dependency; never modify it and never reach into its
-private state. Report any mesa-core bug to the maintainer.
+mesa-core is read-only: never modify it or reach into its private state.
 """
 
 from __future__ import annotations
@@ -132,10 +124,10 @@ class MesaRuntime:
     enforcer: MesaEnforcer
     validator: TriggerValidator
     ha_store: Store
-    # Advisory coordination leases (mesa-core 1.1, Enrichment Section 21).
-    # In-memory only by design: leases cap at 30 seconds and never survive a
-    # restart. Exposed to agents via the mesa_request_lease/mesa_release_lease
-    # tools (mesa_tools.py); no admin UI or HA sensor in this version.
+    # Advisory coordination leases. In-memory only by design: they cap at 30
+    # seconds and never survive a restart. Exposed to agents through the
+    # mesa_request_lease/mesa_release_lease tools (mesa_tools.py); there is no
+    # admin UI or HA sensor.
     lease_manager: LeaseManager
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     trigger_issues: list[ValidationIssue] = field(default_factory=list)
@@ -188,10 +180,9 @@ class MesaRuntime:
 
 
 def _build_get_entity_area(hass: HomeAssistant) -> Callable[[str], str | None]:
-    """Return a sync callback mapping entity_id to area_id (device fallback).
+    """Return a sync callback mapping entity_id to its effective area_id.
 
-    Mirrors mcp_view._resolve_area_id but is defined here to avoid an import
-    cycle (mcp_view imports this module for enforcement).
+    The entity's own area, else its device's effective area.
     """
 
     def _get_entity_area(entity_id: str) -> str | None:
@@ -207,16 +198,14 @@ def _build_get_entity_device(hass: HomeAssistant) -> Callable[[str], str | None]
 
     This is the MESA "device" inheritance level, between entity and area: one
     profile against a device registry id governs every entity that device owns,
-    including entities a firmware or integration update adds later, which is the
-    part per-entity profiles can never cover.
+    including entities a firmware or integration update adds later, which
+    per-entity profiles can never cover.
 
     The lookup is UNCONDITIONAL, unlike the device read inside
-    _build_get_entity_area, which consults the device only when the entity has
-    no area of its own. Here the owning device is the answer whether or not the
-    entity is separately placed.
-
-    There is no fallback by design: without this callback the whole layer is
-    inert, because guessing a device would silently apply policy nobody wrote.
+    _build_get_entity_area, which consults the device only when the entity has no
+    area of its own. There is no fallback by design: without this callback the
+    whole layer is inert, because guessing a device would silently apply policy
+    nobody wrote.
     """
 
     def _get_entity_device(entity_id: str) -> str | None:
@@ -231,9 +220,9 @@ def _build_get_entity_integration(hass: HomeAssistant) -> Callable[[str], str | 
 
     This is the MESA "integration" inheritance level (between area and domain): the
     entity registry's ``platform`` is the component that created the entity (e.g.
-    ``hue``, ``yale_access_bluetooth``), which is exactly the key a vendor sidecar
-    is stored under. It lets a device/hub integration's sidecar govern the entities
-    it created regardless of their entity domain (lock.*, sensor.*, ...).
+    ``hue``), which is exactly the key a vendor sidecar is stored under. It lets a
+    device/hub integration's sidecar govern the entities it created regardless of
+    their entity domain (lock.*, sensor.*, ...).
     """
 
     def _get_entity_integration(entity_id: str) -> str | None:
@@ -246,20 +235,19 @@ def _build_get_entity_integration(hass: HomeAssistant) -> Callable[[str], str | 
 def build_expand_target(hass: HomeAssistant) -> Callable[[str, str], list[str]]:
     """Return the host callback resolving indirect automation targets to entity ids.
 
-    mesa-core's trigger walk (entities_by_role / TriggerValidator) finds target
+    mesa-core's trigger walk (entities_by_role / TriggerValidator) meets target
     selectors it cannot resolve itself: device triggers and the target blocks of
-    purpose-specific triggers reference a device_id/area_id/floor_id/label_id,
-    and only the host can expand those against the HA registries. Without this
+    purpose-specific triggers reference a device_id/area_id/floor_id/label_id, and
+    only the host can expand those against the HA registries. Without this
     callback, an automation triggering on a device is invisible to the
     triggers_automations staleness check and to Phoenix MCP's reverse references.
 
-    Deliberately INCLUSIVE, unlike service-target expansion: hidden, config,
-    and diagnostic entities still fire triggers, so there is no
-    primary-entities-only filtering here. Disabled registry entries are
-    excluded (they produce no state or events). An entity assigned its own
-    area does not count toward its device's area, matching HA's area
-    semantics. Any failure returns [] (a resolution error must never break
-    validation or a reverse-reference read).
+    Deliberately INCLUSIVE, unlike service-target expansion: hidden, config and
+    diagnostic entities still fire triggers, so there is no primary-entities-only
+    filtering. Disabled registry entries are excluded (they produce no state or
+    events). An entity with its own area does not count toward its device's area,
+    matching HA's area semantics. Any failure returns [] (a resolution error must
+    never break validation or a reverse-reference read).
     """
 
     def _device_entities(ent_reg: Any, device_id: str) -> list[str]:
@@ -324,11 +312,11 @@ def _build_get_state(hass: HomeAssistant) -> Callable[[str], str | None]:
 def _build_get_solar_elevation(hass: HomeAssistant) -> Callable[[datetime], float | None]:
     """Return a sync callback computing the sun's elevation (degrees) at a time.
 
-    Backs mesa-core's solar_angle temporal conditions. HA's cached astral
-    Location (helpers.sun.get_astral_location) computes elevation at ANY
-    instant, so mesa-core's solar_offset_minutes sampling in the past is
-    exact, not approximated from the current sun.sun state. Any failure
-    returns None, which mesa-core treats as unevaluable (fail-closed).
+    Backs mesa-core's solar_angle temporal conditions. HA's cached astral Location
+    (helpers.sun.get_astral_location) computes elevation at ANY instant, so
+    solar_offset_minutes sampling in the past is exact, not approximated from the
+    current sun.sun state. Any failure returns None, which mesa-core treats as
+    unevaluable (fail-closed).
     """
 
     def _get_solar_elevation(at: datetime) -> float | None:
@@ -344,9 +332,9 @@ def _build_get_solar_elevation(hass: HomeAssistant) -> Callable[[datetime], floa
 def _build_on_lease_event(hass: HomeAssistant) -> Callable[[dict[str, Any]], None]:
     """Bridge mesa-core lease events onto the HA event bus as phoenix_mcp_mesa_lease_expired.
 
-    LeaseManager's sync methods run via asyncio.to_thread (the a* variants), so
-    the callback fires on a worker thread; hass.add_job hops back to the event
-    loop before touching the bus (async_fire is a @callback, loop-only).
+    mesa-core's tool handlers run LeaseManager methods on a worker thread, so the
+    callback fires there; hass.add_job hops back to the event loop before touching
+    the bus (async_fire is a @callback, loop-only).
     """
     from .const import DOMAIN  # noqa: PLC0415 - matches fire_mesa_blocked_event
 
@@ -363,9 +351,9 @@ def _numeric_threshold_example(nt_spec: dict[str, Any]) -> dict[str, Any]:
     serialize the way its selector shape suggests: the config value is
     {type: above|below, value: {number, unit_of_measurement}}, not a bare number.
     The unit lives either at the selector level as a list (temperature) or inside
-    the number spec as a string (percentage); handle both. type must be above or
-    below (there is no bidirectional form). The number is a representative
-    in-range placeholder the caller adapts to the user's real threshold.
+    the number spec as a string (percentage); both are handled. type must be above
+    or below (there is no bidirectional form). The number is a representative
+    in-range placeholder for the caller to adapt.
     """
     number = nt_spec.get("number") or {}
     lo, hi = number.get("min"), number.get("max")
@@ -390,16 +378,13 @@ def _moment_example_config(
     """A minimal, copy-adaptable VALID config for a semantic moment, or None.
 
     The moment's ``schema`` is the frontend FORM descriptor (selectors), not the
-    config-YAML serialization, and a model handed only that cannot reliably
-    author the trigger/condition: it is left reverse-engineering the config shape
-    one field at a time against repeated validation failures. This emits a
-    concrete example for the
-    selector types whose serialization is known and verified, and returns None
-    (example omitted, never guessed) for anything else so a wrong example is never
-    shipped. Fields with defaults (behavior, for) are omitted from the minimal
-    example; only required parameterized fields are serialized. Triggers and
-    conditions share the numeric_threshold serialization; they differ only in the
-    leading key (verified against HA's own validate_config for both).
+    config-YAML serialization, so a model handed only that cannot reliably author
+    the trigger/condition. This emits a concrete example for the selector types
+    whose serialization is known, and returns None (example omitted, never
+    guessed) for anything else so a wrong example is never shipped. Fields with
+    defaults (behavior, for) are omitted; only required parameterized fields are
+    serialized. Triggers and conditions share the numeric_threshold serialization
+    and differ only in the leading key.
     """
     options: dict[str, Any] = {}
     for field_name, field_spec in (schema.get("fields") or {}).items():
@@ -413,35 +398,25 @@ def _moment_example_config(
 
 
 async def async_semantic_moments(hass: HomeAssistant, entity_id: str) -> list[dict[str, Any]] | None:
-    """Live purpose-specific trigger/condition vocabulary for one entity.
+    """Live purpose-specific trigger/condition vocabulary for one entity, or None.
 
-    Backs mesa-core 1.2's ``mesa_get_profile(include_semantic_moments=True)``.
-    HA 2026.7 graduated purpose-specific triggers/conditions to default;
-    ``async_get_triggers_for_target``/``async_get_conditions_for_target``
-    resolve which apply to an entity from each integration's triggers.yaml/
-    conditions.yaml target descriptors (verified identical between 2026.6.3
-    and the final 2026.7.1). On 2026.6 with the Labs flag off the sets are
-    simply smaller or empty, still a valid answer.
+    Backs mesa-core's ``mesa_get_profile(include_semantic_moments=True)``.
+    ``async_get_triggers_for_target``/``async_get_conditions_for_target`` resolve
+    which apply to an entity from each integration's triggers.yaml/conditions.yaml.
+    Purpose-specific triggers are default from HA 2026.7; on 2026.6 with the Labs
+    flag off the sets are smaller or empty, still a valid answer.
 
-    HA-COUPLING POINT alongside ws_dispatch/the injector/mesa_suggestions:
-    import-inside-function and ANY failure (including the module or functions
-    not existing on older HA) degrades to None, which mesa-core renders as the
-    field being omitted. Re-verify on HA upgrades. Consumed live at request
-    time, never stored, never consulted by enforcement.
+    HA-COUPLING POINT alongside ws_dispatch, the injector and mesa_suggestions:
+    imports sit inside the function and ANY failure (including the module missing
+    on older HA) degrades to None, which mesa-core renders as the field being
+    omitted. Re-verify on HA upgrades. Consumed live, never consulted by enforcement.
 
-    Each moment also carries its ``schema`` (target/fields, straight from the
-    owning integration's triggers.yaml/conditions.yaml) when available, via
-    ``homeassistant.helpers.trigger``/``condition``'s own ``async_get_all_descriptions``
-    (HA's frontend automation editor uses the same call to build its trigger/
-    condition picker forms; the result is cached by HA itself, so this is not
-    a re-parse per request). That schema is the frontend FORM descriptor
-    (selectors), which does NOT map trivially to the config YAML an agent must
-    author; for the selector types whose serialization is known (numeric_threshold
-    triggers), a trigger moment also carries an ``example``: a concrete, valid,
-    copy-adaptable config snippet built by ``_moment_example_config``. Both are
-    SEPARATE, best-effort lookups from the id fetch above: if the ids resolve but
-    the schema/example lookup fails, the moments are still returned without those
-    keys rather than losing the whole field.
+    Each moment carries an ``example`` or its ``schema``. The schema (HA's
+    ``async_get_all_descriptions``) is the frontend FORM descriptor, which does NOT
+    map to the config YAML an agent must author, so where the serialization is
+    known (numeric_threshold) a valid example from ``_moment_example_config``
+    replaces it. Those lookups are separate and best-effort: if the ids resolve but
+    they fail, moments are returned without those keys.
     """
     try:
         from homeassistant.components.websocket_api.automation import (  # noqa: PLC0415
@@ -481,11 +456,10 @@ async def async_semantic_moments(hass: HomeAssistant, entity_id: str) -> list[di
         entry: dict[str, Any] = {"id": key, "kind": "trigger"}
         if schema := trigger_schemas.get(key):
             # A worked example supersedes the selector schema: the schema is the
-            # frontend FORM descriptor and is not directly authorable (it misled a
-            # model into 14 failed validate attempts), so when we can emit a valid
-            # example we return that alone and drop the schema, both to shrink the
-            # payload and to avoid a confusing double representation of each field.
-            # The schema is kept only as the fallback when no example is available.
+            # frontend FORM descriptor and is not directly authorable, so when a
+            # valid example can be emitted it replaces the schema, shrinking the
+            # payload and avoiding two representations of each field. The schema
+            # stays as the fallback when no example is available.
             if example := _moment_example_config(key, "trigger", entity_id, schema):
                 entry["example"] = example
             else:
@@ -539,8 +513,8 @@ async def async_setup_mesa(hass: HomeAssistant, mesa_mode: str) -> MesaRuntime:
     """Construct the MESA runtime, loading any persisted profiles.
 
     Built even when the kill switch is on: the admin profile API must work
-    regardless, and the enforcement gate is simply never reached when no client
-    routes are registered.
+    regardless, and the enforcement gate is never reached when no client routes
+    are registered.
     """
     ha_store: Store[dict] = Store(hass, MESA_STORAGE_VERSION, MESA_STORAGE_KEY)
     raw = await ha_store.async_load() or {}
@@ -664,20 +638,18 @@ async def async_refresh_trigger_issues(hass: HomeAssistant, runtime: MesaRuntime
 
 
 def refresh_orphans(hass: HomeAssistant, runtime: MesaRuntime) -> None:
-    """Recompute stored profiles whose target no longer exists.
+    """Recompute stored profiles whose target is gone.
 
-    Four independent kinds, computed here rather than through mesa-core's own
-    ``find_orphans``: entity profiles whose entity left the registry, device
-    profiles whose device was removed, area profiles whose area was deleted, and
-    integration profiles whose integration is neither producing entities nor
-    loaded as a component. MESA never auto-deletes a profile (a rename or
-    temporary removal must not lose authored intent); this only surfaces them for
-    manual cleanup.
+    Four independent kinds: entity profiles whose entity left the registry (via the
+    store's ``find_orphans``), device profiles whose device was removed, area
+    profiles whose area was deleted, and integration profiles whose integration is
+    neither producing entities nor loaded as a component. MESA never auto-deletes
+    a profile (a rename or temporary removal must not lose authored intent); this
+    only surfaces them for manual cleanup.
 
-    mesa-core can check the scoped levels too, but it returns those orphans as
-    their full reserved key (``__device__:abc``) for the caller to split apart,
-    which would change the shape every consumer here already reads. The lists
-    stay bare and stay separate.
+    The scoped kinds are computed here because ``find_orphans`` returns scoped
+    orphans as their full reserved key (``__device__:abc``), which would change
+    the shape every consumer reads. The lists stay bare and separate.
     """
     er = er_mod.async_get(hass)
     known = set(er.entities) | set(hass.states.async_entity_ids())
@@ -706,7 +678,7 @@ def refresh_orphans(hass: HomeAssistant, runtime: MesaRuntime) -> None:
 class MesaVerdict:
     """Per-entity MESA outcome for one flattened service call.
 
-    allowed: entities that may proceed now. confirm: entities whose profile
+    allowed: entities that may proceed. confirm: entities whose profile
     requires admin confirmation (enforced mode). blocked: (entity, rule, reason)
     for entities MESA refuses outright (read_only, prohibited, declared limit,
     privacy). warnings: advisory messages collected across all entities.
@@ -881,12 +853,11 @@ def evaluate_service_entities(
             service=service_str,
             # The parameters this call will execute, not a filtered view of them:
             # a decision made about a different payload than the one sent is the
-            # divergence the whole target check exists to catch, and the audit
-            # record would describe a call that never happened. service_data has
-            # already had its target selectors CONSUMED by target resolution, so
-            # they are absent from the outgoing call too, which is why nothing
-            # here needs withholding. The resolved entity goes last so no caller
-            # value can displace it.
+            # divergence the target check exists to catch, and the audit record
+            # would describe a call that never happened. service_data has already
+            # had its target selectors CONSUMED by target resolution, so they are
+            # absent from the outgoing call too and nothing needs withholding. The
+            # resolved entity goes last so no caller value can displace it.
             service_params={**entity_service_data, "entity_id": entity_id},
             caller_context=caller,
             current_time=now,
@@ -952,9 +923,8 @@ def entity_control_mode(
     determined. Callers only pass entities the token can already access, so this
     is not an enumeration oracle.
 
-    runtime is optional because every caller passes data.mesa, which is None when
-    MESA never started; the catch-all below already returns None in that case,
-    and the annotation says so rather than pushing the check to every caller.
+    runtime is None when MESA never started (callers pass data.mesa), which
+    returns None rather than pushing the check to every caller.
     """
     if runtime is None:
         return None
@@ -981,9 +951,9 @@ def mesa_confirm_preview(
     service_data: dict[str, Any],
     entities: list[str],
 ) -> list[str]:
-    """Which of these entities MESA would route to admin confirmation right now.
+    """Return the entities MESA would route to admin confirmation.
 
-    Read-only companion to async_apply_mesa_to_call, used by the capability-gate
+    Read-only companion to async_apply_mesa_to_call for the capability-gate
     approval diff builders: the admin's approval of a gated call also satisfies
     MESA's confirm (async_execute_approved_tool runs confirm-approved), so the
     approval record names the entities that confirmation covers. Best-effort by
@@ -1182,11 +1152,11 @@ async def async_apply_mesa_to_call(
             decision="deny", blocked=verdict.blocked, warnings=verdict.warnings
         )
 
-    # NOTE (deferred, low severity): warnings flow to the token via mesa_advisory /
+    # Known gap (low severity): warnings flow to the token via mesa_advisory /
     # native speech regardless of cap_config_read, so an advisory warning reveals an
     # in-scope entity's control_mode even to a token that lacks profile-read access.
     # Not an enumeration oracle (the token targeted an entity it already has WRITE on).
-    # If we ever want to hide it, gate warnings on cap_config_read at the surfacing sites.
+    # Hiding it would mean gating warnings on cap_config_read at the surfacing sites.
     return MesaGateOutcome(
         decision="allow",
         entities=verdict.allowed,
@@ -1258,18 +1228,16 @@ def fire_mesa_blocked_event(
 def release_token_leases(data: Any, token_id: str) -> int:
     """Drop any advisory leases a token still holds. Returns how many.
 
-    Called when a token is revoked or expires. Bookkeeping rather than a safety
-    mechanism, and worth being clear about which: the action that actually stops
-    a dead token is refusing its next call at the tool boundary, which
-    authentication already does. A lease it left behind blocks other sessions for
-    at most MAX_LEASE_DURATION_SECONDS, after which mesa-core drops it during the
-    next request's own sweep, so this only shortens that window.
+    Called when a token is revoked or expires. Bookkeeping, not a safety
+    mechanism: what stops a dead token is authentication refusing its next call. A
+    lease it left behind blocks other sessions for at most
+    MAX_LEASE_DURATION_SECONDS, after which mesa-core drops it during the next
+    request's own sweep, so this only shortens that window.
 
-    Leases are keyed by session, and Phoenix runs the lease tools with the token
-    id as the session, so releasing the token's session releases exactly its own.
-
+    Leases are keyed by session and Phoenix runs the lease tools with the token id
+    as the session, so releasing the token's session releases exactly its own.
     Fails quiet: leases are in-memory and advisory, so a failure here must never
-    interrupt a revocation, which has real teardown to finish.
+    interrupt a revocation.
     """
     runtime = getattr(data, "mesa", None)
     if runtime is None:

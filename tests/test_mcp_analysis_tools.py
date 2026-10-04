@@ -278,6 +278,49 @@ def whatif_env(hass: HomeAssistant):
 
 
 class TestWhatif:
+    @pytest.mark.parametrize("layout", ["file", "directory", "inline"])
+    @pytest.mark.parametrize("hidden", [False, True])
+    async def test_reads_configured_automations_with_scope(self, hass, whatif_env, layout, hidden):
+        from pathlib import Path
+
+        config = {"id": "included", "alias": "Included watcher", "triggers": [
+            {"trigger": "state", "entity_id": "light.kitchen", "to": "on"}], "actions": []}
+        root = Path(hass.config.config_dir)
+        if layout == "inline":
+            source = yaml.safe_dump({"automation": [config]})
+        elif layout == "file":
+            (root / "watchers.yaml").write_text(yaml.safe_dump([config]))
+            source = "automation: !include watchers.yaml\n"
+        else:
+            (root / "watchers").mkdir()
+            (root / "watchers" / "included.yaml").write_text(yaml.safe_dump(config))
+            source = "automation: !include_dir_list watchers\n"
+        (root / "configuration.yaml").write_text(source)
+        token = _token()
+        if hidden:
+            token.permissions.entities["automation.included"] = PermissionNode(state="RED")
+        content, outcome, _ = await _call(
+            "whatif", {"entity_id": "light.kitchen", "hypothetical_state": "on"}, token, hass)
+        assert outcome == "allowed"
+        candidates = _json(content)["candidates"]
+        if hidden:
+            assert candidates == []
+            assert "Included watcher" not in json.dumps(_json(content))
+        else:
+            assert len(candidates) == 1
+            assert candidates[0]["automation_id"] == "included"
+            assert candidates[0]["would_fire"] is True
+
+    async def test_reports_unreadable_automation_include(self, hass, whatif_env):
+        with open(hass.config.path("configuration.yaml"), "w") as file:
+            file.write("automation: !include missing.yaml\n")
+        content, outcome, _ = await _call(
+            "whatif", {"entity_id": "light.kitchen", "hypothetical_state": "on"}, _token(), hass)
+        assert outcome == "allowed"
+        body = _json(content)
+        assert body["candidates"] == []
+        assert any(gap["kind"] == "automation" for gap in body["not_searched"])
+
     async def test_deny(self, hass, whatif_env):
         _, outcome, _ = await _call("whatif", {"entity_id": "light.kitchen", "hypothetical_state": "on"}, _token(cap_search="deny"), hass)
         assert outcome == "denied"
@@ -301,10 +344,11 @@ class TestWhatif:
         assert outcome == "invalid_request"
 
     async def test_device_trigger_coverage_reports_unknown(self, hass):
-        """An automation whose trigger references this entity's DEVICE (no
-        entity_id anywhere) surfaces as a candidate with would_fire "unknown"
-        (device trigger types are integration-specific and cannot be
-        simulated) instead of being invisible."""
+        """A trigger naming this entity's DEVICE (no entity_id) is a candidate.
+
+        It reports would_fire "unknown", because device trigger types are
+        integration-specific and cannot be simulated, instead of being invisible.
+        """
         from homeassistant.helpers import device_registry as dr
 
         entry = MockConfigEntry(domain="test_integration", entry_id="e_dev")
@@ -340,7 +384,7 @@ class TestDryRunService:
 
     async def test_resolves_without_executing(self, hass):
         # resolve_service_targets requires the entity to exist in the registry
-        # (rule 14: no entity creation via service calls), so register it.
+        # (a service call never creates an entity), so register it.
         entry = MockConfigEntry(domain="test_integration", entry_id="e_dry")
         entry.add_to_hass(hass)
         e = er.async_get(hass).async_get_or_create(

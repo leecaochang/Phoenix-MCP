@@ -76,7 +76,7 @@ def _make_data(token: TokenRecord | None, *, kill_switch: bool = False, bound_id
 # --------------------------------------------------------------------------- #
 
 def test_assist_api_supported_in_test_env():
-    # The pinned HA test env ships helpers.llm and the Probatio converter.
+    # The installed HA ships helpers.llm and the Probatio converter.
     assert assist_api_supported() is True
 
 

@@ -1,50 +1,22 @@
 """Config-file tools: the scoped filesystem jail and the raw YAML edit.
 
-Two surfaces that both write files, kept together because they share the same
-shape of risk and the same defence: resolve to a realpath, prove it is inside a
-permitted directory, and refuse otherwise.
-
-`cap_filesystem` covers www/, themes/ and custom_templates/ only
-(const.FILESYSTEM_ALLOWED_DIRS). `_resolve_fs_path` is a real jail: it
-realpaths and requires the result to sit under an allowed directory, so a
-symlink or a traversal cannot escape it, and it cannot reach configuration.yaml
-at all.
-
-`cap_yaml_edit` covers configuration.yaml and the YAML files it loads through
-an !include. Which files those are is not taken on trust: `_yaml_mount_refusal`
-asks yaml_includes.scan_mount_points where a file lands in the configuration
-tree and refuses anything reached from homeassistant:/http:/frontend:/lovelace:,
-anything it cannot rule that out for, and anything nothing loads. That gate
-exists because the content-shaped refusal below cannot see the case: an include
-target's top level IS the value of the key it is loaded at, so `http.yaml` holds
-trusted_proxies as an ordinary top-level key. It carries the
-trust-boundary refusal: `_yaml_protected_check` hard-refuses any write that
-adds, removes or modifies a path in const.YAML_PROTECTED_SUBTREES. The floor is
-not "these keys are powerful" (command_line and shell_command stay writable,
-because command execution is already accepted surface for this capability) but
-"these keys redefine HA's OWN trust boundary": who may authenticate, which
-proxy headers are trusted, whether brute-force defences run, which folder is
-loaded as configuration, and what JavaScript loads into the authenticated
-dashboard. It runs BOTH pre-gate and again at apply time against what is on
-disk, so a change appearing during the approval window is still caught, and it
-fails closed: content that does not parse as YAML is refused.
-
-It also carries the accidental-deletion refusal, `_yaml_removal_check`: a write
-that drops a top-level key present in the current file is refused unless
-`remove_keys` names that key. Nothing else catches that case, because the file
-is valid, no protected subtree moved, and expected_hash matches (the caller did
-read first). Declaring the keys rather than setting a force flag is deliberate:
-a bypass boolean gets set once and then always, while a named key lands in the
-approval diff where a wrong claim is visible. Unlike the protected check this
-one ABSTAINS in two cases: when the prior content is absent or unparseable
-(refusing would make the tool unable to repair the broken file it exists to
-repair), and on a version RESTORE, where reproducing the chosen snapshot
-byte-for-byte is the whole operation and the admin has already seen it.
-
-mcp_view owns the transport, the dispatch registry and the executor registry, and
-imports the names it registers or calls from here. The dependency runs one way:
-this module never imports the transport that dispatches it. Shared primitives
-come from ..tool_common.
+`cap_filesystem` covers only www/, themes/ and custom_templates/; `_resolve_fs_path`
+realpaths and requires containment (const.FILESYSTEM_ALLOWED_DIRS), so symlinks and
+traversal cannot escape and configuration.yaml is unreachable. `cap_yaml_edit` covers
+configuration.yaml and the YAML files it !includes, behind three refusals:
+- Mount gate (`_yaml_mount_refusal`): an include target's top level IS the value
+  of the key it loads at (http.yaml holds trusted_proxies as a plain key), which a
+  content check cannot see. Refused: files reached from homeassistant:, http:,
+  frontend: or lovelace:, files that cannot be ruled out, and files nothing loads.
+- Protected subtrees (`_yaml_protected_check`): adding, removing or changing a path
+  in const.YAML_PROTECTED_SUBTREES is hard-refused, pre-gate and at apply time,
+  failing closed on unparseable content. They redefine HA's OWN trust boundary
+  (auth, trusted proxies, brute-force defences, packages, dashboard JavaScript);
+  command_line and shell_command stay writable.
+- Removal guard (`_yaml_removal_check`): dropping a top-level key present in the
+  file is refused unless `remove_keys` names it, so the claim shows in the approval
+  diff. It abstains on absent or unparseable prior content (a broken file stays
+  repairable) and on a version RESTORE.
 """
 
 from __future__ import annotations
@@ -233,26 +205,18 @@ async def _recoverable_file_delete(
 
 
 def _get_yaml_file_lock(hass: HomeAssistant, rel: str) -> asyncio.Lock:
-    """Serialize whole-file YAML writes (set_yaml_config, patch_yaml_config).
+    """Per-file lock for whole-file writes: set_yaml_config, patch_yaml_config, write_file.
 
-    That write is a full-file replace, so two concurrent callers would lose one
-    edit outright, and the protected-subtree re-check reads the prior content a
-    few statements before the write lands. Without this the window between them
-    is a real one. expected_hash narrows it but is optional by design, so it
-    cannot serve as the floor.
+    A full-file replace loses an edit when two callers interleave, and the
+    protected-subtree re-check reads prior content a few statements before the write
+    lands. expected_hash narrows that window but is optional, so it cannot be the
+    floor. Keyed by config-relative path (bounded by the write jail) so edits to
+    unrelated files do not serialize.
 
-    PER FILE rather than one global lock, keyed by the config-relative path:
-    these tools now write any include target, and a single lock would serialize
-    an edit to templates.yaml behind an unrelated edit to sensors.yaml for no
-    safety gain. The keys are bounded by the write jail, which only admits
-    .yaml/.yml paths inside the configuration directory.
-
-    The automation/script/scene executors never take these locks: yaml_includes
-    fails closed with LocateError ("ambiguous") when a domain is inline in
-    configuration.yaml, so those paths only ever splice !include leaf files
-    under their own domain locks. That leaves one real overlap, an entry-level
-    edit and a whole-file write racing on the SAME leaf, which expected_hash is
-    the guard for; taking a domain lock here would deadlock against it.
+    The automation, script and scene executors take their own domain locks, never
+    these: yaml_includes refuses a domain defined inline in configuration.yaml, so
+    they only splice !include leaf files. The one remaining overlap, an entry-level
+    edit racing a whole-file write on the SAME leaf, is guarded by expected_hash.
     """
     locks: dict[str, asyncio.Lock] = hass.data.setdefault(_YAML_LOCKS_KEY, {})
     if rel not in locks:
@@ -346,9 +310,9 @@ async def _tool_read_file(
 def _file_write_precheck(args: dict, hass: HomeAssistant, tool_name: str) -> tuple[dict, str, str] | None:
     """Pre-gate validation for filesystem writes; None means OK to proceed.
 
-    Checks the path is inside an allowed directory and content is a
-    size-bounded string, so a doomed request is rejected before a pending
-    approval is created. The executor re-validates at apply time.
+    Checks the path is inside an allowed directory and content is a size-bounded
+    string, so a doomed request never becomes a pending approval. The executor
+    re-validates at apply time.
     """
     if _resolve_fs_path(hass, args.get("path", "")) is None:
         return _tool_error("Path is outside the allowed directories (www/, themes/, custom_templates/)."), "denied", tool_name
@@ -581,11 +545,10 @@ async def _tool_get_yaml_config(
 
 
 def _yaml_write_precheck(args: dict, tool_name: str) -> tuple[dict, str, str] | None:
-    """Pre-gate validation for configuration.yaml writes; None means OK to proceed.
+    """Pre-gate validation for YAML writes; None means OK to proceed.
 
-    Checks content is a size-bounded string so a doomed request is rejected
-    before a pending approval is created. The executor re-validates at apply
-    time.
+    Checks content is a size-bounded string, so a doomed request never becomes a
+    pending approval. The executor re-validates at apply time.
     """
     content = args.get("content")
     if not isinstance(content, str):
@@ -602,12 +565,12 @@ def _protected_subtree_diff(old_text: str | None, new_text: str, *, allow_aliase
     """Dotted paths under YAML_PROTECTED_SUBTREES whose value the write changes.
 
     Both sides parse with the lenient loader so an unknown third-party tag cannot
-    make the file unwritable. A value that is byte-identical on both sides passes,
-    however sensitive the key: this refuses CHANGES, not the presence of a key.
+    make the file unwritable. A value identical on both sides passes, however
+    sensitive the key: this refuses CHANGES, not the presence of a key.
 
     Raises yaml_includes.YamlParseError when the NEW content does not parse. Old
-    content that does not parse is treated as empty, which fails closed: every
-    protected key in the new content then counts as changed.
+    content that does not parse is treated as empty (fail closed): every protected
+    key in the new content then counts as changed.
     """
     new_doc = yaml_includes.load_tagged_lenient(new_text, allow_aliases=allow_aliases)
     try:
@@ -670,26 +633,19 @@ def _removed_top_level_keys(
     """Top-level keys the write drops without having declared them in remove_keys.
 
     A whole-file replace can silently delete configuration the caller never
-    mentioned, and nothing else here catches it: the content is valid YAML, no
-    protected subtree moved, and expected_hash matches because the caller DID
-    read the file first. The worst shape is not a mangled file but a tidy one,
-    e.g. dropping `automation: !include automations.yaml` disables every
-    automation while automations.yaml sits on disk intact and check_config
-    passes.
+    mentioned, and nothing else catches it: the content is valid YAML, no protected
+    subtree moved, and expected_hash matches because the caller DID read first. The
+    worst shape is a tidy file, not a mangled one: dropping
+    `automation: !include automations.yaml` disables every automation while
+    check_config passes.
 
-    Declaring a key is the escape hatch rather than a bare force flag: a single
-    bypass boolean is set once and then always set, whereas naming the keys puts
-    the intent in the approval diff where a wrong claim is visible.
-
-    Both sides parse with the lenient loader, matching _protected_subtree_diff.
-    Old content that is absent or does not parse yields NO removals, i.e. this
-    check abstains rather than fails closed. That is deliberate: repairing a
-    configuration.yaml that no longer parses is a legitimate use of this tool
-    and refusing would make the tool unable to fix the one state that most needs
-    fixing. The protected-subtree refusal still runs on that path.
-
-    Assumes the NEW content already parsed, which holds because
-    _yaml_protected_check runs first at both call sites and refuses if it did not.
+    Naming the keys, rather than a bare force flag, puts the intent in the approval
+    diff where a wrong claim is visible. Both sides parse with the lenient loader.
+    Old content that is absent or does not parse yields NO removals (the check
+    abstains, not fail closed) so a configuration.yaml that does not parse can still
+    be repaired; the protected-subtree refusal still runs there. New content that
+    does not parse also yields none, because _yaml_protected_check refuses it first
+    at the gating call sites.
     """
     try:
         old_doc = yaml_includes.load_tagged_lenient(old_text) if old_text else None
@@ -711,19 +667,16 @@ def _removed_top_level_keys(
 def _removed_list_entries(old_text: str | None, new_text: str) -> int:
     """How many top-level entries a write to a LIST-shaped file drops.
 
-    The mapping-key guard above cannot see this: templates.yaml and sensors.yaml
-    are top-level lists, so there are no keys to compare and it abstains, which
-    left a read-modify-write that returned 3 of 12 template blocks accepted.
+    The mapping-key guard cannot see this: templates.yaml and sensors.yaml are
+    top-level lists, so there are no keys to compare and it abstains.
 
     A count rather than a set difference, because list entries have no stable
-    identity: an EDIT changes an entry, so any hash or equality comparison reads
-    it as one removal plus one addition and gives the same net answer with more
-    machinery. The narrow gap that leaves (drop one, add another, in the same
-    write) is a deliberate accepted limit, and the reason patch_yaml_config's
-    index addressing is the real answer for a single-entry edit: it resends
-    nothing, so it cannot lose anything.
+    identity: an EDIT reads as one removal plus one addition either way. The gap
+    that leaves (drop one entry, add another, in the same write) is an accepted
+    limit; patch_yaml_config's index addressing is the answer for a single-entry
+    edit, since it resends nothing and cannot lose anything.
 
-    Abstains on absent or unparseable prior content, matching the mapping form.
+    Abstains on absent or unparseable prior content, like the mapping form.
     """
     try:
         old_doc = yaml_includes.load_tagged_lenient(old_text) if old_text else None
@@ -738,14 +691,12 @@ def _removed_list_entries(old_text: str | None, new_text: str) -> int:
 def _yaml_removal_check(
     old_text: str | None, new_text: str, args: dict, tool_name: str
 ) -> tuple[dict, str, str] | None:
-    """Refuse an undeclared top-level key removal; None means OK to proceed.
+    """Refuse an undeclared key or list-entry removal; None means OK to proceed.
 
-    Runs pre-gate AND at apply time for the same reason the protected-subtree
-    check does: the file can change while an approval waits, so a key that was
-    present at gate time may be one this write is now dropping.
-
-    A wrong-shaped remove_keys degrades to no declarations via str_list_arg,
-    which refuses rather than waves the write through.
+    Runs pre-gate AND at apply time like the protected-subtree check: the file can
+    change while an approval waits, so a key present at gate time may be one this
+    write drops. A wrong-shaped remove_keys or remove_entries degrades to
+    no declaration, so the write is refused rather than waved through.
     """
     dropped = _removed_list_entries(old_text, new_text)
     if dropped and dropped != _declared_entry_removals(args):
@@ -788,21 +739,20 @@ def _yaml_mount_refusal(
 ) -> tuple[dict, str, str] | None:
     """Refuse a write whose place in the configuration tree is unsafe or unknown.
 
-    The trust-boundary floor (rule 30) is defined on configuration.yaml's own
-    top-level keys, and an include target inherits none of that shape: a file
-    loaded at `http:` puts trusted_proxies at ITS top level, and a packages file
-    carries whole integration configs including `frontend:` and `lovelace:`. So
-    the floor here is not the file's content but where the content LANDS, and
-    this refuses anything it cannot prove lands somewhere harmless.
+    The protected subtrees (const.YAML_PROTECTED_SUBTREES) are defined on
+    configuration.yaml's own top-level keys, and an include target inherits none of
+    that shape: a file loaded at `http:` puts trusted_proxies at ITS top level, and
+    a packages file carries whole integration configs including `frontend:` and
+    `lovelace:`. So the check here is where the content LANDS, and anything not
+    provably harmless is refused.
 
-    Four refusals, and each sends the reader somewhere different: the file is
-    loaded under a protected key; a protected key's own branch could not be read
-    so that cannot be ruled out; configuration.yaml itself is unreadable so
-    nothing at all is known; or nothing loads the file, which is both a likely
-    typo and the case where a write would be inert anyway.
+    Four refusals, each pointing the reader elsewhere: the file is loaded under a
+    protected key; a protected key's branch could not be read, so that cannot be
+    ruled out; configuration.yaml itself is unreadable, so nothing is known; or
+    nothing loads the file, which is a likely typo and an inert write anyway.
 
-    configuration.yaml is never routed here. It is the root of the scan rather
-    than a node in it, and rule 30 already governs it directly.
+    configuration.yaml is never routed here: it is the root of the scan, and the
+    protected-subtree check governs it directly.
 
     Safe to run in an executor job: filesystem reads only, no hass.
     """
@@ -866,9 +816,9 @@ async def _read_yaml_text(hass: HomeAssistant, path: str) -> str | None:
 def _yaml_write_target(hass: HomeAssistant, args: dict) -> tuple[str, str] | None:
     """The (realpath, config-relative path) a YAML write targets, or None if refused.
 
-    The jail is the read side's, so the two tools agree on what a path even is;
-    what they do NOT share is the mount gate, which the caller runs separately
-    because it does filesystem work and belongs in an executor job.
+    The jail is the read side's, so both tools agree on what a path is. The mount
+    gate is not included: it does filesystem work, so the caller runs it in an
+    executor job.
     """
     return _resolve_yaml_read_path(hass, args.get("file"))
 
@@ -939,14 +889,13 @@ async def _execute_set_yaml_config(
     path, rel = target
     # Read, protected-subtree re-check, CAS and write are one critical section:
     # the write is a whole-file replace, so an interleaved second writer would
-    # both lose an edit and invalidate the prior content the check above ran on.
+    # both lose an edit and invalidate the prior content the checks ran on.
     async with _get_yaml_file_lock(hass, rel):
-        # The mount is re-checked inside the lock for the same reason the two
-        # content guards below are: configuration.yaml can be re-routed while an
-        # approval waits, and a file that was an ordinary include target when the
-        # gate ran may be loaded under a protected key by the time it applies.
-        # A RESTORE is not exempt: reproducing a snapshot is only safe while the
-        # file still lands where it did when the snapshot was taken.
+        # The mount is re-checked inside the lock, like the two content guards
+        # below: configuration.yaml can be re-routed while an approval waits, so an
+        # ordinary include target at gate time may be loaded under a protected key
+        # by the time it applies. A RESTORE is not exempt: reproducing a snapshot
+        # is only safe while the file still lands where it did when it was taken.
         if rel != _CONFIG_YAML:
             mount = await hass.async_add_executor_job(
                 _yaml_mount_refusal, hass.config.config_dir, path, rel, "set_yaml_config",
@@ -960,23 +909,21 @@ async def _execute_set_yaml_config(
                 before_content = await hass.async_add_executor_job(_read_text_capped, path)
             except (OSError, ValueError):
                 before_content = None  # unreadable/too large: capture as no prior content
-        # Re-check the protected subtrees against what is on disk NOW: the file can
-        # change between the gate and an admin approving the write.
+        # Re-check the protected subtrees against what is on disk at apply time:
+        # the file can change between the gate and an admin approving the write.
         protected = await hass.async_add_executor_job(
             _yaml_protected_check, before_content, content, "set_yaml_config",
         )
         if protected is not None:
             return protected
-        # Same approval-window reasoning as the protected re-check above: a key
-        # present when the gate ran may be one this write is now dropping.
+        # Same approval-window reasoning as the protected re-check above.
         #
-        # A version RESTORE is exempt, mirroring esphome_yaml's literal-credential
-        # waiver: the admin picked that snapshot from a panel showing its content,
-        # reproducing it byte-for-byte is the entire operation, and it legitimately
-        # drops keys added after it was taken. This guard exists to catch an AGENT
-        # dropping a key it never mentioned, which is the opposite situation. The
-        # ContextVar is read HERE, in the event loop, because it does not cross
-        # into an executor job.
+        # A version RESTORE is exempt: the admin picked that snapshot from a panel
+        # showing its content, reproducing it byte-for-byte is the entire operation,
+        # and it legitimately drops keys added after it was taken. This guard exists
+        # to catch an AGENT dropping a key it never mentioned. The ContextVar is
+        # read HERE, on the event loop, because it does not cross into an executor
+        # job.
         if _restore_ctx.get() is None:
             removal = await hass.async_add_executor_job(
                 _yaml_removal_check, before_content, content, args, "set_yaml_config",
@@ -1041,19 +988,18 @@ def _yaml_patch_op(args: dict) -> str:
 
 
 def _patch_declared_removals(args: dict, op: str) -> list[str]:
-    """The top-level keys this patch declares it removes, for the rule-31 guard.
+    """The top-level keys this patch declares it removes, for the removal guard.
 
     A `remove` of a top-level key IS its own declaration: the key argument names
-    exactly what goes, and it lands in the approval diff where a wrong claim is
-    visible, which is what remove_keys exists to provide for a whole-file write.
-    Nothing else a patch can do drops a top-level key, so the guard still runs on
-    every patch and any removal it reports there is a splice bug rather than a
-    resend that forgot a key.
+    exactly what goes and lands in the approval diff, which is what remove_keys
+    provides for a whole-file write. Nothing else a patch does drops a top-level
+    key, so the guard still runs on every patch and any removal it reports is a
+    splice bug.
 
-    A LIST INDEX declares nothing, and needs to declare nothing: the removal
-    guard is defined on top-level mapping keys, so removing an entry from a
-    list-shaped file never reaches it. What protects that case is _verify, which
-    proves every entry the patch did not address survived the splice.
+    A LIST INDEX declares nothing and needs to: the guard covers top-level mapping
+    keys, so removing a list entry never reaches it. What protects that case is
+    yaml_patch._verify, which proves every entry the patch did not address
+    survived the splice.
     """
     if op != "remove":
         return []
@@ -1071,20 +1017,21 @@ def _prepare_yaml_patch(
 ) -> yaml_patch.PatchResult | tuple[dict, str, str]:
     """Build the patched file text, or an error tuple refusing it.
 
-    Runs pre-gate (rule 29) AND again at apply time against what is on disk, for
-    the same reason the two whole-file checks below it do: the addressed key can
-    appear, move, or change shape while an approval waits, and a patch aimed at a
-    line span is more sensitive to that than a whole-file replace is.
+    Validates pre-gate, after the capability-deny check, so an invalid request never
+    becomes a pending approval. Runs again at apply time against what is on disk:
+    the addressed key can appear, move or change shape while an approval waits,
+    and a patch aimed at a line span is more sensitive to that than a whole-file
+    replace.
     """
     op = _yaml_patch_op(args)
     try:
         value = yaml_patch.parse_value(args.get("content")) if op in {"set", "append"} else None
     except yaml_patch.PatchError as err:
         return _tool_error(str(err)), "invalid_request", tool_name
-    # Rule 32. A configuration.yaml read is not itself lossy, so the sentinel can
-    # only arrive in a value the caller carried across from a read that IS (a
-    # dashboard layout, a service response), which is exactly the mistake that
-    # would persist the placeholder as configuration.
+    # A redacted placeholder is never written back as configuration. A
+    # configuration.yaml read is not itself lossy, so the sentinel can only arrive
+    # in a value the caller carried across from a read that IS (a dashboard layout,
+    # a service response).
     offender = redaction_sentinel_path(value)
     if offender is not None:
         where = ".".join(str(segment) for segment in offender) or "the top level"
@@ -1117,15 +1064,12 @@ async def _tool_patch_yaml_config(
     args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
-    """MCP tool: change ONE key inside configuration.yaml (Confirm-gated).
+    """MCP tool: change ONE key inside a YAML configuration file (Confirm-gated).
 
-    The counterpart to patch_dashboard, and it exists for the reading half of the
-    same problem rather than the writing half. set_yaml_config replaces the whole
-    file, so a five-line recorder fix arrives at an operator as an approval diff
-    covering every line of their configuration.yaml, and the one thing an approver
-    must be able to do is see what changed. Addressing a key means the diff is the
-    key, and the untouched bytes (comments, ordering, spacing) are never resent,
-    so they cannot be lost on the way through either.
+    The counterpart to patch_dashboard. set_yaml_config replaces the whole file, so
+    a small fix reaches an approver as a diff of every line; addressing a key makes
+    the diff the key, and the untouched bytes (comments, ordering, spacing) are
+    never resent, so they cannot be lost either.
     """
     tool = "patch_yaml_config"
     if effective_cap(token, "cap_yaml_edit") == CAP_DENY:
@@ -1180,9 +1124,9 @@ async def _execute_patch_yaml_config(
     except yaml_patch.PatchError as err:
         return _tool_error(str(err)), "invalid_request", tool
     # Read, patch, CAS and write are one critical section, sharing the whole-file
-    # writer's lock: the patch is computed from the text read a few statements
-    # earlier, so an interleaved second writer would both lose an edit and leave
-    # this splice aimed at line numbers that no longer mean anything.
+    # writer's lock: the patch is computed from the text read just before, so an
+    # interleaved second writer would both lose an edit and leave this splice
+    # aimed at stale line numbers.
     async with _get_yaml_file_lock(hass, rel):
         # Same approval-window reasoning as set_yaml_config's re-check.
         if rel != _CONFIG_YAML:
@@ -1237,9 +1181,9 @@ async def _execute_patch_yaml_config(
             "op": op,
             "bytes_written": len(content.encode("utf-8")),
             "recovery_id": recovery_receipt.get("recovery_id"),
-            # Structural like patch_dashboard's card ops rather than a blind
-            # replace, so the resulting hash is safe to hand back and further
-            # patches can be chained without another read.
+            # Structural like patch_dashboard's card ops, not a blind replace, so
+            # the hash is safe to hand back and patches can be chained without
+            # another read.
             "content_hash": content_hash(content),
             "note": "Run check_ha_config and restart Home Assistant to apply.",
         })),
@@ -1248,8 +1192,11 @@ async def _execute_patch_yaml_config(
 
 
 def _read_capped_if_file(path: str) -> str | None:
-    """isfile-guarded _read_text_capped for diff builders. Returns None when the
-    file is missing, too large, or unreadable. Safe to run in an executor job."""
+    """isfile-guarded _read_text_capped for diff builders.
+
+    Returns None when the file is missing, too large, or unreadable. Safe to run
+    in an executor job.
+    """
     try:
         if os.path.isfile(path):
             return _read_text_capped(path)

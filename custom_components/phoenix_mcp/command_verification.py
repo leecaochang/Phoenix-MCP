@@ -83,7 +83,10 @@ def _number(value: Any, maximum: float) -> TypeGuard[int | float]:
 
 
 async def async_verify_command_state(hass: Any, data: Any, token: Any, plan: dict) -> str:
-    """Return a scoped observation, never resend, poll a device, or clear recovery."""
+    """Return "matched" or "unconfirmed" from scoped state reads.
+
+    Never resends, polls a device, or clears recovery.
+    """
     from .command_execution import _target_fingerprint
 
     proposal = plan.get("proposal", {})

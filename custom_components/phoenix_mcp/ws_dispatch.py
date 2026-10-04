@@ -1,21 +1,20 @@
 """In-process dispatch of Home Assistant WebSocket API commands.
 
-Some HA capabilities (notably helper CRUD: input_boolean/create, etc.) are only
-exposed through the WebSocket command API. There is no public host-side function
-and the underlying storage collections are not reachable. This module invokes
-HA's already-registered WS command handlers directly, in-process, with no socket
-and no long-lived access token: it looks up the handler in
-``hass.data["websocket_api"]``, validates the message against the registered
-schema, and runs the handler against a synthetic ``ActiveConnection`` that
-captures the result instead of writing to a socket.
+Some HA capabilities (notably helper CRUD such as input_boolean/create) are only
+exposed through the WebSocket command API: there is no public host-side function
+and the storage collections are not reachable. This module invokes HA's
+already-registered WS command handlers directly, with no socket and no long-lived
+access token: it looks up the handler in ``hass.data["websocket_api"]``,
+validates the message against the registered schema, and runs the handler against
+a synthetic ``ActiveConnection`` that captures the result instead of writing to a
+socket.
 
 This is the one place that leans on HA internals (`ActiveConnection`, the
-`async_response` result flow). It is deliberately isolated here, with a version
-shim and tests, so an HA change breaks this module loudly rather than the
-callers. The create/update/delete commands are `@require_admin`, so dispatch
-runs under a real admin user resolved from `hass.auth`; Phoenix MCP's own capability
-gate (e.g. cap_helper_write + Confirm + audit) decides whether a call runs at
-all, the same way create_automation performs a privileged file write under a cap.
+`async_response` result flow), isolated here with a startup compatibility probe
+so an HA change breaks this module loudly rather than its callers. The
+create/update/delete commands are `@require_admin`, so dispatch runs under a real
+admin user resolved from `hass.auth`; Phoenix MCP's own capability gate (e.g.
+cap_helper_write + Confirm + audit) decides whether a call runs at all.
 """
 
 from __future__ import annotations
@@ -39,11 +38,10 @@ DEFAULT_TIMEOUT = 10.0
 # The only WS commands Phoenix MCP is permitted to dispatch in-process. async_ws_command
 # refuses anything outside this set, so a future caller cannot turn user input
 # into an arbitrary privileged command run as admin. Adding a command here is a
-# deliberate act. Keep in sync with the callers in mcp_view.py (helper CRUD +
-# list, backup read/create, lovelace dashboard CRUD), tools/discovery.py
-# (loaded reference graph), and radio.py (the two ZHA reads). restore_backup is
-# deliberately absent (too destructive). The helper
-# "list" read is used to capture the pre-change config for version history.
+# deliberate act. Keep in sync with the command strings the in-tree callers pass
+# (helper, lovelace, blueprint, energy and discovery tools, mcp_view, logger_control,
+# radio.py). restore_backup is deliberately absent (too destructive). The helper
+# "list" read captures the pre-change config for version history.
 # Most ZHA write-side commands (zha/devices/permit, zha/devices/reconfigure,
 # zha/topology/update) are deliberately absent: their handlers enable
 # process-wide ZHA debug logging and/or park cleanup callbacks in
@@ -90,29 +88,26 @@ ALLOWED_WS_COMMANDS: frozenset[str] = frozenset(
         # ABSENT: it fetches an operator-unseen URL from inside HA, which is an
         # SSRF primitive with LAN and supervisor reach. Callers pass literal YAML.
         "blueprint/save", "blueprint/delete",
-        # Energy dashboard preferences, READ ONLY. This is the only route to the
+        # Energy dashboard preferences. energy/get_prefs is the only route to the
         # mapping between a statistic and its Energy role (grid / solar / battery /
         # gas / water / individual device): it lives in .storage/energy, which no
         # filesystem tool can reach (FILESYSTEM_ALLOWED_DIRS is www/themes/
         # custom_templates), and no state or registry read exposes it. Without it a
         # caller removing an integration cannot see that it is about to orphan an
-        # Energy source, because nothing else in HA records that dependency.
+        # Energy source.
         # energy/save_prefs is @require_admin and each of its three top-level keys
         # is a FULL REPLACE: sending "device_consumption" with a partial list
-        # silently deletes every other device the operator configured. That is why
-        # NOTHING here composes a payload from what an agent sent. tools/energy.py
-        # owns the only caller: it re-reads the current preferences UNREDACTED,
-        # applies one addressed mutation, verifies the result differs from the
-        # original in exactly the intended way, and sends ONLY the top-level keys
-        # that actually changed (HA's EnergyManager.async_update copies through any
-        # key the update omits, so an untouched key is never at risk).
-        # energy/validate stays absent: it validates whatever is already persisted
-        # rather than a submitted payload, so it cannot pre-flight a write.
+        # silently deletes every other device the operator configured. So NOTHING
+        # here composes a payload from what an agent sent. tools/energy.py owns the
+        # only caller: it re-reads the current preferences UNREDACTED, applies one
+        # addressed mutation, verifies the result differs from the original in
+        # exactly the intended way, and sends ONLY the top-level keys that changed
+        # (HA's EnergyManager.async_update copies through any key the update omits).
+        # The one exception is an admin version restore, which reproduces a snapshot.
         # energy/validate is a READ despite the name: it validates what is already
-        # persisted, not a submitted payload, so it cannot pre-flight a write. What
-        # it can do is answer "is the Energy dashboard actually working", naming
-        # entries whose entity no longer exists or that record no statistics, which
-        # is the failure the operator otherwise only meets as a blank graph.
+        # persisted, not a submitted payload, so it cannot pre-flight a write. It
+        # answers "is the Energy dashboard actually working", naming entries whose
+        # entity no longer exists or that record no statistics.
         # energy/solar_forecast returns production forecasts for the config entries
         # a solar source names, and {} when none does.
         "energy/get_prefs", "energy/save_prefs", "energy/validate", "energy/solar_forecast",
@@ -129,9 +124,9 @@ class WsCommandNotDispatchedError(WsDispatchError):
 
 
 class WsDashboardNotFoundError(WsCommandNotDispatchedError):
-    """Raised when a named Lovelace dashboard does not exist.
+    """A named Lovelace dashboard does not exist.
 
-    Split out from the generic error so callers can tell "this dashboard is not
+    Distinct from the generic error so callers can tell "this dashboard is not
     there" (a legitimate absence, which the CAS paths treat as before=None) from
     "lovelace could not be read" (a failure that must surface, not be mistaken for
     absence and silently overwritten).
@@ -148,10 +143,9 @@ class _CapturingConnection(ActiveConnection):
     """
 
     def __init__(self, hass: HomeAssistant, user: Any) -> None:
-        # Build the constructor kwargs against the live ActiveConnection
-        # signature and pass only what it accepts, so Phoenix MCP works across the HA
-        # versions it supports: parameters have been added over time (e.g.
-        # `remote` in HA 2026.6). Read names from the code object, never
+        # Pass only the constructor kwargs the live ActiveConnection accepts, so
+        # this works across supported HA versions (parameters are added over time,
+        # e.g. `remote` in HA 2026.6). Read names from the code object, never
         # inspect.signature, which on Python 3.14 evaluates ActiveConnection's
         # TYPE_CHECKING-only annotations and raises NameError.
         available: dict[str, Any] = {
@@ -252,10 +246,10 @@ async def async_ws_command(
 
     # Everything from here leans on HA internals: ActiveConnection construction,
     # the require_admin/async_response decorators, and the handler delivering its
-    # outcome through the connection. Wrap any unexpected failure (a changed
+    # outcome through the connection. Any unexpected failure (a changed
     # ActiveConnection signature, a handler-side error surfaced via the result
-    # future, etc.) as WsDispatchError so callers always get a clean tool error
-    # instead of a raw HA exception if HA changes underneath us.
+    # future) is wrapped as WsDispatchError so callers get a clean tool error
+    # instead of a raw HA exception.
     try:
         connection = _CapturingConnection(hass, user)
         # require_admin runs synchronously (raises if not admin); async_response
@@ -271,9 +265,8 @@ async def async_ws_command(
 
 
 # The ActiveConnection.__init__ params _CapturingConnection knows how to supply.
-# Must stay in sync with the `available` dict in _CapturingConnection.__init__.
-# HA adds params over time (e.g. `remote` in 2026.6); construction supplies the
-# intersection with the live signature, so old and new HA both work.
+# Must stay in sync with the `available` dict in _CapturingConnection.__init__;
+# construction supplies the intersection with the live signature.
 _SUPPLIED_CONNECTION_PARAMS = frozenset(
     {"logger", "hass", "send_message", "user", "refresh_token", "remote"}
 )
@@ -392,7 +385,7 @@ def _lovelace_dashboard(hass: HomeAssistant, url_path: str | None) -> Any:
     dashboard (YAML mode) then the storage-mode default keyed None.
 
     None means ONLY that no dashboard is registered under that url_path. Lovelace
-    being absent raises instead: returning None for both made an unreadable
+    being absent raises instead: returning None for both would make an unreadable
     lovelace look like a missing dashboard, and the write paths treat a missing
     dashboard as "nothing to preserve".
     """
@@ -439,9 +432,10 @@ async def async_save_lovelace_config(
 ) -> None:
     """Save a dashboard's view/card config. Storage-mode dashboards only.
 
-    Raises WsDashboardNotFoundError for an unknown dashboard and WsDispatchError for
-    a YAML-mode dashboard (file-backed, cannot be written) or a failed save, rather
-    than HA's opaque 'Not supported'.
+    Raises WsDashboardNotFoundError for an unknown dashboard, and WsDispatchError
+    (WsCommandNotDispatchedError for a file-backed YAML-mode dashboard) when the
+    save is refused or fails, rather than HA's opaque 'Not supported'. Current
+    authority failures propagate unchanged before dispatch.
     """
     config = _lovelace_dashboard(hass, url_path)
     if config is None:
@@ -451,8 +445,8 @@ async def async_save_lovelace_config(
         raise WsCommandNotDispatchedError(
             "only storage-mode dashboards can be written; this dashboard is YAML-mode"
         )
+    check_request_authority()
     try:
-        check_request_authority()
         await config.async_save(config_data)
     except Exception as exc:  # noqa: BLE001
         raise WsDispatchError(f"failed to save dashboard config: {exc}") from exc
@@ -478,7 +472,7 @@ async def async_zha_reconfigure_device(hass: HomeAssistant, ieee: str) -> None:
     (5-60s+, longer for sleepy battery devices); there is no completion
     signal to await. Raises WsDispatchError when ZHA is unavailable or the
     device is not on the network. HA-coupling point: get_zha_gateway and the
-    gateway API postdate the zha-lib extraction (~HA 2024.8); on older HA this
+    gateway API come from the zha-lib extraction (~HA 2024.8); on older HA this
     degrades to a clean per-call error.
     """
     try:

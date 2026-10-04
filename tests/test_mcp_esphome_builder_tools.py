@@ -1,8 +1,8 @@
-"""Tests for the ESPHome Device Builder read tools (validate, boards, components, automations).
+"""ESPHome Device Builder read tools (validate, boards, components, automations).
 
-The WebSocket layer has its own suite; these tests fake async_builder_command at
-the seam so they can concentrate on what this layer owns: capability gating, the
-path jail, entity scoping, and credential scrubbing.
+async_builder_command is faked at the seam, so these tests concentrate on what
+this layer owns: capability gating, the path jail, entity scoping, and credential
+scrubbing.
 """
 
 from __future__ import annotations
@@ -404,9 +404,9 @@ class TestNoSecretsAnywhere:
 class TestFullStack:
     """One test with nothing between the tool and the wire.
 
-    Every other test here stubs async_builder_command, so the seam between this layer
-    and the WebSocket client is never exercised: a mismatch in how the result is
-    unpacked would pass both suites while failing live.
+    Every other test stubs async_builder_command, so only this one exercises the
+    seam with the WebSocket client: a mismatch in how the result is unpacked would
+    pass the stubbed tests and fail in production.
     """
 
     async def test_validate_round_trips_through_a_real_websocket(

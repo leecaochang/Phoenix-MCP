@@ -1,9 +1,9 @@
-"""Tests for the MESA confirm-to-approval adapter.
+"""MESA confirm-to-approval adapter (async_apply_mesa_to_call).
 
-Covers async_apply_mesa_to_call decision routing (allow/deny/pending), the saved
-approval record shape (sentinel cap, non-dispatchable executor, explicit entity
-list), confirm-approved re-execution folding, and the admin approve sentinel
-skip (the MESA cap must not be auto-rejected by effective_cap).
+Covers decision routing (allow/deny/pending), the saved approval record shape
+(sentinel cap, non-dispatchable executor, explicit entity list), confirm-approved
+re-execution folding, and the admin approve sentinel skip (the MESA cap must not be
+auto-rejected by effective_cap).
 """
 
 from __future__ import annotations
@@ -215,13 +215,13 @@ async def test_missing_runtime_refuses_when_mesa_is_configured(hass: HomeAssista
 async def test_admin_approval_satisfies_mesa_confirm_in_one_step(hass: HomeAssistant):
     """Approving a capability-gated call must not queue a second MESA approval.
 
-    An action gated by BOTH a confirm-mode capability and a MESA confirm-mode
-    entity would otherwise need two sequential admin approvals: approving the
-    capability gate re-runs the call, which queues a separate MESA approval for
-    the exact action the admin just reviewed. The admin-approved re-execution
-    (async_execute_approved_tool) runs the MESA gate under confirm-approved
-    semantics, so one approval completes the action; the same call outside that
-    path still pends (the context flag must reset).
+    An action gated by BOTH a confirm-mode capability and a MESA confirm-mode entity
+    would otherwise need two sequential admin approvals: re-running the call after
+    the first queues a separate MESA approval for the action the admin just
+    reviewed. The admin-approved re-execution (async_execute_approved_tool) runs the
+    MESA gate under confirm-approved semantics, so one approval completes the
+    action; the same call outside that path still pends (the context flag must
+    reset).
     """
     from homeassistant.helpers import entity_registry as er
     from pytest_homeassistant_custom_component.common import async_mock_service
@@ -266,10 +266,9 @@ async def test_admin_approval_satisfies_mesa_confirm_in_one_step(hass: HomeAssis
 async def test_gate_diff_marks_mesa_confirm_involvement(hass: HomeAssistant):
     """The capability-gate approval diff must say MESA is part of the approval.
 
-    One approval now satisfies both gates, so the record the admin reviews (and
-    History keeps) is the only place MESA involvement can be seen: the summary
-    gains a permanent marker and the preview carries the mesa block the panel
-    already renders.
+    One approval satisfies both gates, so the record the admin reviews (and History
+    keeps) is the only place MESA involvement is visible: the summary carries a
+    permanent marker and the preview carries the mesa block the panel renders.
     """
     from homeassistant.helpers import entity_registry as er
 

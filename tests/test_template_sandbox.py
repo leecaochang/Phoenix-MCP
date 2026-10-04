@@ -1,7 +1,7 @@
-"""Regression tests for the token template sandbox.
+"""The token template sandbox exposes only permission-filtered entity state.
 
-These verify that render_template_for_token() exposes only permission-filtered
-entity state, including state helpers called as Jinja2 filters.
+render_template_for_token() must not leak state through helper functions, Jinja2
+filters or enumeration helpers.
 """
 
 from __future__ import annotations
@@ -93,18 +93,16 @@ def test_state_helpers_as_filters_do_not_leak(two_states, template):
     ],
 )
 def test_enumeration_helpers_blocked(two_states, template):
-    """Enumeration helpers either return empty (blocklist stubs) or raise; in no
-    case do they reveal sensor.secret."""
+    """Enumeration helpers return empty (blocklist stubs) or raise; none reveals sensor.secret."""
     token = _scoped_token()
-    # Control render first: prove the sandbox renderer is actually functional in
-    # this code path, so a regression that breaks rendering wholesale fails loudly
-    # here instead of being silently swallowed as "did not leak".
+    # Control render first: shows the sandbox renderer works in this code path, so
+    # a wholesale rendering failure fails loudly instead of passing as "did not leak".
     assert render_template_for_token("{{ states('sensor.allowed') }}", token, two_states) == "42"
     try:
         out = render_template_for_token(template, token, two_states)
     except Exception as exc:
-        # A controlled block (raise) is acceptable, but the leak guard still applies
-        # to the exception text; we never blindly treat "raised" as a pass.
+        # A controlled block (raise) is acceptable, but the exception text must not
+        # leak either.
         assert "sensor.secret" not in str(exc) and "topsecret" not in str(exc)
         return
     assert "sensor.secret" not in out
@@ -112,8 +110,7 @@ def test_enumeration_helpers_blocked(two_states, template):
 
 
 def test_time_helpers_available(two_states):
-    """now()/utcnow()/today_at() must work even though the hass-less environment
-    does not register them by default."""
+    """now()/utcnow()/today_at() work although the hass-less environment omits them by default."""
     token = _scoped_token()
     out = render_template_for_token("{{ now().year }}", token, two_states)
     assert int(out) >= 2024
@@ -130,8 +127,10 @@ def test_safe_math_filters_available(two_states):
 
 
 def test_sandbox_audit_reports_no_unrecognized_names(caplog):
-    """The runtime audit must not warn against the current HA version: every name
-    in the render environment is either blocked, overridden, or known-safe."""
+    """The runtime audit emits no warning for the installed HA version.
+
+    Every name in the render environment is blocked, overridden, or known-safe.
+    """
     import logging
 
     from custom_components.phoenix_mcp import _audit_template_sandbox

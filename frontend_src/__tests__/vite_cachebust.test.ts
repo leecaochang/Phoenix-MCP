@@ -1,16 +1,16 @@
 /** The lazy-chunk cache-bust must survive a bundler upgrade.
  *
- * chunkQueryCacheBust() rewrites dynamic imports of emitted chunks to carry
+ * chunkQueryCacheBust() rewrites imports of emitted chunks to carry
  * ?v=<content-hash>. The panel's static route is registered with
  * cache_headers=False, so browsers fall back to heuristic caching of the bare
  * chunk URL; panel.py's own mtime cache-bust covers ENTRY files only, never
  * the chunks they import.
  *
  * The rewrite is a string replacement over emitted code, so it depends on how
- * the bundler quotes the import specifier -- and that changed across a major
- * version (Vite 5 emitted "./chunk.js", Vite 8 emits `./chunk.js`). It fails
- * OPEN: a missed quote style drops the cache-bust with a successful build and
- * no warning, which is exactly how it regressed once. These assert each style.
+ * the bundler quotes the import specifier, which differs across Vite major
+ * versions (double quotes or a template literal). It fails OPEN: a missed
+ * quote style drops the cache-bust with a successful build and no warning, so
+ * these assert each style.
  */
 import { describe, it, expect } from "vitest";
 import { chunkQueryCacheBust } from "../../vite.cachebust";

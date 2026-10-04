@@ -1,9 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// The shell (the <phoenix-mcp-panel> custom element) is what HA actually instantiates;
-// existing tests render isolated child views instead. Here we mount the real
-// custom element and assert its lifecycle/theme/hass-setter behavior, while
-// stubbing the React root so we exercise the SHELL, not the full PhoenixApp tree.
+// The shell (the <phoenix-mcp-panel> custom element) is what HA actually
+// instantiates. This mounts the real custom element and asserts its lifecycle,
+// theme, and hass-setter behavior, with the React root stubbed so it exercises
+// the SHELL, not the full PhoenixApp tree.
 
 vi.mock("../phoenix-mcp-panel.css?inline", () => ({ default: "" }));
 

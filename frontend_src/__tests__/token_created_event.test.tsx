@@ -3,10 +3,9 @@
  * Every host caches the token list: the panel shell gates its header "Agent
  * Chat" button on a non-empty list and hands the panel-hosted chat window its
  * `tokens` prop, and the floating window (a separate bundle) refetches only on
- * this event. The wizard originally created a token without dispatching, so a
- * first token stayed invisible to both surfaces until a page reload, and the
- * chat window's prune-dead-selection effect then discarded the just-created
- * token id. Revoke already dispatched; create did not.
+ * `phx-tokens-changed`. Without the event a first token stays invisible to both
+ * surfaces until a page reload, and the chat window's prune-dead-selection
+ * effect discards the just-created token id.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, fireEvent, screen, waitFor } from "@testing-library/react";

@@ -128,9 +128,9 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
   // Whether the global floating-window bootstrap (inject/agentchat.ts) has
   // installed itself. Held as STATE, not read live off window.__phxAgentChat in
   // render: the bootstrap becomes ready asynchronously (it polls for hass), and
-  // a live read only got re-evaluated on unrelated re-renders, silently
-  // unmounting an open fallback window at surprising times (e.g. a theme
-  // toggle). The bootstrap dispatches phx-agentchat-ready when it installs.
+  // a live read is only re-evaluated on unrelated re-renders, which would
+  // unmount an open fallback window at arbitrary moments (e.g. a theme toggle).
+  // The bootstrap dispatches phx-agentchat-ready when it installs.
   const [globalChatReady, setGlobalChatReady] = useState<boolean>(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     () => !!(window as any).__phxAgentChat?.ready,
@@ -162,7 +162,7 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
         // A notification deep-link is for a pending approval, so show Pending
         // immediately: otherwise a persisted History sub-tab flashes until the
         // fetch resolves (ApprovalsView corrects to History if it is already
-        // resolved). Fixes "the link took me to History".
+        // resolved).
         setApprovalsTab("pending");
       }
     }
@@ -229,19 +229,17 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
     refresh();
     // Opening from a token's connect flow binds the window to that token;
     // opening from the header restores the last-used token.
-    // Routed through a ref, not the closure: this effect mounts once, and
-    // openAgentCli depends on `settings`, which is still null on that first
-    // render. Calling the captured copy would decide routing (kill switch,
-    // global-vs-panel window) against settings that had not loaded yet, and
-    // always fall through to the panel-only window.
+    // Routed through a ref, not the closure: this effect mounts once, when
+    // `settings` is still null, so a captured openAgentCli would decide routing
+    // (kill switch, global-vs-panel window) before settings loaded and always
+    // fall through to the panel-only window.
     const onOpen = (e: Event) => {
       const detail = (e as CustomEvent).detail as { tokenId?: string } | undefined;
       openAgentCliRef.current(detail?.tokenId);
     };
-    // A revoke elsewhere (Token Detail) should drop the token from the panel
-    // fallback window's own tokens prop too, same as refreshTokens() already
-    // does via goBack() when revoke happens through that path; listening here
-    // covers it independent of navigation, matching the floating window.
+    // A token created or revoked elsewhere (wizard, Token Detail) must reach
+    // the panel fallback window's own tokens prop independent of navigation,
+    // matching the floating window.
     const onTokensChanged = () => { void refreshTokens(); };
     window.addEventListener("phx-open-agentcli", onOpen);
     window.addEventListener("phx-agentcli-providers-changed", refresh);
@@ -762,14 +760,14 @@ class PhoenixPanelElement extends HTMLElement {
     try { localStorage.setItem("phx-theme", t); } catch { /* storage blocked: skip persistence */ }
     this._applyThemeClass();
     // The global Agent Chat window lives outside this element (document.body
-    // shadow host) and cannot see our class change; tell it to re-resolve.
+    // shadow host) and cannot see its class change; tell it to re-resolve.
     window.dispatchEvent(new CustomEvent("phx-theme-changed"));
     this._render();
   }
 
   private _render() {
-    // Strings arrive over the websocket, so hold the first paint until they do
-    // rather than flashing raw keys. Same shape as the existing hass guard.
+    // Strings arrive from the admin API after boot, so hold the first paint
+    // until they do rather than flashing raw keys. Same shape as the hass guard.
     if (this._root && this._hass && isI18nReady()) {
       this._root.render(
         <PhoenixApp

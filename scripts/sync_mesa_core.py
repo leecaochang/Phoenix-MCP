@@ -1,29 +1,22 @@
 #!/usr/bin/env python3
 """Vendor a copy of mesa-core into custom_components/phoenix_mcp/mesa_core/.
 
-mesa-core is developed as a separate, read-only project. Phoenix MCP ships HACS users a
-vendored copy so the integration remains self-contained rather than resolving a
-separate mesa-core package at install time. The source uses absolute imports rooted
-at ``mesa_core``; vendoring under
-``custom_components.phoenix_mcp`` requires rewriting those to the vendored path so the
-copy is hermetic and never collides with a future ``pip install mesa-core`` or
-another integration's copy.
+mesa-core is a separate, read-only project; Phoenix MCP ships a vendored copy so
+a HACS install is self-contained. Its absolute ``mesa_core`` imports are rewritten
+to ``custom_components.phoenix_mcp.mesa_core`` so the copy is hermetic and never
+collides with an installed mesa-core or another integration's copy.
 
-This script reads the source tree only. It never modifies mesa-core. Re-run it
-to re-sync after the upstream library changes; commit the regenerated
-``mesa_core/`` directory.
+The copy comes from the tracked files at the clean source checkout's HEAD;
+mesa-core itself is never modified. Commit the regenerated tree with its manifest.
 
 Usage:
     python scripts/sync_mesa_core.py [SOURCE_DIR]   re-vendor from source
     python scripts/sync_mesa_core.py --check        verify, writing nothing
 
-SOURCE_DIR defaults to the ``mesa-core`` symlink at the repository root.
-
-``--check`` needs no source tree at all: it hashes the vendored files against
-``tests/contract/mesa_core_vendor.json``, which IS tracked, so a clean checkout
-(or CI, which has no mesa-core symlink) can tell a re-sync from a hand-edit. The
-copy is ordinary Python that imports and passes tests whatever it says, so
-nothing else would notice an edit to it.
+SOURCE_DIR defaults to the ``mesa_core`` package inside the ``mesa-core`` symlink
+at the repository root. ``--check`` needs no source tree: it hashes the vendored
+files against the tracked ``tests/contract/mesa_core_vendor.json``, so a clean
+checkout can tell a re-sync from a hand-edit, which nothing else would notice.
 """
 
 from __future__ import annotations
@@ -46,12 +39,10 @@ MANIFEST = REPO_ROOT / "tests" / "contract" / "mesa_core_vendor.json"
 
 VENDOR_PREFIX = "custom_components.phoenix_mcp.mesa_core"
 
-# Never copied into the vendored tree and never hashed. These are the operating
-# system's and the editor's, not the library's: they exist only in a developer's
-# working copy, they are gitignored, and a CI checkout on Linux does not have
-# them. Copying them shipped junk; hashing them made the manifest describe a tree
-# no clean checkout can reproduce, so the guard failed everywhere except the
-# machine that generated it.
+# Never copied into the vendored tree and never hashed. These belong to the OS,
+# editor and tooling, not the library: they exist only in a developer's working
+# copy and are gitignored, so copying them ships junk and hashing them makes the
+# manifest describe a tree no clean checkout can reproduce.
 _EXCLUDED_DIRS = frozenset({"__pycache__", ".git", ".pytest_cache", ".mypy_cache", ".ruff_cache"})
 _EXCLUDED_NAMES = frozenset({".DS_Store", "Thumbs.db", "desktop.ini", ".gitkeep"})
 # The provenance marker itself: it records a sync DATE and a local absolute path,
@@ -67,8 +58,8 @@ def _is_excluded(path: Path, root: Path) -> bool:
     return path.name in _EXCLUDED_NAMES or path.name.endswith((".pyc", ".pyo", ".swp"))
 
 # All internal imports in mesa-core take the form ``from mesa_core[.x] import``.
-# A bare ``import mesa_core`` would bind the wrong name after rewriting, so we
-# detect and refuse it rather than silently produce broken code.
+# A bare ``import mesa_core`` would bind the wrong name after rewriting, so it is
+# refused rather than silently rewritten into broken code.
 _FROM_RE = re.compile(r"\bfrom mesa_core\b")
 _BARE_IMPORT_RE = re.compile(r"\bimport mesa_core\b(?!\s*\.)")
 
@@ -218,16 +209,10 @@ def main() -> int:
 def _tree_digest() -> tuple[str, dict[str, str]]:
     """Hash every SHIPPED vendored file, and the whole tree.
 
-    What it skips is the load-bearing part, and getting it wrong made the guard
-    useless in the one place it had to work. It must hash exactly the files a
-    clean checkout has:
-
-    - OS and editor metadata (.DS_Store and friends) is gitignored, so it exists
-      only in a developer's working copy. Hashing it made the manifest describe a
-      tree CI cannot reproduce, and the vendoring test then failed on Linux while
-      passing on the machine that generated it.
-    - _VENDORED.txt carries a sync DATE and a local absolute path, so hashing it
-      would change the digest on every re-run with no upstream change.
+    It must hash exactly the files a clean checkout has. Gitignored OS and editor
+    metadata is skipped, or the manifest would describe a tree no clean checkout
+    can reproduce; so is _VENDORED.txt, whose sync date and local path would
+    change the digest on every re-run with no upstream change.
     """
     per_file: dict[str, str] = {}
     for path in sorted(DEST.rglob("*")):
@@ -272,12 +257,9 @@ def _write_manifest(version: str, provenance: dict[str, str]) -> None:
 def check() -> int:
     """Report whether the vendored tree still matches its manifest. Writes nothing.
 
-    The reason this exists is narrower than a supply-chain check and worth being
-    precise about: mesa-core is a first-party project at a known read-only path,
-    so this is not authenticating an unknown upstream. It catches a HAND-EDIT of
-    the vendored copy, which the project forbids and which nothing else would
-    notice, since the copy is ordinary Python that imports and passes tests
-    whatever it says.
+    It catches a HAND-EDIT of the vendored copy, which the project forbids and
+    which nothing else would notice: the copy is ordinary Python that imports and
+    passes tests whatever it says. It does not authenticate an unknown upstream.
     """
     if not MANIFEST.exists():
         print(f"ERROR: {MANIFEST.relative_to(REPO_ROOT)} is missing; run the sync to create it.")

@@ -1,9 +1,10 @@
-"""Tests for the mesa-core audit bridge.
+"""The mesa-core audit bridge records only genuine blocks, attributed to the
+request.
 
-The property under test is narrow and easy to get vacuously right, so each test
-here is written to fail if the filter, the attribution, or the teardown is
-removed: an "it recorded something" assertion would pass against a bridge that
-recorded everything, which is the specific thing this must not do.
+The property is narrow and easy to get vacuously right, so each test fails if the
+filter, the attribution or the teardown is removed: an "it recorded something"
+assertion would pass against a bridge that recorded everything, which is what this
+must not do.
 """
 
 from __future__ import annotations
@@ -99,8 +100,8 @@ class TestFiltering:
         assert e.request_id == "req-1"
         assert e.token_id == "tok" and e.token_name == "Road test"
         assert e.client_ip == "10.0.0.5"
-        # The rule is the whole point of the row: "denied" alone is what the
-        # Audit tab already showed before this bridge existed.
+        # The rule is the whole point of the row: "denied" alone does not say which
+        # MESA rule fired.
         assert "control_mode:prohibited" in (e.payload or "")
 
     def test_a_privacy_denial_is_recorded_too(self, bridge_data):
@@ -125,14 +126,12 @@ class TestFiltering:
         assert data.audit.query() == []
 
     def test_an_event_outside_a_request_is_dropped(self, bridge_data, monkeypatch):
-        # A dry_run_service preview runs the same enforcer; a predicted block is
-        # not a block, and there is no request to attribute it to.
+        # A dry_run_service preview runs the same enforcer; a predicted block is not
+        # a block, and there is no request to attribute it to.
         #
-        # The handleError assertion is load-bearing, not decoration: deleting the
-        # ctx-is-None guard makes the handler dereference None and the class's
-        # own catch-all swallows it, so "nothing was recorded" holds either way
-        # and this test passed against the deliberately broken version until it
-        # also insisted the skip was CLEAN.
+        # The handleError assertion is load-bearing: without the ctx-is-None guard
+        # the handler dereferences None and the class's own catch-all swallows it,
+        # so "nothing was recorded" holds either way. The skip must also be CLEAN.
         data, _ = bridge_data
         errors: list[object] = []
         monkeypatch.setattr(logging.Handler, "handleError", lambda self, record: errors.append(record))
@@ -220,11 +219,11 @@ class TestLifecycle:
 class TestConfirmIsNotADenial:
     """A confirm entity Phoenix let through must not appear as a denial.
 
-    mesa-core labels it "blocked" because the enforcer runs with
-    interactive=False, but Phoenix reinterprets it host-side in BOTH
-    modes: advisory allows with a warning, enforced raises a pending approval
-    that gets its own record. Neither is a denial, and recording one made the
-    Audit tab list actions MESA had not stopped.
+    mesa-core labels it "blocked" because the enforcer runs with interactive=False,
+    but Phoenix reinterprets it host-side in BOTH modes: advisory allows with a
+    warning, enforced raises a pending approval that gets its own record. Neither is
+    a denial, and recording one would make the Audit tab list actions MESA had not
+    stopped.
     """
 
     @pytest.mark.asyncio
@@ -256,11 +255,10 @@ class TestConfirmIsNotADenial:
 
     @pytest.mark.asyncio
     async def test_only_the_real_block_is_recorded_in_a_mixed_call(self, hass: HomeAssistant):
-        """The live shape: many confirm entities, one genuine block.
+        """Many confirm entities and one genuine block file exactly one row.
 
-        This is the case that produced the defect. Six confirm timers and one
-        read_only one filed seven denial rows for one actual block, so the count
-        is the assertion that matters, not merely that the block appears.
+        The count is the assertion that matters, not merely that the block appears:
+        confirm entities must not be recorded as denials alongside the real block.
         """
         runtime = await async_setup_mesa(hass, "advisory")
         for i in range(6):
@@ -318,12 +316,11 @@ class TestConfirmIsNotADenial:
 class TestLoggerLevelCoupling:
     """An empty MESA audit log does not mean MESA blocked nothing.
 
-    mesa-core emits at INFO and the bridge deliberately never raises the
-    logger's level (that would override the operator's logging config and put a
-    line in home-assistant.log per event). The consequence is that raising the
-    default log level, a common way to quiet the log FILE, silences the security
-    audit trail too. Pinned here so the coupling is a known, tested property
-    rather than a surprise.
+    mesa-core emits at INFO and the bridge never raises the logger's level (that
+    would override the operator's logging config and write a line per event to the
+    HA log). Raising the default log level, a common way to quiet the log file,
+    therefore silences the security audit trail too. The coupling is pinned as a
+    known property.
     """
 
     @pytest.mark.asyncio
@@ -336,10 +333,10 @@ class TestLoggerLevelCoupling:
             default_origin=MetadataOrigin.USER,
         ))
         data = _Data(GlobalSettings(mesa_mode="enforced"), mesa=runtime)
-        # Order matters and is the whole test: quiet the logger FIRST, then
-        # attach. Attaching first would let the test's own setLevel overwrite a
-        # bridge that forces INFO, so the assertion below could never fail and
-        # the pin would be vacuous. (It was, until a mutation run said so.)
+        # Order matters and is the whole test: quiet the logger FIRST, then attach.
+        # Attaching first would let the test's own setLevel overwrite a bridge that
+        # forces INFO, so the assertion below could never fail and the pin would be
+        # vacuous.
         previous = audit_logger.level
         audit_logger.setLevel(logging.WARNING)
         bridge = attach_mesa_audit_bridge(data)

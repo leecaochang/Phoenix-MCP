@@ -25,7 +25,7 @@ def log_result_size(body: dict) -> int:
 
 
 def log_payload_budget(*, byte_limited: bool = False) -> dict:
-    """Describe the response budget independently of source retention coverage."""
+    """Describe the response size budget, separate from how much log history is retained."""
     return {
         "max_response_bytes": SYSTEM_LOG_MAX_RESPONSE_BYTES,
         "size_basis": "serialized_tool_result_json",
@@ -63,13 +63,21 @@ def compact_log_text(text: str, budget: int, *, traceback: bool = False) -> tupl
 
 
 def log_detail_ref(entry: dict, token: Any, *, phoenix_only: bool, bucket_id: str) -> str:
-    """Bind a reference to this token, namespace and complete scrubbed bucket."""
+    """Bind a reference to this token, namespace and complete scrubbed bucket.
+
+    An HMAC keyed by the token's hash, so a reference is not usable by another
+    token or after the bucket content changes.
+    """
     payload = json.dumps([phoenix_only, bucket_id, entry], sort_keys=True).encode("utf-8")
     return hmac.new(token.token_hash.encode(), payload, hashlib.sha256).hexdigest()
 
 
 def compact_log_entry(entry: dict, detail_ref: str | None, *, text_divisor: int = 1) -> dict:
-    """Preview retained variants and metadata without losing omission accounting."""
+    """Preview retained variants and metadata without losing omission accounting.
+
+    Retries with a halved text budget (up to an eighth) until the entry fits
+    SYSTEM_LOG_MAX_ENTRY_BYTES; raises ValueError if even that is too large.
+    """
     result = dict(entry)
     messages = entry["messages"]
     previews = [compact_log_text(text, SYSTEM_LOG_MAX_MESSAGE_BYTES // text_divisor)

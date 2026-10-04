@@ -107,7 +107,12 @@ async def _tool_restore_configuration(
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
-    """Return a restore receipt, then gate the bound Template restore once."""
+    """Restore a recovery record in two steps, dispatching on its snapshot type.
+
+    Without `snapshot_digest` and `target_fingerprint` it returns a receipt (both
+    values plus a diff). A call echoing both is gated through Phoenix approval; the
+    execute step then revalidates both against the live target before writing.
+    """
     tool = "restore_configuration"
     if all(effective_cap(token, cap) == "deny" for cap in (
         "cap_helper_write", "cap_energy_write", "cap_yaml_edit", "cap_filesystem",
@@ -327,7 +332,10 @@ async def _tool_restore_blueprint_configuration(
     args: dict, record: dict[str, Any], side: str, token, hass, data,
     request_id: str, client_ip: str | None,
 ) -> tuple[dict, str, str]:
-    """Preflight and approve one blueprint source restore under its dual gate."""
+    """Preflight one blueprint source restore under its dual gate.
+
+    The gate is cap_blueprint_write plus the blueprint domain's own write cap.
+    """
     from .blueprint import _blueprint_denied, _read_blueprint_source, _resolve_blueprint_path
 
     tool = "restore_configuration"
@@ -626,7 +634,11 @@ async def _tool_restore_energy_configuration(
 async def _execute_restore_configuration(
     args: dict, token, hass, data
 ) -> tuple[dict, str, str]:
-    """Revalidate the owner and snapshot, then use the qualified Template adapter."""
+    """Revalidate owner, snapshot digest and target fingerprint after approval.
+
+    Then run the adapter for the snapshot type (Energy, file, blueprint, dashboard
+    layout or registry, Template).
+    """
     tool = "restore_configuration"
     record = data.config_recovery.get(str(args.get("recovery_id") or ""))
     if not _may_restore_record(record, token):

@@ -1,20 +1,17 @@
-"""Tests for compare_entities: can one entity stand in for another.
+"""compare_entities: can one entity stand in for another.
 
-The tool exists because of four real substitution traps found while migrating a
-live instance from one integration to another, and each one has a test here
-named after it. Three shapes matter and they fail differently: an option set
-RENAMED between two integrations (preset_modes boost -> speed) breaks every
-automation naming the old value while both entities still look like climate
-entities; a range NARROWED (min_temp 7 -> 16) breaks only the calls outside the
-new bounds; and an attribute one side declares and the other does not
-(target_temp_step) silently changes how every value is rendered. The fourth,
-an attribute with no counterpart at all, is the missing_in_compare_to case.
+Four substitution traps fail differently, and each has a test named after it. An
+option set RENAMED between two integrations (preset_modes boost to speed) breaks
+every automation naming the old value while both entities still look alike; a
+range NARROWED (min_temp 7 to 16) breaks only the calls outside the new bounds;
+an attribute only one side declares (target_temp_step) silently changes how every
+value is rendered; and an attribute with no counterpart at all is the
+missing_in_compare_to case.
 
-The security-shaped tests are the two that matter most to keep: scrubbing runs
-BEFORE the diff, so a sensitive attribute cannot reappear as a difference
-between two entities, and a refusal names the tool rather than the entity, so
-comparing against an id the token cannot see never reveals which side was the
-problem.
+The security-shaped tests matter most: scrubbing runs BEFORE the diff, so a
+sensitive attribute cannot reappear as a difference between two entities, and a
+refusal names the tool rather than the entity, so comparing against an id the
+token cannot see never reveals which side was the problem.
 """
 
 from __future__ import annotations
@@ -75,7 +72,7 @@ class TestGating:
 
 
 class TestScopeRefusalsAreIndistinguishable:
-    """Rule 12: an out-of-scope entity and a nonexistent one answer identically."""
+    """An out-of-scope entity and a nonexistent one answer identically (no existence oracle)."""
 
     async def test_out_of_scope_and_nonexistent_match_byte_for_byte(self, hass):
         hass.states.async_set("climate.old", "cool", {})
@@ -132,9 +129,8 @@ class TestTheFourMigrationTraps:
         assert changed["max_temp"]["compare_value"] == 30.0
 
     async def test_attribute_only_the_replacement_declares(self, hass):
-        """Trap 3, the one a human caught and the agent did not: nothing about
-        target_temp_step looks wrong, it just makes every rendered value change
-        from 26.0 to 26."""
+        """Trap 3: nothing about target_temp_step looks wrong, it just makes every
+        rendered value change from 26.0 to 26."""
         hass.states.async_set("climate.old", "cool", {"temperature": 26.0})
         hass.states.async_set("climate.new", "cool", {"temperature": 26.0, "target_temp_step": 1.0})
         content, _, _ = await _compare(hass, _token())
@@ -185,9 +181,11 @@ class TestReportShape:
         assert body["compare_state"] == "cool"
 
     async def test_note_points_at_history_for_values_that_vary(self, hass):
-        """The washer trap was only resolvable by comparing histories across one
-        wash cycle. A snapshot tool that does not say so invites reading a clean
-        report as proof the two entities behave the same."""
+        """Attributes that vary over a running cycle can only be compared through history.
+
+        A snapshot tool that does not say so invites reading a clean report as
+        proof the two entities behave the same.
+        """
         hass.states.async_set("climate.old", "cool", {})
         hass.states.async_set("climate.new", "cool", {})
         assert "get_history" in _json((await _compare(hass, _token()))[0])["note"]
@@ -267,13 +265,12 @@ class TestValuesAreBounded:
 
 
 class TestAnOfflineEntityIsNotReportedAsAPoorReplacement:
-    """Live-found on the first smoke test against a real pair.
+    """An offline entity must not read as a replacement's limits.
 
-    An offline entity answers every read and simply publishes almost nothing, so
-    the comparison does not fail: it silently turns into a list of attributes the
-    other side has, which describes the OUTAGE and reads exactly like a
-    description of the replacement's limits. Five attributes the unit publishes
-    perfectly well when it is up were reported as missing from it.
+    An offline entity answers every read and publishes almost nothing, so the
+    comparison does not fail: it silently turns into a list of attributes the
+    other side has, which describes the OUTAGE but reads exactly like the
+    replacement's limits. The report therefore carries a warning.
     """
 
     async def test_an_unavailable_side_is_warned_about_by_name(self, hass):

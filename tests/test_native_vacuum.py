@@ -1,16 +1,15 @@
 """The three native vacuum tools.
 
-HassVacuumStart and HassVacuumReturnToBase are ordinary domain-locked action
-tools. HassVacuumCleanArea is not, and that is what most of this file is about:
-its `area` names the room to CLEAN and is passed to the service as
-cleaning_area_id, so feeding it to entity resolution the way every other native
-tool feeds `area` would both target the wrong entities and quietly widen the
-call. The test that pins `area` out of the resolver is the one worth keeping.
+HassVacuumStart and HassVacuumReturnToBase are ordinary domain-locked action tools.
+HassVacuumCleanArea is not: its `area` names the room to CLEAN and is passed to the
+service as cleaning_area_id, so feeding it to entity resolution the way every other
+native tool feeds `area` would both target the wrong entities and quietly widen the
+call.
 
 The feature filter is the other load-bearing piece. HA's vacuum intents set
-required_features, so a vacuum that cannot perform the operation is never
-targeted; without the mirror the service would be called anyway and the tool
-would report success for a vacuum that ignored it.
+required_features, so a vacuum that cannot perform the operation is never targeted;
+without the mirror the service would be called anyway and the tool would report
+success for a vacuum that ignored it.
 
 Patches target tools.native directly, never mcp_view's re-exported names: a
 monkeypatch on a re-export fails silently and leaves these assertions passing.
@@ -114,8 +113,8 @@ async def test_vacuum_action_pins_domain_and_filters_by_feature(handler, service
         await handler({"area": "Kitchen"}, _token(), hass)
 
     # An area-only call is pinned to vacuum and must not resolve every writable
-    # entity in that area. Wrong explicit domains are covered at the public
-    # dispatcher boundary in test_native_selectors.py.
+    # entity in that area. Wrong explicit domains are refused by the selector tests
+    # at the public dispatcher boundary.
     assert resolve.call_args.kwargs["domains"] == ["vacuum"]
     assert resolve.call_args.kwargs["area"] == "Kitchen"
     called_domain, called_service, service_data, entities = action.call_args.args[1:5]
@@ -148,12 +147,12 @@ async def test_clean_area_refuses_an_unmatched_area_without_saying_so():
 
 
 async def test_clean_area_passes_the_area_as_service_data_not_as_a_selector():
-    """The whole point of this tool's shape.
+    """`area` is service data, not an entity selector.
 
-    `area` must reach the service as cleaning_area_id and must NOT reach entity
+    It must reach the service as cleaning_area_id and must NOT reach entity
     resolution: passing it as a selector would target only vacuums registered to
-    that area (wrong: the vacuum lives elsewhere and drives there) and would drag
-    in whatever else the area holds.
+    that area (the vacuum may live elsewhere and drive there) and would drag in
+    whatever else the area holds.
     """
     hass = _hass_with_features({"vacuum.rosie": VACUUM_CLEAN_AREA_BIT})
     resolve = MagicMock(return_value=["vacuum.rosie"])

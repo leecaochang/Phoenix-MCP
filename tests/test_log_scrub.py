@@ -1,8 +1,10 @@
-"""Tests for log-text redaction used by the cap_log_read MCP tools.
+"""Log-text and diagnostics redaction behind the cap_log_read MCP tools.
 
 collect_log_entries routes every message and exception through _scrub_log_text,
-which removes Phoenix MCP tokens, JWTs/LLATs, and URL-embedded credentials so a token
-holding cap_log_read never receives another integration's secret verbatim.
+which removes Phoenix MCP tokens, JWTs/LLATs, and URL-embedded credentials so a
+token holding cap_log_read never receives another integration's secret verbatim.
+redact_secrets_in_text and redact_diagnostics apply the same discipline to source
+text and diagnostics payloads.
 """
 
 from __future__ import annotations
@@ -27,8 +29,8 @@ def test_scrubs_phx_token():
 def test_token_scrub_pattern_tracks_the_real_token_prefix():
     """The scrubber must match the prefix tokens are actually minted with.
 
-    This pair fails open: if the pattern drifts from TOKEN_PREFIX, live bearer
-    tokens flow through to a caller holding cap_log_read and nothing raises.
+    A drifted pattern fails open: live bearer tokens would flow through to a
+    caller holding cap_log_read and nothing raises.
     """
     minted = TOKEN_PREFIX + "b" * 64
     assert minted not in _scrub_log_text(f"Bearer {minted} rejected")

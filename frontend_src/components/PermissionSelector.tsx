@@ -24,11 +24,10 @@ if (typeof document !== "undefined") {
 }
 
 // Holds the nearest scrolling ancestor's scroll position steady for a few
-// frames. Belt-and-suspenders against whatever is nudging the page on tap
-// (mobile-only, not reproduced on desktop): blurring the button (below)
-// covers a focus-driven "scroll the focused element into view", this covers
-// anything else (a reflow, a browser scroll-anchoring heuristic) by simply
-// undoing any scroll delta that shows up in the next few animation frames.
+// frames, as a guard against the page jumping on tap (seen on mobile only).
+// Blurring the button (below) covers a focus-driven "scroll the focused
+// element into view"; this covers anything else (a reflow, browser
+// scroll anchoring) by undoing any scroll delta over the next few frames.
 function lockScroll(container: HTMLElement | null) {
   if (!container) return;
   const el = container;
@@ -74,9 +73,8 @@ export const PermissionSelector = React.memo(function PermissionSelector({ value
             onChange(newState);
             // Unconditional, and safe for keyboard users: this only runs on
             // the pointer path (a keyboard Enter/Space activation never
-            // fires onPointerDown), so it can't blur a real Tab-focused
-            // button. Belt-and-suspenders alongside lockScroll above for
-            // whatever is causing the mobile-only scroll on tap.
+            // fires onPointerDown), so it cannot blur a Tab-focused button.
+            // Works alongside lockScroll above against scroll on tap.
             e.currentTarget.blur();
           }}
           onClick={(e) => {

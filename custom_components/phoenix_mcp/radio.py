@@ -1,30 +1,21 @@
 """Radio network management: protocol/backend detection, projections, and ops.
 
-Phoenix MCP's radio tool surface (network, device, and group reads plus Zigbee
-writes) is protocol-generic at the tool layer and backend-specific here. v1
-covers one protocol, Zigbee, with two backends:
+The radio tools are protocol-generic at the tool layer and backend-specific
+here. Zigbee has two backends:
 
-- "z2m" (Zigbee2MQTT): driven over Z2M's MQTT request/response topics
-  (<base>/bridge/request/... answered on <base>/bridge/response/...) and
-  retained state topics (<base>/bridge/info, <base>/bridge/devices). The MQTT
-  access goes through two module-level seams (_mqtt_subscribe/_mqtt_publish)
-  so tests can fake the broker without paho-mqtt.
-- "zha": driven through ws_dispatch for the clean read, binding, and group
-  commands, plus the zha.permit / zha.remove admin services, the reconfigure
-  task starter, and a direct scoped zigpy topology scan (the HA websocket
-  topology command never returns a result). Every write or active scan has a
-  fixed shape and resolves its radio identifiers from registry-scoped objects.
+- "z2m" (Zigbee2MQTT): MQTT request/response topics (<base>/bridge/request/...
+  answered on <base>/bridge/response/...) and retained state topics
+  (<base>/bridge/info, <base>/bridge/devices), reached only through the
+  _mqtt_subscribe/_mqtt_publish seams.
+- "zha": ws_dispatch for reads, bindings and groups, the zha.permit/zha.remove
+  services, the reconfigure task starter, and a direct scoped zigpy topology
+  scan (the HA websocket topology command never returns a result). Every write
+  or active scan has a fixed shape and resolves radio identifiers from
+  registry-scoped objects.
 
-Every read is an ALLOWLIST projection, never a blocklist strip: both backends'
-raw payloads can carry network key material (zigpy NetworkBackup keys; Z2M
-bridge/info embeds the full Z2M config), and an allowlist means a future field
-added upstream can never leak by default. Matter/Thread/Z-Wave land here later
-as new protocol branches; the tool schemas in mcp_view.py do not change.
-
-HA-coupling points (re-verify on HA and Z2M upgrades): the ZHA WS command
-names and zha_device_info field names, the zha.permit/zha.remove service
-schemas, zigpy's ControllerApplication.topology/devices/_device fields, and the
-Z2M bridge topic API including networkmap (shapes verified against Z2M 2.x).
+Every read is an ALLOWLIST projection, never a blocklist strip: raw payloads can
+carry network key material (zigpy NetworkBackup keys; Z2M bridge/info embeds the
+full Z2M config), and an allowlist means a field added upstream cannot leak.
 """
 
 from __future__ import annotations
@@ -59,6 +50,11 @@ from .ws_dispatch import (
 from .policy_engine import device_registry_entries
 
 _LOGGER = logging.getLogger(__name__)
+
+# HA-coupling points to re-verify on HA and Z2M upgrades: the ZHA WS command names
+# and zha_device_info field names, the zha.permit/zha.remove service schemas,
+# zigpy's ControllerApplication.topology/devices/_device fields, and the Z2M
+# bridge topic API including networkmap (verified against Z2M 2.x).
 
 BACKEND_Z2M = "z2m"
 BACKEND_ZHA = "zha"
@@ -175,11 +171,11 @@ def present_zigbee_backends(hass: HomeAssistant) -> list[str]:
 
 
 def visible_zigbee_device_map(hass: HomeAssistant, accessible_entity_ids: set[str]) -> dict[str, str]:
-    """Map ieee -> device_id for every Zigbee device the token can see.
+    """Map ieee to device_id for every Zigbee device the token can see.
 
     A device is visible when at least one of its entities is in the token's
-    accessible set (the get_device rule). Used to decide which neighbor
-    identifiers a scoped token may see un-redacted.
+    accessible set (the get_device rule). Decides which neighbor identifiers a
+    scoped token may see un-redacted.
     """
     from homeassistant.helpers import entity_registry as er  # noqa: PLC0415
 
@@ -202,9 +198,8 @@ def visible_zigbee_device_map(hass: HomeAssistant, accessible_entity_ids: set[st
 
 
 # ---------------------------------------------------------------------------
-# Z2M MQTT plumbing. The two seams below are the module's only broker contact;
-# tests monkeypatch them (the mesa_suggestions._refs_for seam pattern) so the
-# suite never needs a real or mocked paho client.
+# Z2M MQTT plumbing. The two seams below are the module's only broker contact,
+# so a test can replace them without any MQTT client.
 # ---------------------------------------------------------------------------
 
 
@@ -243,7 +238,7 @@ async def async_z2m_request(
     Subscribes to <base>/bridge/response/<path> before publishing
     <base>/bridge/request/<path>, tags the request with a transaction id that
     Z2M echoes back (so a concurrent admin's identical request cannot be
-    mistaken for ours), and awaits the matching response. Raises RadioError on
+    mistaken for this one), and awaits the matching response. Raises RadioError on
     a Z2M-reported error or an unavailable broker; a response timeout raises
     TimeoutError so callers can distinguish "still working, no answer yet"
     (e.g. a sleepy device mid-reinterview) from a hard failure.
@@ -267,7 +262,10 @@ async def async_z2m_request(
         raise RadioError(f"MQTT is not available: {exc}") from exc
     try:
         request = json.dumps({**payload, "transaction": transaction})
-        await _mqtt_publish(hass, f"{Z2M_BASE_TOPIC}/bridge/request/{path}", request)
+        try:
+            await _mqtt_publish(hass, f"{Z2M_BASE_TOPIC}/bridge/request/{path}", request)
+        except Exception as exc:  # noqa: BLE001 - broker/integration unavailable
+            raise RadioError(f"MQTT publish failed: {exc}") from exc
         response = await asyncio.wait_for(future, timeout)
     finally:
         unsubscribe()
@@ -808,8 +806,8 @@ def z2m_effective_device_options(
 
     Zigbee2MQTT's Device.options getter merges config.device_options with the
     device's own config.devices[ieee] block. bridge/info publishes that
-    default-expanded config after removing its known secrets. We select only
-    properties declared by definition.options, so the rest of the bridge config
+    default-expanded config after removing its known secrets. Only properties
+    declared by definition.options are selected, so the rest of the bridge config
     never crosses Phoenix's allowlist boundary.
     """
     info = info if isinstance(info, dict) else {}
@@ -1584,7 +1582,7 @@ def project_z2m_device(
     """Project one bridge/devices entry to the safe per-device view.
 
     Z2M has no per-device neighbor data without a whole-network map scan, so
-    the Z2M view carries interview/definition metadata only.
+    the view carries interview, definition, option and endpoint metadata only.
     """
     entry = entry if isinstance(entry, dict) else {}
     definition = (
@@ -1862,8 +1860,8 @@ async def async_scan_zha_topology(
 
     ZHA's websocket update command intentionally has no result and would always
     time out through Phoenix's synthetic dispatcher. Calling zigpy's topology
-    object directly also lets us pass only visible devices instead of probing
-    every router on a partially scoped token. The returned IEEE values remain
+    object directly also allows passing only visible devices instead of probing
+    every router on a partially scoped token. The returned IEEE values are
     internal and must pass through :func:`project_zigbee_topology`.
     """
     try:

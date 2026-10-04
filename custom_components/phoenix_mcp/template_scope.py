@@ -22,11 +22,12 @@ class HelperScopeError(PermissionError):
 
 
 def template_entities(source: str) -> set[str]:
-    """Parse a restricted expression language, without evaluating any HA data.
+    """Return the literal entity IDs a helper template depends on, without evaluating it.
 
     Only direct literal state lookups and explicit pure operations are accepted.
     Aliases, computed lookups, domain iteration, includes, macros and unknown
-    functions/filters cannot silently introduce an unreviewed dependency.
+    functions or filters raise HelperScopeError, so no unreviewed dependency can
+    slip in. A source with no template markers has none.
     """
     if not any(marker in source for marker in ("{{", "{%", "{#")):
         return set()
@@ -167,7 +168,10 @@ def template_entities(source: str) -> set[str]:
 
 
 def validate_template_selectors(options: Any, template_type: str) -> None:
-    """Refuse future HA scripts and unscoped device associations by schema type."""
+    """Refuse nonempty Template actions and device associations, found by schema type.
+
+    Raises HelperScopeError. Their future authority cannot be established.
+    """
     from homeassistant.components.template.config_flow import config_schema
     from homeassistant.helpers.selector import ActionSelector, DeviceSelector
 

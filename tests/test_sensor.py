@@ -1,4 +1,4 @@
-"""Tests for Phoenix MCP sensor platform."""
+"""Per-token sensors: construction, state, registry bookkeeping and write debouncing."""
 
 from __future__ import annotations
 
@@ -103,11 +103,10 @@ def test_make_sensors_returns_six():
 
 
 def test_make_sensors_unique_ids():
-    """Identity is the token's id, never its name.
+    """A sensor's unique_id is the token's id, never its name.
 
-    The name is mutable, and while the slug WAS the identity every rename deleted
-    six registry rows and created six new ones under new entity_ids, so anything
-    naming one broke. The device was already keyed on the id; these now agree.
+    The name is mutable: keying on it would delete and recreate every registry row
+    (with new entity_ids) on each rename. The device is keyed on the id as well.
     """
     token = _make_token(name="alpha")
     data = _make_data()
@@ -126,11 +125,10 @@ def test_make_sensors_unique_ids():
 
 
 def test_make_sensors_names_come_from_the_translation_catalog():
-    """Names moved from a .title() call to HA's own entity translations.
+    """Sensor names come from HA entity translations, not a computed title.
 
-    Asserting the English too, not just the key: these are the friendly names an
-    existing dashboard or automation refers to, so they had to stay byte-identical
-    to what .title() produced.
+    The English values are asserted as well as the keys: they are the friendly
+    names dashboards and automations refer to, so they must stay stable.
     """
     import json
     import pathlib
@@ -243,10 +241,8 @@ def test_last_access_returns_timestamp_at_minute_resolution():
 def test_expires_in_is_unknown_without_an_expiry():
     """No expiry reports None (HA "unknown"), never a sentence.
 
-    It returned the English literal "No expiry" until 2026-07-31, which made one
-    sensor alternate between a number carrying a unit and untranslated prose.
-    The unit and state class now stay attached in both cases, so the sensor has
-    one type and history and statistics work for it.
+    The unit and state class stay attached in both cases, so the sensor has one
+    type and history and statistics work for it.
     """
     token = _make_token(expires_at=None)
     data = _make_data()
@@ -423,9 +419,10 @@ async def test_remove_token_sensors_pops_from_platform_entities():
 class TestCounterWriteDebounce:
     """update_token_counter coalesces sensor writes into one per debounce window.
 
-    request_count/last_access change on every request; immediate writes meant one
-    state_changed event and recorder row per agent call. Counters themselves stay
-    immediately current in data.token_counters (the admin API reads those).
+    request_count and last_access change on every request, so immediate writes
+    would produce one state_changed event and recorder row per agent call.
+    Counters stay immediately current in data.token_counters (the admin API reads
+    those).
     """
 
     async def test_writes_coalesce_into_one_flush(self, hass):
@@ -496,14 +493,12 @@ class TestCounterWriteDebounce:
         assert data.sensor_write_dirty == set()
 
     def test_flush_sensor_writes_is_marked_callback(self):
-        # flush_sensor_writes calls sensor.async_write_ha_state(), which requires
-        # the event loop thread. Without @callback, HA's HassJob type-inference
-        # sees a plain function passed to async_call_later and dispatches it to
-        # the executor thread pool instead, which is exactly the thread-safety
-        # violation ("calls async_write_ha_state from a thread other than the
-        # event loop") this decorator prevents. A MagicMock sensor in the
-        # coalesce test above can't catch a missing decorator (mocks don't care
-        # what thread they're called from), so this asserts the marker directly.
+        # flush_sensor_writes calls sensor.async_write_ha_state(), which must run on
+        # the event loop. Without @callback, HA's HassJob type inference sees a
+        # plain function passed to async_call_later and dispatches it to the
+        # executor pool, violating that. A MagicMock sensor cannot catch a missing
+        # decorator (mocks do not care which thread calls them), so this asserts
+        # the marker directly.
         from homeassistant.core import is_callback
         from custom_components.phoenix_mcp.helpers import flush_sensor_writes
 
@@ -512,19 +507,18 @@ class TestCounterWriteDebounce:
 
 # --- token identity survives a rename (real entity registry) ------------------
 #
-# These use the REAL entity and device registries rather than a MagicMock hass,
-# because the whole defect lives in registry bookkeeping: a MagicMock records the
-# calls and asserts nothing about identity, which is why the previous tests
-# pinned the hazardous implementation instead of catching it. The sensors are
-# registered by hand rather than through the platform so the test stays about
-# identity and does not need a full config entry set up.
+# These use the REAL entity and device registries rather than a MagicMock hass:
+# the invariant lives in registry bookkeeping, and a MagicMock records calls
+# without asserting anything about identity. The sensors are registered by hand
+# rather than through the platform so the tests stay about identity and need no
+# full config entry.
 
 class TestTokenRenameKeepsSensorIdentity:
     """A rename must change what is DISPLAYED, never what is ADDRESSED."""
 
     @staticmethod
     def _register(hass, token):
-        """Put one token's six sensors in the registry under the current scheme."""
+        """Register one token's sensors and device, keyed on the token id."""
         from homeassistant.helpers import device_registry as dr
         from homeassistant.helpers import entity_registry as er
         from custom_components.phoenix_mcp.sensor import (
@@ -582,9 +576,9 @@ class TestTokenRenameKeepsSensorIdentity:
 
     @pytest.mark.asyncio
     async def test_rename_repoints_the_sensors_at_the_new_record(self, hass):
-        # The sensors read every value off the TokenRecord they hold. The rebuild
-        # this replaced got that for free by constructing new ones; in-place has
-        # to do it explicitly or the status sensor reports the stale record.
+        # The sensors read every value off the TokenRecord they hold, so a rename
+        # must repoint them at the new record or the status sensor reports the
+        # stale one.
         from custom_components.phoenix_mcp.sensor import async_rename_token_sensors
 
         token = _make_token(name="alpha")
@@ -661,15 +655,12 @@ class TestTokenRenameKeepsSensorIdentity:
 
 @pytest.mark.asyncio
 async def test_generated_entity_ids_match_the_documentation(hass, enable_custom_integrations):
-    """Pin the ID a FRESH install gets, through HA's real naming path.
+    """Entity IDs HA generates through its real naming path match the documented ones.
 
-    docs/operations.html lists these IDs for an operator to put in a dashboard or
-    an automation, and they were wrong from the day they were written: the table
-    said `sensor.phoenix_mcp_my_token_status` while HA produces
-    `sensor.phoenix_mcp_token_my_token_status`. Nothing noticed because no test
-    ever created a sensor through the entity platform, which is what composes
-    `has_entity_name` device name + entity name into the object id; a hand-built
-    registry row skips exactly that step and reproduces neither.
+    docs/operations.html lists these IDs for operators to use in dashboards and
+    automations. The entity platform composes the `has_entity_name` device name and
+    entity name into the object id; a hand-built registry row skips that step, so
+    the sensors are added through a real EntityPlatform.
     """
     import logging
     from datetime import timedelta as _timedelta
@@ -691,9 +682,9 @@ async def test_generated_entity_ids_match_the_documentation(hass, enable_custom_
     # The sensors carry a translation_key rather than a literal name, and the
     # platform resolves it from the translations HA loads during a real setup.
     # A hand-built platform loads none, so every entity would come out unnamed and
-    # collide into _2.._6 suffixes: the object id would be the DEVICE name alone,
-    # which reproduces neither what HA generates nor what the docs say. Loading
-    # the integration's own catalog keeps this exercising the real composition.
+    # collide into _2.._6 suffixes (the object id would be the device name alone).
+    # Loading the integration's own catalog keeps this exercising the real
+    # composition.
     _catalog = json.loads(
         (pathlib.Path(__file__).resolve().parent.parent / "custom_components"
          / "phoenix_mcp" / "translations" / "en.json").read_text(encoding="utf-8")
@@ -706,7 +697,7 @@ async def test_generated_entity_ids_match_the_documentation(hass, enable_custom_
     async def _fake_get_translations(language, category, integration):
         return _translations
 
-    # Patched AT the seam HA itself calls, not next to it: PlatformData now owns
+    # Patched AT the seam HA itself calls, not next to it: PlatformData owns
     # translation loading and the read-only dictionaries the naming path reads.
     platform.platform_data._async_get_translations = _fake_get_translations
     await platform.platform_data.async_load_translations()
@@ -717,9 +708,8 @@ async def test_generated_entity_ids_match_the_documentation(hass, enable_custom_
 
     # Each generated id is compared to the id documented for THAT sensor, and the
     # two sets are compared whole. A prefix assertion plus a separate "the docs
-    # mention this string" check was the first attempt and bound nothing: with
-    # both, HA could generate `..._wrong_status` and every assertion still passed,
-    # which is the same ineffective-guard shape this file exists to prevent.
+    # mention this string" check would bind nothing: HA could generate
+    # `..._wrong_status` and every assertion would still pass.
     docs = (
         pathlib.Path(__file__).resolve().parent.parent / "docs" / "operations.html"
     ).read_text(encoding="utf-8")

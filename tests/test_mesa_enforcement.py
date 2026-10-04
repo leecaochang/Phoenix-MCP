@@ -1,8 +1,8 @@
-"""Tests for MESA per-entity enforcement classification.
+"""MESA per-entity enforcement classification.
 
-Exercises evaluate_service_entities over a real MesaRuntime: the advisory vs
-enforced vs off behaviour, the interactive=False confirm routing, per-profile
-enforcement_mode override, and confirm-approved folding.
+Exercises evaluate_service_entities over a real MesaRuntime: advisory vs enforced vs
+off behaviour, the interactive=False confirm routing, per-profile enforcement_mode
+override, and confirm-approved folding.
 """
 
 from __future__ import annotations

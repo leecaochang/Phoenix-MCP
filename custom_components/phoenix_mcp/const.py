@@ -15,7 +15,7 @@ from home_assistant_intents import get_languages as _assist_languages
 CATALOGS_DIR = pathlib.Path(__file__).parent / "catalogs"
 
 PHOENIX_VERSION = "1.4.0"
-# Supported base release; floor CI exercises runtime imports and boundaries.
+# Minimum supported HA release; runtime imports and boundaries are exercised at this floor.
 MIN_HA_VERSION = "2026.7.0"
 ASSIST_SCHEMA_DIALECT = "https://json-schema.org/draft/2020-12/schema"
 GITHUB_URL = "https://github.com/leecaochang/Phoenix-MCP"
@@ -177,11 +177,10 @@ MAX_VERSIONS_PER_RESOURCE = 20
 # anything absent here, and _record_version swallows that (history must never
 # break a write), so a type missing from this set loses its whole rollback path
 # SILENTLY, with only a log line. Adding a _record_version call site means adding
-# the type here AND to tests/contract/version_resource_types.json;
-# tests/test_frontend_contract.py pins this set against that fixture in both
-# directions, because the two drifted exactly this way on 2026-08-03 (`energy`
-# reached the fixture and the TS union but not here, and every energy version
-# silently failed to record).
+# the type here AND to the frontend contract fixture; a contract test pins this
+# set against that fixture in both directions, since a type present in the
+# fixture and the TS union but missing here silently fails to record every
+# version of that resource.
 VERSIONED_RESOURCE_TYPES = frozenset(
     {"automation", "script", "scene", "helper", "dashboard", "yaml_config", "file", "entity", "device",
      "blueprint", "esphome_yaml", "energy", "config_entry", "area", "floor"}
@@ -189,10 +188,10 @@ VERSIONED_RESOURCE_TYPES = frozenset(
 
 # Dashboard card catalog. Which Lovelace cards this instance can actually render,
 # harvested by the panel frontend and cached here so the MCP tool surface can
-# answer "what cards do I have" before an agent authors one. It MUST be harvested
-# in a browser: a card's type strings frequently do not exist as literals in its
-# minified bundle (Mushroom builds all 19 of its types by string concatenation at
-# runtime), so parsing the JS on disk finds roughly a quarter of a real catalog
+# answer which cards exist before an agent authors one. It MUST be harvested in a
+# browser: a card's type strings frequently do not exist as literals in its
+# minified bundle (some card sets build their type names by string concatenation
+# at runtime), so parsing the JS on disk finds only a fraction of a real catalog
 # and silently misses the most-used card sets. window.customCards is the registry
 # HA's own card picker reads, and only a browser that imported the resources has it.
 CARD_CATALOG_STORAGE_KEY = "phoenix_mcp_card_catalog"
@@ -219,12 +218,12 @@ AGENTCLI_CLAUDE_BASE_URL = "https://api.anthropic.com"
 AGENTCLI_CLAUDE_DEFAULT_MODEL = "claude-opus-4-8"
 AGENTCLI_ANTHROPIC_VERSION = "2023-06-01"
 AGENTCLI_DEEPSEEK_BASE_URL = "https://api.deepseek.com"
-# `deepseek-chat` and `deepseek-reasoner` were RETIRED on 2026-07-24 and now
-# answer an HTTP error. They were never separate models, only routing labels for
-# the non-thinking and thinking modes of the current generation, which is why the
-# replacement is one id plus the `thinking` field rather than two ids. A shipped
-# default is a guess that rots: the provider card refuses to store a model the
-# provider does not list, so this constant is a starting point and not a promise.
+# The retired `deepseek-chat` and `deepseek-reasoner` ids answer an HTTP error.
+# They were only routing labels for the non-thinking and thinking modes of the
+# current generation, which is why the default is one id plus the `thinking`
+# field rather than two ids. A shipped default is a guess that rots: the provider
+# card refuses to store a model the provider does not list, so this constant is a
+# starting point and not a promise.
 AGENTCLI_DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash"
 # ChatGPT (OpenAI) is OpenAI-compatible; base already includes /v1.
 AGENTCLI_OPENAI_BASE_URL = "https://api.openai.com/v1"
@@ -295,12 +294,12 @@ AGENTCLI_TENCENT_GUANGZHOU_BASE_URL = "https://tokenhub.tencentcloudmaas.com/v1"
 AGENTCLI_TENCENT_US_BASE_URL = "https://tokenhub-us.tencentcloudmaas.com/v1"
 AGENTCLI_OPENCODE_BASE_URL = "https://opencode.ai/zen/v1"
 AGENTCLI_DEFAULT_MAX_TOKENS = 8192
-# Explicit output cap sent to DeepSeek only. DeepSeek's undocumented default
-# (historically 4K non-thinking / 32K thinking) truncated a large tool call
-# (a whole-dashboard write) mid-JSON; 32K is at or above both historical
-# defaults, so it only ever raises the ceiling, and is far under the V4
-# documented 384K max output. Other OpenAI-compatible kinds are deliberately
-# not sent max_tokens (OpenAI reasoning models reject the field outright).
+# Explicit output cap sent to DeepSeek only. Its undocumented default cap can
+# truncate a large tool call (a whole-dashboard write) mid-JSON; 32K is at or
+# above the defaults for both modes, so it only ever raises the ceiling, and is
+# far under the documented 384K max output. Other OpenAI-compatible kinds are
+# deliberately not sent max_tokens (OpenAI reasoning models reject the field
+# outright).
 AGENTCLI_DEEPSEEK_MAX_TOKENS = 32768
 # How many Ollama /api/show lookups run at once during a capability refresh.
 # Ollama is the only backend whose capabilities cost one request PER MODEL, and a
@@ -322,14 +321,14 @@ AGENTCLI_PROBE_SENTINEL = "phoenix-probe-invalid"
 
 # Hard cap on completion requests one probe run may make. The matrix is bounded by
 # construction (one validation check plus five levels plus temperature), so this
-# is a backstop against a future knob turning a button into an unbounded spend.
+# is a backstop that keeps a new knob from turning a button into unbounded spend.
 AGENTCLI_PROBE_MAX_CALLS = 10
 
 # How long a refusal LEARNED from a real turn is honoured before Phoenix tries
 # the option again. It expires because the fact came from one moment in one
 # provider's history: a model that rejects a parameter today may accept it after
-# an upgrade, and a permanent "no" learned from a transient refusal is the same
-# silently-stale answer this whole area exists to remove, with our name on it.
+# an upgrade, and a permanent "no" learned from a transient refusal would be the
+# same silently-stale answer this whole area exists to remove.
 AGENTCLI_LEARNED_REFUSAL_TTL_DAYS = 30
 
 # Request keys a refusal can be learned for, mapped to the capability it settles.
@@ -342,7 +341,7 @@ AGENTCLI_LEARNABLE_OPTIONS = {
     "think": "thinking",
     "enable_thinking": "thinking",
 }
-# Per-turn cap on provider<->tool round trips before the loop pauses. In the
+# Per-turn cap on provider and tool round trips before the loop pauses. In the
 # interactive chat this is a "continue?" checkpoint (the operator can grant
 # another N rounds), not a hard stop; the headless voice/AI-task loops stop
 # here since there is no one to ask. Admin-configurable via the
@@ -359,7 +358,7 @@ AGENTCLI_MAX_SSE_BUFFER_BYTES = 8 * 1024 * 1024
 AGENTCLI_MAX_STREAM_BYTES = 32 * 1024 * 1024
 # Cap on the TOTAL provider-generated output retained across a whole turn (all
 # iterations), measured on the assistant messages held in the conversation. The
-# per-response cap above bounds one stream; this bounds the sum so 12 iterations
+# per-response cap above bounds one stream; this bounds the sum so many iterations
 # cannot accumulate a large multiple. A real multi-step turn stays far below it.
 AGENTCLI_MAX_TURN_OUTPUT_BYTES = 48 * 1024 * 1024
 # Max idle gap between stream chunks before the provider request is aborted. The
@@ -431,11 +430,10 @@ AI_TASK_CLIENT_IP = "ai_task"
 # Deployment defaults are deliberately absent: they are a single fallback record
 # rather than a keyed level, and every surface treats them separately.
 #
-# Hand-mirrored into the panel (the scope union, the six label maps, the editor's
+# Hand-mirrored into the panel (the scope union, the label maps, the editor's
 # API dispatch, the list table, and the in-context injector), where a missing
-# entry is mostly SILENT rather than a type error: the editor's dispatch used to
-# fall through to the area endpoint for any scope it did not name. A contract
-# fixture pins this list against the frontend in both directions.
+# entry is mostly SILENT rather than a type error. A contract fixture pins this
+# list against the frontend in both directions.
 MESA_SCOPES: tuple[str, ...] = ("entity", "device", "area", "integration", "domain")
 
 MESA_STORAGE_KEY = "phoenix_mcp_mesa"
@@ -462,15 +460,10 @@ MESA_APPROVED_EXECUTOR = "call_service_mesa_approved"
 # gate also retains frontend availability checks because it depends on DOM shape.
 MESA_INJECT_MIN_HA = MIN_HA_VERSION
 
-# MESA profile suggestions (mesa_suggestions.py). Two v1 signals; suggestions
-# are computed admin-side and NEVER auto-applied.
+# MESA profile suggestions (mesa_suggestions.py). Two signals; suggestions are
+# computed admin-side and NEVER auto-applied.
 MESA_SUGGEST_SIGNAL_BLAST_RADIUS = "blast_radius"
 MESA_SUGGEST_SIGNAL_NAKED_RISKY = "naked_risky"
-# Curated risky domains for the naked-risky signal: domain -> (suggested
-# control_mode, concern text surfaced verbatim in the suggestion reason).
-# lock/alarm suggest "prohibited" to MATCH mesa-core's zero-profile baseline,
-# so applying a suggestion is never a relaxation under enforced mode; the
-# rest suggest "confirm". Irreversibility rationale folded per signal 9e.
 # The suggestion reason an operator reads, and which is written verbatim into a
 # profile's control_reason when they Apply. English stays the stored form (like
 # a diff summary, it is the record); the panel renders the key in its own
@@ -513,6 +506,11 @@ MESA_SUGGESTION_PHRASES: dict[str, str] = {
     ),
 }
 
+# Curated risky domains for the naked-risky signal: each domain maps to its
+# (suggested control_mode, concern text surfaced verbatim in the suggestion reason).
+# lock/alarm suggest "prohibited" to MATCH mesa-core's zero-profile baseline,
+# so applying a suggestion is never a relaxation under enforced mode; the
+# rest suggest "confirm".
 MESA_SUGGEST_RISKY_DOMAINS: dict[str, tuple[str, str]] = {
     "lock": ("prohibited", "controls a physical security boundary; a mistaken unlock cannot be undone remotely"),
     "alarm_control_panel": ("prohibited", "arms and disarms the home security system; a silent disarm defeats it"),
@@ -571,13 +569,13 @@ SENSITIVE_KEY_SUBSTRINGS = frozenset({
 # echoes a read back would silently store the placeholder as if it were real
 # configuration. `tool_common.redaction_sentinel_path` is that guard.
 #
-# The four PRODUCERS (policy_engine.filter_service_response, helpers.redact_structure,
-# helpers.redact_diagnostics, esphome_yaml's value scrub) still spell the literal
-# inline; this constant is deliberately NOT a refactor of them, because rewriting
-# working redaction code carries more risk than the duplication does. What keeps the
-# two honest is tests/test_redaction_sentinel.py, which asserts this value is what
-# filter_service_response actually emits, so a producer that ever changes its
-# placeholder fails there rather than silently disarming the write guard.
+# The redacting PRODUCERS (policy_engine.filter_service_response, helpers.redact_structure,
+# helpers.redact_diagnostics, esphome_yaml's value scrub, among others) still spell
+# the literal inline; this constant is deliberately NOT a refactor of them, because
+# rewriting working redaction code carries more risk than the duplication does. A
+# guard test asserts this value is what filter_service_response actually emits, so a
+# producer that ever changes its placeholder fails there rather than silently
+# disarming the write guard.
 REDACTION_SENTINEL = "<redacted>"
 
 # Domain-aware "lean" view for get_state / get_states. When a caller passes no
@@ -592,7 +590,7 @@ REDACTION_SENTINEL = "<redacted>"
 # per domain (each domain's ATTR_* constants / entity.state_attributes), curated to
 # what an agent needs to reason about or act on that domain's state, so a weak model
 # rarely has to escalate to detailed=. This is an allowlist by design (never a
-# denylist): an unlisted attribute or domain is simply omitted, and the fix for a
+# denylist): an unlisted attribute or domain is omitted, and the fix for a
 # missing attribute is to add it here, not to strip junk. Deliberately excluded:
 # large/nested blobs (weather forecast, image/URL-class already scrubbed), long
 # free text (release_summary, calendar description), the big capability *_list attrs
@@ -691,9 +689,10 @@ PHYSICAL_GATE_SERVICES = frozenset({
 })
 
 # Core HA services that take NO entity/device/area target: they re-read YAML
-# configuration domain-wide. Phoenix MCP's normal call_service path flattens every call
-# to an explicit entity_id list (rule 15), which these services' schemas reject
-# ("extra keys not allowed @ data['entity_id']"), so they are handled by a
+# configuration domain-wide. Phoenix MCP's normal call_service path flattens every
+# call to an explicit entity_id list (device_id, area_id and "all" never reach HA),
+# which these services' schemas reject ("extra keys not allowed @
+# data['entity_id']"), so they are handled by a
 # dedicated no-target branch that calls them with bare service_data. They are the
 # "apply" step for a raw set_yaml_config / write_file edit, so they gate on
 # cap_yaml_edit (the same capability that authorized the edit authorizes the
@@ -922,11 +921,11 @@ ESPHOME_BUILDER_JOB_LOG_TIMEOUT_SECONDS = 60.0
 # 2000, and the full 64KB budget above would still swamp an agent's context, so
 # job output gets its own tighter bound.
 ESPHOME_BUILDER_JOB_OUTPUT_MAX_CHARS = 16_384
-# A poll of a RUNNING build gets a much tighter, tail-only slice. Live-found: the
-# full log is near-identical between polls, so an agent checking a real build
-# every 30 seconds pulled the same banner into its context a dozen times over.
-# Progress is a question about the last few lines; the whole log is only worth
-# returning once the build has actually finished.
+# A poll of a RUNNING build gets a much tighter, tail-only slice. The full log is
+# near-identical between polls, so an agent checking a real build every 30 seconds
+# would pull the same banner into its context a dozen times over. Progress is a
+# question about the last few lines; the whole log is only worth returning once
+# the build has actually finished.
 ESPHOME_BUILDER_JOB_PROGRESS_MAX_CHARS = 4_096
 # wait_for_esphome_job holds the request open so a build has something in flight
 # to report progress on. This is the longest hold in the whole surface (the next
@@ -949,8 +948,8 @@ ESPHOME_BUILDER_JOB_POLL_SECONDS = 5.0
 ESPHOME_BUILDER_DECODE_TIMEOUT_SECONDS = 90.0
 ESPHOME_BUILDER_MAX_BACKTRACE_LINES = 200
 # devices/logs runs until it is killed, so a capture window bounds the request.
-# The maximum is deliberately under the SSE keepalive story's comfort zone: this
-# hold is real dead air on the wire for however long it runs.
+# The maximum is deliberately small: this hold is dead air on the wire for however
+# long it runs.
 ESPHOME_BUILDER_LOG_CAPTURE_SECONDS = 15
 ESPHOME_BUILDER_LOG_CAPTURE_MAX_SECONDS = 60
 
@@ -964,8 +963,7 @@ APPROVAL_SWEEP_INTERVAL = datetime.timedelta(minutes=5)
 # executor INLINE inside the admin's HTTP request (the same constraint that makes
 # ESPHome builds enqueue a job instead), so a batch's wall time is the sum of its
 # tools' and an unbounded one would hold a connection open for minutes and read
-# as a hang. Set well above any realistic hand-selected batch; a migration
-# touching every automation on a large instance ran to about 20.
+# as a hang. Set well above any realistic hand-selected batch.
 MAX_BATCH_APPROVALS = 50
 
 # Diff size limits for approval records.
@@ -1159,8 +1157,8 @@ ANNOUNCE_BIT = 2
 # cannot perform the operation is never targeted rather than being asked and
 # erroring, and the native tools mirror that.
 # HA-VERSION-SENSITIVE: a renumbered bit would silently target the wrong vacuums
-# while every test still passed, so tests/test_native_intent_parity.py pins these
-# against the installed VacuumEntityFeature enum.
+# while every other test still passed, so a guard test pins these against the
+# installed VacuumEntityFeature enum.
 VACUUM_START_BIT = 8192
 VACUUM_RETURN_HOME_BIT = 16
 VACUUM_CLEAN_AREA_BIT = 16384
@@ -1195,12 +1193,12 @@ MAX_LOGBOOK_NARROWED_DAYS = 31
 # and must stay absent: Home Assistant attaches its system_log handler with
 # setLevel(logging.WARNING) (components/system_log/__init__.py), so an INFO
 # record never enters the store this reads and there is no config option to
-# lower it. Offering INFO was a promise the store cannot keep, and the failure
-# was silent in the direction that matters: an agent asking for INFO to chase
-# something got warnings and errors back with nothing saying INFO is never
-# collected, so a quiet result read as "nothing was logged" rather than "that
-# level is not available here". Distinct from helpers._LOG_LEVEL_RANK, which
-# ranks the level of a RECORD; this is the narrower set a CALLER may ask for.
+# lower it. Offering INFO would promise what the store cannot keep, and fail
+# silently: an agent asking for INFO would get warnings and errors back with
+# nothing saying INFO is never collected, so a quiet result would read as
+# "nothing was logged" rather than "that level is not available here". Distinct
+# from helpers._LOG_LEVEL_RANK, which ranks the level of a RECORD; this is the
+# narrower set a CALLER may ask for.
 LOG_LEVELS = ("WARNING", "ERROR")
 LOG_LEVEL_ERROR_MESSAGE = (
     "level must be WARNING or ERROR. Home Assistant's system log holds WARNING "
@@ -1225,16 +1223,12 @@ MAX_TOOL_NAME_LENGTH = 200
 MAX_ENTITY_ALIASES = 32
 MAX_ENTITY_ALIAS_LENGTH = 255
 
-# Hard cap for the search_entities free-text query. Ranking tokenizes on
-# whitespace and the fuzzy fallback runs difflib against every accessible
-# entity, so an unbounded query could stall the event loop; a real query is far
-# shorter than this.
 # get_relationships: how many source paths one holder of a dangling reference
-# reports before the rest become a count. Live-measured: a single deleted script
-# was called from 18 sub-buttons on one dashboard, and repeating that dashboard's
-# identity 18 times spent most of the response on nothing an operator needs. The
-# true total is always reported alongside, per the truncation contract, so a
-# clipped list is never mistaken for a complete one.
+# reports before the rest become a count. A single deleted script can be called
+# from many sub-buttons on one dashboard, and repeating that dashboard's identity
+# for each spends most of the response on nothing an operator needs. The true
+# total is always reported alongside, per the truncation contract, so a clipped
+# list is never mistaken for a complete one.
 MAX_DANGLING_PATHS = 3
 
 # compare_entities: how many members of a list-valued attribute are named per
@@ -1252,14 +1246,18 @@ MAX_COMPARE_VALUE_CHARS = 200
 # wait_for_approval, PLURAL form only: how many characters of one approval's
 # tool result are echoed. A batch is a list of STATUSES, not a list of results.
 # Twelve approved `edit_automation` records each echo their whole config, which
-# measured 80KB live and blew the caller's output limit, so the answer to "did
-# my twelve writes land" could not be delivered at all. An ERROR's text is the
+# can exceed a caller's output limit, so the answer to "did my twelve writes
+# land" could not be delivered at all. An ERROR's text is the
 # part that has to survive, and it is short: an agent told only "rejected",
 # with the executor's reason buried, retries the same doomed call. A success
 # only needs to say it succeeded. The single-id form stays unbounded and is
 # where a full result is read.
 MAX_APPROVAL_RESULT_CHARS = 500
 
+# Hard cap for the search_entities free-text query. Ranking tokenizes on
+# whitespace and the fuzzy fallback runs difflib against every accessible
+# entity, so an unbounded query could stall the event loop; a real query is far
+# shorter than this.
 MAX_SEARCH_QUERY_LEN = 512
 # Bound opt-in membership normalization and disclosure across one search page.
 MAX_SEARCH_MEMBERS = 256
@@ -1270,29 +1268,6 @@ MAX_SEARCH_MEMBER_ID_LEN = 255
 # It blocks the tool call up to this many seconds waiting for a state change.
 MAX_SUBSCRIPTION_SECONDS = 30
 
-# A token's inline wait (seconds) on a confirm gate: a confirm-gated call holds
-# the response open up to confirm_inline_wait_seconds for an admin decision
-# before falling back to the immediate pending_approval reply. 0 means off,
-# return immediately, and it is now BOTH the default and the panel's first
-# option. The max is kept well within typical MCP client timeouts so the held
-# response never outlives one.
-#
-# THE DEFAULT IS OFF, and that is a deliberate reversal (it was 60). Blocking is
-# automatic behaviour decided by a TOKEN SETTING, but the party that knows
-# whether the outcome is needed right now is the AGENT: firing twenty writes it
-# needs them queued, not resolved one at a time; turning off one lock it does
-# want the answer. Holding the request removes that choice, and because the hold
-# blocks a whole request while tool calls arrive one at a time, approval N+1
-# cannot even be CREATED until approval N stops waiting. Live-measured at the old
-# 60s default, consecutive approvals landed 62.8 SECONDS apart, so a twenty-write
-# change took twenty minutes just to reach the operator's queue.
-#
-# The architecture already answers this properly: return pending_approval at once
-# and let the agent call wait_for_approval (now accepting several ids) if and when
-# it wants the outcomes. Approvals then STAGE immediately and the operator clears
-# them however suits, individually or in one batch. The inline wait stays
-# available for an operator who prefers an external client to block on a single
-# action, but it is opt-in rather than the thing everyone silently pays for.
 # How often the MCP endpoint writes to an SSE-framed response while the request
 # is still being handled. A confirm gate can hold a response for up to
 # MAX_CONFIRM_INLINE_WAIT_SECONDS with nothing on the wire, which is exactly the
@@ -1321,6 +1296,28 @@ MCP_LEGACY_PROTOCOL_VERSION_PREFERRED = MCP_LEGACY_PROTOCOL_VERSIONS[0]
 # never about what it is allowed to DO.
 MCP_DISCOVER_TTL_MS = 300_000
 
+# A token's inline wait (seconds) on a confirm gate: a confirm-gated call holds
+# the response open up to confirm_inline_wait_seconds for an admin decision
+# before falling back to the immediate pending_approval reply. 0 means off
+# (return immediately) and is both the default and the panel's first option. The
+# max is kept well within typical MCP client timeouts so the held response never
+# outlives one.
+#
+# THE DEFAULT IS OFF. Blocking is automatic behaviour decided by a TOKEN
+# SETTING, but the party that knows whether the outcome is needed right now is
+# the AGENT: firing twenty writes it needs them queued, not resolved one at a
+# time; turning off one lock it does want the answer. Holding the request removes
+# that choice, and because the hold blocks a whole request while tool calls
+# arrive one at a time, approval N+1 cannot even be CREATED until approval N
+# stops waiting: at a 60 second wait, twenty writes would take twenty minutes
+# just to reach the operator's queue.
+#
+# The architecture answers this properly: return pending_approval at once and let
+# the agent call wait_for_approval (which accepts several ids) if and when it
+# wants the outcomes. Approvals then STAGE immediately and the operator clears
+# them however suits, individually or in one batch. The inline wait stays
+# available for an operator who prefers an external client to block on a single
+# action, but it is opt-in rather than the thing everyone silently pays for.
 MIN_CONFIRM_INLINE_WAIT_SECONDS = 30
 MAX_CONFIRM_INLINE_WAIT_SECONDS = 180
 DEFAULT_CONFIRM_INLINE_WAIT_SECONDS = 0
@@ -1355,8 +1352,8 @@ YAML_MAX_EXPANDED_NODES = 100_000
 #   frontend: extra_module_url and lovelace: resources load arbitrary JavaScript
 #     into the authenticated dashboard, which is a stored-XSS foothold with access
 #     to the instance and its tokens.
-# An admin edits these by hand. Enforced by mcp_view._yaml_protected_check on both
-# the pre-gate and the apply-time path; unchanged values always pass.
+# An admin edits these by hand. Enforced by tools.config_files._yaml_protected_check
+# on both the pre-gate and the apply-time path; unchanged values always pass.
 YAML_PROTECTED_SUBTREES: dict[str, tuple[str, ...]] = {
     "homeassistant": ("auth_providers", "auth_mfa_modules", "packages"),
     "http": (
@@ -1374,16 +1371,15 @@ YAML_PROTECTED_SUBTREES: dict[str, tuple[str, ...]] = {
 # property, so it has to be translatable. It is also PERSISTED on the approval
 # record (it doubles as the audit trail), which means translating it server-side
 # would freeze the language at creation time and make History mixed after a
-# language switch. So the record carries all three: the English `summary` exactly
-# as before, plus `summary_key` and `summary_params` for the panel to render in
-# the operator's own language, falling back to the stored English for any record
-# written before this existed.
+# language switch. So the record carries the English `summary` plus
+# `summary_key` and `summary_params` for the panel to render in the operator's
+# own language, falling back to the stored English for any record without a key.
 #
 # The template lives HERE and nowhere else. Python formats it to produce the
 # stored English, and scripts/gen_diff_catalog.py generates the panel's
 # translations/en.json `diff.*` entries FROM this dict, so the two cannot drift.
-# tests/test_diff_summary_contract.py pins that generation and checks every
-# builder's emitted key and params against it.
+# A contract test pins that generation and checks every builder's emitted key
+# and params against it.
 #
 # Placeholders are `{name}` only: that is what both str.format and the panel's
 # interpolation understand, and what HA's own translation loader validates a
@@ -1396,7 +1392,7 @@ DIFF_SUMMARY_TEMPLATES: dict[str, str] = {
     "delete_calendar_event": "Delete calendar event",
     "configuration_recovery.restore": "Restore saved configuration for {resource}",
     "configuration_recovery.acknowledge": "Check configuration after an interrupted change to {resource}",
-    # Blueprints. Create never reports consumers (nothing uses it yet).
+    # Blueprints. Create never reports consumers (a new blueprint has none).
     "blueprint.create": "Create {domain} blueprint '{rel}'",
     "blueprint.edit": "Replace {domain} blueprint '{rel}'",
     "blueprint.delete": "Delete {domain} blueprint '{rel}'",
@@ -1435,7 +1431,7 @@ DIFF_SUMMARY_TEMPLATES: dict[str, str] = {
     # System.
     "restart_ha": "Restart Home Assistant",
     # {file} rather than a literal configuration.yaml: these tools write any
-    # include target now, so a summary naming the wrong file is a false line in
+    # include target, so a summary naming the wrong file is a false line in
     # the History an admin reads. {path} is already the addressed KEY here.
     "set_yaml_config": "Replace {file}",
     "set_yaml_config.removing": "Replace {file}, removing the top-level {keys}",
@@ -1802,13 +1798,12 @@ VOICE_TEMPLATES: dict[str, str] = {
     "not_configured": "The Phoenix MCP voice agent is not fully configured.",
     "token_unavailable": "The Phoenix MCP voice agent's token is no longer available.",
     "error": "Sorry, the Phoenix MCP voice agent hit an error.",
-    # How a turn that did not finish cleanly is SPOKEN. These were English
-    # literals inside the loop until the turn-outcome split, so a Chinese
-    # pipeline heard the four declines above translated and then an English
-    # sentence the moment anything went wrong. The loop now reports an outcome
-    # code and each surface renders it, which is what lets these live here.
-    # {reason} is the provider's own error text and stays in whatever language
-    # the provider produced: it is third-party output, not ours to translate.
+    # How a turn that did not finish cleanly is SPOKEN. The loop reports an
+    # outcome code and each surface renders it from here, so a Chinese pipeline
+    # does not hear the declines above translated and then an English sentence
+    # the moment anything went wrong. {reason} is the provider's own error text
+    # and stays in whatever language the provider produced: it is third-party
+    # output and is not translated.
     "could_not_complete": "Sorry, I could not complete that.",
     "provider_error": "Sorry, {reason}.",
     "outcome_unknown": "This action may have run. Check Home Assistant and its approval history before trying it again. Open Needs attention in Phoenix MCP.",

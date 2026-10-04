@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 class AuthorityChangedError(PermissionError):
-    """The request's credential, runtime, or policy is no longer current."""
+    """The request's credential, runtime, or policy changed after it was admitted."""
 
     receipt: tuple[Outcome, str] | None = None
     not_dispatched: bool = False
@@ -73,7 +73,11 @@ execution_guard: ContextVar[Callable[[], None] | None] = ContextVar("phoenix_exe
 
 
 def check_request_authority() -> None:
-    """Refuse further dispatch/disclosure if authority changed during a wait."""
+    """Refuse further dispatch or disclosure when authority changed during a wait.
+
+    Checks the household authority, the execution guard, the token and runtime
+    state, then the permission policy version captured at admission.
+    """
     from .household_authority import household_authority
 
     household = household_authority.get()

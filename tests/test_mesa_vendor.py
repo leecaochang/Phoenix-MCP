@@ -1,9 +1,8 @@
-"""Smoke tests for the vendored mesa-core package.
+"""Vendoring mechanics and integrity of the vendored mesa-core package.
 
-These guard the vendoring mechanics: the copy must import cleanly under its
-rewritten path and must NOT pull in a top-level
-``mesa_core`` module (which would indicate an unrewritten absolute import that
-could collide with a future PyPI install).
+The copy must import cleanly under its rewritten path and must NOT pull in a
+top-level ``mesa_core`` module (an unrewritten absolute import that could collide
+with a PyPI install). A manifest check fails any hand-edit of the tree.
 """
 
 from __future__ import annotations
@@ -77,17 +76,16 @@ def _sync_module():
 def test_vendored_tree_matches_its_manifest():
     """A hand-edit of the vendored copy must fail, not ship.
 
-    The project forbids editing this directory, and nothing else would notice:
-    the copy is ordinary Python that imports fine and passes every other test
-    whatever it says, and the version string it reports is just a literal in a
-    file an editor could change too. The existing tests here check the vendoring
-    MECHANICS (the import path, no top-level leak), which an edit leaves intact.
+    The directory is generated and must not be edited, and nothing else would
+    notice: the copy is ordinary Python that imports fine, and the version string it
+    reports is just a literal. The import-path tests check the vendoring MECHANICS,
+    which an edit leaves intact.
 
     Deliberately NOT a comparison against the upstream source: mesa-core is a
-    separate read-only project reached through a symlink that CI does not have,
-    so a checkout has to be able to answer this on its own. The manifest is the
-    tracked record of what the sync produced; _VENDORED.txt cannot be, since it
-    carries a local absolute path and a sync date.
+    separate read-only project reached through a symlink that CI lacks, so a
+    checkout must answer this on its own. The manifest is the tracked record of what
+    the sync produced; _VENDORED.txt cannot be, since it carries a local absolute
+    path and a sync date.
     """
     import json
     import pathlib
@@ -116,13 +114,10 @@ def test_vendored_tree_matches_its_manifest():
 def test_manifest_describes_exactly_the_tracked_files():
     """The manifest must describe what a CLEAN CHECKOUT has, not the dev tree.
 
-    This is the invariant the first version got wrong: it hashed every file under
-    the vendored directory, which on a macOS working copy included five gitignored
-    .DS_Store files. The manifest then described a tree no other machine can
-    reproduce, so the guard passed only where it was generated and failed in CI,
-    which is the one place it exists to run. Comparing against git's own idea of
-    what is tracked is the check that would have caught it; a hand-maintained
-    exclusion list is the thing that drifts.
+    Hashing every file under the vendored directory would include untracked files
+    such as a macOS .DS_Store, so the manifest would describe a tree no other
+    machine can reproduce and the guard would fail in CI. Comparing against git's
+    own list of tracked files avoids a hand-maintained exclusion list, which drifts.
     """
     import json
     import pathlib

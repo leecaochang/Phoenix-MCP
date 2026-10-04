@@ -18,7 +18,7 @@ vi.mock("../i18n", () => ({
   resolveLanguage: () => "en",
   t: (key: string) => key,
 }));
-vi.mock("../inject/QuickAdd", () => ({ QUICK_ADD_TAG: "phx-mesa-quick-add" }));
+vi.mock("../inject/QuickAdd", () => ({ QUICK_ADD_TAG: "phx-mesa-quick-add-test-build" }));
 
 // HA inherits this conditional slot from @material/mwc-list 0.27.0:
 // ListItemBase.render() only calls renderMeta() when hasMeta is true.
@@ -134,14 +134,14 @@ describe("HA frontend 20260826.7 injection templates", () => {
     expect(button.dataset.phxState).toBe(entityId === "light.profiled" ? "has" : "new");
     button.click();
     await vi.advanceTimersByTimeAsync(0);
-    expect(document.querySelector("phx-mesa-quick-add")?.getAttribute("key")).toBe(entityId);
+    expect(document.querySelector("phx-mesa-quick-add-test-build")?.getAttribute("key")).toBe(entityId);
     expect(haClick).not.toHaveBeenCalled();
     Object.assign(row, { rowId: "light.recycled" });
     await vi.advanceTimersByTimeAsync(2200);
     expect(row.querySelectorAll(`.${BTN_CLASS}`)).toHaveLength(1);
     row.querySelector<HTMLButtonElement>(`.${BTN_CLASS}`)!.click();
     await vi.advanceTimersByTimeAsync(0);
-    expect(document.querySelectorAll("phx-mesa-quick-add")[1].getAttribute("key")).toBe("light.recycled");
+    expect(document.querySelectorAll("phx-mesa-quick-add-test-build")[1].getAttribute("key")).toBe("light.recycled");
     Object.assign(row, { rowId: "not-an-entity" });
     await vi.advanceTimersByTimeAsync(2200);
     expect(row.querySelector(`.${BTN_CLASS}`)).toBeNull();
@@ -174,7 +174,7 @@ describe("HA frontend 20260826.7 injection templates", () => {
     }
     buttons[0].click();
     await vi.advanceTimersByTimeAsync(0);
-    expect(document.querySelector("phx-mesa-quick-add")?.getAttribute("key")).toBe("person.renamed");
+    expect(document.querySelector("phx-mesa-quick-add-test-build")?.getAttribute("key")).toBe("person.renamed");
     await vi.advanceTimersByTimeAsync(2200);
     expect(root.querySelectorAll(`.${BTN_CLASS}`)).toHaveLength(2);
     const controller = (window as unknown as { __phxMesaInjectActive: { dispose: () => void } }).__phxMesaInjectActive;
@@ -189,7 +189,7 @@ describe("HA frontend 20260826.7 injection templates", () => {
     start("/config/integrations/integration/hue");
     const page = document.createElement("hass-subpage");
     // jsdom 29 incorrectly returns null for :scope child selectors on hosts
-    // inside a shadow root. Keep this existing toolbar path in light DOM;
+    // inside a shadow root. Keep this toolbar path in light DOM;
     // entity and People fixtures above exercise shadow-root discovery.
     document.body.appendChild(page);
     page.attachShadow({ mode: "open" }).innerHTML = '<div class="main-title"></div>';
@@ -199,9 +199,12 @@ describe("HA frontend 20260826.7 injection templates", () => {
     expect(button.slot).toBe("toolbar-icon");
     button.click();
     await vi.advanceTimersByTimeAsync(0);
-    const modal = document.querySelector("phx-mesa-quick-add")!;
+    const modal = document.querySelector("phx-mesa-quick-add-test-build")!;
     expect(modal.getAttribute("scope")).toBe("integration");
     expect(modal.getAttribute("key")).toBe("hue");
+    const controller = (window as unknown as { __phxMesaInjectActive: { dispose: () => void } }).__phxMesaInjectActive;
+    controller.dispose();
+    expect(document.querySelector("phx-mesa-quick-add-test-build")).toBeNull();
   });
 
   it("does not inject for non-admin users", async () => {

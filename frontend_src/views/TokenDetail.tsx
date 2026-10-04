@@ -26,16 +26,11 @@ import { ProfileEditor } from "./MesaView";
 import { localeDateTime, t } from "../i18n";
 import { tRich } from "../i18n/rich";
 
-// Default inline-approval-wait duration shown when a token has none set;
-// mirrors const.py DEFAULT_CONFIRM_INLINE_WAIT_SECONDS. The UI exposes only the
-// duration (options span the 30-180 range); 0 (off, for unattended agents) is
-// API-only, never set from here.
-
 // Whether a token change alters which tools the MCP client is shown (tools/list),
 // which is the only kind of change that requires a connected agent to reconnect.
 // A capability only changes the announced set when it crosses the deny boundary: a
-// cap-tied tool is announced whenever its cap is not "deny", so allow<->confirm
-// (which only changes per-request gating, enforced live) does NOT need a reconnect.
+// cap-tied tool is announced whenever its cap is not "deny", so switching between
+// allow and confirm (per-request gating, enforced live) does NOT need a reconnect.
 // pass_through and announce_all_tools change the announced set wholesale. Persona
 // changes surface here as capability changes.
 function toolGatingChanged(a: TokenRecord, b: TokenRecord): boolean {
@@ -217,12 +212,13 @@ export function ToolAnnouncementToggle({ token, onUpdate }: { token: TokenRecord
 }
 
 // Duration choices for the inline-wait select: fixed steps across the allowed
-// range, plus the token's own value if the API set an off-step one (so it still
-// displays correctly). 0 (off) is rendered separately as the first option and is
-// the DEFAULT: a confirm-gated call returns pending immediately so approvals
-// stage in the queue, and an agent that wants the outcome calls wait_for_approval.
-// Turning the wait on makes a single action block, which is a preference rather
-// than the thing every caller pays for.
+// 30-180 range (const.py MIN/MAX_CONFIRM_INLINE_WAIT_SECONDS), plus the token's
+// own value if the API set an off-step one (so it still displays correctly). 0
+// (off) is rendered separately as the first option and is the DEFAULT (const.py
+// DEFAULT_CONFIRM_INLINE_WAIT_SECONDS): a confirm-gated call returns pending
+// immediately so approvals stage in the queue, and an agent that wants the
+// outcome calls wait_for_approval. Turning the wait on makes a single action
+// block, which is a preference rather than something every caller pays for.
 function inlineWaitOptions(current: number): number[] {
   const base = [30, 45, 60, 90, 120, 150, 180];
   const withCurrent = current > 0 && !base.includes(current) ? [...base, current] : base;
@@ -637,11 +633,8 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
   const [canonicalTags, setCanonicalTags] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // One destructive action at a time, by construction. This was four
-  // independent show/busy pairs (revoke, rotate, pass-through, clear
-  // permissions): eight booleans encoding one question, spreading each action's
-  // state across two variables and leaving "two modals open at once"
-  // representable even though it is never wanted.
+  // One destructive action at a time, by construction: a single state makes
+  // "two modals open at once" unrepresentable.
   const [action, setAction] = useState<{ kind: TokenAction; busy: boolean } | null>(null);
   const openAction = (kind: TokenAction) => setAction({ kind, busy: false });
   const closeAction = () => setAction(null);
@@ -651,8 +644,8 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
   const [rotatedRawToken, setRotatedRawToken] = useState<string | null>(null);
   const [showSelectByPicker, setShowSelectByPicker] = useState(false);
   const [entityTree, setEntityTree] = useState<import("../types").EntityTree | null>(null);
-  // Set when a change alters the announced tool list, so we can remind the operator
-  // to reconnect the agent. Only surfaced when the token has actually been used.
+  // Set when a change alters the announced tool list, to remind the operator to
+  // reconnect the agent. Only surfaced when the token has actually been used.
   const [reconnectNeeded, setReconnectNeeded] = useState(false);
   const [selectedEntityId, setSelectedEntityId] = useState("");
   const [selectedDepth, setSelectedDepth] = useState<"entity" | "device" | "domain">("entity");
@@ -727,10 +720,9 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
   useEffect(() => { api.getMesaVocabulary().then((v) => setCanonicalTags(v.canonical_tags)).catch(() => null); }, []);
 
   // Open the MESA profile editor as an overlay on this tab (no tab switch). isNew
-  // mirrors the +/MESA affordance the user clicked (driven by the same set).
+  // mirrors the +/MESA affordance that was clicked, which is driven by the same
+  // set, so the editor opens in the mode the operator just saw.
   const openMesaInline = useCallback((key: string, scope: LinkScope = "entity", label?: string) => {
-    // isNew mirrors the +/MESA affordance that was clicked, which is driven by
-    // the same set, so the editor opens in the mode the operator just saw.
     const known = scope === "device" ? mesaProfileDevices
       : scope === "domain" ? mesaProfileDomains
       : mesaProfileEntities;
@@ -762,7 +754,7 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("tokens.rotateFailed"));
     } finally {
-      // Closed on success and on failure alike, as before.
+      // Closed on success and on failure alike.
       closeAction();
     }
   }
@@ -1120,9 +1112,9 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
           // The target is whichever row was clicked, so it is fixed rather than
           // picked. Without this the editor shows its combobox and validates the
           // pre-filled key against a picker source this view does not supply,
-          // which rejected every device id as "no matching device". Locking is
-          // also what the in-context injector does, and for the same reason: the
-          // caller already knows the target, so re-deriving it can only go wrong.
+          // which rejects every device id as "no matching device". The in-context
+          // injector locks for the same reason: the caller already knows the
+          // target, so re-deriving it can only go wrong.
           lockedKey
         />
       )}

@@ -1,35 +1,23 @@
-"""Archetype-based adversarial testing across the whole tool surface.
+"""Archetype-based adversarial sweep over the whole tool surface.
 
-The per-tool suites elsewhere in tests/ each assert what ONE tool does with
-sensible input. This suite asserts what EVERY tool does with hostile input, and
-derives both the tools and the attacks from the published inputSchema, so a
-tool added tomorrow is covered without anyone writing a case for it. That is
-the whole point: coverage that scales with the surface instead of with effort.
+Per-tool suites assert what ONE tool does with sensible input; this asserts what
+EVERY tool does with hostile input. Tools and attacks are derived from the
+published inputSchema, so a new tool is covered without writing a case. Attacks
+are shapes real models emit: a list where a string was declared (HA's matcher
+raises AttributeError on it), a JSON-encoded string where an object was
+declared, and stray extra arguments.
 
-The attacks come from the shapes a real model actually emits. A list where a
-string was declared is not hypothetical: a model targeting two entities by name
-sends one, and HA's matcher raises AttributeError on it. So is a JSON-encoded
-string where an object was declared, and a stray extra argument, which weaker
-local models produce constantly.
+_call_tool is called DIRECTLY, not through the dispatcher, on purpose: the
+tools/call dispatcher's catch-all turns any exception into a clean "Internal
+error", so a tool crashing on every input would still pass.
 
-CALLED DIRECTLY, NOT THROUGH THE DISPATCHER, on purpose. _dispatch_mcp wraps
-tools/call in a catch-all that turns any unhandled exception into a clean
-"Internal error". Running the torture through it would make this suite pass
-against a tool that crashes on every input. The catch-all is defense in depth,
-not a substitute for the tools being correct, so the assertion here is that
-_call_tool itself never raises.
-
-Four invariants, checked on every (tool, attack) pair:
-
+Invariants checked on every (tool, attack) pair:
 1. It returns, rather than raising.
-2. It returns the MCP content contract, with a recognised audit outcome.
-3. It never leaks a traceback or an interpreter path into the agent's response.
-4. A FULLY DENIED token learns nothing about its own payload. Every attack
-   string carries a marker; if it comes back, the tool told a token with no
-   capability something about what it sent, which would let it use the error
-   text as a validator for its own input.
+2. It returns the MCP content contract with a recognised audit outcome.
+3. It never leaks a traceback or interpreter path into the response.
+4. A FULLY DENIED token learns nothing about its payload: each attack string
+   carries a marker, and its return would make the error text a validator.
 """
-
 from __future__ import annotations
 
 import asyncio
@@ -77,11 +65,7 @@ def _all_defs() -> list[dict]:
 
 
 def _archetype(tool_def: dict) -> str:
-    """Classify a tool by the SHAPE of its declared input.
-
-    Derived from the schema rather than a hand-kept list, so the classification
-    cannot drift away from the tool it describes.
-    """
+    """Classify a tool by the SHAPE of its declared input, derived from the schema."""
     props: dict = tool_def.get("inputSchema", {}).get("properties", {}) or {}
     names = set(props)
     if not names:
@@ -168,13 +152,13 @@ def _baseline(tool_def: dict) -> dict:
 
 
 def _hostile_values(kind: str | None) -> list:
-    """Values of the wrong shape for a declared type, in the flavours real
-    clients actually emit."""
+    """Wrong-shaped values for a declared type, in the flavours real clients emit."""
     common = [None, 0, True, [], {}]
     if kind == "string":
-        # The list case is the live-found intent-tool crash; the long string is
-        # the unbounded-field case; the rest are traversal and template probes
-        # that must be refused rather than interpreted.
+        # A list where a string was declared crashes HA's name matcher (a model
+        # targeting two entities by name sends one); the long string is the
+        # unbounded-field case; the rest are traversal and template probes that
+        # must be refused rather than interpreted.
         return common + [
             [f"{MARKER}_a", f"{MARKER}_b"],
             {"nested": MARKER},
@@ -204,9 +188,9 @@ def _attacks(tool_def: dict) -> list[tuple[str, dict]]:
     base = _baseline(tool_def)
 
     cases: list[tuple[str, dict]] = [("empty", {})]
-    # A stray argument must not hard-fail: unknown-key rejection was deliberately
-    # not enforced, because weak models emit stray fields and refusing them tanks
-    # task completion without protecting anything.
+    # A stray argument must not hard-fail: unknown keys are tolerated by design,
+    # because weaker models emit stray fields and refusing them hurts task
+    # completion without protecting anything.
     cases.append(("unknown_key", {**base, f"{MARKER}_unknown": MARKER}))
     if required:
         # Every required field present but every one of them nonsense.
@@ -248,8 +232,7 @@ def _nested_attacks(schema: dict) -> list[tuple[str, object]]:
 
 @pytest.fixture(autouse=True)
 def isolated_config_dir(hass: HomeAssistant, tmp_path):
-    """Anything that does reach a file write must land in a throwaway dir, not
-    in the shared testing config the rest of the suite reads."""
+    """Anything that reaches a file write lands in a throwaway dir, not the shared config."""
     hass.config.config_dir = str(tmp_path)
     (tmp_path / "configuration.yaml").write_text(
         "automation: !include automations.yaml\nscript: !include scripts.yaml\n",
@@ -265,8 +248,10 @@ def _data() -> PhoenixData:
 
 
 def _token(mode: str) -> TokenRecord:
-    """A token whose every capability is `mode`, with an EMPTY permission tree:
-    no entity is ever in scope, so nothing real is actuated."""
+    """A token whose every capability is `mode`, with an EMPTY permission tree.
+
+    No entity is ever in scope, so nothing real is actuated.
+    """
     return TokenRecord(
         id=str(uuid.uuid4()), name="torture", token_hash="x", created_at=utcnow(),
         created_by="admin", permissions=PermissionTree(domains={}),
@@ -324,7 +309,7 @@ def test_every_adversarial_baseline_normalizes(tool_def):
     ],
 )
 def test_structured_adversarial_baseline_passes_normalization(tool_name: str):
-    """Positive control for every structured family the audit found vacuous."""
+    """Positive control: each structured family's seed passes normalization, so its sweep bites."""
     tool_def = next(item for item in ALL_DEFS if item["name"] == tool_name)
     schema = tool_def["inputSchema"]
     seed = _placeholder("arguments", schema)
@@ -337,7 +322,7 @@ def test_structured_adversarial_baseline_passes_normalization(tool_name: str):
 async def test_structured_get_state_seed_reaches_permission_resolution(
     hass: HomeAssistant,
 ):
-    """Positive control for the boundary hidden by the former empty projection seed."""
+    """Positive control: the seed reaches permission resolution, not an early validation failure."""
     tool_def = next(item for item in ALL_DEFS if item["name"] == "get_state")
     properties = tool_def["inputSchema"]["properties"]
     seed = {name: _placeholder(name, spec) for name, spec in properties.items()}
@@ -465,8 +450,8 @@ async def test_denied_token_survives_hostile_input(tool_def: dict, hass: HomeAss
 # Only a CAP-gated tool owes the uniform refusal. A capless tool (the native
 # Hass* family) is scoped by entity and validates its arguments first, and its
 # "'x' is not of type 'integer'" is a statement about the caller's own input,
-# not about the instance; the same reasoning already lets ServiceValidationError
-# text through so an agent can self-correct.
+# not about the instance; the same reasoning lets ServiceValidationError text
+# through so an agent can self-correct.
 CAP_GATED_DEFS = [d for d in ALL_DEFS if mcp_view._tool_caps(d)]
 
 
@@ -475,9 +460,9 @@ async def test_cap_denied_tool_never_echoes_the_payload(tool_def: dict, hass: Ho
     """Invariant 4, the security one.
 
     A token whose capability is denied must not be able to use the tool's error
-    messages as a validator for its own input. That is why the cap-deny check
-    runs BEFORE any precheck: otherwise a denied token can ask "would this have
-    worked?" and read the answer off the error text.
+    messages as a validator for its own input, so the cap-deny check runs BEFORE
+    any precheck; otherwise it could ask "would this have worked?" and read the
+    answer off the error text.
     """
     token, data, name = _token("deny"), _data(), tool_def["name"]
     for label, args in _attacks(tool_def):
@@ -491,8 +476,11 @@ async def test_cap_denied_tool_never_echoes_the_payload(tool_def: dict, hass: Ho
 
 @pytest.mark.parametrize("tool_def", EXECUTABLE_DEFS, ids=lambda d: d["name"])
 async def test_permitted_token_survives_hostile_input(tool_def: dict, hass: HomeAssistant):
-    """Invariants 1-3 with every capability granted, so the attack reaches the
-    tool's own argument handling instead of stopping at the cap gate."""
+    """Invariants 1-3 with every capability granted.
+
+    The attack reaches the tool's own argument handling instead of stopping at the
+    cap gate.
+    """
     token, data, name = _token("allow"), _data(), tool_def["name"]
     for label, args in _attacks(tool_def):
         result, outcome, resource = await _call_tool(name, args, token, hass, data, "req", "1.2.3.4")
@@ -503,12 +491,11 @@ async def test_permitted_token_survives_hostile_input(tool_def: dict, hass: Home
 async def test_concurrent_identical_calls_do_not_break_each_other(
     tool_def: dict, hass: HomeAssistant,
 ):
-    """The double-delete / racing-writer shape, cheaply.
+    """Two identical calls in flight at once (the double-delete or racing-writer shape).
 
-    Two identical calls in flight at once is what an agent retrying a slow tool
-    actually produces. Neither may raise, and gather is given no
-    return_exceptions so a raise in either fails the test rather than hiding in
-    a result list.
+    An agent retrying a slow tool produces this. Neither may raise; gather is given
+    no return_exceptions so a raise fails the test rather than hiding in a result
+    list.
     """
     token, data, name = _token("allow"), _data(), tool_def["name"]
     args = _baseline(tool_def)
@@ -522,9 +509,10 @@ async def test_concurrent_identical_calls_do_not_break_each_other(
 async def test_unknown_arguments_are_tolerated_not_rejected(hass: HomeAssistant):
     """A stray argument must not turn a valid call into an error.
 
-    Pinned separately from the sweep above because it is a DELIBERATE decision
-    (no per-tool additionalProperties: false) that reads like an oversight, and
-    the sweep only asserts the call survives, not that it stayed successful.
+    Pinned separately from the sweep because tolerating unknown arguments is a
+    DELIBERATE decision (no per-tool additionalProperties: false) that reads like
+    an oversight, and the sweep only asserts the call survives, not that it
+    succeeds.
     """
     token, data = _token("allow"), _data()
     hass.states.async_set("light.kitchen", "on")

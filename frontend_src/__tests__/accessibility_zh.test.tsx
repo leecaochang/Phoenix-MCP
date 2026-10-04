@@ -1,12 +1,10 @@
-/** Accessible names under a non-English catalog.
+/**
+ * Accessible names under a non-English catalog.
  *
- * accessibility.test.tsx renders against the English catalog that setup.ts
- * primes, so it proves an accessible name EXISTS but never that it is
- * localized. A control whose visible label came from the catalog while its
- * aria-label stayed a hardcoded English literal would pass every check there.
- *
- * This file primes zh-Hans and asserts the accessible names actually change,
- * on the controls where the name is built rather than simply passed through.
+ * Rendering against the English catalog proves a name exists, not that it is
+ * localized: a control whose visible label comes from the catalog while its
+ * aria-label stays a hardcoded English literal would pass there. These tests
+ * prime zh-Hans and assert the names change on the controls that build them.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { render, screen } from "@testing-library/react";

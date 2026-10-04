@@ -362,14 +362,12 @@ describe("agentCLI model capabilities (real per-provider levels)", () => {
     expect(vals(c)).toEqual(["off", "low", "medium", "high", "xhigh", "max"]);
   });
   it("deepseek: off/low/high/max; temperature only when thinking off", () => {
-    // `low` is real on the v4 models. The retired deepseek-chat / deepseek-reasoner
-    // aliases remapped low and medium to high, and the reasoner branch that used to
-    // sit here described a model that no longer answers.
+    // `low` is a distinct level on the v4 models, not folded into high.
     expect(vals(modelCaps("deepseek", "deepseek-v4-flash", true))).toEqual(["off", "low", "high", "max"]);
     expect(modelCaps("deepseek", "deepseek-v4-flash", true).temperature).toBe(false);
     expect(modelCaps("deepseek", "deepseek-v4-flash", false).temperature).toBe(true);
-    // No model-NAME special cases left: every deepseek model gets the same set,
-    // which is what makes the capability refresh the thing that corrects it.
+    // No model-NAME special cases: every deepseek model gets the same set, so the
+    // provider's capability refresh is what corrects it.
     expect(vals(modelCaps("deepseek", "deepseek-v4-pro", true))).toEqual(["off", "low", "high", "max"]);
   });
   it("chatgpt: gpt-5 none..high, o-series low..high, plain gpt-* no thinking + temperature", () => {
@@ -530,9 +528,8 @@ describe("agentCLI generation options mapping", () => {
 
 describe("agentCLI token formatting (fmtTokens)", () => {
   it("formats counts compactly across magnitudes", () => {
-    // CLDR's short form, not the old hand-rolled ladder: the suffix is a
-    // capital K in English, and in a locale that groups by another magnitude
-    // the NUMBER changes too (see i18n_format.test.ts). Locale pinned here so
+    // CLDR's short form: the suffix is a capital K in English, and in a locale
+    // that groups by another magnitude the NUMBER changes too. Locale pinned so
     // this asserts the format rather than the test runner's environment.
     setFormatLocale({}, "en-US");
     expect(fmtTokens(0)).toBe("0");
@@ -1132,8 +1129,8 @@ describe("AgentCliWindow streaming", () => {
   });
 
   it("shows the rejection reason and the approved-but-failed detail on resolved approvals", async () => {
-    // A bare "rejected" hid WHY (live-found: an admin's Approve whose executor
-    // failed read as a refusal); the resolved card must carry the reason.
+    // A bare "rejected" hides why: an admin's Approve whose executor failed would
+    // read as a refusal. The resolved card must carry the reason.
     agentCliChat.mockImplementation(async (_body, onEvent: (n: string, p: unknown) => void) => {
       onEvent("approval_required", { approval_id: "ap1", tool_name: "add_dashboard_card", review_url: "/x" });
       onEvent("approval_resolved", { approval_id: "ap1", status: "rejected", reason: "wrong sensor, use the outdoor one" });
@@ -1156,8 +1153,8 @@ describe("AgentCliWindow streaming", () => {
 
     await waitFor(() => expect(screen.getByText(/Rejected/)).toBeInTheDocument());
     expect(screen.getByText(/wrong sensor, use the outdoor one/)).toBeInTheDocument();
-    // The same label also reaches the live region now that the announcement
-    // resolves the status through the catalog, so scope this to the card.
+    // The same label also reaches the live region (the announcement resolves the
+    // status through the catalog), so scope this to the card.
     const statuses = Array.from(document.querySelectorAll(".agentcli-approval-status"));
     expect(statuses.map((n) => n.textContent).join(" ")).toContain("approved, but execution failed");
     expect(screen.getByText(/changed since you last read it/)).toBeInTheDocument();
@@ -1260,7 +1257,7 @@ describe("AgentCliWindow streaming", () => {
   it("token-usage footer accumulates across turns, resets on /clear, and hides via the gear toggle", async () => {
     // Turn 1: two usage events (turn-cumulative from the server); the footer
     // shows the newest totals plus the newest call's context size. Locale
-    // pinned because the footer now renders CLDR's compact form, which differs
+    // pinned because the footer renders CLDR's compact form, which differs
     // per language (48.2K in English, 4.8万 in Chinese).
     setFormatLocale({}, "en-US");
     agentCliChat.mockImplementation(async (_body, onEvent: (n: string, p: unknown) => void) => {
@@ -1447,11 +1444,11 @@ describe("AgentCliWindow streaming", () => {
   });
 
   it("Cancel keeps the partial turn in the transcript instead of wiping it", async () => {
-    // Live-found: a long agentic exchange is one turn, and Cancel dropped the
-    // live entries, erasing the whole visible conversation. Cancel must fold
-    // the partial turn into the transcript, flip any still-pending approval
-    // card to cancelled (matching the server's orphan cleanup), and add a
-    // Cancelled marker, while still restoring the query for editing.
+    // A long agentic exchange is one turn, so Cancel must not drop the live
+    // entries and erase the visible conversation. It folds the partial turn into
+    // the transcript, flips any still-pending approval card to cancelled
+    // (matching the server's orphan cleanup), and adds a Cancelled marker, while
+    // still restoring the query for editing.
     agentCliChat.mockImplementation((_body, onEvent: (n: string, p: unknown) => void, signal) => {
       onEvent("assistant_delta", { text: "Working on it." });
       onEvent("approval_required", { approval_id: "ap1", tool_name: "add_dashboard_card", review_url: "/x" });
@@ -1664,7 +1661,7 @@ describe("AgentCliWindow streaming", () => {
 
       // The global Agent Chat layer is hidden while the panel-owned review modal
       // is open. Closing the modal reveals only the compact mobile restore pill,
-      // not the full titlebar that used to cover the approvals panel.
+      // not the full titlebar, which would cover the approvals panel.
       notifyAgentChatReviewClosed("ap-mobile");
       await waitFor(() => expect(dialog).not.toHaveClass("agentcli-reviewing"));
       expect(dialog).toHaveClass("agentcli-minimized");
@@ -1727,12 +1724,12 @@ describe("AgentCliWindow streaming", () => {
   });
 
   it("hides the buttons when the approval is acted on somewhere else", async () => {
-    // The bug this closes: the bubble learned about a resolution ONLY from the
-    // SSE stream, which rides the agent's turn resuming. Rejecting in the panel
-    // left Approve and Reject sitting here until the model answered, so the
-    // operator could click an action the server would only answer with a 409.
-    // Nothing is streamed here after approval_required, which is the point:
-    // the update has to arrive without the agent saying anything.
+    // The bubble must learn of a resolution made elsewhere without waiting for the
+    // SSE stream, which only carries it once the agent's turn resumes. Otherwise
+    // Approve and Reject stay clickable after a panel rejection until the model
+    // answers, and the server would answer the click with a 409. Nothing is
+    // streamed here after approval_required, which is the point: the update has
+    // to arrive without the agent saying anything.
     const handlers: Record<string, (ev: unknown) => void> = {};
     const el = document.createElement("home-assistant");
     (el as unknown as { hass: unknown }).hass = {
@@ -1942,8 +1939,8 @@ describe("agentCLI cancellation on close/unmount", () => {
     vi.clearAllMocks();
     __resetAgentCliState();
     getAgentCliModels.mockResolvedValue({ models: ["claude-opus-4-8"] });
-    // A never-resolving promise keeps the request "in flight" so we can observe
-    // whether its abort signal is tripped by Close / unmount.
+    // A never-resolving promise keeps the request "in flight" so the test can
+    // observe whether its abort signal is tripped by Close / unmount.
     agentCliChat.mockReturnValue(new Promise(() => {}));
   });
 
@@ -2002,11 +1999,10 @@ describe("agentCLI cancellation on close/unmount", () => {
 });
 
 describe("unsent message box survives a panel remount", () => {
-  // The panel-hosted window is unmounted whenever the user navigates away from
-  // the Phoenix MCP panel in Home Assistant. The transcript survived that (it
-  // lives in the session tier) but the half-written prompt did not, so a user
-  // who typed, wandered off, and came back found the box emptied. The global
-  // floating window never unmounts, so it never showed this.
+  // The panel-hosted window unmounts whenever the user navigates away from the
+  // Phoenix MCP panel in Home Assistant. The transcript lives in the session tier
+  // and survives, so the half-written prompt must too. The global floating window
+  // never unmounts.
   beforeEach(() => {
     __resetAgentCliState();
     getAgentCliModels.mockResolvedValue({ models: ["claude-opus-4-8"] });
@@ -2152,9 +2148,8 @@ describe("AgentCliWindow generic activity line", () => {
   }
 
   it("names the running tool with verbose off, where there is otherwise nothing", async () => {
-    // The defect this closes: with verbose off the window rendered NOTHING for
-    // the entire run, so an operator could not tell working from hung and read
-    // the blank window as broken.
+    // With verbose off the window would otherwise render NOTHING for the whole
+    // run, and an operator could not tell working from hung.
     await running([["tool_call", { id: "tc1", name: "get_states", arguments: {} }]]);
 
     await waitFor(() => expect(screen.getByText("Working: get_states")).toBeInTheDocument());
@@ -2225,9 +2220,9 @@ describe("AgentCliWindow generic activity line", () => {
 
 // Declared capabilities only ever REMOVE a control, never add one. A provider
 // saying "no reasoning" is authoritative; a provider saying nothing (which is
-// most of them) leaves the shipped table standing. That asymmetry is what makes
-// a failed or unsupported lookup degrade to today's behaviour instead of
-// stripping a working model's controls.
+// most of them) leaves the shipped table standing. That asymmetry makes a failed
+// or unsupported lookup fall back to the shipped table instead of stripping a
+// working model's controls.
 describe("modelCaps with declared capabilities", () => {
   const vals2 = (c: { thinking: { value: string }[] }) => c.thinking.map((o) => o.value);
 
@@ -2303,7 +2298,7 @@ describe("modelCaps with probed effort levels", () => {
 });
 
 // The aggregator case: one key fronting many vendors, where no built-in answer
-// fits and a reasoning model was therefore losing its reasoning entirely.
+// fits, so a reasoning model offers no way to choose its level until probed.
 describe("modelCaps for aggregator providers", () => {
   const vals4 = (c: { thinking: { value: string }[] }) => c.thinking.map((o) => o.value);
 

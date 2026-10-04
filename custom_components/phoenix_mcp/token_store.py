@@ -1,4 +1,7 @@
-"""Token storage CRUD for Phoenix MCP. No business logic lives here."""
+"""Token, archive, global-settings and pending-approval storage for Phoenix MCP.
+
+Tokens are stored only as SHA-256 hashes and compared in constant time.
+"""
 
 from __future__ import annotations
 
@@ -66,14 +69,12 @@ VALID_NODE_STATES = frozenset({"GREY", "YELLOW", "GREEN", "RED"})
 
 
 def _require_dt(value: str | None, field: str) -> datetime:
-    """Parse a REQUIRED stored datetime, raising if it does not parse.
+    """Parse a REQUIRED stored datetime, raising ValueError if it does not parse.
 
-    created_at (and an archived record's revoked_at) are non-optional, but
-    _parse_dt returns None for anything unparseable, which would build a record
-    whose non-optional datetime is None and crash much later at an arbitrary
-    comparison or .isoformat(). Raising here routes a corrupt value into the
-    existing "skip the record, warn, never abort setup" handler at the load site,
-    which is where every other corruption is already handled.
+    created_at (and an archived record's revoked_at) are non-optional, so a None
+    from _parse_dt would crash later at an arbitrary comparison. Raising routes a
+    corrupt value into the load site's "skip the record, warn, never abort setup"
+    handler.
     """
     parsed = _parse_dt(value)
     if parsed is None:
@@ -86,10 +87,9 @@ def _parse_dt(value: str | None) -> datetime | None:
         return None
     parsed = parse_datetime(value)
     if parsed is not None and parsed.tzinfo is None:
-        # Phoenix MCP always writes UTC-aware values; a naive one can only come from
-        # hand-edited storage or a record persisted before input normalization.
-        # Assume UTC so expiry comparisons never mix naive and aware datetimes
-        # (that TypeError would abort integration setup).
+        # Phoenix MCP always writes UTC-aware values; a naive one means hand-edited
+        # or legacy storage. Assume UTC so expiry comparisons never mix naive and
+        # aware datetimes (that TypeError would abort integration setup).
         parsed = parsed.replace(tzinfo=timezone.utc)
     return parsed
 
@@ -97,10 +97,10 @@ def _parse_dt(value: str | None) -> datetime | None:
 def _clamp_inline_wait(value: Any) -> int:
     """Coerce confirm_inline_wait_seconds to 0 (off) or an int in [MIN, MAX].
 
-    A non-numeric or non-positive value means off (0, the unattended-agent mode);
-    any positive value enables the inline wait and is clamped into
-    [MIN_CONFIRM_INLINE_WAIT_SECONDS, MAX_CONFIRM_INLINE_WAIT_SECONDS], so a stored
-    or patched value can never sit below the useful floor or above the ceiling.
+    A non-numeric or non-positive value means off (the unattended-agent mode); a
+    positive value is clamped into [MIN_CONFIRM_INLINE_WAIT_SECONDS,
+    MAX_CONFIRM_INLINE_WAIT_SECONDS], so a stored or patched value can never sit
+    below the useful floor or above the ceiling.
     """
     try:
         seconds = int(value)
@@ -114,11 +114,11 @@ def _clamp_inline_wait(value: Any) -> int:
 def _load_rate(value: Any, default: int) -> int:
     """Coerce a stored rate-limit field to an int in [0, 100000].
 
-    Storage can be hand-edited; a negative or non-numeric limit must never
-    reach the rate limiter (a negative window size fails every request with an
-    IndexError). Out-of-range values fall back to the default rather than
-    clamping, because clamping a negative to 0 would silently disable rate
-    limiting. The bounds match the admin API's create/patch validation.
+    A negative or non-numeric limit must never reach the rate limiter (a
+    negative limit fails every request with an IndexError). Out-of-range values
+    fall back to the default rather than clamping, because clamping a negative
+    to 0 would silently disable rate limiting. The bounds match the admin API's
+    create/patch validation.
     """
     if isinstance(value, bool):
         return default
@@ -134,10 +134,10 @@ def _load_rate(value: Any, default: int) -> int:
 def _load_bool(value: object) -> bool:
     """Load a stored access-widening flag fail-closed: only real True is True.
 
-    A corrupt or hand-edited record could store a truthy non-bool (e.g. the
-    string "false", which is truthy under bool()); for a flag that widens
-    access (pass_through, use_assist_exposure) that must never silently enable
-    it. Anything that is not literally True loads as False.
+    A corrupt record could store a truthy non-bool (the string "false" is truthy
+    under bool()), and a flag that widens access (pass_through,
+    use_assist_exposure) must never be enabled that way. Anything that is not
+    literally True loads as False.
     """
     return value is True
 
@@ -299,14 +299,12 @@ class TokenRecord:
     # can actually use (its caps and write scope). True announces the full tool
     # surface (diagnostic / opt-out). Not a capability: a presentation toggle.
     announce_all_tools: bool = False
-    # Inline wait (seconds) on a confirm gate: a confirm-gated call holds the
-    # response open up to this many seconds for an admin decision before falling
-    # back to the immediate pending_approval reply. 0 means off (return
-    # immediately, the unattended-agent mode, API-settable only); a positive
-    # value is clamped to [MIN, MAX]_CONFIRM_INLINE_WAIT_SECONDS. The product
-    # default is OFF: async_create_token seeds new tokens with
-    # DEFAULT_CONFIRM_INLINE_WAIT_SECONDS and from_dict defaults a stored record
-    # missing the field to it. Directly constructed records also default to 0.
+    # Seconds a confirm-gated call holds its response open for an admin decision
+    # before falling back to the immediate pending_approval reply. 0 is off (the
+    # unattended-agent mode); a positive value is clamped to
+    # [MIN, MAX]_CONFIRM_INLINE_WAIT_SECONDS. The product default is OFF:
+    # async_create_token and from_dict both use DEFAULT_CONFIRM_INLINE_WAIT_SECONDS,
+    # and a directly constructed record also defaults to 0.
     confirm_inline_wait_seconds: int = 0
     rate_limit_requests: int = DEFAULT_RATE_LIMIT_REQUESTS
     rate_limit_burst: int = DEFAULT_RATE_LIMIT_BURST
@@ -367,23 +365,27 @@ class TokenRecord:
     capability_grant_base: int | None = None
     capability_grant_version: int | None = None
     tools_list_version: int = 1
-    # The tool-catalog fingerprint this token last saw at tools/list. The second
-    # staleness axis: settings_version catches the OPERATOR changing the token,
+    # The tool-catalog fingerprint this token last saw at tools/list: the second
+    # staleness axis. settings_version catches the OPERATOR changing the token;
     # this catches the CODE changing (a deploy) under a client that already
-    # fetched its schemas. Empty means never recorded, which is deliberately NOT
+    # fetched its schemas. Empty means never recorded and is deliberately NOT
     # treated as stale: token_store cannot import mcp_view to learn the current
-    # fingerprint (the dependency runs the other way), so an upgraded token has
-    # no baseline and guessing one would advise every token once for nothing.
-    # The first tools/list after the upgrade records it and deploys are caught
-    # from then on.
+    # fingerprint (the dependency runs the other way), and guessing a baseline
+    # would advise every such token once for nothing. The first tools/list
+    # records it.
     tools_catalog_fingerprint: str = ""
 
     def caps_dict(self) -> dict[str, str]:
-        """Return the cap_*->mode mapping for this token."""
+        """Return the mapping of each capability name to its mode."""
         return {name: getattr(self, name) for name in CAPABILITY_NAMES}
 
     def accepts_policy_version(self, version: int) -> bool:
-        """Keep admitted work valid only across proven capability-only grants."""
+        """Whether work admitted under policy `version` may still proceed.
+
+        True when the settings are unchanged, or when every change since was a
+        capability-only grant (tracked by capability_grant_base and
+        capability_grant_version); any other change invalidates it.
+        """
         return version == self.settings_version or (
             self.capability_grant_base is not None
             and self.capability_grant_version == self.settings_version
@@ -547,8 +549,8 @@ class ArchivedTokenRecord:
             revoked=data.get("revoked", False),
             expires_at=_parse_dt(data.get("expires_at")),
             last_used_at=_parse_dt(data.get("last_used_at")),
-            # pass_through and other privilege fields are intentionally not loaded even
-            # if present in older storage records; archives never carry them.
+            # pass_through and other privilege fields are intentionally not loaded
+            # even if present in storage; archives never carry them.
         )
 
 
@@ -811,7 +813,11 @@ class GlobalSettings:
 
 
 class _PhoenixStore(DurableStore[dict]):
-    """Load released v2/v3 storage without replaying obsolete pending actions."""
+    """Migrate stored v2 and v3 data to the current version without replaying pending actions.
+
+    Pending approvals that have not started executing are cancelled, because
+    their format is incompatible with the current one.
+    """
 
     async def _async_migrate_func(
         self, old_major_version: int, old_minor_version: int, old_data: dict
@@ -845,7 +851,7 @@ class TokenStore:
         self._archived: dict[str, ArchivedTokenRecord] = {}
         self._pending_approvals: list[dict] = []
         self._settings: GlobalSettings = GlobalSettings()
-        # Global per-entity hints (entity_id -> hint text), surfaced to every token
+        # Global per-entity hints (entity_id to hint text), surfaced to every token
         # in the context endpoint. Distinct from per-token permission-node hints.
         self._entity_hints: dict[str, str] = {}
         self.async_lock: asyncio.Lock = asyncio.Lock()
@@ -970,7 +976,7 @@ class TokenStore:
         return self._tokens.get(token_id)
 
     def get_token_by_hash(self, token_hash: str) -> TokenRecord | None:
-        """Find a token by constant-time comparison of SHA-256 hashes."""
+        """Find a token by `hmac.compare_digest` over SHA-256 hashes, never `==`."""
         for token in self._tokens.values():
             if hmac_compare(token.token_hash, token_hash):
                 return token
@@ -1039,9 +1045,12 @@ class TokenStore:
     ) -> TokenRecord | None:
         """Update mutable capability and rate-limit fields on a token and persist.
 
-        Callers must hold self.async_lock before calling to prevent concurrent writes.
-        When rate_limit_requests is set to 0, rate_limit_burst is forced to 0.
-        Returns None if the token is not found.
+        Callers must hold self.async_lock. A rate_limit_requests of 0 forces
+        rate_limit_burst to 0, and any capability change re-derives the persona.
+        settings_version advances for anything beyond a rename or inline-wait
+        change. When every change was a capability-only grant (see
+        CAP_GRANT_TRANSITIONS) the grant run is recorded so admitted requests stay
+        valid (accepts_policy_version). Returns None if the token is not found.
         """
         token = self._tokens.get(token_id)
         if token is None:
@@ -1088,9 +1097,9 @@ class TokenStore:
             token.announce_all_tools = False
         if token.rate_limit_requests == 0:
             token.rate_limit_burst = 0
-        # If any capability changed, re-derive persona from the resulting cap set.
-        # This keeps the persona label honest: applying a preset and then tweaking
-        # any cap drops the token to "custom" (or to a different matching preset).
+        # Re-derive the persona from the resulting cap set so the label stays
+        # honest: tweaking any cap drops the token to "custom" (or to a different
+        # matching persona).
         if cap_changed and token.persona != PERSONA_HOME_COMPANION:
             from .personas import detect_persona  # noqa: PLC0415 - avoid circular import at module load
             token.persona = detect_persona(token.caps_dict())
@@ -1306,7 +1315,7 @@ class TokenStore:
         return self._settings
 
     def get_entity_hints(self) -> dict[str, str]:
-        """Return the global entity-hint map (entity_id -> hint). Mutate via async_set_entity_hint."""
+        """Return the global entity-hint map (entity_id to hint). Mutate via async_set_entity_hint."""
         return self._entity_hints
 
     async def async_set_entity_hint(self, entity_id: str, hint: str | None) -> None:
@@ -1330,12 +1339,12 @@ class TokenStore:
         return self._settings
 
     async def async_wipe(self) -> None:
-        """Clear all tokens, archived records, approvals, and settings, then persist.
+        """Clear all tokens, archived records, approvals, entity hints and settings, then persist.
 
-        Pending approvals reference token IDs that this call deletes; leaving
-        them would persist orphaned, un-approvable records (and their notifications
-        would linger). The admin wipe handler dismisses those notifications and
-        fires phoenix_mcp_approval_resolved for the captured records, mirroring revocation.
+        Pending approvals reference token IDs that this call deletes, so they are
+        cleared too rather than persisted as orphaned, un-approvable records. The
+        admin wipe handler captures them first to dismiss their notifications and
+        fire phoenix_mcp_approval_resolved, mirroring revocation.
         """
         self._tokens.clear()
         self._archived.clear()

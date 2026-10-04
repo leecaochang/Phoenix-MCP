@@ -169,7 +169,9 @@ async def test_unknown_tool_does_not_create_recovery_barrier(hass, token_store):
 
 @pytest.mark.parametrize("surface", ["chat", "voice", "ai_task"])
 async def test_provider_loops_continue_after_unknown_tool(hass, token_store, surface):
-    """Exercise the actual three turn loops and the actual MCP dispatcher."""
+    """The chat, voice and AI Task loops continue past an unknown tool, via the
+    real MCP dispatcher.
+    """
     from custom_components.phoenix_mcp import agentcli
     from custom_components.phoenix_mcp.audit import AuditLog
     from custom_components.phoenix_mcp.data import PhoenixData

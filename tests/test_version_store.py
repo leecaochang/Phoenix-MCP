@@ -1,4 +1,4 @@
-"""Tests for version_store.py."""
+"""Version store: record shape and lookup, retention, validation and persistence."""
 
 from __future__ import annotations
 

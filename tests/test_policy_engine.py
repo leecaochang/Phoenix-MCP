@@ -1,4 +1,4 @@
-"""Tests for policy_engine.py."""
+"""Permission resolution, entity filtering, target flattening and response redaction."""
 
 from __future__ import annotations
 
@@ -101,7 +101,6 @@ def device_reg(hass: HomeAssistant) -> dr.DeviceRegistry:
 
 @pytest.fixture
 def basic_env(hass: HomeAssistant, config_entry: MockConfigEntry):
-    """Set up a minimal known entity environment in the real hass instance."""
     hass.states.async_set("light.kitchen", "on", {"friendly_name": "Kitchen"})
     hass.states.async_set("sensor.temp", "22", {"unit_of_measurement": "C"})
     hass.states.async_set("lock.front_door", "locked", {})
@@ -111,7 +110,7 @@ def basic_env(hass: HomeAssistant, config_entry: MockConfigEntry):
 
 @pytest.fixture
 def registered_env(hass: HomeAssistant, config_entry: MockConfigEntry, entity_reg):
-    """Set up entities that are registered in both the state machine and the entity registry."""
+    """Entities registered in both the state machine and the entity registry."""
     lights = {}
     for slug, unique in [("kitchen", "uid_light_kitchen"), ("hallway", "uid_light_hallway")]:
         entry = entity_reg.async_get_or_create(
@@ -137,7 +136,6 @@ def registered_env(hass: HomeAssistant, config_entry: MockConfigEntry, entity_re
 
 @pytest.fixture
 def device_env(hass: HomeAssistant, config_entry: MockConfigEntry, entity_reg, device_reg):
-    """Set up device + area + entity environment for service target tests."""
     area_reg = __import__(
         "homeassistant.helpers.area_registry", fromlist=["async_get"]
     ).async_get(hass)
@@ -280,12 +278,12 @@ class TestConfigEntryRegistryPolicy:
 
 @pytest.fixture
 def category_env(hass: HomeAssistant, config_entry: MockConfigEntry, entity_reg, device_reg):
-    """A device+area holding a primary switch plus same-domain config, diagnostic,
-    and hidden switches, to exercise the primary-entities-only indirect filter.
+    """A primary switch plus same-domain config, diagnostic and hidden switches.
 
-    Same domain as the primary control on purpose: that is the real bug (a
-    config-category switch like a child lock swept in by "every switch in the
-    area"). Domain scoping alone would never catch it.
+    Held in one device and area to exercise the primary-entities-only indirect
+    filter. Same domain as the primary control on purpose: a config-category switch
+    like a child lock would be swept in by "every switch in the area", which domain
+    scoping alone cannot catch.
     """
     area_reg = __import__(
         "homeassistant.helpers.area_registry", fromlist=["async_get"]
@@ -451,7 +449,7 @@ class TestResolveDeviceLevel:
         assert resolve(entity_id, token, hass) == Permission.DENY
 
     async def test_device_overrides_domain(self, hass, device_env):
-        """Device GREEN + domain YELLOW -> WRITE (device wins as more specific)."""
+        """Device GREEN with domain YELLOW gives WRITE: the device is more specific."""
         env = device_env
         token = _make_token(
             domains={"light": "YELLOW"},
@@ -460,7 +458,7 @@ class TestResolveDeviceLevel:
         assert resolve(env["light_main"].entity_id, token, hass) == Permission.WRITE
 
     async def test_domain_red_beats_device_green(self, hass, device_env):
-        """Domain RED + device GREEN -> DENY (Pass 1 catches domain RED)."""
+        """Domain RED with device GREEN gives DENY: Pass 1 catches domain RED."""
         env = device_env
         token = _make_token(
             domains={"light": "RED"},
@@ -583,13 +581,14 @@ class TestResolveGhostAndBlocklist:
 
     @pytest.mark.parametrize("bad", [True, 0, 1.5, ["light.a", "light.b"], {"id": "light.a"}, None])
     async def test_a_non_string_entity_id_is_a_ghost_not_a_crash(self, hass, bad):
-        """resolve() is the single choke point every permission decision runs
-        through, and a model does not always follow the tool schema.
+        """A non-string entity id is a ghost, not a crash.
 
-        Each caller now coerces its own arguments, so nothing in the tool surface
-        reaches here with a non-string any more; this stays as the fail-closed
-        floor for the MCP, Assist and Agent Chat paths, and is pinned directly
-        because a guard that nothing tests is a guard someone deletes.
+        resolve() is the single choke point every permission decision runs through,
+        and a model does not always follow the tool schema (a list where a string
+        is declared). The ghost answer is byte-identical to any absent entity and
+        fails closed; callers coerce their own arguments, so this is the floor for
+        the MCP, Assist and Agent Chat paths, pinned directly because a guard that
+        nothing tests is a guard someone deletes.
         """
         token = _make_token(domains={"light": "GREEN"})
         assert resolve(bad, token, hass) == Permission.NOT_FOUND
@@ -1189,7 +1188,7 @@ class TestResolveServiceTargetsEntityCategory:
         assert env["diag"].entity_id in result_set
 
     async def test_untargeted_whole_domain_keeps_config_and_diagnostic(self, hass, category_env):
-        # No target => whole-domain expansion, same semantics as "all": unfiltered.
+        # No target means whole-domain expansion, same semantics as "all": unfiltered.
         env = category_env
         token = _make_token(domains={"switch": "GREEN"})
         result, _ = resolve_service_targets(
@@ -1439,17 +1438,16 @@ class TestEffectiveHint:
 class TestResolveIntentEntities:
     """resolve_intent_entities native-tool targeting, esp. the fail-closed guard.
 
-    A native intent action (HassTurnOn, etc.) that arrives with no recognized
-    selector (no name/area/floor/domain/device_class) must match NOTHING, not fan
-    out to the token's entire writable scope. A model passing an unrecognized
-    argument (e.g. entity_id, which these tools do not accept) is the real trigger:
-    every recognized selector ends up empty. Without the guard the call would
-    silently actuate every entity the token can write.
+    A native intent action (HassTurnOn, etc.) with no recognized selector (no
+    name/area/floor/domain/device_class) must match NOTHING, not fan out to the
+    token's entire writable scope. The typical trigger is an unrecognized argument
+    such as entity_id, which these tools do not accept; without the guard the call
+    would actuate every entity the token can write.
     """
 
     def test_no_selectors_returns_empty(self, hass, basic_env):
-        # Pass-through token => resolve() is WRITE for every non-phoenix_mcp entity, so the
-        # old behavior would have returned the whole writable scope here.
+        # Pass-through token: resolve() is WRITE for every non-phoenix_mcp entity,
+        # so an unguarded call would return the whole writable scope here.
         token = _make_token(pass_through=True)
         assert resolve_intent_entities(hass, token) == []
 
@@ -1474,12 +1472,11 @@ class TestResolveIntentEntities:
         assert result == ["cover.garage"]
 
     def test_list_typed_name_degrades_to_other_selectors_not_a_crash(self, hass, basic_env):
-        # Live-observed: a model targeting multiple locks by name sent
-        # name=["Front Door Lock", "Rear door lock"] (a list) instead of a single
-        # string. HA's own async_match_targets assumes name is str | None and
-        # raises AttributeError('list' object has no attribute 'strip') on
-        # anything else. A list name must degrade to "not provided" rather than
-        # crash, so a real domain selector given alongside it still resolves.
+        # A model targeting several locks may send name=["Front Door Lock", "Rear
+        # door lock"] (a list) instead of a string. HA's own async_match_targets
+        # assumes name is str | None and raises AttributeError on anything else, so
+        # a list name must degrade to "not provided" rather than crash, and a real
+        # domain selector given alongside it still resolves.
         token = _make_token(pass_through=True)
         result = resolve_intent_entities(
             hass, token, domains=["lock"], name=["Front Door Lock", "Rear door lock"]
@@ -1510,11 +1507,11 @@ class TestResolveIntentEntities:
         assert result == [env["primary"].entity_id]
 
     def test_name_path_candidate_set_excludes_categorized(self, hass, category_env):
-        # Decision A: the entity_category/hidden filter is applied to the candidate
-        # list BEFORE async_match_targets runs, so a name match can never reach a
-        # config/diagnostic/hidden entity. Capture what the matcher is handed
-        # (name matching itself needs more registry setup than this harness gives,
-        # so assert on the candidate set rather than a live name match).
+        # The entity_category/hidden filter is applied to the candidate list BEFORE
+        # async_match_targets runs, so a name match can never reach a config,
+        # diagnostic or hidden entity. Capture what the matcher is handed (name
+        # matching itself needs more registry setup than this harness gives, so
+        # assert on the candidate set rather than a live name match).
         from homeassistant.helpers.intent import MatchTargetsResult
 
         env = category_env

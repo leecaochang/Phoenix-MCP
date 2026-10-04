@@ -3,7 +3,7 @@ import { render, fireEvent } from "@testing-library/react";
 import { BeforeAfter, RemovedPane } from "../components/DiffView";
 
 // The approval diff renders a red/green line diff of the before/after configs
-// (JSON converted to YAML), with a side-by-side <-> stacked layout toggle.
+// (JSON converted to YAML), with a toggle between side-by-side and stacked layouts.
 describe("BeforeAfter (approval diff)", () => {
   // The layout choice is persisted; clear it so each test starts side-by-side.
   beforeEach(() => localStorage.clear());

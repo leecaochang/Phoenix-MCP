@@ -379,7 +379,7 @@ class TestExpire:
         )
         async with store.async_lock:
             await async_update_approval_status(store, record.id, status=STATUS_APPROVED)
-        # Now backdate — should not flip approved->expired.
+        # Backdate again; this must not flip approved to expired.
         raw = store.get_pending_approvals()
         raw[0]["expires_at"] = (utcnow() - timedelta(minutes=5)).isoformat()
         store.set_pending_approvals(raw)
@@ -749,12 +749,11 @@ class TestArgsRedaction:
 class TestInterruptedExecution:
     """A crash between the side effect and its recorded outcome.
 
-    The in-memory claim in data.approvals_in_progress makes a double-click safe,
-    but it dies with the process. The executor runs OUTSIDE the store lock and
-    the terminal status is written afterwards, so a stop in that window left an
-    untouched pending record whose action may already have applied, and approving
-    it again applied it twice. Nothing covered this: the existing tests are all
-    same-process races.
+    The in-memory claim in data.approvals_in_progress guards a double-click but dies
+    with the process. The executor runs outside the store lock and the terminal
+    status is written afterwards, so a stop in that window must leave a durable
+    marker rather than an untouched pending record whose action may already have
+    applied (approving it again would apply it twice).
     """
 
     async def _pending(self, store) -> str:
@@ -817,9 +816,9 @@ class TestInterruptedExecution:
 
     @pytest.mark.asyncio
     async def test_an_untouched_pending_approval_is_left_alone(self, store):
-        # The whole point is telling "nobody acted on this" apart from "someone
-        # started acting and we lost the answer". Resolving both would throw away
-        # every approval waiting in the queue at a restart.
+        # The whole point is telling "nobody acted on this" apart from "someone started
+        # acting and the answer was lost". Resolving both would throw away every
+        # approval waiting in the queue at a restart.
         approval_id = await self._pending(store)
 
         changed = await async_reconcile_interrupted_approvals(store)
@@ -845,15 +844,12 @@ class TestInterruptedExecution:
 
     @pytest.mark.asyncio
     async def test_an_unwritable_store_refuses_rather_than_running_unmarked(self, store):
-        """Fail CLOSED, which reverses this test's original assertion.
+        """Fail closed: an unwritable store refuses the approval instead of running unmarked.
 
-        It used to require that an unwritable store not block an approval the
-        admin had already authorized. That sounds right and is wrong: the same
-        store has to persist the terminal status afterwards, so a disk that
-        cannot take the marker cannot record the outcome either. Executing anyway
-        buys nothing and leaves a pending record whose action HAS run with no
-        trace saying so, which is the replay this marker exists to prevent, made
-        permanent instead of crash-dependent.
+        The same store persists the terminal status afterwards, so a disk that cannot
+        take the marker cannot record the outcome either. Executing anyway leaves a
+        pending record whose action has run with no trace saying so, which is the
+        replay the marker exists to prevent.
         """
         approval_id = await self._pending(store)
         store.async_save = AsyncMock(side_effect=OSError("disk full"))

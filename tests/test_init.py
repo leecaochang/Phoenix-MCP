@@ -1,11 +1,11 @@
-"""Tests for integration setup/unload orchestration in __init__.py.
+"""Integration setup and unload orchestration in __init__.py.
 
-These cover async_setup_entry's wiring decisions, not the HA primitives it drives:
-the kill-switch gate on client route registration (admin routes + panel always
-register), MESA initialization failure retaining protected-write refusal, and async_unload_entry
-cleaning up hass.data. Real timers and background tasks are neutralized so the test
-asserts the orchestration without scheduling anything that would linger past it.
-The end-to-end route wiring is covered separately by the real-HTTP scaffold test.
+Covers async_setup_entry's wiring decisions, not the HA primitives it drives: the
+kill-switch gate on client route registration (admin routes and panel always
+register), MESA initialization failure keeping protected-write refusal, rollback
+of a failed setup, one-shot listener lifecycle, and async_unload_entry cleaning
+up hass.data even when a step fails. Real timers and background tasks are
+neutralized so nothing is scheduled that would linger past a test.
 """
 
 from __future__ import annotations
@@ -339,13 +339,11 @@ async def test_unload_removes_data(hass: HomeAssistant):
 async def test_setup_reconciles_approvals_interrupted_by_the_last_shutdown(hass: HomeAssistant):
     """Startup must resolve approvals whose executor never reported back.
 
-    An approval marked as executing and still pending is one whose side effect
-    may already have applied. Leaving it pending offers the admin a button that
-    could apply a service call or a config write a second time, which is the one
-    outcome with no recovery. Pinned at the wiring level because the reconcile
-    function passing its own unit tests says nothing about setup calling it.
-    Startup reconciles first, then the initial expiry sweep reconciles again
-    while excluding the live execution claims.
+    An approval marked as executing and still pending may already have applied
+    its side effect. Leaving it pending offers the admin a button that could apply
+    a service call or config write a second time, which has no recovery. Setup
+    reconciles first, then the initial expiry sweep reconciles again while
+    excluding the live execution claims.
     """
     with patch(
         "custom_components.phoenix_mcp.approvals.async_reconcile_interrupted_approvals",
@@ -414,7 +412,7 @@ async def test_alias_updates_without_sentinel_transition_are_not_warned(
 
 
 async def test_a_fired_one_shot_listener_is_not_removed_again_on_unload(hass: HomeAssistant, caplog):
-    """LIVE-FOUND on a config-entry reload.
+    """A one-shot listener that already fired is not removed again on unload.
 
     `hass.bus.async_listen_once` removes its own listener when the event fires,
     so passing its remove-callback to `entry.async_on_unload` asks HA to remove
@@ -422,10 +420,10 @@ async def test_a_fired_one_shot_listener_is_not_removed_again_on_unload(hass: Ho
     `ValueError: list.remove(x): x not in list`, which HA logs as "Unable to
     remove unknown job listener" with a Phoenix traceback.
 
-    Only reproducible in the reload-after-a-cold-start order: the event has to
-    have FIRED before the unload. A happy-path setup/unload test never fires it,
-    which is why this survived. Both `homeassistant_started` (suggestion priming)
-    and `homeassistant_stop` (the final flush) had the shape.
+    This only shows when the event has FIRED before the unload, as on a
+    config-entry reload after a cold start. It applies to both
+    `homeassistant_started` (suggestion priming) and `homeassistant_stop` (the
+    final flush).
     """
     from homeassistant.const import EVENT_HOMEASSISTANT_STARTED
 
@@ -448,8 +446,7 @@ async def test_a_fired_one_shot_listener_is_not_removed_again_on_unload(hass: Ho
     #
     # Asserted on the LOG, not on a raised exception: HA catches the ValueError
     # inside _async_remove_listener and logs it, so an exception-based assertion
-    # passes whether or not the bug is present. That is how the first version of
-    # this test survived the mutation that restores the defect.
+    # would pass whether or not the double removal happens.
     caplog.clear()
     await entry._async_process_on_unload(hass)
     await hass.async_block_till_done()
@@ -507,11 +504,11 @@ async def test_a_coroutine_one_shot_listener_is_awaited(hass: HomeAssistant):
 
 # --- unload is failure-tolerant ---------------------------------------------
 #
-# Every step before the platform unload is best-effort. These pin that, because
-# the failure they prevent is silent and total: shutting_down is set FIRST and
-# helpers gates every token request on it, so an exception on the way out used to
-# leave the entry loaded with every route registered and every request answering
-# 503 until the next restart. Happy-path unload tests cannot see any of it.
+# Every step before the platform unload is best-effort. The failure these guard
+# against is silent and total: shutting_down is set FIRST and helpers gates every
+# token request on it, so an exception on the way out would leave the entry loaded
+# with every route registered and every request answering 503 until the next
+# restart.
 
 
 async def test_unload_survives_an_unwritable_audit_store(hass: HomeAssistant):
@@ -549,9 +546,9 @@ async def test_unload_survives_a_failing_panel_removal(hass: HomeAssistant):
 
 
 async def test_one_failing_frontend_removal_does_not_skip_the_others(hass: HomeAssistant):
-    # They are three unrelated removals. Sharing one try meant a failure in the
-    # first silently skipped the rest, leaving modules injected into every HA
-    # page with nothing left to service them.
+    # They are three unrelated removals: a failure in one must not skip the rest,
+    # which would leave modules injected into every HA page with nothing left to
+    # service them.
     await _run_setup(hass, kill_switch=False)
     entry = hass.config_entries.async_entries(DOMAIN)[0]
 
@@ -570,10 +567,9 @@ async def test_one_failing_frontend_removal_does_not_skip_the_others(hass: HomeA
 async def test_a_failed_unload_keeps_the_frontend(hass: HomeAssistant):
     """HA keeps a failed unload LOADED, so its admin UI has to survive it.
 
-    Removing the panel before knowing the outcome left a still-running
+    Removing the panel before the outcome is known would leave a running
     integration with no administrative surface, recoverable only by a later
-    successful reload or a restart. The token routes stay live either way, so
-    this is the operator losing the one control that could fix the situation.
+    successful reload or a restart. The token routes stay live either way.
     """
     await _run_setup(hass, kill_switch=False)
     entry = hass.config_entries.async_entries(DOMAIN)[0]

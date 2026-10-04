@@ -71,7 +71,7 @@ export const AGENTCLI_TEXT_SIZE_MAX_PT = 19.75;
 export const AGENTCLI_TEXT_SIZE_STEP_PT = 0.5;
 
 /** Keep persisted or user-adjusted text sizes on the supported half-point
- *  scale. Anchoring the scale at 9.75pt preserves the old 13px default. */
+ *  scale, anchored at 9.75pt so the 13px default sits on a step. */
 export function normalizeAgentCliTextSize(value: unknown): number {
   const candidate = typeof value === "number" && Number.isFinite(value)
     ? value
@@ -107,9 +107,9 @@ export function getDurable(): AgentCliDurable {
     const raw = key ? localStorage.getItem(key) : null;
     if (!raw) return defaultDurable();
     const p = JSON.parse(raw) as Partial<AgentCliDurable> & { showUsage?: unknown };
-    // showUsage was the pre-1.0.163 name, when the setting hid only the token
-    // count. Preserve that browser choice while removing the stale key from
-    // the next persisted object.
+    // A legacy `showUsage` key (it hid only the token count) is honored as
+    // showFooter when the new key is absent, and dropped from the next
+    // persisted object.
     const { showUsage: legacyShowUsage, ...persisted } = p;
     const d = defaultDurable();
     const showFooter = typeof p.showFooter === "boolean"
@@ -170,13 +170,12 @@ export function patchDurable(patch: Partial<AgentCliDurable>, owner = ownerId): 
 // not just after the panel unmounts (which happens whenever the user navigates
 // away from the Phoenix MCP panel in Home Assistant).
 //
-// Kept under its OWN storage key, separate from the window state above, for
-// two reasons: it is the only part that can grow without bound, and if it ever
-// has to be dropped (quota, corruption) the window geometry and the token /
-// provider / model selections must survive independently.
+// Kept under its OWN storage key: it is the only part that can grow without
+// bound, and if it has to be dropped (quota, corruption) the window geometry
+// and the token / provider / model selections must survive independently.
 //
-// This does mean conversation content, including tool results, is written to
-// browser localStorage on an admin-only page. It is bounded by the chat-memory
+// Conversation content, including tool results, is therefore written to browser
+// localStorage on an admin-only page. It is bounded by the scrollback-lines
 // setting and by MAX_CONV_BYTES below.
 // ---------------------------------------------------------------------------
 
@@ -355,8 +354,7 @@ export function setSessionUsage(usage: SessionUsage, owner = ownerId): void {
 }
 
 // Test helper: simulate a full page reload. Drops the in-memory cache but
-// leaves localStorage alone, so the next read comes back off disk exactly as
-// it would after F5.
+// leaves localStorage alone, so the next read comes back off disk.
 export function __reloadFromStorage(): void {
   flushSessionDraft();
   conversation = defaultConversation();

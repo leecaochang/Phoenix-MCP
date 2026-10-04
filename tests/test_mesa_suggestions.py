@@ -1,8 +1,8 @@
-"""Tests for the MESA suggestion scanner (mesa_suggestions.py).
+"""MESA suggestion scanner (mesa_suggestions.py).
 
-Both signals (blast_radius, naked_risky), coverage suppression via
-has_profile, the cover device-class filter, domain consolidation, the
-deployment-defaults guard, dismissal filtering/pruning, and persistence.
+Both signals (blast_radius, naked_risky), coverage suppression via has_profile, the
+cover device-class filter, domain consolidation, the deployment-defaults guard,
+dismissal filtering and pruning, and persistence.
 """
 
 from __future__ import annotations
@@ -338,9 +338,8 @@ async def test_a_device_profile_counts_as_coverage(hass: HomeAssistant):
     """An entity covered only by its device's profile stops being suggested.
 
     Coverage is "a stored profile at any inheritance level", so the device layer
-    joins it automatically once the host callback is wired. That is intended and
-    worth pinning: without it, an operator who profiled a whole physical device
-    would keep being told its entities are unprofiled.
+    counts once the host callback is wired. Otherwise an operator who profiled a
+    whole physical device would keep being told its entities are unprofiled.
     """
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.helpers import device_registry as dr, entity_registry as er

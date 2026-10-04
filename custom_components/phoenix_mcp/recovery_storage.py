@@ -68,7 +68,8 @@ class RecoveryStorage:
         if not isinstance(raw, dict):
             raise DurableStorageError("Configuration recovery index is invalid.")
         if "snapshot_format" not in raw:
-            # Released inline snapshots remain authoritative until migration commits.
+            # A legacy index with inline snapshots stays authoritative until the next
+            # save migrates it to the referenced format.
             self._known = known
             return raw
         if type(raw["snapshot_format"]) is not int or raw["snapshot_format"] != 1 or not isinstance(raw.get("records"), dict) or len(raw["records"]) > CONFIG_RECOVERY_MAX_RECORDS:
@@ -129,8 +130,8 @@ class RecoveryStorage:
         for reference, snapshot in blobs.items():
             if reference in committed:
                 continue
-            # _known includes crash orphans, which were not verified on load.
-            # Rewriting newly encountered content also repairs a missing orphan.
+            # Only committed references were verified on load. An orphan in _known
+            # (left by a crash) is unverified, so it is rewritten rather than trusted.
             await self._store(CONFIG_RECOVERY_SNAPSHOT_PREFIX + reference).async_save(snapshot)
             self._known.add(reference)
         await self.index.async_save({"snapshot_format": 1, "records": encoded})

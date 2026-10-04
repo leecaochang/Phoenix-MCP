@@ -217,9 +217,9 @@ export function hideAgentChat(): void {
   // The panel's own close button persists open:false itself (closeAgentCli),
   // but this window's close button (and the load-failure fallback below) call
   // straight here with no other path through the panel, so this is the only
-  // place that clears the flag for THIS window. Without it, closing here left
-  // open:true stuck in storage, and a later reload reopened the window right
-  // back up (the panel's own restore-on-mount reads that same flag).
+  // place that clears the flag for THIS window. Without it open:true stays in
+  // storage and a later reload reopens the window (the panel's own
+  // restore-on-mount reads that same flag).
   patchAgentCliDurable({ open: false }, persistenceOwner);
   unwatchApprovalReview();
   unwatchTheme();

@@ -1,10 +1,10 @@
-"""Tests for the ESPHome firmware tools (compile, install, job polling, diagnostics).
+"""ESPHome firmware tools (compile, install, job polling, diagnostics).
 
-The WebSocket layer has its own suite; these tests fake async_builder_command at
-the seam so they can concentrate on what this layer owns: the capability split
-between building and flashing, job-id scoping, the in-flight guard that keeps a
-retry from destroying the build it is retrying, and never claiming a device was
-flashed on the strength of a finished compile.
+async_builder_command is faked at the seam, so these tests concentrate on what
+this layer owns: the capability split between building and flashing, job-id
+scoping, the in-flight guard that keeps a retry from destroying the build it is
+retrying, and never claiming a device was flashed on the strength of a finished
+compile.
 """
 
 from __future__ import annotations
@@ -175,12 +175,11 @@ class TestCompile:
     async def test_every_job_starter_names_the_tool_that_shows_progress(
         self, hass, esphome_dir, tool, args, command, reply
     ):
-        # LIVE-REPORTED: these notes all said "Poll get_esphome_job", the agent did
-        # exactly that, and polling returns instantly so the panel rendered nothing
-        # for a multi-minute build. Only wait_for_esphome_job holds the request open,
-        # which is what drives the progress line, and the operator ended up asking
-        # the agent to monitor by hand. An agent does what the note NAMES, so every
-        # tool that starts a job has to name this one, from the shared constant.
+        # Only wait_for_esphome_job holds the request open, which is what drives the
+        # progress line; get_esphome_job returns instantly, so a note telling the
+        # agent to poll it renders nothing for a multi-minute build. An agent does
+        # what the note NAMES, so every tool that starts a job has to name the wait
+        # tool, from the shared constant.
         builder = FakeBuilder(**{command: reply, "firmware/get_jobs": []})
         content, _o, _r = await _run(tool, args, _yaml_token(), hass, builder)
         note = _json(content)["note"]
@@ -377,8 +376,8 @@ class TestJobScoping:
         assert outcome == "not_found"
         # get_esphome_job also names the file alternative, since that is the
         # recovery an agent without a job id actually needs; the wording is
-        # asserted in TestJobLookupByFile, and rule 12 is covered by
-        # test_out_of_scope_job_is_byte_identical_to_unknown below.
+        # asserted in TestJobLookupByFile, and the out-of-scope case answering
+        # identically is covered by test_out_of_scope_job_is_byte_identical_to_unknown.
         assert content["content"][0]["text"].startswith("No such firmware job.")
 
     async def test_out_of_scope_job_is_byte_identical_to_unknown(
@@ -655,10 +654,9 @@ class TestCleanBuild:
         body = _json(content)
         assert body["job_id"] == "c1"
         assert builder.args_for("firmware/clean") == {"configuration": FILE}
-        # LIVE-OBSERVED and contrary to the add-on's docs: clean also drops the
-        # SHARED PlatformIO cache, so it slows every device's next build, not
-        # just this one. An agent told only "one slower rebuild" would reach for
-        # it as a free retry, so the note has to carry the real cost.
+        # Clean also drops the SHARED PlatformIO cache, so it slows every device's
+        # next build, not just this one. An agent told only "one slower rebuild"
+        # would reach for it as a free retry, so the note has to carry the real cost.
         assert "full one" in body["note"]
         assert "every other device" in body["note"]
 
@@ -778,10 +776,9 @@ class TestJobLookupByFile:
         assert _json(content)["job_id"] == JOB
 
     async def test_an_unknown_job_id_names_the_file_alternative(self, hass, esphome_dir):
-        # LIVE-OBSERVED: an agent that had lost its job id guessed one, got a
-        # bare "No such firmware job", and spent two more calls discovering it
-        # could ask by file. Naming the fix in the refusal is the same lesson as
-        # the service-name hints.
+        # An agent that lost its job id and guessed one should be told in the
+        # refusal that it can ask by file, instead of spending more calls finding
+        # out. Same approach as the service-name hints.
         builder = FakeBuilder(**{"firmware/get_job": None})
         content, outcome, _ = await _run(
             "get_esphome_job", {"job_id": "nope"}, _yaml_token(), hass, builder)
@@ -832,7 +829,7 @@ class TestChainAcrossConfigurations:
         tail["depends_on"] = JOB
 
         def jobs(args):
-            # The filtered query is the one that used to be the only query.
+            # The configuration-filtered query misses the tail; only the unfiltered one sees it.
             return [] if args.get("configuration") else [tail]
 
         builder = FakeBuilder(**{
@@ -914,17 +911,17 @@ class TestHeadlessWaitClamp:
         assert outcome == "allowed"
         body = _json(content)
         assert body["finished"] is False
-        # LIVE-FOUND wording failure: "ask them to check back, or call
-        # get_esphome_job on the next turn" read as permission to poll NOW, and
-        # the model spent all 20 of its rounds doing exactly that, ending the
-        # turn with nothing to say. The note has to end the TURN, and say why.
+        # The note has to end the TURN, and say why: "ask them to check back, or
+        # call get_esphome_job on the next turn" reads as permission to poll NOW,
+        # and a model will spend every round doing exactly that and end the turn
+        # with nothing to say.
         note = body["note"]
         assert "STOP CALLING TOOLS NOW" in note
         assert "not poll this job again in this turn" in note.replace("Do NOT", "not")
         assert "limited number of tool calls per turn" in note
-        # LIVE-FOUND separately: a later turn read "the wait call returned" as
-        # "the build finished". On this surface the wait ALWAYS returns early, so
-        # the reply has to deny that inference outright.
+        # A later turn can read "the wait call returned" as "the build finished".
+        # On this surface the wait ALWAYS returns early, so the reply has to deny
+        # that inference outright.
         assert "HAS NOT FINISHED" in note
         # And it must point at the recovery that needs no remembered state.
         assert "with the file name" in note
@@ -942,9 +939,9 @@ class TestHeadlessWaitClamp:
     async def test_get_esphome_job_carries_the_same_steer_on_a_headless_turn(
         self, hass, esphome_dir
     ):
-        # Steering only wait_for_esphome_job moved the loop next door: told not
-        # to loop on the wait tool, the model obeyed literally and polled THIS
-        # one 18 times at two-second intervals instead.
+        # Steering only wait_for_esphome_job would move the loop next door: told
+        # not to loop on the wait tool, a model obeys literally and polls THIS one
+        # at short intervals instead.
         builder = FakeBuilder(**{
             "firmware/get_job": _job(status="running"),
             "firmware/get_jobs": [],
@@ -1100,8 +1097,8 @@ class TestWaiting:
         """MCP requires the numeric progress to increase on every notification.
 
         The add-on's percentage does not qualify: it resets at the compile-to-upload
-        seam and was seen reading 27 on an already-completed job. It belongs in the
-        human-readable message, with elapsed seconds carrying the monotonic promise.
+        seam and can be stale on a completed job. It belongs in the human-readable
+        message, with elapsed seconds carrying the monotonic promise.
         """
         msg = esphome._esphome_progress_message({"progress": 42}, FILE, "Compiling")
         assert msg == f"Compiling {FILE}: 42%"
@@ -1302,9 +1299,9 @@ class TestScrubbing:
 
 class TestVersionJumpNotice:
     """An over-the-air update rewrites only the app, so a version change leaves a
-    new app on the bootloader the device was originally cabled with. The card
-    showed both version numbers without ever saying they differed, which is the
-    one fact that makes that legible.
+    new app on the bootloader the device was first flashed with over a cable.
+    The approval card states that the versions differ, which is the one fact that
+    makes the gap legible.
 
     The notice deliberately does not predict an unbootable device: a version
     jump over the air completes cleanly in practice, and a warning whose

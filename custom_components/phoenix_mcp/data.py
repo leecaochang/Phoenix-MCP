@@ -40,7 +40,7 @@ class PhoenixData:
     rate_limiter: RateLimiter
     audit: AuditLog
     # The HomeAssistant instance, set in __init__. Optional so direct constructions
-    # (tests) need not supply it; used to fire bus events (e.g. phoenix_mcp_config_changed).
+    # (tests) need not supply it; fires bus events (e.g. phoenix_mcp_config_changed).
     hass: HomeAssistant | None = None
     # Configuration version history. Always present: __init__ supplies a
     # persistent store; direct constructions (tests) get an in-memory default.
@@ -106,7 +106,9 @@ class PhoenixData:
     async_on_token_archived: Callable | None = None
     # Set to True once client routes have been registered; prevents duplicate registration.
     routes_registered: bool = False
-    # Called by the admin settings PATCH when the kill switch is deactivated.
+    # Registers the agent-facing views when setup skipped them (kill switch on).
+    # Called by the admin settings PATCH when the kill switch is deactivated and
+    # by the core wipe.
     async_register_routes: Callable | None = None
     # Unregister callback for the Assist bridge llm.API (assist_api.py), set when
     # the API is registered. None when unregistered (kill switch on, unsupported HA).
@@ -133,10 +135,11 @@ class PhoenixData:
     # Set to True by async_unload_entry. Views check this before accessing store/audit
     # to avoid KeyError 500s after unload (HA does not expose a view unregister API).
     shutting_down: bool = False
+    # Platforms this entry forwarded, so unload can unload exactly those.
+    forwarded_platforms: set[str] = field(default_factory=set)
     # Direct constructions are ready by default for isolated tests. Real setup
     # passes False and publishes readiness only after every mandatory step has
     # completed. Permanent aiohttp routes refuse while this is false.
-    forwarded_platforms: set[str] = field(default_factory=set)
     ready: bool = True
     # Legacy Streamable HTTP sessions, keyed by the cryptographically random
     # Mcp-Session-Id returned from initialize. Direct constructions keep

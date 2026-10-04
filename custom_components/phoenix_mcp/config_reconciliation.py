@@ -106,7 +106,7 @@ def _matches(record: dict, observed: dict) -> bool:
         return False
     if expected.get("snapshot_type") == "dashboard_registry":
         # HA allocates IDs and fills defaults on create. Every submitted or
-        # previously present field must still match, not just entry existence.
+        # already-present field must still match, not just entry existence.
         row = observed.get("dashboard") or {}
         return observed.get("exists") == expected.get("exists") and all(
             row.get(key) == value for key, value in (expected.get("dashboard") or {}).items()

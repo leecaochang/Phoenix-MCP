@@ -41,6 +41,6 @@ def make_log_store(entries: list[LogEntry], *, capacity: int = 50) -> DedupStore
 
 
 def attach_log_store(hass, store: DedupStore) -> None:
-    """Attach the real store using Home Assistant's current system_log envelope."""
+    """Attach the store as HA's system_log data and set config_dir to /config."""
     hass.data["system_log"] = SimpleNamespace(records=store)
     hass.config.config_dir = "/config"

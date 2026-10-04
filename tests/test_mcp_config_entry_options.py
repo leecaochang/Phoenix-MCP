@@ -161,12 +161,13 @@ class TestRead:
         assert fields["hysteresis"]["default"] == 0.0
 
     async def test_editable_options_is_the_set_a_caller_sends_back(self, hass, helper_entry, as_helper):
-        """LIVE-FOUND on a real third-party helper. attribute_as_sensor STORES
-        entity_id and name while its options flow declares neither, so "send the
-        options back with your change applied" fails validation on the extras,
-        and omitting them is both correct and harmless because HA's schema flow
-        merges over what is stored. Handing the caller the intersection removes
-        the guess."""
+        """editable_settings is the intersection of stored settings and flow fields.
+
+        A helper can STORE keys (entity_id, name) that its options flow does not
+        declare, so "send the options back with your change applied" fails
+        validation on the extras. Omitting them is correct and harmless because
+        HA's schema flow merges over what is stored.
+        """
         hass.config_entries.async_update_entry(
             helper_entry,
             options={"entity_id": "sensor.kitchen", "hysteresis": 0.0, "name": "Kitchen"},
@@ -200,7 +201,7 @@ class TestRead:
         MockConfigEntry(domain="hue", entry_id="hub1", title="Hue").add_to_hass(hass)
         hub, _o1, _ = await _call("get_config_entry_options", {"entry_id": "hub1"}, _token(), hass)
         gone, _o2, _ = await _call("get_config_entry_options", {"entry_id": "nope"}, _token(), hass)
-        # Rule 12: whether an entry_id names a real integration is not disclosed.
+        # Whether an entry_id names a real integration is not disclosed.
         assert hub["content"][0]["text"] == gone["content"][0]["text"]
 
 
@@ -208,6 +209,8 @@ class TestWrite:
     async def test_partial_options_update_preserves_untouched_current_fields(
         self, hass, helper_entry, as_helper,
     ):
+        hass.config_entries.async_update_entry(
+            helper_entry, options={**helper_entry.options, "hysteresis": 2.5})
         init, configure, created = _flow(hass)
         with init, configure:
             content, outcome, _ = await _call(
@@ -218,7 +221,7 @@ class TestWrite:
         assert outcome == "allowed"
         assert created["options"] == {
             "entity_id": "sensor.other",
-            "hysteresis": 0.0,
+            "hysteresis": 2.5,
         }
         assert _json(content)["settings"] == created["options"]
 
@@ -235,7 +238,7 @@ class TestWrite:
         assert _json(content)["settings"]["entity_id"] == "sensor.other"
 
     async def test_deny_returns_forbidden_without_echoing_the_payload(self, hass, helper_entry, as_helper):
-        """Rule 29(a): the cap check runs before anything reads the arguments."""
+        """The cap check runs before anything reads the arguments, so a denied token learns nothing."""
         content, outcome, _ = await _call(
             "set_config_entry_options",
             {"entry_id": "helper1", "settings": {"entity_id": "sensor.nonsense"}},
@@ -278,7 +281,7 @@ class TestWrite:
         assert "lock.secret" in content["content"][0]["text"]
 
     async def test_a_doomed_write_never_becomes_an_approval(self, hass, helper_entry, as_helper):
-        """Rule 29."""
+        """A write that cannot succeed is refused before any approval is created."""
         data = MagicMock()
         data.store.get_pending_approvals.return_value = []
         _, outcome, _ = await _call(
@@ -441,20 +444,21 @@ class TestReconfigureMechanism:
         assert body["mechanism"] == "reconfigure"
         # entry.data, not entry.options: an options flow would read the wrong store.
         assert body["settings"] == {"entities": ["sensor.kitchen"]}
-        # LIVE-FOUND. Intersecting stored keys with field names was the first
-        # attempt and returns {} here, reporting that nothing can be changed on a
-        # helper that reconfigures fine: this one stores "entities" (a list) and
-        # its form field is "entity" (one id). The form's shape is the caller's
-        # business; the stored shape is the integration's.
+        # Stored keys are not intersected with field names: this helper stores
+        # "entities" (a list) while its form field is "entity" (one id), so that
+        # would report {} for a helper that reconfigures fine. The form's shape is
+        # the caller's business; the stored shape is the integration's.
         assert body["editable_settings"] == {"entity": "sensor.kitchen"}
 
     async def test_a_successful_reconfigure_is_not_read_as_a_failure(
         self, hass, data_entry, as_data_helper,
     ):
-        """THE TRAP. An options flow signals success with CREATE_ENTRY; a
-        reconfigure signals it with ABORT + reason reconfigure_successful, so a
-        single "type != CREATE_ENTRY means nothing happened" test reports every
-        successful reconfigure as a failure."""
+        """An options flow signals success with CREATE_ENTRY; a reconfigure flow with
+        ABORT + reason reconfigure_successful.
+
+        A single "type != CREATE_ENTRY means nothing happened" test would report
+        every successful reconfigure as a failure.
+        """
         init, configure, applied = self._reconfigure_flow(hass)
         with init, configure:
             content, outcome, _ = await _call(
@@ -511,8 +515,8 @@ class TestReconfigureMechanism:
         self, hass, data_entry, as_data_helper,
     ):
         """An empty field list is a lie a caller acts on: it reads as "accepts
-        nothing", and the caller then sends nothing and clears every optional
-        setting. Say the form could not be described instead."""
+        nothing", and the caller cannot tell which settings it may edit.
+        Say the form could not be described instead."""
         async def _init(handler, *, context=None, data=None):
             return {"type": FlowResultType.FORM, "flow_id": "rf1", "step_id": "reconfigure",
                     # A shape voluptuous_serialize cannot convert.

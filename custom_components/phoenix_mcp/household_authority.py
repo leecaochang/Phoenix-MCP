@@ -90,7 +90,7 @@ def household_service_kwargs(hass: HomeAssistant, domain: str, service: str) -> 
 
         admin_handler = getattr(ha_service, "_async_admin_handler", None)
         if admin_handler is None:
-            # Refuse if HA changes the registration adapter we have qualified.
+            # Fail closed if HA changes the admin-service registration adapter.
             raise Unauthorized()
         registered = hass.services.async_services().get(domain, {}).get(service)
         if registered is not None:

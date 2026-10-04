@@ -1,9 +1,8 @@
 """Tests for rename_esphome_device.
 
-The add-on's devices/rename compiles a renamed image and OTA-flashes it. That is
-why this tool exists at all rather than the command being allowlisted for the
-authoring capability: under cap_esphome_yaml it would be a way to flash a device
-without holding the capability that governs flashing.
+The add-on's devices/rename compiles and OTA-flashes a renamed image, so the tool
+is gated on the flash capability: allowlisting the command under cap_esphome_yaml
+would let a token flash a device without the capability that governs flashing.
 """
 
 from __future__ import annotations
@@ -47,8 +46,8 @@ async def _run(args, token, hass, builder, data=None):
 
 class TestCapability:
     async def test_the_authoring_capability_alone_cannot_rename(self, hass, esphome_dir):
-        # THE test for this tool. devices/rename flashes, so a token that may
-        # author but is denied flashing must not reach it.
+        # devices/rename flashes, so a token that may author but is denied
+        # flashing must not reach it.
         builder = FakeBuilder(**{"devices/rename": RENAMED})
         content, outcome, _ = await _run(
             {"file": FILE, "new_name": "new-name"},
@@ -68,9 +67,9 @@ class TestCapability:
         assert outcome == "allowed"
 
     def test_the_command_is_reachable_but_only_through_this_tool(self):
-        # Pinned in both directions: the allowlist carries it (so the tool works)
-        # and the tool carries the flash capability (so the allowlist entry is
-        # not a way around the capability split).
+        # The allowlist carries the command (so the tool works) and the tool
+        # carries the flash capability (so the allowlist entry is not a way
+        # around the capability split).
         assert "devices/rename" in ESPHOME_BUILDER_ALLOWED_COMMANDS
         every = (mcp_view._ENTITY_TOOL_DEFS + mcp_view._SYSTEM_TOOL_DEFS
                  + mcp_view._NATIVE_TOOL_DEFS)
@@ -97,10 +96,9 @@ class TestValidation:
     ):
         # A config's esphome name and its filename stem diverge routinely (an
         # imported config keeps its raw name while the file is slugified; an
-        # adopted device gets renamed later). Live example on a real box:
-        # esphome-web-31fca4.yaml holding doorbell-31fca4. Comparing the rename
-        # target against the STEM refused that device's legitimate rename AND
-        # blamed a name it does not have, which is the worse half.
+        # adopted device is renamed later). Comparing the rename target against
+        # the stem would refuse a legitimate rename and blame a name the device
+        # does not have.
         (esphome_dir / "imported.yaml").write_text(
             "esphome:\n  name: real-device-name\n")
         builder = FakeBuilder(**{"firmware/get_jobs": [], "devices/rename": RENAMED})
@@ -112,17 +110,15 @@ class TestValidation:
         assert "already has that name" in content["content"][0]["text"]
         assert builder.calls == []
 
-        # ...and renaming it to match its own FILENAME is a real rename, which
-        # the stem compare used to refuse.
+        # ...and renaming it to match its own filename is a real rename.
         content, outcome, _ = await _run(
             {"file": "imported.yaml", "new_name": "imported"}, _flash_token(), hass, builder)
         assert outcome == "allowed"
 
     async def test_a_substituted_name_is_resolved(self, hass, esphome_dir):
-        # The generated bluetooth-proxy configs all carry esphome.name: ${name},
-        # so an unresolved read would compare against the literal "${name}" and
-        # never match, silently disabling the same-name refusal for exactly the
-        # configs Home Assistant creates for you.
+        # Generated bluetooth-proxy configs carry esphome.name: ${name}. An
+        # unresolved read would compare against the literal "${name}" and never
+        # match, silently disabling the same-name refusal for those configs.
         (esphome_dir / "proxy.yaml").write_text(
             "substitutions:\n  name: bt-proxy-aabbcc\nesphome:\n  name: ${name}\n")
         builder = FakeBuilder(**{"firmware/get_jobs": [], "devices/rename": RENAMED})
@@ -138,8 +134,8 @@ class TestValidation:
         self, hass, esphome_dir
     ):
         # new_name slugifies to this device's OWN file, so only esphome.name
-        # changes. The add-on supports this and forces its config-only path
-        # (the OTA chain needs a distinct filename to build against), so the
+        # changes. The add-on supports this and takes its config-only path (the
+        # OTA chain needs a distinct filename to build against), so the
         # existing-file check must not fire on the file being renamed.
         (esphome_dir / "imported.yaml").write_text(
             "esphome:\n  name: real-device-name\n")
@@ -212,9 +208,9 @@ class TestResult:
             "configuration": FILE, "new_name": "new-name"}
 
     async def test_the_addon_returns_whole_job_records_not_bare_ids(self, hass, esphome_dir):
-        # LIVE-FOUND. The API docs write the reply as {"job": <job_id>}, but the
-        # add-on sends the whole job RECORD, so returning result["job"] verbatim
-        # handed the agent a dict that get_esphome_job cannot accept.
+        # The add-on replies with whole job records, not the bare id its docs
+        # imply; passing the record through verbatim would give the agent a
+        # dict get_esphome_job cannot accept.
         builder = FakeBuilder(**{
             "firmware/get_jobs": [],
             "devices/rename": {
@@ -240,15 +236,14 @@ class TestResult:
     async def test_a_reply_carrying_no_job_is_a_config_only_rename(
         self, hass, esphome_dir
     ):
-        # The add-on's config-only rename, verified against its SOURCE rather than
-        # inferred from live runs that looked conclusive and were not: it returns
-        # exactly this shape ({"configuration": ..., "job": None}) for an explicit
-        # config_only argument (which Phoenix never sends) or for an IN-PLACE
-        # rename, where the new name slugifies to the device's own file.
+        # The add-on's config-only rename returns {"configuration": ..., "job":
+        # None} for an explicit config_only argument (which Phoenix never sends)
+        # or for an IN-PLACE rename, where the new name slugifies to the
+        # device's own file.
         #
-        # The caller-facing distinction from a FAILED flash is the whole point:
-        # there the config is reverted and installing anything is wrong, here the
-        # file really does carry the new name and installing it is how you finish.
+        # Unlike a FAILED flash (config reverted, installing anything is wrong),
+        # the file really does carry the new name here, and installing it is how
+        # the caller finishes.
         builder = FakeBuilder(**{
             "firmware/get_jobs": [],
             "devices/rename": {"configuration": FILE, "job": None},
@@ -268,16 +263,14 @@ class TestResult:
     async def test_a_job_it_cannot_read_fails_loud_instead_of_reading_as_config_only(
         self, hass, esphome_dir
     ):
-        # THE dangerous shape drift in this tier. The success branch keys on
-        # "did we get a job id", so anything unreadable silently falls through to
-        # the config-only branch and reports "nothing was compiled or flashed"
-        # while a compile-and-flash chain runs on the device: the operator is
-        # told the OPPOSITE of what is happening to their hardware.
+        # The success branch keys on "is there a job id", so an unreadable job
+        # would fall through to the config-only branch and report "nothing was
+        # compiled or flashed" while a compile-and-flash chain runs on the
+        # device, telling the operator the opposite of what is happening.
         #
-        # A missing or null "job" is the add-on's documented config-only reply
-        # and must stay quiet; a job PRESENT but unreadable is a third shape and
-        # must not be guessed at. The add-on's docs have already been wrong five
-        # times, so this is a question of when, not whether.
+        # A missing or null "job" is the documented config-only reply and stays
+        # quiet; a job PRESENT but unreadable is a third shape and must not be
+        # guessed at.
         builder = FakeBuilder(**{
             "firmware/get_jobs": [],
             "devices/rename": {"configuration": FILE, "job": {"identifier": "j-new-shape"}},
@@ -294,11 +287,10 @@ class TestResult:
         assert "nothing was compiled" not in text
 
     async def test_it_says_the_action_services_need_a_reconnect(self, hass, esphome_dir):
-        # LIVE-CONFIRMED on a round-trip rename: after the flash the device is
-        # back and its entities are fine, but esphome.<name>_<action> stays
+        # After the flash the device is back, but esphome.<name>_<action> stays
         # UNREGISTERED until the config entry reconnects, because Home Assistant
-        # registers those services on connect and never removes the old ones.
-        # An operator reading only "renamed" finds a silently uncallable action.
+        # registers those services on connect and never removes the old ones. A
+        # note saying only "renamed" leaves a silently uncallable action.
         builder = FakeBuilder(**{"firmware/get_jobs": [], "devices/rename": RENAMED})
         content, _o, _r = await _run(
             {"file": FILE, "new_name": "new-name"}, _flash_token(), hass, builder)
@@ -308,8 +300,8 @@ class TestResult:
         assert "config entry" in note
 
     async def test_config_only_is_never_taken_from_the_caller(self, hass, esphome_dir):
-        # Same principle as install always sending port OTA: the caller does not
-        # get to choose the quiet path.
+        # As with install, which always sends port OTA, the caller cannot choose
+        # the quiet path.
         builder = FakeBuilder(**{"firmware/get_jobs": [], "devices/rename": RENAMED})
         await _run(
             {"file": FILE, "new_name": "new-name", "config_only": True},
@@ -317,14 +309,11 @@ class TestResult:
         assert "config_only" not in builder.args_for("devices/rename")
 
     async def test_it_says_a_failed_rename_reverts_itself(self, hass, esphome_dir):
-        # LIVE-FOUND, and the whole reason this wording exists: the OTA flash
-        # failed, the add-on reverted the configuration to the old name on its
-        # own, and the agent read that revert as a half-finished rename. It then
-        # called install_esphome_firmware on the OLD file to "complete" it, which
-        # can never complete a rename and only reflashes what the device already
-        # runs. A note that covers only the success path gets an improvised
-        # recovery invented for the failure path, so the misreading is denied
-        # here by name.
+        # If the OTA flash fails the add-on reverts the configuration to the old
+        # name itself. A note covering only the success path lets an agent read
+        # that revert as a half-finished rename and "complete" it by installing
+        # firmware on the OLD file, which only reflashes what the device already
+        # runs; the note denies that misreading by name.
         builder = FakeBuilder(**{"firmware/get_jobs": [], "devices/rename": RENAMED})
         content, outcome, _r = await _run(
             {"file": FILE, "new_name": "new-name"}, _flash_token(), hass, builder)
@@ -338,11 +327,10 @@ class TestResult:
     async def test_it_warns_that_both_configurations_are_listed_meanwhile(
         self, hass, esphome_dir
     ):
-        # LIVE-FOUND: the add-on COPIES the file rather than renaming it in place
-        # and drops one only at the end, so mid-rename the operator sees two cards
-        # and an agent listing files sees two configurations. Unwarned, that reads
-        # as a half-applied rename or as debris to tidy up, and the tidying would
-        # destroy the rename in flight.
+        # The add-on COPIES the file and drops one only at the end, so
+        # mid-rename both configurations are listed. Unwarned, that reads as a
+        # half-applied rename or debris to tidy up, and tidying would destroy
+        # the rename in flight.
         builder = FakeBuilder(**{"firmware/get_jobs": [], "devices/rename": RENAMED})
         content, _o, _r = await _run(
             {"file": FILE, "new_name": "new-name"}, _flash_token(), hass, builder)
@@ -379,13 +367,10 @@ class TestApprovalDiff:
     async def test_a_loaded_entry_does_not_mean_a_reachable_device(
         self, hass, esphome_dir, esphome_entries
     ):
-        # entry.state describes the CONFIG ENTRY, not the device: a device that is
-        # powered off or off the network keeps a perfectly LOADED entry, which is
-        # the shape a live fleet actually presents. Reading the entry state as
-        # liveness told the admin every offline device was online and dropped this
-        # note in exactly the case it exists for, so the operator would approve
-        # expecting a flash and get a file rename. Only runtime.available answers
-        # it, which is what the install diff already reads.
+        # entry.state describes the CONFIG ENTRY, not the device: a powered-off
+        # or unreachable device keeps a LOADED entry. Reading it as liveness
+        # would drop the offline note exactly where it applies. Only
+        # runtime.available answers it, as the install diff does.
         _esphome_entry(hass, esphome_entries, runtime=_runtime(available=False))
         diff = esphome._build_diff_rename_esphome_device(
             {"file": FILE, "new_name": "new-name"}, _flash_token(), hass)
@@ -396,11 +381,10 @@ class TestApprovalDiff:
     async def test_the_offline_note_never_promises_a_file_only_rename(
         self, hass, esphome_dir, esphome_entries
     ):
-        # LIVE-FOUND: a device Home Assistant reported unavailable still answered
-        # on the OTA port, so the add-on compiled and attempted a real flash while
-        # this note promised the file would only be rewritten. device_online is
-        # Home Assistant's API connection and the add-on never consults it, so the
-        # note must describe that uncertainty instead of forecasting the add-on.
+        # device_online is Home Assistant's API connection and the add-on never
+        # consults it, so a device reported unavailable can still answer on the
+        # OTA port and be flashed. The note must describe that uncertainty
+        # rather than promise a file-only rename.
         _esphome_entry(hass, esphome_entries, runtime=_runtime(available=False))
         note = esphome._build_diff_rename_esphome_device(
             {"file": FILE, "new_name": "new-name"}, _flash_token(), hass
@@ -413,9 +397,8 @@ class TestApprovalDiff:
     async def test_a_reachable_device_carries_no_offline_note(
         self, hass, esphome_dir, esphome_entries
     ):
-        # The other direction, so "always offline" cannot pass for a fix: a note
-        # claiming the rename is disk-only would be just as wrong on a device that
-        # is about to be flashed.
+        # The note is specific to an unreachable device, so an always-offline
+        # implementation cannot pass.
         _esphome_entry(hass, esphome_entries, runtime=_runtime(available=True))
         diff = esphome._build_diff_rename_esphome_device(
             {"file": FILE, "new_name": "new-name"}, _flash_token(), hass)

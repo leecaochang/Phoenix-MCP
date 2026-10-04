@@ -1,9 +1,9 @@
-"""Tests for patch_yaml_config and the yaml_patch splice engine behind it.
+"""patch_yaml_config and the yaml_patch splice engine behind it.
 
-The property the whole feature rests on is that a patch changes ONE key and
-nothing else: not the comments, not the ordering, not the spacing, and not the
-approval an operator has to read. So the assertions here are mostly about what
-did NOT move, which is the opposite of how the whole-file tool is tested.
+The property the whole feature rests on is that a patch changes ONE key and nothing
+else: not the comments, not the ordering, not the spacing, and not the approval an
+operator has to read. So the assertions here are mostly about what did NOT move,
+which is the opposite of how the whole-file tool is tested.
 """
 
 from __future__ import annotations
@@ -284,16 +284,14 @@ class TestPatchTool:
 
     @pytest.mark.parametrize("key", ["recorder", "recorder.exclude", "tts", "automation"])
     async def test_a_read_of_a_key_round_trips_as_the_patch_content(self, hass, key):
-        """The docs and the tool description both tell an agent that
-        get_yaml_config's fragment for a key IS the shape `content` takes, so
-        reading a key and writing it straight back must change nothing.
+        """Reading a key and writing it straight back changes nothing.
 
-        Semantically, not byte-for-byte: the READ re-dumps the fragment in
-        PyYAML's style, so a value whose file layout differs from that style
-        (a block sequence indented under its key) comes back reformatted. The
-        patch splices the caller's text verbatim, so this is a property of the
-        read, and it is why the guidance is to address the narrowest key you are
-        actually changing.
+        The tool description tells an agent that get_yaml_config's fragment for a
+        key IS the shape `content` takes. The round trip is semantic, not
+        byte-for-byte: the READ re-dumps the fragment in PyYAML's style, so a value
+        whose file layout differs (a block sequence indented under its key) comes
+        back reformatted, while the patch splices the caller's text verbatim. Hence
+        the guidance to address the narrowest key actually being changed.
         """
         _write(hass)
         content, outcome, _ = await _call_tool(
@@ -319,7 +317,10 @@ class TestPatchTool:
         assert _read(hass) == SAMPLE.replace("sensor.*_energy_*", "sensor.*_debug_*")
 
     async def test_deny_returns_forbidden_without_echoing_the_payload(self, hass):
-        """Rule 29(a): the cap-deny check runs before any validation of the input."""
+        """A denied token learns nothing about its input.
+
+        The cap-deny check runs before any validation of the input.
+        """
         _write(hass)
         content, outcome, _ = await _call(
             {"key": "recorder.nonsense.deep", "content": "!!!"}, _token(cap_yaml_edit="deny"), hass)
@@ -328,7 +329,11 @@ class TestPatchTool:
         assert "nonsense" not in text and "does not exist" not in text
 
     async def test_a_bad_key_is_refused_before_an_approval_exists(self, hass):
-        """Rule 29: a doomed patch must not become a pending approval."""
+        """A doomed patch is refused before an approval exists.
+
+        It never becomes a pending approval that can only fail after an admin
+        approves it.
+        """
         _write(hass)
         data = _data()
         data.store.get_pending_approvals.return_value = []
@@ -339,7 +344,7 @@ class TestPatchTool:
         data.store.set_pending_approvals.assert_not_called()
 
     async def test_a_protected_subtree_cannot_be_patched(self, hass):
-        """Rule 30 applies to the resulting file however it was produced."""
+        """The protected-subtree rule applies however the file was produced."""
         _write(hass, "http:\n  server_port: 8123\n")
         content, outcome, _ = await _call(
             {"key": "http", "content": "server_port: 8123\ntrusted_proxies:\n  - 0.0.0.0/0\n"},
@@ -349,7 +354,7 @@ class TestPatchTool:
         assert "trusted_proxies" not in _read(hass)
 
     async def test_a_top_level_removal_declares_itself(self, hass):
-        """Rule 31's declaration IS the key argument here, so no remove_keys."""
+        """A top-level removal is declared by the key argument, not remove_keys."""
         _write(hass)
         _, outcome, _ = await _call({"key": "tts", "op": "remove"}, _token(), hass)
         assert outcome == "allowed"
@@ -358,7 +363,7 @@ class TestPatchTool:
         assert "recorder:" in out and "automation: !include automations.yaml" in out
 
     async def test_a_redacted_value_is_refused(self, hass):
-        """Rule 32: a placeholder carried across from a lossy read."""
+        """A redaction placeholder from a lossy read is never written back."""
         _write(hass)
         content, outcome, _ = await _call(
             {"key": "recorder.include", "content": "entities:\n  - <redacted>\n"},
@@ -577,9 +582,9 @@ class TestListAddressing:
     def test_a_key_sharing_its_line_with_the_dash_keeps_the_dash(self):
         """`- a: 1` puts the first pair on the dash's own line.
 
-        Replacing that line without re-emitting the dash deletes the whole list
-        entry. _verify caught it as a mismatch rather than writing it, which is
-        the self-check working, but the edit has to LAND, not be refused.
+        Replacing that line without re-emitting the dash would delete the whole list
+        entry. The self-check would refuse that result, but the edit has to LAND,
+        not be refused.
         """
         assert _patch("- a: 1\n- b: 2\n", None, content="9", path=[0, "a"]).text == (
             "- a: 9\n- b: 2\n"

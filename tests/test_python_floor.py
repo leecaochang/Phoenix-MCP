@@ -2,8 +2,7 @@
 
 Home Assistant 2026.7.0 requires Python 3.14.2, so Phoenix source must parse
 with the Python 3.14 grammar. Dependency and vendored source are outside this
-scan. The full runtime suites qualify behavior on the floor and pinned HA.
-An older-grammar negative control proves that feature_version is enforced.
+scan. An older-grammar negative control proves that feature_version is enforced.
 """
 
 from __future__ import annotations
@@ -44,10 +43,10 @@ def test_source_parses_on_the_python_floor(path: pathlib.Path):
 
 
 def test_parser_honors_an_older_requested_grammar(tmp_path):
-    """Mutation check in-file: prove feature_version is doing the work.
+    """An older requested grammar rejects newer syntax.
 
-    Without this, a future Python whose ast ignores feature_version (or a typo in
-    the tuple) would turn the whole module into a no-op that still reports green.
+    A parser that ignored feature_version (or a typo in the version tuple) would
+    turn the whole module into a no-op that still reports green.
     """
     newer = tmp_path / "newer.py"
     newer.write_text("type Alias[T = int] = list[T]\n", encoding="utf-8")
@@ -61,7 +60,7 @@ def test_parser_honors_an_older_requested_grammar(tmp_path):
 
 
 def test_the_guard_accepts_syntax_the_floor_allows():
-    """The complement: it must not reject what the supported interpreter accepts."""
+    """The guard accepts every syntax form the supported interpreter allows."""
     for src in (
         "def f(x: int | None) -> None: ...\n",              # PEP 604, 3.10
         "def f(x):\n    match x:\n        case 1: return 2\n",  # match, 3.10

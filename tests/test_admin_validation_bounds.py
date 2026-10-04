@@ -1,16 +1,13 @@
-"""Structural-validation and pagination-bound regressions on the admin API.
+"""Structural-validation and pagination-bound contracts on the admin API.
 
-Two defects, both reachable with syntactically valid JSON / query strings:
+Both are reachable with syntactically valid JSON or query strings:
 
-* A permission-tree section that is not an object reached ``.items()`` and
-  raised ``AttributeError``, surfacing as a 500 instead of a 400.
-* The paged endpoints disagreed on bounds. A NEGATIVE limit was accepted and
-  slices as "everything but the last N" (and in the version store is an
-  explicit "return everything"), and the approvals endpoint silently replaced
-  malformed input with defaults rather than reporting it.
-
-Admin-only surfaces, so these are correctness rather than privilege issues,
-but both violate the documented contract.
+* A permission-tree section that is not an object is a 400, never an
+  AttributeError surfacing as a 500.
+* The paged endpoints agree on bounds. A negative limit is refused (it would
+  slice as "everything but the last N", and mean "return everything" in the
+  version store), and malformed approvals paging input is reported rather than
+  silently replaced with defaults.
 """
 
 from __future__ import annotations
@@ -52,7 +49,7 @@ from tests.test_admin_view import (  # reuse the established harness
     ],
 )
 def test_non_object_permission_section_is_rejected(body):
-    """Previously raised AttributeError on .items(), escaping as a 500."""
+    """A non-object section is rejected, not an AttributeError on .items()."""
     resp = _validate_permission_tree_body(body, "rid-1")
     assert resp is not None, f"{body!r} should be refused"
     assert resp.status == 400
@@ -157,10 +154,10 @@ async def test_approvals_endpoint_rejects_negative_limit():
 # --------------------------------------------------------------------------- #
 # Rate-limit fields must be real integers
 #
-# int() accepts bool (True -> 1), float (1.75 -> 1), and numeric strings
-# ("12" -> 12), so a caller could store a value it never sent while the API
-# advertised "must be integers". bool needs an explicit exclusion because it
-# is a subclass of int.
+# int() accepts bool (True becomes 1), float (1.75 becomes 1), and numeric
+# strings ("12" becomes 12), so a caller could store a value it never sent
+# while the API advertised "must be integers". bool needs an explicit
+# exclusion because it is a subclass of int.
 # --------------------------------------------------------------------------- #
 
 @pytest.mark.parametrize(

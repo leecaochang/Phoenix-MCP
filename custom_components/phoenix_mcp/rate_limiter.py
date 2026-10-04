@@ -88,8 +88,9 @@ class RateLimiter:
                 retry_after=max(1, retry_after),
             )
 
-        # Step 3: burst check - scan from the right since the deque is time-ordered.
-        # Break early once we pass the burst window boundary, then index the oldest entry.
+        # Step 3: burst check. The deque is time-ordered, so scan from the right
+        # and stop at the burst window boundary; the oldest in-burst entry is then
+        # indexed directly.
         if rate_limit_burst > 0:
             last_second_count = 0
             for t in reversed(window):
@@ -130,31 +131,22 @@ class RateLimiter:
     ) -> RateLimitResult:
         """Charge `extra` further units, or refuse the whole batch.
 
-        A JSON-RPC batch arrives as ONE HTTP request carrying up to
-        MAX_BATCH_ITEMS calls, so `check` charged it once and a token on the
-        default 60/min could issue 3,000 tool calls a minute by batching. The
-        items are the work, so the items are what the window has to count.
+        A JSON-RPC batch is ONE HTTP request carrying up to MAX_BATCH_ITEMS
+        calls, so `check` alone would charge it once and batching would
+        multiply the configured ceiling (60/min times 50 items is 3,000 calls a
+        minute). `check` still charges the request itself, so `extra` is the
+        remainder (items minus one).
 
         This is a PREFLIGHT, run before any item is dispatched, and the refusal
-        is the point. Charging-without-denying was tried first and left a real
-        hole: entries clamp at the limit, so a token limited to 10/min could send
-        a 50-item batch, have all 50 execute, and only then be throttled, i.e. 40
-        operations past a ceiling the operator set deliberately. Because nothing
-        has run yet, refusing here is clean; there is no half-applied batch, and
-        the caller answers 429 exactly as any other over-limit request does.
+        is the point: charging without refusing lets every item execute and only
+        then throttles, running a 50-item batch 40 operations past a 10/min
+        ceiling. A refusal leaves no half-applied batch. BOTH ceilings are
+        checked: a batch lands in one instant, so the minute limit alone would
+        let it exceed the per-second burst setting many times over.
 
-        BOTH ceilings are checked. The minute limit alone was not enough: a batch
-        lands in a single instant, so its whole cost falls inside one burst
-        window, and a token configured 60/min with burst 10/sec could run a
-        50-item batch, exceeding the per-second ceiling fivefold while satisfying
-        the per-minute one. Burst is the setting that exists to stop exactly that
-        shape of traffic, so skipping it here defeated its purpose.
-
-        Returns an allowed result (rate limiting disabled, or both budgets cover
-        the batch) or a denied one carrying `retry_after`. `check` still runs
-        first for the request itself, so this only ever decides the remainder.
-        The returned result is what the caller must put in its response headers:
-        the one from `check` describes a single request and understates the spend.
+        Returns an allowed result (limiting disabled, or both budgets cover the
+        batch) or a denied one carrying `retry_after`. The caller must send the
+        returned result's headers: the one from `check` understates the spend.
         """
         if rate_limit_requests == 0:
             return RateLimitResult(allowed=True, rate_limiting_enabled=False)

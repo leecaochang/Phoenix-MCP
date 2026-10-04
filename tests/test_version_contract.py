@@ -1,22 +1,17 @@
-"""The release version is stated in four files and nothing kept them equal.
+"""The release version is stated in four places and must be equal in all of them.
 
-`const.PHOENIX_VERSION` is what an operator and an MCP client both see: it is the
+`const.PHOENIX_VERSION` is what operators and MCP clients see: the
 `serverInfo.version` of every `initialize` handshake and the `version` field of
 the admin info endpoint. `manifest.json` is what Home Assistant and HACS read to
 decide whether an update is available. `package.json` and its lock file version
-the panel bundle built from the same tree.
+the panel bundle built from the same tree. A bump that touched one and forgot
+another would ship an integration claiming one version to HACS and another to
+every connected client.
 
-Nothing tied them together, so the first bump that touched one and forgot
-another would ship an integration claiming one version to HACS and a different
-one to every connected client, which is the kind of drift nobody notices until
-someone is debugging a version-specific report. That is the same failure the
-Home Assistant floor had before `test_ha_version_floor.py`, in a second place.
-
-The lock file is npm-generated and follows `package.json` on the next install,
-so it is checked rather than trusted: a hand-edited bump that skips `npm install`
+The lock file is npm-generated and follows `package.json` on the next install, so
+it is checked rather than trusted: a hand-edited bump that skips `npm install`
 leaves it behind, and the committed file is what a clean checkout builds from.
 """
-
 from __future__ import annotations
 
 import json

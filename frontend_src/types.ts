@@ -246,15 +246,12 @@ export interface AgentCliProvidersResponse {
   provider_types: AgentCliProviderType[];
 }
 
-// One configured provider account. Multiple of the same kind are allowed (e.g.
-// two Claude keys, two Ollama servers); `name` disambiguates duplicates.
 /** What one model's provider DECLARED it accepts.
  *
- *  A field is present only when the provider actually reports it, so `undefined`
- *  means "not declared" and must never be read as false. Mistral, OpenRouter,
- *  and Ollama publish some of this, and Ollama omits `temperature` because it
- *  takes one for every model. Treating absence as a limit would strip a working
- *  model's controls. */
+ *  A field is present only when the provider reports it (Mistral, OpenRouter and
+ *  Ollama publish some; Ollama omits `temperature` because it takes one for every
+ *  model), so `undefined` means "not declared" and must never be read as false.
+ *  Treating absence as a limit would strip a working model's controls. */
 export interface DeclaredModelCaps {
   tools?: boolean;
   thinking?: boolean;
@@ -267,6 +264,8 @@ export interface DeclaredModelCaps {
   effort_levels?: string[];
 }
 
+// One configured provider account. Multiple of the same kind are allowed (e.g.
+// two Claude keys, two Ollama servers); `name` disambiguates duplicates.
 export interface AgentCliInstance {
   id: string;
   kind: AgentCliProviderKind;
@@ -274,8 +273,8 @@ export interface AgentCliInstance {
   model: string;
   base_url?: string;
   endpoint_id?: string | null;
-  /** Per-model declared capabilities, keyed by model id. Empty when this
- *  provider publishes none, which is most of them. */
+  /** Per-model declared capabilities, keyed by model id. Empty when the
+   *  provider publishes none, which is most of them. */
   capabilities?: Record<string, DeclaredModelCaps>;
   /** When the capability refresh last ran, ISO. Null if it never has. */
   capabilities_checked_at?: string | null;
@@ -285,9 +284,8 @@ export type MesaMode = "off" | "advisory" | "enforced";
 
 // The inheritance levels a profile can be authored at, most specific first.
 // ONE definition: the editor, its label maps, the list table and the in-context
-// injector all derive from this, because they each used to carry their own copy
-// and a scope missing from one of them failed silently rather than at compile
-// time. Pinned against the backend's own list by a contract fixture.
+// injector all derive from this, so a missing scope fails at compile time, not
+// silently. A contract fixture pins it against the backend's own list.
 // Deployment defaults are not a keyed level and are handled separately.
 export type MesaProfileScope = "entity" | "device" | "area" | "integration" | "domain";
 
@@ -611,9 +609,9 @@ export interface ApprovalDiff {
     | "esphome_yaml";
   summary?: string;
   /** Catalog key + params for `summary`, so the panel can render it localized.
-   *  Absent on records written before this existed, and on any key this bundle
-   *  does not know; both fall back to the stored English `summary`. Plain
-   *  strings, not a key union: they cross a version boundary. */
+   *  Absent on older records and on any key this bundle does not know; both fall
+   *  back to the stored English `summary`. Plain strings, not a key union, because
+   *  they cross a version boundary. */
   summary_key?: string;
   summary_params?: Record<string, string | number>;
   target?: { type?: string; id?: string | null; label?: string | null };
@@ -622,14 +620,14 @@ export interface ApprovalDiff {
   preview?: Record<string, unknown>;
 }
 
-/** Result of approving several approvals in one admin action.
+/**
+ * Result of approving several approvals in one admin action.
  *
  * Home Assistant writes are not transactional, so a batch cannot be atomic. The
- * server stops at the first failure rather than ploughing on, because the likely
- * failures are systematic (a capability revoked mid-batch, the kill switch, a
- * stale hash after an earlier item touched the same file) and continuing would
- * reproduce the same error for every remaining item. `remaining` is therefore not
- * an error list: those are untouched and still individually approvable.
+ * server stops at the first failure, because the likely failures are systematic
+ * (capability revoked mid-batch, kill switch, a stale hash after an earlier item
+ * touched the same file) and would repeat for every remaining item. `remaining`
+ * is not an error list: those approvals are untouched and still approvable.
  */
 export interface BatchApproveResult {
   applied: { approval_id: string; tool_name: string | null }[];
@@ -664,9 +662,9 @@ export interface ApprovalRecord {
   result: unknown | null;
   request_id: string;
   client_ip: string | null;
-  /** Its saved action is executing right now (server-side claim). Present on the
-   *  pending list so a panel loaded mid-execution renders it non-actionable too,
-   *  not only one that happened to receive the claim event. */
+  /** Its saved action is executing right now (server-side claim). Sent on the
+   *  pending list so a panel loaded mid-execution also renders it non-actionable,
+   *  not only one that received the claim event. */
   in_progress?: boolean;
 }
 
@@ -685,11 +683,10 @@ export interface ApprovalListParams {
 }
 
 export type VersionAction = "create" | "edit" | "delete" | "rollback";
-// Must list every resource_type _record_version is called with in mcp_view.py.
-// blueprint, entity and esphome_yaml were all recorded by the backend while
-// missing here, so a version of those types was mistyped at every use; the same
-// drift previously hid "esphome_yaml" from ApprovalDiff.kind, which routed those
-// approvals to the wrong renderer.
+// Mirrors VERSIONED_RESOURCE_TYPES in const.py; both must change together, and a
+// contract test pins the two against one fixture. A type missing here is
+// mistyped at every use and can route its approvals to the wrong renderer
+// (see ApprovalDiff.kind).
 export type VersionResourceType =
   | "automation"
   | "script"

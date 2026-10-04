@@ -2,23 +2,21 @@
 
 Registers a Home Assistant ``llm.API`` whose tools are the Phoenix MCP tool surface of a
 single admin-chosen (bound) token. Every tool call flows through the same
-``_dispatch_mcp`` path an external MCP client uses, so per-token scoping, MESA,
-the approval gate, and the audit log all apply identically. Confirm-gated actions
-degrade to "queued, approve in the Phoenix MCP panel": a voice turn cannot show inline
-Approve/Reject buttons, so the tool reports the action as queued and returns
-(the per-call token copy forces ``confirm_inline_wait_seconds`` to 0 so the turn
-never blocks). The bound token stays a normal, live-editable Phoenix MCP token; it is
-re-resolved fresh on every instance build and every tool call, so cap/scope edits
-take effect on the next call with no re-registration.
+``_dispatch_mcp`` path an external MCP client uses, so per-token scoping, MESA, the
+approval gate, and the audit log apply identically. A voice turn cannot show inline
+Approve/Reject buttons, so confirm-gated actions degrade to "queued, approve in the
+Phoenix MCP panel" (the per-call token copy forces ``confirm_inline_wait_seconds`` to 0
+so the turn never blocks). The bound token stays a normal, live-editable token; it is
+re-resolved on every instance build and tool call, so cap/scope edits take effect on
+the next call with no re-registration.
 
 HA-COUPLING POINT (re-verify on HA upgrades, same posture as ws_dispatch):
-``homeassistant.helpers.llm`` (async_register_api / API / Tool / APIInstance) is
-under active refactoring. Probatio-based HA uses ``probatio.from_openapi``.
-The original Voluptuous engine uses a JSON Schema validator wrapped as a native
-HA schema so bounds and composition remain intact. Both paths retain the original
-JSON Schema through HA's custom serializer hook. Resolve the validator in the
-executor before registration, and omit individual schemas that cannot be supported.
-
+``homeassistant.helpers.llm`` (async_register_api / API / Tool / APIInstance) is under
+active refactoring. Probatio-based HA uses ``probatio.from_openapi``; the original
+Voluptuous engine uses a JSON Schema validator wrapped as a native HA schema so bounds
+and composition stay intact. Both paths keep the original JSON Schema through HA's
+custom serializer hook. The validator is resolved in the executor before registration,
+and schemas that cannot be supported are omitted individually.
 """
 from __future__ import annotations
 
@@ -181,8 +179,8 @@ if _ASSIST_API_SUPPORTED:
                 # Re-resolve the bound token per call: it may have been revoked,
                 # expired, narrowed, or the kill switch flipped since the conversation
                 # started. _current_dispatch_token also zeroes confirm_inline_wait so a
-                # voice turn never blocks on an approval; instead the gate returns
-                # pending and we report it as queued below.
+                # voice turn never blocks on an approval; the gate returns pending and
+                # the result is reported as queued below.
                 token = _current_dispatch_token(data, self._token_id)
                 if token is None:
                     return {"error": "This Phoenix MCP token is no longer available."}
@@ -234,8 +232,8 @@ if _ASSIST_API_SUPPORTED:
             settings = data.store.get_settings()
             token = None
             # Resolve the bound token FRESH every turn (never cache token state).
-            # Unbound, missing, invalid, or Phoenix MCP disabled -> zero tools, never raise
-            # (raising would fail the whole conversation turn).
+            # Unbound, missing, invalid, or Phoenix MCP disabled yields zero tools and
+            # never raises (raising would fail the whole conversation turn).
             if data.ready and not data.shutting_down and not settings.kill_switch:
                 token_id = settings.assist_bound_token_id
                 if token_id:
@@ -283,9 +281,9 @@ if _ASSIST_API_SUPPORTED:
                             err,
                         )
                         continue
-                    # name/description come from a tool def dict, so they are Any to
-                    # the checker; the def lists always carry both (test_mcp_tool_catalog
-                    # pins it), and a missing name would fail far earlier at tools/list.
+                    # name and description come from a tool def dict (Any to the type
+                    # checker); the tool list always carries both, and a missing name
+                    # would fail far earlier at tools/list.
                     tools.append(
                         PhoenixAssistTool(
                             str(name), tool_def.get("description"), parameters, token.id,
@@ -316,7 +314,7 @@ def async_register_assist_api(hass: HomeAssistant, data: Any) -> None:
     """Register the single stable-id Phoenix MCP Assist API, if supported and not already up.
 
     Idempotent: a second call while registered is a no-op. Never raises; a failed
-    registration logs and leaves the bridge simply absent.
+    registration is logged and the bridge stays absent.
     """
     if not _ASSIST_API_SUPPORTED or data.assist_api_unregister is not None:
         return

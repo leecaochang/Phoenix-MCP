@@ -14,14 +14,12 @@ import { tRich } from "../i18n/rich";
 import { ProviderAddForm } from "./ProviderAddForm";
 import { ConversationBehaviorControls } from "./ConversationBehaviorControls";
 
-// Which account warnings the operator has closed. Persisted, because the point
-// of closing one is that it stays closed across visits; an in-memory dismissal
-// would come straight back on the next card open, which is the complaint.
+// Which account warnings the operator has closed. Persisted so a closed
+// warning stays closed across visits.
 //
 // The key includes the MODEL, so a warning about a different model is a
-// different warning and shows again on its own. That is what keeps a dismissal
-// from silently covering a NEW problem: the operator dismissed a statement about
-// one model, not a category of statement forever.
+// different warning and shows again: a dismissal never silently covers a NEW
+// problem.
 const DISMISS_KEY = "phx-agentcli-dismissed";
 
 function readDismissed(): Record<string, true> {
@@ -37,7 +35,7 @@ function readDismissed(): Record<string, true> {
 function writeDismissed(next: Record<string, true>) {
   try {
     window.localStorage.setItem(DISMISS_KEY, JSON.stringify(next));
-  } catch { /* private mode: the warning simply keeps showing, which is safe */ }
+  } catch { /* storage blocked: the warning keeps showing, which is safe */ }
 }
 
 /** A warning the operator can close, leaving a marker that reopens it. */
@@ -61,10 +59,9 @@ function WarningBadge({ text, onShow }: { text: string; onShow: () => void }) {
 
 /** What a refresh or an options check found, held as data rather than prose.
  *
- *  Storing the rendered sentence was a real bug: switching the panel language
- *  repaints the card, but a string baked at the time the action ran keeps the
- *  old language forever. Anything shown to the operator has to be translated at
- *  RENDER time, which means state holds the facts and never the words. */
+ *  A sentence rendered when the action ran would keep its language after a
+ *  panel language switch repaints the card, so state holds the facts and the
+ *  text is translated at RENDER time. */
 type CardResult =
   | { kind: "refreshed"; models: number; declared: boolean }
   | { kind: "probed"; calls: number; levels?: string[]; effortCheckable: boolean; answered: boolean }
@@ -72,25 +69,23 @@ type CardResult =
 
 /** Turn a probe response into its card result, or throw so the caller reports a failure.
  *
- *  Built here, synchronously, rather than inside the `setRefreshResult` updater
- *  that consumes it. A state updater does not run at the await; React runs it
- *  during the NEXT render, where a throw is an unhandled render error that the
- *  `try` around the request cannot see and that takes the whole settings
- *  component down with it. The shape is checked rather than assumed because the
- *  client can hand back values the return type does not admit: `undefined` for a
- *  204, and an `{error, message}` object for a success that did not parse as JSON.
+ *  Built synchronously, not inside the `setRefreshResult` updater that consumes
+ *  it: React runs an updater during the NEXT render, where a throw is an
+ *  unhandled render error that the `try` around the request cannot see and
+ *  that takes the whole settings component down. The shape is checked rather
+ *  than assumed because the client can hand back values the return type does
+ *  not admit: `undefined` for a 204, and an `{error, message}` object for a
+ *  success that did not parse as JSON.
  */
 function probedCard(r: Awaited<ReturnType<typeof api.probeAgentCliCapabilities>>): CardResult {
   if (!r || typeof r !== "object" || typeof r.probed !== "object" || r.probed === null) {
     throw new Error(t("settings.agentcliConnectionFailed"));
   }
-  // Every FIELD is checked, not just the container. Validating only that `probed`
-  // was an object still let `effort_levels: "high"` through, and a string has a
-  // truthy `.length` but no `.map`, so cardResultText threw during render, which
-  // is the same unhandled-render-error crash one level deeper. Levels degrade to
-  // absent rather than throwing: "the provider did not report levels" is a real
-  // answer this card already renders, so a malformed levels list is worth
-  // reporting as that rather than as a failed connection.
+  // Every FIELD is checked, not just the container: a string `effort_levels`
+  // has a truthy `.length` but no `.map`, so cardResultText would throw during
+  // render. Levels degrade to absent rather than throwing, because "the
+  // provider did not report levels" is an answer this card already renders and
+  // a malformed list is better reported as that than as a failed connection.
   const levels = Array.isArray(r.probed.effort_levels)
     && r.probed.effort_levels.every((l) => typeof l === "string")
     ? r.probed.effort_levels
@@ -178,11 +173,9 @@ export function AgentCliSettings({
   });
   useEffect(() => { void load(); }, []);
 
-  // Refresh every account's model list when the card is shown. This is the free
-  // half of staleness detection: a model list is a cheap authenticated GET, so
-  // it costs no completion tokens, and it runs exactly when the operator is
-  // looking at providers and can act on what it says. Best-effort and parallel;
-  // a provider that fails simply records nothing.
+  // Refresh every account's model list when the card is shown. A model list is
+  // a cheap authenticated GET that costs no completion tokens. Best-effort and
+  // parallel; a provider that fails records nothing.
   useEffect(() => {
     if (!instances?.length) return;
     let cancelled = false;
@@ -200,21 +193,17 @@ export function AgentCliSettings({
     return () => { cancelled = true; };
   }, [instances]);
 
-  /** The account's default model is set to something this provider no longer offers.
+  /** The account's default model is not in the provider's live model list.
    *
-   *  Only claimed against a non-empty list we actually fetched. An unreachable
-   *  provider, or one that reports nothing, says nothing about the model, and
-   *  reporting it as retired would send the operator to fix a working account.
+   *  Claimed only against a non-empty list that was actually fetched: an
+   *  unreachable provider, or one that reports nothing, says nothing about the
+   *  model, and flagging it would send the operator to fix a working account.
    */
   const modelIsStale = (inst: AgentCliInstance) => {
     const models = liveModels[inst.id];
     return Boolean(inst.model && models && models.length > 0 && !models.includes(inst.model));
   };
 
-  // Explicit refresh: re-read the model list AND whatever the provider declares
-  // about each model. Separate from the on-open list fetch because the two cost
-  // very different things: a model list is one request, while Ollama's
-  // capabilities are one request PER MODEL. Still no completion tokens.
   const [dismissed, setDismissed] = useState<Record<string, true>>(readDismissed);
 
   // A warning is identified by the account, which warning it is, and the model
@@ -233,6 +222,9 @@ export function AgentCliSettings({
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [refreshResult, setRefreshResult] = useState<Record<string, CardResult | null>>({});
 
+  // Explicit refresh: re-read the model list AND whatever the provider declares
+  // about each model. Separate from the on-open list fetch because Ollama's
+  // capabilities cost one request PER MODEL. Still no completion tokens.
   const refresh = async (inst: AgentCliInstance) => {
     setRefreshing(inst.id);
     setRefreshResult((r) => ({ ...r, [inst.id]: null }));
@@ -242,8 +234,7 @@ export function AgentCliSettings({
       if (!r || !Array.isArray(r.models)) throw new Error(t("settings.agentcliConnectionFailed"));
       const models = r.models;
       // "This provider publishes none" is a real answer and must not read like a
-      // failed refresh: most providers report an id and an owner and nothing
-      // else, so an empty result is the norm rather than a fault.
+      // failed refresh: most providers report only an id and an owner.
       const card: CardResult = { kind: "refreshed", models: models.length, declared: r.declared };
       setLiveModels((m) => ({ ...m, [inst.id]: models }));
       await load();
@@ -260,15 +251,11 @@ export function AgentCliSettings({
 
   /** This model declared it cannot call tools, so Agent Chat cannot use it.
    *
-   *  Surfaced ON THE OPTION rather than as a banner, which is where the two
-   *  live reports landed. Listing every unusable model was noise: OpenRouter
-   *  carries hundreds and already filters its own dropdown to the tool-capable
-   *  ones, so the banner named sixty-odd models the operator could not select
-   *  even if they wanted to. And it could not be dismissed, because there is
-   *  nothing to fix: a local library simply contains models that cannot do
-   *  this. A permanent banner about a choice nobody can make teaches the reader
-   *  to skip banners, which is the one place a genuinely broken account has to
-   *  be read. A BANNER now means only "this account is broken, fix it".
+   *  Surfaced ON THE OPTION, not as a banner: a provider library can hold
+   *  hundreds of unusable models, there is nothing to fix, and a permanent
+   *  banner about a choice nobody can make teaches the reader to skip banners,
+   *  which a genuinely broken account needs read. A BANNER means only "this
+   *  account is broken, fix it".
    */
   const cannotCallTools = (inst: AgentCliInstance, model: string) =>
     inst.capabilities?.[model]?.tools === false;
@@ -281,11 +268,10 @@ export function AgentCliSettings({
 
   /** Run the check and REPORT it, whichever path asked for it.
    *
-   *  One helper because the result has to reach the operator identically from
-   *  all three: the manual button, adding an account, and changing the default
-   *  model. The add and save paths ran it silently, which is the worst of both
-   *  ways to spend someone's credit, since they paid for an answer and were not
-   *  shown it. Never throws: the account is already stored and working.
+   *  One helper so the result reaches the operator identically from the manual
+   *  button, adding an account, and changing the default model: a check that
+   *  spends credit must always show its answer. Never throws: the account is
+   *  already stored and working.
    */
   const runProbe = async (id: string) => {
     try {
@@ -307,10 +293,8 @@ export function AgentCliSettings({
       await runProbe(inst.id);
       await load();
       // Both chat-window hosts hold their accounts as state and reload on this
-      // event. Without it the check writes new capabilities that the window
-      // cannot see, so a control it just established does not appear until the
-      // page is reloaded: the answer was correct and invisible, which reads
-      // exactly like the check not working.
+      // event. Without it the newly stored capabilities stay invisible to the
+      // window until a page reload, which reads like the check not working.
       notifyChanged();
     } finally {
       setProbing(null);
@@ -323,8 +307,8 @@ export function AgentCliSettings({
     try {
       await api.setAgentCliProviderModel(id, modelDraft);
       // A different model has different options, and nothing is known about the
-      // new one yet. Same offer as the add flow, at the same moment: before the
-      // first conversation rather than after one behaves oddly.
+      // new one yet. Same offer as the add flow: check before the first
+      // conversation rather than after one behaves oddly.
       if (probeOnSave) await runProbe(id);
       await load();
       notifyChanged();
@@ -353,8 +337,8 @@ export function AgentCliSettings({
       notifyChanged();
       setConfirmRemove(null);
     } catch (err: unknown) {
-      // Keep the dialog open and tell the user; a silent failure looked like
-      // the account was removed when it was not.
+      // Keep the dialog open and report the failure; a silent one would look
+      // as if the account had been removed.
       setRemoveError(err instanceof Error ? err.message : t("settings.agentcliRemoveAccountFailed"));
     } finally {
       setBusy(false);
@@ -371,8 +355,8 @@ export function AgentCliSettings({
     if (n !== scrollback) onScrollbackChange(n);
   };
 
-  // Auto-save shortly after the last change so the spinner arrows persist without
-  // needing an explicit blur or Enter (the reported "spinner does not stick" bug).
+  // Auto-save shortly after the last change so number-spinner arrows persist
+  // without needing an explicit blur or Enter.
   const commitTimer = useRef<number | undefined>(undefined);
   const onScrollInput = (raw: string) => {
     setScrollInput(raw);
@@ -385,8 +369,8 @@ export function AgentCliSettings({
   };
   useEffect(() => () => window.clearTimeout(commitTimer.current), []);
 
-  // Max tool rounds before the "continue?" checkpoint (idea b). Same
-  // debounced-auto-save pattern as the memory field; clamped to [3, 100].
+  // Max tool rounds before the "continue?" checkpoint. Same debounced
+  // auto-save pattern as the memory field; clamped to [3, 100].
   const maxIterTimer = useRef<number | undefined>(undefined);
   const commitMaxIter = (raw: string) => {
     let n = parseInt(raw, 10);
@@ -454,9 +438,7 @@ export function AgentCliSettings({
                   {/* The stored model when the provider no longer lists it. It has
                       to be PRESENT or the select silently displays some other
                       model as though it were the configured one, and DISABLED or
-                      the card offers a choice it has just finished warning about.
-                      Showing it without disabling it was the first attempt and it
-                      let a deleted model be re-selected. */}
+                      a deleted model could be re-selected. */}
                   {modelIsStale(inst) && (
                     <option value={inst.model} disabled>
                       {t("settings.agentcliModelUnavailable", { model: inst.model })}
@@ -523,9 +505,8 @@ export function AgentCliSettings({
                     <RefreshIcon />
                   </IconButton>
                   {/* The last-checked time rides on this button's own tooltip
-                      rather than a separate line: it is a property of the check,
-                      and a card of four controls plus a status line was reported
-                      as too much to read. */}
+                      rather than a separate status line, to keep the card's
+                      controls uncluttered. */}
                   <IconButton busy={probing === inst.id}
                               busyLabel={t("settings.agentcliProbing")}
                               label={inst.capabilities_checked_at

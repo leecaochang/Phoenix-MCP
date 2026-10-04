@@ -1,7 +1,8 @@
-"""Tests for MESA runtime startup tasks and host callbacks.
+"""MESA runtime startup tasks and host callbacks.
 
 Covers sidecar developer-profile import (with the user-source skip), the
-CallerContext mapping, and TriggerValidator wiring.
+CallerContext mapping, TriggerValidator wiring, expand_target, orphan refresh, the
+solar-elevation callback and the device inheritance layer.
 """
 
 from __future__ import annotations
@@ -91,7 +92,7 @@ async def test_sidecar_import_loads_developer_profile(hass: HomeAssistant):
     # Sidecars import as integration-scope profiles keyed by the component name.
     integration_profile = runtime.store.get_integration_profile("my_integration")
     assert integration_profile is not None
-    # Sidecar without metadata_origin is stamped developer (Spec 5.3).
+    # Sidecar without metadata_origin is stamped developer.
     assert integration_profile.metadata.source is MetadataOrigin.DEVELOPER
 
 
@@ -134,9 +135,11 @@ async def test_get_entity_integration_maps_to_platform(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 async def test_integration_profile_resolves_for_its_entities(hass: HomeAssistant):
-    """An integration profile governs the entities that integration created, even
-    when those entities live under a different entity domain (where a domain
-    profile keyed by the component name would not apply)."""
+    """An integration profile governs the entities that integration created.
+
+    This holds even when those entities live under a different entity domain, where
+    a domain profile keyed by the component name would not apply.
+    """
     from homeassistant.helpers import entity_registry as er
 
     entry = er.async_get(hass).async_get_or_create(
@@ -158,9 +161,9 @@ async def test_trigger_validator_flags_none_declared_entity(hass: HomeAssistant)
     runtime = await async_setup_mesa(hass, "advisory")
     # default_origin=USER mirrors what the admin profile API stamps on an
     # operator-authored profile. It matters here: an unconfirmed profile of
-    # untrusted origin cannot assert triggers_automations: none on a helper
-    # domain (mesa-core reads it as `likely`, Spec 5.4 Rule 9), so a
-    # source-less fixture would resolve away the very declaration under test.
+    # untrusted origin cannot assert triggers_automations: none on a helper domain
+    # (mesa-core reads it as `likely`), so a source-less fixture would resolve away
+    # the very declaration under test.
     runtime.store.set(
         "input_boolean.guest_mode",
         SemanticProfile.from_dict(
@@ -194,9 +197,11 @@ async def test_trigger_validator_flags_none_declared_entity(hass: HomeAssistant)
 async def test_trigger_validator_flags_entity_inheriting_none_from_domain(
     hass: HomeAssistant,
 ):
-    """An entity with no profile of its own, reading as none via a domain
-    profile, is still flagged. It is absent from the store's key set, so this
-    only works because the host passes the entity registry as candidates."""
+    """An entity inheriting none from a domain profile is still flagged.
+
+    It has no profile of its own and is absent from the store's key set, so this
+    works only because the host passes the entity registry as candidates.
+    """
     runtime = await async_setup_mesa(hass, "advisory")
     runtime.store.set_domain_profile(
         "binary_sensor",
@@ -308,9 +313,11 @@ async def test_expand_target_resolves_device_area_floor_label(hass: HomeAssistan
 async def test_trigger_validator_flags_none_entity_behind_device_trigger(
     hass: HomeAssistant,
 ):
-    """The headline expand_target case: an entity declared triggers_automations
-    none that an automation references ONLY through a device trigger (no
-    entity_id anywhere in the config) is still flagged as stale."""
+    """An entity declared triggers_automations none is flagged as stale.
+
+    The automation references it ONLY through a device trigger (no entity_id
+    anywhere in the config), which is the core expand_target case.
+    """
     device, on_device, _second, _area, _floor, _label = _registry_env(hass)
     runtime = await async_setup_mesa(hass, "advisory")
     runtime.store.set(
@@ -346,9 +353,12 @@ async def test_trigger_validator_flags_none_entity_behind_device_trigger(
 
 @pytest.mark.asyncio
 async def test_refresh_orphans_covers_entity_area_integration(hass: HomeAssistant):
-    """refresh_orphans flags entity, area, and integration profiles whose target
-    is gone, and leaves live ones alone (mesa-core's find_orphans covers only the
-    entity level, so Phoenix MCP checks area + integration host-side)."""
+    """refresh_orphans flags entity, area, and integration profiles whose target is
+    gone.
+
+    Live ones are left alone. Phoenix MCP computes these host-side so every list
+    holds bare keys rather than mesa-core's reserved scoped keys.
+    """
     from homeassistant.helpers import area_registry as ar
     from homeassistant.helpers import entity_registry as er
 
@@ -546,13 +556,13 @@ async def test_one_device_profile_governs_every_entity_the_device_owns(hass: Hom
 
 @pytest.mark.asyncio
 async def test_device_layer_tightens_and_scope_only_breaks_ties(hass: HomeAssistant):
-    """How the device layer actually composes, which is easy to state wrongly.
+    """The device layer composes by restrictiveness, not by scope.
 
-    Device sits between entity and area in scope rank, but on control_mode
-    RESTRICTIVENESS DOMINATES SCOPE: the most restrictive declared value wins and
-    scope only breaks a tie between equally restrictive ones. So a device profile
-    is not "overridden" by a more permissive entity profile; layers only tighten,
-    which is the same property that makes hiding one from a caller unsafe.
+    Device sits between entity and area in scope rank, but on control_mode the most
+    restrictive declared value wins and scope only breaks a tie between equally
+    restrictive ones. So a device profile is not "overridden" by a more permissive
+    entity profile; layers only tighten, which is the same property that makes
+    hiding one from a caller unsafe.
     """
     from homeassistant.helpers import entity_registry as er
 

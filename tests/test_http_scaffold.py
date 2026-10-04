@@ -1,4 +1,4 @@
-"""Real-HTTP coverage for Phoenix MCP route registration."""
+"""Phoenix MCP route registration over Home Assistant's real HTTP stack."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ async def client_routes(hass: HomeAssistant, hass_client_no_auth):
 
 
 def test_client_route_list_contains_no_rest_proxy() -> None:
-    """Only MCP, context, skill, and Agent Chat remain token-facing."""
+    """The only token-facing routes are MCP, context, skill, and Agent Chat."""
     assert {view.url for view in _client_view_classes()} == {
         "/api/phoenix-mcp",
         "/api/phoenix-mcp/context",

@@ -1,4 +1,8 @@
-"""Install Phoenix and imported HA component requirements under HA's constraints."""
+"""Install Phoenix and imported HA component requirements under HA's constraints.
+
+Run: python tests/ha_floor_dependencies.py [--print]
+--print lists the requirements instead of installing them.
+"""
 
 from __future__ import annotations
 
@@ -10,7 +14,10 @@ import sys
 
 
 def main() -> None:
-    """Use the installed HA release as the dependency authority for smoke tests."""
+    """Install, or with --print list, the dependency requirements.
+
+    Sources are Phoenix's manifest and the installed HA release's component manifests.
+    """
     spec = importlib.util.find_spec("homeassistant")
     if spec is None or spec.origin is None:
         raise RuntimeError("Install the pinned Home Assistant test stack first.")

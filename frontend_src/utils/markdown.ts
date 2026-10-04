@@ -1,12 +1,12 @@
-// Minimal, dependency-free Markdown -> HTML renderer for agentCLI assistant
+// Minimal, dependency-free Markdown to HTML renderer for agentCLI assistant
 // output. Safety model: every piece of source text is HTML-escaped BEFORE any
 // transform runs, and the transforms only ever insert a fixed whitelist of tags
 // (never raw model text into an attribute or tag position), so model output
-// cannot inject markup. Non-text control characters are stripped, link hrefs are
-// restricted to http(s)/relative and have quotes stripped. This is intentionally
-// small: it covers the common Markdown an assistant emits (headings, emphasis,
-// code, lists, links, blockquotes) and renders anything it does not recognise as
-// plain text.
+// cannot inject markup. Non-text control characters are stripped, and link hrefs
+// are restricted to http(s) or root-relative with double quotes percent-encoded.
+// It is intentionally small: it covers the common Markdown an assistant emits
+// (headings, emphasis, code, lists, links, blockquotes, tables) and renders
+// anything it does not recognise as plain text.
 
 // Non-text control characters (keep tab \x09, newline \x0A, carriage return
 // \x0D). Built via RegExp() with escaped strings so no literal control bytes
@@ -50,7 +50,7 @@ function esc(s: string): string {
 // must not begin or end with whitespace, and it must be followed by a non-word
 // character or end-of-string. This mirrors the GFM rule that emphasis markers
 // flanked by alphanumerics on the inside edge do not delimit, so intra-word
-// underscores (the common case that used to garble output) stay literal.
+// underscores (the common case) stay literal.
 function inline(s: string): string {
   s = s.replace(/`([^`]+)`/g, (_m, c) => `<code>${c}</code>`);
   s = s.replace(/(^|[^\w*])\*\*(\S(?:[^*]*?\S)?)\*\*(?!\w)/g, "$1<strong>$2</strong>");

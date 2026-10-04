@@ -381,14 +381,12 @@ class TestApprovalApprove:
 
     @pytest.mark.asyncio
     async def test_approve_marks_execution_on_disk_before_running_the_executor(self):
-        """The durable half of the double-run guard.
+        """The execution marker is on disk before the executor runs.
 
-        approvals_in_progress makes a double-click safe within one process, but
-        it dies with the process. The executor runs OUTSIDE the store lock and
-        its outcome is written afterwards, so a restart in that window left an
-        untouched pending record whose action may already have applied. The
-        marker is only worth anything if it is on disk BEFORE the executor runs,
-        which is what this observes from inside it.
+        approvals_in_progress only guards a double-click within one process. The
+        executor runs outside the store lock and its outcome is written afterwards, so
+        a restart in that window must find a marker, not an untouched pending record
+        whose action may already have applied. Observed from inside the executor.
         """
         token = _make_token("tok-1", cap_restart="confirm")
         store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
@@ -429,14 +427,11 @@ class TestApprovalApprove:
 
     @pytest.mark.asyncio
     async def test_approve_refuses_when_the_marker_cannot_be_persisted(self):
-        """Fail CLOSED: no durable marker, no execution.
+        """Fail closed: no durable marker, no execution.
 
-        The same store records the terminal status afterwards, so a disk that
-        cannot take the marker cannot record the outcome either. Running anyway
-        would leave a pending record whose action HAS run with nothing saying so,
-        which is precisely the replay the marker exists to prevent. Asserting the
-        executor is never reached, because "did not block the approval" was the
-        original contract here and it was the wrong one.
+        The same store records the terminal status afterwards, so a disk that cannot
+        take the marker cannot record the outcome either. Running anyway would leave a
+        pending record whose action has run with nothing saying so.
         """
         token = _make_token("tok-1", cap_restart="confirm")
         store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
@@ -720,7 +715,7 @@ class TestApprovalApprove:
 
     @pytest.mark.asyncio
     async def test_approve_cancels_when_token_revoked(self):
-        # No token in store -> get_token_by_id returns None.
+        # No token in store, so get_token_by_id returns None.
         store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[])
         data = _make_data(store)
         hass = _make_hass(data)
@@ -734,7 +729,7 @@ class TestApprovalApprove:
 
         assert resp.status == 404
         assert json.loads(resp.text)["error"] == "not_found"
-        # Storage should now show the approval cancelled.
+        # Storage shows the approval cancelled.
         cancelled = next(r for r in store._pending if r["id"] == "appr_a")
         assert cancelled["status"] == STATUS_CANCELLED
         assert cancelled["rejected_reason"] == "token_inactive"
@@ -848,13 +843,15 @@ class TestApprovalApprove:
         assert resp.status == 404
 
 
-# ---- audit logging on resolution (regression) --------------------------------
+# ---- audit logging on resolution -------------------------------------------
 
 
 def _make_data_real_audit(store: MagicMock) -> PhoenixData:
-    """Like _make_data but with a real AuditLog so a malformed record() call
-    (missing settings=, or an outcome outside _VALID_OUTCOMES) is exercised
-    rather than swallowed by a MagicMock."""
+    """_make_data with a real AuditLog.
+
+    A malformed record() call (missing settings=, or an outcome outside
+    _VALID_OUTCOMES) is then exercised instead of swallowed by a MagicMock.
+    """
     rate_limiter = MagicMock(spec=RateLimiter)
     audit = AuditLog(store=None, maxlen=100)
     return PhoenixData(
@@ -865,15 +862,12 @@ def _make_data_real_audit(store: MagicMock) -> PhoenixData:
 
 
 class TestApprovalClaimSignal:
-    """An approve that is executing must stop every surface offering the action.
+    """An executing approve stops every surface still offering the action.
 
-    Approve runs its saved tool INLINE in the admin's request, so the resolved
-    event cannot fire until that finishes, which is seconds for a real write. For
-    all of it the Approvals tab, the Agent Chat bubble and the persistent
-    notification kept offering Approve and Reject on an approval already being
-    acted on. The store-lock claim answered the second click with a 409, so the
-    outcome was never wrong; the operator was being shown a control that could
-    not work. These pin the claim/release signal that closes that window.
+    Approve runs its saved tool inline in the admin's request, so the resolved
+    event cannot fire until that finishes. Meanwhile the Approvals tab, the Agent
+    Chat bubble and the persistent notification must stop offering Approve and
+    Reject, which the claim/release signal tested here does.
     """
 
     @staticmethod
@@ -886,8 +880,10 @@ class TestApprovalClaimSignal:
 
     @pytest.mark.asyncio
     async def test_claim_event_fires_before_the_executor_runs(self):
-        """Ordering is the whole point: firing it after execution would signal
-        exactly when the resolved event already does, changing nothing."""
+        """The claim event fires before the executor runs.
+
+        Firing it afterwards would coincide with the resolved event and change nothing.
+        """
         token = _make_token("tok-1", cap_restart="confirm")
         store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
         data = _make_data(store)
@@ -913,8 +909,10 @@ class TestApprovalClaimSignal:
 
     @pytest.mark.asyncio
     async def test_notification_is_dismissed_before_the_executor_runs(self):
-        """The notification is the surface with no UI state of its own, so
-        dismissing it IS its version of going non-actionable."""
+        """The notification is dismissed before the executor runs.
+
+        It has no UI state of its own, so dismissal is its way of going non-actionable.
+        """
         token = _make_token("tok-1", cap_restart="confirm")
         store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
         data = _make_data(store)
@@ -938,8 +936,11 @@ class TestApprovalClaimSignal:
 
     @pytest.mark.asyncio
     async def test_successful_approve_never_releases(self):
-        """A resolved approval must not come back: the resolved event already
-        removed it everywhere, and a release would re-offer a dead action."""
+        """A resolved approval is never released.
+
+        The resolved event already removed it everywhere; a release would re-offer a
+        dead action.
+        """
         token = _make_token("tok-1", cap_restart="confirm")
         store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
         data = _make_data(store)
@@ -960,19 +961,12 @@ class TestApprovalClaimSignal:
 
     @pytest.mark.asyncio
     async def test_a_raising_executor_closes_the_approval_instead_of_re_offering_it(self):
-        """A raising executor may already have applied its side effect.
+        """A raising executor closes the approval instead of re-offering it.
 
-        This test asserted the OPPOSITE contract: that the record stayed pending
-        and the notification came back, so a live approval was never invisible.
-        That reasoning is right about visibility and wrong about safety. A service
-        call that succeeded and then raised in result handling is indistinguishable
-        from one that never ran, so re-offering invites the admin to apply it a
-        second time, seconds later, while they are still looking at it. The
-        A durable marker protects process loss, but this in-process failure also
-        needs a terminal update before the admin can try again.
-
-        The record is therefore resolved exactly as recovery reconciliation
-        resolves an interrupted one, and the surfaces learn from the resolved
+        A call that succeeded and then raised in result handling is indistinguishable
+        from one that never ran, so re-offering would invite the admin to apply it
+        twice. The record is resolved as recovery reconciliation resolves an interrupted
+        one (failed, execution_interrupted) and the surfaces learn from the resolved
         event rather than from the approval reappearing.
         """
         token = _make_token("tok-1", cap_restart="confirm")
@@ -1023,10 +1017,9 @@ class TestApprovalClaimSignal:
             second = await view.post(_make_admin_request(body=b"{}"), approval_id="appr_a")
 
         assert first.status == 500
-        # The executor ran exactly ONCE: that is the whole guarantee. The second
-        # POST answers 200 because approving an already-terminal record is
-        # idempotent (pre-existing behaviour), so it reports the stored outcome
-        # rather than running anything.
+        # The executor ran exactly ONCE: that is the guarantee. The second POST
+        # answers 200 because approving an already-terminal record is idempotent,
+        # so it reports the stored outcome rather than running anything.
         assert executor.await_count == 1
         assert json.loads(second.text)["status"] == STATUS_FAILED
         assert json.loads(second.text)["rejected_reason"] == "execution_interrupted"
@@ -1034,10 +1027,10 @@ class TestApprovalClaimSignal:
     @pytest.mark.asyncio
     async def test_an_unregistered_tool_stays_retryable(self):
         # The other side of the line: the registry lookup is the first thing
-        # async_execute_approved_tool does, so a KeyError means nothing ran and
-        # nothing can have applied. That one keeps its old, correct behaviour, and
-        # the marker is cleared so a later startup does not resolve a healthy
-        # pending approval as interrupted.
+        # async_execute_approved_tool does, so ExecutorNotRegistered means nothing ran
+        # and nothing can have applied. That one stays retryable, and the marker is
+        # cleared so a later startup does not resolve a healthy pending approval as
+        # interrupted.
         token = _make_token("tok-1", cap_restart="confirm")
         store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
         data = _make_data(store)
@@ -1063,14 +1056,11 @@ class TestApprovalClaimSignal:
 
     @pytest.mark.asyncio
     async def test_a_real_executor_raising_KeyError_is_not_treated_as_a_missing_one(self):
-        """A KeyError from INSIDE an executor must not read as "nothing ran".
+        """A KeyError raised inside an executor does not read as "nothing ran".
 
-        This drives the REAL registry and the real dispatcher, because mocking
-        `async_execute_approved_tool` cannot tell a lookup failure from an
-        executor failure, and that is precisely the confusion being tested. The
-        old code caught bare KeyError for the retryable branch, so an executor
-        doing an ordinary dict lookup on a service response could clear the
-        durable marker and re-offer an action it had already applied.
+        Drives the real registry and dispatcher: mocking async_execute_approved_tool
+        cannot tell a lookup failure from an executor failure. Treating the KeyError as
+        retryable would clear the durable marker and re-offer an applied action.
         """
         from custom_components.phoenix_mcp import mcp_view
 
@@ -1105,12 +1095,11 @@ class TestApprovalClaimSignal:
 
     @pytest.mark.asyncio
     async def test_cancellation_mid_execution_does_not_re_offer_the_approval(self):
-        """asyncio.CancelledError does NOT inherit from Exception.
+        """A cancellation mid-execution closes the approval instead of re-offering it.
 
-        A cancelled task therefore skipped the failure handler entirely, ran the
-        finally, released the claim and put the approval back on offer with its
-        side effect possibly applied. The cancellation is re-raised rather than
-        swallowed, so the assertion is about what the STORE looks like afterwards.
+        asyncio.CancelledError does not inherit from Exception, so an `except
+        Exception` handler skips it, yet the side effect may have landed. The
+        cancellation is re-raised, so the assertion is on the store afterwards.
         """
         from custom_components.phoenix_mcp import mcp_view
 
@@ -1142,12 +1131,11 @@ class TestApprovalClaimSignal:
 
     @pytest.mark.asyncio
     async def test_an_approval_carrying_a_stale_marker_refuses_to_run_again(self):
-        """Belt and braces for every path that leaves a marker behind.
+        """A pending record carrying an execution marker refuses to run again.
 
-        A marker on a still-pending record means an earlier attempt reached
-        dispatch and never reported back, so the action may already have applied.
-        Overwriting the marker and running again is exactly the retry that must
-        not happen; recovery reconciliation is what resolves these.
+        The marker means an earlier attempt reached dispatch and never reported back,
+        so the action may already have applied. Overwriting it and running again is the
+        retry that must not happen; recovery reconciliation resolves these.
         """
         from custom_components.phoenix_mcp import mcp_view
 
@@ -1179,8 +1167,11 @@ class TestApprovalClaimSignal:
 
     @pytest.mark.asyncio
     async def test_list_reports_in_progress_so_a_reloaded_panel_agrees(self):
-        """The event only reaches a panel that was already open. A page loaded
-        mid-execution has to learn it from the row."""
+        """The list reports in-progress approvals so a reloaded panel agrees.
+
+        The claim event only reaches a panel that was already open; a page loaded
+        mid-execution learns it from the row.
+        """
         store = _make_store(pending=[_make_pending("appr_a"), _make_pending("appr_b")])
         data = _make_data(store)
         data.approvals_in_progress.add("appr_a")
@@ -1246,10 +1237,9 @@ class TestApprovalAuditLogging:
 class TestBatchApprove:
     """POST /admin/approvals/batch/approve.
 
-    Purely an operator convenience: every id still runs through the SAME
-    _approve_approval, so these tests are about the BATCH's own contract (order,
-    stop-at-failure, what is reported, what is left pending) rather than about
-    re-proving the per-approval lifecycle, which the tests above already cover.
+    Every id runs through the same _approve_approval, so these tests cover the
+    batch's own contract (order, stop-at-failure, what is reported, what is left
+    pending), not the per-approval lifecycle.
     """
 
     @staticmethod
@@ -1289,10 +1279,10 @@ class TestBatchApprove:
 
     @pytest.mark.asyncio
     async def test_stops_at_first_failure_and_leaves_the_rest_pending(self):
-        """The whole point of stop-at-failure: the queue is not burned through.
+        """Stop at the first failure and leave the rest pending.
 
-        Item 2 fails, so item 3 must never reach its executor and must still be
-        individually approvable afterwards.
+        The second approval fails, so the third never reaches its executor and stays
+        individually approvable.
         """
         token = _make_token("tok-1", cap_restart="confirm")
         view, request, store, _data = self._view_and_request(
@@ -1325,10 +1315,10 @@ class TestBatchApprove:
 
     @pytest.mark.asyncio
     async def test_execution_failure_is_not_reported_as_applied(self):
-        """A 200 is not enough.
+        """A failed execution answered with 200 is not reported as applied.
 
         An executor returning isError finalizes the record as rejected with
-        execution_failed and _approve_approval still answers 200; counting that as
+        execution_failed while _approve_approval still answers 200; counting that as
         applied would report a failed write as a success.
         """
         token = _make_token("tok-1", cap_restart="confirm")
@@ -1380,8 +1370,11 @@ class TestBatchApprove:
 
     @pytest.mark.asyncio
     async def test_rejects_a_repeated_id(self):
-        """A duplicate would hit the already-terminal branch and halt the batch
-        on the caller's own typo, so it is refused up front instead."""
+        """A repeated id is refused up front.
+
+        A duplicate would hit the already-terminal branch and halt the batch on the
+        caller's own typo.
+        """
         view, request, _s, _d = self._view_and_request([], [], ["appr_a", "appr_a"])
         resp = await view.post(request)
         assert resp.status == 400

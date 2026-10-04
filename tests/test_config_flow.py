@@ -1,8 +1,8 @@
 """Tests for the Phoenix MCP config flow.
 
-The flow is a single-step, single-instance flow with no remote connection, so the
-prompt's cannot_connect / invalid_auth cases do not apply. We cover: the initial
-form, creating the entry, and the single-instance already_configured abort.
+The flow is single-step and single-instance with no remote connection, so there
+are no cannot_connect or invalid_auth cases. Covered: the initial form, entry
+creation, and the already_configured abort.
 """
 
 from __future__ import annotations
@@ -20,11 +20,10 @@ from custom_components.phoenix_mcp.const import DOMAIN
 
 @pytest.fixture(autouse=True)
 def _enable(hass, enable_custom_integrations):
-    """Make custom_components/phoenix_mcp discoverable to the config-entries machinery.
+    """Make the integration discoverable to the config-entries machinery.
 
-    Phoenix MCP's manifest depends on `frontend`, whose `hass_frontend` package is
-    not installed here. Mark it already-loaded so dependency processing during flow
-    init does not try to bootstrap it.
+    The manifest depends on `frontend`, whose `hass_frontend` package is absent in
+    tests, so mark it loaded to stop flow init from trying to bootstrap it.
     """
     hass.config.components.add("frontend")
     yield
@@ -38,8 +37,7 @@ async def test_user_step_shows_form(hass: HomeAssistant):
 
 
 async def test_user_step_creates_entry(hass: HomeAssistant):
-    # Patch setup so the flow test does not trigger full integration setup
-    # (route/panel/MESA wiring is covered separately in the setup tests).
+    # Patch setup so the flow test does not trigger full integration setup.
     with patch("custom_components.phoenix_mcp.async_setup_entry", return_value=True):
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": config_entries.SOURCE_USER})

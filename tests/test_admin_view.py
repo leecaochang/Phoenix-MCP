@@ -1258,7 +1258,7 @@ async def test_settings_patch_agentcli_scrollback_persists_and_clamps():
     view = PhoenixAdminSettingsView()
     view.hass = hass
 
-    # A normal value reaches async_patch_settings (was silently dropped before).
+    # A normal value reaches async_patch_settings.
     resp = await view.patch(_make_admin_request(body=json.dumps({"agentcli_scrollback_lines": 250}).encode()))
     assert resp.status == 200
     assert data.store.async_patch_settings.call_args.kwargs["agentcli_scrollback_lines"] == 250
@@ -1387,8 +1387,10 @@ async def test_settings_patch_mesa_inject_enables_and_syncs():
 
 @pytest.mark.asyncio
 async def test_settings_patch_flush_interval_reschedules_timer():
-    """Changing audit_flush_interval re-registers the periodic flush immediately,
-    instead of taking effect only after the previously pending interval elapses."""
+    """Changing audit_flush_interval re-registers the periodic flush immediately.
+
+    It must not take effect only after the pending interval elapses.
+    """
     data = _make_data()
     data.store.async_patch_settings = AsyncMock(
         return_value=GlobalSettings(audit_flush_interval=5)
@@ -1834,9 +1836,9 @@ _ADMIN_HTTP_METHODS = ("get", "post", "put", "patch", "delete")
 def _admin_view_handlers() -> list[tuple[type, str]]:
     """(view_class, method_name) for every HTTP handler across ALL_ADMIN_VIEWS.
 
-    Every one of these must reject unauthenticated and non-admin requests via
-    @require_admin, regardless of the path parameters its route declares: the
-    decorator checks auth before the wrapped method (and its path kwargs) ever run.
+    Every one must reject unauthenticated and non-admin requests via @require_admin,
+    regardless of the path parameters its route declares: the decorator checks auth
+    before the wrapped method (and its path kwargs) ever run.
     """
     handlers = []
     from custom_components.phoenix_mcp.agentcli import ALL_AGENTCLI_ADMIN_VIEWS, ALL_AGENTCLI_CHAT_VIEWS
@@ -1855,14 +1857,13 @@ def _admin_view_handlers() -> list[tuple[type, str]]:
     ids=lambda v: v.__name__ if isinstance(v, type) else v,
 )
 async def test_admin_handler_rejects_unauthenticated_and_non_admin(view_cls, method_name):
-    """Regression guard: every admin HTTP handler must be @require_admin.
+    """Every admin HTTP handler is guarded by @require_admin.
 
     Calls each handler with no path kwargs; @require_admin returns before the
     wrapped method (and any path params it needs) ever runs, so this works
-    uniformly across the whole admin surface without per-route fixtures. A
-    handler missing the decorator would instead hit the real method body and
-    raise (e.g. a missing positional path argument) rather than return 401/403,
-    which fails this test just as loudly.
+    uniformly across the whole admin surface without per-route fixtures. A handler
+    missing the decorator would hit the real method body and raise (e.g. a missing
+    positional path argument) rather than return 401/403, which fails just as loudly.
     """
     data = _make_data()
     hass = _make_hass(data)
@@ -1904,8 +1905,8 @@ def test_wipe_flag_coercion():
     assert _wipe_flag(True, False) is True
     assert _wipe_flag(False, True) is False
     assert _wipe_flag(None, True) is True          # key absent
-    assert _wipe_flag("false", True) is True       # garbage -> default
-    assert _wipe_flag(1, False) is False           # non-bool -> default
+    assert _wipe_flag("false", True) is True       # garbage: default
+    assert _wipe_flag(1, False) is False           # non-bool: default
 
 
 @pytest.mark.asyncio
@@ -2131,7 +2132,7 @@ async def test_wipe_mesa_flag_wipes_mesa_and_can_spare_others():
 @pytest.mark.asyncio
 async def test_wipe_mesa_without_runtime_clears_store_directly():
     data = _make_wipe_data()
-    data.mesa = None  # runtime unavailable this session
+    data.mesa = None  # runtime unavailable
     hass = _make_hass(data)
     view = PhoenixAdminWipeView()
     view.hass = hass
@@ -2336,7 +2337,7 @@ async def test_voice_pipeline_post_creates_and_defaults_preferred_true():
         resp = await view.post(_make_admin_request(body=b"{}"))
     assert resp.status == 200
     assert json.loads(resp.text)["pipeline_id"] == "pl1"
-    # body omitted "preferred" -> defaults to True
+    # Body omits "preferred", which defaults to True.
     assert created.call_args.kwargs["preferred"] is True
 
 
@@ -2717,14 +2718,10 @@ async def test_ai_task_preferred_delete_clears():
 
 
 # ---------------------------------------------------------------------------
-# Settings PATCH validation: characterization.
-#
-# The PATCH handler validates and applies every global setting, and several of
-# its rejection branches had no test at all. These pin the exact status and
-# message of each one so the validation can be restructured without changing
-# what an operator (or the panel) sees. Every case here failed to be covered
-# before this block existed; they are deliberately assertions about MESSAGES,
-# not just status codes, because the panel surfaces the message verbatim.
+# Settings PATCH validation: the exact status and message of each rejection
+# branch. The panel surfaces the message verbatim, so these assert messages,
+# not just status codes, which lets the validation be restructured without
+# changing what an operator sees.
 # ---------------------------------------------------------------------------
 
 
@@ -2797,7 +2794,7 @@ async def test_settings_patch_blank_string_clears_to_none(key, blank):
     ],
 )
 async def test_settings_patch_clamps_rather_than_rejecting(key, sent, stored):
-    """These two clamp; the four enum-ish integers reject. Do not blur them."""
+    """The two agentcli limits clamp; the fixed-menu integers reject. Do not blur them."""
     hass, data, _ = _patchable_hass()
     resp = await _settings_patch(hass, {key: sent})
     assert resp.status == 200
@@ -2867,16 +2864,13 @@ async def test_settings_patch_ai_task_sync_fires_on_config_and_kill_switch(setti
 
 
 # ---------------------------------------------------------------------------
-# Token PATCH validation: characterization.
+# Token PATCH validation: the whole per-token surface (name, pass-through
+# acknowledgment, every capability, the persona, the rate limits, the
+# inline-confirm wait), message included.
 #
-# Same reasoning as the settings block above. This handler validates the whole
-# per-token surface (name, pass-through acknowledgment, every capability, the
-# persona, the rate limits, the inline-confirm wait) and several of its
-# rejections had no test. Pinned before restructuring, message included.
-#
-# NOTE its validation deliberately runs INSIDE the store lock (rule 17): the
-# name-uniqueness check reads store state the same critical section then writes,
-# so it cannot be hoisted out.
+# Its validation deliberately runs INSIDE the store lock: the name-uniqueness
+# check reads store state the same critical section then writes, so it cannot
+# be hoisted out.
 # ---------------------------------------------------------------------------
 
 
@@ -2978,10 +2972,10 @@ async def test_token_patch_accepts_valid_inline_wait(wait):
 async def test_token_patch_rename_sensor_rebuild_failure_never_fails_the_patch():
     """Following a rename onto the sensors is best-effort; it must not 500 the rename.
 
-    It must also not go through the archive/create callbacks. Those DESTROY the
-    token's six entities and build six new ones, which is how a rename used to
-    change every entity_id out from under whatever referred to them; the sensors
-    are keyed on the token id now and are updated in place.
+    It must also not go through the archive/create callbacks, which destroy the
+    token's entities and build new ones, changing every entity_id out from under
+    whatever referred to them. The sensors are keyed on the token id and updated in
+    place.
     """
     token = _make_active_token(name="old-name")
     data = _token_patch_data(token)

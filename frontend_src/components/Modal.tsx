@@ -95,10 +95,10 @@ export function Modal({ titleId, onClose, onNavigatePrevious, onNavigateNext, re
   }, [previousFocus]);
 
   // A fixed backdrop does not automatically own a touch scroll gesture. On
-  // mobile, swipes from an empty dialog area—or outward at a scroll boundary—
+  // mobile, swipes from an empty dialog area, or outward at a scroll boundary,
   // can otherwise chain into the Phoenix panel underneath. Let a modal or
-  // nested editor scroll natively while it has room; consume only the gesture
-  // the moment nothing inside the dialog can move in that direction.
+  // nested editor scroll natively while it has room; consume the gesture only
+  // when nothing inside the dialog can move in that direction.
   useEffect(() => {
     const backdrop = backdropRef.current;
     const modal = modalRef.current;

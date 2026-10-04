@@ -27,7 +27,11 @@ def _bounded_text(text: str, limit: int) -> str:
 
 
 def describe_template_failure(exc: Exception) -> dict:
-    """Extract Jinja locations in the worker without re-rendering or reading locals."""
+    """Classify a worker failure as a safe payload: a kind, a line, and for syntax errors a message.
+
+    Runs in the worker without re-rendering or reading locals. Only compiler
+    syntax messages are passed on; runtime exception text can hold state values.
+    """
     line = None
     tb = exc.__traceback__
     for _ in range(TEMPLATE_DIAGNOSTIC_TRACEBACK_FRAMES):
@@ -72,7 +76,12 @@ def describe_template_failure(exc: Exception) -> dict:
 
 
 def format_template_failure(payload: bytes, template: str) -> str:
-    """Validate the private worker protocol and derive source only from caller input."""
+    """Turn a worker diagnostic payload into a user-facing message.
+
+    The payload is untrusted: anything oversized, malformed or carrying unknown
+    keys collapses to the generic worker message, and the quoted source line is
+    taken from the caller's own template, never from the payload.
+    """
     fallback = TEMPLATE_FAILURE_MESSAGES["worker"]
     if len(payload) > TEMPLATE_DIAGNOSTIC_BYTES:
         return fallback

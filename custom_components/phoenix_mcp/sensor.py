@@ -83,9 +83,7 @@ class PhoenixTokenSensor(SensorEntity):
             self._attr_options = ["active", "expired", "revoked"]
         self._attr_unique_id = _unique_id(token.id, sensor_type)
         # HA resolves the display name from translations/<lang>.json's entity
-        # section. The English there is byte-identical to the old .title() output,
-        # so an existing dashboard or automation referring to the friendly name
-        # reads the same; unique_id and entity_id are untouched either way.
+        # section; the English entries are the title-cased sensor type names.
         self._attr_translation_key = sensor_type
         self._device_info = self._build_device_info()
 
@@ -101,10 +99,10 @@ class PhoenixTokenSensor(SensorEntity):
     def async_follow_token_update(self, token: TokenRecord) -> None:
         """Point this sensor at the token's current record, in place.
 
-        A rename produces a NEW TokenRecord, and every reading here is taken off
-        the one held in _token, so without this the status and expiry sensors
-        would keep reporting the pre-rename record indefinitely. The sensors used
-        to be destroyed and rebuilt for this, which is what cost their identity.
+        A rename produces a NEW TokenRecord, and every reading is taken off the
+        one held in _token, so without this the status and expiry sensors would
+        keep reporting the pre-rename record. Updating in place, rather than
+        rebuilding the sensor, preserves entity identity.
         """
         self._token = token
         self._device_info = self._build_device_info()
@@ -123,10 +121,8 @@ class PhoenixTokenSensor(SensorEntity):
 
     @property
     def native_unit_of_measurement(self) -> str | None:
-        # Unconditional: expires_in is always days. These two used to switch off
-        # when the token had no expiry, because the value was then the string
-        # "No expiry" and a unit on prose is meaningless. The value is now None
-        # in that case, which HA reports as unknown with the unit intact.
+        # Unconditional: expires_in is always days. A token with no expiry
+        # reports None, which HA shows as unknown with the unit intact.
         if self._sensor_type == "expires_in":
             return UnitOfTime.DAYS
         return None
@@ -166,12 +162,11 @@ class PhoenixTokenSensor(SensorEntity):
             return token.last_used_at.replace(second=0, microsecond=0)
 
         if sensor_type == "expires_in":
-            # None, not a sentence. A token with no expiry used to report the
-            # English string "No expiry", which made one sensor alternate between
-            # a number with a unit and untranslated prose: it never localized, it
-            # broke history and statistics for the sensor, and any template
-            # comparing the value had to handle both types. None renders as
-            # HA's own "unknown" in the viewer's language and compares cleanly.
+            # None, not a sentence, when the token has no expiry. A string would
+            # make one sensor alternate between a number with a unit and
+            # untranslated prose, breaking its history and statistics and any
+            # template comparing the value. None renders as HA's own "unknown" in
+            # the viewer's language.
             if token.expires_at is None:
                 return None
             delta = token.expires_at - utcnow()
@@ -182,7 +177,7 @@ class PhoenixTokenSensor(SensorEntity):
 
 @callback
 def _async_migrate_unique_ids(hass: HomeAssistant, tokens: list[TokenRecord]) -> None:
-    """Preserve entity IDs when released name-based sensor identities are upgraded."""
+    """Move name-based sensor unique IDs to token-ID-based ones, keeping entity IDs."""
     from homeassistant.helpers import entity_registry as er
 
     registry = er.async_get(hass)
@@ -229,14 +224,10 @@ async def async_rename_token_sensors(
 ) -> None:
     """Follow a token rename WITHOUT touching entity identity.
 
-    Only two things actually change: the device's display name, which the sensors
-    inherit through has_entity_name, and the TokenRecord each sensor reads from.
-    The entity registry is not touched at all.
-
-    This used to remove all six entities and recreate them, because the
-    unique_id was derived from the token NAME. That changed every entity_id and
-    silently broke any dashboard card or automation naming one; the operator saw
-    a rename and got a deletion.
+    Only the device's display name (inherited through has_entity_name) and the
+    TokenRecord each sensor reads from change. The entity registry is untouched,
+    and unique_id derives from the token ID, so entity_ids, and any dashboard
+    card or automation naming them, survive the rename.
     """
     from homeassistant.helpers import device_registry as dr  # noqa: PLC0415
 

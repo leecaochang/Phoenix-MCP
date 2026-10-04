@@ -1,42 +1,22 @@
 """Key- and index-addressed splicing for a YAML document.
 
-Replaces, adds, or removes ONE addressed value inside a YAML file while leaving
-every other byte exactly as it was. An address is either a dotted `key` of
-mapping keys or a `path` list mixing mapping keys and 0-based list indexes; the
-list form is what reaches an entry in a file whose top level is a sequence,
-which most !include targets are. Pure functions, no hass, following esphome_yaml.py
-and yaml_includes.py; the tool that calls it lives in tools/config_files.py.
+Replaces, adds or removes ONE addressed value in a YAML file, leaving every other
+byte as it was. An address is a dotted `key` of mapping keys or a `path` list of
+mapping keys and 0-based list indexes, which reaches entries of a top-level
+sequence (most !include targets). Pure functions, no hass.
 
-The approach is span-surgical for the same reason esphome_yaml's is. A
-parse-and-re-dump round trip produces a semantically identical file and destroys
-everything a human put there: comments, blank-line grouping, key order, quoting
-style. configuration.yaml is hand-maintained and heavily commented, so rewriting
-it wholesale to change one key is not an acceptable cost. `yaml.compose` gives
-every node its exact source position, so the new text is spliced in at the
-addressed key's own lines and nothing else moves.
+Span-surgical, like esphome_yaml: a parse-and-re-dump round trip destroys comments,
+blank-line grouping, key order and quoting, so `yaml.compose` positions locate the
+addressed key's own lines and only those are spliced.
 
-Spans are computed in LINES rather than byte offsets, mirroring
-yaml_includes._FileScan: PyYAML's end_mark for a block collection runs to the
-start of the next token, which swallows the blank lines and comments that sit
-between two keys and belong to the SECOND one. Each key's span therefore ends
-where its next sibling begins, with trailing blank and comment lines trimmed back
-out, so a comment written above a key stays with that key.
+Spans are in LINES (as yaml_includes._FileScan): PyYAML's end_mark for a block
+collection swallows blank lines and comments belonging to the NEXT key, so a child
+ends at its next sibling's start, blanks and comments trimmed. The LAST child has no
+sibling, so `limit` bounds it (file length, or the enclosing child's end); otherwise
+a nested last child would absorb its parent's following siblings.
 
-Two refusals are structural rather than cautious. Nothing is created along the
-way, so a path whose parent is missing is a typo rather than an instruction to
-build the tree (the resolve_json_path rule); and a flow-style collection ({...}
-or [...] on one line) has no per-child line span to address, so anything inside
-one is refused rather than guessed at. A negative index is refused for the same
-reason resolve_json_path refuses one: Python would read it as counting from the
-end, so a -1 computed off a stale read silently edits the wrong entry.
-
-Every patch is VERIFIED before it is returned: the spliced text is re-parsed and
-compared against the old document with only the addressed path changed. A span
-bug therefore surfaces as a refusal rather than as a quietly mangled
-configuration.yaml, which is the same self-check discipline yaml_includes applies
-to its own splices. It is also what makes index addressing safe without a
-deletion guard: that an entry the patch did not address survived is proved on
-every write rather than assumed.
+Flow-style collections are refused (no per-child span). Every patch is re-parsed and
+compared with the old document, so a span bug is a refusal, not a mangled file.
 """
 
 from __future__ import annotations
@@ -63,7 +43,10 @@ class PatchError(Exception):
 
 @dataclass(frozen=True)
 class PatchResult:
-    """A verified patch: the new file text and the key's previous source text."""
+    """A verified patch: the new file text and the addressed value's old source text.
+
+    `before` is None when the address was absent.
+    """
 
     text: str
     before: str | None
@@ -72,13 +55,11 @@ class PatchResult:
 def split_key(key: Any) -> list[Segment]:
     """Split a dotted key path into mapping keys, refusing an empty segment.
 
-    Keys containing a literal dot cannot be addressed, which is the same limit
-    get_yaml_config's `key` argument already has; both stop at the mapping whose
-    keys are entity ids (homeassistant.customize) and edit it whole.
-
-    Mapping keys only. A list index is not expressible here on purpose: a
-    numeric segment would be ambiguous against a mapping key that is literally
-    "0", which HA configurations do contain. Indexes go through `path`.
+    A key containing a literal dot cannot be addressed (get_yaml_config's `key`
+    has the same limit); edit the enclosing mapping whole, as for
+    homeassistant.customize. Mapping keys only: a numeric segment would be
+    ambiguous against a mapping key that is literally "0", so indexes go through
+    `path`.
     """
     if not isinstance(key, str) or not key.strip():
         raise PatchError("key must be a dotted path of mapping keys, e.g. 'recorder.include'.")
@@ -89,18 +70,15 @@ def split_key(key: Any) -> list[Segment]:
 
 
 def normalize_path(key: Any, path: Any) -> list[Segment]:
-    """One path from either argument form: dotted `key` or a `path` list.
+    """Return one path from either argument form: dotted `key` or a `path` list.
 
-    `path` is the list form patch_dashboard already uses, mixing mapping keys
-    and list indexes, and it exists here because a file loaded at an !include
-    target is routinely a top-level LIST (templates.yaml, sensors.yaml) whose
-    entries a dotted key cannot reach at all.
+    `path` is the list form patch_dashboard uses, mixing mapping keys and list
+    indexes. It exists because an !include target is routinely a top-level LIST
+    (templates.yaml, sensors.yaml) that a dotted key cannot reach.
 
-    A negative index is refused rather than honoured. Python would accept it,
-    and a -1 computed off a stale read silently edits the wrong end of a list,
-    which is the resolve_json_path rule in a second place. `True` is rejected
-    with the other non-integers: bool is an int subclass in Python, so an
-    unchecked isinstance would read it as index 1.
+    A negative index is refused (the resolve_json_path rule): a -1 from a stale
+    read silently edits the wrong end of a list. `True` is rejected with the other
+    non-integers because bool is an int subclass and would read as index 1.
     """
     if key is not None and path is not None:
         raise PatchError("Pass either key or path, not both.")
@@ -133,7 +111,7 @@ def normalize_path(key: Any, path: Any) -> list[Segment]:
 
 
 def describe_path(path: list[Segment]) -> str:
-    """A path rendered for a message, e.g. [0]. binary_sensor as '[0].binary_sensor'."""
+    """Render a path for a message, e.g. [0, 'binary_sensor'] as '[0].binary_sensor'."""
     out = ""
     for segment in path:
         if isinstance(segment, int):
@@ -156,13 +134,13 @@ def _is_blank_or_comment(line: str) -> bool:
 
 
 def _child_start(child: Any, lines: list[str]) -> int:
-    """Start line of one child of a block collection.
+    """Return the start line of one child of a block collection.
 
-    A mapping pair starts at its key. A sequence item starts at its own first
-    token, which sits on the dash line in the ordinary `- key: value` form but
-    on the NEXT line when the dash stands alone, so that case walks back up to
-    the dash; without it the dash would be left behind by an edit and become a
-    second, empty entry. Same rule as yaml_includes._item_start_line.
+    A mapping pair starts at its key. A sequence item starts at its first token,
+    which is on the dash line for `- key: value` but on the NEXT line when the dash
+    stands alone; that case walks back up to the dash, or an edit would leave the
+    dash behind as a second, empty entry. Same rule as
+    yaml_includes._item_start_line.
     """
     if isinstance(child, tuple):
         return child[0].start_mark.line
@@ -173,16 +151,13 @@ def _child_start(child: Any, lines: list[str]) -> int:
 
 
 def _child_spans(node: yaml.nodes.Node, lines: list[str], limit: int) -> list[tuple[int, int]]:
-    """Line span of each child in a block mapping or sequence, blanks trimmed.
+    """Return each child's line span in a block mapping or sequence, blanks trimmed.
 
-    A child runs from its own first line to the start of the next child's, so a
-    comment above one belongs to it and survives an edit to the child before it.
-    `limit` bounds the LAST child: the file length at the top level, and the
-    enclosing child's own end further down.
-
-    Mapping pairs and sequence items share this because they share the shape
-    PyYAML gives them, an ordered list of nodes carrying source marks; only
-    where a child's first mark sits differs, which is _child_start's job.
+    A child runs from its first line to the next child's first line, so a comment
+    above a child belongs to it and survives an edit to the child before it.
+    `limit` bounds the LAST child: the file length at the top level, the enclosing
+    child's own end further down. Mapping pairs and sequence items share this; only
+    where a child's first mark sits differs (_child_start).
     """
     starts = [_child_start(child, lines) for child in node.value]
     spans: list[tuple[int, int]] = []
@@ -195,8 +170,7 @@ def _child_spans(node: yaml.nodes.Node, lines: list[str], limit: int) -> list[tu
 
 
 def _index_of(node: yaml.nodes.MappingNode, part: str) -> int | None:
-    """Index of the LAST pair whose key matches, mirroring PyYAML's own reading
-    of a duplicate key."""
+    """Return the index of the LAST pair whose key matches, as PyYAML reads duplicates."""
     found = None
     for index, (key_node, _) in enumerate(node.value):
         if str(key_node.value) == part:
@@ -214,11 +188,10 @@ class _Target:
     end_line: int
     limit: int
     in_sequence: bool = False
-    # What sits before the key on its own line when that is not just spaces,
-    # i.e. "- " for the FIRST pair of a mapping written inline after a dash
-    # ("- a: 1"). Replacing that line without re-emitting the dash deletes the
-    # list entry itself, which _verify catches as a mismatch rather than a
-    # corrupted file; this is what makes the edit land instead of being refused.
+    # Non-space text before the key on its own line: "- " for the FIRST pair of a
+    # mapping written inline after a dash ("- a: 1"). Replacing that line without
+    # re-emitting the dash would delete the list entry itself, which _verify
+    # refuses; re-emitting it makes the edit land.
     prefix: str = ""
 
 
@@ -275,9 +248,9 @@ def _locate(text: str, path: list[Segment]) -> _Target:
                     f"{named} has {len(node.value)} entries, so index {part} is out of "
                     f"range. Entries are counted from 0."
                 )
-            # An index one past the end APPENDS, which is the same affordance a
-            # missing mapping key already has: set creates it. Refusing would
-            # leave a whole-file rewrite as the only way to add one entry.
+            # An index one past the end APPENDS, like a missing mapping key that
+            # set creates; refusing would leave a whole-file rewrite as the only
+            # way to add one entry.
             if part == len(node.value):
                 if not last:
                     raise PatchError(
@@ -331,7 +304,7 @@ def _locate(text: str, path: list[Segment]) -> _Target:
 
 
 def _line_prefix(lines: list[str], line: int, column: int) -> str:
-    """The non-blank text before a key on its own line, or "" when it is indent.
+    """Return the non-blank text before a key on its line, or "" when it is indent.
 
     Only ever "- ", from a mapping written inline after a sequence dash.
     """
@@ -341,11 +314,10 @@ def _line_prefix(lines: list[str], line: int, column: int) -> str:
 
 
 def _child_indent(item: yaml.nodes.Node, lines: list[str]) -> int:
-    """Column of a sequence item's own dash, which is where a replacement goes.
+    """Return the column of a sequence item's own dash, where a replacement goes.
 
-    The item node's column points at its first token, one past the dash in the
-    `- key: value` form and at column 0 of the next line when the dash stands
-    alone, so neither is the dash itself; the dash line is found the same way
+    The item node's column points at its first token (one past the dash, or column
+    0 of the next line when the dash stands alone), so the dash line is found as
     _child_start finds it and its indent read off the text.
     """
     line = _child_start(item, lines)
@@ -356,12 +328,11 @@ def _child_indent(item: yaml.nodes.Node, lines: list[str]) -> int:
 def _removal_span(lines: list[str], target: _Target) -> tuple[int, int]:
     """Widen a key's span to the lines that go with it when it is DELETED.
 
-    Upward over a comment block written directly above the key, which is the same
-    "a comment belongs to the key below it" model _child_spans already uses when
-    it trims one off the PREVIOUS key's span; it stops at a blank line, so a
-    section header separated by one is left alone. Downward over the blank lines
-    that followed, so a removal does not leave a hole. An edit deliberately does
-    neither: the key is staying, and so is what a human wrote about it.
+    Upward over a comment block directly above the key ("a comment belongs to the
+    key below it", as in _child_spans); it stops at a blank line, so a section
+    header separated by one is left alone. Downward over the blank lines that
+    followed, so a removal leaves no hole. An edit does neither: the key stays, and
+    so does what a human wrote about it.
     """
     start, end = target.start_line, target.end_line
     while start > 0 and lines[start - 1].strip().startswith("#"):
@@ -372,8 +343,7 @@ def _removal_span(lines: list[str], target: _Target) -> tuple[int, int]:
 
 
 def _dedent(rows: list[str]) -> list[str]:
-    """Strip the common leading indent, so content copied out of a file at any
-    depth renders at the depth it is being written to."""
+    """Strip the common leading indent so content renders at its new depth."""
     widths = [len(row) - len(row.lstrip(" ")) for row in rows if row.strip()]
     cut = min(widths) if widths else 0
     return [row[cut:] if row.strip() else "" for row in rows]
@@ -382,12 +352,9 @@ def _dedent(rows: list[str]) -> list[str]:
 def _render(key: Segment, content: str, indent: int, value: Any, prefix: str = "") -> str:
     """Render the addressed child at the given indent, block form unless inline fits.
 
-    A dict or list always goes to block form, so a one-line "- a" (a sequence) is
-    never emitted as "key: - a", which is not valid YAML.
-
-    A LIST INDEX renders the entry itself under a dash rather than a `key:`
-    pair, and the index is not written anywhere: position IS the address, so an
-    entry carries no name to restate.
+    A dict or list always goes to block form, so a one-line "- a" is never emitted
+    as the invalid "key: - a". A LIST INDEX renders the entry itself under a dash
+    rather than a `key:` pair; position IS the address, so no name is written.
     """
     rows = _dedent(content.strip("\n").split("\n"))
     pad = prefix or " " * indent
@@ -400,11 +367,9 @@ def _render(key: Segment, content: str, indent: int, value: Any, prefix: str = "
         return f"{pad}{key}: {rows[0]}\n"
     inner = " " * (indent + 2)
     if _is_block_header(rows[0]) and isinstance(value, str):
-        # `state: >` with the body under it, which is how a multi-line template
-        # is written by hand and what a read of one hands back. Emitting the
-        # indicator on its own line below the key parses to the same string but
-        # reformats every template it touches, and this tool's whole promise is
-        # that it does not reformat what it is not changing.
+        # Keep `state: >` with the body under it, as a multi-line template is
+        # written by hand and read back. Moving the indicator to its own line
+        # parses to the same string but reformats every template it touches.
         out = [f"{pad}{key}: {rows[0]}"]
         out.extend(f"{inner}{row}" if row else "" for row in rows[1:])
         return "\n".join(out) + "\n"
@@ -434,11 +399,10 @@ def _splice(text: str, start: int, end: int, replacement: str | None) -> str:
 
 
 def _source_value(text: str, target: _Target) -> str:
-    """The addressed key's current VALUE as it is written in the file.
+    """Return the addressed value as written in the file.
 
-    The value rather than the whole pair, so the before and after sides of a diff
-    describe the same thing; taken from the source rather than re-dumped, so the
-    operator's own comments are on the side they are reading.
+    The value rather than the whole pair, so both sides of a diff describe the same
+    thing; from the source rather than re-dumped, so the operator's comments show.
     """
     rows = [row.rstrip("\n") for row in text.splitlines()[target.start_line : target.end_line]]
     if not rows:
@@ -462,11 +426,10 @@ def _source_value(text: str, target: _Target) -> str:
 def _verify(old_text: str, new_text: str, path: list[Segment], value: Any) -> None:
     """Refuse a splice whose result is not exactly the intended document.
 
-    Everything outside the addressed path must be unchanged and the path itself
-    must hold the intended value, so a span bug is a refusal rather than a
-    corrupted configuration.yaml. This is the check that makes index addressing
-    safe without a deletion guard: an entry the patch did not address surviving
-    byte-for-byte is not assumed, it is proved on every write.
+    Everything outside the addressed path must be unchanged and the path must hold
+    the intended value, so a span bug is a refusal rather than a corrupted file.
+    This is what makes index addressing safe without a deletion guard: an
+    unaddressed entry surviving is proved on every write.
     """
     try:
         new_doc = load_tagged_lenient(new_text)
@@ -537,9 +500,8 @@ def apply_patch(
 ) -> PatchResult:
     """Splice one addressed value into text and return the verified result.
 
-    `value` is the caller's content already through parse_value, so it is parsed
-    once rather than here and again in the guard that inspects it. Ignored when
-    op is 'remove'.
+    `value` is the caller's content already through parse_value (parsed once, shared
+    with the guard that inspects it). Ignored when op is 'remove'.
     """
     path = normalize_path(key, path_arg)
     if op == "append":

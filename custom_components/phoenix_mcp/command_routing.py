@@ -1,4 +1,4 @@
-"""Experimental, local-only command observations; never authorizes or executes."""
+"""Recognize local commands and project them to inert proposals; never authorizes or executes."""
 
 from __future__ import annotations
 
@@ -166,7 +166,7 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant, *,
         return "unsupported", None
     if read_only and (not name or getattr(result, "response", None) not in (None, "default", "one")):
         return "unsupported", None
-    # Match the HA intent's domains, not only the domains we can execute.
+    # Match the HA intent's domains, not only the domains Phoenix can execute.
     # Paired remotes cannot set volume; valves still make position ambiguous.
     target_domains = ([domains] if domains else [expected_domain] if native_action and expected_domain is not None else
                       list(operation.match_domains) if operation else None)

@@ -1,4 +1,8 @@
-"""Tests for Home Assistant device-registry compatibility semantics."""
+"""Device-registry snapshots handle legacy and child-device shapes and fail closed.
+
+Effective area resolves through parent devices, and conflicting identities or
+invalid ancestry are reported rather than guessed at.
+"""
 
 import pytest
 

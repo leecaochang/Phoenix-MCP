@@ -1,25 +1,15 @@
 """Typed base class for Phoenix MCP's aiohttp views.
 
-`HomeAssistantView` does not declare `hass`. HA's own `register_view` never sets
-it either (it only checks `url`/`name`, then calls `view.register(hass, ...)`),
-which is exactly why Phoenix assigns it explicitly at registration:
+`HomeAssistantView` does not declare `hass`, and HA's `register_view` never sets
+it (it only checks `url`/`name`, then calls `view.register(hass, ...)`). Phoenix
+assigns it at registration (`view = view_cls(); view.hass = hass;
+hass.http.register_view(view)`), which a type checker cannot see, so every
+`self.hass` in the view modules would read as an undeclared attribute.
 
-    view = view_cls()
-    view.hass = hass
-    hass.http.register_view(view)
-
-That assignment is what makes the attribute exist at runtime, but it tells a
-type checker nothing, so without this class every `self.hass` across the view
-modules reads as an undeclared attribute. That is the single largest source of
-type-check noise in the package, and enough of it to bury anything real.
-
-This class exists solely to declare that attribute. `hass: HomeAssistant` is an
-ANNOTATION, not an assignment, so no class attribute is created, `hasattr` is
-unchanged, and there is no runtime behaviour here whatsoever. Views keep
-inheriting everything else from `HomeAssistantView`.
-
-Kept in its own module rather than `helpers.py` so it can be imported by every
-view module (admin_view, agentcli, mcp_view, skill_view) with no possibility of
+`hass: HomeAssistant` is an ANNOTATION only: no class attribute is created,
+`hasattr` is unchanged, and there is no runtime behaviour. Views inherit
+everything else from `HomeAssistantView`. Kept apart from `helpers.py` so every
+view module (admin_view, agentcli, mcp_view, skill_view) can import it without
 an import cycle.
 """
 

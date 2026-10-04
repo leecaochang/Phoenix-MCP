@@ -2,27 +2,21 @@
 /**
  * Dashboard card catalog harvester.
  *
- * Builds the list of custom Lovelace cards this instance can actually render and
- * posts it to the backend, so the MCP tool surface can answer "what cards do I
- * have" before an agent authors one.
+ * Builds the list of custom Lovelace cards this instance can render and posts it
+ * to the backend, so the MCP tools can answer "what cards do I have" before an
+ * agent authors one.
  *
- * WHY THIS RUNS IN THE BROWSER. A card announces itself by pushing onto
- * `window.customCards`, the registry HA's own card picker reads, and it does so
- * at runtime. Roughly half of a real plugin set builds its type strings by
- * concatenation, so those strings never appear as literals in the shipped
- * bundle: Mushroom assembles all 18 of its types from `"mushroom"` plus a
- * suffix. Measured on a 24-plugin instance, parsing the files on disk found 16
- * types with no descriptions and no examples, while this found 65 cards, most
- * with a worked example config. The backend genuinely cannot do this.
+ * WHY THIS RUNS IN THE BROWSER. A card announces itself at runtime by pushing
+ * onto `window.customCards`, the registry HA's own card picker reads. Many
+ * bundles build their type strings by concatenation, so those strings never
+ * appear as literals in the shipped file: parsing files on disk finds only a
+ * fraction of a real catalog, with no descriptions or example configs.
  *
- * Design rules, matching the MESA injector next door:
- *  - Admin only, and every entry point is wrapped so a throw logs and no-ops.
- *    A harvest failure must never break the panel or an HA page.
- *  - Best effort per card: one card whose getStubConfig throws costs that card
- *    its example, never the whole catalog.
- *  - Idempotent and cheap to repeat. `import()` is deduplicated by URL in the
- *    browser, so on an instance where HA already loaded the resources the import
- *    loop is a no-op; on one that starts cold it does the real work.
+ * Design rules, matching the MESA injector next door: admin only; every entry
+ * point logs and no-ops on a throw, so a harvest failure never breaks the panel
+ * or an HA page; best effort per card (a throwing getStubConfig costs that card
+ * its example, not the catalog); idempotent, since `import()` is deduplicated by
+ * URL and is a no-op when HA already loaded the resources.
  */
 
 import { api, currentHass } from "../api";
@@ -60,19 +54,13 @@ function log(...args: unknown[]): void {
   console.debug(LOG, ...args);
 }
 
-/** Read the registered Lovelace resources. Falls back to the pre-2025.1 command name. */
+/** Read the registered Lovelace resources through HA's shared list command. */
 async function readResources(hass: any): Promise<any[]> {
   try {
     return (await hass.connection.sendMessagePromise({ type: "lovelace/resources/list" })) ?? [];
-  } catch {
-    // Storage mode registers only `/list`; YAML mode also kept the bare name for
-    // back-compat. Trying both means neither mode is a special case here.
-    try {
-      return (await hass.connection.sendMessagePromise({ type: "lovelace/resources" })) ?? [];
-    } catch (err) {
-      log("could not read the resource list", err);
-      return [];
-    }
+  } catch (err) {
+    log("could not read the resource list", err);
+    return [];
   }
 }
 
@@ -81,9 +69,8 @@ async function readResources(hass: any): Promise<any[]> {
  *
  * Only `module` is handled: `js` and `css` resources cannot register a card
  * element the modern way, and HA itself treats them as separate paths. A failed
- * import is collected rather than thrown, because a registered resource whose
- * file is gone is a real and common condition (a live instance carried four,
- * two of them stale duplicates) and it must not stop the remaining imports.
+ * import is collected rather than thrown: a registered resource whose file is
+ * gone is common and must not stop the remaining imports.
  */
 async function loadModules(hass: any, resources: any[]): Promise<{ url: string; error: string }[]> {
   const base = hass?.auth?.data?.hassUrl || window.location.origin;
@@ -116,17 +103,12 @@ function registry(): any[] {
 }
 
 /**
- * LIVE-FOUND, and the reason the settle and follow-up machinery below exists:
- * cards do not all register by the time the imports resolve. A harvest taken the
- * instant the panel mounted missed browser_mod's popup-card and
- * browser-mod-tile-card while catching a card a slightly earlier probe had
- * missed, and saw tiktoktts-card's element as defined where the earlier probe
- * had not. Registration is asynchronous, so any single instant yields an
- * arbitrary subset.
+ * Tuning for the settle wait and the late-registration follow-ups.
  *
- * A partial catalog is the dangerous failure here, worse than a slow one: the
- * response looks complete, so an agent concludes a card it cannot see is not
- * installed.
+ * Cards do not all register by the time the imports resolve. Registration is
+ * asynchronous, so any single instant yields an arbitrary subset. A partial
+ * catalog is the dangerous failure, worse than a slow one: the response looks
+ * complete, so an agent concludes a card it cannot see is not installed.
  */
 export interface HarvestOptions {
   /**
@@ -159,19 +141,16 @@ const SETTLE_DEFAULTS = {
 /**
  * Wait for window.customCards to stop growing before reading it.
  *
- * A MINIMUM WAIT IS THE LOAD-BEARING PART, and stability alone is not enough.
- * Registrations do not arrive as one burst: an integration-provided card can
- * land seconds after everything else has gone quiet, and a purely
- * stability-based wait returns during that quiet gap and misses it. So this
+ * A MINIMUM WAIT IS THE LOAD-BEARING PART; stability alone is not enough. An
+ * integration-provided card can register seconds after everything else has gone
+ * quiet, and a purely stability-based wait returns during that gap. So this
  * always waits minWaitMs, and only then treats a steady count as settled.
  *
- * This is a mitigation, not a guarantee: a card registering after the window is
- * simply picked up by the next harvest. It is sized so a normal instance is
- * consistently complete, because the catalog is REPLACED wholesale on each
- * report (so an uninstalled card disappears rather than being recommended
- * forever), which means an unusually incomplete harvest would briefly shrink
- * the catalog. Consistency matters more here than speed: this runs in the
- * background, at most once every ten minutes, and blocks nothing.
+ * A mitigation, not a guarantee: a late card is picked up by the next harvest.
+ * Completeness matters more than speed because the catalog is REPLACED wholesale
+ * on each report (so an uninstalled card disappears), and an incomplete harvest
+ * would briefly shrink it. This runs in the background, at most once every ten
+ * minutes, and blocks nothing.
  */
 async function settleRegistry(opts: HarvestOptions): Promise<void> {
   const { minWaitMs, settleTimeoutMs, settlePollMs, stableSamples } = { ...SETTLE_DEFAULTS, ...opts };
@@ -193,11 +172,10 @@ async function settleRegistry(opts: HarvestOptions): Promise<void> {
 /**
  * Ask one card element for a starting config.
  *
- * This is what HA's card picker calls to seed a new card, so it returns
- * something the card itself considers valid, which is the closest thing to a
- * config schema that custom cards publish. It may be sync or async and it may
- * throw on a card that expects entities it cannot find; either way the card
- * still belongs in the catalog, just without an example.
+ * HA's card picker calls this to seed a new card, so the result is a config the
+ * card itself considers valid, the closest thing to a schema that custom cards
+ * publish. It may be sync or async and may throw on a card that expects entities
+ * it cannot find; either way the card stays in the catalog, without an example.
  */
 async function stubFor(el: any, hass: any): Promise<unknown> {
   if (typeof el?.getStubConfig !== "function") return null;
@@ -245,7 +223,7 @@ export async function harvestCards(opts: HarvestOptions = {}): Promise<HarvestRe
   const resources = await readResources(hass);
   const failed = await loadModules(hass, resources);
   // Imports resolving is NOT the same as every card having registered; see
-  // settleRegistry for the live evidence.
+  // settleRegistry.
   await settleRegistry(opts);
 
   const entries: HarvestedCard[] = [];
@@ -262,9 +240,9 @@ export async function harvestCards(opts: HarvestOptions = {}): Promise<HarvestRe
       description: cleanText(c?.description),
       documentation_url: cleanText(c?.documentationURL),
       preview: !!c?.preview,
-      // A card can advertise itself and never define its element (live-observed
-      // on a real instance). Recording that as unavailable is the whole reason
-      // the field exists: the agent must not author a card that cannot render.
+      // A card can advertise itself and never define its element. Recording that
+      // as unavailable is the whole reason the field exists: the agent must not
+      // author a card that cannot render.
       available: !!el,
       has_visual_editor: typeof el?.getConfigElement === "function",
       stub_config: el ? await stubFor(el, hass) : null,
@@ -273,10 +251,10 @@ export async function harvestCards(opts: HarvestOptions = {}): Promise<HarvestRe
   }
 
   // Cards that register an element but skip the picker on purpose so they do not
-  // clutter it (stack-in-card, config-template-card and friends). They are real
-  // and widely used, so a catalog listing only picker cards would tell an agent
-  // they do not exist. Probing by name is a heuristic and is marked as such via
-  // `source`, since there is no way to enumerate the element registry.
+  // clutter it (layout and template helper cards). They are real and widely used,
+  // so a catalog listing only picker cards would tell an agent they do not exist.
+  // Probing by name is a heuristic and is marked as such via `source`, since
+  // there is no way to enumerate the element registry.
   for (const name of candidateNames(resources, seen)) {
     const el = customElements.get(name) as any;
     if (!el || typeof el.prototype?.setConfig !== "function") continue;
@@ -301,11 +279,9 @@ function harvestedRecently(): boolean {
     const raw = window.localStorage.getItem(LAST_KEY);
     if (!raw) return false;
     const [at, build] = raw.split("|");
-    // A new panel build may harvest DIFFERENTLY (this module has already gained
-    // a settle wait that changed what it captures), so the previous run's
-    // timestamp must not suppress the first harvest of a new build. Without
-    // this, deploying a harvester fix and reloading appears to do nothing for
-    // up to the full interval, which reads as the fix not working.
+    // A new panel build may harvest DIFFERENTLY, so the previous run's timestamp
+    // must not suppress the first harvest of a new build. Otherwise a harvester
+    // fix appears to do nothing until the interval lapses.
     if (build !== JS_BUILD) return false;
     const ts = Number(at);
     return Number.isFinite(ts) && Date.now() - ts < MIN_INTERVAL_MS;
@@ -322,15 +298,18 @@ function markHarvested(): void {
   }
 }
 
-/**
- * Harvest and post, unless an admin did so recently. Never throws.
- *
- * `force` skips the interval check, for an explicit operator-triggered rescan.
- */
 const HARVEST_KEY = "__phxCardCatalogHarvest";
 type HarvestOwner = { build: string; userId: unknown; promise: Promise<void> | null };
 const harvestHost = window as unknown as Record<string, unknown>;
 
+/**
+ * Harvest and post (admin only), unless this browser did so recently. Never throws.
+ *
+ * `force` skips the interval check, for an explicit operator-triggered rescan.
+ * The panel and injected bundles share one window: the newest build owns the
+ * harvest, a duplicate caller joins the in-flight run, and a superseded run
+ * stops before posting.
+ */
 export async function syncCardCatalog(force = false, opts: HarvestOptions = {}): Promise<void> {
   const hass = currentHass() as any;
   if (!hass?.user?.is_admin) return;
@@ -377,18 +356,13 @@ async function runHarvest(opts: HarvestOptions, ownsHarvest: () => boolean): Pro
 /**
  * Re-check later for cards that had not registered yet, re-posting if the set grew.
  *
- * WHY THIS EXISTS RATHER THAN A LONGER WAIT. There is no signal for "every card
- * has registered", and no fixed delay can be correct, because each plugin
- * invents its own readiness. browser_mod is the worked example: its popup-card
- * waits on a custom event, then polls every 1000ms for a global, then awaits its
- * own websocket connection before registering. Nothing in Home Assistant knows
- * that has happened, and no amount of waiting up front is guaranteed to cover it.
- *
- * So rather than trying to pick the right instant, converge on it. Registrations
- * only ever ADD within a page session, so a later harvest from the same page is
- * a superset of an earlier one, and re-posting is safe against the backend's
- * wholesale replacement precisely because of that. Posting only on growth keeps
- * a steady instance to exactly one write per visit.
+ * WHY THIS RATHER THAN A LONGER WAIT. There is no signal for "every card has
+ * registered", and no fixed delay can be right because each plugin invents its
+ * own readiness (a card may wait on a custom event, poll for a global, then
+ * await its own websocket connection before registering). Registrations only ADD
+ * within a page session, so a later harvest is a superset of an earlier one and
+ * re-posting is safe against the backend's wholesale replacement. Posting only
+ * on growth keeps a steady instance to one write per visit.
  */
 function scheduleFollowUps(bestSoFar: number, opts: HarvestOptions, ownsHarvest: () => boolean): void {
   const delays = opts.followUpMs ?? SETTLE_DEFAULTS.followUpMs;
@@ -398,7 +372,7 @@ function scheduleFollowUps(bestSoFar: number, opts: HarvestOptions, ownsHarvest:
       void (async () => {
         try {
           if (!ownsHarvest()) return;
-          // No settle wait: we are already well past page load, so read now.
+          // No settle wait: the page is already well past load, so read now.
           const later = await harvestCards({ ...opts, minWaitMs: 0, settleTimeoutMs: 0 });
           if (!ownsHarvest() || later.entries.length <= best) return;
           await api.postCardCatalog(later);

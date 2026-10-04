@@ -86,7 +86,7 @@ def batch_execution_eligible(cfg: Any, language: str) -> bool:
 
 
 def percentage_execution_eligible(cfg: Any, language: str) -> bool:
-    """Keep numeric qualification independent from future categorical model additions."""
+    """Qualify numeric execution by its own model allowlist, on top of batch eligibility."""
     return bool(batch_execution_eligible(cfg, language)
                 and (cfg.kind, cfg.base_url, cfg.model) in DECISION_PERCENTAGE_EXECUTION_MODELS)
 

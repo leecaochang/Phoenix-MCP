@@ -1,17 +1,13 @@
-"""Hold every shipped locale complete and consistent with the English catalog.
+"""Every shipped locale must be complete and consistent with the English catalog.
 
-Phoenix is multilingual from here on, and the failure mode this guards is that
-nothing else reports it. A key missing from a locale renders English in the
-middle of a translated screen; a key whose {placeholder} set drifted is DELETED
-by Home Assistant and falls back to English with only a log line. Both look like
-"the translation is a bit patchy" rather than "someone forgot a step".
+A key missing from a locale renders English in the middle of a translated
+screen; a key whose {placeholder} set drifted is DELETED by Home Assistant and
+falls back to English with only a log line. So a new English string is not
+finished until every locale has it, or the key is listed in the checker's
+KEEP_ENGLISH manifest with a reason.
 
-So adding an English string is not finished until every locale has it, or the
-key is listed in the checker's KEEP_ENGLISH manifest with a reason. This test is
-what makes that mechanical.
-
-The checks themselves live in scripts/i18n_check_locale.py so the same logic
-serves the command line and the suite.
+The checks live in scripts/i18n_check_locale.py so the same logic serves the
+command line and the suite.
 """
 
 from __future__ import annotations
@@ -53,7 +49,7 @@ def test_locale_is_complete_and_consistent(language: str, capsys) -> None:
 
 
 def test_at_least_one_locale_is_shipped() -> None:
-    """Guards the parametrize above from passing vacuously if the glob breaks."""
+    """The parametrized locale checks cannot pass vacuously over an empty locale list."""
     assert _locales(), "no locale files found; did the translations directory move?"
 
 
@@ -75,9 +71,8 @@ MNEMONICS = {
 def test_permission_button_tooltips_keep_the_english_mnemonic(language: str) -> None:
     """Each N/R/W/D tooltip starts with the word its letter stands for.
 
-    Deliberate asymmetry with English, which needs no prefix. A translator
-    tidying this away would silently orphan the button letters, which is exactly
-    the kind of intent that does not survive in a catalog without a test.
+    Deliberate asymmetry with English, which needs no prefix: without the English
+    word a translated tooltip orphans the button letter.
     """
     checker = _checker()
     catalog = checker.flatten(checker.load(language), "")

@@ -1,10 +1,8 @@
 """Tests for list_dashboard_cards, the installed-custom-card discovery tool.
 
-The invariant that matters most here is the cold-start one: an un-harvested
-catalog must never read as "this instance has no custom cards". An agent told
-that avoids every custom card on the system, which is both wrong and something
-it has no way to recover from, whereas "unknown, prefer built-ins" degrades to
-exactly the behaviour that existed before the tool.
+The key invariant is cold start: an un-harvested catalog must never read as "this
+instance has no custom cards". An agent told that avoids every custom card with
+no way to recover, whereas "unknown, prefer built-ins" degrades gracefully.
 """
 
 from __future__ import annotations
@@ -65,7 +63,7 @@ async def _call(args, token, hass, data):
 
 
 async def test_unharvested_is_reported_as_unknown_not_empty(hass: HomeAssistant) -> None:
-    """The whole point: never let a cold catalog read as 'no custom cards'."""
+    """A cold catalog reads as unknown, never as 'no custom cards'."""
     content, outcome, _ = await _call({}, _token(), hass, _data())
     body = _json(content)
 
@@ -159,7 +157,7 @@ async def test_detailed_includes_every_example(hass: HomeAssistant) -> None:
     cards = {c["type"]: c for c in _json(content)["cards"]}
 
     assert cards["custom:mushroom-light-card"]["example_config"]["entity"] == "<redacted>"
-    # A card with no stub simply carries no example rather than a null.
+    # A card with no stub carries no example rather than a null.
     assert "example_config" not in cards["custom:broken-card"]
 
 

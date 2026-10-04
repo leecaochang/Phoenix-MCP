@@ -1,17 +1,11 @@
 """Pin the enumerable parts of the docs site against the code.
 
-Nearly all documentation drift is of one class: enumerable facts (tool
-parameters, provider kinds, error codes, SSE frame names, routes, capability
-lists) restated by hand and left behind by code changes. Everything here derives
-the expectation from the code side, so a tool, provider, code, frame, route, or
-capability added tomorrow is covered without a new test being written.
-
-Extraction-based checks assert a floor on how much they extracted, so a
-refactor that breaks the extraction fails loudly instead of passing vacuously
-(the mutation-pin lesson: absence assertions are the likeliest to be vacuous).
-
-`docs/` at the repo root is the only copy of the documentation. It is published
-as a hosted site; the integration ships no copy of it.
+Documentation drift is mostly enumerable facts (tool parameters, provider
+kinds, error codes, SSE frame names, routes, capability lists) restated by hand
+and left behind by code changes. Each expectation is derived from the code side,
+so a new tool, provider, code, frame, route or capability is covered without a
+new test. Extraction-based checks assert a floor on what they extracted, so a
+broken extraction fails loudly instead of passing vacuously.
 """
 
 from __future__ import annotations
@@ -47,7 +41,7 @@ def _all_defs() -> list[dict]:
 
 
 def _tools_articles() -> dict[str, str]:
-    """Map tool name -> the <article> block documenting it.
+    """Map each tool name to the <article> block documenting it.
 
     An article may document several tools (the ESPHome firmware family shares
     one), so multiple names can map to the same block.
@@ -70,8 +64,7 @@ def test_every_tool_has_an_article() -> None:
 def test_every_required_param_is_named_in_its_article() -> None:
     """A parameter the schema REQUIRES must appear in the tool's article.
 
-    The audit found 28 tools whose article never named at least one required
-    field; an agent (or human) reading the docs could not produce a valid call.
+    Otherwise a reader of the docs could not produce a valid call.
     """
     articles = _tools_articles()
     gaps: list[str] = []
@@ -87,12 +80,10 @@ def test_every_required_param_is_named_in_its_article() -> None:
 def test_required_params_are_marked_required_in_single_tool_articles() -> None:
     """Naming a required parameter is not enough; the article must SAY it is required.
 
-    Mentioning the name passed while the ESPHome firmware article listed `file`
-    and `job_id` with no indication that each is mandatory for its own subset of
-    tools, which is the exact thing a caller needs to know. Scoped to articles
-    documenting exactly ONE tool: a shared article covers several tools whose
-    required sets differ, so "required" cannot be attributed mechanically there
-    and the prose has to carry it (the /docs-verify pass covers those).
+    Scoped to articles documenting exactly ONE tool: a shared article covers
+    several tools whose required sets differ, so "required" cannot be attributed
+    mechanically there and the prose has to carry it (a manual docs
+    verification pass covers those).
     """
     articles = _tools_articles()
     shared = {block for name, block in articles.items()
@@ -189,8 +180,8 @@ def test_service_target_expansion_modes_are_explicit() -> None:
 
 
 # (tool, parameter) pairs whose enum values are deliberately not spelled out in
-# the docs, each with the reason. An exemption is a claim that listing the values
-# would make the page WORSE, which is a higher bar than "it would be tedious".
+# the docs, each with the reason. An exemption claims that listing the values
+# would make the page WORSE, a higher bar than "it would be tedious".
 _ENUM_DOC_EXEMPT: dict[tuple[str, str], str] = {
     (_NATIVE_TOOL_NAMES["HassMediaSearchAndPlay"], "media_class"): (
         "Home Assistant's own 20-value media taxonomy (album/artist/episode/genre/"
@@ -204,28 +195,13 @@ _ENUM_DOC_EXEMPT: dict[tuple[str, str], str] = {
 def test_every_enum_value_is_named_in_its_article() -> None:
     """An enum value a parameter accepts must appear in the tool's article.
 
-    The gap this closes: the checks above derive from the TOOL list and the
-    REQUIRED list, so a whole new operation added to an existing tool's `op` enum
-    is invisible to every one of them. `edit_energy_config` gained `rename_device`
-    and `remove_source` on an already-documented, already-required parameter, and
-    nothing would have failed had the article not been updated with them. An enum
-    value is not an implementation detail; it is a thing the tool DOES, which is
-    exactly what a reader is looking for.
-
-    Deliberately NOT extended to optional parameters. There are hundreds across
-    135 tools, many of them narrow refinements whose place is the schema rather
-    than the prose, and forcing each into the docs would trade this drift for
-    noise. Enum values are bounded and each one names a distinct behaviour.
-
-    Values are matched case-insensitively and only where the enum is a list of
-    strings, so a numeric or mixed enum is skipped rather than producing a
-    nonsense expectation. Exemptions carry a written reason, per house style, so
-    the next one has to be argued for rather than quietly added.
-
-    Its first run found five real gaps: get_history never named either value of
-    `mode`, get_statistics's prose said "5-minute" while the value you actually
-    pass is `5minute`, mesa_query_profiles had no parameter list at all, and
-    mesa_request_lease named two enums without ever saying what they accept.
+    The required-parameter checks above do not notice a new operation added to an
+    existing tool's `op` enum, yet an enum value names a distinct behaviour the
+    tool DOES. Optional parameters are deliberately excluded (many narrow
+    refinements that belong in the schema, not the prose). Matching is
+    case-insensitive and only for string-only enums. Add an `_ENUM_DOC_EXEMPT`
+    entry only with a written reason that listing the values would make the page
+    worse.
     """
     articles = _tools_articles()
     gaps: list[str] = []
@@ -248,8 +224,8 @@ def test_every_enum_value_is_named_in_its_article() -> None:
     assert gaps == [], "\n".join(gaps)
     # Floor, per the module docstring: a refactor that stops finding enums must
     # fail loudly rather than pass by checking nothing. Set below the real count
-    # (49 at the time of writing, after the exemption above removes 20) with room
-    # for a tool to be retired, but far above what a broken extraction returns.
+    # with room for a tool to be retired, but far above what a broken extraction
+    # returns.
     assert checked >= 40, f"only {checked} enum values found; the extraction is probably broken"
 
 

@@ -564,8 +564,10 @@ class TestQuery:
         assert results[0].resource == "new"
 
     def test_method_resource_filter_survives_poisoned_non_string_entry(self):
-        """A malformed JSON-RPC request could historically persist a non-string
-        method/resource; a later filtered query must coerce, not crash on .lower()."""
+        """A recorded non-string method/resource does not crash a filtered query.
+
+        A malformed JSON-RPC request can supply one; filtering must not fail on .lower().
+        """
         log = AuditLog()
         _record(log, method=["bad"], resource=["also-bad"])
         _record(log, method="tools/call", resource="light.kitchen")
@@ -652,8 +654,10 @@ class TestQuery:
 
 
 class TestCount:
-    """count() must agree with query()'s filters, ignoring limit/offset - it is
-    what the admin panel uses to decide whether a "Load more" page exists."""
+    """count() agrees with query()'s filters, ignoring limit/offset.
+
+    The admin panel uses it to decide whether a "Load more" page exists.
+    """
 
     def test_matches_filtered_length_ignoring_pagination(self):
         log = AuditLog()

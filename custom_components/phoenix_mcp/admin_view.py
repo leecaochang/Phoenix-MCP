@@ -170,11 +170,11 @@ async def _read_body(request: web.Request, request_id: str = "") -> dict | web.R
 
     # aiohttp's StreamReader.read(n) is a SHORT read: it returns as soon as the
     # buffer has ANY data, up to n bytes, not once n bytes have actually
-    # arrived. A single read(MAX_REQUEST_BODY_BYTES + 1) call could therefore
+    # arrived. A single read(MAX_REQUEST_BODY_BYTES + 1) call would therefore
     # silently truncate a larger body that arrived across multiple TCP/chunked
-    # segments (a real bug: intermittent "Invalid JSON body." on bigger
-    # payloads, e.g. importing many MESA profiles). Loop until EOF instead,
-    # accumulating chunks and bailing as soon as the cap is exceeded.
+    # segments (an intermittent "Invalid JSON body." on bigger payloads, e.g.
+    # importing many MESA profiles). Loop until EOF, accumulating chunks and
+    # bailing as soon as the cap is exceeded.
     chunks: list[bytes] = []
     total = 0
     try:
@@ -200,10 +200,9 @@ async def _read_body(request: web.Request, request_id: str = "") -> dict | web.R
     try:
         parsed = json.loads(body_bytes)
     except json.JSONDecodeError:
-        # Diagnostic only (never logs the body content itself). The short-read
-        # bug above is now fixed, so this is a backstop: a byte count short of
-        # Content-Length here would now point at something upstream of Phoenix MCP
-        # (a proxy or tunnel), not this reader.
+        # Diagnostic only (never logs the body content itself). The loop above
+        # reads to EOF, so a byte count short of Content-Length points at
+        # something upstream of Phoenix MCP (a proxy or tunnel), not this reader.
         _LOGGER.warning(
             "%s %s: invalid JSON body (%d bytes read, Content-Length %s) rid=%s",
             request.method, request.path, len(body_bytes),
@@ -245,11 +244,10 @@ def _parse_pagination(
 ) -> tuple[int, int] | web.Response:
     """Parse limit/offset, or return a 400 response.
 
-One helper, so the paged endpoints cannot disagree. A negative limit is a
+    One helper, so the paged endpoints cannot disagree. A negative limit is a
     client error, not a request for the whole buffer: it slices as "everything
-    but the last N", and in the version store it is an explicit "return
-    everything". Malformed input is reported rather than silently replaced with
-    a default.
+    but the last N", and in the version store it means "return everything".
+    Malformed input is reported rather than silently replaced with a default.
     """
     try:
         limit = int(request.query.get("limit", default_limit))
@@ -269,8 +267,8 @@ def _validate_permission_tree_body(body: dict, rid: str) -> web.Response | None:
     for section, node_type in (("domains", "domains"), ("devices", "devices"), ("entities", "entities")):
         raw_section = body.get(section, {})
         # A non-object section (list, string, number) is structurally invalid
-        # but syntactically valid JSON. Without this it reached .items() and
-        # raised AttributeError, which surfaced as a 500 rather than a 400.
+        # but syntactically valid JSON; reject it with a 400 instead of letting
+        # .items() raise AttributeError (a 500).
         if not isinstance(raw_section, dict):
             return _err(
                 "invalid_request",
@@ -325,7 +323,7 @@ def _validate_permission_tree_body(body: dict, rid: str) -> web.Response | None:
 
 
 def _build_entity_tree(hass: HomeAssistant) -> dict:
-    """Build a domain-keyed tree of all non-disabled, non-Phoenix entities.
+    """Build a domain-keyed tree of enabled entities outside BLOCKED_DOMAINS and Phoenix's own.
 
     Pulls from the entity, device, and area registries (all in-memory dicts).
     Synchronous; never performs I/O. The result is cached in
@@ -352,11 +350,11 @@ def _build_entity_tree(hass: HomeAssistant) -> dict:
         if domain in BLOCKED_DOMAINS:
             continue
 
-        # Exclude Phoenix MCP's own telemetry sensors (sensor.phoenix_mcp_* entities registered to the
-        # phoenix_mcp platform). They live in the sensor domain so BLOCKED_DOMAINS won't catch them.
-        # Showing them would let admins grant permissions that the runtime policy engine
-        # always blocks, causing confusion. The intent is that Phoenix MCP internals never
-        # appear in the permission UI, not just the phoenix_mcp domain itself.
+        # Exclude Phoenix MCP's own telemetry sensors (entities registered to the
+        # phoenix_mcp platform). They live in the sensor domain, so BLOCKED_DOMAINS
+        # does not catch them. Showing them would let admins grant permissions the
+        # runtime policy engine always blocks; Phoenix MCP internals never appear
+        # in the permission UI.
         if entry.platform == DOMAIN:
             continue
 
@@ -429,12 +427,12 @@ def _build_entity_tree(hass: HomeAssistant) -> dict:
 
         tree[domain]["entity_details"][entity_id] = entity_info
 
-    # Zone, tag, and person creation require inherited domain WRITE scope because their
-    # entity IDs do not exist until Home Assistant creates them. Keep both
-    # grantable domains in the permission UI before their first registry-backed
-    # user entity exists; otherwise the operator faces a chicken-and-egg
-    # requirement. Each gains its ordinary children as soon as an entity
-    # materializes and invalidates this cache.
+    # Zone, tag, and person creation require inherited domain WRITE scope because
+    # their entity IDs do not exist until Home Assistant creates them. Keep all
+    # three grantable domains in the permission UI before their first
+    # registry-backed user entity exists; otherwise the operator faces a
+    # chicken-and-egg requirement. Each gains its ordinary children as soon as an
+    # entity materializes and invalidates this cache.
     for creatable_domain in ("person", "tag", "zone"):
         tree.setdefault(
             creatable_domain,
@@ -584,13 +582,13 @@ class PhoenixAdminCatalogView(PhoenixView):
     Phoenix serves its own panel strings because they cannot live in
     translations/ (hassfest rejects any top-level key outside HA's own closed set
     of categories, which fails the HACS submission), and HA's translation API
-    reads nothing else. helpers.panel_catalog reproduces the English-backing and
-    placeholder-mismatch rules the panel used to get from that API.
+    reads nothing else. helpers.panel_catalog applies the English-backing and
+    placeholder-mismatch rules that HA's translation API would.
 
-    Admin-only like every other view here, which is not a downgrade: the panel is
-    admin-only and the injected bundles only ever run for an admin. Kill-switch
-    immune for the same reason the rest of the admin API is, so a panel opened to
-    turn the kill switch back off is not left rendering raw keys.
+    Admin-only like every other view here: the panel and the injected bundles
+    only run for an admin. Kill-switch immune like the rest of the admin API, so
+    a panel opened to turn the kill switch back off is not left rendering raw
+    keys.
     """
 
     url = "/api/phoenix-mcp/admin/catalog/{language}"
@@ -724,8 +722,8 @@ class PhoenixAdminTokensView(PhoenixView):
             # UTC; a naive input is treated as HA's configured local time.
             expires_at = as_utc(expires_at)
 
-        # Strict: int() would silently accept True (-> 1), 1.75 (-> 1), and
-        # "12" (-> 12), which contradicts the error message and the documented
+        # Strict: int() would silently accept True (as 1), 1.75 (as 1), and
+        # "12" (as 12), which contradicts the error message and the documented
         # contract. Same test as confirm_inline_wait_seconds; bool is excluded
         # explicitly because it is a subclass of int.
         rate_limit_requests = body.get("rate_limit_requests", 60)
@@ -939,11 +937,9 @@ async def _rename_token_sensors(
     """Follow a token rename on its sensors, in place.
 
     Best-effort: a registry problem must never fail a patch that already
-    succeeded. It used to remove the old slug's entities and recreate them under
-    the new one, because the sensor unique_id was derived from the token NAME;
-    that gave every sensor a new entity_id on every rename and broke whatever
-    referred to the old one. Identity is now the token id, so the rename only
-    updates the device's display name and the record the sensors read from.
+    succeeded. Sensor identity derives from the token id, not its name, so the
+    rename only updates the device's display name and the record the sensors read
+    from; entity_ids, and whatever refers to them, are unchanged.
     """
     from .sensor import async_rename_token_sensors  # noqa: PLC0415
 
@@ -994,10 +990,9 @@ class PhoenixAdminTokenView(PhoenixView):
                 return invalid
             updated = await data.store.async_patch_token(token_id, **patchable)
             if updated is None:
-                # The record vanished between the lookup and the write inside the
-                # same lock. Report it rather than dereferencing None; the write
-                # has already happened either way, so this only affects what the
-                # caller is told, never whether the change applied.
+                # The store returns None only for an unknown id, which the lookup
+                # above already excluded under this same lock. Report it rather
+                # than dereference None.
                 return _err("not_found", "Token not found.", 404, rid, key="tokenNotFound")
 
         user = request[KEY_HASS_USER]
@@ -1047,8 +1042,8 @@ class PhoenixAdminTokenView(PhoenixView):
 
                 await data.store.async_archive_token(token_id, revoked=True, revoked_at=now)
                 cancel_expiry_timer(data, token_id)
-                # If this token was the Assist binding or the voice agent's token,
-                # clear it in the same transaction as archival.
+                # If this token was the Assist binding, the voice agent's token or
+                # the AI Task token, clear it in the same transaction as archival.
                 _s = data.store.get_settings()
                 _patch: dict[str, Any] = {}
                 if _s.assist_bound_token_id == token_id:
@@ -1079,14 +1074,14 @@ class PhoenixAdminTokenView(PhoenixView):
             data.async_sync_voice_agent()
 
         if "voice_agent_token_id" in _patch:
-            # The voice agent lost its token, so it is now unregistered; remove any
+            # The voice agent lost its token and is unregistered; remove any
             # Phoenix-created Assist pipeline so a broken assistant is not left behind.
             from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
             await async_remove_assist_pipeline(hass, data)
 
         if "ai_task_token_id" in _patch and data.async_sync_ai_task is not None:
-            # The AI Task lost its token, so it is no longer fully configured; remove
-            # the AI Task entity from HA (and the picker).
+            # The AI Task lost its token and is not fully configured; remove the AI
+            # Task entity from HA (and the picker).
             data.async_sync_ai_task()
 
         data.rate_limiter.destroy(token_id)
@@ -1360,10 +1355,9 @@ class PhoenixAdminPermissionsView(PhoenixView):
 
             updated = await data.store.async_set_permissions(token_id, new_tree)
             if updated is None:
-                # The record vanished between the lookup and the write inside the
-                # same lock. Report it rather than dereferencing None; the write
-                # has already happened either way, so this only affects what the
-                # caller is told, never whether the change applied.
+                # The store returns None only for an unknown id, which the lookup
+                # above already excluded under this same lock. Report it rather
+                # than dereference None.
                 return _err("not_found", "Token not found.", 404, rid, key="tokenNotFound")
 
         user = request[KEY_HASS_USER]
@@ -1691,10 +1685,10 @@ class PhoenixAdminScopeView(PhoenixView):
                 elif perm == Permission.READ:
                     readable.append(eid)
 
-        # capability_flags reports raw stored values without the pass_through OR adjustments
-        # applied by _build_server_info / _build_context_json. This is intentional: the
-        # admin scope view is a diagnostic tool and the admin should see actual stored flags,
-        # not the effective values a client would receive.
+        # capability_flags reports raw stored values, without the pass_through OR
+        # adjustments applied by _build_server_info / _build_context_json: this is a
+        # diagnostic view, so the admin sees the stored flags, not the effective
+        # values a client would receive.
         return _ok({
             "token_id": token_id,
             "token_name": token.name,
@@ -1739,7 +1733,7 @@ class PhoenixAdminEntityTreeView(PhoenixView):
 
 
 class PhoenixAdminEntityHintsView(PhoenixView):
-    """GET /api/phoenix-mcp/admin/entity-hints - the global entity-hint map (entity_id -> hint)."""
+    """GET /api/phoenix-mcp/admin/entity-hints - the global entity-hint map (entity_id to hint)."""
 
     url = "/api/phoenix-mcp/admin/entity-hints"
     name = "api:phoenix-mcp:admin:entity_hints"
@@ -2038,7 +2032,7 @@ def _settings_response(settings, hass=None) -> dict:
     configured in Phoenix MCP, so the panel can mark the ESPHome capability and
     persona as inapplicable. esphome_builder_live is the coordinator's last
     refresh result, which the panel may show but tool announcement deliberately
-    ignores (see mcp_view.esphome_availability).
+    ignores (see tools.esphome.esphome_availability).
     """
     from .ai_task import ai_task_supported  # noqa: PLC0415
     from .assist_api import assist_api_supported  # noqa: PLC0415
@@ -2064,12 +2058,10 @@ def _settings_response(settings, hass=None) -> dict:
 # ---------------------------------------------------------------------------
 # Settings PATCH: the writable surface, its validation, and its side effects.
 #
-# Split out of the handler, which had grown to 201 lines and ~64 branches doing
-# four unrelated jobs at once. The shape is now: filter to what is writable,
-# validate/coerce it, apply it under the store lock, then run the side effects
-# keyed on which settings actually moved. The sets below were rebuilt on every
-# request as handler locals; at module level they are also the readable
-# statement of what this endpoint will accept.
+# The flow: filter to what is writable, validate/coerce it, apply it under the
+# store lock, then run the side effects keyed on which settings actually moved.
+# The sets below live at module level, not as handler locals, so they are also
+# the readable statement of what this endpoint will accept.
 # ---------------------------------------------------------------------------
 
 from .const import CONVERSATION_LOG_LIMITS
@@ -2132,9 +2124,8 @@ def _coerce_int_setting(
     strings, so "1000" must be accepted. `allowed` rejects anything outside a
     fixed menu (the audit settings, whose values index real buffers and timers);
     `bounds` CLAMPS instead (the two agentcli limits, where an out-of-range value
-    has an obvious nearest sane answer and refusing it would just annoy). Do not
-    blur the two: a rejected menu value is a mistake worth surfacing, a clamped
-    limit is not.
+    has an obvious nearest sane answer). Do not blur the two: a rejected menu
+    value is a mistake worth surfacing, a clamped limit is not.
     """
     try:
         value = int(patchable[key])
@@ -2161,8 +2152,8 @@ async def _validated_settings_patch(
     """Filter a PATCH body to the writable settings and validate/coerce them.
 
     Returns (patchable, None) on success or ({}, error_response) on the first
-    rejection. Nothing here touches the store, so a rejected patch never reaches
-    it; the caller applies the result under the lock.
+    rejection. Nothing here writes to the store, so a rejected patch never
+    reaches it; the caller applies the result under the lock.
     """
     unknown = sorted(set(body) - _PATCHABLE_SETTINGS)
     if unknown:
@@ -2393,7 +2384,7 @@ async def _apply_settings_side_effects(
 
     # If a voice-agent config change left it not fully configured (disabled, or a
     # token/provider/model cleared), tear down any Phoenix-created Assist pipeline so a
-    # broken assistant is not left pointing at the now-unregistered agent. The kill
+    # broken assistant is not left pointing at the unregistered agent. The kill
     # switch is intentionally excluded (it keeps the agent registered-but-declining,
     # so its pipeline stays valid). No-op when nothing is tracked. Must run AFTER the
     # re-sync above, which is what unregisters the agent.
@@ -2854,7 +2845,7 @@ class PhoenixAdminWipeView(PhoenixView):
             # tokens, there are no valid sensors left regardless.
             data.token_id_sensors.clear()
 
-            # Settings were reset, so the voice agent and AI Task are no longer
+            # Settings were reset, so the voice agent and AI Task are not
             # configured; re-sync both (they may have been active before the wipe).
             if data.async_sync_voice_agent is not None:
                 data.async_sync_voice_agent()
@@ -2906,8 +2897,8 @@ class PhoenixAdminWipeView(PhoenixView):
                 async with data.mesa.lock:
                     await data.mesa.async_wipe()
             else:
-                # MESA runtime unavailable this session (setup failed / off):
-                # clear the on-disk store directly so "delete MESA data" holds.
+                # MESA runtime unavailable (setup failed or off): clear the
+                # on-disk store directly so "delete MESA data" still holds.
                 from homeassistant.helpers.storage import Store
                 mesa_store: Store[dict] = Store(hass, MESA_STORAGE_VERSION, MESA_STORAGE_KEY)
                 await mesa_store.async_save(
@@ -3059,26 +3050,18 @@ class PhoenixAdminApprovalApproveView(PhoenixView):
 class PhoenixAdminApprovalBatchApproveView(PhoenixView):
     """POST /api/phoenix-mcp/admin/approvals/batch/approve.
 
-    Approves several pending approvals in ONE admin action. Purely an operator
-    convenience: it changes nothing about the tool surface, the stateless
-    transport, or the approval record. Each id still goes through the SAME
-    `_approve_approval` (its own store-lock claim, its own token/capability/
-    kill-switch re-validation, its own executor run, its own audit row), so the
-    security model is byte-for-byte what it was, and a batch is indistinguishable
-    from the admin clicking Approve N times, only faster.
-
-    It exists because a routine migration produced ~20 near-identical writes and
-    approving them one at a time was the single biggest cost of the exercise.
+    Approves several pending approvals in ONE admin action; an operator
+    convenience only. Each id goes through the SAME `_approve_approval` (its own
+    store-lock claim, token/capability/kill-switch re-validation, executor run
+    and audit row), so the security model is unchanged and a batch is
+    equivalent to the admin clicking Approve N times.
 
     STOPS AT THE FIRST FAILURE, deliberately. Home Assistant writes are not
-    transactional, so no batch can be atomic; the honest choice is between
-    stopping and ploughing on. Stopping wins because the likely failures here are
+    transactional, so a batch cannot be atomic. The likely failures are
     SYSTEMATIC rather than independent (a capability revoked mid-batch, the kill
     switch thrown, a stale expected_hash after an earlier item rewrote the same
-    file), and continuing would burn the rest of the queue producing the same
-    error N more times. Everything after the failure is left PENDING and still
-    individually approvable, so stopping costs the operator nothing but a second
-    click once they have dealt with the cause.
+    file), so continuing would only repeat the same error. Everything after the
+    failure stays PENDING and individually approvable.
     """
 
     url = "/api/phoenix-mcp/admin/approvals/batch/approve"
@@ -3098,9 +3081,9 @@ class PhoenixAdminApprovalBatchApproveView(PhoenixView):
                 key="approvalIdsNonEmpty",
             )
         if len(ids) != len(set(ids)):
-            # Not pedantry: the second attempt at a duplicate would hit the
-            # in-progress claim or the already-terminal branch and be reported as
-            # a failure, halting the batch on the caller's own typo.
+            # The second attempt at a duplicate would hit the in-progress claim
+            # or the already-terminal branch and be reported as a failure,
+            # halting the batch on the caller's own typo.
             return _err(
                 "invalid_request", "approval_ids must not repeat an id.", 400, rid,
                 key="approvalIdsUnique",
@@ -3263,7 +3246,14 @@ async def _resolve_approval(
 
 
 async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_id: str) -> web.Response:
-    """Validate, execute, and finalize a previously-pending approval."""
+    """Claim, execute and finalize one pending approval.
+
+    Validation, the terminal-status closures and the durable execution marker all
+    run under `store.async_lock`; the executor runs OUTSIDE it so the tool can use
+    the store, and its outcome is written back under the lock. The marker,
+    persisted before any dispatch, makes a stop or crash mid-execution refuse a
+    retry until recovery resolves the record.
+    """
     from .approvals import (  # noqa: PLC0415
         REASON_CAPABILITY_DENIED,
         REASON_EXECUTION_INTERRUPTED,
@@ -3338,19 +3328,20 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
         # The in-memory claim dies with the process. Record the same fact on disk,
         # still under the lock, so a stop or crash during the execution below
         # leaves a trace: the executor runs OUTSIDE the lock and its outcome is
-        # written afterwards, so without this a restart in that window left an
-        # untouched pending record whose side effect may already have applied,
-        # and approving it again would apply it twice. FAIL CLOSED: if the marker
-        # cannot be persisted the executor must not run, because the same store
-        # has to record the outcome afterwards, so executing would leave a pending
-        # record whose action HAS run with nothing saying so. Release the claim on
-        # the way out so a retry is possible once the store is writable.
+        # written afterwards, so without a marker a restart in that window would
+        # leave an untouched pending record whose side effect may already have
+        # applied, and approving it again would apply it twice. FAIL CLOSED: if the
+        # marker cannot be persisted the executor must not run, because the same
+        # store has to record the outcome afterwards, so executing would leave a
+        # pending record whose action HAS run with nothing saying so. The
+        # in-memory claim is added only after the marker persists, so a retry is
+        # possible once the store is writable.
         #
-        # A marker ALREADY on the record means a previous attempt got as far as
-        # dispatch and never reported back, so this approval may already have
-        # applied. Refuse rather than overwrite the marker: overwriting is what
-        # would let an admin retry straight past the evidence that something is
-        # unresolved. Recovery resolves these; nothing else should.
+        # A marker ALREADY on the record means a previous attempt reached dispatch
+        # and never reported back, so this approval may already have applied.
+        # Refuse rather than overwrite the marker: overwriting would let an admin
+        # retry straight past the evidence that something is unresolved. Recovery
+        # resolves these; nothing else should.
         if record.execution_started_at is not None:
             return _err(
                 "conflict",
@@ -3509,13 +3500,12 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 policy_version.reset(policy_ctx)
                 request_authority.reset(authority_ctx)
         except ExecutorNotRegistered:
-            # The registry lookup also proves nothing was dispatched: it raises
-            # before any executor is called. It has its own type
-            # for exactly this reason. Catching bare KeyError here was wrong,
-            # because an executor that raises KeyError internally (a dict lookup
-            # on a service response, a missing config key) is indistinguishable
-            # from the lookup failing, so a side effect that HAD begun was
-            # re-offered as retryable.
+            # The registry lookup raises before any executor is called, so this
+            # also proves nothing was dispatched. It has its own exception type
+            # because catching bare KeyError would be ambiguous: an executor that
+            # raises KeyError internally (a dict lookup on a service response, a
+            # missing config key) is indistinguishable from the lookup failing,
+            # and a side effect that HAD begun would be re-offered as retryable.
             await async_clear_execution_marker(data.store, approval_id)
             _record_admin_lifecycle(
                 "approval/failed",
@@ -3528,8 +3518,8 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
             )
         except BaseException as exc:
             # BaseException, not Exception, because asyncio.CancelledError does
-            # not inherit from Exception: a cancelled task skipped this handler
-            # entirely, ran the finally, released the claim and re-offered an
+            # not inherit from Exception: a cancelled task would skip this handler
+            # entirely, run the finally, release the claim and re-offer an
             # approval whose executor had already been dispatched.
             #
             # Anything landing here may have raised AFTER the side effect
@@ -3549,10 +3539,10 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 _LOGGER.exception("Approval execution failed for %s", approval_id)
             # Best-effort during a cancellation: awaiting inside a cancelled task
             # can be interrupted again, and the marker left on disk is the
-            # backstop either way (recovery reconciles it, and the pre-existing
-            # marker check above refuses any retry before then). So a failure to
-            # resolve here degrades to "resolved at next recovery sweep", never to
-            # "offered again now".
+            # backstop either way (recovery reconciles it, and the marker check
+            # above refuses any retry before then). So a failure to resolve here
+            # degrades to "resolved at the next recovery sweep", never to "offered
+            # again".
             try:
                 async with data.store.async_lock:
                     interrupted = await async_update_approval_status(
@@ -3574,9 +3564,10 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                     "Could not resolve approval %s after a failed execution; the "
                     "recovery will close it as interrupted", approval_id,
                 )
-                # NOT resolved, so the finally re-offers it, but the marker check
-                # refuses the retry. Leave `resolved` False only for cancellation,
-                # where re-raising skips the response anyway.
+                # An ordinary failure counts as resolved, so the finally does not
+                # re-offer it. Only for cancellation is `resolved` left False: the
+                # finally then re-offers the still-pending record, but the marker
+                # check refuses the retry, and re-raising skips the response anyway.
                 resolved = not cancelled
             if cancelled:
                 # Never swallow a cancellation: the event loop owns it, and
@@ -3674,28 +3665,21 @@ def _mesa_migrated_doc(body: dict) -> dict:
     """A profile document stamped with the current MESA schema version.
 
     The store boundary is the ONLY sanctioned place that label is written.
-    mesa-core deliberately never stamps on save, because `schema_version`
-    describes the document's CONTENT rather than when it was last written:
-    stamping every write would relabel legacy documents as current, and the
-    first version needing a real transformation would then skip them with no
-    way to tell afterwards. Migration is the one operation allowed to set it.
+    mesa-core never stamps on save, because `schema_version` describes the
+    document's CONTENT rather than when it was last written: stamping every write
+    would relabel legacy documents as current, and a later version needing a real
+    transformation would then skip them. Migration is the one operation allowed
+    to set it.
 
-    That leaves an inverse problem here, which this fixes. A document from the
-    panel carries no `schema_version`, and the parser reads "absent" as 1.0-era
-    content, because 1.0 was the only version that could have written an
-    unversioned document. Ours is freshly authored by a current-version editor,
-    so the label said the opposite of the truth. The mislabel is the SAFE
-    direction (a future migration still runs against it and no-ops), which is
-    why this is hygiene rather than a bug.
+    A panel document carries no `schema_version`, which the parser reads as
+    1.0-era content though a current-version editor authored it. That mislabel is
+    the SAFE direction (a later migration still runs against it). The 1.0 to 1.1
+    step is a pure restamp; stamping here ensures a future transforming step is
+    applied at the boundary.
 
-    Nothing observable changes today: the 1.0 to 1.1 step is a pure restamp,
-    since 1.1 was additive. It is wired up now so that the first version which
-    genuinely transforms a document is applied at the boundary, rather than
-    discovered later against a store full of documents claiming to be 1.0.
-
-    Fails SOFT on purpose. A malformed or unparseable-version body is returned
+    Fails SOFT on purpose: a malformed or unparseable-version body is returned
     untouched so `SemanticProfile.from_dict` reports the real problem as a 400;
-    raising here would turn a caller's bad payload into a 500.
+    raising here would turn a bad payload into a 500.
     """
     from .mesa_core.exceptions import MesaError  # noqa: PLC0415
     from .mesa_core.migration import migrate_profile  # noqa: PLC0415
@@ -3703,11 +3687,10 @@ def _mesa_migrated_doc(body: dict) -> dict:
     try:
         if isinstance(body.get("semantic_profile"), dict):
             return migrate_profile(body)
-        # `from_dict` also accepts a BARE semantic profile as the entire body
-        # (verified: it wraps whatever it is handed), and that shape has to be
-        # stamped too, or half the accepted inputs would still be stored
-        # claiming to be 1.0. migrate_profile only understands the wrapped form,
-        # so wrap it, migrate, and hand the inner object back.
+        # `from_dict` also accepts a BARE semantic profile as the entire body,
+        # and that shape has to be stamped too, or half the accepted inputs would
+        # still be stored claiming to be 1.0. migrate_profile only understands
+        # the wrapped form, so wrap it, migrate, and hand the inner object back.
         return migrate_profile({"semantic_profile": body})["semantic_profile"]
     except MesaError:
         return body
@@ -4647,15 +4630,12 @@ async def _mask_esphome_version(hass: HomeAssistant, body: dict) -> dict:
     """Mask credentials in an esphome_yaml version's before/after, for DISPLAY only.
 
     The STORED snapshot stays raw, because a restore has to reproduce the file
-    byte for byte; this masks only what is served to the panel. Without it the
-    Changes tab was the one Phoenix MCP surface that rendered credentials in
-    clear text, including a value generated by !phoenix_generate that the agent
-    itself was never allowed to see. The file is already plaintext on disk and
-    this view is admin-only, so nothing here was a disclosure to someone who
-    could not already read it; a rendered pane is simply a far more exposed place
-    for a secret to sit than a file is, being screenshot, screen-shared, and
-    pasted into issues. The operator reads the real value from the ESPHome
-    dashboard, which is the documented path.
+    byte for byte; this masks only what is served to the panel. Unmasked, the
+    Changes tab would render credentials in clear text, including a value
+    generated by !phoenix_generate that the agent was never allowed to see. A
+    rendered pane is a far more exposed place for a secret than a file on disk
+    (screenshots, screen-sharing, pasted issues). The operator reads the real
+    value from the ESPHome dashboard.
 
     FAILS CLOSED: masking that raises means the credentials could not be located,
     which is exactly when the raw text must not be shown.
@@ -4768,12 +4748,12 @@ class PhoenixAdminVersionRestoreView(PhoenixView):
             settings=data.store.get_settings(),
         )
         if is_error:
-            # Relay the executor's OWN reason. It named the exact path and cause
+            # Relay the executor's OWN reason: it names the exact path and cause
             # ("'wifi.ap.password' is a masked credential and cannot be changed to
-            # a new value"); a fixed string turned that into a support ticket.
-            # This is an admin-only surface authenticated by an HA session, so
-            # there is no caller to keep in the dark, unlike the token-facing
-            # tools where uniform messages are what prevent an oracle.
+            # a new value"), which a fixed string would hide. This is an
+            # admin-only surface authenticated by an HA session, so there is no
+            # caller to keep in the dark, unlike the token-facing tools where
+            # uniform messages are what prevent an oracle.
             detail = " ".join(
                 item.get("text", "")
                 for item in tool_result.get("content", [])
@@ -4818,8 +4798,8 @@ class PhoenixAdminMesaOrphansClearView(PhoenixView):
         from .mesa import refresh_orphans  # noqa: PLC0415
 
         async with runtime.lock:
-            # Recompute against the live registries so we delete exactly what is
-            # orphaned now, never a stale client-supplied list.
+            # Recompute against the live registries to delete exactly what is
+            # orphaned at this moment, never a stale client-supplied list.
             refresh_orphans(self.hass, runtime)
             entities = list(runtime.orphans)
             devices = list(runtime.orphan_devices)
@@ -4963,8 +4943,8 @@ class PhoenixAdminCardCatalogView(PhoenixView):
 
     POST is the panel harvester reporting which Lovelace cards this instance can
     render. It has to come from a browser: a card registers itself on
-    window.customCards at runtime and half of a real plugin set builds its type
-    strings by concatenation, so the backend cannot read this off disk (see
+    window.customCards at runtime and many build their type strings by
+    concatenation, so the backend cannot read this off disk (see
     card_catalog.py). The payload is admin-authenticated but assembled from
     third-party card code, so card_catalog sanitizes every field; this view only
     bounds the request and hands it over.

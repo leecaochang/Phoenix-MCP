@@ -1,18 +1,16 @@
 // Panel string catalog.
 //
 // Strings live in custom_components/phoenix_mcp/catalogs/{lang}.json under the
-// "panel" key and arrive from Phoenix's own admin API. They used to come over
-// HA's frontend/get_translations websocket command, which reads translations/
-// and nothing else; they had to leave that directory because hassfest rejects
-// any top-level key outside HA's own closed set of categories, which fails the
-// HACS submission.
+// "panel" key and arrive from Phoenix's own admin API, not HA's
+// frontend/get_translations command (which reads only translations/): hassfest
+// rejects any top-level key there outside HA's closed set of categories, which
+// fails the HACS submission.
 //
-// helpers.panel_catalog reproduces both behaviours that move cost us: English is
-// the base with the requested language overlaid, so a key a translator has not
-// reached resolves to English server-side and this module needs no fallback
-// chain of its own; and a translated string whose {placeholder} set differs from
-// English is dropped in favour of English, which is why the interpolation syntax
-// here is Python format style rather than something else.
+// helpers.panel_catalog serves English as the base with the requested language
+// overlaid, so a key a translator has not reached resolves to English
+// server-side and this module needs no fallback chain of its own. A translated
+// string whose {placeholder} set differs from English is dropped in favour of
+// English, which is why the interpolation syntax here is Python format style.
 //
 // Keep catalog loading independent from the admin API and its import graph.
 
@@ -50,8 +48,8 @@ export type Params = Record<string, string | number>;
  * currently in one they cannot read, which means the label is the same string in
  * every catalog and translating it would be wrong rather than merely redundant.
  *
- * Must stay in step with custom_components/phoenix_mcp/catalogs/*.json;
- * i18n_keys.test.ts fails if it drifts.
+ * Must stay in step with custom_components/phoenix_mcp/catalogs/*.json; a
+ * contract test fails if it drifts.
  */
 export const LANGUAGES: ReadonlyArray<{ code: string; endonym: string }> = [
   { code: "de", endonym: "Deutsch" },
@@ -116,7 +114,7 @@ export function canonicalLanguage(language: unknown): string {
 // and read it from the same origin without needing an API call.
 const LANGUAGE_KEY = "phx-lang";
 
-/** The stored override, or LANGUAGE_AUTO when unset or no longer shipped. */
+/** The stored override, or LANGUAGE_AUTO when unset or not a shipped language. */
 export function getLanguagePreference(): string {
   let saved: string | null = null;
   try { saved = localStorage.getItem(LANGUAGE_KEY); } catch { /* storage blocked: use auto */ }

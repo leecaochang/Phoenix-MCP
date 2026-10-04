@@ -1,8 +1,8 @@
-"""Tests for backup (list/create) and Lovelace dashboard CRUD MCP tools.
+"""Backup (list/create) and Lovelace dashboard CRUD MCP tools.
 
-These dispatch through ws_dispatch.async_ws_command (covered end-to-end in
-test_ws_dispatch). Here it is patched so we verify Phoenix MCP's wiring: the gates, the
-command names/payloads, defaults, and validation. restore_backup does not exist.
+The tools dispatch through ws_dispatch.async_ws_command, which is patched here so
+the checks cover Phoenix MCP's wiring: the gates, the command names and payloads,
+defaults, and validation. There is deliberately no restore_backup tool.
 """
 
 from __future__ import annotations
@@ -55,9 +55,8 @@ def _patch_ws_map(mapping, default=None):
 def _patch_lovelace_ws(return_value):
     """Patch the dashboard tools' own async_ws_command.
 
-    The dashboard surface lives in tools/lovelace.py, so patching mcp_view's
-    binding would apply to a name these handlers never read - and the mock
-    would simply go unused rather than failing.
+    The dashboard handlers live in tools/lovelace.py, so patching mcp_view's
+    binding would hit a name they never read and the mock would silently go unused.
     """
     rows = [] if isinstance(return_value, dict) and "url_path" in return_value else [
         {"id": "d1", "url_path": "dashboard-d1", "title": "Old"}

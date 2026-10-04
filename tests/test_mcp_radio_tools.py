@@ -2,13 +2,11 @@
 reconfiguration, binding, reporting, options, direct properties, group
 management, and device removal).
 
-The Z2M backend is exercised against a fake MQTT broker monkeypatched over
-radio.py's two seams (_mqtt_subscribe/_mqtt_publish), so no paho client is
-needed. The ZHA backend is exercised with async_ws_command / the reconfigure
-starter monkeypatched (zigpy is not installed here, so the real zha component
-cannot load) and fake zha.permit/zha.remove services. Both network
-projections are asserted against realistic fixtures that INCLUDE key material,
-proving the allowlist never leaks it.
+Z2M runs against a fake MQTT broker monkeypatched over radio.py's two seams
+(_mqtt_subscribe/_mqtt_publish), so no paho client is needed; ZHA runs with
+async_ws_command and the reconfigure starter monkeypatched plus fake
+zha.permit/zha.remove services. Both network projections are asserted against
+fixtures that INCLUDE key material, proving the allowlist never leaks it.
 """
 
 from __future__ import annotations
@@ -2886,9 +2884,23 @@ class TestRadioZ2mPlumbing:
         with pytest.raises(TimeoutError):
             await radio.async_z2m_request(hass, "permit_join", {"time": 5}, timeout=0.05)
 
+    @pytest.mark.parametrize("failure", [RuntimeError("broker disconnected"), TimeoutError("publish timed out"), asyncio.CancelledError()])
+    async def test_publish_failure_unsubscribes(self, hass, monkeypatch, failure):
+        unsubscribe = MagicMock()
+        monkeypatch.setattr(radio, "_mqtt_subscribe", AsyncMock(return_value=unsubscribe))
+        publish = AsyncMock(side_effect=failure)
+        monkeypatch.setattr(radio, "_mqtt_publish", publish)
+        expected = asyncio.CancelledError if isinstance(failure, asyncio.CancelledError) else radio.RadioError
+        with pytest.raises(expected) as exc:
+            await radio.async_z2m_request(hass, "permit_join", {"time": 5})
+        if expected is radio.RadioError:
+            assert exc.value.__cause__ is failure
+        publish.assert_awaited_once()
+        unsubscribe.assert_called_once_with()
+
     async def test_transaction_mismatch_ignored(self, hass, broker):
         # A concurrent admin's response (different transaction) must not satisfy
-        # our request.
+        # the request.
         def _wrong_transaction(req):
             for cb in list(broker.subs.get("zigbee2mqtt/bridge/response/permit_join", [])):
                 cb(SimpleNamespace(

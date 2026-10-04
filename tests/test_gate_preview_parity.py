@@ -1,18 +1,15 @@
 """The preview tools must predict the verdict the enforcing path will reach.
 
-dry_run_service exists so an agent can ask "what would happen" before it
-actuates. That is only worth anything if the answer matches. When the preview
-encodes a gate rule SEPARATELY from the path that enforces it, the two agree
-until one of them changes, and the failure is silent in the worst direction: the
-preview says allowed, the operator approves the plan, the real call denies or
-pends.
+dry_run_service lets an agent ask "what would happen" before it actuates, which
+is only worth anything if the answer matches. A preview that encodes a gate rule
+separately from the enforcing path agrees until one of them changes, then fails
+silently in the worst direction: the preview says allowed, the operator approves,
+the real call denies or pends.
 
-The physical gate was such a mirror. policy_engine.call_needs_physical_gate held
-the rule; dry_run_service re-implemented it inline, including the
-homeassistant.toggle redispatch case. They agreed, but nothing made them agree.
-The rule now lives once, in policy_engine.physical_gate_applies, and both call
-it. These tests pin that: the behavioural equivalence, and the structural fact
-that the preview does not re-derive the rule.
+The physical gate rule therefore lives once, in
+policy_engine.physical_gate_applies, and both call_needs_physical_gate and
+dry_run_service call it. These tests pin the predicate's behaviour and the
+structural fact that the preview does not re-derive the rule.
 """
 
 from __future__ import annotations
@@ -30,12 +27,15 @@ PKG = REPO / "custom_components" / "phoenix_mcp"
 
 
 class TestPredicate:
-    """physical_gate_applies is now the single definition; pin what it says."""
+    """physical_gate_applies is the single definition of the physical gate."""
 
     @pytest.mark.parametrize("domain", sorted(PHYSICAL_GATE_DOMAINS))
     def test_every_service_on_an_actuator_domain_gates(self, domain):
-        """Domain-keyed, not service-keyed. An exact service-name allowlist was a
-        real bypass (cover.toggle, *_cover_tilt, alarm_arm_custom_bypass)."""
+        """Domain-keyed, not service-keyed.
+
+        An exact service-name allowlist would miss cover.toggle, *_cover_tilt and
+        alarm_arm_custom_bypass.
+        """
         for service in ("toggle", "open_cover_tilt", "arm_custom_bypass", "a_service_invented_tomorrow"):
             assert physical_gate_applies(domain, service, []) is True
 
@@ -44,14 +44,16 @@ class TestPredicate:
         assert physical_gate_applies("homeassistant", "toggle", ["light.k", "cover.blind"]) is True
 
     def test_generic_toggle_does_not_gate_a_non_physical_target(self):
-        """The drop side: gating everything would make the cap meaningless."""
+        """Generic toggle on a non-physical target does not gate, or the gate would mean nothing."""
         assert physical_gate_applies("homeassistant", "toggle", ["light.kitchen"]) is False
         assert physical_gate_applies("homeassistant", "toggle", []) is False
 
     @pytest.mark.parametrize("service", ["turn_on", "turn_off"])
     def test_generic_turn_on_off_are_excluded(self, service):
-        """They verifiably no-op on these domains, so gating them would refuse a
-        call that could never actuate anything. HA-version-sensitive."""
+        """Generic turn_on/turn_off no-op on physical domains, so gating them would refuse a harmless call.
+
+        HA-version-sensitive: re-verify on HA upgrades.
+        """
         assert physical_gate_applies("homeassistant", service, ["lock.front"]) is False
 
     def test_a_plain_domain_never_gates(self):
@@ -61,9 +63,8 @@ class TestPredicate:
 class TestNoSecondDefinition:
     """Structural: the preview must CALL the rule, never restate it.
 
-    Behavioural equality between two copies is exactly what a mirror looks like
-    right up until it breaks, so the durable assertion is that there is only one
-    copy.
+    Two copies that agree behaviourally still drift when one changes, so the
+    durable assertion is that only one copy exists.
     """
 
     def _func(self, rel: str, name: str) -> ast.AST:
@@ -80,10 +81,10 @@ class TestNoSecondDefinition:
         )
 
     def test_dry_run_does_not_re_derive_the_toggle_case(self):
-        """The specific inline copy this rule was extracted from.
+        """dry_run_service contains no PHYSICAL_GATE_DOMAINS membership test of its own.
 
-        A bare PHYSICAL_GATE_DOMAINS membership test inside dry_run is that
-        shape; if it comes back, so does the drift.
+        An inline copy of the toggle-redispatch rule is how the preview would
+        start to drift from the enforcing path.
         """
         body = ast.unparse(self._func("tools/discovery.py", "_tool_dry_run_service"))
         assert "PHYSICAL_GATE_DOMAINS" not in body, (
@@ -98,10 +99,10 @@ class TestNoSecondDefinition:
         )
 
     def test_this_check_would_notice_a_second_definition(self):
-        """Mutation check in-file: prove the scan is not vacuous.
+        """The scan flags a re-derived gate, so its clean result is not vacuous.
 
-        A structural assertion that reads the wrong function, or unparses to an
-        empty string, passes exactly like a clean codebase.
+        An assertion that reads the wrong function, or unparses to an empty
+        string, would pass exactly like a clean codebase.
         """
         fake = ast.parse(
             "def _tool_dry_run_service(args):\n"
@@ -114,14 +115,11 @@ class TestNoSecondDefinition:
 
 
 class TestFindAvailableActionsScope:
-    """The sibling preview tool is deliberately NOT routed through the predicate.
+    """find_available_actions is deliberately NOT routed through the predicate.
 
-    find_available_actions enumerates services in the ENTITY's own domain, so
-    `homeassistant.toggle` can never appear in its list and the toggle-redispatch
-    case cannot arise. Its plain domain membership test is complete for what it
-    enumerates. Written down because "why doesn't this one use the shared helper
-    too" is the obvious next question, and the answer is a real constraint rather
-    than an oversight.
+    It enumerates services in the ENTITY's own domain, so `homeassistant.toggle`
+    never appears in its list and the toggle-redispatch case cannot arise; its
+    plain domain membership test is complete for what it enumerates.
     """
 
     def test_it_enumerates_only_the_entitys_own_domain(self):

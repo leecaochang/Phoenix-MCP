@@ -1,21 +1,14 @@
 """Record which English each locale was translated from, and report the drift.
 
-Every other i18n guard judges a locale against en.json AS IT IS NOW: the key is
-present, the placeholders match, the value is not the English one. A translation
-made from English that has since been REWORDED passes all of them. It is
-complete, its placeholders still line up, and it is still not identical to the
-current English. Nothing reports it, so the locale keeps confidently stating
-whatever the string used to say.
+Other i18n guards judge a locale against the current en.json, so a translation
+made from English that has since been reworded passes all of them and keeps
+stating the old behaviour. This stamps a fingerprint of the English behind each
+translated key into tests/contract/i18n_source_hashes.json; when the English
+moves, the stamp no longer matches and a drift test names the keys.
 
-So this stamps a fingerprint of the English behind each translated key, into
-tests/contract/i18n_source_hashes.json. When the English moves, the stamp no
-longer matches and tests/test_i18n_source_drift.py names the keys.
-
-Re-stamping without retranslating is legal and sometimes right (fixing an
-English typo does not invalidate a translation), but it is then a visible line
-in the diff rather than silence. Only the fingerprint is stored; the English it
-was taken from is in en.json's own git history.
-
+Re-stamping without retranslating is legal (an English typo fix does not
+invalidate a translation) but shows up as a visible line in the diff. Only the
+fingerprint is stored; the English is in en.json's git history.
 scripts/i18n_merge_locale.py stamps what it merges, so a locale written the
 normal way needs nothing here.
 
@@ -68,9 +61,9 @@ def locales() -> list[str]:
 def catalog(name: str) -> dict[str, str]:
     """One language's whole catalog, flattened.
 
-    Through the checker, so this reads BOTH halves of the split catalog (see
-    i18n_check_locale.SECTION_DIRS). Reading only one would leave the other's
-    keys stamped-but-absent, which this script reports as drift.
+    Read through the checker so BOTH halves of the split catalog are included (see
+    i18n_check_locale.SECTION_DIRS); reading only one would leave the other's keys
+    stamped-but-absent, which this script reports as drift.
     """
     return checker.flatten(checker.load(name))
 
@@ -84,11 +77,11 @@ def load_baseline() -> dict[str, dict[str, str]]:
 def audit(
     english: dict[str, str], locale: dict[str, str], stamped: dict[str, str]
 ) -> dict[str, list[str]]:
-    """Classify a locale against its stamps. Pure, so the test can prove it bites.
+    """Classify a locale against its stamps. Pure, so it can be tested directly.
 
     stale: the English moved since this key was translated.
     unstamped: translated but never fingerprinted (nothing would notice drift).
-    orphaned: a stamp for a key the locale or en.json no longer has.
+    orphaned: a stamp whose key is gone from the locale or from en.json.
     """
     return {
         "stale": sorted(

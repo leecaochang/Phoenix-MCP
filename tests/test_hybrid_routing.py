@@ -30,7 +30,7 @@ async def hybrid_home(hass, token_store, immediate_command_observation):
     hass.data[DOMAIN] = data
     store = agentcli.AgentCliStore(AsyncMock())
     hass.data["_phoenix_agentcli_store"] = store
-    # Generic sequential protocol coverage; qualified JEV is exercised separately below.
+    # Generic sequential protocol; jev_hybrid_home configures the qualified JEV variant.
     decision = await store.add("typesafe", {"api_key": "decision-secret", "model": "test-model"})
     chat = await store.add("deepseek", {"api_key": "chat-secret", "model": "chat"})
     await token_store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=token.id,
@@ -551,7 +551,7 @@ async def test_numeric_fast_path_preserves_capability_and_mesa(hass, jev_numeric
                                             sentence=f'I would like {home[-1]} at 37 percent now.')
     remote.assert_awaited_once()
     provider.assert_not_called()
-    # Existing physical-control policy gates covers, not lighting or media volume.
+    # The physical-control policy gates covers only, not lighting or media volume.
     assert call.await_count == (1 if restriction == 'capability' and spec[1] != 'cover' else 0)
 
 
@@ -1456,7 +1456,7 @@ async def test_saved_zero_duration_plan_is_rejected_at_execution(hass, jev_hybri
     hass.states.async_set(entry.entity_id, 'idle', {'friendly_name': 'Test timer', 'duration': '0:05:00'})
     async_expose_entity(hass, 'conversation', entry.entity_id, True)
     proposal = {'intent': 'PhoenixTimerDuration', 'entity_ids': [entry.entity_id], 'value': '00:00:01'}
-    # Simulate a pre-fix saved plan, preserving its bindings to isolate value validation.
+    # Keep the saved plan's bindings valid so only value validation can reject it.
     plan = _capture_plan(hass, data, token, proposal)
     assert plan is not None
     assert plan_is_current(plan, hass, data, token)

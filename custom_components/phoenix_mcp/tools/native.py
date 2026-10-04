@@ -1,31 +1,22 @@
 """Native HA MCP tools: the Hass* surface HA itself publishes, implemented 1:1.
 
-These handlers back the domain-prefixed tool names HA's own MCP server exposes.
 Public names are translated to the stable internal operation names at the
-transport boundary. Parity with HA's shapes is the contract, not a preference:
-a client written against HA's MCP server has to work here unchanged, which is why
-every action returns the full native envelope
-({"speech": {}, "response_type": "action_done", "data": {"success": [], "failed": []}})
-even when nothing matched, and why HassCancelAllTimers always carries
-speech_slots {"canceled": N} including N=0.
+transport boundary. Parity with HA's shapes is the contract: a successful action
+returns the native envelope ({"speech": {}, "response_type": "action_done",
+"data": {"success": [], "failed": []}}) and HassCancelAllTimers always carries
+speech_slots {"canceled": N}, including N=0. A request matching nothing
+accessible is an error identical to a denial.
 
-Three HA-coupling points live here and are re-verified on HA upgrades, each with
-its reasoning in a comment above the table it drives: homeassistant.turn_on/off
-verifiably no-ops on lock/cover/vacuum/valve, so _TURN_DOMAIN_SERVICES routes
-those to their domain services instead of silently reporting success;
-_POSITION_DOMAIN_SERVICES covers valves as well as covers; and target matching
-goes through async_match_targets with assistant=None (Phoenix scopes by its own
-permission tree, not Assist exposure) and never overrides
-area_candidate_filter.
+HA-coupling points, re-verified on HA upgrades, each reasoned above its table:
+homeassistant.turn_on/off silently no-ops on lock/cover/vacuum/valve, so
+_TURN_DOMAIN_SERVICES routes those to their domain services;
+_POSITION_DOMAIN_SERVICES covers valves as well as covers. Target matching uses
+async_match_targets with assistant=None: Phoenix scopes by its own permission
+tree, not Assist exposure.
 
-_yaml_scalar and its tables are the untrusted-data boundary for GetLiveContext:
-entity-supplied text is quoted so a state value cannot become a new YAML key or
-list item in the context block a model reads as instructions.
-
-mcp_view owns the transport, the dispatch registry and the executor registry, and
-imports the names it registers or calls from here. The dependency runs one way:
-this module never imports the transport that dispatches it. Shared primitives
-come from ..tool_common.
+_yaml_scalar and its tables quote entity-supplied text so a state value cannot
+become a new YAML key or list item in the GetLiveContext block a model reads as
+instructions. mcp_view registers these tools and this module never imports it.
 """
 
 from __future__ import annotations
@@ -306,10 +297,8 @@ def _build_target_context(args: dict, hass: HomeAssistant) -> list[dict]:
 class _MesaGate(NamedTuple):
     """Either a response the caller must return, or the surviving entities.
 
-    Single-return rather than a (value, error) pair or a two-shapes union: a
-    non-None `response` is the whole answer, and `entities` is only meaningful
-    when it is None. The pair form guaranteed nothing about which field was
-    populated, which is the idiom this package removed elsewhere.
+    A non-None `response` is the whole answer; `entities` and `warnings` are
+    meaningful only when it is None.
     """
 
     response: tuple[dict, str, str] | None
@@ -336,18 +325,15 @@ async def _mesa_gate_native(
 ) -> _MesaGate:
     """Run MESA over an already-flattened list for a native tool.
 
-    The MESA gate for the native surface, factored out of _tool_intent_action so
-    the two native tools that cannot route through it still enforce the same
-    policy. Both actuate real entities with their own hass.services.async_call:
-    HassCancelAllTimers because its native contract requires a speech_slots
-    count _tool_intent_action does not emit, and HassBroadcast because it targets
-    assist_satellite devices it selects itself. Calling HA directly from either
-    would actuate a MESA read_only or prohibited entity that the identical call
-    through _tool_intent_action denies, so both route through here instead.
+    Factored out of _tool_intent_action so the native tools that cannot route
+    through it (HassCancelAllTimers, HassBroadcast, the frozen relative-volume
+    plan) enforce the same policy: each actuates entities with its own
+    hass.services.async_call, so skipping this gate would actuate a MESA
+    read_only or prohibited entity that _tool_intent_action denies.
 
-    data/request_id come from hass since native tools do not thread them. The
-    shared gate distinguishes an explicit off mode from a failed production
-    runtime.
+    A MESA deny returns the same refusal as no match. data defaults to
+    hass.data[DOMAIN] and request_id to the dispatch request id. The shared gate
+    distinguishes an explicit off mode from a failed production runtime.
     """
     try:
         household_service_kwargs(hass, service_domain, service_name)
@@ -381,8 +367,8 @@ async def _mesa_gate_native(
         fire_mesa_blocked_event(hass, token, outcome.blocked)
     if outcome.decision == "pending":
         # Held inline when the token asks for it, exactly as a capability confirm
-        # is (tool_common._pending_or_inline). Without this a MESA confirm on a
-        # native tool returned immediately and could never deliver the
+        # is (tool_common._pending_or_inline); otherwise a MESA confirm on a
+        # native tool would return immediately and never deliver the
         # operator-accepted note, which only the inline path appends.
         return _MesaGate(
             await _pending_or_inline(hass, data, token, outcome.approval), [], [])
@@ -408,7 +394,7 @@ async def _tool_intent_action(
     """Execute a service call on pre-resolved, permission-filtered entity list.
 
     The choke point for every native Hass* tool that maps onto one service call.
-    MESA runs here via _mesa_gate_native, on the already-flattened list; the two
+    MESA runs here via _mesa_gate_native, on the already-flattened list; the
     tools that cannot route through this function call that gate directly.
     """
     if not entities:
@@ -616,14 +602,13 @@ async def _hass_turn_gate(
 ) -> tuple[dict, str, str]:
     """Shared gate for HassTurnOn/HassTurnOff.
 
-    homeassistant.turn_on/off route lock/alarm/cover/valve entities to their
-    physical services (lock.lock, alarm_control_panel.alarm_arm_*,
-    cover.open_cover, valve.open_valve), so a
-    call that targets any of those is subject to cap_physical_control. When that
-    cap is confirm AND physical entities are in scope, the whole call is gated as
-    a pending approval (the executor re-runs it on approval). When the cap is deny
-    the physical entities are silently dropped inside the executor; non-physical
-    entities always proceed immediately.
+    Lock, alarm, cover and valve targets (PHYSICAL_GATE_DOMAINS) actuate physical
+    hardware, so a call that targets any of them is subject to
+    cap_physical_control. When that cap is confirm AND physical entities are in
+    scope, the whole call is gated as a pending approval (the executor re-runs it
+    on approval). When the cap is deny the executor drops the physical entities
+    and names them in not_permitted; non-physical entities always proceed
+    immediately.
     """
     refusal = _no_selector_refusal(args, tool_name)
     if refusal is not None:
@@ -642,18 +627,16 @@ async def _hass_turn_gate(
     return await _hass_turn_execute(tool_name, service, args, token, hass, data)
 
 
-# homeassistant.turn_on/off does not operate these domains on current HA, so a
-# HassTurnOn/Off must call the domain service instead (mirroring HA's own intent
-# handler): turn_on -> lock.lock / cover.open_cover / vacuum.start /
-# valve.open_valve, turn_off -> the inverse. Every other domain stays on
-# homeassistant.turn_on/off. vacuum.stop (not return_to_base) is deliberate: HA's
-# own log confirms homeassistant.turn_on/off silently no-ops on vacuum entities
-# ("does not support entities vacuum.X") exactly like the lock/cover case; "off"
-# maps to stop (halt in place), matching "stop" as a word, not a return-to-dock
-# action (that stays a distinct request through call_service/vacuum.return_to_base).
-# valve is the same no-op class (the valve domain has open/close_valve, no
-# turn_on/off services), and "turn on the water" -> open valve mirrors HA's own
-# on/off intent handling.
+# homeassistant.turn_on/off does not operate these domains on current HA (it logs
+# "does not support entities vacuum.X" and does nothing), so a HassTurnOn/Off must
+# call the domain service instead, mirroring HA's own intent handler: turn_on
+# becomes lock.lock / cover.open_cover / vacuum.start / valve.open_valve, and
+# turn_off the inverse. Every other domain stays on homeassistant.turn_on/off.
+# vacuum.stop (not return_to_base) is deliberate: "off" means halt in place,
+# matching "stop" as a word; returning to the dock stays a distinct request
+# through call_service/vacuum.return_to_base. valve is the same no-op class (the
+# valve domain has open/close_valve and no turn_on/off services), and "turn on
+# the water" opening a valve mirrors HA's own on/off intent handling.
 _TURN_DOMAIN_SERVICES: dict[str, tuple[str, str, str]] = {
     "lock": ("lock", "lock", "unlock"),
     "cover": ("cover", "open_cover", "close_cover"),
@@ -708,24 +691,16 @@ def _with_declined_targets(
 ) -> tuple[dict, str, str]:
     """Name the targets a capability removed from an otherwise successful action.
 
-    This is the mixed-target case: "turn off everything in the hall" resolves a
-    light and a lock, cap_physical_control is deny, the lock is dropped and the
-    light succeeds. Reported as a success naming only the light, that is
-    indistinguishable from a hall containing one light, so an agent has no reason
-    to mention the lock and the operator never learns it stayed locked.
+    "Turn off everything in the hall" resolves a light and a lock; with
+    cap_physical_control deny the lock is dropped and the light succeeds, which
+    would read as a hall holding one light. The dropped entities are listed in
+    `not_permitted`, only when non-empty. Deliberately NOT data.failed: HA fills
+    that only when a service call RAISED, so a client written against HA's shape
+    would read a declined target as a transport error on a successful call.
 
-    Emitted only when non-empty, the mesa_advisory and warnings convention.
-    Deliberately NOT data.failed: HA fills that only when a service call RAISED,
-    and then raises IntentHandleError because it is non-empty, so a client
-    written against HA's shape would read a declined target as a transport error
-    on a call that in fact succeeded.
-
-    Leak-safe: these entities each resolved WRITE for this token before the
-    capability removed them, so naming them discloses nothing the token could not
-    already read. The outcome check is the guarantee that a REFUSAL is never
-    annotated, and it is load-bearing rather than defensive: a refusal body
-    happens to be plain text today, so a mistakenly annotated one would fail to
-    parse and be left alone by accident, but that is not something to rely on.
+    Leak-safe: each entity resolved WRITE for this token before the capability
+    removed it. The outcome check keeps a REFUSAL from ever being annotated; that
+    must not rest on a refusal body happening to be unparseable plain text.
     """
     response, outcome, resource = result
     if not declined or outcome != "allowed":
@@ -890,7 +865,7 @@ async def _tool_hass_light_set(
 
 
 def _validate_hass_light_set_args(args: dict) -> tuple[dict, str, str] | None:
-    """Validate existing light parameters without claiming or executing a write."""
+    """Validate HassLightSet arguments; side-effect free."""
     refusal = _no_selector_refusal(args, "HassLightSet", _DOMAIN_TARGET_SELECTORS)
     if refusal is not None:
         return refusal
@@ -935,7 +910,7 @@ async def _tool_hass_fan_set_speed(
 
 
 def _validate_hass_fan_set_speed_args(args: dict) -> tuple[dict, str, str] | None:
-    """Validate existing fan parameters without claiming or executing a write."""
+    """Validate HassFanSetSpeed arguments; side-effect free."""
     refusal = _fixed_domain_refusal(
         args, "HassFanSetSpeed", "fan", _DOMAIN_TARGET_SELECTORS
     )
@@ -1088,11 +1063,12 @@ async def _tool_hass_set_position(
 
 
 # Position-capable domains and the service that positions them. HassSetPosition
-# targets covers AND valves (spec: "Set position of covers, valves, or similar
-# devices"), mirroring HA's own set-position intent; both services take the same
-# `position` (0-100) field. Entities of any other domain (reachable only via an
-# explicit `domain` arg) are dropped before dispatch, since routing them to
-# cover.set_cover_position would be a guaranteed service error.
+# targets covers AND valves (HA describes it as "Set position of covers, valves,
+# or similar devices"), mirroring HA's own set-position intent; both services
+# take the same `position` (0-100) field. Entities of any other domain
+# (reachable only via an explicit `domain` arg) are dropped before dispatch,
+# since routing them to cover.set_cover_position would be a guaranteed service
+# error.
 _POSITION_DOMAIN_SERVICES: dict[str, tuple[str, str]] = {
     "cover": ("cover", "set_cover_position"),
     "valve": ("valve", "set_valve_position"),
@@ -1637,11 +1613,11 @@ async def _tool_hass_cancel_all_timers(
     )
     if entities:
         # A timer is an entity like any other, so MESA's per-entity nature policy
-        # applies (rule 26). This tool cannot route through _tool_intent_action
-        # because its native contract requires speech_slots, so it calls the same
-        # gate directly. The count reported is what MESA allowed, not what was
-        # resolved: saying "canceled: 3" after cancelling one is a lie to the
-        # caller about state it will act on.
+        # applies, last, on the flattened list. This tool cannot route through
+        # _tool_intent_action because its native contract requires speech_slots,
+        # so it calls the same gate directly. The count reported is what MESA
+        # allowed, not what was resolved: "canceled: 3" after cancelling one
+        # would misstate state the caller will act on.
         gate = await _mesa_gate_native(
             "HassCancelAllTimers", "timer", "cancel", {}, entities, hass, token)
         if gate.response is not None:
@@ -1781,10 +1757,8 @@ async def _tool_hass_vacuum_return_to_base(
 def _areas_matching(hass: HomeAssistant, area_name: str) -> list[ar.AreaEntry]:
     """Areas whose name, id, or alias equals area_name, case-insensitively.
 
-    Deliberately not HA's intent.find_areas: that helper postdates this
-    integration's supported HA floor, and an exact name/id/alias match over the
-    area registry is the whole of what is needed to turn the caller's word into
-    cleaning_area_id values.
+    An exact match over the area registry is all that is needed to turn the
+    caller's word into cleaning_area_id values.
     """
     wanted = area_name.strip().casefold()
     if not wanted:
@@ -1854,9 +1828,10 @@ async def _tool_hass_broadcast(
     if not targets:
         return _tool_error("No accessible broadcast devices found."), "denied", "HassBroadcast"
 
-    # An assist satellite is an entity, so MESA applies here too (rule 26). This
-    # tool selects its own targets rather than taking a resolved list, so it
-    # cannot route through _tool_intent_action and calls the gate directly.
+    # An assist satellite is an entity, so MESA applies here too, last, on the
+    # flattened list. This tool selects its own targets rather than taking a
+    # resolved list, so it cannot route through _tool_intent_action and calls the
+    # gate directly.
     gate = await _mesa_gate_native(
         "HassBroadcast", "assist_satellite", "announce",
         {"message": message}, targets, hass, token)
@@ -1894,9 +1869,9 @@ async def _tool_hass_broadcast(
 def _build_diff_hass_turn(service: str, physical: list[str], args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
     """Diff payload for a HassTurnOn/Off approval triggered by physical entities.
 
-    Only the physical (lock/alarm/cover) targets are listed, since those are the
-    entities cap_physical_control gates; non-physical targets are not part of the
-    approval decision.
+    Only the physical (lock/alarm/cover/valve) targets are listed, since those
+    are the entities cap_physical_control gates; non-physical targets are not
+    part of the approval decision.
     """
     targets = []
     for eid in physical:

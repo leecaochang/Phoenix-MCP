@@ -1,12 +1,9 @@
-/** The Agent Chat conversation survives a full page reload.
+/**
+ * The Agent Chat conversation survives a full page reload.
  *
- * Two tiers back the window. Window state (geometry, token/provider/model) has
- * always been durable. The conversation tier -- transcript, unsent message box,
- * usage counters -- used to be module variables, so it survived the panel
- * unmounting but not F5.
- *
- * It is now persisted under its own storage key, separate from the window
- * state, so that a conversation too large to store can be dropped without
+ * Window state (geometry, token/provider/model) and the conversation tier
+ * (transcript, unsent message box, usage counters) persist under separate
+ * storage keys, so a conversation too large to store can be dropped without
  * taking the window geometry and account selections down with it.
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";

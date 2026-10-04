@@ -1,8 +1,8 @@
-"""Tests for yaml_includes: include-graph resolution, locate, and splice editing.
+"""yaml_includes: include-graph resolution, locate, and splice editing.
 
 Pure-module tests (no hass fixture): everything runs against tmp_path config
-trees. The oracle tests cross-check Phoenix MCP's include semantics against HA's own
-annotatedyaml loader on the same tree.
+trees. The oracle tests cross-check Phoenix MCP's include semantics against HA's
+own annotatedyaml loader on the same tree.
 """
 
 from __future__ import annotations
@@ -779,8 +779,10 @@ def test_create_append_plain_include(tmp_path):
 
 
 def test_create_append_into_bare_empty_list(tmp_path):
-    """HA's default empty automations.yaml is a bare inline '[]'; a text append
-    after it would produce invalid YAML. The entry must replace the token."""
+    """HA's default empty automations.yaml is a bare inline '[]'.
+
+    A text append after it would produce invalid YAML, so the entry replaces the token.
+    """
     write(tmp_path, "configuration.yaml", DEFAULT_CONFIGURATION)
     write(tmp_path, "automations.yaml", "[]\n")
     res = yi.perform_create(str(tmp_path), "automation", "phoenix_mcp_x", {"id": "phoenix_mcp_x", "alias": "X"})
@@ -910,8 +912,10 @@ def test_create_filename_sanitized(tmp_path):
 
 
 def test_create_script_proceeds_when_packages_present(tmp_path):
-    """Regression: a config with homeassistant.packages must NOT block creating a
-    brand-new script (locate returns 'ambiguous', which create treats as proceed)."""
+    """A config with homeassistant.packages does not block creating a brand-new script.
+
+    locate returns 'ambiguous', which create treats as proceed.
+    """
     write(tmp_path, "configuration.yaml", """\
         script: !include scripts.yaml
         homeassistant:
@@ -984,8 +988,8 @@ def test_read_entry_routed_and_absent(tmp_path):
 
 
 def test_read_entry_fallback_tolerates_secrets(tmp_path):
-    # No configuration.yaml: fall back to the hardcoded default file. The legacy
-    # loader raised on !secret; the tag-tolerant loader must not.
+    # No configuration.yaml: fall back to the hardcoded default file, read with the
+    # tag-tolerant loader, which must not raise on !secret.
     write(tmp_path, "automations.yaml", "- id: aaa\n  password: !secret p\n")
     assert yi.read_entry(str(tmp_path), "automation", "aaa") == {
         "id": "aaa", "password": "!secret p"}
@@ -1053,13 +1057,12 @@ def test_oracle_against_ha_loader(tmp_path):
 # read_all_entries: the READ counterpart to locate_entry
 # ---------------------------------------------------------------------------
 #
-# The reverse-reference walks behind get_relationships and describe_entity used
-# to open one hardcoded file per domain, so any layout other than HA's default
-# read as EMPTY and the caller reported that nothing referenced the entity. That
-# is indistinguishable from a genuinely unused entity, and it is the worst answer
-# those callers can give, since the whole question is "is anything still using
-# this". These cover every flavor HA accepts, plus the branches that stay
-# unreadable and must therefore be NAMED.
+# The reverse-reference walks behind get_relationships and describe_entity read
+# through read_all_entries. A layout other than HA's default must not read as
+# EMPTY: the caller would report that nothing references the entity, which is
+# indistinguishable from a genuinely unused one and the worst answer to "is
+# anything still using this". These cover every flavor HA accepts, plus the
+# branches that stay unreadable and must therefore be NAMED.
 
 
 def _seed(tmp_path: Path, config: str) -> Path:
@@ -1081,7 +1084,7 @@ def test_read_all_default_include(tmp_path):
 
 
 def test_read_all_include_dir_list_is_one_entry_per_file(tmp_path):
-    """The layout that read as empty before: each file IS one automation."""
+    """With !include_dir_list each file IS one automation."""
     _seed(tmp_path, "automation: !include_dir_list automations/\n")
     write(tmp_path, "automations/first.yaml", "id: a1\nalias: One\n")
     write(tmp_path, "automations/second.yaml", "id: a2\nalias: Two\n")
@@ -1115,8 +1118,10 @@ def test_read_all_include_dir_merge_named_is_a_mapping_per_file(tmp_path):
 
 
 def test_read_all_reads_an_inline_domain(tmp_path):
-    """Readable here, unlike the WRITE path, which refuses inline as ambiguous:
-    reading it is unambiguous, splicing into it is not."""
+    """An inline domain is readable here, unlike on the WRITE path.
+
+    Writes refuse inline as ambiguous: reading it is unambiguous, splicing into it is not.
+    """
     _seed(tmp_path, "automation:\n  - id: a1\n    alias: Inline\n")
     found = yi.read_all_entries(str(tmp_path), "automation")
     assert [e["alias"] for e in found.entries] == ["Inline"]
@@ -1132,8 +1137,10 @@ def test_read_all_merges_labeled_keys_with_the_bare_one(tmp_path):
 
 
 def test_read_all_names_packages_rather_than_guessing(tmp_path):
-    """HA merges packages into the domain; resolving that tree is not attempted,
-    so the caller is told its answer is incomplete."""
+    """HA merges packages into the domain; resolving that tree is not attempted.
+
+    The caller is told its answer is incomplete instead.
+    """
     _seed(tmp_path, "homeassistant:\n  packages: !include_dir_named packages/\n"
                     "automation: !include automations.yaml\n")
     write(tmp_path, "automations.yaml", "- id: a1\n")
@@ -1159,8 +1166,10 @@ def test_read_all_names_a_missing_include_directory(tmp_path):
 
 
 def test_read_all_falls_back_to_the_legacy_leaf(tmp_path):
-    """An unreadable configuration.yaml must not make the DEFAULT layout
-    unreadable too; this mirrors OpResult.fallback on the write side."""
+    """An unreadable configuration.yaml must not make the DEFAULT layout unreadable too.
+
+    This mirrors OpResult.fallback on the write side.
+    """
     write(tmp_path, "configuration.yaml", "this: [is not valid\n")
     write(tmp_path, "automations.yaml", "- id: a1\n")
     found = yi.read_all_entries(str(tmp_path), "automation")

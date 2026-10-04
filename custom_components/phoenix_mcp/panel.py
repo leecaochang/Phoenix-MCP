@@ -79,8 +79,8 @@ async def async_register_phoenix_panel(hass: HomeAssistant) -> None:
         hass=hass,
         component_name="custom",
         # The brand mark, Latin in every language: Home Assistant keeps its own
-        # name untranslated in all 148 of its zh-Hans strings, and several places
-        # name this integration in HA's own UI where it cannot be localized.
+        # name untranslated in its zh-Hans strings, and several places name this
+        # integration in HA's own UI where it cannot be localized.
         sidebar_title="Phoenix MCP",
         sidebar_icon="mdi:fire",
         frontend_url_path=_PANEL_KEY,
@@ -96,7 +96,7 @@ async def async_register_phoenix_panel(hass: HomeAssistant) -> None:
 
 
 def remove_phoenix_panel(hass: HomeAssistant) -> None:
-    """Remove the panel if it was registered in this session.
+    """Remove the panel if it was registered in this HA run.
 
     Silently skips if the panel was never registered (e.g. unload before setup
     completed, or HA restarted with the kill switch enabled).
@@ -127,12 +127,10 @@ def _inject_url_with_cache_bust() -> str:
 def _inject_version_ok() -> bool:
     """Whether the running HA is at or above the injector feature baseline.
 
-    The version comes from the package constant, which is the only always-present
-    source. ``hass.config`` carries no ``version`` attribute, so reading one
-    raises, and with the fail-open catch below that turned this whole gate into a
-    constant True: the baseline was declared but never applied.
+    The version comes from the package constant, the only always-present source:
+    ``hass.config`` carries no ``version`` attribute.
 
-    Fail-open is still right when the version cannot be PARSED: the in-page
+    Fail-open when the version cannot be PARSED: the in-page
     feature-detection self-disables on a DOM it does not recognise, so the worst
     case is a script that adds nothing. This gate only avoids loading it on
     known-incompatible old HA; it is not a safety boundary.
@@ -174,7 +172,7 @@ async def async_sync_mesa_inject(hass: HomeAssistant) -> None:
     _remove_all_inject_urls(hass)
     if prior:
         _safe_remove_inject_url(hass, prior)
-    add_extra_js_url(hass, url)  # es5=False -> loaded as an ES module
+    add_extra_js_url(hass, url)  # es5=False: loaded as an ES module
     hass.data[_INJECT_REGISTERED_URL_KEY] = url
 
 
@@ -195,11 +193,11 @@ def _safe_remove_inject_url(hass: HomeAssistant, url: str) -> None:
 def _remove_all_inject_urls(hass: HomeAssistant) -> None:
     """Remove every registered injector module URL, whatever its cache-bust value.
 
-    Belt-and-suspenders so HA never holds two phoenix-mcp-inject modules at once: a full
-    page load would otherwise run them as two fighting injector instances. Catches
-    a stale URL orphaned in HA's extra-module set if our own tracking got out of
-    sync (e.g. a prior removal that raised). Best-effort; never raises. Falls back
-    to the caller's tracked-prior removal if the set cannot be read on this HA.
+    Keeps HA from holding two phoenix-mcp-inject modules at once, which a full page
+    load would run as two competing injector instances. Catches a stale URL
+    orphaned in HA's extra-module set when this module's own tracking got out of
+    sync (e.g. a prior removal raised). Best-effort; never raises. If the set cannot
+    be read, callers still remove their tracked URL.
     """
     try:
         from homeassistant.components.frontend import DATA_EXTRA_MODULE_URL
@@ -267,7 +265,7 @@ async def async_sync_agentchat_inject(hass: HomeAssistant) -> None:
     _remove_all_agentchat_urls(hass)
     if prior:
         _safe_remove_inject_url(hass, prior)
-    add_extra_js_url(hass, url)  # es5=False -> loaded as an ES module
+    add_extra_js_url(hass, url)  # es5=False: loaded as an ES module
     hass.data[_AGENTCHAT_REGISTERED_URL_KEY] = url
 
 

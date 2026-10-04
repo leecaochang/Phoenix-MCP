@@ -54,6 +54,19 @@ afterEach(() => {
 });
 
 describe("harvestCards", () => {
+  it("keeps registered cards when the resource list fails without retrying its legacy alias", async () => {
+    const sendMessagePromise = vi.fn().mockRejectedValue(new Error("resources unavailable"));
+    vi.mocked(currentHass).mockReturnValue(hass({ connection: { sendMessagePromise } }));
+    defineCard("harv-resource-failure");
+    (window as unknown as { customCards: unknown[] }).customCards = [{ type: "harv-resource-failure" }];
+
+    const result = await harvestCards(FAST);
+
+    expect(sendMessagePromise).toHaveBeenCalledExactlyOnceWith({ type: "lovelace/resources/list" });
+    expect(result.resource_count).toBe(0);
+    expect(result.entries[0]).toMatchObject({ type: "harv-resource-failure", available: true });
+  });
+
   it("reads name, description and docs URL from the picker registry", async () => {
     defineCard("harv-basic");
     (window as unknown as { customCards: unknown[] }).customCards = [
@@ -74,8 +87,8 @@ describe("harvestCards", () => {
   });
 
   it("marks a card advertised without a defined element as unavailable", async () => {
-    // Live-observed on a real instance: a picker entry whose element never
-    // loaded. Authoring it produces a broken card, so it must not read as usable.
+    // A picker entry whose element never loaded. Authoring it produces a broken
+    // card, so it must not read as usable.
     (window as unknown as { customCards: unknown[] }).customCards = [
       { type: "harv-never-defined", name: "Ghost" },
     ];
@@ -149,12 +162,10 @@ describe("harvestCards", () => {
 });
 
 describe("settling before reading the registry", () => {
-  // LIVE-FOUND. A harvest taken the instant the panel mounted missed
-  // browser_mod's popup-card and browser-mod-tile-card, while a probe minutes
-  // earlier had seen both and missed a different card. Registration is
-  // asynchronous, so any single instant yields an arbitrary subset. A partial
-  // catalog is worse than a slow one: it looks complete, so an agent concludes
-  // a card it cannot see is not installed.
+  // Card registration is asynchronous, so a harvest taken the instant the panel
+  // mounts yields an arbitrary subset of the cards. A partial catalog is worse
+  // than a slow one: it looks complete, so an agent concludes a card it cannot
+  // see is not installed.
   const SETTLE = { minWaitMs: 60, settleTimeoutMs: 2000, settlePollMs: 5, stableSamples: 3, followUpMs: [] };
 
   it("picks up a card that registers after the imports resolve", async () => {
@@ -190,7 +201,8 @@ describe("settling before reading the registry", () => {
   });
 
   it("does not wait out the full timeout on an empty instance", async () => {
-    // A genuinely card-free instance must not cost every harvest 5 seconds.
+    // A genuinely card-free instance must settle once the count is stable, not
+    // wait out the full timeout on every harvest.
     (window as unknown as { customCards: unknown[] }).customCards = [];
     const started = Date.now();
 
@@ -268,10 +280,9 @@ describe("syncCardCatalog", () => {
   });
 
   it("re-posts when a card registers after the first report", async () => {
-    // The browser_mod shape, which no amount of up-front waiting can cover: its
-    // popup-card waits on a custom event, then polls every 1000ms for a global,
-    // then awaits its own websocket before registering. Converging beats
-    // guessing a delay.
+    // A card that registers only after a chain of asynchronous steps (a custom
+    // event, a poll for a global, its own websocket) is beyond any fixed up-front
+    // wait. Converging beats guessing a delay.
     defineCard("harv-prompt");
     defineCard("harv-slowpoke");
     (window as unknown as { customCards: unknown[] }).customCards = [{ type: "harv-prompt" }];

@@ -13,7 +13,6 @@ const SIGNAL_LABEL_KEYS: Record<string, string> = {
   naked_risky: "mesa.signalUnprotected",
 };
 
-// Same MESA control-mode vocabulary the profile editor and badges use.
 /**
  * The suggestion sentence, in the operator's language.
  *

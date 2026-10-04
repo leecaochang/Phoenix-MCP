@@ -1,37 +1,22 @@
 """Tail mesa-core's audit events into Phoenix MCP's own audit log.
 
-mesa-core emits an event dict on the ``mesa_core.audit`` logger, one per
-decision, with the structured payload on the record's ``mesa_audit_event``
-attribute. Phoenix MCP records its OWN outcome for a call, so without this an
-operator reading the Audit tab sees that a service call was denied but never
-which entity MESA stopped or under which rule. Attaching a logging handler,
-rather than keeping a second copy of mesa-core's decision logic, also captures
-privacy denials and lease refusals that nothing in Phoenix MCP inspects.
+mesa-core emits one event dict per decision on the ``mesa_core.audit`` logger
+(payload on the record's ``mesa_audit_event`` attribute). Phoenix MCP records its
+OWN outcome for a call, so without this the Audit tab never shows which entity
+MESA stopped or under which rule.
 
-TWO DELIBERATE LIMITS, both about keeping the Audit tab worth reading:
+Two deliberate limits keep the tab worth reading. 1. DENIALS ONLY, and only those
+PHOENIX honored: allowed traffic would flood the ring buffer, and
+``control_mode:confirm_no_channel`` (``_NOT_A_DENIAL_RULES``) is labelled
+"blocked" because the enforcer runs with interactive=False, but Phoenix always
+reinterprets it host-side (advisory warns, enforced raises its own approval), so
+it is never a Phoenix denial. 2. THE LOGGER'S LEVEL IS UNCHANGED (mesa-core
+defaults it to INFO): an operator raising it can suppress rows, so an empty trail
+does not prove no denial occurred. See docs/mesa.html.
 
-1. DENIALS ONLY, and a denial means one PHOENIX honored. Recording allowed
-   traffic would put a row in the ring buffer for each in-scope entity of each
-   call, evicting the real request history this log exists for; a
-   confirm-approved allow is skipped for the further reason that it already has
-   an approval record. The subtle case is ``control_mode:confirm_no_channel``,
-   filtered by ``_NOT_A_DENIAL_RULES``: mesa-core labels it "blocked" because
-   the enforcer runs with interactive=False, but Phoenix always reinterprets it
-   host-side (advisory allows with a warning, enforced raises its own approval),
-   so it is never a Phoenix denial. Recording it makes the tab list actions MESA
-   did not stop, one row per confirm entity, for no block at all.
-
-2. THE BRIDGE DOES NOT CHANGE THE LOGGER'S LEVEL. The bundled library defaults
-   ``mesa_core.audit`` to INFO. An operator raising its level can suppress
-   companion rows, so an empty MESA audit trail does not prove no denial occurred.
-   Phoenix's extra read-only veto uses the same public audit event API; core
-   denials are not emitted again. See docs/mesa.html for logging configuration.
-
-Rows are attributed to the request that provoked them through a ContextVar set
-by the actuation gate, MESA-tool adapter and camera privacy check. The preview tools
-run the same enforcer to predict a verdict, and a preview is not a block: with
-no context set, an event is dropped rather than logged against a request that
-never happened.
+Rows are attributed to the request that provoked them through a ContextVar set by
+the actuation gate, MESA-tool adapter and camera privacy check; with no context
+set (a preview) an event is dropped.
 """
 
 from __future__ import annotations
@@ -58,12 +43,12 @@ _RECORDED_DECISIONS = frozenset({"blocked", "denied"})
 
 # NOT a denial, however mesa-core labels it. The enforcer runs with
 # interactive=False, so a confirm entity comes back "blocked" with this rule
-# before any challenge is issued (rule 27), and Phoenix ALWAYS reinterprets it
-# host-side: advisory lets it through with a warning, enforced turns it into a
-# pending approval that gets an approval record of its own. Recording it here
-# put a "denied" row in the operator's log for an action that actually ran,
-# which is worse than saying nothing: the audit tab is where you go to find out
-# what MESA stopped, and this was listing things it did not stop.
+# before any challenge is issued (a MESA confirm entity routes through Phoenix's
+# own approval gate, never mesa-core's confirmation manager), and Phoenix ALWAYS
+# reinterprets it host-side: advisory lets it through with a warning, enforced
+# turns it into a pending approval with an approval record of its own. Recording
+# it would log a "denied" row for an action that actually ran, when the Audit tab
+# is where an operator finds out what MESA stopped.
 _NOT_A_DENIAL_RULES = frozenset({"control_mode:confirm_no_channel"})
 
 # Prefix on the audit row's method, so one "mesa" filter in the panel finds
@@ -119,7 +104,10 @@ def _resource(event: dict[str, Any]) -> str:
 def record_read_only_denial(
     entity_id: str, service: str, caller: CallerContext, result: EnforcementResult
 ) -> None:
-    """Record Phoenix's stronger read-only boundary only for actual requests."""
+    """Record Phoenix's stronger read-only boundary only for actual requests.
+
+    Uses the public audit event API; mesa-core's own denials are not emitted again.
+    """
     if _context.get() is None:
         return
     emit_audit_event(MesaAuditEvent(
@@ -136,7 +124,7 @@ def record_read_only_denial(
 
 
 class MesaAuditBridge(logging.Handler):
-    """Records mesa-core denials into Phoenix MCP's audit log.
+    """Records mesa-core denials, including privacy and lease refusals, in Phoenix's audit log.
 
     A logging handler runs inside the caller's ``log()`` call, so it must never
     raise: an exception here would surface inside mesa-core's decision path and
@@ -189,8 +177,8 @@ def attach_mesa_audit_bridge(data: PhoenixData) -> MesaAuditBridge:
 
 
 def detach_mesa_audit_bridge(bridge: MesaAuditBridge | None) -> None:
-    """Stop recording. Safe to call twice; a config-entry reload must not stack
-    handlers, which would multiply every future row."""
+    """Stop recording. Safe to call twice, so a config-entry reload cannot stack
+    handlers and multiply every future row."""
     if bridge is None:
         return
     audit_logger.removeHandler(bridge)

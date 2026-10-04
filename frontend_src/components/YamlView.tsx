@@ -19,11 +19,9 @@ export function YamlView({ value }: { value: string }) {
   const ref = useRef<HTMLElement | null>(null);
   const [useEditor, setUseEditor] = useState(() => !!customElements.get("ha-code-editor"));
 
-  // ha-code-editor is lazy-loaded by HA, so it may not be registered at the
-  // moment we mount. Rather than deciding once and being stuck on the <pre>
-  // fallback, upgrade to the editor as soon as HA defines the element
-  // (whenDefined resolves whenever that happens; if it never does, we simply
-  // keep the styled <pre>).
+  // HA lazy-loads ha-code-editor, so it may not be registered at mount. Upgrade
+  // from the <pre> fallback as soon as whenDefined resolves; if it never does,
+  // the styled <pre> stays.
   useEffect(() => {
     if (useEditor || typeof customElements === "undefined") return;
     let cancelled = false;
@@ -37,11 +35,10 @@ export function YamlView({ value }: { value: string }) {
   useEffect(() => {
     if (!useEditor || !ref.current) return;
     // React 18 writes a className prop on a CUSTOM element as a junk
-    // attribute literally named "classname", so a JSX className here leaves
-    // the element with no class and no .yaml-editor rule (border, the
-    // --code-mirror-max-height cap, the theme-variable pins) ever matches.
-    // Set the real attribute imperatively; React never writes "class" on its
-    // own, so nothing fights it.
+    // attribute named "classname", so a JSX className would leave the element
+    // with no class and no .yaml-editor rule (border, the
+    // --code-mirror-max-height cap, the theme-variable pins) would match.
+    // Set the real attribute imperatively; React never writes "class" itself.
     ref.current.setAttribute("class", "yaml-editor");
     const el = ref.current as unknown as Record<string, unknown>;
     el.mode = "yaml";

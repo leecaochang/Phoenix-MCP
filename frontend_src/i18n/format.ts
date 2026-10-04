@@ -181,16 +181,13 @@ export function localePluralCategory(value: number): Intl.LDMLPluralRule {
 /**
  * A large count in the locale's own short form: 48.2K, 4.8万, 1,2 Mio.
  *
- * Hand-rolled "48.2k" was wrong outside English in a way that is easy to miss,
- * because it is not a translation problem: Chinese groups by 10^4 (万), so no
- * amount of translating the suffix produces the right NUMBER. CLDR knows the
- * grouping as well as the suffix, which is why this delegates rather than
- * appending a localized unit to an English-scaled figure. Note some locales
- * legitimately decline to abbreviate thousands at all (German renders 48.200),
- * so this can be wider than the English form.
+ * Delegates to CLDR rather than appending a localized suffix to an
+ * English-scaled figure: Chinese groups by 10^4 (万), so translating the suffix
+ * cannot produce the right NUMBER. Some locales decline to abbreviate thousands
+ * (German renders 48.200), so the result can be wider than the English form.
  *
- * Zero and non-finite collapse to "0" so a missing usage counter reads as
- * nothing rather than as NaN.
+ * Zero, negative and non-finite values collapse to "0" so a missing usage
+ * counter reads as nothing rather than as NaN.
  */
 export function localeCompactNumber(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "0";
@@ -208,11 +205,10 @@ export function localeCompactNumber(value: number): string {
  * Compare two display strings for sorting, in the panel's language.
  *
  * A bare a.localeCompare(b) sorts by the BROWSER's language, so a panel in one
- * language ordered its lists by another's rules; the difference is invisible in
- * English and immediate in any language whose alphabet or accent handling
- * differs. Collation options are deliberately left at their defaults: switching
- * on numeric collation would reorder existing lists ("Light 10" before
- * "Light 2"), which is a separate decision from localizing them.
+ * language would order its lists by another's rules wherever alphabet or
+ * accent handling differs. Collation options stay at their defaults: numeric
+ * collation would reorder lists ("Light 10" sorts before "Light 2" today),
+ * which is a separate decision from localizing them.
  */
 export function compareStrings(a: string, b: string): number {
   if (collator === null) collator = new Intl.Collator(dateLocale);

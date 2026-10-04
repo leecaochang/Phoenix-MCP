@@ -1,22 +1,21 @@
-"""Pin the native Hass* tool surface against the intents the installed HA registers.
+"""The native Hass* tool surface stays in step with the intents the installed HA
+registers.
 
-The Hass* names, and the descriptions published with them, are a snapshot of what
-Home Assistant generates at runtime: HA builds each tool from an intent handler's
-own `description` and `slot_schema` (helpers/llm.py), while Phoenix MCP freezes
-the resulting strings into tool_defs.py so the catalog is static and needs no
-integration set up to serve. Nothing else notices when the two fall out of step,
-and every way they can is silent: a reworded description keeps saying the old
-thing, a renamed intent leaves a tool pointing at nothing, and an intent HA adds
-is simply never considered.
+The Hass* names and their descriptions snapshot what Home Assistant generates at
+runtime: HA builds each tool from an intent handler's own `description` and
+`slot_schema` (helpers/llm.py), while Phoenix MCP freezes the strings into
+tool_defs.py so the catalog is static and needs no integration set up to serve.
+Every way the two can diverge is silent: a reworded description keeps saying the
+old thing, a renamed intent leaves a tool pointing at nothing, and an intent HA
+adds is never considered.
 
-These tests close all three directions. They also pin the triage list below, so
-an intent HA starts registering fails here until somebody writes down why Phoenix
-MCP does or does not publish it.
+These tests close all three directions and pin the triage list below, so an intent
+HA starts registering fails here until somebody records why Phoenix MCP does or does
+not publish it.
 
-Bound worth knowing: the registry only holds intents whose component is set up,
-so this checks the core actuator surface listed in _INTENT_COMPONENTS rather than
-every intent a particular installation might have. That is the same bound the
-service-hint drift test works under, and it covers every intent Phoenix mirrors.
+The registry only holds intents whose component is set up, so this checks the core
+actuator surface in _INTENT_COMPONENTS rather than every intent a given installation
+might have. That covers every intent Phoenix mirrors.
 """
 
 from __future__ import annotations
@@ -252,10 +251,9 @@ async def test_source_verified_descriptions_match_ha_source():
 
 
 async def test_phoenix_publishes_nothing_ha_withholds_from_llm_apis(ha_intents):
-    # HA 2026.8 moved intent publication from one AssistAPI ignore list to each
-    # integration's llm.py platform. Publishing outside those declarations
-    # should be a deliberate departure, not something that arrives by copying a
-    # registered intent.
+    # Each integration's llm.py platform (HA 2026.8 and later) declares the intents
+    # it publishes. Publishing outside those declarations should be a deliberate
+    # departure, not something that arrives by copying a registered intent.
     outside_ha = sorted(set(_published_hass_tools()) - _ha_llm_intents(ha_intents))
     assert not outside_ha, f"publishing intents HA withholds from LLM APIs: {outside_ha}"
 
@@ -263,7 +261,7 @@ async def test_phoenix_publishes_nothing_ha_withholds_from_llm_apis(ha_intents):
 async def test_every_unpublished_ha_intent_has_a_written_reason(ha_intents):
     # The forward-looking half: an intent HA starts registering fails here until
     # somebody decides whether Phoenix MCP should publish it. Without this, a new
-    # actuator intent is simply never noticed.
+    # actuator intent is never noticed.
     ours = set(_published_hass_tools())
     ha_llm_intents = _ha_llm_intents(ha_intents)
     untriaged = sorted(
@@ -278,8 +276,8 @@ async def test_every_unpublished_ha_intent_has_a_written_reason(ha_intents):
 
 
 async def test_the_triage_list_has_no_stale_entries(ha_intents):
-    # The reverse direction, so the list cannot rot into a record of intents that
-    # no longer exist or that Phoenix MCP has since started publishing.
+    # The reverse direction, so the list cannot rot into intents that HA does not
+    # register or that Phoenix MCP already publishes.
     ours = set(_published_hass_tools())
     assert all(reason.strip() for reason in NOT_PUBLISHED.values()), (
         "every NOT_PUBLISHED entry needs a reason"

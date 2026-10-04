@@ -11,7 +11,13 @@ import sys
 
 
 def main() -> None:
-    """Enforce OS resource limits before importing HA or compiling caller input."""
+    """Apply OS limits, then render the template read from stdin.
+
+    RLIMIT_CPU and RLIMIT_AS are set before importing HA or touching caller input.
+    Exit 70 means startup failed (one stderr line, no caller data); the
+    diagnostic exit code means the render failed, with a bounded JSON diagnostic
+    on stdout.
+    """
     phase = "resource_limits"
     try:
         # Run by filename so spawn works independently of HA's process entry point.

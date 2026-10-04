@@ -364,7 +364,7 @@ async def test_integration_options_lists_platforms_with_entities(hass: HomeAssis
 
     reg = er.async_get(hass)
     reg.async_get_or_create("light", "hue", "u1", suggested_object_id="a")
-    reg.async_get_or_create("sensor", "hue", "u2", suggested_object_id="b")  # same platform -> deduped
+    reg.async_get_or_create("sensor", "hue", "u2", suggested_object_id="b")  # same platform, so deduped
     reg.async_get_or_create("lock", "yale_access_bluetooth", "u3", suggested_object_id="c")
     await _setup(hass)
 
@@ -470,7 +470,7 @@ async def test_orphans_clear_deletes_all_orphan_profiles(hass: HomeAssistant):
     assert "ghost_area_clear" in out["deleted"]["areas"]
     assert "ghost_integration_clear" in out["deleted"]["integrations"]
 
-    # Profiles are gone and the orphan lists are now empty.
+    # Profiles are gone and the orphan lists are empty.
     assert runtime.store.get("input_boolean.ghost_clear") is None
     assert runtime.store.get_area_profile("ghost_area_clear") is None
     assert runtime.store.get_integration_profile("ghost_integration_clear") is None
@@ -642,9 +642,11 @@ async def test_suggestion_endpoints_503_without_mesa(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 async def test_suggestions_only_refresh_does_not_touch_orphans(hass: HomeAssistant):
-    """The Suggestions card's Rescan (?refresh=suggestions) must not silently
-    recompute (and potentially change) the separate, unrelated orphans/issues
-    banner; only ?refresh=1 (the full refresh) does that."""
+    """The Suggestions card's Rescan does not touch the orphans banner.
+
+    ?refresh=suggestions must not recompute the separate orphans/issues banner;
+    only the full ?refresh=1 does.
+    """
     data = await _setup(hass)
     hass.states.async_set("lock.front", "locked")
     # Simulate a stale cached orphan list (as if computed earlier at startup),
@@ -698,10 +700,10 @@ async def test_export_returns_archive_of_stored_profiles(hass: HomeAssistant):
     archive = _body(resp)
     inner = archive["mesa_export"]
     # Pinned against the library's own current format rather than a literal.
-    # Export always writes the newest format and an older reader refuses it
-    # outright, so the version is the library's to choose; what this asserts is
-    # that Phoenix MCP passes it through rather than stamping one of its own.
-    # An unintended change of that format is caught by the vendored version pin.
+    # Export writes the newest format and an older reader refuses it outright,
+    # so the version is the library's to choose; this asserts that Phoenix MCP
+    # passes it through rather than stamping one of its own. A vendored-version
+    # pin catches an unintended change of that format.
     from custom_components.phoenix_mcp.mesa_core.portability import ARCHIVE_FORMAT_VERSION
 
     assert inner["format_version"] == ARCHIVE_FORMAT_VERSION
@@ -876,11 +878,11 @@ async def test_export_import_503_when_mesa_unavailable(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 async def test_import_succeeds_even_if_post_import_rescan_fails(hass: HomeAssistant, monkeypatch):
-    """A refresh_orphans/refresh_suggestions crash must not take down the import.
+    """A crashing post-import rescan does not fail the import.
 
-    The import itself (validate + write + save) already completed by the time
-    the best-effort rescan runs; a scan bug (e.g. an HA-coupling regression)
-    must degrade, not turn a successful import into a client-visible failure.
+    The import itself (validate, write, save) has completed when the best-effort
+    refresh_orphans/refresh_suggestions rescan runs, so a scan error must degrade
+    rather than surface as a client-visible failure.
     """
     from custom_components.phoenix_mcp.admin_view import PhoenixAdminMesaImportView
 
@@ -962,11 +964,10 @@ async def test_devices_list_returns_stored_device_profiles(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 async def test_device_options_report_the_operator_facing_name(hass: HomeAssistant):
-    """A device id is opaque, so the picker has to carry a readable name.
+    """A device picker option carries the operator-facing name.
 
-    Unlike an area, whose id an admin can recognise, a device registry id says
-    nothing, which is why this endpoint exists at all. A rename by the operator
-    outranks the integration's own name, matching what HA displays.
+    A device registry id is opaque, unlike an area id. A rename by the operator
+    (name_by_user) outranks the integration's own name, matching what HA displays.
     """
     from homeassistant.config_entries import ConfigEntry
     from homeassistant.helpers import device_registry as dr
@@ -995,15 +996,12 @@ async def test_device_options_report_the_operator_facing_name(hass: HomeAssistan
 
 @pytest.mark.asyncio
 async def test_put_stamps_the_current_schema_version(hass: HomeAssistant):
-    """A profile authored NOW must not be stored labelled as 1.0-era content.
+    """A profile written through the panel is stamped with the current schema_version.
 
-    mesa-core reads an absent `schema_version` as 1.0, because 1.0 is the only
-    version that could have written an unversioned document. That inference is
-    right for a file found on disk and wrong for a document this panel just
-    produced, so the write boundary migrates it. Migration is the ONLY operation
-    allowed to set the label: mesa-core never stamps on save, or a future
-    version needing a real transformation would skip every document that had
-    ever been written.
+    mesa-core reads an absent schema_version as 1.0, which is right for a file found
+    on disk and wrong for a document just produced, so the write boundary migrates
+    it. Migration is the only operation allowed to set the label: mesa-core never
+    stamps on save.
     """
     from custom_components.phoenix_mcp.mesa_core.migration import CURRENT_SCHEMA_VERSION
 
@@ -1021,11 +1019,10 @@ async def test_put_stamps_the_current_schema_version(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 async def test_every_scope_stamps_the_version_not_just_entities(hass: HomeAssistant):
-    """All five write boundaries, because they are five separate handlers.
+    """Domain, area, integration and device writes stamp the schema version.
 
-    Wiring one and forgetting the others is the obvious way to half-fix this,
-    and nothing else would notice: an unstamped document still resolves
-    identically today.
+    Each scope is a separate handler, and an unstamped document still resolves
+    identically, so a missed handler would go unnoticed.
     """
     from custom_components.phoenix_mcp.mesa_core.migration import CURRENT_SCHEMA_VERSION
 
@@ -1054,11 +1051,10 @@ async def test_every_scope_stamps_the_version_not_just_entities(hass: HomeAssist
 
 @pytest.mark.asyncio
 async def test_a_bare_semantic_profile_body_is_stamped_too(hass: HomeAssistant):
-    """from_dict accepts TWO body shapes, so both have to be stamped.
+    """A bare semantic-profile body is stamped too.
 
-    A body with no `semantic_profile` key is treated as the semantic profile
-    itself. Guarding on that key alone therefore skipped a legitimate shape and
-    stored it still claiming to be 1.0.
+    from_dict accepts two body shapes; a body without a `semantic_profile` key is
+    the semantic profile itself.
     """
     from custom_components.phoenix_mcp.mesa_core.migration import CURRENT_SCHEMA_VERSION
 
@@ -1075,11 +1071,10 @@ async def test_a_bare_semantic_profile_body_is_stamped_too(hass: HomeAssistant):
 
 @pytest.mark.asyncio
 async def test_an_unparseable_version_does_not_become_a_500(hass: HomeAssistant):
-    """Migration fails SOFT so a caller's bad value reaches the validator.
+    """An unparseable schema_version reaches the validator instead of a 500.
 
-    `migrate_profile` raises on a version it cannot parse. Calling it unguarded
-    would turn that into an unhandled error rather than the validation response
-    the caller deserves.
+    migrate_profile raises on a version it cannot parse, so migration at the write
+    boundary fails soft and the caller gets the validation response.
     """
     await _setup(hass)
     view = PhoenixAdminMesaProfileView()

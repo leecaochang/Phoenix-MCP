@@ -1,4 +1,4 @@
-"""Tests for raw YAML edit (get/set_yaml_config) and integration enable/disable."""
+"""Raw YAML edit (get/set_yaml_config) and integration enable/disable."""
 
 from __future__ import annotations
 
@@ -29,9 +29,10 @@ from custom_components.phoenix_mcp.token_store import (
 
 @pytest.fixture(autouse=True)
 def isolated_config_dir(hass, tmp_path):
-    """set_yaml_config writes configuration.yaml; keep it out of the shared
-    shared testing config dir so it cannot leak into other tests (the authoring
-    executors now resolve configuration.yaml via yaml_includes)."""
+    """set_yaml_config writes configuration.yaml; keep it out of the shared testing
+    config dir so it cannot leak into other tests (the authoring executors resolve
+    configuration.yaml via yaml_includes).
+    """
     hass.config.config_dir = str(tmp_path)
     return tmp_path
 
@@ -123,9 +124,10 @@ class TestYamlConfig:
         assert outcome == "invalid_request"
 
     async def test_set_non_string_confirm_mode_rejected_before_pending(self, hass):
-        """A doomed write must fail before a pending approval is created, even
-        under confirm mode, otherwise it sails through as a false pending that
-        can only fail once an admin approves it."""
+        """A doomed write fails before a pending approval is created, even under
+        confirm mode; otherwise it would sail through as a false pending that can
+        only fail once an admin approves it.
+        """
         _, outcome, _ = await _call(
             "set_yaml_config", {"content": {"a": 1}}, _token(cap_yaml_edit="confirm"), hass)
         assert outcome == "invalid_request"
@@ -597,7 +599,7 @@ class TestYamlTopLevelKeyRemoval:
 
     async def test_executor_recheck_catches_approval_window_drift(self, hass):
         """A key appeared while the approval was pending, so the approved write
-        now drops something the admin never saw."""
+        drops something the admin never saw."""
         self._write(hass, "default_config:\n")
         self._write(hass, "default_config:\nrecorder:\n")
         _, outcome, _ = await _execute_set_yaml_config(
@@ -606,8 +608,9 @@ class TestYamlTopLevelKeyRemoval:
         assert "recorder" in self._read(hass)
 
     async def test_denied_token_learns_nothing_about_its_payload(self, hass):
-        """Rule 29(a): the cap-deny check runs first, so a denied token gets the
-        uniform Forbidden message and never the removal detail."""
+        """The cap-deny check runs first, so a denied token gets the uniform
+        Forbidden message and never the removal detail.
+        """
         self._write(hass, "default_config:\nrecorder:\n")
         content, outcome, _ = await _call(
             "set_yaml_config", {"content": "default_config:\n"},
@@ -695,7 +698,7 @@ class TestYamlConfigContentHash:
 
     async def test_stale_hash_confirm_mode_fails_before_pending(self, hass):
         # Under confirm mode the stale write must be refused before a pending
-        # approval is created, not queue a doomed approval (rule 29).
+        # approval is created, not queue a doomed approval.
         path = hass.config.path("configuration.yaml")
         with open(path, "w", encoding="utf-8") as f:
             f.write("original:\n")
@@ -966,10 +969,10 @@ class TestConfigYamlSerialization:
 class TestSetYamlConfigTargetsIncludeFiles:
     """set_yaml_config writes any file configuration.yaml loads at a safe key.
 
-    The write jail used to be configuration.yaml alone while the READ jail took
-    a file argument, so an agent that read templates.yaml had no way to write it
-    back, and a `file` argument sent to this tool was silently dropped and the
-    content validated against configuration.yaml instead.
+    The write jail matches the READ jail: a `file` argument names an include target,
+    so an agent that read templates.yaml can write it back, and the argument is
+    never silently dropped with the content validated against configuration.yaml
+    instead.
     """
 
     USER_CONFIG = (
@@ -1025,9 +1028,9 @@ class TestSetYamlConfigTargetsIncludeFiles:
     async def test_refuses_a_file_loaded_under_a_protected_key(self, hass, tmp_path):
         """The trust-boundary floor follows the key, not the filename.
 
-        http.yaml's own top level IS http:'s value, so trusted_proxies sits
-        there as an ordinary-looking key and the content-shaped rule-30 check
-        would never fire on it.
+        http.yaml's own top level IS http:'s value, so trusted_proxies sits there as
+        an ordinary-looking key and the content-shaped protected-subtree check would
+        never fire on it.
         """
         self._seed(tmp_path, "http: !include http.yaml\n")
         (tmp_path / "http.yaml").write_text("trusted_proxies:\n  - 10.0.0.1\n", encoding="utf-8")
@@ -1088,7 +1091,7 @@ class TestSetYamlConfigTargetsIncludeFiles:
         assert "can be written" in content["content"][0]["text"]
 
     async def test_denied_token_learns_nothing_about_its_payload(self, hass, tmp_path):
-        """Rule 29(a): the cap check runs before every path and mount refusal."""
+        """The cap check runs before every path and mount refusal."""
         self._seed(tmp_path)
         content, outcome, _ = await _call(
             "set_yaml_config", {"file": "../escape.yaml", "content": "x\n"},
@@ -1210,10 +1213,10 @@ class TestPatchYamlConfigTargetsIncludeFiles:
 
 
 class TestIncludeTargetRoundTrip:
-    """The reported workflow, end to end: read an include target, edit, write back.
+    """The include-target workflow end to end: read, edit, write back.
 
-    A model reaches for expected_hash from the read, so the two tools have to
-    agree on both the path and the hash for a real edit to land.
+    A model reaches for expected_hash from the read, so the two tools have to agree
+    on both the path and the hash for a real edit to land.
     """
 
     BEFORE = (
@@ -1256,12 +1259,12 @@ class TestIncludeTargetRoundTrip:
 
 
 class TestListEntryRemovalGuard:
-    """The rule-31 backstop for a file whose top level is a LIST.
+    """The top-level removal backstop for a file whose top level is a LIST.
 
     The mapping-key guard abstains there (no keys to compare), so a
-    read-modify-write returning 3 of 12 template blocks was accepted. Counting
-    is the whole mechanism: list entries have no stable identity, so an edit and
-    a delete-plus-add are indistinguishable and only the net matters.
+    read-modify-write returning 3 of 12 template blocks would be accepted without
+    it. Counting is the whole mechanism: list entries have no stable identity, so an
+    edit and a delete-plus-add are indistinguishable and only the net matters.
     """
 
     THREE = "- a: 1\n- b: 2\n- c: 3\n"

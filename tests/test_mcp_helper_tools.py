@@ -104,9 +104,7 @@ class TestCreateHelper:
         assert outcome == "invalid_request"
 
     async def test_empty_config_confirm_mode_rejected_before_pending(self, hass, helper_env, hass_admin_user):
-        """An invalid helper config must fail before a pending approval is
-        created, even under confirm mode, otherwise it sails through as a false
-        pending that can only fail once an admin approves it."""
+        """An invalid helper config fails before any approval is created, even in confirm mode."""
         _, outcome, _ = await _call(
             "create_helper", {"helper_type": "input_boolean", "config": {}},
             _token(cap_helper_write="confirm"), hass)
@@ -187,10 +185,10 @@ class TestConfigFlowHelperCreation:
     ):
         """The real three-step helper flow is replayable without leaked flows."""
         assert await async_setup_component(hass, "input_boolean", {"input_boolean": {}})
-        # Loading the real flow normally starts Recorder, whose pytest fixture
-        # must run before this suite's session-scoped hass. Keep the real
-        # history_stats flow handler and config-entry manager, but replace the
-        # dependency setup and entity platform with the smallest materializer.
+        # Loading the real flow normally starts Recorder, whose fixture must run
+        # before this suite's session-scoped hass. Keep the real history_stats
+        # flow handler and config-entry manager, but replace dependency setup and
+        # the entity platform with the smallest materializer.
         import homeassistant.components.history_stats as history_stats
         from homeassistant.helpers import entity_registry as er
 
@@ -496,9 +494,9 @@ class TestEditDeleteHelper:
 class TestVersionCapture:
     """create/edit/delete_helper record version history.
 
-    The other helper tests pass a MagicMock for data, so capture is a no-op there;
-    here a real VersionStore is supplied so the helper read-before path that
-    populates `before` for edit and delete is actually exercised end-to-end.
+    A real VersionStore is supplied (capture is a no-op when data is a MagicMock)
+    so the read-before path that populates `before` for edit and delete is
+    exercised end-to-end.
     """
 
     @staticmethod
@@ -539,7 +537,7 @@ class TestVersionCapture:
         # edit_helper reads the prior config into `before`.
         assert edit_rec.before is not None and edit_rec.before.get("name") == "A"
         assert edit_rec.after == {"name": "B"}
-        # delete_helper read the prior config; no `after`
+        # delete_helper reads the prior config into `before`; no `after`.
         assert delete_rec.before is not None and delete_rec.before.get("name") == "B"
         assert delete_rec.after is None
 
@@ -584,7 +582,7 @@ class TestListHelpers:
 
 
 class TestInputButtonLifecycle:
-    """Prove input_button fits the shared storage-helper CRUD contract."""
+    """input_button follows the shared storage-helper CRUD contract."""
 
     async def test_crud_and_deleted_restore(self, hass, hass_admin_user):
         from homeassistant.helpers import entity_registry as er
@@ -682,7 +680,7 @@ class TestInputButtonLifecycle:
         assert outcome == "allowed"
 
 class TestZoneLifecycle:
-    """Prove storage-zone CRUD stays scoped and approval-bound."""
+    """Storage-zone CRUD stays scoped and approval-bound."""
 
     @staticmethod
     async def _setup(hass: HomeAssistant) -> None:
@@ -1011,7 +1009,7 @@ class TestZoneLifecycle:
 
 
 class TestTagLifecycle:
-    """Prove tag CRUD protects scope and treats scan data as read-only evidence."""
+    """Tag CRUD protects scope and treats scan data as read-only evidence."""
 
     @staticmethod
     async def _setup(hass: HomeAssistant) -> None:
@@ -1402,7 +1400,7 @@ class TestTagLifecycle:
 
 
 class TestPersonLifecycle:
-    """Prove person CRUD is storage-only and keeps private relationships private."""
+    """Person CRUD is storage-only and keeps private relationships private."""
 
     @staticmethod
     async def _setup(hass: HomeAssistant) -> None:
@@ -1607,7 +1605,7 @@ class TestPersonLifecycle:
 
 
 class TestScheduleLifecycle:
-    """Prove schedule CRUD, validation, deletion, and restore."""
+    """Schedule CRUD validates its schema, and a deleted schedule restores."""
 
     async def test_schema_crud_and_deleted_restore(self, hass, hass_admin_user):
         from homeassistant.helpers import entity_registry as er
@@ -1742,7 +1740,7 @@ class TestScheduleLifecycle:
 
 @pytest.mark.parametrize("kind,state", [("sensor", "{{ 7 }}"), ("binary_sensor", "{{ true }}")])
 async def test_template_menu_inspection_and_creation(hass, kind, state):
-    """Drive real HA menu/forms without creating during inspection or preflight."""
+    """Inspecting the real HA menu/forms, or preflighting a create, creates nothing."""
     assert await async_setup_component(hass, "homeassistant", {})
     token = _token(permissions=PermissionTree(domains={kind: PermissionNode(state="GREEN")}))
     content, outcome, _ = await _call("create_helper", {"helper_type": "template", "flow_steps": []}, token, hass)

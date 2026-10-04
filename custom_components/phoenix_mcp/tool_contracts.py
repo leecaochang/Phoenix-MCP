@@ -1,4 +1,4 @@
-"""Normalization for the breaking, structured Tool Catalog v2 inputs."""
+"""Normalize structured Tool Catalog v2 inputs to the executors' flat shape and diagnose retired v1 shapes."""
 
 from __future__ import annotations
 
@@ -144,8 +144,9 @@ def _near_parameter(name: str, candidate: str) -> bool:
 def unknown_argument_error(tool: str, args: dict[str, Any]) -> str | None:
     """Diagnose targeted public-name mistakes without rewriting caller input.
 
-    Surface diagnostics only after capability denial checks, before approval.
-    This is deliberately not a validator for arbitrary nested configuration.
+    Callers run it after the capability-deny check (so a denied token learns
+    nothing about its arguments) and before an approval is created. It is
+    deliberately not a validator for arbitrary nested configuration.
     """
     protected = UNKNOWN_ARGUMENT_PROTECTED_FIELDS.get(tool)
     if protected is None:
@@ -191,10 +192,11 @@ def unknown_argument_error(tool: str, args: dict[str, Any]) -> str | None:
 
 
 def normalize_tool_args(tool: str, args: dict[str, Any]) -> tuple[dict[str, Any], str | None]:
-    """Translate a v2 public request to the established executor shape.
+    """Translate a Catalog v2 request to the flat shape the executors take.
 
-    Unrelated unknown keys remain untouched. Retired fields retain migration
-    guidance; targeted selector mistakes receive correction errors.
+    Returns (args, error). Unrelated unknown keys pass through untouched; retired
+    fields get migration guidance and targeted selector mistakes get correction
+    errors.
     """
     replacements = _RETIRED_REPLACEMENTS.get(tool, {})
     retired = set(replacements) & set(args)

@@ -336,7 +336,7 @@ class TestCreate:
         assert "already exists" in _text(content)
 
     async def test_yaml_suffix_added_by_ha_is_not_our_concern(self, hass, bp_env):
-        # We require an explicit .yaml/.yml, so HA's suffix fallback never fires.
+        # An explicit .yaml/.yml is required, so HA's suffix fallback never fires.
         _, outcome, _ = await _call(
             "create_blueprint",
             {"domain": "automation", "path": "author/nosuffix", "content": VALID},
@@ -485,11 +485,8 @@ class TestApprovalDiff:
 class TestBlueprintRestore:
     """async_restore_version routes blueprint snapshots back through the executors.
 
-    Blueprint versions were recorded (and the panel offered Restore) long before
-    a restore branch existed, so every attempt errored "Cannot restore resource
-    type 'blueprint'"; these pin the branch and the synthetic restore token's
-    explicit capability allows, without which the executor's dual gate refuses
-    the pass-through-EXEMPT domain caps.
+    The synthetic restore token needs explicit capability allows: without them the
+    executor's dual gate refuses the pass-through-EXEMPT domain caps.
     """
 
     async def test_restore_token_carries_explicit_allows_for_exempt_caps(self):

@@ -1,12 +1,10 @@
 """Tests for the MCP protocol layer: discovery, version negotiation, unknown methods.
 
-These cover the three things a client learns about the server before it learns
-anything about Home Assistant: which protocol revisions this transport claims,
-who the server says it is, and what happens to a method it does not implement.
-
-The version list is the load-bearing one. It is a compliance CLAIM (a client is
-entitled to assume every MUST of a listed revision is honored), so the pins here
-assert what is deliberately ABSENT as well as what is present.
+These cover what a client learns before anything about Home Assistant: which
+protocol revisions the transport claims, who the server says it is, and what
+happens to a method it does not implement. The version list is a compliance
+CLAIM (a client may assume every MUST of a listed revision is honored), so the
+pins assert what is deliberately ABSENT as well as what is present.
 """
 
 from __future__ import annotations
@@ -110,9 +108,9 @@ class TestServerDiscover:
         assert resp["result"]["cacheScope"] == "private"
 
     async def test_instructions_are_token_aware(self):
-        # The whole reason discover carries instructions: a client on a revision
-        # with no initialize would otherwise never be told which capabilities
-        # are approval-gated.
+        # discover carries instructions because a client on a revision with no
+        # initialize would otherwise never learn which capabilities are
+        # approval-gated.
         resp, _m, _r, _o = await _dispatch(
             "server/discover", cap_automation_write="confirm")
         instructions = resp["result"]["instructions"]
@@ -177,12 +175,11 @@ class TestProtocolVersions:
         assert resp["result"]["protocolVersion"] == MCP_LEGACY_PROTOCOL_VERSION_PREFERRED
 
     async def test_initialize_echoes_a_non_preferred_supported_version(self):
-        # The assertion above is VACUOUS while the list holds one entry: echoing
-        # the request and always answering with the preferred version produce
-        # the same string. Pin the real behaviour against a two-version server
-        # so the echo cannot quietly regress the day a second one is added.
-        # Patched on mcp_view (the reader), not const; patching the definition
-        # module would not reach the already-imported name.
+        # The assertion above is vacuous while the list holds one entry: echoing
+        # the request and always answering with the preferred version give the
+        # same string. Pin the behaviour against a two-version server. Patched
+        # on mcp_view (the reader), not const; patching the definition module
+        # would not reach the already-imported name.
         with patch.object(mcp_view, "MCP_LEGACY_PROTOCOL_VERSIONS", ("2025-11-25", "2025-03-26")), \
              patch.object(mcp_view, "MCP_LEGACY_PROTOCOL_VERSION_PREFERRED", "2025-11-25"):
             resp, _m, _r, _o = await _dispatch(
@@ -630,16 +627,16 @@ _UNKNOWN = {"jsonrpc": "2.0", "id": 1, "method": "resources/subscribe"}
 
 class TestUnknownMethod:
     async def test_legacy_unknown_method_preserves_session_with_rpc_error(self):
-        # 404 + a -32601 body is what tells a client this IS an MCP endpoint
-        # that lacks the method, versus a 404 from a server hosting none.
+        # A legacy session is preserved: HTTP 200 carrying a -32601 body. Only a
+        # modern request gets the 404 that marks an MCP endpoint lacking the method.
         _token, raw, _data, hass = _env()
         resp = await _view(hass).post(_make_request(_UNKNOWN, "application/json", raw))
         assert resp.status == 200
         assert json.loads(resp.text)["error"]["code"] == -32601
 
     async def test_legacy_unknown_method_uses_json_error_for_sse_clients(self):
-        # The whole reason the check sits ahead of the framing choice: preparing
-        # a stream puts a 200 on the wire and the status can no longer be set.
+        # The check sits ahead of the framing choice because preparing a stream
+        # puts a 200 on the wire and the status can no longer be set.
         _token, raw, _data, hass = _env()
         stream = _FakeStream()
         with _stream_patch(stream):
@@ -650,7 +647,7 @@ class TestUnknownMethod:
         assert json.loads(resp.text)["error"]["code"] == -32601
 
     async def test_unknown_notification_is_accepted(self):
-        # A valid envelope whose method we do not implement owes no reply.
+        # A valid envelope whose method the server does not implement owes no reply.
         _token, raw, _data, hass = _env()
         resp = await _view(hass).post(_make_request(
             {"jsonrpc": "2.0", "method": "notifications/cancelled"},

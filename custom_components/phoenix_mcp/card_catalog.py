@@ -1,30 +1,22 @@
 """Dashboard card catalog: which Lovelace cards this instance can actually render.
 
-Phoenix MCP's dashboard write tools accept any card `type` whose shape is a dict
-with a non-empty string, so an agent authoring a dashboard has no way to learn
-which custom cards are installed and has to guess. This module holds the answer:
-a cached catalog of every card type the instance can render, with a one-line
-description, a documentation URL, and a worked stub config per card.
+Phoenix MCP's dashboard write tools accept any card dict with a non-empty string
+`type`, so an agent authoring a dashboard cannot learn which custom cards are
+installed. This module holds a cached catalog of every card type the instance can
+render, with a one-line description, a documentation URL, and a worked stub config.
 
-WHY THIS IS HARVESTED IN A BROWSER RATHER THAN READ OFF DISK. A card announces
-itself by pushing onto `window.customCards`, which is the registry Home
-Assistant's own card picker reads. That push happens at runtime, and much of a
-real-world plugin set yields NOTHING to a static parse: some build their type
-strings by concatenation, so no literal ever appears in the bundle, and others
-never register in the picker at all. A browser harvest therefore finds several
-times as many cards as parsing the JS on disk does, and finds descriptions and
-worked example configs that a static parse cannot recover at all. The gap is not
-an optimisation, it is the difference between a usable catalog and a misleading
-one.
+The catalog is HARVESTED IN A BROWSER, not read off disk. A card announces itself by
+pushing onto `window.customCards` (the registry HA's own card picker reads) at runtime.
+A static parse of the plugin JS yields nothing for cards that build their type strings
+by concatenation or never register in the picker, and cannot recover descriptions or
+stub configs, so it finds far fewer cards and would give a misleading catalog.
 
-The frontend harvester posts here through the admin API. Nothing in this module
-trusts that payload: it arrives from a browser, is assembled from third-party
-card code, and every field is coerced, bounded, and dropped on doubt.
+The frontend harvester posts here through the admin API. The payload is assembled
+from third-party card code, so every field is coerced, bounded, and dropped on doubt.
 
-A NEVER-HARVESTED CATALOG IS NOT AN EMPTY ONE. `harvested_at is None` means no
-browser has reported yet, and callers must say so rather than report zero cards.
-An agent told "you have no custom cards" avoids every custom card on the system,
-which is a worse failure than admitting the catalog is not ready.
+A NEVER-HARVESTED CATALOG IS NOT AN EMPTY ONE. `harvested_at is None` means no browser
+has reported yet, and callers must say so rather than report zero cards: an agent told
+"you have no custom cards" avoids every custom card on the system.
 """
 
 from __future__ import annotations
@@ -46,10 +38,10 @@ _LOGGER = logging.getLogger(__name__)
 
 # Where an entry came from. "picker" is a window.customCards registration (the
 # card advertises itself, so name/description are the author's own). "element"
-# is a custom element that resolved by name without a picker registration:
-# stack-in-card and config-template-card deliberately skip the picker so they do
-# not clutter it, but they are real, widely used cards, so a catalog that listed
-# only picker cards would tell an agent they do not exist.
+# is a custom element that resolved by name without a picker registration: some
+# widely used cards (stack-in-card, config-template-card) deliberately skip the
+# picker, so a catalog listing only picker cards would tell an agent they do not
+# exist.
 CARD_SOURCES = frozenset({"picker", "element"})
 
 
@@ -58,9 +50,8 @@ class CardEntry:
     """One renderable card type.
 
     `available` is the load-bearing field. A card can register a picker entry
-    while its custom element never defines, so "advertised" and "usable" are
-    genuinely different states, and an agent that conflates them authors a card
-    that renders as an error.
+    while its custom element never defines, so "advertised" and "usable" differ,
+    and an agent that conflates them authors a card that renders as an error.
     """
 
     type: str
@@ -82,9 +73,8 @@ class CardCatalog:
     harvested_at: str | None = None
     resource_count: int = 0
     # Resources that failed to import during the harvest. Surfaced to the admin
-    # as a cleanup hint: a registered resource whose file is gone is a real and
-    # common condition, typically a stale duplicate of a card that has since
-    # moved to a different path.
+    # as a cleanup hint: a registered resource whose file is gone is common,
+    # typically a stale duplicate of a card served from a different path.
     failed_imports: list[dict] = field(default_factory=list)
 
     @property
@@ -221,7 +211,6 @@ class CardCatalogStore:
         )
 
     async def async_save(self) -> None:
-        """Persist the catalog."""
         if self._store is None:
             return
         await self._store.async_save(self.as_dict())

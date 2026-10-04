@@ -115,8 +115,8 @@ class AuditLog:
     these toggles and always reflect total activity.
 
     When a Store is provided, the log can be persisted to disk via async_save()
-    and restored on startup via async_load(). Passing no store keeps the log
-    purely in-memory when no store is supplied (for example in tests).
+    and restored on startup via async_load(). Without a store it is purely
+    in-memory.
     """
 
     def __init__(self, maxlen: int = AUDIT_LOG_MAXLEN, store: Store | None = None) -> None:
@@ -145,9 +145,10 @@ class AuditLog:
     ) -> None:
         """Append an audit entry, subject to the current logging settings.
 
-        Returns without writing if the master kill switch or the relevant
-        per-outcome toggle is off. Redaction of resource and client_ip is
-        applied when the corresponding setting is off.
+        Returns without writing if disable_all_logging or the relevant per-outcome
+        toggle is off. resource and client_ip are redacted when log_entity_names or
+        log_client_ip is off. pending_approval and approval/* lifecycle rows ignore
+        the log_allowed/log_denied toggles.
         """
         if settings.disable_all_logging:
             return
@@ -240,10 +241,9 @@ class AuditLog:
         if client_ip is not None:
             entries = [e for e in entries if client_ip in e.client_ip]
         # str() guards against a persisted entry whose method/resource is not a
-        # string: a malformed JSON-RPC request could historically log a non-string
-        # method, which snapshots to the Store and survives restart, so a later
-        # filtered query must not crash on .lower(). Ingress is now type-checked
-        # upstream, but old poisoned entries can still be in the ring buffer.
+        # string: such a value snapshots to the Store and survives restart, and a
+        # filtered query must not crash on .lower(). Ingress is type-checked
+        # upstream, but a restored buffer may still hold such entries.
         if method is not None:
             entries = [e for e in entries if method.lower() in str(e.method).lower()]
         if resource is not None:
@@ -291,8 +291,10 @@ class AuditLog:
         resource: str | None = None,
         since: datetime | None = None,
     ) -> int | None:
-        """Return the total number of entries matching the same filters as query(),
-        ignoring limit/offset. Returns None for the same invalid-outcome case."""
+        """Return the number of entries matching query()'s filters, ignoring limit/offset.
+
+        Returns None for an unrecognised outcome, like query().
+        """
         entries = self._filtered(
             token_id=token_id, outcome=outcome, client_ip=client_ip,
             method=method, resource=resource, since=since,
@@ -300,7 +302,7 @@ class AuditLog:
         return None if entries is None else len(entries)
 
     def clear(self) -> None:
-        """Remove all in-memory entries. Called by tests and the wipe handler."""
+        """Remove all in-memory entries without touching storage."""
         self._log.clear()
 
     def resize(self, maxlen: int) -> None:
@@ -314,7 +316,8 @@ class AuditLog:
     async def async_save(self) -> None:
         """Snapshot the in-memory buffer to HA storage.
 
-        No-op when no store is configured. Never mode only disables periodic saves.
+        No-op when no store is configured. An audit_flush_interval of 0 ("Never")
+        disables only the periodic timer; the shutdown handler still saves.
         """
         if self._store is None:
             return

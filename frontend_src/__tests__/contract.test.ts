@@ -10,8 +10,8 @@ import providerContract from "../../tests/contract/agentcli_provider_kinds.json"
 import mesaContract from "../../tests/contract/mesa_scopes.json";
 
 // Contract drift guard between the frontend TokenRecord type and the Python
-// serializer. The shared fixture is generated from TokenRecord.to_dict (see
-// tests/test_frontend_contract.py). This map is typed `satisfies
+// serializer. The shared fixture is generated from TokenRecord.to_dict by a
+// backend contract test. This map is typed `satisfies
 // Record<keyof TokenRecord, true>`, so tsc fails if a TokenRecord field is added
 // or removed without updating it; the runtime assertion then checks those keys
 // equal the Python-generated fixture, catching drift on either side.
@@ -74,10 +74,9 @@ describe("frontend/backend TokenRecord contract", () => {
   });
 });
 
-// Same guard for version records. This union drifted twice without anyone
-// noticing: blueprint, entity and esphome_yaml were recorded by the backend
-// while missing here, so those versions were mistyped everywhere they were
-// used. `satisfies Record<VersionResourceType, true>` makes tsc fail if the
+// Same guard for version records: a resource type the backend records but this
+// union lacks is mistyped everywhere it is used.
+// `satisfies Record<VersionResourceType, true>` makes tsc fail if the
 // union changes without this map; the runtime check then pins both against the
 // types the Python side actually records.
 const VERSION_RESOURCE_TYPES = {
@@ -108,8 +107,7 @@ describe("frontend/backend version resource type contract", () => {
   // The union above is a TYPE. It says nothing about whether Changes can RENDER
   // the value, and resourceTypeLabel falls through to the raw slug rather than
   // failing, so a missing entry ships as a row labelled `energy` that an operator
-  // scanning for "Energy dashboard" does not recognise. Live-hit exactly that way
-  // on 2026-08-03: the rows were there and were reported as absent.
+  // scanning for "Energy dashboard" does not recognise.
   it("every resource type has a label key, so no row renders as a raw slug", () => {
     const missing = Object.keys(VERSION_RESOURCE_TYPES).filter(
       (rt) => !(rt in RESOURCE_TYPE_LABEL_KEYS),
@@ -157,11 +155,11 @@ describe("frontend/backend agentCLI provider contract", () => {
 });
 
 // Contract drift guard for the MESA inheritance levels, which are hand-mirrored
-// into the backend const, the editor's endpoint dispatch, six label maps, the
+// into the backend const, the editor's endpoint dispatch, several label maps, the
 // list table and the in-context injector. Most of those are SILENT when one is
-// missing: the dispatch used to end in an untyped fallthrough that wrote any
-// unnamed scope to the area endpoint, and the injector coerced any unknown
-// scope to entity. tsc covers the Records keyed by the union; this pins the
+// missing: a scope absent from the dispatch must not fall through to the area
+// endpoint, and the injector must not coerce an unknown scope to entity. tsc
+// covers the Records keyed by the union; this pins the
 // union itself, the runtime tables derived from it, and the injector's subset.
 const MESA_SCOPES = {
   entity: true,

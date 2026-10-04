@@ -1,16 +1,14 @@
 /** A caller that already knows the target must not have it re-validated.
  *
  * The permission tree and the in-context injector both open the profile editor
- * for a row the operator just clicked, so the target is a fact, not a choice.
- * The tree opened it UNLOCKED and supplied no picker source, so the editor
- * rendered its combobox, found the pre-filled key in an empty option list, and
- * refused it: "No matching device. Pick one from the list." on an id the panel
- * itself had just handed over. Reported live.
+ * for a row the operator just clicked, so the target is a fact, not a choice. An
+ * unlocked editor with no picker source finds the pre-filled key in an empty
+ * option list and refuses it ("No matching device. Pick one from the list.") on
+ * an id the panel itself just handed over.
  *
- * `deviceOptions` is deliberately NOT passed here, because that is the state the
- * bug happened in: a locked editor must be correct without a picker source, or
- * the fix is only hiding the problem behind a second prop the next caller will
- * also forget.
+ * `deviceOptions` is deliberately NOT passed here: a locked editor must be
+ * correct without a picker source, or the guarantee only hides behind a second
+ * prop the next caller will also forget.
  */
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
@@ -60,8 +58,8 @@ describe("ProfileEditor with a caller-supplied target", () => {
   });
 
   it("still refuses an unlocked key with no picker source, which is the bug", () => {
-    // The counterpart assertion: unlocked is what produced the live error, so if
-    // this ever stops failing, the two branches have converged and the locked
+    // The counterpart assertion: an unlocked editor is what refuses the key, so
+    // if this ever stops failing, the two branches have converged and the locked
     // assertions above no longer prove anything about locking.
     renderEditor({ lockedKey: false });
 
@@ -70,12 +68,11 @@ describe("ProfileEditor with a caller-supplied target", () => {
 });
 
 describe("the callers that supply their own target", () => {
-  /** Everything above tests ProfileEditor, but the DEFECT was in its caller:
-   *  the permission tree opened the editor without `lockedKey`. Those tests
-   *  would stay green if that regressed, which is the "tested next to the seam,
-   *  not at it" trap. Reading the call site is crude but it guards the thing
-   *  that actually broke, and rendering TokenDetailView here would mean mocking
-   *  a dozen endpoints to assert one prop.
+  /** Everything above tests ProfileEditor, but each caller must pass `lockedKey`.
+   *  Those tests would stay green if a caller dropped it: the "tested next to the
+   *  seam, not at it" trap. Reading the call site is crude but guards the real
+   *  seam, and rendering TokenDetailView here would mean mocking many endpoints
+   *  to assert one prop.
    */
   const callSiteOf = (file: string) => {
     const src = readFileSync(join(process.cwd(), "frontend_src", file), "utf8");

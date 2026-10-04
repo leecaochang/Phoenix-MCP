@@ -2,15 +2,14 @@
  * An approval whose saved action is already executing offers no actions.
  *
  * Approve runs its tool INLINE in the admin's request, so nothing resolves for
- * seconds. During that window this tab kept offering Approve and Reject on an
- * approval already being acted on from Agent Chat or a notification, and the
- * server could only answer the second click with a 409. The outcome was never
- * wrong; the operator was shown a control that could not work.
+ * seconds. During that window the tab must not offer Approve and Reject on an
+ * approval already being acted on from Agent Chat or a notification, because the
+ * server could only answer the second click with a 409.
  *
- * Two independent sources feed the locked state and both are pinned here,
- * because they cover different situations: the live claim event only reaches a
- * panel that was already open, while the row's own `in_progress` is what makes a
- * page loaded or reloaded mid-execution agree.
+ * Two independent sources feed the locked state and both are pinned, because
+ * they cover different situations: the live claim event only reaches a panel
+ * that was already open, while the row's own `in_progress` makes a page loaded
+ * or reloaded mid-execution agree.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";

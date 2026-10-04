@@ -1,7 +1,7 @@
-"""Tests for the card-level dashboard tools (add/edit/delete_dashboard_card).
+"""Card-level dashboard tools (add/edit/delete_dashboard_card).
 
 These edit ONE card of a storage-mode dashboard without resending the whole
-layout, which blows weaker providers' output-token limits. Confirm-gated on
+layout, which can exceed a weaker provider's output-token limit. Confirm-gated on
 cap_lovelace_write like set_dashboard_config, validated pre-gate against the
 current layout, re-validated plus CAS-checked in the executor, and versioned
 with full before/after configs so the Changes tab and async_restore_version
@@ -190,10 +190,10 @@ class TestCardOpValidationBeforeGate:
 
     async def test_autogen_dashboard_steers_to_set_dashboard_config(self, hass, lovelace_env):
         # Card ops need a stored base layout; a fresh default dashboard has none.
-        # The message must NAME the addressed dashboard: live-found, an agent
-        # that dropped url_path was told "this dashboard has no stored config"
-        # about the default dashboard, read it as contradicting the named
-        # dashboard it had just successfully read, and spiraled.
+        # The message must NAME the addressed dashboard: an agent that drops
+        # url_path and is told "this dashboard has no stored config" about the
+        # default dashboard reads it as contradicting the named dashboard it had
+        # just read.
         h, _light = lovelace_env
         content, outcome, _ = await _call(
             "add_dashboard_card", {"view_index": 0, "card": NEW_CARD}, _token(), h, _data()[0])
@@ -330,7 +330,7 @@ class TestCardOpCas:
 
     async def test_executor_revalidates_bounds_without_hash(self, hass, lovelace_env):
         # No expected_hash: the executor still re-resolves the target, so an
-        # index that no longer exists after drift fails cleanly.
+        # index removed by drift fails cleanly.
         h, _light = lovelace_env
         await _seed(h)
         token = _token()
@@ -376,8 +376,7 @@ class TestCardOpDiff:
         # A real single card (a multi-series chart) can exceed the 4000-char
         # display default; the panel PARSES diff.before/diff.after to render
         # the live preview, so a card diff must stay whole JSON up to the
-        # version-snapshot bound (live-found: a truncated ~5.7KB apexcharts
-        # card made the preview toggle vanish).
+        # version-snapshot bound; a truncated diff makes the preview toggle vanish.
         big_card = {"type": "custom:apexcharts-card", "series": [
             {"entity": f"sensor.temperature_{i}", "name": f"Room {i}", "color": "#ff6b6b",
              "stroke_width": 1, "curve": "smooth", "group_by": {"func": "avg", "duration": "30m"},
@@ -391,8 +390,8 @@ class TestCardOpDiff:
         assert "more characters)" not in diff["after"]
         assert "more characters)" not in diff["before"]
         # Whole JSON on both sides: parses, all 30 series intact. (The before
-        # side's entity ids are redacted to scope as usual - these are ghosts -
-        # so assert on non-entity fields.)
+        # side's entity ids are redacted to scope as usual, since these are
+        # ghosts, so assert on non-entity fields.)
         assert json.loads(diff["after"])["series"][29]["name"] == "Room 29"
         before = json.loads(diff["before"])
         assert len(before["series"]) == 30 and before["series"][29]["name"] == "Room 29"

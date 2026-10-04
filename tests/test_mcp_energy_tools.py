@@ -1,24 +1,22 @@
-"""Tests for the Energy dashboard tools: get_energy_config and edit_energy_config.
+"""The Energy dashboard tools: get_energy_config and edit_energy_config.
 
 The Energy dashboard is the one place Home Assistant records that a statistic has
-a ROLE (grid / solar / battery / gas / water / individual device), and it records
-it in .storage/energy where no other Phoenix MCP read reaches. Removing an
-integration therefore orphans an Energy source silently.
+a ROLE (grid / solar / battery / gas / water / individual device), in
+.storage/energy where no other Phoenix MCP read reaches. Removing an integration
+therefore orphans an Energy source silently.
 
-The READ tests pin what makes it safe rather than merely possible: it is scoped to
-the token (energy/get_prefs runs as admin, so an unscoped passthrough would leak
-every statistic on the instance), and a never-configured instance is an answer
-rather than an error.
+The READ tests pin what makes it safe: it is scoped to the token (energy/get_prefs
+runs as admin, so an unscoped passthrough would leak every statistic on the
+instance), and a never-configured instance is an answer rather than an error.
 
-The WRITE tests pin the property the whole design rests on: energy/save_prefs
-FULL-REPLACES each top-level key it receives, so `test_replace_statistic_repoints_
-and_leaves_everything_else_alone` asserting `set(saved[0]) == {"device_consumption"}`
-is not a detail, it is the guarantee. Sending a key the operation did not change
-would put every entry under it at the mercy of whatever the tool reconstructed.
-The other load-bearing pair is the addressing asymmetry: a statistic being WRITTEN
-must resolve for the token, while one used to ADDRESS an existing entry must not
-have to, because a dead entry is addressed by the very id that stopped resolving
-and refusing it would make the broken entries the only ones unfixable.
+The WRITE tests pin the property the design rests on: energy/save_prefs
+FULL-REPLACES each top-level key it receives, so only a key the operation changed
+may be sent. Sending any other would put every entry under it at the mercy of
+whatever the tool reconstructed. The other load-bearing pair is the addressing
+asymmetry: a statistic being WRITTEN must resolve for the token, while one used
+to ADDRESS an existing entry must not have to, because a dead entry is addressed
+by the very id that stopped resolving, and refusing it would make the broken
+entries the only ones unfixable.
 """
 
 from __future__ import annotations
@@ -127,7 +125,7 @@ async def test_water_key_absent_upstream_is_still_emitted(hass: HomeAssistant) -
         # A fresh instance: HA answers ERR_NOT_FOUND rather than empty lists.
         "not_found: No prefs",
         # The energy component is not set up, so ws_dispatch refuses before any
-        # handler lookup. That HA has no Energy dashboard to depend on.
+        # handler lookup: there is no Energy dashboard to depend on.
         "WebSocket command not available: energy/get_prefs",
     ],
 )
@@ -166,7 +164,8 @@ async def test_out_of_scope_entities_are_redacted_and_not_rolled_up(hass: HomeAs
             {"type": "solar", "stat_energy_from": "sensor.solar_production"},
             # A switch: the token's tree grants sensor only, so this resolves to
             # NO_ACCESS. sensor.ghost_meter is absent from states and registry,
-            # so it is NOT_FOUND. Both redact identically (rule 12).
+            # so it is NOT_FOUND. Both redact identically, so the redaction is not
+            # an existence oracle.
             {"type": "battery", "stat_energy_from": "switch.secret_meter"},
         ],
         "device_consumption": [{"stat_consumption": "sensor.ghost_meter"}],
@@ -204,7 +203,7 @@ async def test_dispatch_failure_is_invalid_request_not_denied(hass: HomeAssistan
     """A broken read is an internal failure, never a policy decision.
 
     Filing it as `denied` would corrupt the one audit signal an operator reads to
-    see what the permission rules actually stopped (see the audit taxonomy rule).
+    see what the permission rules actually stopped.
     """
     with patch(_WS, AsyncMock(side_effect=WsDispatchError("timed out"))):
         content, outcome, _ = await _call(hass, _token())
@@ -521,7 +520,7 @@ async def test_external_statistic_is_accepted_as_a_written_value(hass: HomeAssis
 
 
 async def test_sentinel_in_an_argument_is_refused(hass: HomeAssistant) -> None:
-    """Rule 32: the placeholder names nothing, so writing it back is never right."""
+    """A redacted placeholder is never written back as configuration: it names nothing."""
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
@@ -557,7 +556,7 @@ async def test_unknown_address_is_refused(hass: HomeAssistant) -> None:
 
 
 async def test_denied_capability_forbids_and_never_dispatches(hass: HomeAssistant) -> None:
-    """Rule 29(a): a denied token learns nothing about its own payload's validity."""
+    """A denied token learns nothing about its own payload's validity."""
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
@@ -956,11 +955,12 @@ async def test_solar_forecast_denied_capability(hass: HomeAssistant) -> None:
 async def test_both_price_shapes_at_once_is_refused_before_the_gate(
     hass: HomeAssistant,
 ) -> None:
-    """LIVE-FOUND 2026-08-03: this became a PendingApproval and failed at save.
+    """A request carrying both price shapes must not become a pending approval.
 
-    Per-field validation cannot see it, so the call passed every check, waited for
-    an admin, and only then hit HA's _grid_ensure_single_price_export. Rule 29 is
-    about not spending a human's attention on a write that was never going to land.
+    Per-field validation cannot see it, so without a combined check the call would
+    pass every check, wait for an admin, and only then hit HA's
+    _grid_ensure_single_price_export. A confirm-gated write must not spend a
+    human's attention on a write that was never going to land.
     """
     hass.states.async_set("sensor.tariff_now", "5.1")
     ws, saved = _bus(LIVE)
@@ -979,8 +979,8 @@ async def test_a_price_added_to_an_existing_number_price_is_refused(
 ) -> None:
     """The rule reads the MERGED source, not the caller's fields alone.
 
-    LIVE has number_energy_price 4.2 already, so supplying only the entity price
-    still produces a source carrying both. Checking the caller's arguments in
+    The stored grid source already has number_energy_price 4.2, so supplying only
+    the entity price still produces a source carrying both. Checking the caller's arguments in
     isolation would wave this through.
     """
     hass.states.async_set("sensor.tariff_now", "5.1")
@@ -1075,10 +1075,9 @@ async def test_clearing_every_grid_meter_is_refused(hass: HomeAssistant) -> None
 async def test_every_write_records_a_restorable_version(hass: HomeAssistant) -> None:
     """A version record is what makes an Energy write undoable.
 
-    Never asserted until 2026-08-03, when the Changes tab appeared to be missing
-    these rows. The cause turned out to be a missing label-map entry rather than a
-    missing record, but the record itself had no test either way, and it is the
-    only rollback path for the one destructive API in this module.
+    Every write must record one: it is the only rollback path for the one
+    destructive API in this module, and the Changes tab lists writes from these
+    records.
     """
     _seed_states(hass, "sensor.dryer_energy")
     data = _data()
@@ -1105,9 +1104,8 @@ async def test_every_write_records_a_restorable_version(hass: HomeAssistant) -> 
 async def test_the_approval_diff_carries_structured_preview_rows(hass: HomeAssistant) -> None:
     """The panel renders the configuration, not a reparse of diff.before/after.
 
-    Those go through _truncate, and a truncated JSON string does not parse, which
-    is the bug the card preview hit when a large card exceeded the bound. The rows
-    are passed structured so the question never arises.
+    Those go through _truncate, and a truncated JSON string does not parse, so the
+    rows are passed structured instead.
     """
     from custom_components.phoenix_mcp.tools.energy import _build_diff_edit_energy_config
 

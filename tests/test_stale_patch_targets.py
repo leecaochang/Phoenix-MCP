@@ -1,21 +1,16 @@
-"""Guard: no test patches a name on mcp_view that the code under test no longer reads.
+"""Guard: no test patches a name on mcp_view that the code under test does not read.
 
-Moving a tool out of mcp_view.py into tools/ breaks three things, in increasing
-order of how quietly they fail. An `import` fails at collection. A
-`patch("...mcp_view.X")` for a name mcp_view no longer binds fails with
-AttributeError. But a patch on a name mcp_view STILL binds, aimed at code that
-now reads its own module's binding, fails silently: the patch applies to a name
-nobody reads, the real function runs, and every "nothing happened" assertion
-still passes.
+Moving a tool out of mcp_view.py into tools/ breaks tests in three ways, in
+increasing order of how quietly they fail. An `import` fails at collection. A
+`patch("...mcp_view.X")` for a name mcp_view no longer binds raises
+AttributeError. A patch on a name mcp_view STILL binds, aimed at code that now
+reads its own module's binding, fails silently: the patch applies to a name nobody
+reads, the real function runs, and every "nothing happened" assertion still passes
+(for example `assert_not_called()` against a dead mock).
 
-That third case is not theoretical. A `patch("...mcp_view._gate")` site left
-behind by a move keeps passing against a dead mock for every
-`assert_not_called()` assertion it makes. This guard is what makes the next such
-move announce itself.
-
-The checker lives HERE rather than in a helper script, so it cannot go missing:
-a guard that silently disappears is worse than one that never existed, because
-the green suite still claims the property holds.
+The checker lives in this file rather than a helper script, so it cannot go
+missing: a guard that silently disappears leaves a green suite claiming a property
+that no longer holds.
 """
 
 from __future__ import annotations
@@ -64,8 +59,8 @@ def _reads(tree: ast.AST) -> set[str]:
 mcp_src = (PKG / "mcp_view.py").read_text()
 mcp_binds = _bound(ast.parse(mcp_src))
 
-# tool name -> owning module, read off mcp_view's _register_tool lines plus the
-# import block that names where each handler came from.
+# Maps tool name to owning module, read off mcp_view's _register_tool lines plus
+# the import block that names where each handler came from.
 handler_module: dict[str, str] = {}
 imports: dict[str, str] = {}
 for node in ast.parse(mcp_src).body:
@@ -144,12 +139,12 @@ def test_no_stale_patch_targets() -> None:
 
 
 def test_checker_reports_a_known_stale_patch(tmp_path: pathlib.Path) -> None:
-    """The checker must actually catch the defect, not merely return an empty list.
+    """The checker catches a planted stale patch, not merely an empty list.
 
-    A checker that scans nothing reports zero findings exactly like a clean tree,
-    so the guard is worthless until this passes. The fixture reproduces the real
-    shape: a native-tool test that patches _gate on mcp_view, which both mcp_view
-    and tools/native bind, while calling a symbol tools/native defines.
+    A checker that scans nothing reports zero findings exactly like a clean tree.
+    The fixture has the real shape: a native-tool test that patches _gate on
+    mcp_view, which both mcp_view and tools/native bind, while calling a symbol
+    tools/native defines.
     """
     fixture = tmp_path / "test_fixture.py"
     fixture.write_text(

@@ -7,9 +7,8 @@ import type { ApprovalRecord } from "../types";
 
 // A persistent notification links to ONE approval, so an operator who works from
 // notifications lands in the detail modal and never meets the pending list, where
-// the tick boxes and the batch bar live. Batch approve was therefore built on a
-// surface that operator rarely opens. These cover the hint that closes that gap:
-// what it says, and the three ways it must stay quiet.
+// the tick boxes and the batch bar live. These cover the hint that points such
+// an operator at the list: what it says, and when it must stay quiet.
 //
 // It routes to the list rather than offering approve-all from the modal, and that
 // is the point rather than an omission: everything else in the queue is unreviewed,

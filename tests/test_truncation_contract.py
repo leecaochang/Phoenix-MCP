@@ -3,16 +3,15 @@
 An agent cannot ask a follow-up question about data it does not know was
 withheld. A clipped page that looks complete is worse than an error, because the
 agent proceeds confidently on a partial world: fifty errors out of fifty reads as
-a bounded problem, fifty out of five hundred does not, and before this contract
-`get_logs` returned the two identically. That tool is the one an agent reaches
-for to answer "is anything wrong with this instance", so it was the worst place
-in the surface to be silent.
+a bounded problem, fifty out of five hundred does not. `get_logs` is the tool an
+agent reaches for to ask whether anything is wrong with the instance, so it is
+the worst place in the surface to be silent.
 
 Two kinds of test here. The behavioural ones pin the actual field values for each
-paginating MCP read. The AST guard covers the tools nobody has written yet: it
-finds every limit-slice in the package and requires the enclosing function to
-report either `truncated`, a pre-slice `total`, or the cursor pair `has_more`
-plus `next_cursor`, so a new paginating read cannot ship silent.
+paginating MCP read. The AST guard covers tools nobody has written yet: it finds
+every limit-slice in the package and requires the enclosing function to report
+either `truncated`, a pre-slice `total`, or the cursor pair `has_more` plus
+`next_cursor`, so a new paginating read cannot ship silent.
 """
 
 from __future__ import annotations
@@ -31,9 +30,10 @@ PACKAGE = pathlib.Path(__file__).resolve().parent.parent / "custom_components" /
 
 _SKIP_DIRS = {"mesa_core"}
 
-# Either satisfies the contract: a boolean the caller reports directly, or a
-# pre-slice count a caller can compare against what it returned. collect_log_entries
-# is the second kind, which is why "truncated" alone would be the wrong test.
+# Any of these satisfies the contract: a boolean the caller reports directly, a
+# pre-slice count a caller can compare against what it returned, or the cursor
+# pair. collect_log_entries reports the cursor pair (has_more, next_cursor), which
+# is why "truncated" alone would be the wrong test.
 _DIRECT_SIGNALS = {"truncated", "total"}
 _CURSOR_SIGNALS = {"has_more", "next_cursor"}
 
@@ -101,9 +101,11 @@ class TestGetLogsReportsTruncation:
 
     @pytest.mark.asyncio
     async def test_total_counts_after_filtering_not_before(self):
-        """`total` answers "how many matched", not "how many exist", or an agent
-        that narrowed by integration would read the instance-wide count as its
-        own result set and conclude it was still missing rows."""
+        """`matched_buckets` counts matches after filtering, not before.
+
+        Otherwise an agent that narrowed by integration would read the instance-wide
+        count as its own result set and conclude it was missing rows.
+        """
         token, _ = _make_token(cap_log_read="allow")
         data = _make_data(token)
         hass = _make_hass(data)
@@ -121,8 +123,10 @@ class TestGetLogsReportsTruncation:
         assert body["has_more"] is False
 
     def test_helper_reports_the_pre_slice_total(self):
-        """The pair exists so a caller cannot report a clipped page as the whole
-        log by accident; unpacking is forced at every call site."""
+        """collect_log_entries returns the pre-slice match count with the page.
+
+        A caller cannot then report a clipped page as the whole log by accident.
+        """
         data = _make_data()
         hass = _hass_with_logs(data, 7)
         page = collect_log_entries(
@@ -147,10 +151,9 @@ class TestGetLogsReportsTruncation:
 class TestLimitSlicesReportTruncation:
     """Every limit-slice in the package must be reportable by its caller.
 
-    The behavioural tests above cover the reads that exist today. This covers the
-    ones nobody has written: a new paginating read that slices by a limit and says
-    nothing fails here rather than shipping silent, which is exactly how get_logs
-    stayed silent through several passes over this surface.
+    The behavioural tests above cover the reads that exist. This covers the ones
+    nobody has written: a new paginating read that slices by a limit and says
+    nothing fails here rather than shipping silent.
     """
 
     @staticmethod
@@ -190,9 +193,9 @@ class TestLimitSlicesReportTruncation:
                     continue
                 if f"{path.relative_to(PACKAGE)}:{func.name}" in _NOT_PAGINATION:
                     continue
-                # A signal can be a response-body key ("truncated": ...) or the
-                # keyword of a returned pair (LogEntryPage(total=...)); both tell
-                # the caller the same thing, so both count.
+                # A signal can be a response-body key ("truncated": ...) or a keyword
+                # of a returned page (LogEntryPage(has_more=...)); both tell the
+                # caller the same thing, so both count.
                 signal_names = {
                     node.value
                     for node in ast.walk(func)
@@ -226,10 +229,9 @@ class TestLimitSlicesReportTruncation:
         )
 
     def test_the_walk_actually_finds_limit_slices(self):
-        """The test above asserts an ABSENCE, so prove the walk is not blind.
+        """The walk is not blind, since the test above asserts an ABSENCE.
 
-        A detector that silently matched nothing would pass forever while the
-        defect it exists to catch walked straight back in.
+        A detector that silently matched nothing would pass forever.
         """
         tree = ast.parse("x = rows[:limit]\ny = rows[:f.limit]\nz = h[:16]\n")
         subscripts = [n for n in ast.walk(tree) if isinstance(n, ast.Subscript)]
@@ -239,9 +241,10 @@ class TestLimitSlicesReportTruncation:
         assert None in bounds, "a constant bound like [:16] must not be treated as pagination"
 
     def test_no_stale_exemptions(self):
-        """An exemption whose function no longer exists reads as a considered
-        decision while covering nothing, so it must be removed rather than kept
-        as harmless clutter."""
+        """An exemption for a function that no longer exists must be removed.
+
+        It reads as a considered decision while covering nothing.
+        """
         for entry in _NOT_PAGINATION:
             filename, func_name = entry.split(":")
             tree = ast.parse((PACKAGE / filename).read_text(encoding="utf-8"))
@@ -252,8 +255,10 @@ class TestLimitSlicesReportTruncation:
             assert func_name in names, f"exempted function {entry} no longer exists"
 
     def test_the_walk_covers_the_module_that_regressed(self):
-        """helpers.py holds the slice that made get_logs silent, so a path-filter
-        change cannot quietly drop it from the scan."""
+        """The scan covers helpers.py (the log-page slice) and mcp_view.py.
+
+        A path-filter change cannot then quietly drop them.
+        """
         scanned = {
             str(p.relative_to(PACKAGE)) for p in PACKAGE.rglob("*.py")
             if not any(part in _SKIP_DIRS for part in p.relative_to(PACKAGE).parts)

@@ -37,7 +37,7 @@ class RecorderWindow:
 
 
 def _as_utc(value: datetime) -> datetime:
-    """Normalize an aware timestamp to UTC."""
+    """Normalize an aware timestamp to UTC; a naive one raises ValueError."""
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("Timestamp must include a timezone.")
     return dt_util.as_utc(value)
@@ -46,7 +46,11 @@ def _as_utc(value: datetime) -> datetime:
 def parse_recorder_window(
     args: dict[str, Any], *, default_range: timedelta, now: datetime | None = None
 ) -> RecorderWindow:
-    """Parse and validate the shared Recorder tool range and cursor inputs."""
+    """Parse the shared Recorder range, cursor and limit inputs.
+
+    Raises ValueError with a client-safe message on a malformed or
+    inconsistent value.
+    """
     effective_now = _as_utc(now or dt_util.utcnow())
     end = effective_now
     if args.get("end_time"):
@@ -86,12 +90,11 @@ def parse_recorder_window(
 
 
 def iso_utc(value: datetime) -> str:
-    """Return an ISO 8601 UTC timestamp."""
     return dt_util.as_utc(value).isoformat()
 
 
 def state_timestamp(row: Mapping[str, Any]) -> datetime | None:
-    """Extract a normalized Recorder state timestamp."""
+    """Return the row's last_changed (else last_updated) as UTC, or None if absent or unparsable."""
     value = row.get("last_changed") or row.get("last_updated")
     if isinstance(value, datetime):
         return _as_utc(value)
@@ -104,7 +107,7 @@ def state_timestamp(row: Mapping[str, Any]) -> datetime | None:
 
 
 def statistic_timestamp(row: Mapping[str, Any]) -> datetime | None:
-    """Extract a normalized statistics bucket timestamp."""
+    """Return the bucket `start` (datetime, epoch seconds or ISO string) as UTC, or None if unparsable."""
     value = row.get("start")
     if isinstance(value, datetime):
         return _as_utc(value)
@@ -128,7 +131,7 @@ def retention_metadata(kind: Literal["short_term", "long_term"], keep_days: int)
 def retention_warnings(
     kind: Literal["short_term", "long_term"], start: datetime, keep_days: int, now: datetime
 ) -> list[str]:
-    """Warn when a short-term request predates configured Recorder retention."""
+    """Warn when a short-term request starts before the configured Recorder retention."""
     if kind == "short_term" and start < now - timedelta(days=keep_days):
         return [
             f"The requested start is older than the configured {keep_days}-day short-term Recorder retention; earlier data may be unavailable."
@@ -224,7 +227,11 @@ def ceil_statistic_period(value: datetime, period: str) -> datetime:
 
 
 def statistic_page(window: RecorderWindow, period: str) -> tuple[datetime, datetime, int, bool]:
-    """Return an aligned and safely bounded statistics page."""
+    """Return (page_start, page_end, effective_limit, has_more) for an aligned statistics page.
+
+    The page is capped at the period's row limit and never extends past the
+    requested end rounded up to a bucket boundary.
+    """
     effective_limit = min(window.limit, STATISTIC_PERIOD_LIMITS[period])
     page_start = floor_statistic_period(window.page_start, period)
     requested_end = ceil_statistic_period(window.end, period)

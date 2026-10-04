@@ -1,4 +1,4 @@
-"""Prove routing accounting, persistence, reset isolation and missing usage semantics."""
+"""Routing statistics: accounting, persistence, reset isolation, and missing usage versus zero."""
 import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock

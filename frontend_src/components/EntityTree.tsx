@@ -297,9 +297,8 @@ function EntityRow({
   // Scroll to this row only on an explicit reveal request (revealNonce bump),
   // never merely because it became the selected entity: a permission edit in
   // this same tree selects the row (for the emulator) without requesting a
-  // reveal, and isRevealed alone in the dependency array would still fire
-  // this on that transition, which is the scroll-during-click bug this
-  // guards against.
+  // reveal, and isRevealed in the dependency array would fire on that
+  // transition and scroll during the click.
   useEffect(() => {
     if (isRevealed && rowRef.current) {
       rowRef.current.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -320,9 +319,8 @@ function EntityRow({
       });
       onPermChange(tree);
       // Sync the emulator to the entity just edited, but do not scroll: the
-      // row is already on screen (you just clicked a control inside it), and
-      // re-centering it here is what caused clicks to land on the wrong row
-      // mid-scroll.
+      // row is already on screen, and re-centering it would make clicks land
+      // on the wrong row mid-scroll.
       onEntityClick?.(entityId, "entity", { reveal: false });
     } catch (e: unknown) {
       setPermError(e instanceof Error ? e.message : t("perms.permSaveFailed"));

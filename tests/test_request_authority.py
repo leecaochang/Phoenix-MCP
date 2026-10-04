@@ -1,4 +1,9 @@
-"""Interleaving regressions for admitted requests and resource boundaries."""
+"""Authority is rechecked wherever an admitted request waits; wire input stays bounded.
+
+Revocation, rotation, expiry, policy edits and the kill switch take effect between
+admission and dispatch (body read, batch items, watch and MESA waits). Non-finite
+numbers and excessive nesting never reach a handler.
+"""
 
 from __future__ import annotations
 

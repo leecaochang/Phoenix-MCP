@@ -5,17 +5,16 @@ including the reads: a layout names entities and their placement, which is the
 same information the writes edit, so the read tools gate on the write
 capability rather than a separate read one.
 
-Two write shapes, deliberately both: set_dashboard_config replaces a whole
-layout, and the three card ops carry one card each, because a whole-layout
-replace forces the model to regurgitate the entire dashboard inside one tool
-call's arguments, which blows weaker providers' output limits.
-Both guard with an optimistic-lock content_hash, checked pre-gate and again at
-apply time so a change made during the approval window is caught.
+Three write shapes, deliberately: set_dashboard_config replaces a whole layout,
+while the card ops (add/edit/delete one card) and patch_dashboard (one
+path-addressed value) carry only the change, because a whole-layout replace
+forces the model to regurgitate the entire dashboard inside one tool call's
+arguments, which blows weaker providers' output limits. All guard with an
+optimistic-lock content_hash, checked pre-gate and again at apply time so a
+change made during the approval window is caught.
 
-mcp_view owns the transport, the dispatch registry and the executor registry, and
-imports the names it registers or calls from here. The dependency runs one way:
-this module never imports the transport that dispatches it. Shared primitives
-come from ..tool_common.
+mcp_view registers these tools and this module never imports it. Shared
+primitives come from ..tool_common.
 """
 
 from __future__ import annotations
@@ -270,8 +269,7 @@ def _card_row(entry: CardEntry, *, detailed: bool, token: TokenRecord, hass: Hom
     works); the stub config is what CONFIGURING one needs and is an order of
     magnitude larger. A well-stocked instance carries dozens of cards, so
     returning every example by default would spend most of a discovery call's
-    budget on the ones the agent is not going to use. Same reasoning as the
-    ESPHome automation catalog projection and get_state's lean/detailed split.
+    budget on cards the agent will not use.
     """
     row: dict[str, Any] = {
         "type": f"custom:{entry.type}",
@@ -298,10 +296,10 @@ async def _tool_list_dashboard_cards(
 ) -> tuple[dict, str, str]:
     """MCP tool: list the custom dashboard cards installed on this instance.
 
-    Answers "what can I build with" before an agent authors a card, which it
-    otherwise has to guess. The catalog is harvested by the panel frontend (see
-    card_catalog.py for why it cannot be read off disk) and cached, so this tool
-    is a pure read of that cache and never blocks on a browser.
+    Answers "what can I build with" before an agent authors a card. The catalog
+    is harvested by the panel frontend (see card_catalog.py for why it cannot be
+    read off disk) and cached, so this tool is a pure read of that cache and
+    never blocks on a browser.
     """
     tool = "list_dashboard_cards"
     if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
@@ -375,14 +373,13 @@ def _card_warnings(payload: Any, data: PhoenixData) -> list[str]:
 
     ADVISORY, NEVER A REFUSAL. The catalog is a cache of what one browser could
     see, so failing the write closed would block a legitimate card whenever the
-    cache is cold, stale by one plugin install, or harvested from a page that
-    saw a partial registry. The cost of being wrong in that direction is a write
-    the operator wanted being refused with no way to override; the cost in this
-    direction is a warning next to a card that does render.
+    cache is cold, stale, or harvested from a page that saw a partial registry,
+    with no way to override. The cost of the advisory direction is only a warning
+    next to a card that does render.
 
     Silent when the catalog has never been harvested: with nothing to compare
     against, every custom card would be reported as unknown, which trains the
-    reader to ignore the field exactly when it starts being accurate.
+    reader to ignore the field.
     """
     catalog = data.card_catalog
     if not catalog.catalog.harvested:
@@ -536,10 +533,8 @@ def _no_stored_config_message(url_path: str | None) -> str:
     """Explain an auto-generated (no stored config) dashboard, naming the target.
 
     Omitting url_path addresses the DEFAULT dashboard, which is commonly
-    auto-generated. An agent that drops url_path mid-conversation would
-    otherwise read an unnamed "this dashboard has no stored config" as
-    contradicting the named dashboard it just read successfully. Naming which
-    dashboard the message is about makes the wrong-target case self-evident.
+    auto-generated. Naming the target keeps an agent that dropped url_path from
+    reading "no stored config" as contradicting a named dashboard it just read.
     """
     if url_path is None:
         return (
@@ -711,9 +706,7 @@ async def _execute_set_dashboard_config(
 def _card_index_ok(value: Any) -> TypeGuard[int]:
     """True for a real int index (bool subclasses int and must not pass).
 
-    A TypeGuard rather than a plain bool so the range comparisons that follow
-    every call are checkable: they only run once this has returned True, but
-    without the guard the value still reads as Any | None there.
+    A TypeGuard so the range comparisons after each call type-check.
     """
     return isinstance(value, int) and not isinstance(value, bool)
 
@@ -815,12 +808,11 @@ async def _dashboard_card_current(
 ) -> dict | tuple[dict, str, str]:
     """Read the target dashboard's current stored config for a card-level op.
 
-    Returns the config, or the tool error to return. Single-return like
-    _read_body and _resolve_radio_device; the pair form guaranteed a non-None
-    config only via the other element. A card op needs a stored
-    base layout, so an auto-generated dashboard is an invalid_request steering
-    to set_dashboard_config; a CAS mismatch (expected_hash supplied and stale)
-    is refused here too. Used both pre-gate and by the executor.
+    Returns the config dict, or the tool error tuple to return (callers test for
+    a tuple). A card or patch op needs a stored base layout, so an auto-generated
+    dashboard is an invalid_request steering to set_dashboard_config; a CAS
+    mismatch (expected_hash supplied and stale) is refused here too. Used both
+    pre-gate and by the executors.
     """
     url_path = str(args.get("url_path") or "").strip() or None
     try:
@@ -865,8 +857,8 @@ async def _build_diff_dashboard_card(
         # Redact out-of-scope entity ids the same way get_dashboard_config does.
         # Card diffs truncate at the version-snapshot bound, not the 4000-char
         # display default: the panel PARSES diff.before to render the Before
-        # side of the live preview, and a real card (a multi-series chart) can
-        # alone exceed 4000 chars (live-observed), which broke that parse.
+        # side of the live preview, and a large card (a multi-series chart) can
+        # alone exceed 4000 chars, which would break that parse.
         before = _truncate(
             json.dumps(filter_service_response(prior, token, hass), indent=2, default=str),
             max_chars=MAX_DIFF_INLINE_BYTES,
@@ -903,14 +895,11 @@ async def _tool_dashboard_card(
     args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None, *, op: str, tool_name: str,
 ) -> tuple[dict, str, str]:
-    """MCP tool: card-level dashboard edit (Confirm-gated).
+    """MCP tool: add, edit or delete one dashboard card (Confirm-gated).
 
-    Whole-layout replace forces the model to regurgitate the entire dashboard
-    inside one tool call's JSON arguments, which blows weaker providers' output
-    limits; these ops carry only the one card. The full op is validated
-    pre-gate against the current layout, so a structurally doomed op never
-    becomes a pending approval, and the executor re-reads and re-validates at
-    apply time.
+    The full op is validated pre-gate against the current layout, so a
+    structurally doomed op never becomes a pending approval; the executor
+    re-reads and re-validates at apply time.
     """
     if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
@@ -1114,15 +1103,15 @@ async def _tool_patch_dashboard(
 
     The escape hatch for everything the card ops cannot address: view badges, view
     options, a single field inside a card. It exists because set_dashboard_config
-    requires resending the WHOLE layout, and a read of that layout is lossy (rule
-    12 redacts entities the token cannot resolve, INCLUDING ghosts that no longer
-    exist per rule 8), so a dashboard carrying a few dead references cannot be
-    written back at all without persisting placeholders over them. Patching never
-    resends the untouched bytes, so redaction stops being a write barrier.
+    requires resending the WHOLE layout, and a read of that layout is lossy (it
+    redacts entities the token cannot resolve, INCLUDING ghost entities that no
+    longer exist), so a dashboard carrying a few dead references cannot be written
+    back without persisting placeholders over them. Patching never resends the
+    untouched bytes, so redaction stops being a write barrier.
 
-    Validated pre-gate against the current layout (rule 29), so a bad path never
-    becomes a pending approval; the executor re-reads and re-validates at apply
-    time so a change during the approval window is caught.
+    Validated against the current layout before the approval is created, so a bad
+    path never becomes a pending approval; the executor re-reads and re-validates
+    at apply time so a change during the approval window is caught.
     """
     tool = "patch_dashboard"
     if effective_cap(token, "cap_lovelace_write") == CAP_DENY:

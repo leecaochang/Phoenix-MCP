@@ -1,24 +1,21 @@
 """Blueprint tools: list, read, and the create/edit/delete authoring surface.
 
-Reads gate on cap_config_read; writes carry a DUAL gate, and that is the
-load-bearing detail in this module. cap_blueprint_write says "you may author
-blueprints" and the domain cap (cap_automation_write / cap_script_write) says
-"you may affect this domain's configs". Both must permit, because a blueprint
-edit reloads every automation or script built from it while those configs stay
-byte-identical: without the domain key a token could rewire scripts through a
-script blueprint with cap_script_write set to deny. That is also why the
-approval diff names the consumer entities rather than showing the YAML alone.
+Reads gate on cap_config_read; writes carry a DUAL gate. cap_blueprint_write
+authorizes authoring blueprints and the domain cap (cap_automation_write or
+cap_script_write) authorizes affecting that domain's configs. Both must permit,
+because a blueprint edit reloads every automation or script built from it while
+those configs stay byte-identical: without the domain key a token could rewire
+scripts through a script blueprint with cap_script_write set to deny. For the
+same reason the approval diff names the consumer entities, not just the YAML.
 
-Writes go through HA's own blueprint/save and blueprint/delete WS commands, so
-HA re-validates on the way in and refuses a delete while the blueprint is still
-in use. Phoenix validates first anyway, so a doomed write is refused before an
-approval is ever created, using the same generic BLUEPRINT_SCHEMA HA's save
-handler uses.
+Writes go through HA's own blueprint/save and blueprint/delete WS commands, which
+re-validate and refuse a delete while the blueprint is in use. Phoenix validates
+first, with the same generic BLUEPRINT_SCHEMA HA's save handler uses, so a doomed
+write is refused before an approval is created.
 
-mcp_view owns the transport, the dispatch registry and the executor registry, and
-imports the names it registers or calls from here. The dependency runs one way:
-this module never imports the transport that dispatches it. Shared primitives
-come from ..tool_common.
+mcp_view owns the transport and the dispatch and executor registries and imports
+from here; this module does not import it. Shared primitives come from
+..tool_common.
 """
 
 from __future__ import annotations
@@ -81,9 +78,9 @@ async def _tool_list_blueprints(
     domain_arg = str(args.get("domain") or "").strip().lower()
     domains = [domain_arg] if domain_arg in ("automation", "script") else ["automation", "script"]
     out: list[dict] = []
-    # A domain that could not be read and a blueprint that failed to parse both used
-    # to vanish silently, so a short list looked like a complete one. The counts are
-    # reported instead; the listing itself still succeeds.
+    # An unreadable domain or a blueprint that fails to parse must not vanish, or a
+    # short list looks complete; each is reported in warnings and the listing still
+    # succeeds.
     warnings: list[str] = []
     for dom in domains:
         try:
@@ -108,12 +105,9 @@ async def _tool_list_blueprints(
 
 _BLUEPRINT_DOMAINS = ("automation", "script")
 
-# The domain cap that must ALSO permit a blueprint write, per domain. Two keys by
-# design: cap_blueprint_write says "you may author blueprints", the domain cap says
-# "you may affect this domain's configs". Without the second, a token holding
-# cap_blueprint_write but cap_script_write=deny could edit a script blueprint and
-# rewire scripts it cannot write directly, which is escalation through the
-# blueprint surface. Mirrors the pass-through dual-gate precedent.
+# The domain cap that must ALSO permit a blueprint write, per domain. Without it, a
+# token holding cap_blueprint_write but cap_script_write=deny could edit a script
+# blueprint and rewire scripts it cannot write directly.
 _BLUEPRINT_DOMAIN_CAPS = {
     "automation": "cap_automation_write",
     "script": "cap_script_write",
@@ -128,10 +122,10 @@ _BLUEPRINT_PATH_REFUSED = (
 def _resolve_blueprint_path(hass: HomeAssistant, domain: str, path: Any) -> tuple[str, str] | None:
     """Resolve a blueprint path to (realpath, config-relative path), or None.
 
-    Unlike get_blueprint (which can require an exact match against the paths HA
-    already enumerated), a create names a file that does not exist yet, so this is
-    a real jail: relative only, .yaml/.yml, no dot-segments, and the realpath must
-    land under <config>/blueprints/<domain>/.
+    get_blueprint only accepts paths HA already enumerated, but a create names a
+    file that does not exist yet, so this is a real jail: relative only,
+    .yaml/.yml, no dot-segments, and the realpath must land under
+    <config>/blueprints/<domain>/.
     """
     if _usable_path_arg(path) is None:
         return None
@@ -151,11 +145,10 @@ def _resolve_blueprint_path(hass: HomeAssistant, domain: str, path: Any) -> tupl
 
 
 def _blueprint_consumers(hass: HomeAssistant, domain: str, path: str) -> list[str]:
-    """Entity ids whose config comes from this blueprint, best-effort.
+    """Entity ids whose config comes from this blueprint, best-effort (empty on failure).
 
-    Overwriting a blueprint makes HA reload every consumer, while those entities'
-    own configs do not change by a byte, so the approval diff has to name them or
-    the operator cannot see what a small YAML diff actually rewires.
+    Overwriting a blueprint reloads every consumer without changing their own
+    configs, so the approval diff names them.
     """
     try:
         if domain == "automation":
@@ -175,11 +168,10 @@ def _blueprint_consumers(hass: HomeAssistant, domain: str, path: str) -> list[st
 def _validate_blueprint_source(domain: str, content: str) -> str | None:
     """Validate blueprint YAML the way HA's own save path will. Error text or None.
 
-    Side-effect-free, so it runs pre-gate. Deliberately mirrors HA's
-    blueprint/save handler exactly, including its use of the GENERIC
-    BLUEPRINT_SCHEMA for every domain: HA's Blueprint constructor checks the
-    schema, that the declared domain matches the target, and that every !input the
-    body uses has an input definition. The write itself re-validates inside HA.
+    Side-effect-free, so it runs pre-gate. Mirrors HA's blueprint/save handler,
+    including its use of the GENERIC BLUEPRINT_SCHEMA for every domain: the
+    Blueprint constructor checks the schema, that the declared domain matches the
+    target, and that every !input the body uses has an input definition.
     """
     from homeassistant.components.blueprint.models import Blueprint  # noqa: PLC0415
     from homeassistant.components.blueprint.schemas import (  # noqa: PLC0415
@@ -264,9 +256,8 @@ async def _blueprint_write_precheck(
     Returns (refusal_response | None, realpath, config-relative path). The first
     element is a COMPLETE tool response tuple so callers can `return pre` directly.
 
-    Runs after the explicit cap-deny checks, so a fully denied token learns
-    nothing about its own payload, and is additive: HA re-validates on the way
-    in regardless.
+    Runs after the cap-deny checks, so a denied token learns nothing about its
+    own payload.
     """
     def _refuse(message: str) -> tuple[tuple[dict, str, str], str, str]:
         return (_tool_error(message), "invalid_request", tool_name), "", ""
@@ -291,12 +282,7 @@ async def _blueprint_write_precheck(
 
 
 def _blueprint_denied(token: TokenRecord, args: dict, tool_name: str) -> tuple[dict, str, str] | None:
-    """Uniform Forbidden when either key of the blueprint dual-gate denies.
-
-    cap_blueprint_write authorizes blueprint authoring; the domain cap authorizes
-    affecting that domain's configs. Both must permit, or a token could rewire
-    scripts through a script blueprint while cap_script_write says deny.
-    """
+    """Uniform Forbidden when either key of the blueprint dual gate denies."""
     if effective_cap(token, "cap_blueprint_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
     domain = str(args.get("domain") or "").strip().lower()
@@ -367,9 +353,8 @@ async def _build_diff_blueprint(
 ) -> dict:
     """Approval diff for a blueprint write.
 
-    The consumer list is the point of this diff for an edit or delete: overwriting
-    an in-use blueprint reloads every consumer while their own configs stay
-    byte-identical, so a small YAML diff can silently rewire several automations.
+    For an edit or delete the consumer list is the point: a small YAML diff can
+    rewire every automation or script built from the blueprint.
     """
     domain = str(args.get("domain") or "").strip().lower()
     resolved = _resolve_blueprint_path(hass, domain, args.get("path"))

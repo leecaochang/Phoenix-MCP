@@ -261,8 +261,8 @@ function VoiceAgentDisableModal({ onClose, onConfirm }: { onClose: () => void; o
 }
 
 // First-run setup modal: create an Assist pipeline pointed at Phoenix MCP (optionally the
-// preferred assistant), or dismiss to wire it up manually. Preferred defaults ON per
-// the operator's request; they can turn it off before creating.
+// preferred assistant), or dismiss to wire it up manually. Preferred defaults ON;
+// the operator can turn it off before creating.
 function VoiceAgentSetupModal({
   fullyConfigured,
   onClose,

@@ -153,9 +153,8 @@ class _FakeTrace:
 def _trace_buckets(runs=None, not_triggered=None):
     """A real TraceBuckets, the shape HA 2026.7+ stores per automation.
 
-    Built from the installed HA rather than hand-rolled: the previous fixture
-    hard-coded the pre-2026.7 dict shape, so the suite passed while every live
-    automation that had actually run returned an internal error.
+    Built from the installed HA rather than hand-rolled, so the fixture cannot
+    drift from the shape HA really stores.
     """
     from homeassistant.components.trace.models import TraceBuckets
     from homeassistant.util.limited_size_dict import LimitedSizeDict
@@ -216,8 +215,8 @@ class TestGetAutomationTraces:
         assert "warnings" not in _json(content)
 
     async def test_unknown_run_id_is_not_found_not_an_error(self, hass, auto_env):
-        # Live-found: this raised AttributeError before the TraceBuckets fix,
-        # surfacing as "Internal error" for every automation that had ever run.
+        # A TraceBuckets lacks the legacy dict API; an unknown run id must still
+        # answer not_found rather than surface as an internal error.
         _, outcome, _ = await _call(
             "get_automation_traces",
             {"automation_id": "automation.morning", "run_id": "no-such-run"},
@@ -228,9 +227,9 @@ class TestGetAutomationTraces:
 class TestTraceStorageShapes:
     """HA 2026.7 replaced the per-automation dict with TraceBuckets.
 
-    Phoenix supports HA 2025.2+, so both shapes must read correctly, and the
-    not-triggered bucket (new in the same change) must be visible: "why did it
-    not fire" is the usual reason to read traces at all.
+    Both shapes must read correctly, and the not-triggered bucket (new in the same
+    change) must be visible: "why did it not fire" is the usual reason to read
+    traces at all.
     """
 
     def _set_bucket(self, hass, bucket):
@@ -263,7 +262,7 @@ class TestTraceStorageShapes:
         assert _json(content)["run_id"] == "skipped"
 
     async def test_legacy_dict_shape_still_reads(self, hass, auto_env):
-        # Pre-2026.7 HA stored a plain LimitedSizeDict of run_id -> trace.
+        # Older HA stored a plain LimitedSizeDict mapping run_id to trace.
         self._set_bucket(hass, {"run1": _FakeTrace(run_id="run1")})
         content, outcome, _ = await _call(
             "get_automation_traces", {"automation_id": "automation.morning"}, _auto_token(), hass)

@@ -1,9 +1,9 @@
 """Integration tests for configuration version capture.
 
 Exercises the executor capture sites end-to-end with a real VersionStore for the
-YAML-backed resources (automation, script, scene): create -> edit -> delete must
-record one version each, with correct before/after. The other tool-test files pass
-a MagicMock for data, so capture is a no-op there; here a real PhoenixData is supplied.
+YAML-backed resources (automation, script, scene): create, edit and delete must
+record one version each, with correct before/after. A real PhoenixData is supplied
+because capture is a no-op when data is a MagicMock.
 """
 
 from __future__ import annotations
@@ -46,9 +46,11 @@ _SEED_YAML = (
 
 @pytest.fixture(autouse=True)
 def isolated_config_dir(hass: HomeAssistant, tmp_path):
-    """Authoring executors resolve configuration.yaml (yaml_includes); isolate
-    from the shared testing config dir (which other tests pollute) and
-    use the real HA-default include layout."""
+    """Point authoring executors at a private config dir with the HA-default include layout.
+
+    The executors resolve configuration.yaml (yaml_includes), and the shared
+    testing config dir is polluted by other tests.
+    """
     hass.config.config_dir = str(tmp_path)
     (tmp_path / "configuration.yaml").write_text(_SEED_YAML, encoding="utf-8")
     return tmp_path
@@ -74,7 +76,7 @@ def _text(content: dict) -> dict:
 
 
 async def _call_tool(name, args, *rest):
-    """Send legacy fixture intent through the public Catalog v2 envelope."""
+    """Wrap flat set_entity / patch_yaml_config test arguments in the public envelope shapes."""
     args = dict(args)
     if name == "set_entity" and "changes" not in args:
         entity_id = args.pop("entity_id")
@@ -368,8 +370,8 @@ class TestRestoreEndpoint:
         assert self._alias(hass, aid) == "A"
 
     async def test_post_restore_malformed_json_is_400_and_does_not_restore(self, hass, env):
-        # A malformed body must not be treated as "no body": that silently
-        # restored the default side, the opposite of what the admin asked for.
+        # A malformed body must not be treated as "no body", which would silently
+        # restore the default side, the opposite of what the admin asked for.
         from custom_components.phoenix_mcp.admin_view import PhoenixAdminVersionRestoreView
 
         data, versions, aid = await self._seed(hass)
@@ -410,7 +412,7 @@ class TestRawWriteCapture:
         await _call_tool("set_yaml_config", {"content": first_content}, token, hass, data)
         await _call_tool("set_yaml_config", {"content": second_content}, token, hass, data)
 
-        # The test env may or may not ship a configuration.yaml, so assert on the
+        # configuration.yaml may or may not already exist, so assert on the
         # before/after content chain rather than on create-vs-edit of the first write.
         history = versions.list_for("yaml_config", "configuration.yaml")
         assert len(history) == 2
@@ -422,10 +424,9 @@ class TestRawWriteCapture:
     async def test_patch_yaml_config_records_a_restorable_whole_file(self, hass):
         """A patch is a partial write; its version must not be a partial record.
 
-        Asserted against the STORE and then round-tripped through restore rather
-        than against the _record_version call, because that function swallows a
-        failed record by design (history must never break a write), so a wiring
-        mistake would otherwise look exactly like a passing test.
+        Asserted against the STORE and a restore round trip rather than the
+        _record_version call, which swallows failures by design (history must
+        never break a write), so a wiring mistake would otherwise look like a pass.
         """
         data, versions = _data()
         token = _token(cap_yaml_edit="allow")
@@ -873,7 +874,7 @@ class TestEntityRegistryWrite:
     async def test_set_entity_read_only_denied(self, hass, env):
         eid, _area = env
         data, _ = _data()
-        # YELLOW => READ only; registry edits require WRITE.
+        # YELLOW is READ only; registry edits require WRITE.
         tree = PermissionTree(domains={"light": PermissionNode(state="YELLOW")})
         token = _token(tree=tree, cap_registry_write="allow")
         _, outcome, _ = await _call_tool("set_entity", {"entity_id": eid, "name": "X"}, token, hass, data)
@@ -901,7 +902,7 @@ class TestEntityRegistryWrite:
     async def test_set_entity_invalid_area_rejected_before_pending(
         self, hass, env, area_id, message
     ):
-        """Rule 29: invalid registry IDs fail before an approval exists."""
+        """Invalid registry IDs fail before an approval exists."""
         eid, _area = env
         data, _ = _data()
         gate = AsyncMock(return_value=({}, "pending_approval", "approval"))
@@ -1046,12 +1047,11 @@ class TestEntityRegistryWrite:
 
 
 def _summary_text(fields):
-    """The English out of a _version_change_summary triple.
+    """The English summary out of a _version_change_summary result (None passes through).
 
-    The function returns summary/summary_key/summary_params now (the panel needs
-    the key to localize it), so these tests read the English out. Asserting on
-    that English is still the point: it is what a pre-upgrade record shows and
-    what the generated catalog entry has to reproduce.
+    The result also carries summary_key/summary_params for panel localization; the
+    English is what a record stored without a key shows and what the generated
+    catalog entry must reproduce.
     """
     return None if fields is None else fields["summary"]
 

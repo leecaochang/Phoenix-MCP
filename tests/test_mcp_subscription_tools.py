@@ -52,8 +52,8 @@ class TestWatchEntity:
         token = _token()
 
         # Deterministic readiness instead of a fixed sleep: wrap the real
-        # async_track_state_change_event so we fire the change only once the tool
-        # has actually registered its listener (registration is synchronous, so the
+        # async_track_state_change_event so the change fires only once the tool
+        # has registered its listener (registration is synchronous, so the
         # listener is live the moment the wrapper sets the event).
         ready = asyncio.Event()
         real_track = mcp_view.async_track_state_change_event

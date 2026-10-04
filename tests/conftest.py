@@ -14,7 +14,10 @@ pytest_plugins = "pytest_homeassistant_custom_component"
 
 @pytest.fixture(autouse=True)
 async def cleanup_mesa_policy_workers(hass):
-    """Drain public core async APIs used outside integration setup by unit tests."""
+    """Shut down mesa-core policy workers after each test.
+
+    Unit tests call its async API outside integration setup, so nothing else stops them.
+    """
     from custom_components.phoenix_mcp.mesa_core import ashutdown_policy_workers
 
     yield
@@ -39,7 +42,10 @@ def custom_sentence_recognition(monkeypatch):
 
 @pytest.fixture
 def immediate_authoring_observation(monkeypatch):
-    """Keep no-op reload fixtures fast while still running real observation."""
+    """Skip the authoring registration wait.
+
+    No-op reload tests do not sleep, and observation still runs for real.
+    """
     from custom_components.phoenix_mcp import entity_registration
 
     monkeypatch.setattr(entity_registration, "AUTHORING_REGISTRATION_TIMEOUT_SECONDS", 0)
@@ -146,7 +152,10 @@ async def token_store(hass, mock_store):
 
 @pytest.fixture(params=['openai', 'reasoning', 'anthropic', 'text_blocks'])
 def provider_context_history(request):
-    """Use the actual adapters to retain representative completed tool exchanges."""
+    """Completed tool-exchange history in each provider's wire format.
+
+    Built through the real adapters for openai, reasoning, anthropic and text_blocks.
+    """
     import json
     from custom_components.phoenix_mcp.agentcli import ClaudeProvider, OpenAICompatProvider, ProviderConfig
 
@@ -178,7 +187,7 @@ def provider_context_history(request):
 
 @pytest.fixture
 def phoenix_ai_task_platform(hass, enable_custom_integrations):
-    """Use HA's real AI Task component and Phoenix entity registration path."""
+    """Return (platform, entry) wired to HA's real AI Task component."""
     import logging
     from datetime import timedelta
 

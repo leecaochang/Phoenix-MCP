@@ -28,8 +28,9 @@ class TemplateRecoveryAdapter:
     unsupported_states: tuple[str, ...] = ("non_json_or_secret_options", "multiple_or_unmapped_entities")
 
 
-# HA executes these stored actions only after an entity is operated. Restoration
-# only replays the config flow; authoring continues to validate their targets.
+# These platforms store actions, which HA runs only when the entity is operated.
+# Nonempty actions are refused at authoring and restore (see template_scope); the
+# flag is reported in the restore preview.
 TEMPLATE_RECOVERY_ADAPTERS = {
     domain: TemplateRecoveryAdapter(domain, domain in {
         "alarm_control_panel", "button", "cover", "fan", "light", "lock",
@@ -65,7 +66,12 @@ def template_snapshot(hass, entry) -> dict:
 
 
 def validate_snapshot(snapshot: dict) -> None:
-    """Legacy and incompatible snapshots never silently lose identity fields."""
+    """Raise ConfigurationRecoveryError unless the snapshot is restorable as it stands.
+
+    It must match the installed HA and Template flow versions and map to exactly
+    one enabled `template` entity of the adapter's domain. A legacy (adapter 0)
+    snapshot is accepted only for a sensor or binary_sensor.
+    """
     safe_snapshot(snapshot)
     from homeassistant.components.template.config_flow import TemplateConfigFlowHandler
     if (snapshot.get("snapshot_type") != "template_helper"
@@ -99,7 +105,10 @@ def validate_snapshot(snapshot: dict) -> None:
 
 
 def validate_restore_scope(snapshot: dict, token, hass) -> None:
-    """Require current target and reference WRITE scope, including recreation."""
+    """Require current WRITE scope over the target entity and its references.
+
+    Covers recreation of a missing helper. Raises PermissionError.
+    """
     from .policy_engine import Permission, resolve_registry_access
     from .tools.helper import _scoped_helper_create_scope_error, _unwritable_option_entities
 
@@ -141,7 +150,11 @@ async def protect_template(hass, data, token, entry, operation: str, *, source=N
 async def restore_template(
     snapshot: dict, token, hass, data, *, mesa_fingerprint: str | None = None,
 ) -> tuple[dict, str, str]:
-    """Restore one qualified helper through HA flows, retaining partial effects."""
+    """Restore one qualified helper through HA flows, retaining partial effects.
+
+    Returns (payload, audit outcome, tool name). Nothing is rolled back on a
+    partial failure; the recovery record carries its status for review.
+    """
     from homeassistant.config_entries import SOURCE_USER
     from homeassistant.data_entry_flow import FlowResultType
     from .tools.helper import (

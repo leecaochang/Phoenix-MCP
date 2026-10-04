@@ -80,14 +80,11 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def build_permitted_states(token: TokenRecord, hass: HomeAssistant) -> dict:
-    """Return a {entity_id: ScrubbedState} dict for entities accessible to a token.
+    """Return {entity_id: ScrubbedState} for the entities a token may read.
 
-    resolve() is the single filter predicate (Phoenix MCP domain blocklist, Phoenix-platform
-    sensor.phoenix_mcp_* block, pass-through WRITE, scoped READ/WRITE), plus the shared
-    assist_expose_check for pass_through tokens with use_assist_exposure.
-
-    This is the single source of truth for MCP template sandboxes. All template
-    handlers must use this function so the filtering never diverges.
+    resolve() is the single filter predicate, plus the shared assist_expose_check
+    for pass_through tokens with use_assist_exposure. Every template handler must
+    build its sandbox from this function so the filtering never diverges.
     """
     expose = assist_expose_check(token, hass)
     return {
@@ -99,12 +96,11 @@ def build_permitted_states(token: TokenRecord, hass: HomeAssistant) -> dict:
 
 
 def build_permitted_entity_ids(token: TokenRecord, hass: HomeAssistant) -> set:
-    """Return the set of entity IDs accessible to a token, including registry-only entities.
+    """Return the entity IDs accessible to a token, including registry-only entities.
 
-    Unlike build_permitted_states (which needs current State objects), this function
-    unions live states with the entity registry so that history and statistics endpoints
-    can query recorder data for entities that are temporarily offline or disabled.
-    Also applies use_assist_exposure filtering for pass_through tokens.
+    Unlike build_permitted_states, this unions live states with the entity registry
+    so history and statistics can query recorder data for entities that are offline
+    or disabled. Also applies use_assist_exposure filtering for pass_through tokens.
     """
     from homeassistant.helpers import entity_registry as er_mod
 
@@ -236,15 +232,13 @@ def fire_rate_limit_events(hass: HomeAssistant, data: PhoenixData, token: TokenR
 
 
 def content_hash(content: str | bytes | dict | list) -> str:
-    """Stable content hash for optimistic-concurrency (compare-and-swap) checks
-    on Confirm-gated whole-blob config writes.
+    """Hash content for compare-and-swap checks on Confirm-gated whole-blob config writes.
 
-    A read tool returns this hash; the matching write tool accepts it as
-    expected_hash and refuses if the target changed since the read (an admin or
-    another agent edited it during the read/approve/apply window). For a JSON-able
-    structure (a dashboard config) the hash is taken over a canonical
-    (sorted-key, compact) serialization so key ordering never causes a false
-    conflict; text/bytes are hashed as raw UTF-8. The value is opaque: agents
+    A read tool returns this hash; the matching write tool takes it as
+    expected_hash and refuses if the target changed since the read (an edit during
+    the read/approve/apply window). JSON-able content is hashed over a canonical
+    (sorted-key, compact) serialization so key order never causes a false
+    conflict; text and bytes are hashed as raw UTF-8. The value is opaque: agents
     echo it back verbatim, never recompute it.
     """
     if isinstance(content, (dict, list)):
@@ -282,17 +276,16 @@ async def async_get_authenticated_token(
     """Validate the Phoenix MCP bearer token and check rate limits.
 
     Returns (token, rl_result) on success, or an aiohttp Response on failure.
-    Checks for kill switch, query-param token leakage, format pre-validation,
-    hash lookup, revocation, expiry, and rate limits in that order.
+    Checks readiness, kill switch, query-param token leakage, format
+    pre-validation, hash lookup, revocation, expiry, and rate limits in that order.
     """
     if not data.ready or data.shutting_down:
         return build_error_response("service_unavailable", "Service unavailable.", 503, request_id)
 
     if data.store.get_settings().kill_switch:
-        # Kill-switch mode should make Phoenix MCP invisible on the network. At startup
-        # that is achieved by not registering any routes. At runtime, aiohttp
-        # does not support unregistering routes, so 503 is the closest approximation.
-        # This is a known architectural limitation; the routes exist but refuse service.
+        # Kill-switch mode should make Phoenix MCP invisible on the network. At
+        # startup that means registering no routes; aiohttp cannot unregister routes
+        # at runtime, so the routes stay and refuse service with 503.
         return build_error_response("service_unavailable", "Service unavailable.", 503, request_id)
 
     _401 = build_error_response("unauthorized", "Unauthorized.", 401, request_id)
@@ -360,8 +353,8 @@ def cancel_expiry_timer(data: PhoenixData, token_id: str) -> None:
 def schedule_expiry_timer(hass: HomeAssistant, data: PhoenixData, token: TokenRecord) -> None:
     """Schedule a timer to archive a token at its expiry time.
 
-    If the token has no expiry, or has already expired, no timer is scheduled.
-    Any previously registered timer for this token is cancelled first.
+    A token without an expiry is left untouched. Otherwise any earlier timer for
+    it is cancelled first, and none is scheduled when it has already expired.
     """
     if token.expires_at is None:
         return
@@ -448,7 +441,7 @@ async def async_archive_expired_token(
     if data.async_sync_voice_agent is not None:
         data.async_sync_voice_agent()
     if "voice_agent_token_id" in _patch:
-        # The voice agent lost its token, so it is now unregistered; remove any
+        # The voice agent lost its token and is unregistered; remove any
         # Phoenix-created Assist pipeline so a broken assistant is not left behind.
         from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
         await async_remove_assist_pipeline(hass, data)
@@ -730,11 +723,11 @@ def render_template_snapshot(template_str: str, permitted: dict) -> str:
     return "".join(chunks).strip()
 
 
-# Ranks the level of a RECORD, which is why DEBUG and INFO stay here even though
-# Home Assistant's system_log handler is attached at WARNING and stores neither:
-# this map classifies whatever HA hands us, and dropping an entry would silently
-# narrow what an operator can read if that ever changes. The narrower set a
-# CALLER may ask for is const.LOG_LEVELS, and the two are deliberately different.
+# Ranks the level of a RECORD. DEBUG and INFO stay although HA's system_log
+# handler is attached at WARNING and stores neither: this map classifies whatever
+# HA supplies, and dropping an entry would silently narrow what an operator can
+# read. The narrower set a CALLER may ask for is const.LOG_LEVELS; the two differ
+# deliberately.
 _LOG_LEVEL_RANK: dict[str, int] = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 3}
 _PHOENIX_TOKEN_SCRUB_RE = re.compile(r"phx_[0-9a-f]{64}", re.IGNORECASE)
 # Home Assistant long-lived access tokens (and other JWTs) are three base64url
@@ -847,15 +840,13 @@ def redact_structure(obj: Any, _depth: int = 0) -> Any:
 
 
 # Network-topology scrubbing for integration-defined diagnostics (get_system_health).
-# Phoenix MCP already withholds network topology / host layout from agents elsewhere
-# (build_safe_config drops internal_url/external_url/config_dir/paths from get_config),
-# but system_health values are integration-defined free-form strings that can carry the
-# same infrastructure detail (LAN IPs, hostnames inside URLs, filesystem paths), which
-# redact_structure (secret-keyed values + embedded credentials only) does not catch.
-# These patterns are deliberately conservative. The IPv4 set is restricted to
-# PRIVATE/loopback/link-local ranges, so a public-IP-shaped version string like
-# "4.8.0.1" is NOT matched (it is outside these ranges); that avoids the main
-# false-positive while still scrubbing the LAN topology that is the actual concern.
+# build_safe_config already withholds internal_url/external_url/config_dir/paths
+# from get_config, but system_health values are free-form strings that can carry
+# the same infrastructure detail (LAN IPs, hostnames inside URLs, filesystem
+# paths), which redact_structure (secret-keyed values and embedded credentials
+# only) does not catch. The patterns are deliberately conservative. The IPv4 set
+# covers only PRIVATE/loopback/link-local ranges, so a public-IP-shaped version
+# string like "4.8.0.1" is NOT matched while the LAN topology is still scrubbed.
 _PRIVATE_IPV4_RE = re.compile(
     r"\b(?:"
     r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}"                  # 10.0.0.0/8
@@ -896,14 +887,11 @@ def _scrub_diagnostic_str(text: str) -> str:
 def redact_diagnostics(obj: Any, _depth: int = 0) -> Any:
     """redact_structure plus a conservative network-topology scrub for diagnostics.
 
-    get_system_health values are integration-defined and can disclose LAN IPs,
-    hostnames-in-URLs, and filesystem paths that Phoenix MCP already withholds elsewhere
-    (build_safe_config). Layered on redact_structure (secret-keyed values + embedded
-    credentials), each string is also scrubbed for private/loopback/link-local IPs,
-    bare URLs, and absolute paths. Because integration-defined payloads are free-form,
-    dict KEYS get the same string scrub as values (an integration may key its health
-    data by a URL, LAN IP, or path); a sensitive-named key still redacts its value.
-    cap_diagnostics is an elevated read, so a little over-redaction is acceptable; the
+    Each string is also scrubbed for private/loopback/link-local IPs, bare URLs
+    and absolute paths. Integration-defined payloads are free-form, so dict KEYS
+    get the same string scrub as values (an integration may key its health data by
+    a URL, LAN IP or path); a sensitive-named key still redacts its value.
+    cap_diagnostics is an elevated read, so some over-redaction is acceptable; the
     diagnostic shape is preserved.
     """
     if _depth > 25:
@@ -937,8 +925,8 @@ def build_safe_config(hass: HomeAssistant) -> dict:
     """Return the cap_config_read-safe subset of hass.config.as_dict().
 
     Agent-useful context (HA version, time zone, units, location name, loaded
-    components for capability detection) with the sensitive fields removed; Phoenix MCP's
-    own components are stripped so a token cannot enumerate our routes.
+    components for capability detection) with the sensitive fields removed. Phoenix
+    MCP's own components are stripped so a token cannot enumerate its routes.
     """
     raw = hass.config.as_dict()
     safe = {k: raw[k] for k in _SAFE_CONFIG_KEYS if k in raw}
@@ -963,11 +951,11 @@ class SystemLogDegradedError(Exception):
 
 
 def check_system_log_compat(hass: HomeAssistant) -> str | None:
-    """Best-effort probe that hass.data["system_log"] still has the shape get_logs reads.
+    """Best-effort startup probe that hass.data["system_log"] has the shape get_logs reads.
 
-    Runtime reads validate the same shape and fail loudly. This startup probe is
-    retained as an early operator warning. Returns None when compatible OR when
-    system_log is absent entirely, and a short reason string on shape drift.
+    Runtime reads validate the same shape and fail loudly; this is an early
+    operator warning. Returns None when compatible OR when system_log is absent,
+    and a short reason string on shape drift.
     """
     try:
         syslog = hass.data.get("system_log")
@@ -998,7 +986,7 @@ class LogEntryPage:
     detail: dict[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:
-        """Return the same envelope used to enforce the serialized response budget."""
+        """Return the response envelope, the same one measured against the byte budget."""
         body: dict[str, Any]
         if self.detail is not None:
             body = {"source": self.source, "detail": self.detail, "payload": log_payload_budget()}
@@ -1442,15 +1430,12 @@ def flush_sensor_writes(data: PhoenixData, _now=None) -> None:
     """Write HA state for every token marked dirty since the last flush.
 
     Runs at most once per debounce window (scheduled by update_token_counter).
-    Tokens revoked/archived in the window drop out naturally: their
-    token_id_sensors entry is already gone.
+    Tokens revoked or archived in the window drop out: their token_id_sensors
+    entry is already gone.
 
-    Must be @callback: async_write_ha_state() requires the event loop thread.
-    Without this decorator, HA's HassJob type-inference sees a plain sync
-    function passed to async_call_later and dispatches it to the executor
-    thread pool instead, which is exactly the thread-safety violation this
-    decorator prevents (HA logs "calls async_write_ha_state from a thread
-    other than the event loop").
+    Must be @callback: async_write_ha_state() requires the event loop thread, and
+    without the decorator HassJob would treat this plain sync function, passed to
+    async_call_later, as an executor job.
     """
     data.sensor_flush_cancel = None
     dirty = data.sensor_write_dirty
@@ -1464,14 +1449,12 @@ def flush_sensor_writes(data: PhoenixData, _now=None) -> None:
 def update_token_counter(data: PhoenixData, token_id: str, outcome: str) -> None:
     """Increment the in-memory request/denied/rate-limit counters for a token.
 
-    Counters are initialised on first use and read by sensor.py and the admin
-    stats view (the admin API reads data.token_counters directly, so it is
-    always current). Sensor state writes are debounced: request_count and
+    Counters are initialised on first use and read by sensor.py and, directly, by
+    the admin stats view. Sensor state writes are debounced: request_count and
     last_access change on EVERY request, and an immediate async_write_ha_state
-    per request meant one state_changed event and recorder row per agent call
-    (60+/min at the default rate limit). The first request after a flush
-    schedules one write SENSOR_WRITE_DEBOUNCE_SECONDS out; requests inside the
-    window coalesce into it.
+    would emit one state_changed event and recorder row per agent call. The first
+    request after a flush schedules one write SENSOR_WRITE_DEBOUNCE_SECONDS out;
+    requests inside the window coalesce into it.
     """
     if token_id not in data.token_counters:
         data.token_counters[token_id] = {
@@ -1488,8 +1471,7 @@ def update_token_counter(data: PhoenixData, token_id: str, outcome: str) -> None
 
     data.sensor_write_dirty.add(token_id)
     if data.hass is None:
-        # Direct constructions (tests) have no loop to schedule on; keep the
-        # old immediate-write behavior.
+        # Without a hass there is no loop to schedule on; write immediately.
         flush_sensor_writes(data)
         return
     if data.sensor_flush_cancel is None:
@@ -1500,22 +1482,16 @@ def update_token_counter(data: PhoenixData, token_id: str, outcome: str) -> None
         )
 
 
-# Capability evaluation
+# Tool argument coercion
 def dict_arg(value: object) -> dict:
     """A tool argument declared as an object, coerced to a dict.
 
-    The dict sibling of str_arg, and the same degrade-to-absent rule: a model
-    that sends a list or a bare string where a config object was declared gets
-    the default, not a coerced interpretation of what it typed.
-
-    Preferred over the `args.get(k) if isinstance(args.get(k), dict) else {}`
-    idiom, which calls .get twice and, because the second call is a fresh lookup,
-    leaves the result unnarrowed for a reader and a type checker alike.
-
-    Always returns a dict, like str_arg always returns a str. A caller that must
-    tell "absent" from "empty" (the card diff builders, where a missing card
-    means the diff has no `after` side at all) cannot use this and says so
-    inline instead.
+    The dict sibling of str_arg, with the same degrade-to-absent rule: a list or
+    bare string where a config object was declared yields {}, not a coerced
+    interpretation. Preferred over `args.get(k) if isinstance(args.get(k), dict)
+    else {}`, which looks the key up twice and leaves the result unnarrowed for a
+    type checker. Always returns a dict, so a caller that must tell "absent" from
+    "empty" (the card diff builders) cannot use it.
     """
     return value if isinstance(value, dict) else {}
 
@@ -1523,22 +1499,17 @@ def dict_arg(value: object) -> dict:
 def sanitize_service_data(value: object) -> dict[str, Any]:
     """Caller-supplied service data with every HA target selector removed.
 
-    Phoenix MCP resolves and flattens targets itself and then calls the service
-    with an explicit entity list, so a selector arriving inside service data is
-    never something to honour: Home Assistant unions it with that list, reaching
-    entities the permission tree, the capability gates and MESA never evaluated.
-    Public service-call ingress refuses selectors in service data before
-    admission. This helper defensively removes selectors for internal callers;
-    it does not replace that ingress validation.
+    Phoenix MCP flattens targets itself and calls the service with an explicit
+    entity list, so a selector inside service data is never honoured: HA unions it
+    with that list, reaching entities the permission tree, the capability gates
+    and MESA never evaluated. Public service-call ingress already refuses such
+    selectors before admission; this defensively strips them for internal callers
+    and does not replace that validation. The keys are const.TARGET_SELECTOR_KEYS,
+    which a guard test pins against HA's own definition.
 
-    The keys are const.TARGET_SELECTOR_KEYS, which is pinned against HA's own
-    definition, so a release that adds a selector is a failing test rather than a
-    silently wider call.
-
-    Returns a NEW dict and never mutates the caller's, which also gives every
-    call site the snapshot it needs: evaluation suspends at an await, and a
-    caller that still holds the original could otherwise swap the target between
-    the check and the call.
+    Returns a NEW dict and never mutates the caller's, which also gives each call
+    site a snapshot: evaluation suspends at an await, and a caller still holding
+    the original could otherwise swap the target between the check and the call.
     """
     if not isinstance(value, dict):
         return {}
@@ -1549,15 +1520,12 @@ def str_arg(value: object, default: str = "") -> str:
     """A tool argument declared as a string, coerced to one.
 
     A model does not always follow the tool schema: a list where a string was
-    declared reaches HA's matcher and raises. The established answer (matching
-    resolve_intent_entities' name/area/floor coercion) is to degrade a
-    wrong-shaped value to "absent" rather than to interpret it, so a call fails
-    closed on its own terms instead of crashing into the dispatcher's catch-all
-    and reporting a generic internal error.
-
-    Deliberately NOT str(value): stringifying True to "True" or ["a"] to
-    "['a']" invents an argument the caller never sent, which then has to be
-    refused further down with a message about a value nobody typed.
+    declared would reach HA's matcher and raise. A wrong-shaped value degrades to
+    "absent" rather than being interpreted, so the call fails closed on its own
+    terms instead of crashing into the dispatcher's catch-all. Deliberately NOT
+    str(value): stringifying True or ["a"] invents an argument the caller never
+    sent, which would be refused further down with a message about a value nobody
+    typed.
     """
     return value if isinstance(value, str) else default
 
@@ -1576,11 +1544,12 @@ def str_list_arg(value: object) -> list[str]:
     return []
 
 
-# ---------------------
-# async_evaluate_capability returns one of three results:
-#   ("allow", None)          -> proceed to side-effect.
-#   ("deny", None)           -> return forbidden to caller.
-#   ("confirm", approval_id) -> create pending approval, return pending response.
+# Capability evaluation
+#
+# async_evaluate_capability returns a CapabilityResult:
+#   mode "allow"                -> proceed to the side effect.
+#   mode "deny"                 -> return forbidden to the caller.
+#   mode "confirm" + approval   -> a pending approval was created; return the pending response.
 #
 # effective_cap collapses pass_through interaction into a single value used by
 # self-summary endpoints. It is NOT a substitute for async_evaluate_capability when
@@ -1591,8 +1560,9 @@ def effective_cap(token: TokenRecord, cap_name: str) -> str:
     """Return the cap mode after applying pass_through interaction rules.
 
     Exempt caps are unaffected by pass_through. For non-exempt caps under
-    pass_through, "deny" becomes "allow" but "confirm" is preserved
-    (the admin's intent to gate is honored).
+    pass_through, "deny" becomes "allow" but "confirm" is preserved (the admin's
+    intent to gate is honored). On household ingress a non-administrator gets
+    "deny" for every cap outside HOUSEHOLD_CAPABILITIES.
     """
     from .const import HOUSEHOLD_CAPABILITIES
     from .household_authority import household_authority
@@ -1613,11 +1583,11 @@ def effective_cap(token: TokenRecord, cap_name: str) -> str:
 def token_has_write_scope(token: TokenRecord) -> bool:
     """True if the token can write to at least one entity.
 
-    Used to decide whether to announce the control tools (call_service, the
-    native Hass* action tools) in the MCP tools/list. Pass-through always has
-    write scope; otherwise any GREEN grant in the permission tree counts. This
-    is an advisory over-approximation (a GREEN under a RED ancestor still counts
-    here), which is fine: the per-call permission check is the real gate.
+    Decides whether tools/list announces the control tools (call_service, the
+    native Hass* action tools). Pass-through always has write scope; otherwise any
+    GREEN grant in the permission tree counts. This is an advisory
+    over-approximation (a GREEN under a RED ancestor still counts); the per-call
+    permission check is the real gate.
     """
     if token.pass_through:
         return True
@@ -1630,7 +1600,7 @@ def token_has_write_scope(token: TokenRecord) -> bool:
 
 
 def effective_caps(token: TokenRecord) -> dict[str, str]:
-    """Return the full cap_*->effective_mode mapping for a token."""
+    """Return {cap name: effective mode} for every capability of a token."""
     return {name: effective_cap(token, name) for name in CAPABILITY_NAMES}
 
 
@@ -1660,25 +1630,20 @@ class CapabilityResult:
 
 
 # An approval diff, either already built or deferred behind a zero-arg builder.
-# The builder form exists because most builders read config off disk (or call the
-# ESPHome add-on) while the diff itself is read only when an approval is created,
-# so an allow or a deny would otherwise pay for a result nobody looks at.
+# Most builders read config off disk (or call the ESPHome add-on) while the diff
+# is read only when an approval is created, so deferring spares an allow or a deny
+# a result nobody looks at.
 DiffSource = dict | Callable[[], "dict | Awaitable[dict]"] | None
 
 
 async def _resolve_diff(diff: DiffSource) -> dict:
     """Resolve a diff given either as a built dict or as a deferred builder.
 
-    A diff is only ever read when an approval is created, so the expensive
-    builders (which read configuration off disk, load a lovelace config, or call
-    the ESPHome add-on) are passed as a zero-arg callable and invoked here, on
-    the confirm path alone. Passing a plain dict stays supported for the cheap
-    builders that need no I/O.
-
-    Awaitability is tested with collections.abc.Awaitable (an __await__ protocol
-    check) rather than inspect, matching the project's standing rule against
-    inspect on anything HA-adjacent, so sync and async builders can be mixed
-    freely at the call sites.
+    Expensive builders (config off disk, a lovelace config, the ESPHome add-on)
+    are passed as a zero-arg callable and invoked here, on the confirm path alone;
+    cheap builders may pass a plain dict. Awaitability is tested with
+    collections.abc.Awaitable rather than inspect, so sync and async builders can
+    be mixed at the call sites.
     """
     if diff is None:
         return {}
@@ -1722,8 +1687,8 @@ async def async_evaluate_capability(
         return CapabilityResult(CAP_ALLOW)
     if mode == CAP_DENY:
         return CapabilityResult(CAP_DENY)
-    # Only now is the diff actually needed, so a deferred builder runs here and
-    # nowhere else. Both early returns above leave it untouched.
+    # The diff is needed only on the confirm path, so a deferred builder runs here
+    # and nowhere else. Both early returns above leave it untouched.
     if target_entities is not None:
         from .approval_targets import bind_targets, bound_preview
         args = bind_targets(args, target_entities, hass)
@@ -1749,16 +1714,13 @@ async def async_evaluate_capability(
 
 
 def validation_error_message(err: ServiceValidationError | vol.Invalid) -> str:
-    """Human-readable message for a service validation error surfaced to the agent.
+    """Human-readable message for a service validation error shown to the agent.
 
-    Shared by ServiceValidationError (HA's own per-domain validation) and
-    vol.Invalid/MultipleInvalid (the service's raw schema check in
-    hass.services.async_call, which HA re-raises unwrapped rather than
-    converting to a HomeAssistantError - the same catch that already handles
-    ServiceValidationError does not see it). A ServiceValidationError may render
-    as an empty string when it carries only a translation key (translations are
-    not loaded in-process), so fall back to a generic message rather than
-    returning "Invalid request: ".
+    Covers ServiceValidationError and vol.Invalid/MultipleInvalid, which
+    hass.services.async_call re-raises unwrapped rather than as a
+    HomeAssistantError. A ServiceValidationError carrying only a translation key
+    can render as an empty string (translations are not loaded in-process), so an
+    empty detail falls back to a generic message.
     """
     detail = str(err).strip()
     return f"Invalid request: {detail}" if detail else "Invalid request."
@@ -1767,15 +1729,12 @@ def validation_error_message(err: ServiceValidationError | vol.Invalid) -> str:
 def diff_summary_fields(key: str, **params: object) -> dict[str, object]:
     """Build a diff's three summary fields from one template.
 
-    Returns the English `summary` exactly as the old f-strings produced it, plus
-    the `summary_key` and `summary_params` the panel needs to render the same
-    sentence in the operator's language. Splat it into a diff dict.
-
-    One template per key, held in const.DIFF_SUMMARY_TEMPLATES, is what keeps
-    the stored English and the translated form from drifting: both are that one
-    string. A KeyError here means a builder named a key that does not exist,
-    which is a bug worth failing loudly on rather than degrading to a blank
-    summary on the surface an admin approves from.
+    Returns the English `summary` plus the `summary_key` and `summary_params` the
+    panel needs to render the same sentence in the operator's language; splat it
+    into a diff dict. One template per key in const.DIFF_SUMMARY_TEMPLATES keeps
+    the stored English and the translated form from drifting. An unknown key
+    raises KeyError on purpose: a blank summary on the surface an admin approves
+    from would be worse.
     """
     return _summary_fields("diff", DIFF_SUMMARY_TEMPLATES, key, params)
 
@@ -1783,9 +1742,8 @@ def diff_summary_fields(key: str, **params: object) -> dict[str, object]:
 def version_summary_fields(key: str, **params: object) -> dict[str, object]:
     """The same three fields for a version record's one-line change summary.
 
-    A separate namespace from the diff templates because it is a separate
-    surface: a diff describes a change being proposed, a version record one
-    already applied.
+    A separate namespace from the diff templates: a diff describes a proposed
+    change, a version record one already applied.
     """
     return _summary_fields("version", VERSION_SUMMARY_TEMPLATES, key, params)
 
@@ -1803,11 +1761,10 @@ def _summary_fields(
 def notification_text(hass: object, key: str, **params: object) -> str:
     """One persistent-notification string in the instance's language.
 
-    A notification is written once and shown to every admin, so unlike the panel
-    there is no per-viewer language: this resolves against hass.config.language.
-    Reads the same catalogs/<lang>.json the panel does, so a translator only
-    ever edits one file, and falls back to the English template whenever the
-    catalog cannot be read or lacks the key.
+    A notification is shown to every admin, so unlike the panel there is no
+    per-viewer language: this resolves against hass.config.language. Reads the
+    same catalogs/<lang>.json as the panel and falls back to the English template
+    when the catalog cannot be read or lacks the key.
     """
     language = getattr(getattr(hass, "config", None), "language", None)
     return _localized(NOTIFICATION_TEMPLATES, "notification", key, language, params)
@@ -1817,9 +1774,8 @@ def voice_text(language: object, key: str, **params: object) -> str:
     """One spoken voice-agent sentence, in the CONVERSATION's language.
 
     The opposite resolution from notification_text: a spoken reply goes to
-    whoever is talking, and HA hands the conversation's own language to
-    async_process, so that is what it follows. Falls back to English for an
-    unknown language exactly like the notification path.
+    whoever is talking, so it follows the language HA passes to async_process.
+    Falls back to English for an unknown language like the notification path.
     """
     return _localized(VOICE_TEMPLATES, "voice", key, language, params)
 
@@ -1841,15 +1797,13 @@ def _localized(
 def _catalog_section(language: str, section: str) -> dict[str, str]:
     """One top-level section of one language file, flattened to dotted keys.
 
-    Reads catalogs/, NOT translations/. Phoenix's own operator-facing strings
-    (panel, notification, voice) cannot live in translations/: hassfest validates
-    that directory against a CLOSED set of Home Assistant categories and rejects
-    the file outright on an unknown one, which blocks the HACS submission. Only
-    HA's own sections (config, entity) remain there. See CATALOGS_DIR.
-
-    Cached per (language, section): these are small reads on request paths, and
-    the file only changes when the integration is updated. Any failure returns
-    an empty mapping so the caller keeps the English.
+    Reads catalogs/, NOT translations/: hassfest validates translations/ against a
+    CLOSED set of Home Assistant categories and rejects the file on an unknown
+    one, so Phoenix's own operator-facing strings (panel, notification, voice)
+    live in catalogs/ (see CATALOGS_DIR). Only HA's own sections (config, entity)
+    stay in translations/. Cached per (language, section) because the file
+    changes only with the integration; any failure returns an empty mapping so
+    the caller keeps the English.
     """
     path = CATALOGS_DIR / f"{language}.json"
     try:
@@ -1880,24 +1834,13 @@ def _placeholders(value: str) -> frozenset[str]:
 def panel_catalog(language: str) -> dict[str, str]:
     """The panel's strings for one language, English-backed, flattened.
 
-    Reproduces the two behaviours the panel used to get from HA's own
-    frontend/get_translations, which no longer serves these strings (they moved
-    out of translations/ so hassfest would accept the integration; see
-    CATALOGS_DIR):
-
-      - English is the base and the requested language is overlaid on top, so a
-        key a translator has not reached yet resolves to English HERE rather
-        than rendering as a raw key in the panel;
-      - a translated string whose {placeholder} set differs from English is
-        DROPPED in favour of the English one. That is not tidiness: the panel
-        interpolates by name, so a translation that renamed or dropped a
-        placeholder renders a broken sentence or throws, and one that invented a
-        placeholder would print a token the caller never passes. Failing back to
-        a correct English sentence is the lesser harm, and it is exactly what HA
-        did for us before.
-
-    tests/test_i18n_locales.py already refuses to let a mismatched locale ship,
-    so this is the runtime backstop for a hand-edited install, not the guard.
+    English is the base and the requested language is overlaid, so an untranslated
+    key resolves to English rather than rendering as a raw key. A translated
+    string whose {placeholder} set differs from English is DROPPED in favour of
+    the English one: the panel interpolates by name, so a renamed, dropped or
+    invented placeholder would render a broken sentence or throw. A guard test
+    already refuses to let a mismatched locale ship, so this is the runtime
+    backstop for a hand-edited install.
     """
     resolved = canonical_language(language)
     english = _catalog_section("en", "panel")

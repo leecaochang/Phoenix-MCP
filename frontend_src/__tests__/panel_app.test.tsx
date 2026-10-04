@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act, waitFor } from "@testing-library/react";
 import { setAgentCliOwner, patchDurable as patchAgentCliDurable } from "../utils/agentcli_state";
 
-// Companion to panel_shell.test.tsx. That test stubs react-dom/client to isolate
-// the custom-element shell; this one lets the REAL PhoenixApp tree render (with a
-// mocked api) so the app-level effects are covered: token loading propagating
-// into the list, the pending-approval count badge, and #approvals deep-linking.
+// Lets the REAL PhoenixApp tree render (with a mocked api) so the app-level
+// effects are covered: token loading propagating into the list, the
+// pending-approval count badge, and #approvals deep-linking. The custom-element
+// shell is covered separately, with react-dom/client stubbed.
 
 vi.mock("../phoenix-mcp-panel.css?inline", () => ({ default: "" }));
 

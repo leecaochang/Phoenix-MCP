@@ -1,10 +1,9 @@
 """Invariants over the MCP tool catalog itself.
 
-The tool defs are hand-maintained lists, and their MCP annotations are a separate
-hand-maintained map. A tool added without an annotation, or one whose annotation
-contradicts how the tool is actually gated (a "read-only" tool sitting in the
-executor registry), misinforms every client that honors the hints. Assert the
-relationships directly so the drift fails loudly.
+The tool defs are hand-maintained lists, and their MCP annotations a separate
+hand-maintained map. A tool without an annotation, or whose annotation contradicts
+how it is gated (a "read-only" tool in the executor registry), misinforms every
+client that honors the hints, so these tests assert the relationships directly.
 """
 
 from __future__ import annotations
@@ -199,15 +198,15 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
         },
         "write_capable": {
             "tool_count": 97,
-            "canonical_bytes": 101053,
-            "claude_bytes": 91050,
-            "openai_bytes": 93863,
+            "canonical_bytes": 101123,
+            "claude_bytes": 91120,
+            "openai_bytes": 93933,
         },
         "announce_all": {
             "tool_count": 163,
-            "canonical_bytes": 171662,
-            "claude_bytes": 154836,
-            "openai_bytes": 159563,
+            "canonical_bytes": 171732,
+            "claude_bytes": 154906,
+            "openai_bytes": 159633,
         },
     }
     assert metrics["announce_all"]["tool_count"] == len(_static_defs()) == 163
@@ -306,10 +305,8 @@ async def test_announcement_mirrors_agree_across_esphome_availability(integratio
 # ---------------------------------------------------------------------------
 # Dispatch registry invariants.
 #
-# _call_tool used to be a 127-branch if/elif chain, so "every published tool is
-# actually reachable" and "nothing unreachable is published" were guaranteed
-# only by whoever last edited it. The registry is a dict, so both directions can
-# simply be asserted.
+# The registry is a dict, so "every published tool is reachable" and "nothing
+# unreachable is published" can both be asserted directly.
 # ---------------------------------------------------------------------------
 
 
@@ -329,7 +326,8 @@ def test_dispatch_registry_covers_the_reported_tool_count():
 
 def test_every_registered_handler_is_a_coroutine_function():
     # CO_COROUTINE off the code object, matching how _register_tool reads arity:
-    # asyncio.iscoroutinefunction is deprecated, and inspect is off-limits here.
+    # asyncio.iscoroutinefunction is deprecated and inspect.signature can
+    # evaluate annotations eagerly on Python 3.14.
     co_coroutine = 0x80
     bad = [
         name for name, (handler, _w, _b) in mcp_view._TOOL_HANDLERS.items()
@@ -433,10 +431,8 @@ def test_native_targeting_params_are_documented():
     """A native tool must not ship a bare targeting selector.
 
     HA's intent slot schemas carry a type per field and no prose, so a def copied
-    from one starts with nothing telling a model what shape the field wants or
-    that at least one selector is needed. That is exactly the gap a wrong-shaped
-    argument falls through, so the descriptions are required rather than nice to
-    have, and this fails on a new tool that forgets them.
+    from one tells a model nothing about the field's shape or that at least one
+    selector is needed. Descriptions are therefore required.
     """
     undocumented = [
         (tool_def["name"], param)
@@ -448,12 +444,11 @@ def test_native_targeting_params_are_documented():
 
 
 def test_native_targeting_descriptions_have_one_definition_each():
-    """One wording per parameter, so 16 copies cannot drift apart.
+    """One wording per parameter, so the copies cannot drift apart.
 
-    The descriptions are shared module constants; this asserts the result rather
-    than the mechanism, so it still holds if they are ever inlined. domain is
-    exempt: its enum-constrained variant deliberately drops the worked example,
-    which would otherwise name a domain the enum does not accept.
+    Asserts the result rather than the mechanism (shared module constants), so it
+    still holds if they are inlined. domain is exempt: its enum-constrained variant
+    drops the worked example, which would name a domain the enum does not accept.
     """
     for param in ("name", "area", "floor", "device_class"):
         wordings = {
@@ -481,16 +476,14 @@ def test_the_not_a_targeting_selector_exemptions_are_all_live():
 def test_every_published_parameter_declares_a_type():
     """No tool parameter may be left without a declared type.
 
-    NOT a style rule. A property with no "type" is not read as "any" by every
-    client: live-found on patch_dashboard's `value`, a real MCP client serialized
-    an object argument into a JSON STRING because the schema declared nothing for
-    it. For a tool that writes structured config that is silent corruption, since
-    a string lands where a mapping belongs and the write reports success.
+    Not a style rule: a property with no "type" is not read as "any" by every
+    client. A client may serialize an object argument into a JSON STRING when the
+    schema declares nothing, which for a tool that writes structured config is
+    silent corruption (a string lands where a mapping belongs and the write
+    reports success).
 
-    An enum or a oneOf/anyOf/allOf/$ref counts as a declaration; those constrain
-    the value just as well. A parameter that genuinely accepts any JSON must SAY
-    so with a type union rather than by omission, which is what patch_dashboard's
-    `value` now does.
+    An enum or a oneOf/anyOf/allOf/$ref counts as a declaration. A parameter that
+    genuinely accepts any JSON must SAY so with a type union, not by omission.
     """
     untyped = [
         f"{d['name']}.{param}"
@@ -528,15 +521,14 @@ def test_executor_registry_is_an_exact_proxy_for_gating():
 
     _tool_gate_map buckets a Confirm-cap tool as needs_approval only when it is in
     _EXECUTOR_REGISTRY, because a cap-tied READ never calls _gate and would
-    otherwise be reported as queueing for approval when it runs directly. That
-    substitution is only sound while the two sets agree, so this pins them BOTH
-    ways: a gating tool with no executor could never be applied after approval,
-    and a non-gating tool with one would put the misreport straight back.
+    otherwise be reported as queueing for approval. That substitution is sound only
+    while the two sets agree, so both directions are pinned: a gating tool with no
+    executor could never be applied after approval, and a non-gating tool with one
+    would misreport a read as approval-gated.
 
-    Scoped to cap-tied tools on purpose. HassTurnOn/HassTurnOff gate through a
-    helper rather than in their own body, and call_service_mesa_approved is the
-    MESA sentinel executor that _call_tool can never dispatch; none of the three
-    is cap-tied, so none reaches the branch this protects.
+    Scoped to cap-tied tools: HassTurnOn/HassTurnOff gate through a helper, and
+    call_service_mesa_approved is the MESA sentinel executor that _call_tool never
+    dispatches; none of the three is cap-tied.
     """
     capped = {
         _internal_name(d["name"])
@@ -552,10 +544,10 @@ def test_executor_registry_is_an_exact_proxy_for_gating():
 
 
 def test_cap_tied_reads_are_not_reported_as_needing_approval():
-    """The concrete regression: a Confirm cap must not gate a read.
+    """A Confirm cap must not gate a read.
 
-    Asserts the behaviour rather than the predicate, so a future refactor that
-    keeps the sets aligned but changes the bucketing still fails here.
+    Asserts the behaviour rather than the predicate, so a refactor that keeps the
+    sets aligned but changes the bucketing still fails here.
     """
     token = TokenRecord(
         id="t1", name="t", token_hash="x", created_at=utcnow(), created_by="u",

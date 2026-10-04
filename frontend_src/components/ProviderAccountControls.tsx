@@ -1,15 +1,13 @@
 import { BusyButton } from "./BusyButton";
 
 /** A square icon action. Icon-only, so the accessible name and the tooltip are
- *  the SAME localized sentence: a screen reader and a hovering mouse must not be
- *  told different things, and neither may be told a slug. */
+ *  the SAME localized sentence, never a slug. */
 export function IconButton({ label, busyLabel, danger, disabled, busy, blocked, onClick, children, expanded }: {
   expanded?: boolean; label: string; busyLabel?: string; danger?: boolean; disabled?: boolean; busy?: boolean; blocked?: boolean;
   onClick: () => void; children: React.ReactNode;
 }) {
-  // While running, the NAME changes rather than only the styling. A text button
-  // said "Refreshing..."; an icon that merely spins tells a screen reader
-  // nothing, so the running state has to live somewhere a name can carry it.
+  // While running, the NAME changes rather than only the styling: an icon that
+  // merely spins tells a screen reader nothing.
   const name = busy && busyLabel ? busyLabel : label;
   return (
     <BusyButton busy={!!busy || !!blocked} type="button" onClick={onClick} disabled={disabled}

@@ -1,16 +1,13 @@
-"""The four surfaces that tell an agent what to do about a pending approval.
+"""The surfaces that tell an agent what to do about a pending approval agree.
 
-Approvals STAGE: they queue and the operator clears them in one action, so the
-agent's job after a gate is to keep going and collect the outcomes together at
-the end. That model is stated in four separate places written at different
-times, and three of them still described the one-at-a-time world the inline wait
-used to enforce by default, pointing at `wait_for_approval` with a singular
-`approval_id` from before that tool took a list. An agent following that
-literally serialises on the first id, and approval N+1 cannot even be created
-until N stops waiting, which is exactly the stall staging exists to remove.
+Approvals STAGE: they queue and the operator clears them in one action, so after
+a gate the agent keeps going and collects the outcomes together with a single
+`wait_for_approval` call over a list of `approval_ids`. A surface that points at
+a singular `approval_id` makes an agent serialise on the first id, which is the
+stall staging exists to remove.
 
-Wording is the only mechanism here: nothing enforces what an agent does next.
-So the phrases are pinned, the way the operator-accepted note is.
+Wording is the only mechanism here: nothing enforces what an agent does next, so
+the phrases are pinned.
 """
 
 from __future__ import annotations
@@ -36,14 +33,17 @@ class TestPendingToolResult:
         assert payload["review_url"] == "/phoenix-mcp/approvals/appr-1"
 
     def test_it_points_at_the_plural_wait(self):
-        """The singular form is the defect: it predates approval_ids."""
+        """The message names `wait_for_approval` over `approval_ids`, not a singular id."""
         message = _message()
         assert "approval_ids" in message
         assert "wait_for_approval ONCE" in message
 
     def test_it_tells_the_agent_to_continue_rather_than_stop(self):
-        """"You may finish now" read as an instruction to stop, which is the
-        early-return-reads-as-success failure applied to a whole batch."""
+        """The message tells the agent to keep working.
+
+        "You may finish now" reads as an instruction to stop, an early return
+        read as success for a whole batch.
+        """
         message = _message()
         assert "Continue with your remaining steps" in message
         assert "queue alongside" in message
@@ -69,11 +69,10 @@ class TestPendingToolResult:
 
 
 class TestSurfacesAgree:
-    """A primer, a skill guide and a tool result describing one event.
+    """A primer, a skill guide and a tool result describing one event must agree.
 
-    They are read at different moments by the same agent, so a disagreement is
-    not cosmetic: whichever it happens to weight decides whether a twenty-write
-    run takes one approval round or twenty.
+    They are read at different moments by the same agent; whichever it weights
+    decides whether a twenty-write run takes one approval round or twenty.
     """
 
     @pytest.fixture

@@ -172,7 +172,7 @@ async def test_switch_auto_saves_outgoing_then_applies_target(token_store):
         _make_admin_request(), token_id=record.id, preset_id=default_id)
     assert resp.status == 200
     body = json.loads(resp.text)
-    # Live state now matches the default preset (both changes rolled back)...
+    # Live state matches the default preset (both changes rolled back)...
     assert body["cap_restart"] == CAP_DENY and body["cap_search"] == CAP_DENY
     assert body["active_preset_id"] == default_id
     # ...and the outgoing preset B absorbed its unsaved change first.

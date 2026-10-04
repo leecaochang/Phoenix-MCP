@@ -47,7 +47,7 @@ def _body(resp) -> dict:
 
 
 async def _seed(data: PhoenixData):
-    """Create -> edit history on one automation; returns the edit record."""
+    """Create then edit one automation; return the edit record."""
     await data.versions.record(
         resource_type="automation", resource_id="aid1", action="create",
         before=None, after={"alias": "A"}, alias="A", token_name="agent")
@@ -83,10 +83,11 @@ async def _seed_esphome(data: PhoenixData, before: str | None, after: str | None
 
 
 class TestVersionDetailEsphomeMasking:
-    """Without masking, the Changes tab is the one Phoenix MCP surface that
-    renders credentials in clear text, including a value !phoenix_generate
-    produced that the agent itself was never allowed to see. Storage stays raw
-    so a restore is byte-faithful; only what is served to the panel is masked.
+    """Version detail masks ESPHome credentials in what it serves.
+
+    Without masking, the Changes tab renders credentials in clear text, including a
+    value !phoenix_generate produced that the agent itself never saw. Storage stays
+    raw so a restore is byte-faithful; only what is served to the panel is masked.
     """
 
     @pytest.mark.asyncio
@@ -149,9 +150,10 @@ class TestVersionDetailEsphomeMasking:
 class TestVersionRestoreErrorDetail:
     @pytest.mark.asyncio
     async def test_the_executors_own_reason_is_relayed(self):
-        # A fixed string turned a precise, actionable failure ("'wifi.ap.password'
-        # is a masked credential...") into a support ticket. This is an admin-only
-        # surface behind an HA session, so there is no caller to keep in the dark.
+        # The executor's own reason is relayed: a fixed string would hide a precise,
+        # actionable failure ("'wifi.ap.password' is a masked credential..."), and
+        # this admin-only surface sits behind an HA session, so there is no caller to
+        # keep in the dark.
         data = _data()
         rec = await _seed(data)
         view = PhoenixAdminVersionRestoreView()
@@ -213,7 +215,7 @@ class TestVersionsList:
             before=None, after={"alias": "S"}, alias="S", token_name="agent")
         view = PhoenixAdminVersionsView()
         view.hass = _hass(data)
-        resp = await view.get(_request())  # neither param -> global recent feed
+        resp = await view.get(_request())  # neither param: global recent feed
         assert resp.status == 200
         body = _body(resp)
         assert body["total"] == 3
@@ -222,8 +224,10 @@ class TestVersionsList:
 
     @pytest.mark.asyncio
     async def test_recent_feed_total_reflects_full_count_not_just_the_page(self):
-        """total must be the true count across all resources, not len(page) -
-        otherwise the panel's Load More button could never appear."""
+        """total is the true count across all resources, not len(page).
+
+        Otherwise the panel's Load More button could never appear.
+        """
         data = _data()
         await _seed(data)  # two automation versions
         await data.versions.record(

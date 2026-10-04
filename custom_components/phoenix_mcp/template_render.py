@@ -32,7 +32,14 @@ if TYPE_CHECKING:
 async def async_render_template_for_token(
     template: str, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
 ) -> str:
-    """Bound worker count, input, memory, CPU, wall time, and worker lifetime."""
+    """Render a template in a disposable subprocess over this token's permitted states.
+
+    Concurrency (`template_slots`), input size and wall time are bounded here;
+    the worker applies the memory and CPU limits itself, and is always killed and
+    reaped. Request authority is rechecked before the render, after the worker
+    returns, and on exit unless cancelled. Every failure is a TemplateRenderError
+    with a safe message.
+    """
     if not isinstance(template, str) or len(template.encode()) > TEMPLATE_WORKER_INPUT_BYTES:
         raise TemplateRenderError("Invalid template size.")
     if data.template_slots.locked():

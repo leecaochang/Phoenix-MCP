@@ -4,9 +4,9 @@ Every failure mode this guards is SILENT at runtime, which is why it exists.
 Home Assistant compares each translated string's {placeholder} set against
 English and deletes the key when they differ (helpers/translation.py), falling
 back to English without telling anyone. A key the translator misspelled is
-simply never used. A code payload that got translated along with the prose
-around it produces instructions that cannot work. None of that shows up as an
-error in the log the operator reads.
+never used. A code payload that got translated along with the prose around it
+produces instructions that cannot work. None of that shows up as an error in
+the log the operator reads.
 
 Run: python scripts/i18n_check_locale.py zh-Hans
 Exits non-zero on any problem, and prints a coverage summary either way.
@@ -34,8 +34,8 @@ SECTIONS = ("config", "entity", "issues", "panel", "notification", "voice")
 # directories only because hassfest validates translations/ against a closed set
 # of Home Assistant categories and errors on anything else, which fails the HACS
 # submission. So Phoenix's own sections live in catalogs/ and HA's own stay put.
-# Both halves are checked here: config is translated too, and dropping it from
-# the sweep would have silently retired the guards that cover it.
+# Both halves are checked here: config is translated too, and omitting it from
+# the sweep would silently disable the guards that cover it.
 SECTION_DIRS = {
     "config": TRANSLATIONS,
     "entity": TRANSLATIONS,
@@ -82,13 +82,10 @@ KEEP_ENGLISH: dict[str, tuple[str, ...]] = {
         "entity.sensor.last_access.name",
         "entity.sensor.expires_in.name",
     ),
-    # NOTE (2026-07-30): the MESA enum values and the permission states
-    # (READ/WRITE/DENY/INHERIT) USED to live here, on the argument
-    # that the effective-resolution table prints the raw mesa-core value beside
-    # them. That argument was wrong. Home Assistant itself translates entity
-    # states for display while hass.states keeps the English slug, so
-    # "translate the label, leave the raw value raw" is the HA-native pattern,
-    # not an inconsistency. They are translated now; do not move them back.
+    # The MESA enum values and the permission states (READ/WRITE/DENY/INHERIT) are
+    # translated, not kept English. Home Assistant itself translates entity states
+    # for display while hass.states keeps the English slug, so "translate the
+    # label, leave the raw value raw" is the HA-native pattern.
     #
     # Proper nouns with nothing to translate.
     "proper nouns": (
@@ -134,9 +131,9 @@ LITERALS: dict[str, tuple[str, ...]] = {
     "panel.caps.cap_service_response.description": ("conversation.process",),
     "panel.caps.cap_esphome_yaml.description": ("esphome/",),
     "panel.caps.cap_yaml_edit.description": ("configuration.yaml", "secrets.yaml", "!secret"),
-    # panel.diff.set_yaml_config no longer names configuration.yaml: the tool
-    # writes any include target, so the summary carries a {file} placeholder and
-    # pinning the literal would force every locale to name the wrong file.
+    # panel.diff.set_yaml_config does not pin configuration.yaml: the tool writes
+    # any include target, so the summary carries a {file} placeholder and a pinned
+    # literal would force every locale to name the wrong file.
     # These echo an API field name back at the caller; translating it would name
     # a field that does not exist in the request body.
     "panel.adminError.expiresImmutable": ("expires_at",),
@@ -429,9 +426,9 @@ WHITESPACE_EXEMPT = frozenset({
     "panel.mesaSuggestion.baseline_note",
 })
 
-# CLAUDE.md forbids these everywhere, catalog values included. The ideographic
-# characters that look similar in Chinese text are not the same code points and
-# are fine.
+# The house style forbids these everywhere, catalog values included. The
+# ideographic characters that look similar in Chinese text are different code
+# points and are fine.
 FORBIDDEN = re.compile(r"[—–→]|[\U0001F300-\U0001FAFF☀-➿]")
 
 TAG = re.compile(r"<(/?)(\w+)>")
@@ -569,7 +566,7 @@ def exception_manifest_problems(
     locale_flats: list[dict[str, str]],
     locales_by_language: dict[str, dict[str, str]],
 ) -> list[str]:
-    """Stale or no-longer-needed entries in every exception manifest."""
+    """Exception-manifest entries that reference a missing key or that no locale uses."""
     problems: list[str] = []
     for key in sorted(KEEP_ENGLISH_KEYS):
         if key not in en_flat:
@@ -618,7 +615,7 @@ def flatten(node: object, prefix: str = "") -> dict[str, str]:
     out: dict[str, str] = {}
     if isinstance(node, dict):
         for key, value in node.items():
-            out.update(flatten(value, f"{prefix}{key}." if prefix or True else key))
+            out.update(flatten(value, f"{prefix}{key}."))
     elif isinstance(node, str):
         out[prefix[:-1]] = node
     return out
@@ -693,8 +690,8 @@ def check(language: str) -> int:
                 f"section '{section}' must stay English; remove it from {path.name}"
             )
 
-    # The source catalog is not exempt from the house style. Judging only what a
-    # translation "introduces" quietly grandfathered whatever English already had.
+    # The source catalog is held to the same character rules as translations, so
+    # English cannot grandfather a forbidden character.
     for key in sorted(en_flat):
         bad = set(FORBIDDEN.findall(en_flat[key]))
         if bad:

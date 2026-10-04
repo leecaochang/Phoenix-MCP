@@ -1,17 +1,15 @@
 """ESPHome tools: device YAML, Device Builder reads, firmware jobs and status.
 
-The whole ESPHome surface in one module: get/set/delete device YAML behind the
-config/esphome path jail and the credential masking in esphome_yaml.py, the four
-Device Builder lookups, the firmware job tier (compile / install / poll / cancel
-/ device logs / backtrace) plus the three lifecycle tools, and the fleet status
-read. Their capability split is deliberate and documented per tool: compiling
-rides cap_esphome_yaml, only putting an image on hardware needs
-cap_esphome_flash.
+The whole ESPHome surface: get/search/set/delete device YAML behind the
+config/esphome path jail and the credential masking in esphome_yaml.py, the
+Device Builder lookups (validate, boards, components, automations, devices), the
+firmware job tier (compile, install, list/poll/wait/cancel, device logs,
+backtrace), the lifecycle tools (rename, clean, delete) and the fleet status
+read. Compiling rides cap_esphome_yaml; only putting an image on hardware
+(install, rename) needs cap_esphome_flash.
 
-mcp_view owns the transport, the dispatch registry and the executor registry, and
-imports the names it registers or calls from here. The dependency runs one way:
-this module never imports the transport that dispatches it. Shared primitives
-come from ..tool_common.
+mcp_view registers these tools and this module never imports it. Shared
+primitives come from ..tool_common.
 """
 
 
@@ -137,9 +135,9 @@ def _esphome_dashboard(hass: HomeAssistant) -> Any:
     Lazy-imported so Phoenix MCP never hard-depends on the esphome integration
     being installed. Returns None when the integration is absent, when the
     dashboard manager has not been set up yet, or when no Device Builder add-on
-    is configured. Reading HA's own in-process coordinator is deliberate: the
-    add-on's HTTP API is never called, so no credential-resolving endpoint
-    (json-config, get_encryption_key) is reachable from here.
+    is configured. Reading HA's own in-process coordinator is deliberate: no
+    add-on HTTP call is made, so no credential-resolving endpoint (json-config,
+    get_encryption_key) is reachable through it.
     """
     try:
         from homeassistant.components.esphome.dashboard import (  # noqa: PLC0415
@@ -171,14 +169,13 @@ def esphome_availability(hass: HomeAssistant) -> EsphomeAvailability:
 
     Announcement gating keys on CONFIGURED state, never on `builder_live`: an MCP
     client caches its tool list and this transport cannot push a list-changed
-    notification, so a tool list that tracked a stopped add-on would flap
-    mid-session. A configured-but-unreachable add-on keeps its tools announced
-    and fails loudly at call time instead. `builder_live` exists for the admin
-    panel, which re-reads it on every load.
+    notification, so a tool list tracking a stopped add-on would flap
+    mid-session. A configured-but-unreachable add-on keeps its tools announced and
+    fails loudly at call time; `builder_live` is for the admin panel.
 
     Fails OPEN. Hiding a tool is a usability affordance, not a security control:
-    the capability gate and the call-time checks run regardless, so an unknown
-    host announces everything rather than silently losing a tool surface.
+    the capability gate and call-time checks run regardless, so an unknown host
+    announces everything rather than silently losing a tool surface.
     """
     if hass is None:
         return EsphomeAvailability(True, True, True)
@@ -443,8 +440,8 @@ _ESPHOME_PATH_REFUSED = (
 )
 
 
-# Nonexistent and out-of-scope are byte-identical (rule 12): the difference would
-# otherwise reveal which devices exist outside this token's tree.
+# Nonexistent and out-of-scope are byte-identical, so the refusal is not an
+# existence oracle for devices outside this token's tree.
 _ESPHOME_NOT_FOUND = "ESPHome configuration file not found."
 
 
@@ -831,8 +828,8 @@ async def _tool_set_esphome_yaml(
     if not _esphome_file_in_scope(hass, token, rel, write=True):
         return _tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"
 
-    # Parse and splice BEFORE the gate so a doomed or credential-violating write
-    # never becomes a pending approval an admin has to reject (rule 29).
+    # Parse and splice BEFORE the gate (after the cap-deny check) so a doomed or
+    # credential-violating write never becomes a pending approval.
     try:
         await hass.async_add_executor_job(_esphome_prepare_write, hass, args, rel, path)
     except yaml_includes.YamlParseError as err:
@@ -945,8 +942,8 @@ def _esphome_delete_precheck(hass: HomeAssistant, token: TokenRecord, args: dict
     if not _esphome_file_in_scope(hass, token, rel, write=True):
         return _tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"
     if not os.path.exists(path):
-        # Byte-identical to the out-of-scope refusal above (rule 12), different
-        # audit outcome.
+        # Byte-identical to the out-of-scope refusal above, so the refusal is not
+        # an existence oracle; only the audit outcome differs.
         return _tool_error(_ESPHOME_NOT_FOUND), "not_found", f"esphome:{rel}"
     return None
 
@@ -1318,12 +1315,11 @@ async def _tool_get_esphome_component(
 # cannot bloat the response by default. Dropped are the prose (`description`,
 # `docs_url`), `form_editable` (a UI-editor concern), and, on the three catalog
 # sections, `name`: it is a prettified restatement of the id the caller already
-# has ("Cc1101 -> Set Channel" for cc1101.set_channel), useful in the add-on's
+# has ("Cc1101: Set Channel" for cc1101.set_channel), useful in the add-on's
 # own dropdowns and redundant to an agent, which writes the id. `devices` KEEPS
 # its name, which is the operator's own entity name rather than a derived one.
-# Live-measured on a real device: the full payload was 64KB, enough to swamp an
-# agent's context, against under 13KB projected. Every ROW is kept, since a
-# catalog that silently omits entries is worse than a large one.
+# The full payload runs to tens of KB, enough to swamp an agent's context. Every
+# ROW is kept, since a catalog that silently omits entries is worse than a large one.
 _ESPHOME_AUTOMATION_FIELDS: dict[str, tuple[str, ...]] = {
     "triggers": ("id", "applies_to", "is_device_level", "supports_list"),
     "actions": ("id", "domain", "is_control_flow", "has_else_branch",
@@ -1337,9 +1333,9 @@ _ESPHOME_AUTOMATION_FIELDS: dict[str, tuple[str, ...]] = {
 def _project_esphome_automations(result: Any) -> Any:
     """Trim the automation catalog to the fields that shape how config is written.
 
-    Empty and false values are dropped too: a flag that is false on 57 of 60
-    rows carries no information and costs a line each. `scripts` passes through
-    whole, being the device's own declarations rather than catalog metadata.
+    Empty and false values are dropped too: a flag that is false on most rows
+    carries no information and costs a line each. `scripts` passes through whole,
+    being the device's own declarations rather than catalog metadata.
     """
     if not isinstance(result, dict):
         return result
@@ -1420,13 +1416,11 @@ _ESPHOME_JOB_NOT_FOUND = "No such firmware job."
 # Appended ONLY where `file` is actually accepted, i.e. get_esphome_job: naming a
 # recovery the caller cannot use (cancel takes an id only) would just send it
 # round another loop. Same principle as DOMAIN_SERVICE_HINTS: an agent told only
-# "no" retries variations, while one told the fix takes it. Live-observed, an
-# agent that had lost its job id guessed one, got the bare refusal, and spent two
-# further calls working out that it could ask by file instead.
+# "no" retries variations, while one told the fix takes it.
 #
-# Rule 12 is unaffected: whichever message applies, the unknown-id and
-# out-of-scope branches return the SAME body and differ only in audit outcome,
-# and the hint names no file the caller did not already supply.
+# Whichever message applies, the unknown-id and out-of-scope branches return the
+# SAME body and differ only in audit outcome, so the refusal is not an existence
+# oracle, and the hint names no file the caller did not already supply.
 _ESPHOME_JOB_NOT_FOUND_BY_FILE = (
     f"{_ESPHOME_JOB_NOT_FOUND} If you do not have a job_id, for example because "
     "the build was started in an earlier conversation, pass file instead (the "
@@ -1435,11 +1429,11 @@ _ESPHOME_JOB_NOT_FOUND_BY_FILE = (
 
 
 # Every tool that starts a job shares this, because an agent does what the note
-# NAMES and these all used to name polling. wait_for_esphome_job is the only
-# thing that yields a progress line (it holds the request open, which is what
-# drives the panel's activity renderer); get_esphome_job returns instantly and
-# renders nothing, so the operator watched a multi-minute build against a blank
-# window and had to ask the agent to monitor it. Live-reported.
+# NAMES, so it must name wait_for_esphome_job rather than polling.
+# wait_for_esphome_job is the only thing that yields a progress line (it holds
+# the request open, which is what drives the panel's activity renderer);
+# get_esphome_job returns instantly and renders nothing, which would leave the
+# operator watching a multi-minute build against a blank window.
 _ESPHOME_FOLLOW_NOTE = (
     "To follow it, call wait_for_esphome_job with this job_id: it waits for the "
     "build and reports progress the operator can see, so relay what it says as it "
@@ -1573,9 +1567,8 @@ def _esphome_job_id(value: Any) -> str | None:
     """A job id out of either a bare id or a whole job record.
 
     devices/rename returns the full job RECORD under "job" and "tail_job", not
-    the bare id its documentation's `<job_id>` notation implies, and handing that
-    dict back as a job_id gives an agent something no polling tool accepts.
-    Accepting both shapes means a change in either direction keeps working.
+    the bare id its documentation's `<job_id>` notation implies, and a dict is not
+    a job_id any polling tool accepts. Both shapes are accepted.
     """
     if isinstance(value, str):
         return value or None
@@ -1666,19 +1659,16 @@ async def _esphome_job_precheck(
 ) -> tuple[tuple[dict, str, str] | None, dict]:
     """Resolve a job id and authorize the caller against the file it builds.
 
-    A job id is a handle to another device's build log, so it is scoped exactly
-    like the file: the job names its configuration, and that configuration has to
-    be in the token's tree. An id the add-on does not know and an id belonging to
-    a device this token cannot see return the same body, so polling ids is not a
-    way to learn which ones exist.
+    A job id is a handle to another device's build log, so it is scoped like the
+    file: the job names its configuration, which must be in the token's tree. An
+    id the add-on does not know and an id for a device this token cannot see
+    return the same body, so polling ids is not a way to learn which exist.
 
     allow_file lets the caller name the CONFIGURATION instead, answering "is that
-    build done?" with no remembered state. A job id only exists in the
-    conversation that started the build, and a voice or Assist conversation is
-    exactly the one that does not survive, so without this an agent asked later
-    has no id and nothing reliable to guess from. Not offered for cancel:
-    stopping "whichever job is newest" is not something a caller can have meant
-    to name.
+    build done?" with no remembered state (a job id only exists in the
+    conversation that started the build, and voice or Assist conversations do not
+    survive). Not offered for cancel: stopping "whichever job is newest" is not
+    something a caller can have meant to name.
     """
     job_id = args.get("job_id")
     has_file = isinstance(args.get("file"), str) and args["file"].strip()
@@ -1725,9 +1715,8 @@ async def _esphome_job_output(
     if job.get("status") not in _ESPHOME_JOB_TERMINAL:
         # Through the same collector the streaming path uses, never a second
         # line handler: this buffer carries the add-on's literal ANSI escapes and
-        # its own terminators, and hand-joining it returned visible colour codes
-        # with a blank line between every line (found by smoke-testing a live
-        # build, which is the only place the two paths can be compared).
+        # its own terminators, so hand-joining it yields visible colour codes with
+        # a blank line between every line.
         text, truncated = collect_output_lines(
             job.get("output"), ESPHOME_BUILDER_JOB_PROGRESS_MAX_CHARS, head_ratio=0.0
         )
@@ -1845,17 +1834,13 @@ _ESPHOME_SUBST_RE = re.compile(r"^\$\{?([a-zA-Z0-9_]+)\}?$")
 def _esphome_configured_name(path: str, rel: str) -> str:
     """This configuration's real esphome name, NOT its filename stem.
 
-    The two diverge routinely: an imported configuration keeps its raw name
-    while the file is slugified, and a device adopted under one name can be
-    renamed later, leaving a file whose stem is the ORIGINAL name. Comparing a
-    rename target against the stem therefore both refuses a legitimate rename
-    and blames a conflict that does not exist. This mirrors the add-on's own
-    resolved_device_name, which is the value the rename is actually checked
-    against; anything else disagrees with the thing doing the work. Resolves a
-    ${sub} reference, because the generated configurations use one and an
-    unresolved read would compare against the literal "${name}". Fails soft to
-    the stem, the add-on's fallback too, so an unreadable or odd file degrades
-    rather than blocking the rename.
+    The two diverge: an imported configuration keeps its raw name while the file
+    is slugified, and a renamed device leaves a file whose stem is the ORIGINAL
+    name. Comparing a rename target against the stem would refuse a legitimate
+    rename or blame a conflict that does not exist. Mirrors the add-on's own
+    resolved_device_name, which is what the rename is checked against. Resolves a
+    ${sub} reference (generated configurations use one). Falls back to the stem,
+    as the add-on does, for an unreadable or odd file.
     """
     stem = os.path.splitext(os.path.basename(rel))[0]
     try:
@@ -1941,9 +1926,8 @@ def _build_diff_rename_esphome_device(args: dict, token: TokenRecord, hass: Home
     device = getattr(device_info, "name", None)
     # runtime.available, not entry.state: a LOADED entry says the integration set
     # the device up, not that the device is answering, and a powered-off device
-    # keeps its entry loaded. The install diff already reads it this way, and
-    # reading the entry state instead reported every offline device as online,
-    # dropping the note below in exactly the case it exists for.
+    # keeps its entry loaded. Using the entry state would report every offline
+    # device as online and drop the note below in exactly the case it exists for.
     online = bool(getattr(runtime, "available", False))
 
     preview: dict[str, Any] = {
@@ -1980,10 +1964,9 @@ def _build_diff_rename_esphome_device(args: dict, token: TokenRecord, hass: Home
     if not online:
         # Deliberately does NOT promise a file-only rename. This flag is Home
         # Assistant's API connection; the add-on decides whether to flash by its
-        # OWN reachability probe and never consults this one. Live-observed: a
-        # device Home Assistant called unavailable still answered on the OTA port,
-        # so the add-on compiled and attempted a real flash while this note
-        # promised the file would only be rewritten.
+        # OWN reachability probe and never consults this one, so a device Home
+        # Assistant calls unavailable can still answer on the OTA port and be
+        # compiled and flashed.
         preview["offline_note"] = (
             "Home Assistant cannot reach this device, so the flash will probably "
             "fail. The add-on judges reachability separately and may still compile "
@@ -2016,10 +1999,10 @@ async def _tool_rename_esphome_device(
     let a token explicitly denied cap_esphome_flash flash a device through a tool
     whose name says "rename".
 
-    NOT versioned, for the restart_ha reason: the file change is inseparable from
-    the flash, so a restorable snapshot of the old file would be an affordance
-    that cannot actually undo anything. The add-on already deletes the new YAML
-    and leaves the original untouched if the compile or flash fails.
+    NOT versioned: the file change is inseparable from the flash, so a restorable
+    snapshot of the old file could not actually undo anything. The add-on already
+    deletes the new YAML and leaves the original untouched if the compile or
+    flash fails.
     """
     if effective_cap(token, "cap_esphome_flash") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "rename_esphome_device"
@@ -2067,18 +2050,15 @@ async def _execute_rename_esphome_device(
 
     result = res.result if isinstance(res.result, dict) else {}
     # The add-on returns the whole job RECORD under "job" and "tail_job", not the
-    # bare id its docs' `<job_id>` notation implies. Handing that dict back as
-    # job_id gave an agent something get_esphome_job could not accept.
-    # Live-found; both shapes are accepted so a future change either way works.
+    # bare id its docs' `<job_id>` notation implies; _esphome_job_id accepts both.
     raw_job = result.get("job")
     job_id = _esphome_job_id(raw_job)
     # THE dangerous shape drift in this tier, so it fails LOUD. A missing or null
-    # "job" is the add-on's documented config-only reply, but a job we cannot READ
-    # is a third shape, and the branch below treats anything without an id as
-    # config-only. Left silent, a future add-on that rewraps the record would have
-    # Phoenix report "nothing was compiled or flashed" while a compile-and-flash
-    # chain ran on the device: the operator is told the opposite of what is
-    # happening to their hardware, which is the worst failure available here.
+    # "job" is the add-on's documented config-only reply, but a job that cannot be
+    # READ is a third shape, and the branch below treats anything without an id as
+    # config-only. Left silent, a rewrapped record would have Phoenix report
+    # "nothing was compiled or flashed" while a compile-and-flash chain ran on the
+    # device: the operator told the opposite of what is happening to their hardware.
     if raw_job is not None and job_id is None:
         note = version_mismatch_note("devices/rename", res.server_version, res.esphome_version)
         return _tool_error(
@@ -2116,14 +2096,12 @@ async def _execute_rename_esphome_device(
             "unaffected and need nothing."
         )
     else:
-        # The add-on's config-only rename (mutations_simple.rename_device returning
-        # job: None). Reached by an IN-PLACE rename, where the new name slugifies to
-        # this device's own file and the over-the-air chain has no distinct filename
-        # to compile against. Phoenix never sends the explicit config_only argument,
-        # so in-place is the live route. The distinction that matters to the caller
-        # is that the FILE changed and the DEVICE did not: unlike the failed-flash
-        # case, the configuration on disk really does carry the new name, so
-        # installing it is the correct way to finish the job rather than a mistake.
+        # The add-on's config-only rename (job: None). Reached only by an IN-PLACE
+        # rename, where the new name slugifies to this device's own file and the
+        # over-the-air chain has no distinct filename to compile against (Phoenix
+        # never sends the explicit config_only argument). The FILE changed and the
+        # DEVICE did not: unlike the failed-flash case, the configuration on disk
+        # carries the new name, so installing it is the correct way to finish.
         body["flashed"] = False
         body["config_only"] = True
         body["note"] = (
@@ -2141,26 +2119,13 @@ async def _execute_rename_esphome_device(
 async def _tool_clean_esphome_build(
     args: dict, token: TokenRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    """MCP tool: discard one configuration's build artifacts.
-
-    The escape hatch for a build environment that has gone wrong in a way a
-    rebuild cannot fix (a stale cached object, a half-written build dir), which
-    otherwise sends the operator to the add-on UI mid-task.
+    """MCP tool: discard one configuration's build artifacts (a stale cache).
 
     Never approval-gated, and cap-only for the same reason as compile: it writes
-    no configuration file and cannot reach a device.
-
-    Its blast radius is wider than the add-on's own documentation suggests,
-    which describes it as cleaning one device: it also deletes
-    /data/pio_components and the shared PlatformIO cache, so the next build of
-    every device slows down too. The tool description calls that cost out rather
-    than presenting this as a free retry.
-
-    Its sibling firmware/reset_build_env stays permanently unreachable, and the
-    difference is categorical rather than one of degree: clean takes a
-    configuration, cleans that build, and leaves other jobs running, while
-    reset_build_env takes no argument at all and CANCELS EVERY in-flight job on
-    both lanes before wiping.
+    no configuration file and cannot reach a device. Wider than the add-on's
+    docs suggest: it also drops the shared PlatformIO cache, so every device's
+    next build is slower (the tool description says so). firmware/reset_build_env
+    stays unreachable: it takes no configuration and CANCELS EVERY in-flight job.
     """
     if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "clean_esphome_build"
@@ -2312,25 +2277,16 @@ async def _execute_install_esphome_firmware(
 
 
 def _esphome_version_jump(installed: Any, target: Any) -> str | None:
-    """These two ESPHome versions differ by more than the patch digit, or None.
+    """Return "old to new" when two ESPHome versions differ beyond the patch, else None.
 
-    A patch bump is routine. A version change is where the one real limit of an
-    over-the-air update starts to matter: it rewrites only the app partition,
-    never the bootloader or the partition table, so the device ends up running a
-    new app on the bootloader it was originally cabled with. Whatever that
-    bootloader cannot do stays undone, and OTA rollback is the one that costs the
-    operator a recovery net.
+    A patch bump is routine. A version change is where the limit of an over-the-air
+    update matters: it rewrites only the app partition, never the bootloader or
+    the partition table, so the new app runs on the old bootloader. The approval
+    card otherwise shows both numbers without saying they are a version apart.
 
-    This is on the approval card because the card otherwise shows both version
-    numbers without ever saying they are a version apart, which is the one fact
-    that makes the risk legible.
-
-    The wording deliberately does NOT predict an unbootable device: a version
-    jump over the air completes cleanly in practice, and a warning that names a
-    consequence which does not arrive teaches the operator to click past it,
-    the same cry-wolf failure the patch-bump exclusion exists to prevent. It
-    states the bootloader gap instead, which can be verified in the device's own
-    boot log.
+    The warning wording deliberately does NOT predict an unbootable device, which
+    does not happen in practice; a warning naming a consequence that never arrives
+    teaches the operator to click past it. It states the verifiable bootloader gap.
     """
     if not isinstance(installed, str) or not isinstance(target, str):
         return None
@@ -2356,7 +2312,7 @@ def _build_diff_install_esphome_firmware(
     """Diff payload for install_esphome_firmware approvals.
 
     Best-effort throughout: this runs before the gate and must never raise, so a
-    device that cannot be resolved simply produces a thinner card.
+    device that cannot be resolved produces a thinner card.
     """
     rel = args.get("file") if isinstance(args.get("file"), str) else ""
     preview: dict[str, Any] = {"file": rel}
@@ -2447,12 +2403,9 @@ async def _tool_get_esphome_job(
         hass, token, url, args, "get_esphome_job", allow_file=True)
     if refusal is not None:
         return refusal
-    # Carries the same stop-here steer as the wait tool on a headless surface.
-    # LIVE-FOUND: told not to loop on wait_for_esphome_job, a model obeyed that
-    # literally and then polled THIS tool 18 times at two-second intervals,
-    # spending the whole per-turn round budget and ending the turn with no
-    # answer. Steering only the tool it was told to stop calling just moves the
-    # loop next door.
+    # Carries the same stop-here steer as the wait tool on a headless surface:
+    # steering only the tool a model was told to stop calling just moves its
+    # polling loop here, spending the whole per-turn round budget.
     note = _ESPHOME_HEADLESS_STOP if client_ip in _ESPHOME_HEADLESS_CLIENT_IPS else None
     return await _esphome_job_result(hass, url, job, note)
 
@@ -2523,10 +2476,10 @@ _ESPHOME_HEADLESS_CLIENT_IPS = frozenset({
 
 
 # Attached to any UNFINISHED job reply on those surfaces. Written imperatively
-# and with the reason stated, because the first version ("ask them to check back,
-# or call get_esphome_job on the next turn") was read as permission to poll
-# immediately: the model spent all 20 of its rounds doing so and the turn ended
-# with nothing to say. What was missing was that the turn itself must end.
+# and with the reason stated: a softer wording ("ask them to check back, or call
+# get_esphome_job on the next turn") reads as permission to poll immediately,
+# which spends every round and ends the turn with nothing to say. The turn itself
+# must end.
 _ESPHOME_HEADLESS_STOP = (
     "This surface cannot hold a request open while a build runs, and it allows "
     "only a limited number of tool calls per turn. THE BUILD HAS NOT FINISHED: "
@@ -2542,15 +2495,14 @@ _ESPHOME_HEADLESS_STOP = (
 def _clamp_job_wait(value: Any, client_ip: str | None = None) -> int:
     """Clamp a caller-supplied wait, defaulting to the maximum.
 
-    Unlike a page size, the useful default here IS the ceiling: the caller asked
-    to wait, and a build that finishes inside one call is the whole point.
+    Unlike a page size, the useful default here IS the ceiling: a build that
+    finishes inside one call is the whole point.
 
     EXCEPT on a headless conversational surface, where the ceiling is a hang. A
     voice turn or an Assist reply has no stream to write progress to and its own
-    pipeline timeout is far under this tool's, so a full-length hold there buys
-    the user nothing but silence followed by an error, and the build carries on
-    invisibly either way. Those callers get a token wait and are told to ask
-    again, which is the interaction that surface can actually express.
+    pipeline timeout is far under this tool's, so a full-length hold buys only
+    silence followed by an error. Those callers get a short wait and are told to
+    ask again.
     """
     if client_ip in _ESPHOME_HEADLESS_CLIENT_IPS:
         return ESPHOME_BUILDER_JOB_WAIT_HEADLESS_SECONDS
@@ -2564,9 +2516,9 @@ def _esphome_progress_message(job: dict, rel: str, phase: str) -> str:
 
     The percentage lives HERE and never in the protocol's numeric progress field,
     which MCP requires to increase on every notification for a token. The add-on's
-    number does not qualify: it resets at the compile-to-upload seam and was
-    observed reading 27 on an already-completed job. Elapsed seconds carries the
-    monotonic guarantee; this string carries the meaning.
+    number does not qualify: it resets at the compile-to-upload seam and can read
+    nonzero on an already-completed job. Elapsed seconds carries the monotonic
+    guarantee; this string carries the meaning.
     """
     pct = job.get("progress")
     if isinstance(pct, int) and not isinstance(pct, bool) and 0 <= pct <= 100:
@@ -2654,8 +2606,7 @@ async def _tool_wait_for_esphome_job(
     # upload block and the flashed verdict rather than a bare upload status.
     current = await _esphome_job_record(hass, url, str(started.get("job_id") or "")) or started
     # One shared wording with get_esphome_job: two divergent versions of "stop
-    # here" are two chances to leave a loophole, and the model found the gap
-    # between them last time.
+    # here" leave a gap a model can exploit.
     note = _ESPHOME_HEADLESS_STOP if client_ip in _ESPHOME_HEADLESS_CLIENT_IPS else None
     content, outcome, resource = await _esphome_job_result(hass, url, current, note)
     return content, outcome, resource

@@ -65,7 +65,7 @@ def description_rows(value: Any, path: str = "") -> list[dict]:
 
 
 def missing_parameter_descriptions(schema: Any, path: str = "") -> list[str]:
-    """Inspect schema nodes, including properties inside arrays and unions."""
+    """Return JSON paths of properties lacking a description, descending into arrays and unions."""
     if not isinstance(schema, dict):
         return []
     missing = []

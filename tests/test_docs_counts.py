@@ -1,28 +1,16 @@
 """Pin the counts the documentation states against the code.
 
-Counts embedded in prose are the part of the docs that rots silently: nothing
-breaks, the sentence still reads fine, and the number is only wrong. The
-capability count on the overview page went stale twice, the tool count drifted
-in two places at once, and then a written-out "Eighty-six tools" sat invisible
-to this very test because its word dictionary only knew nine through
-twenty-five, so the checks are mechanical and the word list is generated.
+Counts embedded in prose rot silently: the sentence still reads fine and only
+the number is wrong. The checks are mechanical, the written-out number list is
+generated so it has no gaps, and the counts come from
+`mcp_view.tool_catalog_counts()` (also served by the admin info endpoint),
+never re-derived here.
 
-The counts themselves come from mcp_view.tool_catalog_counts(), the single
-source of truth (also served by the admin info endpoint). Nothing here re-derives them from the def lists.
-
-The localized READMEs restate the same headline counts and are scanned by their
-own patterns, because the English one cannot match a CJK noun (see NUMBER_ZH and
-NUMBER_JA). A translated count that nothing checks is the original defect in a
-second language.
-
-Word-numbers below nine are deliberately unchecked: prose legitimately counts
-subsets that small ("four retrieval tools", "Three panel tools"). Every real
-catalog count is far above it, and "hundred"/"thousand" anywhere near a counted
-noun fails outright with instructions to use digits, so a written-out total can
-never slip past again.
-
-`docs/` at the repo root is the only copy of the documentation. It is published
-as a hosted site; the integration ships no copy of it.
+The localized READMEs restate the headline counts and have their own patterns,
+because the English one cannot match a CJK noun (NUMBER_ZH, NUMBER_JA).
+Written-out numbers below nine are unchecked, since prose legitimately counts
+small subsets; "hundred"/"thousand" near a counted noun fails, so a large
+total must be written in digits.
 """
 
 from __future__ import annotations
@@ -39,10 +27,10 @@ from custom_components.phoenix_mcp.personas import PERSONA_DEFINITIONS
 
 DOCS = pathlib.Path(__file__).resolve().parent.parent / "docs"
 
-# Every written-out number nine through ninety-nine, generated so no gap like
-# "eighty-six" can exist. One through eight stay unlisted on purpose (subset
-# counts); anything larger than ninety-nine must be written in digits, enforced
-# by the hundred/thousand tripwire below.
+# Every written-out number nine through ninety-nine, generated so there are no
+# gaps. One through eight stay unlisted on purpose (subset counts); anything
+# larger than ninety-nine must be written in digits, enforced by the
+# hundred/thousand tripwire below.
 _UNITS = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine"]
 _TEENS = ["ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen",
           "sixteen", "seventeen", "eighteen", "nineteen"]
@@ -67,23 +55,20 @@ NUMBER = re.compile(
     r'(?<![\w.-])\b(' + _WORD_ALT + r'|\d{1,3})\b[^.<",;:)]{0,45}?\b' + _NOUNS + r"\b",
     re.IGNORECASE,
 )
-# The same count with the noun FIRST ("tools: 139", "capabilities (26)"). The
-# pattern above reads number-then-noun only, so this grammar was invisible to it.
-# Its window is DELIBERATELY far tighter than NUMBER's 45 characters: reading
-# right-to-left across a sentence sweeps up every number that merely follows the
-# noun, and the first attempt read "capability returns 400" as a capability count
-# of 400. Only light punctuation is allowed between the two, which is the whole
-# difference between a stated count and a number that happens to come later.
+# The same count with the noun FIRST ("tools: 139", "capabilities (26)"), which
+# NUMBER cannot see. The window is DELIBERATELY far tighter than NUMBER's 45
+# characters: a wide one sweeps up every number that merely follows the noun
+# ("capability returns 400" is not a count of 400). Only light punctuation may
+# sit between the two.
 NUMBER_AFTER_NOUN = re.compile(
     r'(?<![\w.-])\b' + _NOUNS + r"\b[\s:=(\[]{0,3}(" + _WORD_ALT + r"|\d{1,3})\b",
     re.IGNORECASE,
 )
-# A count with its noun ELIDED: "plus 116 more", "and 23 others". Neither pattern
-# above can see one, since there is no noun on either side to anchor to. This is
-# the exact shape the stale 108 hid in, so it is matched on the quantifier
-# instead and the VALUE is checked against every count the page may legitimately
-# state. Deliberately narrow: only the few phrasings that always mean a count,
-# so an ordinary sentence containing a number cannot trip it.
+# A count with its noun ELIDED: "plus 116 more", "and 23 others". Neither
+# pattern above has a noun to anchor to, so this matches on the quantifier and
+# checks the VALUE against the counts the page may state. Deliberately narrow:
+# only phrasings that always mean a count, so an ordinary sentence containing a
+# number cannot trip it.
 ELIDED_COUNT = re.compile(
     r"(?<![\w.-])\b(?:plus|and|another|a further)\s+(" + _WORD_ALT + r"|\d{1,3})\b\s+"
     r"(?:more|others|further|additional)\b",
@@ -95,13 +80,11 @@ BIG_WORD = re.compile(
     r"\b(hundred|thousand)\b[^.<]{0,45}?\b" + _NOUNS + r"\b", re.IGNORECASE
 )
 
-# The same counts, restated in the README's Simplified Chinese section. It needs
-# its own pattern rather than another alternation branch: `\b` is defined
-# between a word and a non-word character, and every CJK character is a word
-# character, so "131 个工具" has no boundary before the noun and the pattern
-# above matches nothing at all. The digits are the only part that can drift (a
-# translated count is written in digits, never in characters), so the window
-# between the number and its noun is deliberately tight.
+# The same counts in the README's Simplified Chinese section. It needs its own
+# pattern: `\b` sits between a word and a non-word character and every CJK
+# character is a word character, so "131 个工具" has no boundary before the noun
+# and the pattern above matches nothing. Translated counts are always digits, so
+# the window between the number and its noun is deliberately tight.
 _NOUNS_ZH = r"(工具|能力|角色|服务商)"
 NUMBER_ZH = re.compile(r"(?<![\w.-])(\d{1,3})\s*[个种项]?\s*" + _NOUNS_ZH)
 # Maps each Chinese noun onto the English key its allowed values are filed under.
@@ -113,8 +96,7 @@ _JA_KIND = {"ツール": "tool", "機能": "capabilit", "ペルソナ": "persona
 
 
 def _pages() -> list[pathlib.Path]:
-    # README carries the same headline counts as the docs site and drifted the
-    # same way, so it is scanned with them.
+    # The READMEs carry the same headline counts as the docs site.
     return sorted(DOCS.glob("*.html")) + sorted(DOCS.parent.glob("README*.md"))
 
 
@@ -124,7 +106,7 @@ def test_docs_directory_is_present() -> None:
 
 
 def test_agent_chat_provider_cards_are_alphabetical() -> None:
-    """Keep the provider scan predictable as the catalog grows."""
+    """The provider cards on the Agent Chat page stay alphabetical and complete."""
     html = (DOCS / "agentcli.html").read_text(encoding="utf-8")
     directory = re.search(
         r'<div class="grid-2 provider-directory">(.*?)<h2>Using the chat</h2>',
@@ -138,7 +120,7 @@ def test_agent_chat_provider_cards_are_alphabetical() -> None:
 
 
 def test_word_list_has_no_gaps() -> None:
-    """The 86 blind spot: every value 9..99 must be representable."""
+    """Every value 9..99 must be representable, so no written-out count is invisible."""
     assert sorted(WORDS.values()) == list(range(9, 100))
 
 
@@ -194,8 +176,8 @@ def _stale_counts(text: str, name: str = "fixture") -> list[str]:
             value = WORDS.get(raw, None)
             if value is None:
                 value = int(raw)
-            # No noun to key on, so any count the page could legitimately be
-            # stating is accepted; a value matching none of them is stale.
+            # No noun to key on; the only count prose elides is the additional
+            # tools total, so any other value is stale.
             every = {counts["additional"]}
             if value not in every:
                 stale.append(

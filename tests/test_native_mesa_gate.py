@@ -85,12 +85,11 @@ class TestMesaDecisionRouting:
     async def test_pending_returns_the_approval_and_does_not_actuate(self):
         """A MESA confirm hands the approval to the SHARED pending helper.
 
-        Patched at `_pending_or_inline` rather than at `_tool_pending`, because
-        that helper is the seam now: it decides between returning immediately and
-        holding the request open for `confirm_inline_wait_seconds`. Patching the
-        inner `_tool_pending` would assert only the no-wait branch and would go
-        on passing if this path stopped consulting the token's wait setting at
-        all, which is the defect that made this change necessary.
+        Patched at `_pending_or_inline` rather than `_tool_pending`: that helper decides
+        between returning immediately and holding the request open for
+        `confirm_inline_wait_seconds`. Patching the inner `_tool_pending` would assert
+        only the no-wait branch and would keep passing if this path stopped consulting
+        the token's wait setting.
         """
         approval = SimpleNamespace(id="ap-1", tool_name="HassTurnOn", expires_at=None)
         hass = _hass(with_mesa=True)
@@ -231,7 +230,7 @@ class TestMesaRuntimeAbsent:
 
 
 class TestServiceCallFailures:
-    """The error taxonomy on the native path, which was also uncovered."""
+    """The error taxonomy on the native path."""
 
     async def _call(self, exc):
         hass = _hass(with_mesa=False)
@@ -241,7 +240,7 @@ class TestServiceCallFailures:
             hass, _token(), {})
 
     async def test_timeout_reports_partial_success_not_an_error(self):
-        """A slow service is dispatched, not failed (the ha-mcp lesson)."""
+        """A slow service is dispatched, not failed."""
         import asyncio
 
         content, outcome, _ = await self._call(asyncio.TimeoutError())
@@ -258,8 +257,11 @@ class TestServiceCallFailures:
         assert content["content"][0]["text"] == "Service call failed."
 
     async def test_validation_error_message_is_surfaced(self):
-        """Safe: the entities are already WRITE-permitted and the complaint is
-        about the caller's own argument, not hidden state."""
+        """A validation error message is surfaced to the caller.
+
+        Safe: the entities are already WRITE-permitted and the complaint is about
+        the caller's own argument, not hidden state.
+        """
         from homeassistant.exceptions import ServiceValidationError
 
         content, outcome, _ = await self._call(ServiceValidationError("brightness out of range"))
@@ -267,8 +269,11 @@ class TestServiceCallFailures:
         assert "brightness out of range" in content["content"][0]["text"]
 
     async def test_vol_invalid_is_surfaced_too(self):
-        """hass.services.async_call re-raises the target schema's vol.Invalid
-        unwrapped, so it never reaches the HomeAssistantError catch."""
+        """A vol.Invalid raised by the service call is surfaced too.
+
+        hass.services.async_call re-raises the target schema's vol.Invalid
+        unwrapped, so it never reaches the HomeAssistantError catch.
+        """
         import voluptuous as vol
 
         content, outcome, _ = await self._call(vol.Invalid("extra keys not allowed"))

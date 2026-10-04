@@ -118,7 +118,11 @@ def _environment(hass: HomeAssistant, *, entry_id: str = "remove-entry") -> dict
 
 
 def _make_legacy_shared_device(device: object, *entry_ids: str) -> None:
-    """Emulate HA's pre-2026.9 composite ownership shape without deprecated APIs."""
+    """Make a device report shared ownership by several entries on either registry shape.
+
+    Older HA stores plain `config_entries` sets; newer HA keeps composite
+    subentries behind `_pending_move`.
+    """
     if not hasattr(device, "_pending_move"):
         object.__setattr__(device, "config_entries", set(entry_ids))
         object.__setattr__(device, "config_entries_subentries", {eid: {None} for eid in entry_ids})

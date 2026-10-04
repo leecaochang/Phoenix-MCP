@@ -1,8 +1,8 @@
 """Frontend/backend contract drift guard for the admin token response.
 
 The frontend's TokenRecord type (frontend_src/types.ts) is hand-mirrored from the
-Python TokenRecord serializer. There was no guard, so the two could drift silently.
-This test pins the serialized key set against a shared committed fixture
+Python TokenRecord serializer, so they could drift silently. This test pins the
+serialized key set against a shared committed fixture
 (tests/contract/token_record_keys.json); the matching frontend test asserts the
 TS type covers the same keys.
 
@@ -24,8 +24,8 @@ _CONTRACT = os.path.join(os.path.dirname(__file__), "contract", "token_record_ke
 
 
 def _sample_token() -> TokenRecord:
-    # pass_through=True so the conditional use_assist_exposure field is emitted,
-    # giving the full superset of serialized keys.
+    # pass_through=True emits the conditional use_assist_exposure field, giving
+    # the full superset of serialized keys.
     return TokenRecord(
         id="x", name="n", token_hash="h",
         created_at=datetime.now(timezone.utc), created_by="u", pass_through=True,
@@ -53,13 +53,9 @@ _VERSION_TYPE_RE = re.compile(r'resource_type=["\']([a-z_]+)["\']')
 def _backend_version_resource_types() -> set[str]:
     """Every resource_type _record_version is actually called with.
 
-    Read from the source rather than a hand-kept list, so this reflects reality
-    and cannot itself drift; a call site passing a variable instead of a literal
-    would be invisible here, which the count floor below is a backstop for.
-
-    Scans the whole package, not just mcp_view: the ESPHome executors moved to
-    tools/esphome.py and took "esphome_yaml" with them, which a single-file scan
-    silently reported as a removed resource type.
+    Read from source rather than a hand-kept list, across the whole package (call
+    sites live outside mcp_view). A call site passing a variable instead of a
+    literal is invisible here; the count floor below is the backstop.
     """
     import ast
     import pathlib
@@ -104,16 +100,11 @@ def test_version_resource_types_match_the_frontend_contract():
 def test_versioned_resource_types_accepts_every_recorded_type():
     """VersionStore.record RAISES on a type absent from VERSIONED_RESOURCE_TYPES.
 
-    _record_version swallows that, deliberately: history capture must never break
-    the write it is recording. The consequence is that a type missing from the
-    const set loses its ENTIRE rollback path silently, leaving only a log line
-    nobody reads, while every write still reports success.
-
-    The test above pins the call sites against the frontend fixture and passed
-    happily while this was broken, because the two sets are maintained separately.
-    Live-hit on 2026-08-03: `energy` reached the fixture, the TS union and the
-    label map, but not this frozenset, so every Energy write recorded nothing and
-    the Changes tab was simply empty of them.
+    _record_version swallows that deliberately (history capture must never break
+    the write it records), so a type missing from the const set silently loses
+    its ENTIRE rollback path while every write still reports success. The
+    frontend fixture check cannot see this because the two sets are maintained
+    separately.
     """
     from custom_components.phoenix_mcp.const import VERSIONED_RESOURCE_TYPES
 
@@ -128,7 +119,7 @@ def test_versioned_resource_types_accepts_every_recorded_type():
 def test_version_resource_type_scan_still_finds_the_call_sites():
     # Guards the guard: if _record_version is refactored to pass the type
     # positionally or via a variable, the regex silently returns fewer types and
-    # the assertion above would pass while checking almost nothing.
+    # the assertions above would pass while checking almost nothing.
     assert len(_backend_version_resource_types()) >= 10
 
 
@@ -137,10 +128,10 @@ _PROVIDER_CONTRACT = os.path.join(
 
 
 def test_agentcli_provider_kinds_match_the_frontend_contract():
-    """Shared account transport includes both isolated provider purposes.
+    """The frontend provider-kind union covers both AGENTCLI_PROVIDERS and DECISION_PROVIDERS.
 
-    Eligibility for conversation is enforced separately by the registry,
-    account resolver and catalog filtering, not by this transport union.
+    Eligibility for conversation is enforced separately by the registry, account
+    resolver and catalog filtering, not by this transport union.
     """
     from custom_components.phoenix_mcp.const import AGENTCLI_PROVIDERS, DECISION_PROVIDERS
 
@@ -156,7 +147,7 @@ def test_agentcli_provider_kinds_match_the_frontend_contract():
 
 def test_contract_fixture_covers_every_capability():
     # The cap_* fields are the most drift-prone (each new capability touches both
-    # sides); assert the fixture carries the full canonical capability set.
+    # sides), so the fixture must carry the full canonical capability set.
     from custom_components.phoenix_mcp.const import CAPABILITY_NAMES
 
     with open(_CONTRACT, encoding="utf-8") as f:
@@ -169,9 +160,8 @@ _CAP_MATRIX = os.path.join(
     "frontend_src", "components", "CapabilityMatrix.tsx",
 )
 
-# One entry of the frontend CAPS table. The four fields are always in this
-# order, which is what makes a regex sufficient here (the same pragmatic choice
-# as the provider-kind and version-resource-type scans above).
+# One entry of the frontend CAPS table. The fields always appear in this order,
+# which is what makes a regex sufficient here.
 _CAP_ENTRY_RE = re.compile(
     r'key:\s*"(?P<key>cap_\w+)",\s*'
     r'labelKey:\s*"[^"]*",\s*'
@@ -203,13 +193,11 @@ def test_capability_tier_scan_still_finds_the_frontend_table():
 
 
 def test_capability_tiers_match_the_frontend_table():
-    """CAPABILITY_TIERS is hand-mirrored into the panel; nothing else compares them.
+    """CAPABILITY_TIERS is hand-mirrored into the panel; only this test compares them.
 
     The backend never reads the tier itself, so a capability filed under the
     wrong tier is invisible server-side and shows up only as a control sitting
-    in the wrong group in the UI. Until this test existed CAPABILITY_TIERS had
-    no consumer at all, which made the "the contract guards catch it" note in
-    CLAUDE.md untrue for this one constant.
+    in the wrong group in the UI.
     """
     from custom_components.phoenix_mcp.const import CAPABILITY_NAMES, CAPABILITY_TIERS
 
@@ -253,13 +241,12 @@ _MESA_SCOPE_CONTRACT = os.path.join(
 
 
 def test_mesa_scopes_match_the_frontend_contract():
-    """The inheritance levels are hand-mirrored into the panel many times.
+    """The inheritance levels are hand-mirrored into the panel in many places.
 
-    The editor's API dispatch, six label maps, the list table and the in-context
-    injector each name the scopes, and most of those are silent when one is
-    missing: the dispatch used to end in an untyped fallthrough that wrote any
-    unnamed scope to the AREA endpoint. The matching frontend test pins the TS
-    union, the label maps, the list table and the injector against this fixture.
+    The editor's API dispatch, several label maps, the list table and the
+    in-context injector each name the scopes, and most are silent when one is
+    missing. The matching frontend test pins the TS union, the label maps, the
+    list table and the injector against this fixture.
     """
     from custom_components.phoenix_mcp.const import MESA_SCOPES
 

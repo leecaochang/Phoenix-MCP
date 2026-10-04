@@ -1,4 +1,4 @@
-"""Tests for Phoenix MCP MCP endpoint."""
+"""The Phoenix MCP JSON-RPC endpoint: transport, tools, resources and gating."""
 
 from __future__ import annotations
 
@@ -411,12 +411,14 @@ async def test_mcp_post_notification_returns_202():
     assert result.status == 202
 
 
-# --- malformed JSON-RPC envelope handling (Codex audit) ---
+# --- malformed JSON-RPC envelope handling ---
 
 @pytest.mark.asyncio
 async def test_mcp_post_non_dict_params_is_invalid_params_not_500():
     """A tools/call with a non-dict params (list/scalar) must return a clean
-    JSON-RPC -32602, not escape post() as an AttributeError -> aiohttp 500."""
+    JSON-RPC -32602, not escape post() as an AttributeError that aiohttp turns into
+    a 500.
+    """
     token, raw = _make_token()
     data = _make_data(token)
     view = _make_mcp_view(data)
@@ -609,11 +611,11 @@ async def test_mcp_malformed_no_id_is_invalid_request_not_notification():
 async def test_mcp_invalid_id_is_refused_and_never_dispatched(bad_id):
     """An id that is not an MCP String or Integer must not reach a tool.
 
-    It used to be coerced to None and dispatched anyway, so a tools/call with
-    `id: {}` ran its side effect and answered with an id its sender could not
-    match to the request, which is the shape that makes a client retry a
-    non-idempotent call. Booleans are in here because bool subclasses int in
-    Python, so `id: true` passed every type check and was echoed back as `true`.
+    Coercing it to None and dispatching anyway would let a tools/call with `id: {}`
+    run its side effect and answer with an id its sender cannot match to the
+    request, the shape that makes a client retry a non-idempotent call. Booleans are
+    included because bool subclasses int in Python, so `id: true` would pass every
+    type check and be echoed back as `true`.
     """
     token, raw = _make_token()
     data = _make_data(token)
@@ -678,11 +680,11 @@ async def test_mcp_invalid_id_in_a_batch_errors_only_that_item():
 
 @pytest.mark.asyncio
 async def test_mcp_batch_spends_one_rate_limit_unit_per_item():
-    """The batch multiplier: 50 calls used to cost one unit.
+    """A batch spends one rate-limit unit per item, not one per request.
 
-    Pinned at the transport, not just on the limiter: charge_extra passing its
-    own unit tests says nothing about the batch path calling it, and the whole
-    finding was that the request-level check is the only thing that ran.
+    Pinned at the transport, not just on the limiter: charge_batch passing its own
+    unit tests says nothing about the batch path calling it, and the request-level
+    check alone charges a batch once.
     """
     token, raw = _make_token()
     data = _make_data(token)
@@ -706,9 +708,9 @@ async def test_mcp_batch_spends_one_rate_limit_unit_per_item():
 async def test_mcp_batch_over_the_rate_limit_is_refused_before_any_item_runs():
     """The ceiling has to hold, not just be accounted for afterwards.
 
-    Charging without refusing let a token limited to 10/min send a 50-item batch,
-    execute all 50, and only then be throttled. Nothing is dispatched before this
-    check, so refusing the whole batch leaves nothing half-applied.
+    Charging without refusing would let a token limited to 10/min send a 50-item
+    batch, execute all 50, and only then be throttled. Nothing is dispatched before
+    this check, so refusing the whole batch leaves nothing half-applied.
     """
     token, raw = _make_token()
     token.rate_limit_requests = 10
@@ -736,7 +738,8 @@ async def test_mcp_batch_over_the_rate_limit_is_refused_before_any_item_runs():
 @pytest.mark.asyncio
 async def test_mcp_batch_over_the_burst_ceiling_is_refused():
     # A batch lands in one instant, so its whole cost falls in one burst window.
-    # Checking only the minute limit let 60/min + burst 10/sec run 50 items.
+    # Checking only the minute limit would let 60/min with burst 10/sec run 50
+    # items.
     token, raw = _make_token()
     token.rate_limit_requests = 60
     token.rate_limit_burst = 10
@@ -759,8 +762,9 @@ async def test_mcp_batch_over_the_burst_ceiling_is_refused():
 async def test_mcp_batch_response_headers_report_the_batch_spend():
     """Headers must describe what the batch spent, not one request.
 
-    They were built from the single-request result computed before the other N-1
-    items were charged, so a 50-item batch answered X-RateLimit-Remaining: 59.
+    A header built from the single-request result, computed before the other N-1
+    items were charged, would answer X-RateLimit-Remaining: 59 after a 50-item
+    batch.
     """
     token, raw = _make_token()
     token.rate_limit_requests = 60
@@ -939,8 +943,9 @@ async def test_initialize_nudges_find_available_actions_when_authoring_and_searc
 
 @pytest.mark.asyncio
 async def test_initialize_omits_authoring_nudge_without_search():
-    # Cannot search -> find_available_actions is unavailable -> no nudge (keeps the
-    # always-on primer clean for tokens the guidance does not apply to).
+    # Without search, find_available_actions is unavailable, so there is no nudge
+    # (this keeps the always-on primer clean for tokens the guidance does not apply
+    # to).
     token, _ = _make_token(cap_automation_write="allow")  # cap_search defaults to deny
     data = _make_data(token)
     hass = _make_hass(data)
@@ -1198,13 +1203,12 @@ async def test_tools_call_get_state_success():
 @pytest.mark.asyncio
 async def test_tools_call_unhandled_exception_returns_clean_error_not_hang():
     # _call_tool is a bare dispatcher with no exception handling of its own, and
-    # post() has none either. Before this safety net, an unhandled exception in a
-    # tool handler (e.g. a type-confusion bug triggered by a model sending an
-    # unexpected argument type) propagated all the way to aiohttp's default error
-    # handling, which the MCP client apparently cannot parse cleanly - live-
-    # observed as a multi-minute client hang, not just an ugly error. This must
-    # instead come back as a normal, well-formed JSON-RPC result with a generic,
-    # non-leaking message so the agent can react instead of hanging.
+    # post() has none either, so the dispatch layer must catch an unhandled
+    # exception in a tool handler (e.g. a type-confusion bug triggered by a model
+    # sending an unexpected argument type). Left to reach aiohttp's default error
+    # handling, it can hang an MCP client instead of failing fast. It must come back
+    # as a normal, well-formed JSON-RPC result with a generic, non-leaking message
+    # so the agent can react.
     token, _ = _make_token()
     data = _make_data(token)
     hass = _make_hass(data)
@@ -1274,7 +1278,7 @@ async def test_tools_call_get_state_not_found_entity_same_response_as_denied():
     assert nf_text == denied_text
 
 
-# --- get_state / get_states field projection (v2.1) ---
+# --- get_state / get_states field projection ---
 
 from custom_components.phoenix_mcp.mcp_view import (  # noqa: E402
     _normalize_fields,
@@ -1292,8 +1296,8 @@ def _full_light_dict():
             "friendly_name": "Kitchen",
             "brightness": 200,
             "color_temp_kelvin": 3000,
-            "supported_features": 44,   # not domain-important -> dropped in lean
-            "icon": "mdi:lamp",         # not domain-important -> dropped in lean
+            "supported_features": 44,   # not domain-important: dropped in lean
+            "icon": "mdi:lamp",         # not domain-important: dropped in lean
         },
         "last_changed": "2026-06-29T00:00:00+00:00",
         "last_updated": "2026-06-29T00:00:00+00:00",
@@ -1363,8 +1367,8 @@ def test_lean_state_domain_allowlist_keeps_primary_drops_junk(entity_id, keep_at
 
 
 def test_lean_state_counter_uses_minimum_maximum_not_min_max():
-    # counter's HA attributes are minimum/maximum/step (NOT min/max like number),
-    # the exact name gotcha the allowlist was verified against.
+    # counter's HA attributes are minimum/maximum/step (NOT min/max like number), so
+    # the allowlist must use those exact names.
     d = {
         "entity_id": "counter.visits",
         "state": "3",
@@ -1411,7 +1415,7 @@ def test_select_state_fields_cannot_resurrect_scrubbed_attr():
 
 def test_project_state_modes():
     d = _full_light_dict()
-    assert _project_state(d, None, True) is d  # detailed -> full as-is
+    assert _project_state(d, None, True) is d  # detailed: full as-is
     assert _project_state(d, ["state"], False) == {"entity_id": "light.kitchen", "state": "on"}
     lean = _project_state(d, None, False)
     assert "supported_features" not in lean["attributes"]
@@ -1454,7 +1458,7 @@ async def test_tools_call_get_state_lean_default_and_detailed():
     assert "context" in full_out
 
 
-# --- get_logbook / get_calendar_events (v2.1) ---
+# --- get_logbook / get_calendar_events ---
 
 @pytest.mark.asyncio
 async def test_get_logbook_forbidden_without_cap():
@@ -1485,7 +1489,7 @@ async def test_get_logbook_scopes_to_accessible_entities():
         {"name": "Some event", "message": "no entity id", "when": 3.0},
     ]
     # _logbook_entry_visible (mcp_view.resolve) does the scoping under test; the
-    # extra filter_service_response redaction pass has its own coverage, so stub it
+    # extra filter_service_response redaction pass is tested elsewhere, so stub it
     # to identity here (it would otherwise hit a real entity registry on the mock).
     with patch("custom_components.phoenix_mcp.mcp_view.resolve", side_effect=_res), \
          patch("custom_components.phoenix_mcp.mcp_view.filter_service_response", side_effect=lambda d, t, h: d), \
@@ -1554,7 +1558,7 @@ async def test_get_calendar_events_not_found_when_inaccessible():
     assert outcome == "denied"
 
 
-# --- list_blueprints (v2.1) ---
+# --- list_blueprints ---
 
 @pytest.mark.asyncio
 async def test_list_blueprints_forbidden_without_cap():
@@ -1772,7 +1776,10 @@ async def test_get_blueprint_oversized_file_refused(tmp_path):
 
 @pytest.mark.asyncio
 async def test_get_logs_errors_when_system_log_not_loaded():
-    """Returning [] here said "no warnings or errors", the opposite of the truth."""
+    """An unloaded system_log is an error, not [].
+
+    An empty list would claim "no warnings or errors", the opposite of the truth.
+    """
     token, _ = _make_token(cap_log_read="allow")
     data = _make_data(token)
     hass = _make_hass(data)
@@ -1806,9 +1813,9 @@ async def test_get_logs_returns_entries_when_system_log_present():
 async def test_get_logs_refuses_info_rather_than_answering_as_warning():
     """HA attaches system_log at WARNING, so INFO records never enter the store.
 
-    Coercing INFO to WARNING is what made the missing level invisible: the caller
-    got warnings back with nothing saying INFO is not collected, so a quiet
-    result read as "nothing was logged" instead of "that level is unavailable".
+    Coercing INFO to WARNING would hide the missing level: the caller would get
+    warnings back with nothing saying INFO is not collected, so a quiet result would
+    read as "nothing was logged" instead of "that level is unavailable".
     """
     token, _ = _make_token(cap_log_read="allow")
     data = _make_data(token)
@@ -1825,8 +1832,10 @@ async def test_get_logs_refuses_info_rather_than_answering_as_warning():
 
 @pytest.mark.asyncio
 async def test_get_logs_denied_token_never_learns_about_its_own_level():
-    """Rule 29(a): the cap check runs first, so a denied token gets the uniform
-    refusal and never a message describing the argument it sent."""
+    """A denied token gets the uniform refusal, never a message about its argument.
+
+    The cap check runs first.
+    """
     token, _ = _make_token(cap_log_read="deny")
     data = _make_data(token)
     hass = _make_hass(data)
@@ -1929,14 +1938,14 @@ async def test_tools_call_restart_ha_denied_for_pass_through_without_cap_restart
 
 @pytest.mark.asyncio
 async def test_authoring_validator_drift_is_not_reported_as_invalid_config():
-    """An unexpected exception from HA's validator is an internal error, not bad input.
+    """An unexpected HA validator exception is an internal error, not bad input.
 
     HA calls its automation validator with raise_on_errors=True, so vol.Invalid and
     HomeAssistantError are the caller's own bad config. Anything else (an
-    AttributeError after an HA refactor, say) used to land in the same broad
-    catch and answer "check trigger, condition, and action fields", which sends
-    an agent into rewriting a config that was never the problem. Regression:
-    the message must NOT be the domain guidance, and the failure must be logged.
+    AttributeError after an HA refactor, say) must not land in the same broad catch
+    and answer "check trigger, condition, and action fields", which sends an agent
+    into rewriting a config that was never the problem. The message must NOT be the
+    domain guidance, and the failure must be logged.
     """
     from custom_components.phoenix_mcp.tools import authoring
 
@@ -2598,9 +2607,9 @@ def _fake_action_done(calls):
 
 @pytest.mark.asyncio
 async def test_call_service_cover_toggle_denied_without_physical_control(hass):
-    # End-to-end through _tool_call_service: cover.toggle (a service the old
-    # exact-name allowlist missed) must hit the cap_physical_control gate for a
-    # token that has WRITE on the cover but physical control denied.
+    # End-to-end through _tool_call_service: cover.toggle (a service an exact-name
+    # allowlist would miss) must hit the cap_physical_control gate for a token that
+    # has WRITE on the cover but physical control denied.
     from custom_components.phoenix_mcp.data import PhoenixData
     from custom_components.phoenix_mcp.mcp_view import _tool_call_service
     from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree
@@ -2745,10 +2754,10 @@ def test_turn_service_groups_routes_lock_and_cover():
 
 
 def test_turn_service_groups_routes_vacuum():
-    # Regression: homeassistant.turn_on/off silently no-ops on vacuum entities
-    # (HA logs "does not support entities vacuum.X"), the same class of bug
-    # already fixed for lock/cover. "off" maps to stop (halt in place), not
-    # return_to_base, matching the word "stop" rather than "dock".
+    # homeassistant.turn_on/off silently no-ops on vacuum entities (HA logs "does
+    # not support entities vacuum.X"), as it does for lock/cover. "off" maps to stop
+    # (halt in place), not return_to_base, matching the word "stop" rather than
+    # "dock".
     from custom_components.phoenix_mcp.tools.native import _turn_service_groups
 
     on = {(d, s): e for d, s, e in _turn_service_groups("turn_on", ["vacuum.roomba"])}
@@ -2759,9 +2768,9 @@ def test_turn_service_groups_routes_vacuum():
 
 
 def test_turn_service_groups_routes_valve():
-    # Same silent no-op class as vacuum: the valve domain has open/close_valve,
-    # no turn_on/off services, so homeassistant.turn_on/off cannot operate it.
-    # "Turn on the water" -> open the valve, mirroring HA's own intent handling.
+    # Same silent no-op class as vacuum: the valve domain has open/close_valve, no
+    # turn_on/off services, so homeassistant.turn_on/off cannot operate it. "Turn on
+    # the water" opens the valve, mirroring HA's own intent handling.
     from custom_components.phoenix_mcp.tools.native import _turn_service_groups
 
     on = {(d, s): e for d, s, e in _turn_service_groups("turn_on", ["valve.irrigation"])}
@@ -2773,8 +2782,7 @@ def test_turn_service_groups_routes_valve():
 
 @pytest.mark.asyncio
 async def test_set_position_routes_cover_and_valve_by_domain():
-    """HassSetPosition dispatches cover.set_cover_position vs valve.set_valve_position
-    per entity domain (the spec promises valve support; it was cover-hardcoded)."""
+    """HassSetPosition dispatches cover vs valve position services per entity domain."""
     from custom_components.phoenix_mcp.tools.native import _execute_hass_set_position
 
     token = _make_physical_token("allow")
@@ -2795,7 +2803,7 @@ async def test_set_position_routes_cover_and_valve_by_domain():
          patch("custom_components.phoenix_mcp.tools.native._tool_intent_action", side_effect=_fake_intent_action):
         result = await _execute_hass_set_position({"name": "Irrigation Valve", "position": 50}, token, hass, data)
 
-    # Default resolution now spans both position-capable domains.
+    # Default resolution spans both position-capable domains.
     assert resolver.call_args.kwargs["domains"] == ["cover", "valve"]
     assert calls == [("valve", "set_valve_position", ("valve.irrigation",), {"position": 50})]
     assert result[1] == "allowed"
@@ -2850,12 +2858,12 @@ async def test_turn_on_off_registered_as_executors():
 async def test_turn_on_confirm_creates_real_approval_then_executor_actuates(hass):
     """End-to-end native confirm path with the REAL _gate (not mocked).
 
-    The sibling confirm tests above mock _gate to a canned pending tuple; this one
-    drives the real capability gate so we verify the parts those cannot: that a real
-    PendingApproval is created carrying the saved args and the right cap, that the
-    lock is held (not actuated) while pending, and that async_execute_approved_tool re-runs
-    from those saved args and actuates lock.lock through the real _tool_intent_action.
-    Intent resolution itself is stubbed (covered in test_policy_engine).
+    Sibling confirm tests mock _gate to a canned pending tuple; this one drives the
+    real capability gate to verify what those cannot: a real PendingApproval is
+    created carrying the saved args and the right cap, the lock is held (not
+    actuated) while pending, and async_execute_approved_tool re-runs from those
+    saved args and actuates lock.lock through the real _tool_intent_action. Intent
+    resolution itself is stubbed.
     """
     import asyncio as _asyncio
     from custom_components.phoenix_mcp.mcp_view import (
@@ -3034,7 +3042,8 @@ async def test_inline_confirm_falls_back_to_pending_on_timeout(hass):
 @pytest.mark.asyncio
 async def test_gate_routes_to_inline_wait_only_when_opted_in():
     """_gate calls the inline wait for a pending result iff the token opted in;
-    otherwise it returns the immediate pending reply as before."""
+    otherwise it returns the immediate pending reply.
+    """
     from types import SimpleNamespace
     from custom_components.phoenix_mcp.tool_common import _gate
 
@@ -3064,10 +3073,8 @@ async def test_gate_routes_to_inline_wait_only_when_opted_in():
 async def test_a_mesa_confirm_honours_the_inline_wait_like_a_capability_confirm():
     """The two kinds of confirm gate must hold the request the same way.
 
-    A MESA confirm used to return `_tool_pending` directly and never consult
-    `confirm_inline_wait_seconds`, so an operator who configured an inline wait
-    got it for a capability confirm and not for a MESA one. Both now go through
-    the single `_pending_or_inline` definition.
+    A MESA confirm honours `confirm_inline_wait_seconds` exactly like a capability
+    confirm, because both go through the single `_pending_or_inline` definition.
     """
     from types import SimpleNamespace
     from custom_components.phoenix_mcp.tool_common import _pending_or_inline
@@ -3102,11 +3109,11 @@ def _resolved_approval(status, *, tool_result=None):
 
 
 def test_polling_an_approved_action_carries_the_operator_accepted_note():
-    """The note has to reach agents that POLL, not just those that wait inline.
+    """The operator-accepted note must reach agents that POLL.
 
-    Every approval outliving the inline window resolves by polling, and those
-    are the slow ones an agent is most likely to re-propose. Before this, only
-    `_await_inline_confirm` and Agent Chat appended it.
+    Not just those that wait inline: every approval outliving the inline window
+    resolves by polling, and those are the slow ones an agent is most likely to
+    re-propose.
     """
     from custom_components.phoenix_mcp.mcp_view import _approval_status_result
     from custom_components.phoenix_mcp.tool_common import _OPERATOR_ACCEPTED_NOTE
@@ -3241,7 +3248,7 @@ async def test_a_deploy_advises_that_tool_schemas_may_have_changed():
     assert token.tools_catalog_fingerprint == mcp_view._TOOL_CATALOG_FINGERPRINT
     assert not _has_catalog_advisory(await _dt_call(token, hass, data, 2))
 
-    # A deploy: what this client fetched no longer matches what the build serves.
+    # A deploy: what this client fetched differs from what the build serves.
     token.tools_catalog_fingerprint = "0000deadbeef0000"
     assert _has_catalog_advisory(await _dt_call(token, hass, data, 3))
     assert not _has_catalog_advisory(await _dt_call(token, hass, data, 4))
@@ -3393,11 +3400,11 @@ async def test_legacy_token_never_stale_on_upgrade():
 
 @pytest.mark.asyncio
 async def test_call_service_surfaces_validation_error_as_invalid_request(hass):
-    """A ServiceValidationError from HA (e.g. an out-of-range setpoint) is surfaced
-    to the agent as invalid_request with its message, not masked as 'Forbidden.'.
+    """A ServiceValidationError from HA is surfaced as invalid_request with its message.
 
-    The token already holds WRITE on the entity, so the argument-level message
-    leaks nothing about hidden entities/services (no oracle regression).
+    An out-of-range setpoint, say, is not masked as 'Forbidden.'. The token already
+    holds WRITE on the entity, so the argument-level message leaks nothing about
+    hidden entities/services (it is not an oracle).
     """
     from homeassistant.exceptions import ServiceValidationError
     from homeassistant.helpers import entity_registry as er
@@ -3443,15 +3450,16 @@ async def test_call_service_surfaces_validation_error_as_invalid_request(hass):
 
 @pytest.mark.asyncio
 async def test_call_service_surfaces_schema_rejection_as_invalid_request(hass):
-    """hass.services.async_call validates service_data against the target
-    service's OWN voluptuous schema and re-raises vol.Invalid/MultipleInvalid
-    unwrapped (not as a HomeAssistantError), so without its own catch a service
-    whose schema does not accept entity_id at all falls through the
-    ServiceValidationError/HomeAssistantError catches entirely and hits the
-    dispatch-level safety net as a bare 'Internal error', losing the
-    actionable voluptuous detail. The
-    triggering shape is a model calling a service that does not target entities,
-    with a resolved entity attached anyway."""
+    """A service's own vol.Invalid is surfaced as invalid_request.
+
+    hass.services.async_call validates service_data against the target service's OWN
+    voluptuous schema and re-raises vol.Invalid/MultipleInvalid unwrapped (not as a
+    HomeAssistantError). A service whose schema does not accept entity_id at all
+    would otherwise fall through the ServiceValidationError/HomeAssistantError
+    catches to the dispatch-level safety net as a bare 'Internal error', losing the
+    actionable voluptuous detail. The typical trigger is a model calling a service
+    that does not target entities, with a resolved entity attached anyway.
+    """
     import voluptuous as vol
     from homeassistant.helpers import entity_registry as er
 
@@ -3497,9 +3505,11 @@ async def test_call_service_surfaces_schema_rejection_as_invalid_request(hass):
 
 @pytest.mark.asyncio
 async def test_intent_action_surfaces_schema_rejection_as_invalid_request(hass):
-    """Same fix as test_call_service_surfaces_schema_rejection_as_invalid_request,
-    for the native Hass* tool path (_tool_intent_action), which has its own
-    parallel ServiceNotFound/ServiceValidationError/HomeAssistantError catch."""
+    """The native Hass* path surfaces a service schema rejection too.
+
+    _tool_intent_action has its own parallel set of ServiceNotFound,
+    ServiceValidationError and HomeAssistantError catches.
+    """
     import voluptuous as vol
 
     from custom_components.phoenix_mcp.tools.native import _tool_intent_action
@@ -3572,8 +3582,10 @@ async def test_call_service_service_not_found_stays_generic_forbidden(hass):
 async def test_call_service_service_not_found_hints_verbs_for_core_domain(hass):
     """For a curated core actuator domain (DOMAIN_SERVICE_HINTS), a ServiceNotFound
     surfaces the valid core service verbs as invalid_request so the agent can
-    self-correct a wrong-verb guess (valve.open -> valve.open_valve). Leak-safe:
-    post-authorization + a hardcoded public verb list, no live services lookup."""
+    self-correct a wrong-verb guess (valve.open instead of valve.open_valve).
+    Leak-safe: post-authorization plus a hardcoded public verb list, no live
+    services lookup.
+    """
     from homeassistant.exceptions import ServiceNotFound
     from homeassistant.helpers import entity_registry as er
 
@@ -3628,7 +3640,7 @@ async def test_no_target_reload_executes_bare_without_entity_flattening(hass):
     from custom_components.phoenix_mcp.data import PhoenixData
     from custom_components.phoenix_mcp.mcp_view import _execute_call_service
 
-    # A live automation entity: the old flatten path would attach it as a target.
+    # A live automation entity: entity flattening would attach it as a target.
     hass.states.async_set("automation.foo", "on", {})
 
     captured: dict = {}
@@ -3783,12 +3795,11 @@ def test_inline_resolved_reports_execution_failure_with_executor_error():
 # ---------------------------------------------------------------------------
 # prompts/list + prompts/get for pass-through tokens.
 #
-# These had NO tests, and both call sites wrap _get_ha_assist_api in a bare
-# `except Exception`. HA removed LLMContext.user_prompt, so constructing it
-# raised TypeError, the except swallowed it, and both endpoints silently
-# reported no prompts. Nothing failed loudly; the feature just went quiet.
-# Found by type checking. These pin both halves: that the context is built
-# against the LIVE dataclass, and that the endpoint actually returns a prompt.
+# Both call sites wrap _get_ha_assist_api in a bare `except Exception`, so a failure
+# constructing LLMContext (HA removed LLMContext.user_prompt, which makes a stale
+# construction raise TypeError) is swallowed and both endpoints silently report no
+# prompts. These pin both halves: that the context is built against the LIVE
+# dataclass, and that the endpoint actually returns a prompt.
 # ---------------------------------------------------------------------------
 
 
@@ -3813,8 +3824,8 @@ async def test_get_ha_assist_api_builds_a_context_the_live_ha_accepts():
 
     ctx = captured["ctx"]
     assert isinstance(ctx, ha_llm.LLMContext)
-    # Every field it was given is one the live dataclass declares. A field that
-    # HA has since removed (user_prompt) must simply not be passed.
+    # Every field it was given is one the live dataclass declares. A field HA
+    # removed (user_prompt) must not be passed.
     declared = {f.name for f in dataclasses.fields(ha_llm.LLMContext)}
     assert "platform" in declared and ctx.platform == "phoenix_mcp"
     assert "user_prompt" not in declared or hasattr(ctx, "user_prompt")
@@ -3822,7 +3833,7 @@ async def test_get_ha_assist_api_builds_a_context_the_live_ha_accepts():
 
 @pytest.mark.asyncio
 async def test_prompts_list_returns_the_assist_prompt_for_a_pass_through_token():
-    """The regression itself: this returned [] because the construction raised."""
+    """prompts/list returns the Assist prompt for a pass-through token, not []."""
     from types import SimpleNamespace
 
     from homeassistant.helpers import llm as ha_llm
@@ -3859,12 +3870,12 @@ def _pending_for(approval_id: str, token_id: str = "tid") -> dict:
 
 @pytest.mark.asyncio
 async def test_inline_wait_is_skipped_when_the_token_already_has_one_pending():
-    """The change that makes batch approval usable.
+    """The inline wait steps aside once the token already has a backlog.
 
-    The hold blocks a whole request and tool calls arrive one at a time, so
-    approval N+1 cannot be CREATED until approval N stops waiting. Live-measured
-    at a 60s wait, consecutive approvals landed 62.8s apart, i.e. twenty writes
-    would take twenty minutes to fill a queue meant to be reviewed in one go.
+    The hold blocks a whole request and tool calls arrive one at a time, so approval
+    N+1 cannot be CREATED until approval N stops waiting: at a 60s wait, twenty
+    writes would take about twenty minutes to fill a queue meant to be reviewed in
+    one go.
     """
     from types import SimpleNamespace
     from custom_components.phoenix_mcp.tool_common import _pending_or_inline
@@ -3911,10 +3922,10 @@ async def test_the_first_confirm_still_waits():
 
 @pytest.mark.asyncio
 async def test_the_calls_own_approval_does_not_count_as_a_backlog():
-    """async_evaluate_capability stores this approval BEFORE we get here.
+    """async_evaluate_capability stores this approval BEFORE the backlog check runs.
 
-    Counting it would make the queue never look empty, so no call would ever
-    wait and the inline feature would be silently dead for every token.
+    Counting it would make the queue never look empty, so no call would ever wait
+    and the inline feature would be silently dead for every token.
     """
     from types import SimpleNamespace
     from custom_components.phoenix_mcp.tool_common import _pending_or_inline
@@ -4064,12 +4075,12 @@ def _authoring_result(is_error: bool = False, text: str | None = None) -> dict:
 
 @pytest.mark.asyncio
 async def test_wait_for_many_summarizes_results_so_a_batch_fits_in_one_reply(hass):
-    """The live failure: twelve approved authoring writes came back as 80KB.
+    """A batch of approved authoring writes fits in one reply.
 
-    Each record echoes the config it wrote, which is the right answer for ONE
-    approval and makes a batch undeliverable. The caller asked which of its
-    twelve writes landed, and the size of the answer is what stopped it from
-    finding out.
+    Each record echoes the config it wrote, which is right for ONE approval but
+    makes a batch undeliverable (a dozen such writes run to tens of kilobytes). The
+    caller asked which writes landed, and the size of the answer must not stop it
+    from finding out.
     """
     from custom_components.phoenix_mcp.const import MAX_APPROVAL_RESULT_CHARS
     from custom_components.phoenix_mcp.mcp_view import _tool_wait_for_approval
@@ -4098,7 +4109,7 @@ async def test_wait_for_many_summarizes_results_so_a_batch_fits_in_one_reply(has
     assert all(a["result_truncated"] is True for a in body["approvals"])
     assert all(len(a["result_text"]) == MAX_APPROVAL_RESULT_CHARS for a in body["approvals"])
     assert "result" not in body["approvals"][0]
-    # The whole point is the size. Twelve unsummarized records are ~10x this.
+    # The whole point is the size: unsummarized records would be many times this.
     assert len(raw) < 12 * (MAX_APPROVAL_RESULT_CHARS + 600)
     assert "get_approval_status" in body["note"]
 
@@ -4107,9 +4118,9 @@ async def test_wait_for_many_summarizes_results_so_a_batch_fits_in_one_reply(has
 async def test_wait_for_many_keeps_a_failed_execution_readable(hass):
     """The asymmetry that makes the summary safe.
 
-    A success only has to say it succeeded, but an agent told "rejected" with
-    the executor's reason buried retries the same doomed call, which is a loop
-    seen live. Error text is short, so it survives the clip intact.
+    A success only has to say it succeeded, but an agent told "rejected" with the
+    executor's reason buried retries the same doomed call in a loop. Error text is
+    short, so it survives the clip intact.
     """
     from custom_components.phoenix_mcp.mcp_view import _tool_wait_for_approval
 

@@ -1,10 +1,10 @@
 """Tests for the MCP endpoint's SSE response framing and progress notifications.
 
-The same single JSON-RPC response is delivered either as a plain JSON body or as
-one SSE `message` event, chosen by the client's Accept header. The SSE path also
-writes a frame every MCP_SSE_KEEPALIVE_SECONDS while the request is in flight, so
-a confirm gate holding a response for minutes does not look like a dead
-connection, and carries notifications/progress when the client asked for them.
+The single JSON-RPC response is delivered as a plain JSON body or one SSE `message`
+event, chosen by the Accept header. The SSE path also writes a keepalive frame every
+MCP_SSE_KEEPALIVE_SECONDS while the request is in flight, so a response held for
+minutes by a confirm gate does not look like a dead connection, and carries
+notifications/progress when the client asked for them.
 """
 
 from __future__ import annotations
@@ -321,7 +321,7 @@ class TestKeepaliveAndProgress:
         assert json.loads(resp.text)["id"] == 9
 
     async def test_modern_dispatch_is_cancelled_after_client_disconnect(self, monkeypatch):
-        """The 2026 transport treats its per-request stream as cancellation."""
+        """A modern-protocol dispatch is cancelled when its per-request stream drops."""
         monkeypatch.setattr(mcp_view, "MCP_SSE_KEEPALIVE_SECONDS", 0.01)
         _token, raw, data, hass = _env()
         data.enforce_mcp_lifecycle = True
@@ -354,7 +354,7 @@ class TestKeepaliveAndProgress:
         assert stream.frames == []  # nothing could be written
 
     async def test_legacy_dispatch_continues_after_client_disconnect(self, monkeypatch):
-        """The 2025 transport says a disconnect is not a cancellation signal."""
+        """A legacy-protocol dispatch keeps running after a client disconnect."""
         monkeypatch.setattr(mcp_view, "MCP_SSE_KEEPALIVE_SECONDS", 0.01)
         _token, raw, data, hass = _env()
         data.enforce_mcp_lifecycle = True
@@ -418,7 +418,7 @@ class TestKeepaliveAndProgress:
         assert cancelled.is_set()
 
     async def test_handler_cancellation_leaves_legacy_dispatch_running(self):
-        """Outer cancellation is not a legacy 2025 cancellation signal."""
+        """Outer cancellation does not cancel a legacy-protocol dispatch."""
         _token, _raw, _data, hass = _env()
         started = asyncio.Event()
         finished = asyncio.Event()

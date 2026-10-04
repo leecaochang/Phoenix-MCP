@@ -1,4 +1,4 @@
-"""Resource and lifecycle tests for isolated template rendering."""
+"""Isolated template rendering: worker lifecycle, resource limits, scoped snapshots, diagnostics."""
 
 from __future__ import annotations
 
@@ -352,7 +352,7 @@ async def test_real_worker_returns_template_location(hass):
 
 
 def test_coverage_records_disposable_worker_without_importing_it_in_parent(tmp_path):
-    """Measure the real child entry point, including fail-closed OS startup."""
+    """Coverage measurement records the disposable worker child and its fail-closed OS startup."""
     import os
     from pathlib import Path
     import subprocess
@@ -398,5 +398,19 @@ def test_coverage_records_disposable_worker_without_importing_it_in_parent(tmp_p
         data = CoverageData(basename=str(path))
         data.read()
         measured.update(data.lines(str(worker)) or [])
+    source_lines = worker.read_text(encoding='utf-8').splitlines()
+
+    def _line_of(statement: str) -> int:
+        # Located by content so a docstring or comment edit cannot shift the target.
+        matches = [n for n, line in enumerate(source_lines, start=1) if line.strip() == statement]
+        assert len(matches) == 1, statement
+        return matches[0]
+
     # These lines run only in the disposable child, never in the parent probe.
-    assert {15, 21, 25, 72} <= measured
+    child_only = {
+        _line_of('phase = "resource_limits"'),
+        _line_of('limits = runpy.run_path(str(Path(__file__).with_name("const.py")))'),
+        _line_of('resource.setrlimit(resource.RLIMIT_CPU, (cpu_seconds, cpu_seconds))'),
+        _line_of('main()'),
+    }
+    assert child_only <= measured

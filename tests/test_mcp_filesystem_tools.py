@@ -185,9 +185,7 @@ class TestWriteFile:
         assert outcome == "invalid_request"
 
     async def test_non_string_content_confirm_mode_rejected_before_pending(self, hass, fs_env):
-        """A doomed write must fail before a pending approval is created, even
-        under confirm mode, otherwise it sails through as a false pending that
-        can only fail once an admin approves it."""
+        """A doomed write fails before any approval is created, even in confirm mode."""
         _, outcome, _ = await _call(
             "write_file", {"path": "themes/x.yaml", "content": 123}, _token(cap_filesystem="confirm"), hass)
         assert outcome == "invalid_request"

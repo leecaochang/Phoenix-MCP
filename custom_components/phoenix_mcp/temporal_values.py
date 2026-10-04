@@ -14,7 +14,11 @@ _ENTITY = re.compile(r"(?<![a-z0-9_])[a-z_][a-z0-9_]*\.[a-z0-9_]+(?![a-z0-9_])")
 
 
 def read_temporal_value(sentence: str) -> dict[str, str] | None:
-    """Read one ISO date or clock time; do not guess relative dates or locale order."""
+    """Read one ISO date, clock time, or date and time from a sentence.
+
+    Returns {"kind", "value"} or None; relative dates and locale order are not
+    guessed, and any other number in the sentence (entity ids aside) refuses.
+    """
     if not isinstance(sentence, str) or len(sentence) > MAX_SEARCH_QUERY_LEN:
         return None
     matches = list(_VALUE.finditer(sentence))
@@ -53,7 +57,12 @@ def read_temporal_value(sentence: str) -> dict[str, str] | None:
 
 
 async def async_read_temporal_value(hass: Any, sentence: str, language: str) -> dict[str, str] | None:
-    """Use HA's strict built-in timer intent as duration evidence, never as authority."""
+    """Read a literal value, else a timer duration from HA's strict HassStartTimer match.
+
+    The duration is evidence only, never authority: it needs a named timer, only
+    hours/minutes/seconds slots, and under 24 hours. Raises SentenceTriggerMatch
+    when a custom sentence trigger owns the sentence.
+    """
     source = read_temporal_value(sentence)
     if source is not None or not hass.states.async_entity_ids("timer"):
         return source

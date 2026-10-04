@@ -1,4 +1,9 @@
-"""Real Jinja failures and adversarial worker diagnostic protocol coverage."""
+"""Template failure diagnostics: real Jinja failures and hostile worker output.
+
+Real failures keep their original source locations and never echo state values.
+A malformed, oversized or unknown-kind worker diagnostic fails closed to the
+generic worker message.
+"""
 
 from __future__ import annotations
 

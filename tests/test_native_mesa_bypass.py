@@ -2,21 +2,16 @@
 
 MESA runs last, on the flattened entity list, on EVERY service-call path,
 including the native Hass* tools. Two native tools cannot go through
-_tool_intent_action: HassCancelAllTimers, whose native
-contract requires a speech_slots count that function does not emit, and
-HassBroadcast, which picks its own assist_satellite targets. Both called
-hass.services.async_call directly, so a MESA read_only or prohibited entity was
-actuated anyway.
+_tool_intent_action: HassCancelAllTimers, whose native contract requires a
+speech_slots count that function does not emit, and HassBroadcast, which picks
+its own assist_satellite targets. Both therefore call _mesa_gate_native
+directly; calling hass.services.async_call without it would cancel a read_only
+timer that the identical call through _tool_intent_action denies.
 
-Calling HA directly cancels a read_only timer through HassCancelAllTimers while
-the identical call through _tool_intent_action is denied. The two tools now call
-the same gate (_mesa_gate_native) directly.
-
-Two kinds of test here, deliberately. The behavioural ones run a real
-MesaRuntime and a real service registration, so they assert the service did not
-fire rather than that some mock was not called. The structural one enumerates
-every actuation site in the package, so a THIRD such tool added later fails here
-instead of shipping the same gap again.
+Two kinds of test, deliberately. The behavioural ones run a real MesaRuntime and a
+real service registration, so they assert the service did not fire rather than that
+some mock was not called. The structural one enumerates every actuation site in the
+package, so a THIRD such tool fails here instead of shipping the same gap.
 """
 
 from __future__ import annotations
@@ -180,7 +175,7 @@ class TestBroadcast:
 # to be justified in review; forgetting to add one fails the test below.
 #
 # The categories are all "no entity for MESA to have an opinion about":
-#   - no entity target at all (rule 15's no-target reloads, homeassistant.restart)
+#   - no entity target at all (the no-target reload services, homeassistant.restart)
 #   - a config-store write whose service call is the RELOAD, not an actuation
 #   - a read that happens to use a service (calendar.get_events)
 #   - radio coordinator operations, which act on the radio, not on an entity
@@ -246,7 +241,10 @@ def test_the_exemption_list_has_no_stale_entries():
 
 
 def test_the_two_fixed_tools_are_not_on_the_exemption_list():
-    """They were the bug. Re-exempting them would silently reopen it."""
+    """HassCancelAllTimers and HassBroadcast must stay gated.
+
+    Exempting either reopens the bypass.
+    """
     for name in ("tools/native.py::_tool_hass_cancel_all_timers",
                  "tools/native.py::_tool_hass_broadcast"):
         assert name not in MESA_EXEMPT_ACTUATORS

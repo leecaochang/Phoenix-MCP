@@ -5,8 +5,8 @@ the admin may override individual caps; the token's persona field records
 which preset was applied. Home Companion additionally enforces delegated access;
 ordinary persona labels are not authorization.
 
-Adding a new capability requires extending every persona in PERSONA_DEFINITIONS
-to include a value for it (or to explicitly inherit a default).
+Adding a new capability requires extending every persona in PERSONA_DEFINITIONS;
+_validate_definitions fails at import otherwise.
 """
 
 from __future__ import annotations
@@ -222,10 +222,9 @@ PERSONA_DEFINITIONS: dict[str, dict[str, str]] = {
         "cap_backup": CAP_CONFIRM,
         "cap_filesystem": CAP_CONFIRM,
         "cap_esphome_yaml": CAP_CONFIRM,
-        # Denied even here, where everything else is merely confirmed. This is a
-        # general-purpose administrator, and flashing firmware is a specialist
-        # action that can leave a device unreachable; it should be granted on
-        # purpose (the esphome persona) rather than inherited.
+        # Denied even for this general-purpose administrator: flashing firmware is
+        # a specialist action that can leave a device unreachable, so it is granted
+        # on purpose (the esphome persona) rather than inherited.
         "cap_esphome_flash": CAP_DENY,
         "cap_yaml_edit": CAP_CONFIRM,
     },
@@ -351,7 +350,7 @@ _validate_definitions()
 
 
 def get_persona_caps(persona: str) -> dict[str, str] | None:
-    """Return the cap_*->mode mapping for a named persona, or None for custom/unknown."""
+    """Return {cap name: mode} for a named persona, or None for custom/unknown."""
     if persona == PERSONA_CUSTOM:
         return None
     return PERSONA_DEFINITIONS.get(persona)
@@ -369,7 +368,8 @@ def detect_persona(token_caps: dict[str, str]) -> str:
     """Identify which persona (if any) a token's current caps match.
 
     Returns PERSONA_CUSTOM when the cap values do not exactly match any preset.
-    Useful for the frontend to show "Custom (was: voice_assistant)" labels.
+    PERSONA_HOME_COMPANION is never inferred from caps: it is assigned explicitly
+    and additionally enforces delegated access.
     """
     for name in (
         PERSONA_NEW_USER,

@@ -14,8 +14,8 @@ describe("YamlView", () => {
     expect(container.querySelector("pre.yaml-pre")).toBeTruthy();
     expect(container.querySelector("ha-code-editor")).toBeNull();
 
-    // HA lazy-registers the element later; YamlView must upgrade to it (this is
-    // the regression fix: it no longer decides once at mount).
+    // HA lazy-registers the element later; YamlView must upgrade to it rather
+    // than deciding once at mount.
     if (!customElements.get("ha-code-editor")) {
       customElements.define("ha-code-editor", class extends HTMLElement {});
     }

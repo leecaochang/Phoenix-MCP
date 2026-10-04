@@ -1,7 +1,7 @@
 """Refuse misplaced targets and constrain resolved targets on every service path.
 
 Caller-supplied target selectors are refused before service dispatch. Sanitizing
-remains a second boundary: only the resolved explicit entity list reaches HA.
+is a second boundary: only the resolved explicit entity list reaches HA.
 """
 
 from __future__ import annotations
@@ -117,10 +117,9 @@ def _assert_no_selectors_but_entity_list(call_data: dict, expected: list[str]) -
 def test_selector_keys_match_home_assistant_own_definition():
     """A Home Assistant release that adds a selector must fail here.
 
-    TARGET_SELECTOR_KEYS is the strip list, so a sixth selector Phoenix MCP does
-    not know about would silently widen every call. Pinning it against HA's own
-    target-service field set turns that into a failing test on the upgrade that
-    introduces it.
+    TARGET_SELECTOR_KEYS is the strip list, so a selector Phoenix MCP does not
+    know about would silently widen every call. Pinning it against HA's own
+    target-service field set fails the upgrade that introduces one.
     """
     from homeassistant.helpers import config_validation as cv
 
@@ -130,9 +129,9 @@ def test_selector_keys_match_home_assistant_own_definition():
 def test_target_selection_reads_exactly_those_keys():
     """The strip list is complete with respect to what HA actually honours.
 
-    The field set above is a schema declaration; this reads the class that does
-    the selecting at call time, so the two agreeing is what makes the strip
-    sufficient rather than merely plausible.
+    The field set pinned above is a schema declaration; this reads the class that
+    does the selecting at call time, so their agreement makes the strip sufficient
+    rather than merely plausible.
     """
     from homeassistant.helpers.target import TargetSelection
 
@@ -205,8 +204,11 @@ def test_sanitizer_keeps_target_which_is_a_notify_data_field():
 
 
 def test_sanitizer_returns_a_new_dict_and_never_mutates():
-    """Every call site needs a snapshot: evaluation suspends at an await, and a
-    caller still holding the original could swap the target under it."""
+    """The sanitizer returns a snapshot and never mutates its input.
+
+    Evaluation suspends at an await, and a caller still holding the original could
+    swap the target under it.
+    """
     original = {"entity_id": "light.a", "brightness_pct": 1}
     out = sanitize_service_data(original)
     assert original == {"entity_id": "light.a", "brightness_pct": 1}
@@ -220,8 +222,7 @@ def test_sanitizer_degrades_a_wrong_shaped_value_to_empty():
 
 @pytest.mark.asyncio
 async def test_mcp_call_service_refuses_misplaced_selectors(hass, token_store):
-    """MCP applied no filtering at all: service_data was a free-form caller dict
-    forwarded verbatim."""
+    """A target selector inside service_data is refused, not forwarded to HA."""
     from custom_components.phoenix_mcp.mcp_view import _execute_call_service
 
     token, _ = _make_token()
@@ -302,12 +303,12 @@ async def test_runtime_service_description_adds_secondary_target_guard(hass):
 
 @pytest.mark.asyncio
 async def test_approved_reexecution_refuses_misplaced_selectors(hass, token_store):
-    """The executor is the single choke point, so an approval stored with a
-    selector in its saved args cannot smuggle one past the gate on approval.
+    """An approval whose saved args carry a selector is refused when it executes.
 
-    A confirm-gated call persists the caller's arguments verbatim and re-runs
-    them later, so sanitising only at the request boundary would leave the
-    approve path as an unstripped second entrance.
+    A confirm-gated call persists the caller's arguments verbatim and re-runs them
+    on approval, so the executor (the single choke point) must refuse selectors
+    too; checking only at the request boundary would leave approval as a second
+    entrance.
     """
     from custom_components.phoenix_mcp.mcp_view import async_execute_approved_tool
 
@@ -336,11 +337,10 @@ async def test_approved_reexecution_refuses_misplaced_selectors(hass, token_stor
 
 @pytest.mark.asyncio
 async def test_dry_run_refuses_misplaced_selectors(hass, token_store):
-    """The preview must evaluate the call that would run.
+    """dry_run_service refuses misplaced selectors before consulting MESA.
 
-    dry_run_service exists to predict the real verdict, so it has to hand MESA
-    the same service data the executor would, not the caller's original. Feeding
-    it the unsanitised dict would predict a verdict for a call that cannot happen.
+    The preview predicts the verdict of the call that would actually run, so it
+    never evaluates the caller's unsanitised service data.
     """
     from custom_components.phoenix_mcp.tools import discovery
 
@@ -377,22 +377,19 @@ async def test_dry_run_refuses_misplaced_selectors(hass, token_store):
 
 @pytest.mark.asyncio
 async def test_mesa_evaluates_exactly_the_parameters_that_execute(hass, token_store):
-    """MESA must judge the call that runs, not a filtered view of it.
+    """MESA judges the call that runs, not a filtered view of it.
 
-    The safety property is an equality, not a subset: a decision made about a
-    different payload than the one sent is precisely the divergence the target
-    check exists to catch, and every audit record written afterwards would then
-    describe a call that never happened. So the evaluated parameters must equal
-    the executed ones, differing only in the entity: MESA decides per entity,
-    while the call carries the whole resolved list.
-
-    This holds today because target resolution CONSUMES the selectors, removing
-    them from the outgoing call as well, so nothing has to be withheld to keep
-    the two in step.
+    The property is an equality, not a subset: a decision about a different payload
+    than the one sent is the divergence the target check exists to catch, and the
+    audit record would describe a call that never happened. The evaluated
+    parameters must equal the executed ones, differing only in the entity: MESA
+    decides per entity while the call carries the whole resolved list. This holds
+    because selectors never survive in service data (refused at ingress, stripped
+    for internal callers) and MESA and the executor receive the same service data.
 
     The capture sits on the ENFORCER, not on evaluate_service_entities: patching
     the latter would replace the code that builds these parameters, so the
-    assertion would hold no matter what that code did.
+    assertion would hold whatever that code did.
     """
     from custom_components.phoenix_mcp.mcp_view import _execute_call_service
 
@@ -433,11 +430,10 @@ async def test_mesa_evaluates_exactly_the_parameters_that_execute(hass, token_st
 
 
 def test_contradictory_target_rule_name_matches_the_library():
-    """The defect-signal branch keys on MESA's own rule name.
+    """The defect-signal branch keys on the rule name mesa-core actually emits.
 
-    Phoenix MCP logs this rule as a bug in itself rather than a policy outcome,
-    so a renamed rule would silently turn that alarm off while the refusal it
-    reports on kept happening.
+    Phoenix MCP logs this rule as its own bug rather than a policy outcome, so a
+    renamed rule would silently disable that alarm while the refusal persisted.
     """
     import inspect
 
@@ -448,12 +444,11 @@ def test_contradictory_target_rule_name_matches_the_library():
 
 
 def test_native_clean_area_argument_is_not_a_target_selector():
-    """HassVacuumCleanArea's room rides in service data and must stay spelled
-    cleaning_area_id.
+    """HassVacuumCleanArea passes its room in service data as cleaning_area_id.
 
-    Its `area` names the room to clean rather than scoping entity resolution, so
-    it is genuine service data. Spelled area_id it would be a target selector,
-    stripped by the sanitiser and silently dropped from every clean request.
+    Its `area` names the room to clean rather than scoping entity resolution.
+    Spelled area_id it would be a target selector, which the sanitizer strips,
+    silently dropping the room from every clean request.
     """
     from custom_components.phoenix_mcp.tools import native
 
@@ -465,7 +460,7 @@ def test_native_clean_area_argument_is_not_a_target_selector():
 
 @pytest.fixture
 def remote_service_descriptions():
-    """Use installed HA remote metadata plus a colliding third-party selector."""
+    """Installed remote service metadata plus a third-party `device` target selector."""
     from pathlib import Path
 
     import homeassistant

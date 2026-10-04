@@ -7,11 +7,11 @@ MESA check, approval, and audit entry fires identically. The loop streams its
 progress to the panel over Server-Sent Events; the browser owns the (ephemeral)
 transcript and re-sends it each turn, so this module keeps no conversation state.
 
-Constrained to no external Python dependency, so both the Anthropic
-Messages API and the OpenAI-compatible provider APIs are spoken over
-raw aiohttp via HA's shared client session, parsing streaming SSE by hand. The
-provider API key is loaded from a dedicated secrets Store and is never logged,
-persisted into a transcript, or echoed in an error payload.
+The module takes no external Python dependency: both the Anthropic Messages
+API and the OpenAI-compatible provider APIs are spoken over raw aiohttp via HA's
+shared client session, parsing streaming SSE by hand. The provider API key is
+loaded from a dedicated secrets Store and is never logged, persisted into a
+transcript, or echoed in an error payload.
 """
 
 from __future__ import annotations
@@ -412,8 +412,8 @@ def provider_purpose(kind: str) -> str:
     return definition.purpose if definition else "unsupported"
 
 
-# Compatibility projection for tests and internal code being moved to the typed
-# registry. It contains no independent provider facts.
+# Compatibility projection of the typed registry for tests and internal callers;
+# it carries no independent provider facts.
 _KINDS: dict[str, dict[str, Any]] = {
     kind: {
         "label": definition.label,
@@ -485,10 +485,10 @@ def _with_learned(inst: dict) -> dict:
     """Declared and probed capabilities, with unexpired learned refusals on top.
 
     Expiry is applied HERE, on read, rather than by sweeping storage: a refusal
-    that has aged out simply stops being returned, so nothing has to run on a
-    timer and a clock change cannot leave a stale record behind. An unparseable
-    timestamp is treated as expired, which fails toward offering the control
-    rather than toward hiding it.
+    that has aged out stops being returned, so nothing has to run on a timer and
+    a clock change cannot leave a stale record behind. An unparseable timestamp
+    is treated as expired, which fails toward offering the control rather than
+    toward hiding it.
     """
     caps = {model: dict(vals) for model, vals in (inst.get("capabilities") or {}).items()
             if isinstance(vals, dict)}
@@ -516,7 +516,7 @@ class DuplicateProviderError(ValueError):
 
 
 def _normalized_provider_url(value: object) -> str:
-    """Normalize an Ollama endpoint for duplicate detection only."""
+    """Normalize an endpoint URL (Ollama, Qwen) for duplicate detection only."""
     raw = str(value or "").strip()
     try:
         parsed = urlparse(raw)
@@ -539,7 +539,12 @@ def _normalized_provider_url(value: object) -> str:
 
 
 def _provider_identity(kind: str, cfg: dict) -> tuple[str, str]:
-    """Return the non-secret identity used to reject exact duplicate accounts."""
+    """Return the identity used to reject exact duplicate accounts.
+
+    The endpoint for Ollama, the credential for most kinds, and endpoint plus
+    credential for Qwen, Z.ai and Tencent. Compared in memory only; never stored
+    or returned.
+    """
     if kind == "ollama":
         return kind, _normalized_provider_url(cfg.get("base_url"))
     if kind == "qwen":
@@ -608,14 +613,12 @@ class AgentCliStore:
     async def set_model(self, instance_id: str, model: str) -> bool:
         """Change one account's default model. False if the account is unknown.
 
-        The default model was frozen at creation until now, so correcting it
-        meant deleting the account and re-entering the API key. That is the wrong
-        cost for a value that goes stale on the PROVIDER's schedule rather than
-        the operator's: a shipped default id can be retired out from under a
-        working install, which is exactly what happened to this integration's.
-
-        Only the model is patchable. The credential and base_url are what the
-        account IS, and re-validating them is what the add flow already does.
+        The model is patchable because it goes stale on the PROVIDER's schedule
+        rather than the operator's: a shipped default id can be retired out from
+        under a working install, and deleting the account to re-enter the API key
+        is the wrong cost for that. Only the model is patchable. The credential
+        and base_url are what the account IS, and re-validating them is what the
+        add flow already does.
         """
         async with self._lock:
             cfg = self._data.get(instance_id)
@@ -768,7 +771,7 @@ async def async_wipe_agentcli_secrets(hass: HomeAssistant) -> None:
     """Erase all stored provider accounts and API keys from disk.
 
     Loads (or reuses the cached) store, so it wipes the on-disk file even when
-    Agent Chat was never opened this session. The cached instance stays live but
+    Agent Chat was never opened since startup. The cached instance stays live but
     empty, so any open chat window loses its accounts immediately.
     """
     store = await _get_secret_store(hass)
@@ -854,7 +857,7 @@ def _mistral_rate_limit_headers(headers: Any) -> dict[str, int]:
             continue
         parsed = int(value)
         # Preserve exact integers in the browser rather than silently rounding
-        # an absurd/malformed provider value during JSON -> JavaScript parsing.
+        # an absurd/malformed provider value during JSON-to-JavaScript parsing.
         if parsed <= 9_007_199_254_740_991:
             out.setdefault(field, parsed)
     return out
@@ -1049,10 +1052,10 @@ class _ThinkSplitter:
 def _apply_claude_options(body: dict, options: dict, kind: str = "claude") -> None:
     """Map the panel's generation options into an Anthropic-format request body.
 
-    Claude gets the full surface (adaptive thinking with a display mode + an
-    output_config effort). MiniMax's Anthropic-compatible API takes thinking on
+    Claude takes the full surface (adaptive thinking with a display mode plus an
+    output_config effort). MiniMax's Anthropic-compatible API turns thinking on
     via `{type: adaptive}` but does not accept Anthropic's display/output_config
-    extensions, so it gets only the plain adaptive toggle.
+    extensions, so it receives only the plain adaptive toggle.
     """
     body["max_tokens"] = int(options.get("max_tokens") or AGENTCLI_DEFAULT_MAX_TOKENS)
     thinking = options.get("thinking", True)
@@ -1061,8 +1064,8 @@ def _apply_claude_options(body: dict, options: dict, kind: str = "claude") -> No
             body["thinking"] = {"type": "adaptive"}
         else:
             # display=summarized streams a readable summary the panel can show;
-            # omitted still lets the model think but streams no thinking text, so
-            # when the operator has "show thinking" off we don't ship it at all.
+            # omitted still lets the model think but streams no thinking text,
+            # which is what to request when the operator has "show thinking" off.
             display = "summarized" if options.get("show_thinking") else "omitted"
             body["thinking"] = {"type": "adaptive", "display": display}
     if kind == "claude":
@@ -1410,7 +1413,7 @@ def _claude_err_code(status: int) -> str:
 # non-chat models (embeddings, audio/realtime/transcribe/tts, image, moderation,
 # completions-only "-instruct", and web-search variants that reject tool use).
 # They are all "public" to the key, but only chat-capable models belong in the
-# agentCLI model dropdown, so we include the chat families and drop the rest.
+# agentCLI model dropdown, so only the chat families are kept.
 _CHATGPT_INCLUDE_RE = re.compile(r"^(gpt-|o\d|chatgpt-)", re.I)
 _CHATGPT_EXCLUDE_RE = re.compile(
     r"audio|realtime|transcribe|tts|image|embedding|whisper|moderation|"
@@ -1465,10 +1468,11 @@ def _filter_gemini_models(models: list[str]) -> list[str]:
 
 
 def _filter_openrouter_models(data: list[dict]) -> list[str]:
-    """OpenRouter lists hundreds of models across providers. Agent Chat needs
-    tool-calling, so keep only models that advertise "tools" in
-    supported_parameters (a model without it cannot drive Phoenix MCP's tools), sorted for
-    a stable dropdown. Fall back to every id if none advertise it (schema drift)."""
+    """Keep OpenRouter models that advertise "tools" in supported_parameters.
+
+    A model without it cannot drive Phoenix MCP's tools. Sorted for a stable
+    dropdown; falls back to every id if none advertise it (schema drift).
+    """
     tool_ids = sorted(m["id"] for m in data
                       if m.get("id") and "tools" in (m.get("supported_parameters") or []))
     return tool_ids or sorted(m["id"] for m in data if m.get("id"))
@@ -1522,7 +1526,7 @@ def _refused_option(status: int, message: str, sent: dict) -> str | None:
     the key must be one whose refusal has a single unambiguous consequence; and
     Phoenix must have ACTUALLY SENT it in this request. That last guard is what
     stops an error mentioning "temperature" for some unrelated reason from
-    teaching us that temperature is unsupported.
+    teaching Phoenix that temperature is unsupported.
     """
     if status != 400 or not message:
         return None
@@ -1536,16 +1540,11 @@ def _refused_option(status: int, message: str, sent: dict) -> str | None:
 def _effort_probe_body(kind: str, level: str) -> dict | None:
     """The request fragment that carries an effort level for this backend.
 
-    None for a backend with no effort control at all, which is then not probed.
-    MiniMax takes an adaptive object with no level vocabulary. Ollama's current
-    OpenAI-compatible endpoint validates `reasoning_effort`, so it is probed like
-    the other per-model APIs instead of being reduced to its older boolean shape.
-
-    The aggregators (OpenRouter, NVIDIA NIM) ARE probed, and excluding them was a
-    wrong call worth not repeating. The reason given was that they pass through
-    whatever the underlying model takes, which varies per model, but that is an
-    argument FOR probing rather than against: a probe runs against the one
-    selected model, so per-model variation is precisely what it handles.
+    None for a backend with no effort control at all, which is then not probed
+    (MiniMax takes an adaptive object with no level vocabulary). The aggregators
+    (OpenRouter, NVIDIA NIM) ARE probed: what they pass through varies per model,
+    but a probe runs against the one selected model, so that variation is exactly
+    what it handles.
 
     DeepSeek's fragment carries the thinking toggle too, because it only reads
     the effort when thinking is enabled: probing the level alone would test
@@ -1569,30 +1568,21 @@ async def async_probe_capabilities(
 ) -> tuple[dict, int, bool]:
     """What this model's API actually accepts, established by asking it.
 
-    Returns (capabilities, calls_made, answered). Every value is omitted rather
-    than guessed when the answer could not be established, so a partial or failed
-    probe narrows nothing.
+    Returns (capabilities, calls_made, answered). A value is omitted rather than
+    guessed when it could not be established, so a partial or failed probe
+    narrows nothing.
 
-    `answered` is False when NO call came back with a usable status. A key with
-    no credit, a revoked key or an unreachable host answers the same way to every
-    question, and reporting that as "this provider does not validate its options"
-    blames the provider for an account problem. Only 200 and 400 are answers
-    here; everything else is the provider declining to be asked.
+    `answered` is False when NO call came back with a usable status (200 or 400).
+    A key with no credit, a revoked key or an unreachable host answers every
+    question the same way, and reporting that as "this provider does not validate
+    its options" would blame the provider for an account problem.
 
     TWO STAGES, and the order is the whole method. Stage one sends a
-    deliberately INVALID effort and asks whether the field is VALIDATED: a 400
-    proves the server parses it. Stage two then walks the real levels, and only
-    now is a 200 meaningful, because a field known to be validated accepts a
-    value only if that value is in its vocabulary.
-
-    Without stage one, stage two is worthless. An OpenAI-compatible server that
-    ignores an unknown parameter answers 200 to every level, which reads as
-    "supports all five" and is the exact shape of a wrong answer this whole
-    item exists to remove. A 400 is informative; a 200 on its own never is.
-
-    That asymmetry was established the hard way: whether DeepSeek honoured the
-    effort at all could not be told from its replies, because reasoning output
-    appears or does not at any level, run to run.
+    deliberately INVALID effort: a 400 proves the server validates the field.
+    Only then does stage two walk the real levels, where a 200 is meaningful.
+    Without stage one, a server that ignores an unknown parameter answers 200 to
+    every level, which reads as "supports all five". A 400 is informative; a 200
+    on its own never is.
     """
     provider = build_provider(cfg)
     caps: dict = {}
@@ -1643,13 +1633,12 @@ async def async_probe_capabilities(
 def _openrouter_capabilities(data: list[dict]) -> dict[str, dict]:
     """Per-model declared capabilities from OpenRouter's `supported_parameters`.
 
-    Phoenix already read this field to filter the dropdown by tool support and
-    then threw the rest away, so a model's declared reasoning and temperature
-    support were sitting in a response we had already paid for.
+    The same field also filters the dropdown by tool support, so a model's
+    declared tool, reasoning, temperature and vision support come from one
+    response.
 
     A key is emitted ONLY for something the provider actually declares. A missing
-    key means "not declared" and must never be read as False, which is the same
-    distinction the Energy issues array makes between an empty list and None.
+    key means "not declared" and must never be read as False.
     """
     out: dict[str, dict] = {}
     for m in data:
@@ -1734,9 +1723,10 @@ def _filter_nvidia_models(models: list[str]) -> list[str]:
 
 
 class OpenAICompatProvider:
-    """OpenAI-compatible chat/completions, streaming. Backs DeepSeek, ChatGPT,
-    Gemini, Grok, Kimi, Meta, Mistral, OpenRouter, NVIDIA, OpenCode Zen, and both Ollama
-    flavours.
+    """OpenAI-compatible chat/completions, streaming.
+
+    Backs every conversation provider whose definition does not use the
+    Anthropic adapter (ClaudeProvider serves Anthropic and MiniMax).
 
     Ollama uses a slightly different shape (the OpenAI path lives under /v1 and
     models come from /api/tags). Its current OpenAI-compatible endpoint accepts
@@ -1939,9 +1929,10 @@ class OpenAICompatProvider:
     ) -> dict[str, dict]:
         """What each model DECLARES it accepts; empty when the provider says nothing.
 
-        OpenRouter, Mistral, and Ollama report this. Every other backend's models
-        endpoint returns an id and an owner, which is why the shipped capability
-        table cannot simply be replaced by discovery and why probing the knobs is
+        OpenRouter, Mistral, and Ollama report this; Z.ai, Qwen and MiMo are
+        credited with thinking support from their reasoning style. Every other
+        backend's models endpoint returns only an id and an owner, so the shipped
+        capability table cannot be replaced by discovery, and probing the knobs is
         a separate step rather than part of this one.
 
         Empty means "the provider declared nothing", never "the model supports
@@ -1995,9 +1986,7 @@ class OpenAICompatProvider:
         # Map the panel's thinking selection to each backend's real API knob:
         #   DeepSeek: a thinking on/off toggle + reasoning_effort (low/high/max,
         #     default high; xhigh maps to max). Thinking mode ignores temperature,
-        #     so we drop it while thinking is on. `low` became real when the v4
-        #     models replaced the retired deepseek-chat / deepseek-reasoner
-        #     aliases; before that low and medium both remapped to high.
+        #     so it is dropped while thinking is on.
         #   OpenAI reasoning models: reasoning_effort only (none/minimal/low/
         #     medium/high; none disables it), and they reject a custom temperature.
         #   Ollama: reasoning_effort on its OpenAI-compatible endpoint. Older
@@ -2011,22 +2000,21 @@ class OpenAICompatProvider:
                 body["thinking"] = {"type": "enabled" if thinking else "disabled"}
                 thinking_on = bool(thinking)
             if thinking_on and effort:
-                # TOP-LEVEL, verified on the wire: a deliberately INVALID value
-                # here answers 400, so the field is parsed and validated rather
-                # than ignored. It is a standard OpenAI parameter, which is why it
-                # sits beside `thinking` rather than inside it; DeepSeek's own
-                # samples pass `thinking` through extra_body and leave this one a
-                # normal argument.
+                # TOP-LEVEL: a deliberately INVALID value here answers 400, so
+                # the field is parsed and validated rather than ignored. It is a
+                # standard OpenAI parameter, which is why it sits beside
+                # `thinking` rather than inside it; DeepSeek's own samples pass
+                # `thinking` through extra_body and leave this one a normal
+                # argument.
                 #
-                # Worth knowing before "fixing" it: whether it worked could NOT be
-                # established from the model's replies. Reasoning output appears or
-                # does not at any effort level, run to run, so two sessions gave
-                # opposite impressions. Only the invalid-value probe settled it.
+                # The model's replies cannot show whether it worked: reasoning
+                # output appears or does not at any effort level, run to run.
+                # Only the invalid-value probe settles it.
                 body["reasoning_effort"] = effort
-            # DeepSeek's undocumented default output cap truncated a large tool
-            # call mid-JSON (live-observed on a whole-dashboard write). 32K only
-            # ever raises the ceiling; see const.py. Other kinds deliberately get
-            # no max_tokens (OpenAI reasoning models reject the field).
+            # DeepSeek's undocumented default output cap can truncate a large tool
+            # call (a whole-dashboard write) mid-JSON. 32K only ever raises the
+            # ceiling; see const.py. Other kinds deliberately get no max_tokens
+            # (OpenAI reasoning models reject the field).
             body["max_tokens"] = AGENTCLI_DEEPSEEK_MAX_TOKENS
         elif self.definition.reasoning == "effort":
             # OpenAI and xAI both take a top-level reasoning_effort on chat
@@ -2054,12 +2042,11 @@ class OpenAICompatProvider:
             if effort:
                 body["reasoning_effort"] = effort
         elif self.definition.reasoning == "probed_effort":
-            # Aggregators: one key fronting many vendors' models. Phoenix used to
-            # offer no thinking control here at all, on the grounds that a single
-            # control cannot fit every model behind the key. That reasoning is
-            # obsolete now that capabilities are established PER MODEL: a
-            # reasoning model reached through an aggregator was silently losing
-            # its reasoning, while the same model reached directly kept it.
+            # Aggregators: one key fronting many vendors' models. One fixed
+            # control cannot fit every model behind the key, so capabilities are
+            # established PER MODEL; otherwise a reasoning model reached through
+            # an aggregator would silently lose its reasoning while the same
+            # model reached directly kept it.
             #
             # Which field carries it is not assumed either. Both speak the
             # OpenAI shape, so `reasoning_effort` is the candidate, and the probe
@@ -2343,16 +2330,14 @@ class OpenAICompatProvider:
             # different, so each gets its own code (the panel localizes on the
             # code, not the message, so one code cannot carry three sentences).
             #
-            # A stream that stopped on the output-token limit was TRUNCATED
-            # (live-observed: a whole-dashboard write blowing the provider's
-            # default cap), so the fix is a smaller change. A stream that never
-            # reported a finish_reason at all did not finish: the connection
-            # dropped mid-call, the fix is to send it again, and NOTHING about
-            # what the model wrote was wrong. That one is reported last-resort
-            # as malformed output otherwise, which is the reading that costs the
-            # most time: it sends the operator to inspect a config that was
-            # fine. Anything else genuinely is malformed output (a known Ollama
-            # failure mode).
+            # A stream that stopped on the output-token limit was TRUNCATED (for
+            # example a whole-dashboard write exceeding the provider's default
+            # cap), so the fix is a smaller change. A stream that never reported
+            # a finish_reason did not finish: the connection dropped mid-call,
+            # the fix is to send it again, and NOTHING about what the model wrote
+            # was wrong. Reporting that as malformed output would send the
+            # operator to inspect a config that was fine. Anything else genuinely
+            # is malformed output (a known Ollama failure mode).
             if finish == "length":
                 code = "tool_call_truncated"
                 retryable = False
@@ -2730,12 +2715,14 @@ def _parse_pending(
 
 
 def execution_failure_text(approval: Any) -> str | None:
-    """The executor's own error text when an admin APPROVED an action but its
-    execution failed (the approve path stores the error result and resolves the
-    record as failed with the "execution_failed" slug). None for a real
-    admin rejection or any other state. Reporting that case as a bare "rejected"
-    makes an agent treat an approval as a refusal and loop retrying the same
-    doomed call instead of fixing the reported cause."""
+    """The executor's error text for an approved action whose execution failed, else None.
+
+    The approve path stores the error result and resolves the record as failed
+    with the "execution_failed" slug. Reporting that case as a bare "rejected"
+    would make an agent treat an approval as a refusal and loop retrying the same
+    doomed call instead of fixing the reported cause. None for a real admin
+    rejection or any other state.
+    """
     if getattr(approval, "rejected_reason", None) != "execution_failed":
         return None
     result = getattr(approval, "result", None)
@@ -2751,12 +2738,12 @@ def _resolved_result(status: str, applied_result: dict | None, approval: Any = N
     """A CallToolResult to feed back after an interactive approval resolves.
 
     On a reject/cancel it surfaces the admin's rejection reason (set from the
-    Approvals panel) to the agent, mirroring mcp_view._tool_inline_resolved, so a
-    rejection with a reason is actually reported instead of a generic notice.
+    Approvals panel) to the agent, mirroring tool_common._tool_inline_resolved, so
+    a rejection with a reason is actually reported instead of a generic notice.
     An approved-but-execution-failed record is reported as exactly that, with
     the executor's error, never as a plain rejection. An approved result carries
-    the operator-accepted note (mcp_view._operator_accepted_result) so the agent
-    treats the approved change as settled instead of iterating on it.
+    the operator-accepted note (tool_common._operator_accepted_result) so the
+    agent treats the approved change as settled instead of iterating on it.
     """
     if status == STATUS_APPROVED and applied_result is not None:
         from .tool_common import _operator_accepted_result  # noqa: PLC0415
@@ -2805,11 +2792,11 @@ def _resolved_result(status: str, applied_result: dict | None, approval: Any = N
             })}], "isError": True}
         # A rejection with a reason is the operator STEERING, not stopping:
         # iterating on a proposal through several reject-with-reason rounds is
-        # the normal way a card gets built. Live-tested the strict alternative
+        # the normal way a card gets built. Do not add a strict alternative
         # (forbid variations, escalate to a hard stop on the second rejection):
-        # models turned pedantic, gave up, or side-stepped the tools entirely
-        # (dumped raw data into chat, built an HTML chart instead). Only a
-        # reasonless rejection means "do not just try again".
+        # models turn pedantic, give up, or side-step the tools entirely (dump
+        # raw data into chat, build an HTML chart instead). Only a reasonless
+        # rejection means "do not just try again".
         reason = getattr(approval, "rejected_reason", None)
         if status == STATUS_REJECTED and reason:
             message = (
@@ -2844,8 +2831,8 @@ async def _dispatch_with_progress(emit: Any, tool_id: Any, coro: Any) -> Any:
     """Run one tool call, relaying whatever it reports while it is still running.
 
     Tools that hold the request open (a firmware build, a confirm gate) describe
-    what they are waiting on through mcp_view's progress bus, which exists so an
-    SSE-framed MCP request can emit notifications/progress. Agent Chat is the
+    what they are waiting on through the progress bus in tool_common, which
+    exists so an SSE-framed MCP request can emit notifications/progress. Agent Chat is the
     other consumer of the same signal: it owns both ends of its own stream, so it
     needs no progressToken negotiation and can always show the line.
 
@@ -2905,8 +2892,8 @@ async def _await_agent_approval(
 ) -> dict:
     """Block until an approval resolves (or cancel/timeout), then return a result.
 
-    Modeled on mcp_view._await_inline_confirm but tied to the live SSE connection
-    (long timeout) and cancel-aware. The bus event carries only IDs, so the
+    Modeled on tool_common._await_inline_confirm but tied to the live SSE
+    connection (long timeout) and cancel-aware. The bus event carries only IDs, so the
     executed result is re-read from the persisted approval record.
     """
     future: asyncio.Future = hass.loop.create_future()
@@ -3116,13 +3103,15 @@ async def _stream_turn_resilient(
     dispatch_started: bool = False,
     write_started: bool = False,
 ) -> AsyncIterator[dict]:
-    """provider.stream_turn wrapped with a bounded retry for a transient connection
-    failure (e.g. a DNS/connect timeout) that occurs BEFORE any content is
-    produced. Retries with a short backoff until _CONNECT_RETRY_WINDOW_SECONDS
+    """provider.stream_turn wrapped with a bounded retry for a transient connection failure.
+
+    Covers a failure (e.g. a DNS/connect timeout) that occurs BEFORE any content
+    is produced: retries with a short backoff until _CONNECT_RETRY_WINDOW_SECONDS
     elapses, then surfaces the error (annotated that it retried). Never retries
-    once any content/tool/done event has been seen, since that could duplicate
-    already-streamed output; a mid-stream or non-retryable error passes straight
-    through. Every other event is yielded unchanged.
+    once any content/tool/done event has been seen (that could duplicate
+    already-streamed output) or once a tool dispatch has started; a mid-stream or
+    non-retryable error passes straight through. Every other event is yielded
+    unchanged.
     """
     loop_time = asyncio.get_running_loop().time
     deadline = loop_time() + _CONNECT_RETRY_WINDOW_SECONDS
@@ -3359,7 +3348,7 @@ async def _consume_model_stream(
                                  # Mistral's adapter has already reduced response
                                  # headers to a strict allowlist of safe numeric
                                  # quota fields. Preserve that structured snapshot
-                                 # through the provider -> SSE translation.
+                                 # through the provider-to-SSE translation.
                                  **({"rate_limit": ev["rate_limit"]}
                                     if ev.get("rate_limit") else {}),
                                  # Which of Phoenix's own request keys the provider
@@ -3659,7 +3648,7 @@ async def async_run_agent_turn(
     # The token is re-resolved per dispatch (see _current_dispatch_token), so a
     # mid-turn revoke/expire/cap-change/kill-switch is honored before any side
     # effect. Each dispatch gets the inline-confirm wait zeroed so a confirm gate
-    # returns pending immediately (snappy approval card); our own longer,
+    # returns pending immediately (snappy approval card); the loop's own longer,
     # cancel-aware wait runs afterward.
     token_id = token.id
 
@@ -3669,8 +3658,8 @@ async def async_run_agent_turn(
     saw_text = False
     turn_errored = False
     # Bound the TOTAL provider-generated output retained across the whole turn.
-    # The per-response _sse_lines cap bounds one stream, but 12 iterations of it
-    # would still let messages[] accumulate a large multiple; this shared budget
+    # The per-response _sse_lines cap bounds one stream, but a full turn of
+    # iterations would still let messages[] accumulate a large multiple; this shared budget
     # (measured on the retained assistant messages, which is what is held and
     # re-sent) caps the turn as a whole against a faulty/hostile provider. The
     # check happens BEFORE append (below), so the offending message is never
@@ -3785,20 +3774,18 @@ async def async_run_agent_turn(
         if human_resolved:
             iterations = 0
         # The token lost authority mid-batch (revoked/expired/kill-switch): the
-        # batch was completed with synthetic results (protocol-safe), now end the
+        # batch was completed with synthetic results (protocol-safe); end the
         # turn rather than looping into more denied dispatches.
         if authority_lost:
             await emit("error", {"code": "unauthorized",
                                  "message": "This token is no longer authorized."})
             break
         if stop_turn:
-            # Defence in depth, and deliberately NOT test-pinned: this branch has
-            # no observable effect today, because every path that sets stop_turn
-            # is already handled. Authority loss breaks above; a cancel is caught
-            # by the loop-top check BEFORE the next model call, which emits the
-            # same "cancelled" error. Mutating this to False leaves the whole
-            # suite green, and a test asserting otherwise would be vacuous (one
-            # was written and removed). It stays because it makes the turn's exit
+            # Defence in depth with no observable effect today, so no test can
+            # meaningfully pin it: every path that sets stop_turn is already
+            # handled. Authority loss breaks above; a cancel is caught by the
+            # loop-top check BEFORE the next model call, which emits the same
+            # "cancelled" error. It stays because it makes the turn's exit
             # explicit at the point the batch decided to stop, rather than
             # depending on an ordering argument two screens away.
             if cancel.is_set():
@@ -3807,7 +3794,7 @@ async def async_run_agent_turn(
 
     # Make an ambiguous ending explain itself, so a reply the model truncated at
     # its output limit or an empty response never looks like the agent silently
-    # stalled (a common, non-reproducible-looking "it just stopped" report).
+    # stalled.
     if not turn_errored and not cancel.is_set():
         if stop_reason == "max_tokens":
             await emit("notice", {"code": "max_tokens_stop", "message": (
@@ -3838,7 +3825,7 @@ _HEADLESS_PROVIDER_ERROR = "the language model could not be reached"
 # How a headless turn ended. A CODE, not a sentence, because the two surfaces
 # render it very differently: voice speaks it, in the CONVERSATION's language via
 # const.VOICE_TEMPLATES, while AI Task raises it as an English operator-facing
-# error. The loop returning prose forced an English literal into a spoken reply.
+# error. Prose from the loop would force an English literal into a spoken reply.
 TURN_OK = "ok"
 TURN_PROVIDER_ERROR = "provider_error"
 TURN_OUTCOME_UNKNOWN = "outcome_unknown"
@@ -3855,12 +3842,10 @@ class _HeadlessTurnResult:
     `text` is the model's LAST text (reset at each tool round), so a partial
     answer survives a failure and the caller can still say something useful.
 
-    `outcome` is one of the TURN_* codes and is the whole point of this type:
-    every non-OK ending used to be indistinguishable from a normal one. Running
-    out of rounds returned an empty string, which AI Task then reported as
-    "could not parse structured output" - blaming the model for JSON it never
-    got to write. Hitting the model's own output limit returned a half-answer
-    with nothing marking it as half.
+    `outcome` is one of the TURN_* codes, so a non-OK ending is never mistaken
+    for a normal one: running out of rounds would otherwise look like an empty
+    reply (AI Task would blame the model for JSON it never got to write), and
+    hitting the model's own output limit would look like a complete answer.
 
     `detail` carries the provider's own error text for TURN_PROVIDER_ERROR only.
     """
@@ -3895,23 +3880,22 @@ async def _run_headless_turn(
 ) -> _HeadlessTurnResult:
     """Run one headless model/tool turn to completion.
 
-    The shared engine behind async_run_voice_turn and async_run_ai_task, which
-    were 63 and 61 lines differing in six of them (the error policy, the audit
-    sentinel, and collecting review URLs). Everything a surface actually decides
-    now lives in its wrapper; everything both surfaces must do identically lives
-    here, so a fix to the tool-dispatch path cannot land on one and miss the other.
+    The shared engine behind async_run_voice_turn and async_run_ai_task: what a
+    surface decides (error policy, audit sentinel, review URLs) lives in its
+    wrapper; what both must do identically lives here, so a fix to the
+    tool-dispatch path cannot land on one and miss the other.
 
     HEADLESS means two things, both deliberate. There is no event emission, so
     none of the interactive loop's SSE machinery applies. And a confirm gate is
     never waited on: neither an Assist pipeline nor an ai_task.generate_data call
     can hold a request open for an admin, so a pending approval is fed back as a
-    "queued_for_approval" tool result and the turn continues. That is the one
-    policy that rules out sharing async_run_agent_turn's _run_tool_batch, which
-    blocks up to AGENTCLI_APPROVAL_WAIT_SECONDS on a real human.
+    "queued_for_approval" tool result and the turn continues. That rules out
+    sharing _run_tool_batch, which blocks up to AGENTCLI_APPROVAL_WAIT_SECONDS on
+    a human.
 
     The token is re-resolved before every dispatch (_current_dispatch_token), so a
     mid-turn revoke, expiry, kill switch or cap narrowing is honored before any
-    side effect, exactly as on the interactive path.
+    side effect.
     """
     from .mcp_view import _dispatch_mcp  # noqa: PLC0415
 
@@ -3930,10 +3914,10 @@ async def _run_headless_turn(
     final_text = ""
     review_urls: list[str] = []
     # Bound the TOTAL provider output retained across the turn, matching
-    # async_run_agent_turn. Without it these surfaces retained assistant and tool
-    # messages across every round and re-sent the growing transcript on each one,
-    # with no ceiling at all against a faulty or hostile provider. Checked BEFORE
-    # the append, so the offending message is never retained.
+    # async_run_agent_turn: assistant and tool messages are retained across every
+    # round and the growing transcript is re-sent on each one, so without a
+    # ceiling a faulty or hostile provider could inflate it. Checked BEFORE the
+    # append, so the offending message is never retained.
     turn_output_bytes = 0
     # Set when a dispatch was refused because the token lost authority mid-turn.
     # The round that discovers it still finishes and still feeds the refusals
@@ -4159,9 +4143,9 @@ async def _run_headless_turn(
     if authority_lost:
         # Reported ahead of exhaustion: a turn can hit both (authority lost in the
         # final allowed round), and the token dying is the actionable cause. It
-        # also cannot be inferred from the outside - the closing round often ends
-        # normally, so without this the turn looked like an ordinary success that
-        # happened to produce nothing.
+        # also cannot be inferred from the outside: the closing round often ends
+        # normally, so without this the turn would look like an ordinary success
+        # that produced nothing.
         return _HeadlessTurnResult(
             final_text, review_urls, outcome=TURN_AUTHORITY_LOST,
             focus_declined=focus_declined,
@@ -4234,25 +4218,20 @@ async def async_run_voice_turn(
 ) -> str:
     """Run one conversation-agent turn to completion; return the spoken answer.
 
-    A headless sibling of async_run_agent_turn for HA's native Assist/voice pipeline: no
-    SSE, no interactive approval wait. A confirm gate returns pending, which is fed
-    back to the model as a "queued_for_approval" tool result (the operator approves
-    it in the Phoenix MCP panel), so a voice turn never blocks. The token is re-resolved
-    before every dispatch, so a mid-turn revoke/expire/kill-switch/cap-narrow is
-    honored before any side effect, exactly like async_run_agent_turn. Reuses the same
-    provider stream, tool list, and gated dispatch primitives.
+    A headless sibling of async_run_agent_turn for HA's Assist/voice pipeline
+    (engine: _run_headless_turn): no SSE, no interactive approval wait. A confirm
+    gate is fed back to the model as a "queued_for_approval" tool result, so a
+    voice turn never blocks.
 
     include_review_links appends a clickable approval link for anything queued this
-    turn. The caller passes True only for a TEXT surface (typed Assist chat): a
-    conversation reply is both displayed and spoken from one string, so a link would
-    otherwise be read aloud by TTS on a voice satellite.
+    turn. Pass True only for a TEXT surface (typed Assist chat): a reply is both
+    displayed and spoken from one string, so a link would otherwise be read aloud
+    by TTS on a voice satellite.
 
-    language is the CONVERSATION's language, threaded through for the same reason
-    voice_agent's declines take one: a spoken reply goes to whoever is talking, not
-    to the server. Every sentence this function can produce that is not the model's
-    own words comes from const.VOICE_TEMPLATES; they were English literals here
-    until the turn-outcome split, so a Chinese pipeline heard a translated decline
-    and then an English apology the moment a turn failed. None falls back to English.
+    language is the CONVERSATION's language: a spoken reply goes to whoever is
+    talking, not to the server. Every sentence that is not the model's own words
+    comes from const.VOICE_TEMPLATES, so a failure is never spoken in English to a
+    non-English pipeline. None falls back to English.
     """
     from .home_companion import is_companion, internal_turn, async_delegate
     from .const import HOME_COMPANION_REPORT_STATUSES
@@ -4616,7 +4595,7 @@ class PhoenixAgentCliChatView(PhoenixView):
         cancel = asyncio.Event()
 
         async def emit(name: str, payload: dict) -> None:
-            # Learn from a refusal the model gave during REAL work. This is the
+            # Learn from a refusal the provider returned during REAL work. This is the
             # backstop under the declared and probed answers: it costs nothing
             # extra, it is ground truth rather than an inference, and it covers
             # the providers that publish nothing and validate nothing, which
@@ -4743,7 +4722,7 @@ async def _validate_base_url(
     try:
         infos = await asyncio.get_running_loop().getaddrinfo(parts.hostname, None)
     except (OSError, ValueError):
-        return None  # unresolvable now; the actual request just fails cleanly
+        return None  # unresolvable at setup time; the actual request fails cleanly
     for info in infos:
         try:
             ip = ipaddress.ip_address(info[4][0])
@@ -4938,7 +4917,7 @@ class PhoenixAgentCliProvidersView(PhoenixView):
 
 
 class PhoenixAgentCliProviderView(PhoenixView):
-    """DELETE /api/phoenix-mcp/admin/agentcli/providers/{instance_id} - remove one account."""
+    """PATCH/DELETE /api/phoenix-mcp/admin/agentcli/providers/{instance_id} - change the default model or remove one account."""
 
     url = "/api/phoenix-mcp/admin/agentcli/providers/{instance_id}"
     name = "api:phoenix-mcp:admin:agentcli:provider"
@@ -5036,12 +5015,12 @@ class PhoenixAgentCliProviderView(PhoenixView):
             if voice_removed:
                 if data.async_sync_voice_agent is not None:
                     data.async_sync_voice_agent()
-                # The voice agent lost its provider, so it is now unregistered;
+                # The voice agent lost its provider and is unregistered;
                 # remove any Phoenix-created Assist pipeline as well.
                 from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
                 await async_remove_assist_pipeline(self.hass, data)
             if ai_task_removed and data.async_sync_ai_task is not None:
-                # The AI Task is no longer fully configured; remove its entity
+                # The AI Task is not fully configured; remove its entity
                 # from Home Assistant and the AI Task picker.
                 data.async_sync_ai_task()
         _audit_admin(self.hass, request, rid, f"provider:{instance_id}")
@@ -5086,7 +5065,7 @@ class PhoenixAgentCliRefreshView(PhoenixView):
     of work rather than a page-load amount.
 
     Nothing here spends completion tokens; probing the knobs that no provider
-    declares is a later, separately-consented step.
+    declares is a separate step the operator consents to (the probe endpoint).
     """
 
     url = "/api/phoenix-mcp/admin/agentcli/providers/{instance_id}/refresh"
@@ -5192,9 +5171,8 @@ class PhoenixAgentCliProbeCapsView(PhoenixView):
             "checked_at": checked_at,
             # Whether this backend has an effort control to ask about AT ALL.
             # Without it the panel cannot tell "asked, and the provider ignores
-            # unknown options" from "there was nothing here to ask", and it
-            # reported the second as the first on a backend whose thinking
-            # control is a boolean flag.
+            # unknown options" from "there was nothing here to ask" (a backend
+            # whose thinking control is a boolean flag).
             "effort_checkable": _effort_probe_body(cfg.kind, AGENTCLI_PROBE_SENTINEL) is not None,
             # False when the provider declined every question (no credit, a bad
             # key, unreachable). Reporting that as a finding about the model

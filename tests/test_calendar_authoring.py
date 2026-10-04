@@ -21,7 +21,7 @@ from custom_components.phoenix_mcp.tools import calendar as tools
 
 
 class WritableCalendar(CalendarEntity):
-    """Real HA event types with observable integration dispatch boundaries."""
+    """A writable calendar entity that records every create, update and delete call."""
 
     _attr_supported_features = CalendarEntityFeature.CREATE_EVENT | CalendarEntityFeature.UPDATE_EVENT | CalendarEntityFeature.DELETE_EVENT
 

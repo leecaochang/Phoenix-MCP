@@ -1,8 +1,8 @@
-"""Tests for build_safe_config, the cap_config_read-safe view of hass.config.
+"""build_safe_config: the cap_config_read-safe view of hass.config.
 
 The MCP get_config tool must not hand a cap_config_read token precise home
-coordinates, internal/external URLs, or host filesystem paths; it returns an
-allowlisted subset of agent-useful context with Phoenix MCP's own components stripped.
+coordinates, internal or external URLs, or host filesystem paths. It returns an
+allowlisted subset with Phoenix MCP's own components stripped.
 """
 
 from __future__ import annotations

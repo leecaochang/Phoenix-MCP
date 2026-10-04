@@ -1,32 +1,22 @@
 """Minimal client for the ESPHome Device Builder WebSocket API.
 
-The Device Builder add-on exposes a multiplexed WebSocket API that the ESPHome
-frontend itself speaks. Phoenix MCP uses a bounded slice of it: config
-validation, the board / component / automation reference data that lets an
-authoring agent look facts up instead of recalling them, and the firmware job
-model (compile, install, poll, cancel) alongside device console logs and
-backtrace decoding.
+The Device Builder add-on exposes the WebSocket API its own frontend speaks.
+Phoenix MCP uses a bounded slice: config validation, board / component /
+automation reference data, the firmware job model (compile, install, poll,
+cancel), device logs and backtrace decoding. It targets the host and port HA's
+ESPHome dashboard coordinator uses, over HA's shared aiohttp session, with no credentials.
 
-This is Phoenix MCP's only outbound network connection. It targets the same
-host and port Home Assistant's own ESPHome dashboard coordinator already talks
-to, over Home Assistant's shared aiohttp session, with no credentials involved.
-
-SECURITY: the Device Builder has no permission model of its own. Its own threat
-model states that an authenticated client can run arbitrary Python at config
-time and arbitrary shell through ESPHome subprocess invocations, which makes an
-authenticated session equivalent to shell access on the add-on's host. So the
-allowlist below is the ONLY thing bounding what this client can reach. It is
-checked before any session or socket work, so no caller can turn input into an
-arbitrary command, and the commands deliberately left out of it are pinned off
-by test rather than merely absent. Widening the set is a security decision
-rather than a maintenance one, and the pinning tests exist to force that diff
-through review.
+SECURITY: the Device Builder has no permission model. An authenticated client can
+run arbitrary Python at config time and arbitrary shell through ESPHome
+subprocesses, so a session is equivalent to shell access on the add-on's host.
+The command allowlist below is the ONLY bound on what this client can reach. It
+is checked before any session or socket work, so no caller can turn input into an
+arbitrary command, and a guard test pins the deliberately excluded commands off.
+Widening the set is a security decision that must go through review.
 
 Each call is one connection: connect, read the handshake, send one command,
-close. Nothing is held between requests, matching the stateless transport
-everywhere else in Phoenix MCP. Firmware jobs live server-side in the add-on and
-are connection-independent, so a build outlives the request that started it and
-Phoenix MCP needs no job store of its own.
+close. Firmware jobs live server-side in the add-on and survive disconnects, so
+a build outlives the request that started it and no job store is needed here.
 """
 
 from __future__ import annotations
@@ -61,7 +51,7 @@ _LOGGER = logging.getLogger(__name__)
 # job is polled afterwards through get_job / get_jobs / follow_job, and stopped
 # with cancel. The jobs themselves are the add-on's, and survive its restart.
 #
-# Deliberately absent, and pinned absent by test:
+# Deliberately absent, and pinned absent by a guard test:
 #   config/set_secret, config/set_wifi_credentials  write secrets.yaml
 #   devices/delete, devices/archive                 destroy, bypassing versioning
 #   firmware/reset_build_env                        cancels EVERY job, then wipes
@@ -99,22 +89,20 @@ ESPHOME_BUILDER_ALLOWED_COMMANDS = frozenset({
     # firmware/reset_build_env stays off and the difference is categorical, not a
     # matter of degree: clean takes a configuration and leaves other jobs
     # running, while reset_build_env takes no argument at all and CANCELS every
-    # in-flight job on both lanes before wiping. Note clean is still not fully
-    # contained (live-observed: it also drops the shared PlatformIO cache, so
-    # every device's next build slows); the caller states that cost.
+    # in-flight job on both lanes before wiping. clean is still not fully
+    # contained: it also drops the shared PlatformIO cache, so every device's next
+    # build slows; the caller states that cost.
     "firmware/clean",
     # Compiles a renamed image and OTA-flashes it, so it is reachable ONLY from a
-    # tool gated on cap_esphome_flash. Under the authoring capability it would be
-    # a way to flash a device without holding the capability that governs
-    # flashing, which is the reason it stayed off until there was a caller that
-    # gates correctly.
+    # tool gated on cap_esphome_flash. Under the authoring capability it would
+    # flash a device without the capability that governs flashing.
     "devices/rename",
 })
 
-# The Device Builder colorizes its process output. Live-observed: it sends the
-# escape as the LITERAL five characters \033[ rather than a real 0x1b byte, so
-# matching only the real byte strips nothing. Both forms are handled, since the
-# literal spelling is the add-on's own encoding choice and could change back.
+# The Device Builder colorizes its process output and sends the escape as the
+# LITERAL five characters \033[ rather than a real 0x1b byte, so matching only
+# the real byte strips nothing. Both forms are handled in case the add-on's
+# encoding changes.
 _ANSI_RE = re.compile(r"(?:\x1b|\\033|\\x1b|\\e)\[[0-9;]*[A-Za-z]")
 
 _TRUNCATION_MARKER = "\n... [output truncated] ...\n"
@@ -152,10 +140,9 @@ class BuilderResult:
     Request/response commands populate `result`. Streaming commands populate
     `output` plus the `success`/`exit_code` the final frame carried.
 
-    `server_version` is whatever the add-on announced in this connection's
-    handshake. Carried so a caller that cannot make sense of a reply can name
-    the version that produced it, which is the difference between "unexpected
-    reply" and a diagnosis.
+    `server_version` and `esphome_version` are what the add-on announced in this
+    connection's handshake, so a caller that cannot make sense of a reply can
+    name the version that produced it.
     """
 
     result: Any = None
@@ -172,10 +159,9 @@ def version_mismatch_note(
 ) -> str | None:
     """Explain a failure in terms of an unverified add-on version, or None.
 
-    Returns None when the versions agree, because blaming the version for a
-    genuine command failure sends the operator to upgrade something that was
-    never the problem. Only ever appended to an ERROR; a version difference on
-    its own is not worth saying out loud.
+    Returns None when the versions agree, so a genuine command failure is not
+    blamed on the version. Only appended to an ERROR; a version difference on
+    its own is not reported.
     """
     differences = []
     if server_version and server_version != ESPHOME_BUILDER_VERIFIED_VERSION:
@@ -214,10 +200,10 @@ class _OutputCollector:
 
     def add(self, chunk: str) -> None:
         cleaned = _ANSI_RE.sub("", chunk)
-        # Live-observed: the add-on sends one event per line with the terminator
-        # already stripped, so concatenating verbatim collapses the whole run
-        # into a single unreadable line. Re-terminate only when the chunk did not
-        # bring its own, which leaves a server that does send them untouched.
+        # The add-on sends one event per line with the terminator already
+        # stripped, so concatenating verbatim collapses the run into a single
+        # line. Re-terminate only when the chunk did not bring its own, which
+        # leaves a server that does send them untouched.
         if cleaned and not cleaned.endswith("\n"):
             cleaned += "\n"
         self._length += len(cleaned)
@@ -237,7 +223,7 @@ def _max_chars(override: int | None) -> int:
     """Resolve an output budget, reading the constant at call time.
 
     Not a default argument value: that would snapshot the constant at import and
-    quietly ignore anyone who adjusts it later.
+    ignore a later adjustment.
     """
     return ESPHOME_BUILDER_OUTPUT_MAX_CHARS if override is None else override
 
@@ -359,15 +345,15 @@ async def async_builder_command(
 ) -> BuilderResult:
     """Run one allowlisted Device Builder command and return its outcome.
 
-    `url` is the dashboard coordinator's base URL; this module never resolves
-    the dashboard itself, which keeps it free of any import back into the view
-    layer and leaves the coordinator lookup as a single test seam there.
+    `url` is the dashboard coordinator's base URL; the caller resolves the
+    coordinator, which keeps this module free of any import back into the view
+    layer.
 
     Raises BuilderUnavailable when the add-on cannot be reached, BuilderAuthRequired
     when it wants credentials, and BuilderCommandError when it refuses the command.
     """
     if command not in ESPHOME_BUILDER_ALLOWED_COMMANDS:
-        # Before any network work: this is the read-only boundary, not a hint.
+        # Before any network work: this is the allowlist boundary, not a hint.
         raise ValueError(f"Command not allowed for the Device Builder client: {command}")
 
     session = async_get_clientsession(hass)
@@ -389,9 +375,8 @@ async def async_builder_command(
                 try:
                     reply = await _read_reply(ws, collector)
                 except BuilderCommandError as err:
-                    # A refused command is where the version earns its keep: an
-                    # add-on that no longer has this command says so in its own
-                    # words, which read as a Phoenix bug without this context.
+                    # An add-on that lacks this command says so in its own words,
+                    # which would read as a Phoenix bug without the version.
                     note = version_mismatch_note(command, version, compiler_version)
                     if note is None:
                         raise
@@ -416,11 +401,9 @@ def collect_output_lines(
     """Normalize output that was delivered as a list rather than as frames.
 
     A running job's log arrives from firmware/get_job as an in-memory list, not
-    as `output` events, but it is the same text from the same producer: it
-    carries the add-on's literal ANSI escapes and brings its own line
-    terminators. Joining it by hand is what produced visible colour codes and a
-    blank line between every line, so it goes through the one collector that
-    already knows those two things instead of a second line handler.
+    as `output` events, but it is the same text: it carries the add-on's literal
+    ANSI escapes and its own line terminators. It goes through the same collector
+    so escapes are stripped and lines are not double-terminated.
     """
     collector = _OutputCollector(_max_chars(max_chars), head_ratio)
     for line in lines if isinstance(lines, list) else []:
@@ -438,7 +421,7 @@ async def _collect_until(
     Reaching the deadline is the normal, successful end of a capture rather than
     a failure, so that TimeoutError is swallowed here. An error frame still
     raises: a stream the add-on refused outright is not the same as a quiet
-    device that simply had nothing to say.
+    device with nothing to say.
 
     Streams are registered under the originating request's message_id in the
     Device Builder, including captures that never produce an output frame.
@@ -463,12 +446,10 @@ async def _collect_until(
 async def _stop_stream(ws: aiohttp.ClientWebSocketResponse) -> None:
     """End the stream server-side before the socket goes away.
 
-    Closing the socket alone does end it, but the add-on tears the subprocess
-    down hard and the DEVICE logs a CONNECTION_CLOSED warning every single time,
-    which pollutes the operator's own device log with a scary-looking line for
-    what is a completely normal end of a capture. Best-effort throughout: the
-    capture already succeeded by this point, so nothing here may turn it into a
-    failure.
+    Closing the socket alone ends it, but the add-on then tears the subprocess
+    down hard and the DEVICE logs a CONNECTION_CLOSED warning on every capture.
+    Best-effort throughout: the capture already succeeded by this point, so
+    nothing here may turn it into a failure.
     """
     try:
         await ws.send_str(

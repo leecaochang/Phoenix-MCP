@@ -4,15 +4,13 @@ import { ApprovalsView } from "../views/ApprovalsView";
 import { api } from "../api";
 import type { ApprovalRecord } from "../types";
 
-// Regression coverage for a live bug: the Diff|Preview toggle was wired only
-// for set_dashboard_config approvals, so an add/edit/delete_dashboard_card
-// approval (the card-level tools) never offered a preview at all, even with
-// <hui-card> registered. Every dashboard-write tool must be covered.
+// Every dashboard-write tool must offer the Diff|Preview toggle once <hui-card>
+// is registered, not only set_dashboard_config: the card-level
+// add/edit/delete_dashboard_card approvals need it too.
 //
-// Like yamlview.test.tsx (the ha-code-editor precedent), the "not registered"
-// case is asserted FIRST, before this file ever calls customElements.define:
-// jsdom's custom element registry is shared for the whole file and cannot be
-// un-registered, so test order carries the coverage.
+// The "not registered" case is asserted FIRST, before this file ever calls
+// customElements.define: jsdom's custom element registry is shared for the whole
+// file and cannot be un-registered, so test order carries the coverage.
 
 vi.mock("../api", () => ({
   api: { listApprovals: vi.fn(), getApproval: vi.fn() },
@@ -67,8 +65,8 @@ describe("dashboard preview toggle on the approval card", () => {
   });
 
   it("registers hui-card (as a session that has opened any dashboard would)", () => {
-    // Mirrors yamlview.test.tsx's ha-code-editor registration: from here on in
-    // this file, hui-card is available and whenDefined resolves immediately.
+    // From here on in this file, hui-card is available and whenDefined resolves
+    // immediately.
     customElements.define("hui-card", class extends HTMLElement {});
     expect(customElements.get("hui-card")).toBeTruthy();
   });

@@ -1,4 +1,4 @@
-"""Tests for the personas module."""
+"""Persona templates cover every capability, use valid modes and round-trip."""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ def test_all_personas_in_persona_names():
 
 
 def test_every_persona_covers_every_cap():
-    """A missing cap on a persona is a bug; this test asserts the import-time invariant."""
+    """Every persona defines every capability and nothing else."""
     expected = set(CAPABILITY_NAMES)
     for name, mapping in PERSONA_DEFINITIONS.items():
         assert set(mapping.keys()) == expected, f"persona {name} cap set mismatch"
@@ -129,8 +129,9 @@ class TestPowerUser:
         assert caps["cap_restart"] == CAP_ALLOW
 
     def test_physical_remains_confirm(self):
-        """Power user gets full reads/writes/restart but physical control still gates.
-        Door locks and alarm changes are uniquely high-cost surprises.
+        """Power user keeps physical control gated.
+
+        Door locks and alarm changes are high-cost surprises.
         """
         caps = get_persona_caps(PERSONA_POWER_USER)
         assert caps["cap_physical_control"] == CAP_CONFIRM
@@ -207,7 +208,6 @@ class TestDetectPersona:
             assert detect_persona(caps) == name, f"{name} did not round-trip"
 
     def test_new_user_is_detected_not_custom(self):
-        # new_user must round-trip through persona detection.
         assert detect_persona(get_persona_caps(PERSONA_NEW_USER)) == PERSONA_NEW_USER
 
     def test_returns_custom_for_unmatched(self):
@@ -221,7 +221,7 @@ class TestDetectPersona:
 
 
 class TestEsphome:
-    """The esphome persona is a narrow, one-click template for device work."""
+    """The esphome persona is a narrow template for device work."""
 
     def test_only_the_esphome_cap_is_writable(self):
         caps = get_persona_caps(PERSONA_ESPHOME)

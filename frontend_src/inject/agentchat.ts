@@ -3,16 +3,16 @@
  * Global Agent Chat bootstrap.
  *
  * Loaded on every HA page (via the frontend extra-module mechanism) only when the
- * admin turned on `agentcli_global`. It exposes `window.__phxAgentChat` so the Phoenix MCP
- * panel can open/close a chat window that floats over the whole HA UI. The heavy
- * window (React + AgentCliWindow + panel CSS) is lazy-imported on first open, so
- * the always-loaded footprint here is tiny.
+ * admin turned on `agentcli_global`. It exposes `window.__phxAgentChat` so the
+ * Phoenix MCP panel can open/close a chat window that floats over the whole HA
+ * UI. The heavy window (React + AgentCliWindow + panel CSS) is lazy-imported on
+ * first open, so the always-loaded footprint here is tiny.
  *
  * Design rules (mirroring the profile injector):
  *  - Admin only: does nothing unless `hass.user.is_admin`.
  *  - Shift+A toggles it when Home Assistant keyboard shortcuts are enabled.
- *  - If this never becomes ready (old HA, hass not found), the panel sees no
- *    `window.__phxAgentChat` and falls back to its own panel-only window.
+ *  - If this never becomes ready (hass not found, user not an admin), the panel
+ *    sees no `window.__phxAgentChat` and falls back to its own panel-only window.
  */
 
 import { JS_BUILD } from "../version";
@@ -140,19 +140,19 @@ function start(): void {
   };
   (window as any).__phxAgentChat = bridge;
   unregisterShortcut = registerAgentChatShortcut(getHass, toggle);
-  // Opportunistic card-catalog harvest, same reasoning as the profile injector:
-  // this loads on every HA page, so it catches dashboards where the Lovelace
-  // resources are already imported. DYNAMICALLY imported and deferred so the
-  // always-loaded footprint this module promises stays tiny; the harvester pulls
-  // in api.ts, which is far larger than everything here. Rate-limited internally.
+  // Opportunistic card-catalog harvest, as in the profile injector: this loads
+  // on every HA page, so it catches dashboards whose Lovelace resources are
+  // already imported. DYNAMICALLY imported and deferred to keep the always-loaded
+  // footprint tiny; the harvester pulls in api.ts, which is far larger than
+  // everything here. Rate-limited internally.
   trackedTimeout(() => {
     import("../utils/card_harvest")
       .then((m) => m.syncCardCatalog())
       .catch(() => { /* harvesting is best effort and never blocks the chat bridge */ });
   }, 3000);
-  // The Phoenix MCP panel may already be rendering (this bootstrap polls for hass, so
-  // it can win or lose that race); announce readiness so the panel can switch
-  // from its fallback window as state, not on some later unrelated re-render.
+  // The Phoenix MCP panel may already be rendering (this bootstrap polls for
+  // hass, so it can win or lose that race); announce readiness so the panel
+  // switches from its fallback window as state, not on a later unrelated re-render.
   window.dispatchEvent(new CustomEvent("phx-agentchat-ready"));
   // eslint-disable-next-line no-console
   console.debug(LOG, "ready", "build", JS_BUILD);

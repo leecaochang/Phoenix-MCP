@@ -19,8 +19,8 @@ const NAME_REGEX = /^[A-Za-z0-9_\-]{3,32}$/;
 
 
 // Steps 0-3 are shared; step 3 branches. "chat" runs the agent inside Home
-// Assistant via Agent Chat (the preferred path); "app" connects an external
-// MCP app (the pre-existing Connect/Test flow).
+// Assistant via Agent Chat; "app" connects an external MCP app (the
+// Connect/Test flow).
 type Branch = "app" | "chat";
 
 type TtlUnit = "minutes" | "hours" | "days" | "weeks" | "none";
@@ -113,7 +113,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
         // Creation changes the token list every host caches: the panel shell
         // gates its header "Agent Chat" button on a non-empty list and hands
         // the panel-hosted chat window its tokens prop, and the floating
-        // window refetches on this event. Without it a token made here is
+        // window refetches on this event. Without it a token made here stays
         // invisible to both until a page reload.
         window.dispatchEvent(new CustomEvent("phx-tokens-changed"));
         await api.patchToken(record.id, patchBody);

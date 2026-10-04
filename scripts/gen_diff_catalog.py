@@ -1,13 +1,15 @@
-"""Generate the generated catalog sections from their Python templates.
+"""Regenerate the template-derived sections of the English catalog.
 
-An approval's summary is produced by Python (it is persisted on the record as
-the audit trail) and rendered by the panel (which must show it in the operator's
-language). Both have to be the same sentence, so only one of them gets to author
-it: const.DIFF_SUMMARY_TEMPLATES. This copies that dict into the `diff` section
-of translations/en.json.
+Approval summaries, diffs, version summaries, MESA suggestion reasons,
+notifications and voice declines are authored once, as Python templates in
+const.py: the same sentence is persisted on records (the audit trail) and
+rendered by the panel in the operator's language. This copies those template
+dicts into custom_components/phoenix_mcp/catalogs/en.json (panel.diff,
+panel.approvalSummary, panel.version, panel.mesaSuggestion, notification and
+voice).
 
-Run after adding or changing a template. A contract test fails if the two ever
-disagree, so this is not something to keep in sync by hand.
+Run after adding or changing a template. A contract test fails when the
+catalog and the templates disagree.
 """
 
 from __future__ import annotations
