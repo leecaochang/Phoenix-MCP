@@ -167,7 +167,7 @@ function EventRow({ event, responseStatus }: { event: ConversationEvent; respons
     : event.kind === "approval_requested" ? mdiClockOutline
     : event.kind === "continue_required" || payload?.code === "cancelled" ? mdiPauseCircleOutline : outcomeIcon(outcome);
   const heading = event.kind === "assistant_text" ? t(responseStatus ? "conversations.response" : "conversations.event.assistant_text")
-    : event.kind === "routing" && ["provider", "local", "decision"].includes(String(payload?.route)) ? t(payload.route === "provider" ? "conversations.routeProvider" : "conversations.routeLocal")
+    : event.kind === "routing" && ["provider", "local", "decision"].includes(String(payload?.route)) ? t(payload?.route === "provider" ? "conversations.routeProvider" : "conversations.routeLocal")
     : event.kind === "notice" && payload?.reason === "execution_unknown" ? t("conversations.executionUnknown")
     : event.kind === "tool_call" && OPERATION_KEYS[name] ? t(OPERATION_KEYS[name]) : label("event", event.kind);
   return <li className={`conversation-event conversation-event-${signal}`}>
