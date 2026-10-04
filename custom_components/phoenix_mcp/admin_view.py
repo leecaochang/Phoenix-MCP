@@ -51,7 +51,7 @@ from .const import (
     PERSONA_NAMES,
     PRESET_NAME_MAX_LENGTH,
     RUNTIME_READY_KEY,
-    TOKEN_NAME_REGEX,
+    ACCESS_KEY_NAME_REGEX,
 )
 from .data import PhoenixData
 from .device_semantics import device_registry_snapshot, effective_entity_area_id
@@ -66,12 +66,12 @@ from .policy_engine import (
     resolve,
 )
 from .const import TOOL_ROUTING_MODES, TOOL_ROUTING_SETTINGS
-from .token_store import (
+from .access_key_store import (
     valid_command_routing_languages,
     PermissionNode,
     PermissionTree,
     VALID_NODE_STATES,
-    token_name_slug,
+    access_key_name_slug,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -521,7 +521,7 @@ def _bulk_permission_selection(
     }
 
 
-def _build_resolution_path(entity_id: str, token: Any, hass: HomeAssistant) -> list[dict]:
+def _build_resolution_path(entity_id: str, access_key: Any, hass: HomeAssistant) -> list[dict]:
     """Return the ancestor chain and each node's state for a given entity/token pair.
 
     Used by the resolve admin endpoint to explain why an entity has a particular
@@ -540,7 +540,7 @@ def _build_resolution_path(entity_id: str, token: Any, hass: HomeAssistant) -> l
 
     path: list[dict] = [{"level": "global", "state": "GREY"}]
 
-    domain_node = token.permissions.domains.get(domain)
+    domain_node = access_key.permissions.domains.get(domain)
     path.append({"level": f"domain:{domain}", "state": domain_node.state if domain_node else "GREY"})
 
     if entry and entry.device_id:
@@ -549,10 +549,10 @@ def _build_resolution_path(entity_id: str, token: Any, hass: HomeAssistant) -> l
             device_name = device.name_by_user or device.name or entry.device_id
         else:
             device_name = entry.device_id
-        device_node = token.permissions.devices.get(entry.device_id)
+        device_node = access_key.permissions.devices.get(entry.device_id)
         path.append({"level": f"device:{device_name}", "state": device_node.state if device_node else "GREY"})
 
-    entity_node = token.permissions.entities.get(entity_id)
+    entity_node = access_key.permissions.entities.get(entity_id)
     path.append({"level": f"entity:{entity_id}", "state": entity_node.state if entity_node else "GREY"})
 
     return path
@@ -610,7 +610,7 @@ class PhoenixAdminCatalogView(PhoenixView):
         )
 
 
-class PhoenixAdminArchivedTokensView(PhoenixView):
+class PhoenixAdminArchivedAccessKeysView(PhoenixView):
     """GET /api/phoenix-mcp/admin/tokens/archived - list all archived tokens."""
 
     url = "/api/phoenix-mcp/admin/tokens/archived"
@@ -624,7 +624,7 @@ class PhoenixAdminArchivedTokensView(PhoenixView):
         return _ok(archived, request_id=request["phoenix_mcp_rid"])
 
 
-class PhoenixAdminArchivedTokenView(PhoenixView):
+class PhoenixAdminArchivedAccessKeyView(PhoenixView):
     """DELETE /api/phoenix-mcp/admin/tokens/archived/{token_id} - permanently delete an archived record."""
 
     url = "/api/phoenix-mcp/admin/tokens/archived/{token_id}"
@@ -652,7 +652,7 @@ class PhoenixAdminArchivedTokenView(PhoenixView):
         return web.Response(status=204, headers={"X-Phoenix-Request-ID": rid})
 
 
-class PhoenixAdminTokensView(PhoenixView):
+class PhoenixAdminAccessKeysView(PhoenixView):
     """GET /api/phoenix-mcp/admin/tokens - list active tokens.
     POST /api/phoenix-mcp/admin/tokens - create a new token.
     """
@@ -664,8 +664,8 @@ class PhoenixAdminTokensView(PhoenixView):
     @require_admin
     async def get(self, request: web.Request) -> web.Response:
         data: PhoenixData = self.hass.data[DOMAIN]
-        tokens = [t.to_dict() for t in data.store.list_tokens()]
-        return _ok(tokens, request_id=request["phoenix_mcp_rid"])
+        access_keys = [t.to_dict() for t in data.store.list_access_keys()]
+        return _ok(access_keys, request_id=request["phoenix_mcp_rid"])
 
     @require_admin
     async def post(self, request: web.Request) -> web.Response:
@@ -682,7 +682,7 @@ class PhoenixAdminTokensView(PhoenixView):
         name = body.get("name")
         if not name or not isinstance(name, str):
             return _err("invalid_request", "name is required.", 400, rid, key="nameRequired")
-        if not TOKEN_NAME_REGEX.match(name):
+        if not ACCESS_KEY_NAME_REGEX.match(name):
             return _err(
                 "invalid_request", "name does not match required pattern.", 400, rid,
                 key="tokenNamePattern",
@@ -754,7 +754,7 @@ class PhoenixAdminTokensView(PhoenixView):
         async with data.store.async_lock:
             if data.store.name_slug_exists(name):
                 return _err("conflict", "An access key with that name (or equivalent slug) already exists.", 409, rid, key="tokenNameTaken")
-            record, raw_token = await data.store.async_create_token(
+            record, raw_access_key = await data.store.async_create_access_key(
                 name=name,
                 created_by=user.id,
                 expires_at=expires_at,
@@ -764,8 +764,8 @@ class PhoenixAdminTokensView(PhoenixView):
                 rate_limit_burst=rate_limit_burst,
             )
 
-        if data.async_on_token_created:
-            await data.async_on_token_created(record)
+        if data.async_on_access_key_created:
+            await data.async_on_access_key_created(record)
 
         data.audit.record(
             request_id=rid,
@@ -778,15 +778,15 @@ class PhoenixAdminTokensView(PhoenixView):
             settings=data.store.get_settings(),
         )
 
-        # raw_token is included once in the creation response and never again.
+        # raw_access_key is included once in the creation response and never again.
         response_body = record.to_dict()
-        response_body["token"] = raw_token
+        response_body["token"] = raw_access_key
         return _ok(response_body, status=201, request_id=rid)
 
 
 # The per-token settings a PATCH may write. Capabilities are folded in from
 # const, so adding one needs no change here.
-_PATCHABLE_TOKEN_FIELDS = {
+_PATCHABLE_ACCESS_KEY_FIELDS = {
     "name", "pass_through", "use_assist_exposure", "announce_all_tools",
     "confirm_inline_wait_seconds",
     "rate_limit_requests", "rate_limit_burst", "persona",
@@ -795,8 +795,8 @@ _PATCHABLE_TOKEN_FIELDS = {
 _RATE_LIMIT_MAX = 100_000
 
 
-def _validated_token_patch(
-    body: dict, token: Any, token_id: str, data: PhoenixData, rid: str
+def _validated_access_key_patch(
+    body: dict, access_key: Any, token_id: str, data: PhoenixData, rid: str
 ) -> tuple[dict, web.Response | None]:
     """Filter a token PATCH body to writable fields and validate them.
 
@@ -807,7 +807,7 @@ def _validated_token_patch(
     critical section then writes, so hoisting this out of the lock would reopen a
     race between two concurrent renames.
     """
-    unknown = sorted(set(body) - _PATCHABLE_TOKEN_FIELDS - {"confirm_pass_through"})
+    unknown = sorted(set(body) - _PATCHABLE_ACCESS_KEY_FIELDS - {"confirm_pass_through"})
     if unknown:
         fields = ", ".join(unknown)
         return {}, _err(
@@ -823,13 +823,13 @@ def _validated_token_patch(
         new_name = body["name"]
         if not new_name or not isinstance(new_name, str):
             return {}, _err("invalid_request", "name is required.", 400, rid, key="nameRequired")
-        if not TOKEN_NAME_REGEX.match(new_name):
+        if not ACCESS_KEY_NAME_REGEX.match(new_name):
             return {}, _err(
                 "invalid_request",
                 "name must be 3-32 characters: letters, numbers, hyphens, or underscores.",
                 400, rid, key="tokenNameLengthPattern", params={"min": 3, "max": 32},
             )
-        if data.store.name_slug_exists(new_name, exclude_token_id=token_id):
+        if data.store.name_slug_exists(new_name, exclude_access_key_id=token_id):
             return {}, _err(
                 "invalid_request", "An access key with this name already exists.", 400, rid,
                 key="tokenNameTaken",
@@ -844,14 +844,14 @@ def _validated_token_patch(
         enabling = body["pass_through"]
         # Real JSON true only: bool("false") is True, so a truthy string
         # must not satisfy this acknowledgment gate.
-        if enabling and not token.pass_through and body.get("confirm_pass_through") is not True:
+        if enabling and not access_key.pass_through and body.get("confirm_pass_through") is not True:
             return {}, _err(
                 "invalid_request",
                 "confirm_pass_through: true is required when enabling pass_through.",
                 400, rid, key="passThroughConfirmationRequired",
             )
 
-    patchable = {k: v for k, v in body.items() if k in _PATCHABLE_TOKEN_FIELDS}
+    patchable = {k: v for k, v in body.items() if k in _PATCHABLE_ACCESS_KEY_FIELDS}
 
     for bool_field in ("announce_all_tools", "use_assist_exposure"):
         if bool_field in patchable and not isinstance(patchable[bool_field], bool):
@@ -898,7 +898,7 @@ def _validated_token_patch(
 
     if "use_assist_exposure" in patchable:
         # Keyed on the RESULTING pass_through, so enabling both in one PATCH works.
-        resulting_pass_through = bool(patchable.get("pass_through", token.pass_through))
+        resulting_pass_through = bool(patchable.get("pass_through", access_key.pass_through))
         if not resulting_pass_through:
             return {}, _err(
                 "invalid_request", "use_assist_exposure is only valid for pass_through access keys.",
@@ -931,7 +931,7 @@ def _validated_token_patch(
     return patchable, None
 
 
-async def _rename_token_sensors(
+async def _rename_access_key_sensors(
     hass: HomeAssistant, token_id: str, old_name: str, updated: Any
 ) -> None:
     """Follow a token rename on its sensors, in place.
@@ -941,15 +941,15 @@ async def _rename_token_sensors(
     rename only updates the device's display name and the record the sensors read
     from; entity_ids, and whatever refers to them, are unchanged.
     """
-    from .sensor import async_rename_token_sensors  # noqa: PLC0415
+    from .sensor import async_rename_access_key_sensors  # noqa: PLC0415
 
     try:
-        await async_rename_token_sensors(hass, old_name, updated)
+        await async_rename_access_key_sensors(hass, old_name, updated)
     except Exception:  # noqa: BLE001
         _LOGGER.warning("Sensor rename failed for access key %s", token_id, exc_info=True)
 
 
-class PhoenixAdminTokenView(PhoenixView):
+class PhoenixAdminAccessKeyView(PhoenixView):
     """GET/PATCH/DELETE /api/phoenix-mcp/admin/tokens/{token_id} - manage a single token."""
 
     url = "/api/phoenix-mcp/admin/tokens/{token_id}"
@@ -960,10 +960,10 @@ class PhoenixAdminTokenView(PhoenixView):
     async def get(self, request: web.Request, token_id: str) -> web.Response:
         rid = request["phoenix_mcp_rid"]
         data: PhoenixData = self.hass.data[DOMAIN]
-        token = data.store.get_token_by_id(token_id)
-        if token is None:
-            return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
-        return _ok(token.to_dict(), request_id=rid)
+        access_key = data.store.get_access_key_by_id(token_id)
+        if access_key is None:
+            return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
+        return _ok(access_key.to_dict(), request_id=rid)
 
     @require_admin
     async def patch(self, request: web.Request, token_id: str) -> web.Response:
@@ -980,20 +980,20 @@ class PhoenixAdminTokenView(PhoenixView):
 
         old_name: str | None = None
         async with data.store.async_lock:
-            token = data.store.get_token_by_id(token_id)
-            if token is None:
-                return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
-            old_name = token.name
+            access_key = data.store.get_access_key_by_id(token_id)
+            if access_key is None:
+                return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
+            old_name = access_key.name
 
-            patchable, invalid = _validated_token_patch(body, token, token_id, data, rid)
+            patchable, invalid = _validated_access_key_patch(body, access_key, token_id, data, rid)
             if invalid is not None:
                 return invalid
-            updated = await data.store.async_patch_token(token_id, **patchable)
+            updated = await data.store.async_patch_access_key(token_id, **patchable)
             if updated is None:
                 # The store returns None only for an unknown id, which the lookup
                 # above already excluded under this same lock. Report it rather
                 # than dereference None.
-                return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
+                return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
 
         user = request[KEY_HASS_USER]
         data.audit.record(
@@ -1008,7 +1008,7 @@ class PhoenixAdminTokenView(PhoenixView):
         )
 
         if updated is not None and old_name is not None and updated.name != old_name:
-            await _rename_token_sensors(self.hass, token_id, old_name, updated)
+            await _rename_access_key_sensors(self.hass, token_id, old_name, updated)
 
         return _ok(updated.to_dict(), request_id=rid)
 
@@ -1017,7 +1017,7 @@ class PhoenixAdminTokenView(PhoenixView):
         """Revoke a token, close its queued approvals, and fire the bus event."""
         from .approvals import (  # noqa: PLC0415
             REASON_REVOKED,
-            async_cancel_approvals_for_token,
+            async_cancel_approvals_for_access_key,
             dismiss_approval_notification,
             fire_approval_resolved_event,
         )
@@ -1033,14 +1033,14 @@ class PhoenixAdminTokenView(PhoenixView):
         # the gap between validation and persistence.
         async with data.settings_update_lock:
             async with data.store.async_lock:
-                token = data.store.get_token_by_id(token_id)
-                if token is None:
-                    return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
+                access_key = data.store.get_access_key_by_id(token_id)
+                if access_key is None:
+                    return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
 
-                token_name = token.name
+                token_name = access_key.name
                 now = utcnow()
 
-                await data.store.async_archive_token(token_id, revoked=True, revoked_at=now)
+                await data.store.async_archive_access_key(token_id, revoked=True, revoked_at=now)
                 cancel_expiry_timer(data, token_id)
                 # If this token was the Assist binding, the voice agent's token or
                 # the AI Task token, clear it in the same transaction as archival.
@@ -1057,7 +1057,7 @@ class PhoenixAdminTokenView(PhoenixView):
                 # A revoked token's queued approvals must not linger as approvable
                 # entries. Live claims are skipped; a stale marker is closed as
                 # interrupted so token cleanup preserves its uncertainty.
-                changed_approvals = await async_cancel_approvals_for_token(
+                changed_approvals = await async_cancel_approvals_for_access_key(
                     data.store, token_id, REASON_REVOKED,
                     skip_ids=data.approvals_in_progress,
                 )
@@ -1067,8 +1067,8 @@ class PhoenixAdminTokenView(PhoenixView):
 
         # Advisory leases the token still held. Outside the store lock: they are
         # in-memory and unrelated to stored state.
-        from .mesa import release_token_leases  # noqa: PLC0415
-        release_token_leases(data, token_id)
+        from .mesa import release_access_key_leases  # noqa: PLC0415
+        release_access_key_leases(data, token_id)
 
         if data.async_sync_voice_agent is not None:
             data.async_sync_voice_agent()
@@ -1086,7 +1086,7 @@ class PhoenixAdminTokenView(PhoenixView):
 
         data.rate_limiter.destroy(token_id)
         data.rate_limit_notified.pop(token_id, None)
-        data.token_counters.pop(token_id, None)
+        data.access_key_counters.pop(token_id, None)
         data.stale_tools_advised.pop(token_id, None)
 
         hass.bus.async_fire("phoenix_mcp_token_revoked", {
@@ -1107,10 +1107,10 @@ class PhoenixAdminTokenView(PhoenixView):
             settings=data.store.get_settings(),
         )
 
-        slug = token_name_slug(token_name)
-        if data.async_on_token_archived:
+        slug = access_key_name_slug(token_name)
+        if data.async_on_access_key_archived:
             try:
-                await data.async_on_token_archived(slug)
+                await data.async_on_access_key_archived(slug)
             except Exception:
                 _LOGGER.warning("Sensor removal failed for access key %s; entity registry may have ghost entries", token_id, exc_info=True)
 
@@ -1120,7 +1120,7 @@ class PhoenixAdminTokenView(PhoenixView):
 def _presets_disabled(data: PhoenixData, rid: str) -> web.Response | None:
     """403 for every preset endpoint while the feature toggle is off."""
     if not data.store.get_settings().token_presets_enabled:
-        return _err("forbidden", "Access Key presets are disabled. Enable them in Settings.", 403, rid, key="presetsDisabled")
+        return _err("forbidden", "Access key presets are disabled. Enable them in Settings.", 403, rid, key="presetsDisabled")
     return None
 
 
@@ -1147,7 +1147,7 @@ def _validate_preset_name(raw: object, rid: str) -> str | web.Response:
     return name
 
 
-class PhoenixAdminTokenPresetsView(PhoenixView):
+class PhoenixAdminAccessKeyPresetsView(PhoenixView):
     """POST /api/phoenix-mcp/admin/tokens/{token_id}/presets - save the current settings as a new preset."""
 
     url = "/api/phoenix-mcp/admin/tokens/{token_id}/presets"
@@ -1176,13 +1176,13 @@ class PhoenixAdminTokenPresetsView(PhoenixView):
                     key="presetSaveRejected",
                 )
             if updated is None:
-                return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
+                return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
 
         _audit_admin(self.hass, request, rid, request.path)
         return _ok(updated.to_dict(), status=201, request_id=rid)
 
 
-class PhoenixAdminTokenPresetView(PhoenixView):
+class PhoenixAdminAccessKeyPresetView(PhoenixView):
     """PATCH/DELETE /api/phoenix-mcp/admin/tokens/{token_id}/presets/{preset_id} - rename or delete a preset."""
 
     url = "/api/phoenix-mcp/admin/tokens/{token_id}/presets/{preset_id}"
@@ -1213,7 +1213,7 @@ class PhoenixAdminTokenPresetView(PhoenixView):
                     key="presetRenameRejected",
                 )
             if updated is None:
-                return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
+                return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
 
         _audit_admin(self.hass, request, rid, request.path)
         return _ok(updated.to_dict(), request_id=rid)
@@ -1236,13 +1236,13 @@ class PhoenixAdminTokenPresetView(PhoenixView):
                     key="presetDeleteRejected",
                 )
             if updated is None:
-                return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
+                return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
 
         _audit_admin(self.hass, request, rid, request.path)
         return _ok(updated.to_dict(), request_id=rid)
 
 
-class PhoenixAdminTokenPresetApplyView(PhoenixView):
+class PhoenixAdminAccessKeyPresetApplyView(PhoenixView):
     """POST /api/phoenix-mcp/admin/tokens/{token_id}/presets/{preset_id}/apply - make the token match a preset.
 
     Workspace model: applying a DIFFERENT preset first auto-saves the
@@ -1267,13 +1267,13 @@ class PhoenixAdminTokenPresetApplyView(PhoenixView):
             return body
 
         async with data.store.async_lock:
-            token = data.store.get_token_by_id(token_id)
-            if token is None:
-                return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
-            preset = next((p for p in token.presets if p.id == preset_id), None)
+            access_key = data.store.get_access_key_by_id(token_id)
+            if access_key is None:
+                return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
+            preset = next((p for p in access_key.presets if p.id == preset_id), None)
             if preset is None:
                 return _err("not_found", "Preset not found.", 404, rid, key="presetNotFound")
-            if preset.pass_through and not token.pass_through and body.get("confirm_pass_through") is not True:
+            if preset.pass_through and not access_key.pass_through and body.get("confirm_pass_through") is not True:
                 return _err(
                     "invalid_request",
                     "confirm_pass_through: true is required when the preset enables pass_through.",
@@ -1283,10 +1283,10 @@ class PhoenixAdminTokenPresetApplyView(PhoenixView):
             # SWITCH: the outgoing preset absorbs the live state first, so
             # nothing the admin changed since the last switch is ever lost.
             # Applying the active preset itself skips this (that is the revert).
-            if preset_id != token.active_preset_id and token.active_preset_id:
-                await data.store.async_sync_preset(token_id, token.active_preset_id)
+            if preset_id != access_key.active_preset_id and access_key.active_preset_id:
+                await data.store.async_sync_preset(token_id, access_key.active_preset_id)
 
-            await data.store.async_patch_token(
+            await data.store.async_patch_access_key(
                 token_id,
                 persona=preset.persona,
                 pass_through=preset.pass_through,
@@ -1301,13 +1301,13 @@ class PhoenixAdminTokenPresetApplyView(PhoenixView):
             await data.store.async_set_permissions(
                 token_id, PermissionTree.from_dict(preset.permissions.to_dict()),
             )
-            token.active_preset_id = preset.id
+            access_key.active_preset_id = preset.id
             await data.store.async_save()
 
         # New limits take effect cleanly rather than inheriting the old window.
         data.rate_limiter.destroy(token_id)
         _audit_admin(self.hass, request, rid, request.path)
-        return _ok(token.to_dict(), request_id=rid)
+        return _ok(access_key.to_dict(), request_id=rid)
 
 
 class PhoenixAdminPermissionsView(PhoenixView):
@@ -1321,10 +1321,10 @@ class PhoenixAdminPermissionsView(PhoenixView):
     async def get(self, request: web.Request, token_id: str) -> web.Response:
         rid = request["phoenix_mcp_rid"]
         data: PhoenixData = self.hass.data[DOMAIN]
-        token = data.store.get_token_by_id(token_id)
-        if token is None:
-            return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
-        return _ok(token.permissions.to_dict(), request_id=rid)
+        access_key = data.store.get_access_key_by_id(token_id)
+        if access_key is None:
+            return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
+        return _ok(access_key.permissions.to_dict(), request_id=rid)
 
     @require_admin
     async def put(self, request: web.Request, token_id: str) -> web.Response:
@@ -1349,16 +1349,16 @@ class PhoenixAdminPermissionsView(PhoenixView):
             )
 
         async with data.store.async_lock:
-            token = data.store.get_token_by_id(token_id)
-            if token is None:
-                return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
+            access_key = data.store.get_access_key_by_id(token_id)
+            if access_key is None:
+                return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
 
             updated = await data.store.async_set_permissions(token_id, new_tree)
             if updated is None:
                 # The store returns None only for an unknown id, which the lookup
                 # above already excluded under this same lock. Report it rather
                 # than dereference None.
-                return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
+                return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
 
         user = request[KEY_HASS_USER]
         data.audit.record(
@@ -1385,8 +1385,8 @@ class PhoenixAdminPermissionIntegrationOptionsView(PhoenixView):
     async def get(self, request: web.Request, token_id: str) -> web.Response:
         rid = request["phoenix_mcp_rid"]
         data: PhoenixData = self.hass.data[DOMAIN]
-        if data.store.get_token_by_id(token_id) is None:
-            return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
+        if data.store.get_access_key_by_id(token_id) is None:
+            return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
         integrations = []
         for entry in self.hass.config_entries.async_entries():
             selection = _integration_permission_selection(self.hass, entry.entry_id)
@@ -1462,10 +1462,10 @@ class PhoenixAdminPermissionBulkSelectView(PhoenixView):
 
         data: PhoenixData = self.hass.data[DOMAIN]
         async with data.store.async_lock:
-            token = data.store.get_token_by_id(token_id)
-            if token is None:
-                return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
-            permissions = PermissionTree.from_dict(token.permissions.to_dict())
+            access_key = data.store.get_access_key_by_id(token_id)
+            if access_key is None:
+                return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
+            permissions = PermissionTree.from_dict(access_key.permissions.to_dict())
             for node_type, node_ids in (
                 ("devices", selection["device_ids"]),
                 ("entities", selection["entity_ids"]),
@@ -1478,7 +1478,7 @@ class PhoenixAdminPermissionBulkSelectView(PhoenixView):
                         nodes[node_id] = PermissionNode(state=state)
             updated = await data.store.async_set_permissions(token_id, permissions)
             if updated is None:
-                return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
+                return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
 
         _audit_admin(self.hass, request, rid, request.path)
         summary = {
@@ -1577,9 +1577,9 @@ async def _patch_permission_node(
         )
 
     async with data.store.async_lock:
-        token = data.store.get_token_by_id(token_id)
-        if token is None:
-            return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
+        access_key = data.store.get_access_key_by_id(token_id)
+        if access_key is None:
+            return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
 
         updated = await data.store.async_patch_permission_node(
             token_id, node_type, node_id, state, hint
@@ -1587,7 +1587,7 @@ async def _patch_permission_node(
         if updated is None:
             # Same reasoning as the token PATCH above: report rather than
             # dereference None if the record vanished inside the lock.
-            return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
+            return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
 
     user = request[KEY_HASS_USER]
     data.audit.record(
@@ -1617,12 +1617,12 @@ class PhoenixAdminResolveView(PhoenixView):
             return _err("invalid_request", "Invalid entity ID format.", 400, rid, key="badEntityId")
         hass = self.hass
         data: PhoenixData = hass.data[DOMAIN]
-        token = data.store.get_token_by_id(token_id)
-        if token is None:
-            return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
+        access_key = data.store.get_access_key_by_id(token_id)
+        if access_key is None:
+            return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
 
-        perm = resolve(entity_id, token, hass)
-        resolution_path = _build_resolution_path(entity_id, token, hass)
+        perm = resolve(entity_id, access_key, hass)
+        resolution_path = _build_resolution_path(entity_id, access_key, hass)
 
         effective_map = {
             Permission.WRITE: "WRITE",
@@ -1632,7 +1632,7 @@ class PhoenixAdminResolveView(PhoenixView):
             Permission.NOT_FOUND: "NOT_FOUND",
         }
 
-        effective_hint = get_effective_hint(token, entity_id, hass, data.store.get_entity_hints())
+        effective_hint = get_effective_hint(access_key, entity_id, hass, data.store.get_entity_hints())
 
         return _ok({
             "entity_id": entity_id,
@@ -1654,15 +1654,15 @@ class PhoenixAdminScopeView(PhoenixView):
         rid = request["phoenix_mcp_rid"]
         hass = self.hass
         data: PhoenixData = hass.data[DOMAIN]
-        token = data.store.get_token_by_id(token_id)
-        if token is None:
-            return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
+        access_key = data.store.get_access_key_by_id(token_id)
+        if access_key is None:
+            return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
 
         all_states = hass.states.async_all()
         readable: list[str] = []
         writable: list[str] = []
 
-        if token.pass_through:
+        if access_key.pass_through:
             # Fast path: pass_through tokens have WRITE on everything except BLOCKED_DOMAINS
             # and Phoenix MCP platform entities. Avoids an O(n) resolve() call per entity.
             registry = er_mod.async_get(hass)
@@ -1678,7 +1678,7 @@ class PhoenixAdminScopeView(PhoenixView):
         else:
             for state in all_states:
                 eid = state.entity_id
-                perm = resolve(eid, token, hass)
+                perm = resolve(eid, access_key, hass)
                 if perm == Permission.WRITE:
                     readable.append(eid)
                     writable.append(eid)
@@ -1691,11 +1691,11 @@ class PhoenixAdminScopeView(PhoenixView):
         # values a client would receive.
         return _ok({
             "token_id": token_id,
-            "token_name": token.name,
+            "token_name": access_key.name,
             "readable": sorted(readable),
             "writable": sorted(writable),
-            "persona": token.persona,
-            "capability_flags": {name: getattr(token, name) for name in CAPABILITY_NAMES},
+            "persona": access_key.persona,
+            "capability_flags": {name: getattr(access_key, name) for name in CAPABILITY_NAMES},
         }, request_id=rid)
 
 
@@ -1799,7 +1799,7 @@ class PhoenixAdminEntityHintView(PhoenixView):
         return _ok({"entity_hints": dict(data.store.get_entity_hints())}, request_id=rid)
 
 
-class PhoenixAdminTokenStatsView(PhoenixView):
+class PhoenixAdminAccessKeyStatsView(PhoenixView):
     """GET /api/phoenix-mcp/admin/tokens/{token_id}/stats - in-memory counters for one token."""
 
     url = "/api/phoenix-mcp/admin/tokens/{token_id}/stats"
@@ -1810,23 +1810,23 @@ class PhoenixAdminTokenStatsView(PhoenixView):
     async def get(self, request: web.Request, token_id: str) -> web.Response:
         rid = request["phoenix_mcp_rid"]
         data: PhoenixData = self.hass.data[DOMAIN]
-        token = data.store.get_token_by_id(token_id)
-        if token is None:
-            return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
+        access_key = data.store.get_access_key_by_id(token_id)
+        if access_key is None:
+            return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
 
-        counters = data.token_counters.get(token_id, {
+        counters = data.access_key_counters.get(token_id, {
             "request_count": 0,
             "denied_count": 0,
             "rate_limit_hits": 0,
         })
 
-        last_used = token.last_used_at.isoformat() if token.last_used_at else None
+        last_used = access_key.last_used_at.isoformat() if access_key.last_used_at else None
 
-        status = "expired" if token.is_expired() else "active"
+        status = "expired" if access_key.is_expired() else "active"
 
         return _ok({
             "token_id": token_id,
-            "token_name": token.name,
+            "token_name": access_key.name,
             "request_count": counters["request_count"],
             "denied_count": counters["denied_count"],
             "rate_limit_hits": counters["rate_limit_hits"],
@@ -1835,7 +1835,7 @@ class PhoenixAdminTokenStatsView(PhoenixView):
         }, request_id=rid)
 
 
-class PhoenixAdminTokenConnectionView(PhoenixView):
+class PhoenixAdminAccessKeyConnectionView(PhoenixView):
     """GET /api/phoenix-mcp/admin/tokens/{token_id}/connection - connection signals.
 
     Used by the onboarding wizard to detect when a token's MCP client has
@@ -1852,12 +1852,12 @@ class PhoenixAdminTokenConnectionView(PhoenixView):
     async def get(self, request: web.Request, token_id: str) -> web.Response:
         rid = request["phoenix_mcp_rid"]
         data: PhoenixData = self.hass.data[DOMAIN]
-        token = data.store.get_token_by_id(token_id)
-        if token is None:
-            return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
+        access_key = data.store.get_access_key_by_id(token_id)
+        if access_key is None:
+            return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
 
-        counters = data.token_counters.get(token_id, {})
-        last_used = token.last_used_at.isoformat() if token.last_used_at else None
+        counters = data.access_key_counters.get(token_id, {})
+        last_used = access_key.last_used_at.isoformat() if access_key.last_used_at else None
 
         return _ok({
             "last_used_at": last_used,
@@ -1865,7 +1865,7 @@ class PhoenixAdminTokenConnectionView(PhoenixView):
         }, request_id=rid)
 
 
-class PhoenixAdminTokenAuditView(PhoenixView):
+class PhoenixAdminAccessKeyAuditView(PhoenixView):
     """GET /api/phoenix-mcp/admin/tokens/{token_id}/audit - paginated audit log for one token."""
 
     url = "/api/phoenix-mcp/admin/tokens/{token_id}/audit"
@@ -1876,9 +1876,9 @@ class PhoenixAdminTokenAuditView(PhoenixView):
     async def get(self, request: web.Request, token_id: str) -> web.Response:
         rid = request["phoenix_mcp_rid"]
         data: PhoenixData = self.hass.data[DOMAIN]
-        token = data.store.get_token_by_id(token_id)
-        if token is None:
-            return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
+        access_key = data.store.get_access_key_by_id(token_id)
+        if access_key is None:
+            return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
 
         paged = _parse_pagination(request, rid, default_limit=100, max_limit=500)
         if isinstance(paged, web.Response):
@@ -1983,7 +1983,7 @@ class PhoenixAdminAuditView(PhoenixView):
             return paged
         limit, offset = paged
 
-        token_id_filter = request.query.get("token_id")
+        access_key_id_filter = request.query.get("token_id")
         outcome_filter = request.query.get("outcome")
         ip_filter = request.query.get("ip")
         method_filter = request.query.get("method")
@@ -2001,7 +2001,7 @@ class PhoenixAdminAuditView(PhoenixView):
             since_filter = as_utc(since_filter)
 
         filter_kwargs: dict[str, Any] = {
-            "token_id": token_id_filter,
+            "token_id": access_key_id_filter,
             "outcome": outcome_filter,
             "client_ip": ip_filter,
             "method": method_filter,
@@ -2096,7 +2096,7 @@ _NULLABLE_STRING_SETTINGS = (
 )
 
 # (token setting, provider setting) pairs validated against live records.
-_SURFACE_TOKEN_PROVIDER_PAIRS = (
+_SURFACE_ACCESS_KEY_PROVIDER_PAIRS = (
     ("voice_agent_token_id", "voice_agent_provider_id"),
     ("ai_task_token_id", "ai_task_provider_id"),
 )
@@ -2261,7 +2261,7 @@ async def _validated_settings_patch(
                 400, rid, key="tokenIdOrNull", params={"field": "assist_bound_token_id"},
             )
         else:
-            bound = data.store.get_token_by_id(val)
+            bound = data.store.get_access_key_by_id(val)
             if bound is None or not bound.is_valid():
                 return {}, _err(
                     "invalid_request", "assist_bound_token_id must reference an active access key.",
@@ -2285,9 +2285,9 @@ async def _validated_settings_patch(
             )
 
     provider_store = None
-    for tkey, pkey in _SURFACE_TOKEN_PROVIDER_PAIRS:
+    for tkey, pkey in _SURFACE_ACCESS_KEY_PROVIDER_PAIRS:
         if patchable.get(tkey):
-            vtok = data.store.get_token_by_id(patchable[tkey])
+            vtok = data.store.get_access_key_by_id(patchable[tkey])
             if vtok is None or not vtok.is_valid():
                 return {}, _err(
                     "invalid_request", f"{tkey} must reference an active access key.",
@@ -2487,33 +2487,33 @@ class PhoenixAdminCommandPreviewView(PhoenixView):
                                             or context_history(body["messages"], structured=True) is None))):
             return _err("invalid_request", "Invalid command preview request.", 400, rid,
                         key="routingPreviewInvalid")
-        token = data.store.get_token_by_id(token_id)
-        if token is None or not token.is_valid():
+        access_key = data.store.get_access_key_by_id(token_id)
+        if access_key is None or not access_key.is_valid():
             return _err("invalid_request", "Select an active access key.", 400, rid,
                         key="activeTokenRequired", params={"field": "token_id"})
         from .command_routing import RoutingAuthority
-        authority = RoutingAuthority.capture(data, token)
+        authority = RoutingAuthority.capture(data, access_key)
         language = body.get("language", "en")
-        result = await async_evaluate_command(self.hass, data, token, sentence, language, preview=True)
+        result = await async_evaluate_command(self.hass, data, access_key, sentence, language, preview=True)
         if "messages" in body:
             reviewer = async_preview_context
             if body.get("references"):
                 from .decision_reference import async_preview_reference
                 reviewer = async_preview_reference
             result["context_review"] = await reviewer(
-                self.hass, data, token, sentence, language, body["messages"], result)
+                self.hass, data, access_key, sentence, language, body["messages"], result)
             if result["context_review"]["reason"] in ("context_changed", "authority_changed"):
                 result.update(route="provider", reason=result["context_review"]["reason"], proposal=None)
         elif body.get("batch"):
             from .decision_batch import async_preview_batch
-            result["batch_review"] = await async_preview_batch(self.hass, data, token, sentence, language, result,
+            result["batch_review"] = await async_preview_batch(self.hass, data, access_key, sentence, language, result,
                                                              numeric_preview=body.get("numeric", False))
             if result["batch_review"]["reason"] in ("targets_changed", "authority_changed"):
                 result.update(route="provider", reason=result["batch_review"]["reason"], proposal=None)
         elif body.get("decision"):
             from .decision_shadow import async_preview_decision
             result["decision_shadow"] = await async_preview_decision(
-                self.hass, data, token, sentence, language, result, targets=body.get("targets", False), ingress="preview")
+                self.hass, data, access_key, sentence, language, result, targets=body.get("targets", False), ingress="preview")
         if authority.current(self.hass) is None:
             result = {"route": "provider", "reason": "authority_changed", "proposal": None,
                       "executed": False, "elapsed_ms": result["elapsed_ms"]}
@@ -2564,7 +2564,7 @@ class PhoenixAdminSettingsView(PhoenixView):
                     # its current state (workspace model). Idempotent on re-enables.
                     seeded = await data.store.async_seed_default_presets()
                     if seeded:
-                        _LOGGER.info("Access Key presets enabled; seeded a default preset on %d access key(s)", seeded)
+                        _LOGGER.info("Access key presets enabled; seeded a default preset on %d access key(s)", seeded)
 
             await _apply_settings_side_effects(
                 self.hass, data, patchable, updated, old_kill_switch,
@@ -2794,7 +2794,7 @@ class PhoenixAdminWipeView(PhoenixView):
                     async with data.store.async_lock:
                         data.rate_limiter.destroy_all()
                         data.rate_limit_notified.clear()
-                        data.token_counters.clear()
+                        data.access_key_counters.clear()
                         data.stale_tools_advised.clear()
                         data.command_routing.clarifications.clear()
                         await data.decision_budget.async_wipe()
@@ -2817,7 +2817,7 @@ class PhoenixAdminWipeView(PhoenixView):
                         wiped_approvals = collect_pending_approvals_for_wipe(
                             data.store, REASON_WIPED,
                         )
-                        active_slugs = [token_name_slug(t.name) for t in data.store.list_tokens()]
+                        active_slugs = [access_key_name_slug(t.name) for t in data.store.list_access_keys()]
                         await data.store.async_wipe()
                 finally:
                     data.core_wipe_in_progress = False
@@ -2834,16 +2834,16 @@ class PhoenixAdminWipeView(PhoenixView):
             # with the same slug as a just-wiped token could have its sensors removed here.
             # This race is accepted: wipe is a destructive admin operation and should not
             # be run concurrently with token creation.
-            if data.async_on_token_archived:
+            if data.async_on_access_key_archived:
                 await asyncio.gather(
-                    *[data.async_on_token_archived(slug) for slug in active_slugs],
+                    *[data.async_on_access_key_archived(slug) for slug in active_slugs],
                     return_exceptions=True,
                 )
             # Clear unconditionally: if any sensor removal above failed and left stale
-            # entries in token_id_sensors, they would cause async_write_ha_state() to
+            # entries in access_key_id_sensors, they would cause async_write_ha_state() to
             # be called for token IDs that no longer exist. Since the wipe removes all
             # tokens, there are no valid sensors left regardless.
-            data.token_id_sensors.clear()
+            data.access_key_id_sensors.clear()
 
             # Settings were reset, so the voice agent and AI Task are not
             # configured; re-sync both (they may have been active before the wipe).
@@ -2919,7 +2919,7 @@ class PhoenixAdminWipeView(PhoenixView):
         return web.Response(status=204, headers={"X-Phoenix-Request-ID": rid})
 
 
-class PhoenixAdminTokenRotateView(PhoenixView):
+class PhoenixAdminAccessKeyRotateView(PhoenixView):
     """POST /api/phoenix-mcp/admin/tokens/{token_id}/rotate - replace the raw token value atomically."""
 
     url = "/api/phoenix-mcp/admin/tokens/{token_id}/rotate"
@@ -2934,16 +2934,16 @@ class PhoenixAdminTokenRotateView(PhoenixView):
         user = request[KEY_HASS_USER]
 
         async with data.store.async_lock:
-            result = await data.store.async_rotate_token(token_id)
+            result = await data.store.async_rotate_access_key(token_id)
 
         if result is None:
-            return _err("not_found", "Access Key not found.", 404, rid, key="tokenNotFound")
+            return _err("not_found", "Access key not found.", 404, rid, key="tokenNotFound")
 
-        token, raw_token = result
+        access_key, raw_access_key = result
 
         hass.bus.async_fire("phoenix_mcp_token_rotated", {
-            "token_id": token.id,
-            "token_name": token.name,
+            "token_id": access_key.id,
+            "token_name": access_key.name,
             "rotated_by": user.id,
             "timestamp": utcnow().isoformat(),
         })
@@ -2959,8 +2959,8 @@ class PhoenixAdminTokenRotateView(PhoenixView):
             settings=data.store.get_settings(),
         )
 
-        response_body = token.to_dict()
-        response_body["token"] = raw_token
+        response_body = access_key.to_dict()
+        response_body["token"] = raw_access_key
         return _ok(response_body, request_id=rid)
 
 
@@ -3258,7 +3258,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
         REASON_CAPABILITY_DENIED,
         REASON_EXECUTION_INTERRUPTED,
         REASON_KILL_SWITCH,
-        REASON_TOKEN_INACTIVE,
+        REASON_ACCESS_KEY_INACTIVE,
         STATUS_APPROVED,
         STATUS_CANCELLED,
         STATUS_EXPIRED,
@@ -3279,7 +3279,7 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
     data: PhoenixData = hass.data[DOMAIN]
     user = request[KEY_HASS_USER]
     from .config_reconciliation import is_recovery_approval, execute_recovery_approval
-    from .mcp_view import _restore_token
+    from .mcp_view import _restore_access_key
     closed_record = None
     closed_method: str | None = None
     closed_reason: str | None = None
@@ -3363,21 +3363,21 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 key="approvalAlreadyResolved",
             )
         else:
-            token = _restore_token(user.id) if recovery_request else data.store.get_token_by_id(record.token_id)
-            if token is None or not token.is_valid():
+            access_key = _restore_access_key(user.id) if recovery_request else data.store.get_access_key_by_id(record.token_id)
+            if access_key is None or not access_key.is_valid():
                 closed_record = await async_update_approval_status(
                     data.store, approval_id,
                     status=STATUS_CANCELLED,
                     approved_by_user_id=user.id,
-                    rejected_reason=REASON_TOKEN_INACTIVE,
+                    rejected_reason=REASON_ACCESS_KEY_INACTIVE,
                 )
                 closed_method = "approval/cancelled"
-                closed_reason = REASON_TOKEN_INACTIVE
+                closed_reason = REASON_ACCESS_KEY_INACTIVE
                 closed_response = _err(
-                    "not_found", "Access Key no longer active.", 404, rid,
+                    "not_found", "Access key no longer active.", 404, rid,
                     key="approvalTokenInactive",
                 )
-            elif not recovery_request and record.cap_name != MESA_CONFIRM_CAP and effective_cap(token, record.cap_name) == "deny":
+            elif not recovery_request and record.cap_name != MESA_CONFIRM_CAP and effective_cap(access_key, record.cap_name) == "deny":
                 # The MESA sentinel cap is re-evaluated by its executor instead.
                 closed_record = await async_update_approval_status(
                     data.store, approval_id,
@@ -3430,9 +3430,9 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
             reason=closed_reason,
         )
         return closed_response
-    if token is None:
+    if access_key is None:
         return _err(
-            "not_found", "Access Key no longer active.", 404, rid,
+            "not_found", "Access key no longer active.", 404, rid,
             key="approvalTokenInactive",
         )
 
@@ -3467,9 +3467,9 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                 RequestAuthority, policy_version, request_authority,
             )
             authority_ctx = request_authority.set(
-                None if recovery_request else RequestAuthority(hass, data, token.id, token.token_hash)
+                None if recovery_request else RequestAuthority(hass, data, access_key.id, access_key.token_hash)
             )
-            policy_ctx = policy_version.set(token.settings_version)
+            policy_ctx = policy_version.set(access_key.settings_version)
             try:
                 with data.conversations.approval_scope(approval_id):
                     if recovery_request:
@@ -3490,11 +3490,11 @@ async def _approve_approval(hass: HomeAssistant, request: web.Request, approval_
                                     outcome, _resource = "denied", record.tool_name
                                 else:
                                     tool_result, outcome, _resource = await async_execute_approved_tool(
-                                        record.tool_name, record.args, token, hass, data,
+                                        record.tool_name, record.args, access_key, hass, data,
                                     )
                         else:
                             tool_result, outcome, _resource = await async_execute_approved_tool(
-                                record.tool_name, record.args, token, hass, data,
+                                record.tool_name, record.args, access_key, hass, data,
                             )
             finally:
                 policy_version.reset(policy_ctx)
@@ -4402,9 +4402,9 @@ class PhoenixAdminAttentionView(PhoenixView):
         data: PhoenixData = self.hass.data[DOMAIN]
         items = []
         for row in data.agent_recovery.admin_records():
-            token = data.store.get_token_by_id(row["token_id"])
+            access_key = data.store.get_access_key_by_id(row["token_id"])
             items.append({"id": row["request_id"], "kind": "agent", "tool": row["tool"],
-                          "token_name": token.name if token else row["token_id"],
+                          "token_name": access_key.name if access_key else row["token_id"],
                           "started_at": row["started_at"], "dispatch_result": row["dispatch_result"]})
         journal = data.calendar_writes
         if journal is not None:
@@ -4414,10 +4414,10 @@ class PhoenixAdminAttentionView(PhoenixView):
                     for row in rows:
                         if row["status"] != "outcome_unknown" or row["receipt_id"] in journal.active:
                             continue
-                        token = data.store.get_token_by_id(row["token_id"])
+                        access_key = data.store.get_access_key_by_id(row["token_id"])
                         items.append({"id": row["receipt_id"], "kind": "calendar",
                                       "tool": row["operation"] + "_calendar_event",
-                                      "token_name": token.name if token else row["token_id"],
+                                      "token_name": access_key.name if access_key else row["token_id"],
                                       "started_at": row["created_at"], "entity_id": row["entity_id"],
                                       "dispatch_result": "unknown"})
             except Exception:
@@ -5088,13 +5088,13 @@ class PhoenixAdminMesaSuggestionRestoreView(PhoenixView):
 ALL_ADMIN_VIEWS: list[type[PhoenixView]] = [
     PhoenixAdminInfoView,
     PhoenixAdminCatalogView,
-    PhoenixAdminArchivedTokensView,
-    PhoenixAdminArchivedTokenView,
-    PhoenixAdminTokensView,
-    PhoenixAdminTokenView,
-    PhoenixAdminTokenPresetsView,
-    PhoenixAdminTokenPresetView,
-    PhoenixAdminTokenPresetApplyView,
+    PhoenixAdminArchivedAccessKeysView,
+    PhoenixAdminArchivedAccessKeyView,
+    PhoenixAdminAccessKeysView,
+    PhoenixAdminAccessKeyView,
+    PhoenixAdminAccessKeyPresetsView,
+    PhoenixAdminAccessKeyPresetView,
+    PhoenixAdminAccessKeyPresetApplyView,
     PhoenixAdminPermissionsView,
     PhoenixAdminPermissionIntegrationOptionsView,
     PhoenixAdminPermissionBulkSelectView,
@@ -5102,14 +5102,14 @@ ALL_ADMIN_VIEWS: list[type[PhoenixView]] = [
     PhoenixAdminPermissionDeviceView,
     PhoenixAdminPermissionEntityView,
     PhoenixAdminResolveView,
-    PhoenixAdminTokenRotateView,
+    PhoenixAdminAccessKeyRotateView,
     PhoenixAdminScopeView,
     PhoenixAdminEntityTreeView,
     PhoenixAdminEntityHintsView,
     PhoenixAdminEntityHintView,
-    PhoenixAdminTokenStatsView,
-    PhoenixAdminTokenConnectionView,
-    PhoenixAdminTokenAuditView,
+    PhoenixAdminAccessKeyStatsView,
+    PhoenixAdminAccessKeyConnectionView,
+    PhoenixAdminAccessKeyAuditView,
     PhoenixAdminAuditView,
     PhoenixAdminConversationsView,
     PhoenixAdminConversationView,

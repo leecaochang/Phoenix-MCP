@@ -14,8 +14,8 @@ from tests.runtime_fixtures import mesa_off_store
 
 from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery, ConfigurationRecoveryError
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.mcp_view import _restore_token, _call_tool
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.mcp_view import _restore_access_key, _call_tool
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.template_recovery import template_snapshot, restore_template
 from homeassistant.util.dt import utcnow
 
@@ -109,7 +109,7 @@ async def test_real_template_recreation_preserves_identity(hass, kind):
     await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done()
     runtime = data()
-    result, outcome, _ = await restore_template(snapshot, _restore_token("admin"), hass, runtime)
+    result, outcome, _ = await restore_template(snapshot, _restore_access_key("admin"), hass, runtime)
     body = json.loads(result["content"][0]["text"])
     assert outcome == "allowed", body
     assert body["entry_id"] != entry.entry_id
@@ -118,8 +118,8 @@ async def test_real_template_recreation_preserves_identity(hass, kind):
     assert runtime.config_recovery.records()[0]["phase"] == "verified"
 
 
-def _template_agent(domain: str, *, token_id: str | None = None) -> TokenRecord:
-    return TokenRecord(
+def _template_agent(domain: str, *, token_id: str | None = None) -> AccessKeyRecord:
+    return AccessKeyRecord(
         id=token_id or uuid.uuid4().hex, name="template-agent", token_hash="x",
         created_at=utcnow(), created_by="test",
         permissions=PermissionTree(domains={domain: PermissionNode(state="GREEN")}),
@@ -132,22 +132,22 @@ async def test_agent_template_restore_is_owner_scoped_and_rechecks_target(hass):
 
     entry = await create_template(hass)
     domain = entry.options["template_type"]
-    token = _template_agent(domain)
+    access_key = _template_agent(domain)
     runtime = data()
     source = template_snapshot(hass, entry)
     await _execute_set_config_entry_options(
         {"entry_id": entry.entry_id, "settings": {"state": "{{ 8 }}"}},
-        token, hass, runtime,
+        access_key, hass, runtime,
     )
     recovery_id = await runtime.config_recovery.begin(
-        f"config_entry:{entry.entry_id}", "test_agent_restore", token.id, source,
+        f"config_entry:{entry.entry_id}", "test_agent_restore", access_key.id, source,
     )
     await runtime.config_recovery.mark(recovery_id, "verified")
     runtime.config_recovery.leave(recovery_id)
 
     receipt, outcome, _ = await _call_tool(
         "restore_configuration", {"recovery_id": recovery_id, "side": "before"},
-        token, hass, runtime,
+        access_key, hass, runtime,
     )
     assert outcome == "allowed"
     body = json.loads(receipt["content"][0]["text"])
@@ -168,7 +168,7 @@ async def test_agent_template_restore_is_owner_scoped_and_rechecks_target(hass):
             "recovery_id": recovery_id, "side": "before",
             "snapshot_digest": stale["snapshot_digest"],
             "target_fingerprint": stale["target_fingerprint"],
-        }, token, hass, runtime,
+        }, access_key, hass, runtime,
     )
     assert outcome == "invalid_request"
     assert "changed" in result["content"][0]["text"]
@@ -178,7 +178,7 @@ async def test_agent_template_restore_is_owner_scoped_and_rechecks_target(hass):
             "recovery_id": recovery_id, "side": "before",
             "snapshot_digest": body["snapshot_digest"],
             "target_fingerprint": body["target_fingerprint"],
-        }, token, hass, runtime,
+        }, access_key, hass, runtime,
     )
     assert outcome == "allowed", result
     assert entry.options["state"] == source["options"]["state"]
@@ -189,7 +189,7 @@ async def test_agent_authored_file_restore_rechecks_digest_and_target(hass):
     from custom_components.phoenix_mcp.tools.config_files import _authored_file_snapshot
     from custom_components.phoenix_mcp.tools.recovery import _execute_restore_configuration
 
-    token = TokenRecord(
+    access_key = AccessKeyRecord(
         id=uuid.uuid4().hex, name="file-agent", token_hash="x",
         created_at=utcnow(), created_by="test", permissions=PermissionTree(),
         cap_filesystem="allow",
@@ -201,7 +201,7 @@ async def test_agent_authored_file_restore_rechecks_digest_and_target(hass):
     snapshot = _authored_file_snapshot("www/recovery-smoke.txt", True, "before")
     runtime = data()
     rid = await runtime.config_recovery.begin(
-        "authored_file:www/recovery-smoke.txt", "write_file", token.id, snapshot,
+        "authored_file:www/recovery-smoke.txt", "write_file", access_key.id, snapshot,
     )
     await runtime.config_recovery.mark(rid, "verified")
     target = _authored_file_snapshot("www/recovery-smoke.txt", True, "current")
@@ -211,7 +211,7 @@ async def test_agent_authored_file_restore_rechecks_digest_and_target(hass):
         "target_fingerprint": content_hash(target),
     }
 
-    result, outcome, _ = await _execute_restore_configuration(bound, token, hass, runtime)
+    result, outcome, _ = await _execute_restore_configuration(bound, access_key, hass, runtime)
 
     body = json.loads(result["content"][0]["text"])
     assert outcome == "allowed", body
@@ -225,7 +225,7 @@ async def test_agent_authored_file_restore_removes_created_file(hass):
     from custom_components.phoenix_mcp.tools.config_files import _authored_file_snapshot
     from custom_components.phoenix_mcp.tools.recovery import _execute_restore_configuration
 
-    token = TokenRecord(
+    access_key = AccessKeyRecord(
         id=uuid.uuid4().hex, name="file-agent", token_hash="x",
         created_at=utcnow(), created_by="test", permissions=PermissionTree(),
         cap_filesystem="allow",
@@ -238,14 +238,14 @@ async def test_agent_authored_file_restore_removes_created_file(hass):
     current = _authored_file_snapshot(rel, True, "created")
     runtime = data()
     rid = await runtime.config_recovery.begin(
-        f"authored_file:{rel}", "write_file", token.id, absent, source=current,
+        f"authored_file:{rel}", "write_file", access_key.id, absent, source=current,
     )
     await runtime.config_recovery.mark(rid, "verified")
     result, outcome, _ = await _execute_restore_configuration({
         "recovery_id": rid, "side": "before",
         "snapshot_digest": content_hash(absent),
         "target_fingerprint": content_hash(current),
-    }, token, hass, runtime)
+    }, access_key, hass, runtime)
 
     body = json.loads(result["content"][0]["text"])
     assert outcome == "allowed", body
@@ -260,7 +260,7 @@ async def test_agent_blueprint_restore_uses_ha_blueprint_command(hass):
     from custom_components.phoenix_mcp.tools.blueprint import _blueprint_recovery_snapshot
     from custom_components.phoenix_mcp.tools.recovery import _execute_restore_configuration
 
-    token = TokenRecord(
+    access_key = AccessKeyRecord(
         id=uuid.uuid4().hex, name="blueprint-agent", token_hash="x",
         created_at=utcnow(), created_by="test", permissions=PermissionTree(),
         cap_blueprint_write="allow", cap_automation_write="allow",
@@ -272,7 +272,7 @@ async def test_agent_blueprint_restore_uses_ha_blueprint_command(hass):
     target = _blueprint_recovery_snapshot("automation", "author/restore.yaml", "blueprint: current\n")
     runtime = data()
     rid = await runtime.config_recovery.begin(
-        "blueprint:automation/author/restore.yaml", "edit_blueprint", token.id, snapshot,
+        "blueprint:automation/author/restore.yaml", "edit_blueprint", access_key.id, snapshot,
     )
     await runtime.config_recovery.mark(rid, "verified")
 
@@ -289,7 +289,7 @@ async def test_agent_blueprint_restore_uses_ha_blueprint_command(hass):
             "recovery_id": rid, "side": "before",
             "snapshot_digest": content_hash(snapshot),
             "target_fingerprint": content_hash(target),
-        }, token, hass, runtime)
+        }, access_key, hass, runtime)
 
     body = json.loads(result["content"][0]["text"])
     assert outcome == "allowed", body
@@ -302,7 +302,7 @@ async def test_agent_dashboard_registry_restore_uses_dashboard_command(hass):
     from custom_components.phoenix_mcp.helpers import content_hash
     from custom_components.phoenix_mcp.tools.recovery import _execute_restore_configuration
 
-    token = TokenRecord(
+    access_key = AccessKeyRecord(
         id=uuid.uuid4().hex, name="dashboard-agent", token_hash="x",
         created_at=utcnow(), created_by="test", permissions=PermissionTree(),
         cap_lovelace_write="allow",
@@ -326,7 +326,7 @@ async def test_agent_dashboard_registry_restore_uses_dashboard_command(hass):
     }
     runtime = data()
     rid = await runtime.config_recovery.begin(
-        "dashboard_registry:dashboard-one", "edit_dashboard", token.id, snapshot,
+        "dashboard_registry:dashboard-one", "edit_dashboard", access_key.id, snapshot,
     )
     await runtime.config_recovery.mark(rid, "verified")
     target = {
@@ -340,7 +340,7 @@ async def test_agent_dashboard_registry_restore_uses_dashboard_command(hass):
             "recovery_id": rid, "side": "before",
             "snapshot_digest": content_hash(snapshot),
             "target_fingerprint": content_hash(target),
-        }, token, hass, runtime)
+        }, access_key, hass, runtime)
 
     body = json.loads(result["content"][0]["text"])
     assert outcome == "allowed", body
@@ -355,7 +355,7 @@ async def test_real_template_collision_never_creates(hass):
     await hass.config_entries.async_remove(entry.entry_id)
     await hass.async_block_till_done()
     hass.states.async_set(snapshot["entities"][0]["entity_id"], "occupied")
-    result, outcome, _ = await restore_template(snapshot, _restore_token("admin"), hass, data())
+    result, outcome, _ = await restore_template(snapshot, _restore_access_key("admin"), hass, data())
     assert outcome == "invalid_request"
     assert "occupied" in result["content"][0]["text"]
     assert not hass.config_entries.async_entries("template")
@@ -366,14 +366,14 @@ async def test_real_template_settings_and_deleted_restore_from_history(hass):
     from custom_components.phoenix_mcp.tools.helper import _execute_set_config_entry_options
     entry = await create_template(hass)
     runtime = data()
-    token = _restore_token("admin")
+    access_key = _restore_access_key("admin")
     result, outcome, _ = await _execute_set_config_entry_options(
-        {"entry_id": entry.entry_id, "settings": {"state": "{{ 8 }}"}}, token, hass, runtime)
+        {"entry_id": entry.entry_id, "settings": {"state": "{{ 8 }}"}}, access_key, hass, runtime)
     assert outcome == "allowed", result
     assert entry.options["state"] == "{{ 8 }}"
     assert runtime.config_recovery.records()[0]["before"]["options"]["state"] == "{{ 7 }}"
     await hass.async_block_till_done()
-    result, outcome, _ = await _execute_remove_integration({"entry_id": entry.entry_id}, token, hass, runtime)
+    result, outcome, _ = await _execute_remove_integration({"entry_id": entry.entry_id}, access_key, hass, runtime)
     assert outcome == "allowed", result
     await hass.async_block_till_done()
     version = runtime.versions.list_for("config_entry", entry.entry_id)[0]
@@ -388,10 +388,10 @@ async def test_invalid_template_settings_do_not_create_recovery_barrier(hass):
 
     entry = await create_template(hass)
     runtime = data()
-    token = _restore_token("admin")
+    access_key = _restore_access_key("admin")
     result, outcome, _ = await _execute_set_config_entry_options(
         {"entry_id": entry.entry_id, "settings": {"name": "Rejected rename"}},
-        token, hass, runtime,
+        access_key, hass, runtime,
     )
     assert outcome == "invalid_request"
     assert "rejected" in result["content"][0]["text"]
@@ -399,7 +399,7 @@ async def test_invalid_template_settings_do_not_create_recovery_barrier(hass):
     assert entry.options["state"] == "{{ 7 }}"
     result, outcome, _ = await _execute_set_config_entry_options(
         {"entry_id": entry.entry_id, "settings": {"state": "{{ 8 }}"}},
-        token, hass, runtime,
+        access_key, hass, runtime,
     )
     assert outcome == "allowed", result
     assert entry.options["state"] == "{{ 8 }}"
@@ -420,7 +420,7 @@ async def test_template_storage_failure_prevents_removal(hass):
     entry = await create_template(hass)
     runtime = data()
     runtime.config_recovery = ConfigurationRecovery(MagicMock(async_save=AsyncMock(side_effect=OSError)))
-    result, outcome, _ = await _execute_remove_integration({"entry_id": entry.entry_id}, _restore_token("admin"), hass, runtime)
+    result, outcome, _ = await _execute_remove_integration({"entry_id": entry.entry_id}, _restore_access_key("admin"), hass, runtime)
     assert outcome == "invalid_request"
     assert hass.config_entries.async_get_entry(entry.entry_id) is entry
 
@@ -432,7 +432,7 @@ async def test_template_identity_changes_during_safety_save_refuse(hass):
     async def change(_):
         hass.config_entries.async_update_entry(entry, title="Changed elsewhere")
     runtime.config_recovery = ConfigurationRecovery(MagicMock(async_save=AsyncMock(side_effect=change)))
-    result, outcome, _ = await _execute_remove_integration({"entry_id": entry.entry_id}, _restore_token("admin"), hass, runtime)
+    result, outcome, _ = await _execute_remove_integration({"entry_id": entry.entry_id}, _restore_access_key("admin"), hass, runtime)
     assert outcome == "invalid_request"
     assert hass.config_entries.async_get_entry(entry.entry_id) is entry
     assert runtime.config_recovery.records()[0]["phase"] == "not_applied"
@@ -441,20 +441,20 @@ async def test_template_identity_changes_during_safety_save_refuse(hass):
 async def test_restart_lost_response_is_not_replayed_and_fresh_runtime_is_distinct(hass):
     from custom_components.phoenix_mcp.mcp_view import _execute_restart_ha, _tool_get_config
     runtime = data()
-    token = _restore_token("admin")
+    access_key = _restore_access_key("admin")
     with patch.object(type(hass.services), "async_call", new=AsyncMock(side_effect=asyncio.TimeoutError)) as dispatch:
-        result, outcome, _ = await _execute_restart_ha({}, token, hass, runtime)
+        result, outcome, _ = await _execute_restart_ha({}, access_key, hass, runtime)
         assert outcome == "allowed"
         receipt = json.loads(result["content"][0]["text"])
         assert receipt["retry_safe"] is False
-        _, outcome, _ = await _execute_restart_ha({}, token, hass, runtime)
+        _, outcome, _ = await _execute_restart_ha({}, access_key, hass, runtime)
         assert outcome == "invalid_request"
         dispatch.assert_awaited_once()
-    observed, _, _ = await _tool_get_config({}, token, hass)
+    observed, _, _ = await _tool_get_config({}, access_key, hass)
     assert json.loads(observed["content"][0]["text"])["runtime_identity"] == receipt["runtime_identity"]
     fresh = MagicMock(data={})
     fresh.config.as_dict.return_value = {}
-    observed, _, _ = await _tool_get_config({}, token, fresh)
+    observed, _, _ = await _tool_get_config({}, access_key, fresh)
     assert json.loads(observed["content"][0]["text"])["runtime_identity"] != receipt["runtime_identity"]
     assert runtime.config_recovery.records()[0]["phase"] == "dispatching"
 
@@ -464,14 +464,14 @@ async def test_restore_existing_template_reproduces_optional_fields_and_custom_n
     entry = await create_template(hass)
     snapshot = template_snapshot(hass, entry)
     runtime = data()
-    token = _restore_token("admin")
+    access_key = _restore_access_key("admin")
     result, outcome, _ = await _execute_set_config_entry_options({"entry_id": entry.entry_id,
-        "settings": {"state": "{{ 9 }}", "unit_of_measurement": "m"}}, token, hass, runtime)
+        "settings": {"state": "{{ 9 }}", "unit_of_measurement": "m"}}, access_key, hass, runtime)
     assert outcome == "allowed", result
     await hass.async_block_till_done()
     entity_id = snapshot["entities"][0]["entity_id"]
     er.async_get(hass).async_update_entity(entity_id, name="Changed")
-    result, outcome, _ = await restore_template(snapshot, token, hass, runtime)
+    result, outcome, _ = await restore_template(snapshot, access_key, hass, runtime)
     assert outcome == "allowed", result
     assert dict(entry.options) == snapshot["options"]
     assert er.async_get(hass).async_get(entity_id).name is None
@@ -490,7 +490,7 @@ async def test_incompatible_snapshot_refuses_before_creation(hass, change):
         snapshot["version"] = 999
     else:
         snapshot["options"]["unsupported"] = "x"
-    result, outcome, _ = await restore_template(snapshot, _restore_token("admin"), hass, data())
+    result, outcome, _ = await restore_template(snapshot, _restore_access_key("admin"), hass, data())
     assert outcome == "invalid_request", result
     assert not hass.config_entries.async_entries("template")
     assert not hass.config_entries.flow.async_progress()
@@ -509,7 +509,7 @@ async def test_recreation_partial_keeps_replacement_and_source(hass):
         return original(entity_id, **kwargs)
     runtime = data()
     with patch.object(registry, "async_update_entity", side_effect=fail_name):
-        result, outcome, _ = await restore_template(snapshot, _restore_token("admin"), hass, runtime)
+        result, outcome, _ = await restore_template(snapshot, _restore_access_key("admin"), hass, runtime)
     assert outcome == "invalid_request"
     body = json.loads(result["content"][0]["text"])
     assert body["status"] == "partial"
@@ -603,7 +603,7 @@ async def test_template_change_during_form_preparation_never_submits(hass, chang
     ) as submit:
         result = await helper._execute_set_config_entry_options(
             {"entry_id": entry.entry_id, "settings": {"state": "{{ 99 }}"}},
-            _restore_token("admin"), hass, runtime,
+            _restore_access_key("admin"), hass, runtime,
         )
     assert result[0]["isError"]
     submit.assert_not_awaited()
@@ -668,7 +668,7 @@ async def test_file_admission_and_recovery_redaction_run_in_executor(hass, tmp_p
         assert await config_files._file_recovery_precheck(hass, str(path), "www/example.txt", text, "write_file") is None
         result = await config_files._recoverable_file_write(
             path=str(path), rel="www/example.txt", before_exists=True, before_content="before",
-            content=text, token=_restore_token("admin"), data=runtime, operation="write_file",
+            content=text, access_key=_restore_access_key("admin"), data=runtime, operation="write_file",
             display_path="www/example.txt", hass=hass, return_result=True,
         )
     assert len(calls) == 5

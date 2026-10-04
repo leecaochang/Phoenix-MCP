@@ -1,7 +1,7 @@
 {
   "notification": {
-    "approval.message": "Klucz dostępu '{token}' poprosił o zatwierdzenie.\n\n[Przejrzyj w Phoenix MCP]({url})",
-    "rate_limit.message": "Phoenix MCP: klucz dostępu '{token}' osiągnął swój limit szybkości.",
+    "approval.message": "Klucz dostępu '{access_key}' poprosił o zatwierdzenie.\n\n[Przejrzyj w Phoenix MCP]({url})",
+    "rate_limit.message": "Phoenix MCP: klucz dostępu '{access_key}' osiągnął swój limit szybkości.",
     "rate_limit.title": "Alert Phoenix MCP"
   },
   "voice": {
@@ -1092,7 +1092,7 @@
       "codexHeaderValueLabel": "Wartość nagłówka",
       "codexServerNameLabel": "Nazwa serwera",
       "connectAgentTitle": "Połącz Phoenix MCP ze swoim agentem AI",
-      "connectIntro": "Dodaj Phoenix MCP jako serwer MCP w swoim agencie. Uwierzytelnia się za pomocą <code>Authorization: Bearer <token></code>, a nie logowania do Home Assistant ani OAuth. Używaj HTTPS w niezaufanych sieciach. Nie umieszczaj kluczy dostępu bearer w historii powłoki, udostępnianych plikach, zrzutach ekranu ani kontroli wersji. Wymień ujawniony klucz dostępu.",
+      "connectIntro": "Dodaj Phoenix MCP jako serwer MCP w swoim agencie. Uwierzytelnia się za pomocą <code>Authorization: Bearer phx_...</code>, a nie logowania do Home Assistant ani OAuth. Używaj HTTPS w niezaufanych sieciach. Nie umieszczaj kluczy dostępu bearer w historii powłoki, udostępnianych plikach, zrzutach ekranu ani kontroli wersji. Wymień ujawniony klucz dostępu.",
       "connectLater": "Połącz później",
       "connectTitle": "Połącz swojego pierwszego agenta AI",
       "connected": "Połączono! Twój agent połączył się z Phoenix MCP.",
@@ -1258,7 +1258,7 @@
       "nameDuplicateError": "Klucz dostępu o tej nazwie (lub równoważnym slugu) już istnieje.",
       "nameFormatError": "Nazwa musi mieć 3-32 znaki: litery, cyfry, _ lub -.",
       "nameLabel": "Nazwa (wymagana)",
-      "namePlaceholder": "my_token",
+      "namePlaceholder": "my_access_key",
       "nameRuleError": "3-32 znaki: litery, cyfry, łączniki lub podkreślenia.",
       "off": "wyłączone",
       "on": "włączone",

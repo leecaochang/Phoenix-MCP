@@ -19,17 +19,17 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
 from custom_components.phoenix_mcp.mcp_view import _call_tool
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
 
-def _token(**caps) -> TokenRecord:
+def _access_key(**caps) -> AccessKeyRecord:
     tree = PermissionTree(domains={
         "light": PermissionNode(state="GREEN"),
         "automation": PermissionNode(state="GREEN"),
     })
     base = {"cap_search": "allow", "cap_diagnostics": "allow"}
     base.update(caps)
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x",
         created_at=utcnow(), created_by="u", permissions=tree, **base,
     )
@@ -46,7 +46,7 @@ def _data(mesa=None) -> MagicMock:
     return d
 
 
-async def _call(name, args, token, hass, data=None):
+async def _call(name, args, access_key, hass, data=None):
     if name == "whatif":
         from custom_components.phoenix_mcp.tools.discovery import _domain_entries
         configs, _ = _domain_entries(hass, "automation")
@@ -75,26 +75,26 @@ async def _call(name, args, token, hass, data=None):
         if entity_id is not None:
             args["targets"] = [{"kind": "entity", "ids": [entity_id]}]
         args["service"] = service
-    return await _call_tool(name, args, token, hass, data or _data())
+    return await _call_tool(name, args, access_key, hass, data or _data())
 
 
 # --- get_capability_summary ---
 
 class TestCapabilitySummary:
     async def test_no_cap_required_and_reports_modes(self, hass):
-        token = _token(cap_search="deny", cap_physical_control="confirm", cap_config_read="allow")
-        content, outcome, _ = await _call("get_capability_summary", {}, token, hass)
+        access_key = _access_key(cap_search="deny", cap_physical_control="confirm", cap_config_read="allow")
+        content, outcome, _ = await _call("get_capability_summary", {}, access_key, hass)
         assert outcome == "allowed"
         body = _json(content)
-        assert body["persona"] == token.persona
+        assert body["persona"] == access_key.persona
         assert "cap_physical_control" in body["confirm_gated"]
         assert "cap_config_read" in body["allowed"]
         assert "cap_search" in body["denied"]
         assert body["write_scope"] is True  # light GREEN
 
     async def test_tool_gate_map(self, hass):
-        token = _token(cap_search="deny", cap_automation_write="confirm", cap_config_read="allow")
-        content, _, _ = await _call("get_capability_summary", {}, token, hass)
+        access_key = _access_key(cap_search="deny", cap_automation_write="confirm", cap_config_read="allow")
+        content, _, _ = await _call("get_capability_summary", {}, access_key, hass)
         tools = _json(content)["tools"]
         assert "search_entities" in tools["unavailable"]      # cap_search deny
         assert "create_automation" in tools["needs_approval"]  # cap_automation_write confirm
@@ -109,27 +109,27 @@ class TestCapabilitySummary:
 
 class TestAuditSummary:
     async def test_returns_own_entries(self, hass):
-        token = _token()
+        access_key = _access_key()
         entry = SimpleNamespace(request_id="r1", timestamp="2026-01-01", method="tools/call",
                                 resource="get_state", outcome="allowed", mesa_advisory=False)
         data = _data()
         data.audit.query.return_value = [entry]
-        content, outcome, _ = await _call("get_audit_summary", {"limit": 10}, token, hass, data)
+        content, outcome, _ = await _call("get_audit_summary", {"limit": 10}, access_key, hass, data)
         assert outcome == "allowed"
         body = _json(content)
         assert body["entries"][0]["request_id"] == "r1"
         # mesa_advisory omitted when false (matches AuditEntry.to_dict)
         assert "mesa_advisory" not in body["entries"][0]
         # query must be scoped to this token
-        assert data.audit.query.call_args.kwargs["token_id"] == token.id
+        assert data.audit.query.call_args.kwargs["token_id"] == access_key.id
 
     async def test_surfaces_mesa_advisory_flag(self, hass):
-        token = _token()
+        access_key = _access_key()
         entry = SimpleNamespace(request_id="r2", timestamp="2026-01-01", method="tools/call",
                                 resource="call_service", outcome="allowed", mesa_advisory=True)
         data = _data()
         data.audit.query.return_value = [entry]
-        content, outcome, _ = await _call("get_audit_summary", {"limit": 10}, token, hass, data)
+        content, outcome, _ = await _call("get_audit_summary", {"limit": 10}, access_key, hass, data)
         assert outcome == "allowed"
         body = _json(content)
         assert body["entries"][0]["mesa_advisory"] is True
@@ -137,7 +137,7 @@ class TestAuditSummary:
     async def test_invalid_outcome_filter(self, hass):
         data = _data()
         data.audit.query.return_value = None
-        _, outcome, _ = await _call("get_audit_summary", {"outcome": "bogus"}, _token(), hass, data)
+        _, outcome, _ = await _call("get_audit_summary", {"outcome": "bogus"}, _access_key(), hass, data)
         assert outcome == "invalid_request"
 
 
@@ -156,35 +156,35 @@ def _approval_dict(approval_id: str, token_id: str, status: str = "pending") -> 
 
 class TestApprovalStatus:
     async def test_lists_own_pending_when_no_id(self, hass):
-        token = _token()
+        access_key = _access_key()
         other_id = str(uuid.uuid4())
         data = _data()
         data.store.get_pending_approvals.return_value = [
-            _approval_dict("appr_mine", token.id),
+            _approval_dict("appr_mine", access_key.id),
             _approval_dict("appr_other", other_id),            # another token: hidden
-            _approval_dict("appr_done", token.id, "approved"),  # resolved: excluded
+            _approval_dict("appr_done", access_key.id, "approved"),  # resolved: excluded
         ]
-        content, outcome, _ = await _call("get_approval_status", {}, token, hass, data)
+        content, outcome, _ = await _call("get_approval_status", {}, access_key, hass, data)
         assert outcome == "allowed"
         body = _json(content)
         assert body["count"] == 1
         assert [a["approval_id"] for a in body["pending_approvals"]] == ["appr_mine"]
 
     async def test_single_id_still_works(self, hass):
-        token = _token()
+        access_key = _access_key()
         data = _data()
-        data.store.get_pending_approvals.return_value = [_approval_dict("appr_mine", token.id)]
+        data.store.get_pending_approvals.return_value = [_approval_dict("appr_mine", access_key.id)]
         content, outcome, resource = await _call(
-            "get_approval_status", {"approval_id": "appr_mine"}, token, hass, data)
+            "get_approval_status", {"approval_id": "appr_mine"}, access_key, hass, data)
         assert outcome == "allowed"
         assert _json(content)["status"] == "pending"
 
     async def test_cross_token_id_not_found(self, hass):
-        token = _token()
+        access_key = _access_key()
         data = _data()
         data.store.get_pending_approvals.return_value = [_approval_dict("appr_x", str(uuid.uuid4()))]
         _, outcome, _ = await _call(
-            "get_approval_status", {"approval_id": "appr_x"}, token, hass, data)
+            "get_approval_status", {"approval_id": "appr_x"}, access_key, hass, data)
         assert outcome == "not_found"
 
 
@@ -192,36 +192,36 @@ class TestApprovalStatus:
 
 class TestWaitForApproval:
     async def test_missing_id_invalid(self, hass):
-        _, outcome, _ = await _call("wait_for_approval", {}, _token(), hass, _data())
+        _, outcome, _ = await _call("wait_for_approval", {}, _access_key(), hass, _data())
         assert outcome == "invalid_request"
 
     async def test_cross_token_not_found(self, hass):
-        token = _token()
+        access_key = _access_key()
         data = _data()
         data.store.get_pending_approvals.return_value = [_approval_dict("appr_x", str(uuid.uuid4()))]
         _, outcome, _ = await _call(
-            "wait_for_approval", {"approval_ids": ["appr_x"]}, token, hass, data)
+            "wait_for_approval", {"approval_ids": ["appr_x"]}, access_key, hass, data)
         assert outcome == "not_found"
 
     async def test_already_resolved_returns_immediately(self, hass):
-        token = _token()
+        access_key = _access_key()
         data = _data()
-        data.store.get_pending_approvals.return_value = [_approval_dict("appr_mine", token.id, "approved")]
+        data.store.get_pending_approvals.return_value = [_approval_dict("appr_mine", access_key.id, "approved")]
         content, outcome, _ = await _call(
-            "wait_for_approval", {"approval_ids": ["appr_mine"]}, token, hass, data)
+            "wait_for_approval", {"approval_ids": ["appr_mine"]}, access_key, hass, data)
         assert outcome == "allowed"
         body = _json(content)
         assert body["approvals"][0]["status"] == "approved"
         assert body["resolved"] is True
 
     async def test_wakes_on_resolved_event(self, hass):
-        token = _token()
+        access_key = _access_key()
         data = _data()
-        rec = _approval_dict("appr_mine", token.id, "pending")
+        rec = _approval_dict("appr_mine", access_key.id, "pending")
         data.store.get_pending_approvals.return_value = [rec]
 
         task = asyncio.ensure_future(
-            _call("wait_for_approval", {"approval_ids": ["appr_mine"], "timeout": 5}, token, hass, data))
+            _call("wait_for_approval", {"approval_ids": ["appr_mine"], "timeout": 5}, access_key, hass, data))
         # Deterministic readiness instead of sleep(0): poll the public listener
         # registry until the tool has actually subscribed to the resolved event,
         # then fire it. No fixed delay, no coupling to scheduler ordering.
@@ -241,11 +241,11 @@ class TestWaitForApproval:
         assert body["approvals"][0]["status"] == "approved"
 
     async def test_timeout_returns_pending(self, hass):
-        token = _token()
+        access_key = _access_key()
         data = _data()
-        data.store.get_pending_approvals.return_value = [_approval_dict("appr_mine", token.id, "pending")]
+        data.store.get_pending_approvals.return_value = [_approval_dict("appr_mine", access_key.id, "pending")]
         content, outcome, _ = await _call(
-            "wait_for_approval", {"approval_ids": ["appr_mine"], "timeout": 1}, token, hass, data)
+            "wait_for_approval", {"approval_ids": ["appr_mine"], "timeout": 1}, access_key, hass, data)
         assert outcome == "allowed"
         body = _json(content)
         assert body["resolved"] is False
@@ -296,11 +296,11 @@ class TestWhatif:
             (root / "watchers" / "included.yaml").write_text(yaml.safe_dump(config))
             source = "automation: !include_dir_list watchers\n"
         (root / "configuration.yaml").write_text(source)
-        token = _token()
+        access_key = _access_key()
         if hidden:
-            token.permissions.entities["automation.included"] = PermissionNode(state="RED")
+            access_key.permissions.entities["automation.included"] = PermissionNode(state="RED")
         content, outcome, _ = await _call(
-            "whatif", {"entity_id": "light.kitchen", "hypothetical_state": "on"}, token, hass)
+            "whatif", {"entity_id": "light.kitchen", "hypothetical_state": "on"}, access_key, hass)
         assert outcome == "allowed"
         candidates = _json(content)["candidates"]
         if hidden:
@@ -315,18 +315,18 @@ class TestWhatif:
         with open(hass.config.path("configuration.yaml"), "w") as file:
             file.write("automation: !include missing.yaml\n")
         content, outcome, _ = await _call(
-            "whatif", {"entity_id": "light.kitchen", "hypothetical_state": "on"}, _token(), hass)
+            "whatif", {"entity_id": "light.kitchen", "hypothetical_state": "on"}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["candidates"] == []
         assert any(gap["kind"] == "automation" for gap in body["not_searched"])
 
     async def test_deny(self, hass, whatif_env):
-        _, outcome, _ = await _call("whatif", {"entity_id": "light.kitchen", "hypothetical_state": "on"}, _token(cap_search="deny"), hass)
+        _, outcome, _ = await _call("whatif", {"entity_id": "light.kitchen", "hypothetical_state": "on"}, _access_key(cap_search="deny"), hass)
         assert outcome == "denied"
 
     async def test_predicts_matching_trigger(self, hass, whatif_env):
-        content, outcome, _ = await _call("whatif", {"entity_id": "light.kitchen", "hypothetical_state": "on"}, _token(), hass)
+        content, outcome, _ = await _call("whatif", {"entity_id": "light.kitchen", "hypothetical_state": "on"}, _access_key(), hass)
         assert outcome == "allowed"
         by_id = {c["automation_id"]: c for c in _json(content)["candidates"]}
         assert by_id["a1"]["would_fire"] is True   # to: on
@@ -336,11 +336,11 @@ class TestWhatif:
         assert "a3" not in by_id
 
     async def test_inaccessible_not_found(self, hass, whatif_env):
-        _, outcome, _ = await _call("whatif", {"entity_id": "sensor.secret", "hypothetical_state": "on"}, _token(), hass)
+        _, outcome, _ = await _call("whatif", {"entity_id": "sensor.secret", "hypothetical_state": "on"}, _access_key(), hass)
         assert outcome == "not_found"
 
     async def test_missing_hypothetical(self, hass, whatif_env):
-        _, outcome, _ = await _call("whatif", {"entity_id": "light.kitchen"}, _token(), hass)
+        _, outcome, _ = await _call("whatif", {"entity_id": "light.kitchen"}, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_device_trigger_coverage_reports_unknown(self, hass):
@@ -368,7 +368,7 @@ class TestWhatif:
             ], f)
 
         content, outcome, _ = await _call(
-            "whatif", {"entity_id": e.entity_id, "hypothetical_state": "on"}, _token(), hass)
+            "whatif", {"entity_id": e.entity_id, "hypothetical_state": "on"}, _access_key(), hass)
         assert outcome == "allowed"
         by_id = {c["automation_id"]: c for c in _json(content)["candidates"]}
         assert by_id["a_dev"]["would_fire"] == "unknown"
@@ -379,7 +379,7 @@ class TestWhatif:
 
 class TestDryRunService:
     async def test_deny(self, hass):
-        _, outcome, _ = await _call("dry_run_service", {"domain": "light", "service": "turn_on"}, _token(cap_search="deny"), hass)
+        _, outcome, _ = await _call("dry_run_service", {"domain": "light", "service": "turn_on"}, _access_key(cap_search="deny"), hass)
         assert outcome == "denied"
 
     async def test_resolves_without_executing(self, hass):
@@ -393,7 +393,7 @@ class TestDryRunService:
         called = []
         hass.services.async_register("light", "turn_on", lambda c: called.append(c))
         content, outcome, _ = await _call(
-            "dry_run_service", {"domain": "light", "service": "turn_on", "entity_id": "light.kitchen"}, _token(), hass)
+            "dry_run_service", {"domain": "light", "service": "turn_on", "entity_id": "light.kitchen"}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["resolved_entities"] == ["light.kitchen"]
@@ -402,7 +402,7 @@ class TestDryRunService:
         assert called == []  # nothing executed
 
     async def test_dual_gate_system_service(self, hass):
-        content, _, _ = await _call("dry_run_service", {"domain": "homeassistant", "service": "restart"}, _token(), hass)
+        content, _, _ = await _call("dry_run_service", {"domain": "homeassistant", "service": "restart"}, _access_key(), hass)
         body = _json(content)
         assert body["system_service"] is True
         assert body["would_execute"] is False  # cap_restart defaults to deny
@@ -414,11 +414,11 @@ class TestDryRunService:
         e = er.async_get(hass).async_get_or_create(
             "lock", "test_integration", "uid_lock", config_entry=entry, suggested_object_id="front")
         hass.states.async_set(e.entity_id, "locked", {})
-        token = _token(cap_physical_control="confirm")
-        token.permissions.domains["lock"] = PermissionNode(state="GREEN")
+        access_key = _access_key(cap_physical_control="confirm")
+        access_key.permissions.domains["lock"] = PermissionNode(state="GREEN")
         content, _, _ = await _call(
             "dry_run_service",
-            {"domain": "lock", "service": "unlock", "entity_id": "lock.front"}, token, hass)
+            {"domain": "lock", "service": "unlock", "entity_id": "lock.front"}, access_key, hass)
         body = _json(content)
         assert body["physical_gate"] is True
         assert body["predicted_outcome"] == "pending_approval"
@@ -431,11 +431,11 @@ class TestDryRunService:
         e = er.async_get(hass).async_get_or_create(
             "valve", "test_integration", "uid_valve", config_entry=entry, suggested_object_id="irrigation")
         hass.states.async_set(e.entity_id, "closed", {})
-        token = _token(cap_physical_control="confirm")
-        token.permissions.domains["valve"] = PermissionNode(state="GREEN")
+        access_key = _access_key(cap_physical_control="confirm")
+        access_key.permissions.domains["valve"] = PermissionNode(state="GREEN")
         content, _, _ = await _call(
             "dry_run_service",
-            {"domain": "valve", "service": "open_valve", "entity_id": "valve.irrigation"}, token, hass)
+            {"domain": "valve", "service": "open_valve", "entity_id": "valve.irrigation"}, access_key, hass)
         body = _json(content)
         assert body["physical_gate"] is True
         assert body["predicted_outcome"] == "pending_approval"
@@ -452,7 +452,7 @@ class TestDryRunService:
         with patch("custom_components.phoenix_mcp.tools.discovery.evaluate_service_entities", return_value=verdict):
             content, _, _ = await _call(
                 "dry_run_service",
-                {"domain": "light", "service": "turn_on", "entity_id": "light.den"}, _token(), hass, data)
+                {"domain": "light", "service": "turn_on", "entity_id": "light.den"}, _access_key(), hass, data)
         body = _json(content)
         assert body["predicted_outcome"] == "pending_approval"
 
@@ -461,7 +461,7 @@ class TestDryRunService:
 
 class TestValidateConfig:
     async def test_deny(self, hass):
-        _, outcome, _ = await _call("validate_config", {"type": "automation", "config": {}}, _token(cap_diagnostics="deny"), hass)
+        _, outcome, _ = await _call("validate_config", {"type": "automation", "config": {}}, _access_key(cap_diagnostics="deny"), hass)
         assert outcome == "denied"
 
     async def test_valid_automation_reports_referenced(self, hass):
@@ -471,7 +471,7 @@ class TestValidateConfig:
             "trigger": [{"platform": "state", "entity_id": "light.kitchen"}],
             "action": [{"service": "light.turn_on", "target": {"entity_id": "light.kitchen"}}],
         }
-        content, outcome, _ = await _call("validate_config", {"type": "automation", "config": config}, _token(), hass)
+        content, outcome, _ = await _call("validate_config", {"type": "automation", "config": config}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["valid"] is True
@@ -488,20 +488,20 @@ class TestValidateConfig:
             "trigger": [{"platform": "state", "entity_id": "light.kitchen"}],
             "action": [{"service": "lock.lock", "target": {"entity_id": "lock.front_door"}}],
         }
-        content, outcome, _ = await _call("validate_config", {"type": "automation", "config": config}, _token(), hass)
+        content, outcome, _ = await _call("validate_config", {"type": "automation", "config": config}, _access_key(), hass)
         assert outcome == "allowed"
         ref = {r["entity_id"]: r for r in _json(content)["referenced_entities"]}
         assert ref["lock.front_door"]["accessible"] is False
         assert ref["lock.front_door"]["exists"] is False
 
     async def test_invalid_automation(self, hass):
-        content, _, _ = await _call("validate_config", {"type": "automation", "config": {"alias": "x"}}, _token(), hass)
+        content, _, _ = await _call("validate_config", {"type": "automation", "config": {"alias": "x"}}, _access_key(), hass)
         body = _json(content)
         assert body["valid"] is False
         assert body["errors"]
 
     async def test_bad_type(self, hass):
-        _, outcome, _ = await _call("validate_config", {"type": "scene", "config": {}}, _token(), hass)
+        _, outcome, _ = await _call("validate_config", {"type": "scene", "config": {}}, _access_key(), hass)
         assert outcome == "invalid_request"
 
 
@@ -526,7 +526,7 @@ def _patch_history(mapping, second_mapping=None):
 
 class TestCompareState:
     async def test_deny(self, hass):
-        _, outcome, _ = await _call("compare_state", {"entity_id": "light.kitchen", "t1": "24h"}, _token(cap_search="deny"), hass)
+        _, outcome, _ = await _call("compare_state", {"entity_id": "light.kitchen", "t1": "24h"}, _access_key(cap_search="deny"), hass)
         assert outcome == "denied"
 
     async def test_changed_flag(self, hass):
@@ -535,7 +535,7 @@ class TestCompareState:
         at_t1 = {"light.kitchen": [_FakeState("light.kitchen", "off", now - timedelta(hours=20))]}
         at_t2 = {"light.kitchen": [_FakeState("light.kitchen", "on", now)]}
         with _patch_history(at_t1, at_t2):
-            content, outcome, _ = await _call("compare_state", {"entity_id": "light.kitchen", "t1": "24h"}, _token(), hass)
+            content, outcome, _ = await _call("compare_state", {"entity_id": "light.kitchen", "t1": "24h"}, _access_key(), hass)
         assert outcome == "allowed"
         comp = _json(content)["comparisons"][0]
         assert comp["state_at_t1"] == "off"
@@ -544,7 +544,7 @@ class TestCompareState:
 
     async def test_invalid_t1(self, hass):
         hass.states.async_set("light.kitchen", "on", {})
-        _, outcome, _ = await _call("compare_state", {"entity_id": "light.kitchen", "t1": "notatime"}, _token(), hass)
+        _, outcome, _ = await _call("compare_state", {"entity_id": "light.kitchen", "t1": "notatime"}, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_reversed_times_are_rejected_before_history(self, hass):
@@ -553,20 +553,20 @@ class TestCompareState:
             _, outcome, _ = await _call(
                 "compare_state",
                 {"entity_id": "light.kitchen", "t1": "2026-01-02T00:00:00+00:00", "t2": "2026-01-01T00:00:00+00:00"},
-                _token(), hass,
+                _access_key(), hass,
             )
         assert outcome == "invalid_request"
         get_instance.assert_not_called()
 
     async def test_more_than_100_entities_is_rejected(self, hass):
         ids = [f"light.item_{index}" for index in range(101)]
-        _, outcome, _ = await _call("compare_state", {"entity_id": ids, "t1": "24h"}, _token(), hass)
+        _, outcome, _ = await _call("compare_state", {"entity_id": ids, "t1": "24h"}, _access_key(), hass)
         assert outcome == "invalid_request"
 
 
 class TestRecentActivity:
     async def test_deny(self, hass):
-        _, outcome, _ = await _call("recent_activity", {}, _token(cap_search="deny"), hass)
+        _, outcome, _ = await _call("recent_activity", {}, _access_key(cap_search="deny"), hass)
         assert outcome == "denied"
 
     async def test_lists_changes(self, hass):
@@ -574,7 +574,7 @@ class TestRecentActivity:
         now = utcnow()
         mapping = {"light.kitchen": [_FakeState("light.kitchen", "on", now)]}
         with _patch_history(mapping):
-            content, outcome, _ = await _call("recent_activity", {"minutes": 60}, _token(), hass)
+            content, outcome, _ = await _call("recent_activity", {"minutes": 60}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["changes"][0]["entity_id"] == "light.kitchen"

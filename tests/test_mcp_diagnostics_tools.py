@@ -15,12 +15,12 @@ from homeassistant.util.dt import utcnow
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.mcp_view import _call_tool
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
 
-def _token(permissions: PermissionTree | None = None, **caps) -> TokenRecord:
+def _access_key(permissions: PermissionTree | None = None, **caps) -> AccessKeyRecord:
     tree = permissions or PermissionTree(domains={"light": PermissionNode(state="GREEN")})
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x",
         created_at=utcnow(), created_by="u", permissions=tree, **caps,
     )
@@ -30,8 +30,8 @@ def _json(content: dict) -> dict:
     return json.loads(content["content"][0]["text"])
 
 
-async def _call(name, args, token, hass):
-    return await _call_tool(name, args, token, hass, MagicMock())
+async def _call(name, args, access_key, hass):
+    return await _call_tool(name, args, access_key, hass, MagicMock())
 
 
 # --- get_history ---
@@ -67,7 +67,7 @@ class TestGetHistoryTransitions:
             content, outcome, _ = await _call(
                 "get_history",
                 {"entity_id": "light.kitchen", "start_time": "24h", "limit": 2},
-                _token(), hass,
+                _access_key(), hass,
             )
         assert outcome == "allowed"
         body = _json(content)
@@ -96,7 +96,7 @@ class TestGetHistoryTransitions:
             content, _, _ = await _call(
                 "get_history",
                 {"entity_id": "light.kitchen", "start_time": "24h", "mode": "significant_states"},
-                _token(), hass,
+                _access_key(), hass,
             )
         body = _json(content)
         assert body["mode"] == "significant_states"
@@ -109,7 +109,7 @@ class TestGetHistoryTransitions:
             content, outcome, _ = await _call(
                 "get_history",
                 {"entity_id": "light.kitchen", "start_time": "8d", "mode": "significant_states"},
-                _token(), hass,
+                _access_key(), hass,
             )
         assert outcome == "invalid_request"
         assert "at most 7 days" in content["content"][0]["text"]
@@ -118,14 +118,14 @@ class TestGetHistoryTransitions:
     async def test_legacy_modes_are_breaking_errors(self, hass):
         hass.states.async_set("light.kitchen", "on", {})
         content, outcome, _ = await _call(
-            "get_history", {"entity_id": "light.kitchen", "mode": "raw"}, _token(), hass,
+            "get_history", {"entity_id": "light.kitchen", "mode": "raw"}, _access_key(), hass,
         )
         assert outcome == "invalid_request"
         assert "Invalid mode" in content["content"][0]["text"]
 
     async def test_inaccessible_entity_not_found(self, hass):
         content, outcome, _ = await _call(
-            "get_history", {"entity_id": "sensor.secret", "start_time": "24h"}, _token(), hass)
+            "get_history", {"entity_id": "sensor.secret", "start_time": "24h"}, _access_key(), hass)
         assert outcome in ("not_found", "denied")
 
 
@@ -183,7 +183,7 @@ def auto_env(hass: HomeAssistant):
 
 def _auto_token(cap_traces="allow"):
     tree = PermissionTree(domains={"automation": PermissionNode(state="GREEN")})
-    return _token(permissions=tree, cap_traces=cap_traces)
+    return _access_key(permissions=tree, cap_traces=cap_traces)
 
 
 class TestGetAutomationTraces:
@@ -304,11 +304,11 @@ class TestTraceStorageShapes:
 
 class TestDiagnostics:
     async def test_system_health_deny(self, hass):
-        _, outcome, _ = await _call("get_system_health", {}, _token(cap_diagnostics="deny"), hass)
+        _, outcome, _ = await _call("get_system_health", {}, _access_key(cap_diagnostics="deny"), hass)
         assert outcome == "denied"
 
     async def test_system_health_returns_version(self, hass):
-        content, outcome, _ = await _call("get_system_health", {}, _token(cap_diagnostics="allow"), hass)
+        content, outcome, _ = await _call("get_system_health", {}, _access_key(cap_diagnostics="allow"), hass)
         assert outcome == "allowed"
         assert _json(content)["home_assistant_version"]
 
@@ -320,7 +320,7 @@ class TestDiagnostics:
             "broker": {"url": "https://admin:hunter2@mqtt.local/x"},
         }
         with patch("homeassistant.components.system_health.get_info", AsyncMock(return_value=info)):
-            content, outcome, _ = await _call("get_system_health", {}, _token(cap_diagnostics="allow"), hass)
+            content, outcome, _ = await _call("get_system_health", {}, _access_key(cap_diagnostics="allow"), hass)
         assert outcome == "allowed"
         body = _json(content)
         text = json.dumps(body)
@@ -339,7 +339,7 @@ class TestDiagnostics:
             "version": {"installed": "4.8.0.1"},  # public-IP-shaped; must NOT scrub
         }
         with patch("homeassistant.components.system_health.get_info", AsyncMock(return_value=info)):
-            content, outcome, _ = await _call("get_system_health", {}, _token(cap_diagnostics="allow"), hass)
+            content, outcome, _ = await _call("get_system_health", {}, _access_key(cap_diagnostics="allow"), hass)
         assert outcome == "allowed"
         text = json.dumps(_json(content))
         assert "192.168.1.50" not in text         # private IP scrubbed
@@ -351,7 +351,7 @@ class TestDiagnostics:
 
     async def test_repairs_deny(self, hass):
         _, outcome, _ = await _call(
-            "get_repairs", {}, _token(cap_diagnostics="deny"), hass,
+            "get_repairs", {}, _access_key(cap_diagnostics="deny"), hass,
         )
         assert outcome == "denied"
 
@@ -387,7 +387,7 @@ class TestDiagnostics:
             translation_key="ignored_problem",
         )
         ir.async_ignore_issue(hass, "demo", "ignored_issue", True)
-        token = _token(
+        access_key = _access_key(
             permissions=PermissionTree(
                 domains={"light": PermissionNode(state="GREEN")},
                 entities={"light.secret": PermissionNode(state="RED")},
@@ -396,7 +396,7 @@ class TestDiagnostics:
         )
         content, outcome, _ = await _call(
             "get_repairs", {"domain": "DEMO", "severity": "error"},
-            token, hass,
+            access_key, hass,
         )
         assert outcome == "allowed"
         body = _json(content)
@@ -428,7 +428,7 @@ class TestDiagnostics:
         with_ignored, outcome, _ = await _call(
             "get_repairs",
             {"domain": "demo", "include_ignored": True, "limit": 2},
-            token, hass,
+            access_key, hass,
         )
         assert outcome == "allowed"
         included = _json(with_ignored)
@@ -445,8 +445,8 @@ class TestDiagnostics:
                 severity=ir.IssueSeverity.WARNING,
                 translation_key="bounded_issue",
             )
-        first_token = _token(cap_diagnostics="allow")
-        second_token = _token(cap_diagnostics="allow")
+        first_token = _access_key(cap_diagnostics="allow")
+        second_token = _access_key(cap_diagnostics="allow")
         second_token.token_hash = "different-token-hash"
         first = _json((await _call(
             "get_repairs", {"domain": "bounded", "limit": 2}, first_token, hass,
@@ -474,18 +474,18 @@ class TestDiagnostics:
     ])
     async def test_repairs_rejects_invalid_filters(self, hass, args):
         _, outcome, _ = await _call(
-            "get_repairs", args, _token(cap_diagnostics="allow"), hass,
+            "get_repairs", args, _access_key(cap_diagnostics="allow"), hass,
         )
         assert outcome == "invalid_request"
 
     async def test_check_ha_config_deny(self, hass):
-        _, outcome, _ = await _call("check_ha_config", {}, _token(cap_diagnostics="deny"), hass)
+        _, outcome, _ = await _call("check_ha_config", {}, _access_key(cap_diagnostics="deny"), hass)
         assert outcome == "denied"
 
     async def test_check_ha_config_valid(self, hass):
         fake = MagicMock(errors=[], warnings=[])
         with patch("homeassistant.helpers.check_config.async_check_ha_config_file", AsyncMock(return_value=fake)):
-            content, outcome, _ = await _call("check_ha_config", {}, _token(cap_diagnostics="allow"), hass)
+            content, outcome, _ = await _call("check_ha_config", {}, _access_key(cap_diagnostics="allow"), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["valid"] is True
@@ -495,7 +495,7 @@ class TestDiagnostics:
         err = MagicMock(message="bad yaml", domain="light")
         fake = MagicMock(errors=[err], warnings=[])
         with patch("homeassistant.helpers.check_config.async_check_ha_config_file", AsyncMock(return_value=fake)):
-            content, _, _ = await _call("check_ha_config", {}, _token(cap_diagnostics="allow"), hass)
+            content, _, _ = await _call("check_ha_config", {}, _access_key(cap_diagnostics="allow"), hass)
         body = _json(content)
         assert body["valid"] is False
         assert body["errors"][0]["message"].startswith("Configuration validation failed")

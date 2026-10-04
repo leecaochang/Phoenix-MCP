@@ -145,12 +145,12 @@ class PhoenixSafeLoader(yaml.SafeLoader):
         self._node_costs: dict[int, tuple[int, int]] = {}
         super().__init__(stream)
 
-    def fetch_flow_collection_start(self, token_class: Any) -> None:
+    def fetch_flow_collection_start(self, access_key_class: Any) -> None:
         # The scanner can look ahead for a possible simple key before composing
         # the first node. Bound that lookahead too, using actual YAML tokens.
         if self.flow_level >= YAML_MAX_DEPTH:
             raise yaml.YAMLError("YAML nesting exceeds the maximum depth.")
-        super().fetch_flow_collection_start(token_class)
+        super().fetch_flow_collection_start(access_key_class)
 
     def compose_node(self, parent: Any, index: Any) -> Any:
         """Bound parsing and later tree walks without expanding alias graphs."""

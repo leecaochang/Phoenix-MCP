@@ -31,7 +31,7 @@ from .numeric_evidence import read_explicit_percentage, compare_percentage, has_
 _LOGGER = logging.getLogger(__name__)
 
 
-def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = False, extended: bool = False, temporal: bool = False
+def capture_batch_targets(hass: Any, access_key: Any, *, numeric_preview: bool = False, extended: bool = False, temporal: bool = False
                           ) -> tuple[dict[str, dict], dict[str, TargetSnapshot]]:
     """Union complete scoped catalogs; keep eligibility per operation and all competitors."""
     devices = device_registry_snapshot(hass)
@@ -42,13 +42,13 @@ def capture_batch_targets(hass: Any, token: Any, *, numeric_preview: bool = Fals
     grouped = extended
     max_targets = DECISION_GROUPED_MAX_TARGETS if grouped else DECISION_BATCH_MAX_TARGETS if extended else DECISION_MAX_TARGETS
     operation_bytes = DECISION_GROUPED_OPERATION_BYTES if grouped else DECISION_MAX_TARGET_BYTES
-    snapshots = {category: capture_targets(hass, token, category, devices=devices, max_targets=max_targets,
+    snapshots = {category: capture_targets(hass, access_key, category, devices=devices, max_targets=max_targets,
                                           compact=extended, max_bytes=operation_bytes)
                  for category in sorted(categories)}
     if extended and not temporal:
         from .command_summary import summary_catalog
         try:
-            snapshots['state_summary'] = summary_catalog(hass, token, devices=devices,
+            snapshots['state_summary'] = summary_catalog(hass, access_key, devices=devices,
                                                           max_targets=max_targets, max_bytes=operation_bytes)
         except CatalogLimitError:
             # Disable this complete query catalog rather than truncating it or other routes.
@@ -264,7 +264,7 @@ async def async_prepare_batch(hass: Any, authority: RoutingAuthority, provider: 
                       "proposal": proposal, "_plan": plan}
 
 
-async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
+async def async_preview_batch(hass: Any, data: Any, access_key: Any, sentence: str,
                               language: str, local: dict, *, numeric_preview: bool = False) -> dict:
     """Use the shared slot without preparing plans, dispatching or changing local results."""
     started = monotonic()
@@ -276,7 +276,7 @@ async def async_preview_batch(hass: Any, data: Any, token: Any, sentence: str,
         return result("invalid_input")
     if local.get("reason") not in ("supported", "no_match", "unsupported", "no_target"):
         return result("local_unavailable")
-    authority = RoutingAuthority.capture(data, token)
+    authority = RoutingAuthority.capture(data, access_key)
     if authority.current(hass) is None:
         return result("authority_changed")
     runtime = data.decision_shadow

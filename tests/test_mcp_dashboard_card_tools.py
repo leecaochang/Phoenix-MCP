@@ -28,15 +28,15 @@ from custom_components.phoenix_mcp.tools.lovelace import (
     _build_diff_dashboard_card,
     _execute_dashboard_card,
 )
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
 from custom_components.phoenix_mcp.ws_dispatch import async_get_lovelace_config, async_save_lovelace_config
 
 
-def _token(tree: PermissionTree | None = None, **caps) -> TokenRecord:
+def _access_key(tree: PermissionTree | None = None, **caps) -> AccessKeyRecord:
     base = {"cap_lovelace_write": "allow"}
     base.update(caps)
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x", created_at=utcnow(),
         created_by="u", permissions=tree or PermissionTree(domains={}), **base,
     )
@@ -52,8 +52,8 @@ def _json(content: dict) -> dict:
     return json.loads(content["content"][0]["text"])
 
 
-async def _call(name, args, token, hass, data=None):
-    return await _call_tool(name, args, token, hass, data if data is not None else MagicMock())
+async def _call(name, args, access_key, hass, data=None):
+    return await _call_tool(name, args, access_key, hass, data if data is not None else MagicMock())
 
 
 CARD_A = {"type": "markdown", "content": "a"}
@@ -83,16 +83,16 @@ class TestAddDashboardCard:
         await _seed(h)
         _, outcome, _ = await _call(
             "add_dashboard_card", {"view_index": 0, "card": NEW_CARD},
-            _token(cap_lovelace_write="deny"), h)
+            _access_key(cap_lovelace_write="deny"), h)
         assert outcome == "denied"
 
     async def test_appends_and_records_full_version(self, hass, lovelace_env):
         h, _light = lovelace_env
         await _seed(h)
-        token = _token()
+        access_key = _access_key()
         data, versions = _data()
         content, outcome, _ = await _call(
-            "add_dashboard_card", {"view_index": 0, "card": NEW_CARD}, token, h, data)
+            "add_dashboard_card", {"view_index": 0, "card": NEW_CARD}, access_key, h, data)
         assert outcome == "allowed"
         stored = await async_get_lovelace_config(h, None)
         assert stored["views"][0]["cards"] == [CARD_A, CARD_B, NEW_CARD]
@@ -114,7 +114,7 @@ class TestAddDashboardCard:
         await _seed(h)
         _, outcome, _ = await _call(
             "add_dashboard_card", {"view_index": 0, "position": 1, "card": NEW_CARD},
-            _token(), h, _data()[0])
+            _access_key(), h, _data()[0])
         assert outcome == "allowed"
         stored = await async_get_lovelace_config(h, None)
         assert stored["views"][0]["cards"] == [CARD_A, NEW_CARD, CARD_B]
@@ -123,7 +123,7 @@ class TestAddDashboardCard:
         h, _light = lovelace_env
         await _seed(h, {"views": [{"title": "Empty"}]})
         _, outcome, _ = await _call(
-            "add_dashboard_card", {"view_index": 0, "card": NEW_CARD}, _token(), h, _data()[0])
+            "add_dashboard_card", {"view_index": 0, "card": NEW_CARD}, _access_key(), h, _data()[0])
         assert outcome == "allowed"
         assert (await async_get_lovelace_config(h, None))["views"][0]["cards"] == [NEW_CARD]
 
@@ -131,11 +131,11 @@ class TestAddDashboardCard:
         h, _light = lovelace_env
         await _seed(h, {"views": [{"type": "sections", "sections": [{"title": "S", "cards": [dict(CARD_A)]}]}]})
         _, outcome, _ = await _call(
-            "add_dashboard_card", {"view_index": 0, "card": NEW_CARD}, _token(), h, _data()[0])
+            "add_dashboard_card", {"view_index": 0, "card": NEW_CARD}, _access_key(), h, _data()[0])
         assert outcome == "invalid_request"
         _, outcome, _ = await _call(
             "add_dashboard_card", {"view_index": 0, "section_index": 0, "card": NEW_CARD},
-            _token(), h, _data()[0])
+            _access_key(), h, _data()[0])
         assert outcome == "allowed"
         stored = await async_get_lovelace_config(h, None)
         assert stored["views"][0]["sections"][0]["cards"] == [CARD_A, NEW_CARD]
@@ -145,7 +145,7 @@ class TestAddDashboardCard:
         await _seed(h)
         _, outcome, _ = await _call(
             "add_dashboard_card", {"view_index": 0, "section_index": 0, "card": NEW_CARD},
-            _token(), h, _data()[0])
+            _access_key(), h, _data()[0])
         assert outcome == "invalid_request"
 
 
@@ -164,7 +164,7 @@ class TestCardOpValidationBeforeGate:
         h, _light = lovelace_env
         await _seed(h)
         _, outcome, _ = await _call(
-            "add_dashboard_card", args, _token(cap_lovelace_write="confirm"), h)
+            "add_dashboard_card", args, _access_key(cap_lovelace_write="confirm"), h)
         assert outcome == "invalid_request"
 
     async def test_edit_and_delete_index_out_of_range(self, hass, lovelace_env):
@@ -174,18 +174,18 @@ class TestCardOpValidationBeforeGate:
             ("edit_dashboard_card", {"view_index": 0, "card_index": 7, "card": NEW_CARD}),
             ("delete_dashboard_card", {"view_index": 0, "card_index": 7}),
         ):
-            _, outcome, _ = await _call(name, args, _token(cap_lovelace_write="confirm"), h)
+            _, outcome, _ = await _call(name, args, _access_key(cap_lovelace_write="confirm"), h)
             assert outcome == "invalid_request"
 
     async def test_strategy_view_and_dashboard_rejected(self, hass, lovelace_env):
         h, _light = lovelace_env
         await _seed(h, {"views": [{"strategy": {"type": "area"}}]})
         _, outcome, _ = await _call(
-            "add_dashboard_card", {"view_index": 0, "card": NEW_CARD}, _token(), h, _data()[0])
+            "add_dashboard_card", {"view_index": 0, "card": NEW_CARD}, _access_key(), h, _data()[0])
         assert outcome == "invalid_request"
         await _seed(h, {"strategy": {"type": "original-states"}})
         _, outcome, _ = await _call(
-            "add_dashboard_card", {"view_index": 0, "card": NEW_CARD}, _token(), h, _data()[0])
+            "add_dashboard_card", {"view_index": 0, "card": NEW_CARD}, _access_key(), h, _data()[0])
         assert outcome == "invalid_request"
 
     async def test_autogen_dashboard_steers_to_set_dashboard_config(self, hass, lovelace_env):
@@ -196,7 +196,7 @@ class TestCardOpValidationBeforeGate:
         # just read.
         h, _light = lovelace_env
         content, outcome, _ = await _call(
-            "add_dashboard_card", {"view_index": 0, "card": NEW_CARD}, _token(), h, _data()[0])
+            "add_dashboard_card", {"view_index": 0, "card": NEW_CARD}, _access_key(), h, _data()[0])
         assert outcome == "invalid_request"
         text = content["content"][0]["text"]
         assert "set_dashboard_config" in text
@@ -230,7 +230,7 @@ class TestCardOpValidationBeforeGate:
         data.store = _ApprStore()
         _content, outcome, _ = await _call(
             "add_dashboard_card", {"view_index": 0, "card": NEW_CARD},
-            _token(cap_lovelace_write="confirm"), h, data)
+            _access_key(cap_lovelace_write="confirm"), h, data)
         assert outcome == "pending_approval"
         assert len(data.store._p) == 1
         assert data.store._p[0]["tool_name"] == "add_dashboard_card"
@@ -246,7 +246,7 @@ class TestEditDeleteDashboardCard:
         data, versions = _data()
         _, outcome, _ = await _call(
             "edit_dashboard_card", {"view_index": 0, "card_index": 1, "card": NEW_CARD},
-            _token(), h, data)
+            _access_key(), h, data)
         assert outcome == "allowed"
         stored = await async_get_lovelace_config(h, None)
         assert stored["views"][0]["cards"] == [CARD_A, NEW_CARD]
@@ -257,7 +257,7 @@ class TestEditDeleteDashboardCard:
         h, _light = lovelace_env
         await _seed(h)
         _, outcome, _ = await _call(
-            "delete_dashboard_card", {"view_index": 0, "card_index": 0}, _token(), h, _data()[0])
+            "delete_dashboard_card", {"view_index": 0, "card_index": 0}, _access_key(), h, _data()[0])
         assert outcome == "allowed"
         assert (await async_get_lovelace_config(h, None))["views"][0]["cards"] == [CARD_B]
 
@@ -276,7 +276,7 @@ class TestEditDeleteDashboardCard:
         await _seed(h, cfg)
         _, outcome, _ = await _call(
             "add_dashboard_card", {"view_index": 1, "section_index": 1, "card": NEW_CARD},
-            _token(), h, _data()[0])
+            _access_key(), h, _data()[0])
         assert outcome == "allowed"
         stored = await async_get_lovelace_config(h, None)
         assert stored["title"] == "Home"
@@ -289,19 +289,19 @@ class TestCardOpCas:
     async def test_matching_hash_writes_and_chains(self, hass, lovelace_env):
         h, _light = lovelace_env
         await _seed(h)
-        token = _token()
+        access_key = _access_key()
         data, _v = _data()
         current = await async_get_lovelace_config(h, None)
         content, outcome, _ = await _call(
             "add_dashboard_card",
             {"view_index": 0, "card": NEW_CARD, "expected_hash": content_hash(current)},
-            token, h, data)
+            access_key, h, data)
         assert outcome == "allowed"
         # Chain the returned hash into a second op without re-reading.
         _, outcome, _ = await _call(
             "delete_dashboard_card",
             {"view_index": 0, "card_index": 0, "expected_hash": _json(content)["content_hash"]},
-            token, h, data)
+            access_key, h, data)
         assert outcome == "allowed"
 
     async def test_stale_hash_refused_pre_gate(self, hass, lovelace_env):
@@ -310,7 +310,7 @@ class TestCardOpCas:
         _, outcome, _ = await _call(
             "add_dashboard_card",
             {"view_index": 0, "card": NEW_CARD, "expected_hash": content_hash({"views": ["stale"]})},
-            _token(cap_lovelace_write="confirm"), h)
+            _access_key(cap_lovelace_write="confirm"), h)
         assert outcome == "invalid_request"
         assert (await async_get_lovelace_config(h, None))["views"][0]["cards"] == [CARD_A, CARD_B]
 
@@ -319,13 +319,13 @@ class TestCardOpCas:
         # own CAS check (and bounds re-validation) must refuse at apply time.
         h, _light = lovelace_env
         await _seed(h)
-        token = _token()
+        access_key = _access_key()
         data, _v = _data()
         stale_hash = content_hash(await async_get_lovelace_config(h, None))
         await async_save_lovelace_config(h, None, {"views": [{"cards": []}]})  # drift
         _, outcome, _ = await _execute_dashboard_card(
             {"view_index": 0, "card": NEW_CARD, "expected_hash": stale_hash},
-            "add", "add_dashboard_card", token, h, data)
+            "add", "add_dashboard_card", access_key, h, data)
         assert outcome == "invalid_request"
 
     async def test_executor_revalidates_bounds_without_hash(self, hass, lovelace_env):
@@ -333,11 +333,11 @@ class TestCardOpCas:
         # index removed by drift fails cleanly.
         h, _light = lovelace_env
         await _seed(h)
-        token = _token()
+        access_key = _access_key()
         data, _v = _data()
         await async_save_lovelace_config(h, None, {"views": [{"cards": []}]})  # drift: cards gone
         _, outcome, _ = await _execute_dashboard_card(
-            {"view_index": 0, "card_index": 1}, "delete", "delete_dashboard_card", token, h, data)
+            {"view_index": 0, "card_index": 1}, "delete", "delete_dashboard_card", access_key, h, data)
         assert outcome == "invalid_request"
 
 
@@ -346,7 +346,7 @@ class TestCardOpDiff:
         h, _light = lovelace_env
         await _seed(h)
         diff = await _build_diff_dashboard_card(
-            {"view_index": 0, "card": NEW_CARD}, "add", _token(), h)
+            {"view_index": 0, "card": NEW_CARD}, "add", _access_key(), h)
         assert diff["kind"] == "yaml_diff"
         assert "history-graph" in diff["summary"]
         assert diff["before"] is None and "history-graph" in diff["after"]
@@ -354,11 +354,11 @@ class TestCardOpDiff:
 
     async def test_delete_diff_shows_prior_card_redacted(self, hass, lovelace_env):
         h, light = lovelace_env
-        token = _token(tree=PermissionTree(domains={"light": PermissionNode(state="GREEN")}))
+        access_key = _access_key(tree=PermissionTree(domains={"light": PermissionNode(state="GREEN")}))
         await _seed(h, {"views": [{"cards": [
             {"type": "entities", "entities": [light, "sensor.secret"]}]}]})
         diff = await _build_diff_dashboard_card(
-            {"view_index": 0, "card_index": 0}, "delete", token, h)
+            {"view_index": 0, "card_index": 0}, "delete", access_key, h)
         assert diff["after"] is None
         assert diff["before"] is not None
         assert light in diff["before"]
@@ -368,7 +368,7 @@ class TestCardOpDiff:
         h, _light = lovelace_env
         await _seed(h)
         diff = await _build_diff_dashboard_card(
-            {"view_index": 0, "card_index": 1, "card": NEW_CARD}, "edit", _token(), h)
+            {"view_index": 0, "card_index": 1, "card": NEW_CARD}, "edit", _access_key(), h)
         assert "button" in diff["before"]  # the replaced card
         assert "history-graph" in diff["after"]
 
@@ -386,7 +386,7 @@ class TestCardOpDiff:
         h, _light = lovelace_env
         await _seed(h, {"views": [{"cards": [dict(big_card)]}]})
         diff = await _build_diff_dashboard_card(
-            {"view_index": 0, "card_index": 0, "card": big_card}, "edit", _token(), h)
+            {"view_index": 0, "card_index": 0, "card": big_card}, "edit", _access_key(), h)
         assert "more characters)" not in diff["after"]
         assert "more characters)" not in diff["before"]
         # Whole JSON on both sides: parses, all 30 series intact. (The before

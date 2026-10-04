@@ -52,7 +52,7 @@ def context_history(messages: Any, *, structured: bool = False) -> list[dict] | 
     return copied
 
 
-def _state(hass: Any, token: Any, sentence: str, language: str,
+def _state(hass: Any, access_key: Any, sentence: str, language: str,
            history: list[dict], proposal: Any) -> tuple[dict, str] | None:
     """Keep exact context or decline; redaction must not erase a prior restriction."""
     if (not isinstance(proposal, dict) or not isinstance(proposal.get("intent"), str)
@@ -73,11 +73,11 @@ def _state(hass: Any, token: Any, sentence: str, language: str,
     fingerprint: str | None
     if summary:
         from .command_summary import summary_current
-        if not summary_current(hass, token, proposal):
+        if not summary_current(hass, access_key, proposal):
             return None
-        fingerprint = _digest({eid: _target_fingerprint(hass, token, eid, intent) for eid in ids})
+        fingerprint = _digest({eid: _target_fingerprint(hass, access_key, eid, intent) for eid in ids})
     else:
-        fingerprint = _target_fingerprint(hass, token, ids[0], intent)
+        fingerprint = _target_fingerprint(hass, access_key, ids[0], intent)
     if fingerprint is None:
         return None
     try:
@@ -85,7 +85,7 @@ def _state(hass: Any, token: Any, sentence: str, language: str,
     except (ValueError, RecursionError):
         return None
     for text in texts:
-        if redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(text) or "", token, hass) != text:
+        if redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(text) or "", access_key, hass) != text:
             return None
     candidate = {"intent": intent, "entity_ids": list(ids)}
     if summary:
@@ -113,23 +113,23 @@ def context_execution_eligible(hass: Any, data: Any, language: object) -> bool:
                 and cfg and (cfg.kind, cfg.base_url, cfg.model) in DECISION_CONTEXT_EXECUTION_MODELS)
 
 
-async def async_preview_context(hass: Any, data: Any, token: Any, sentence: str,
+async def async_preview_context(hass: Any, data: Any, access_key: Any, sentence: str,
                                 language: str, messages: Any, local: dict) -> dict:
     """Administrator previews cannot request execution plans."""
     if not local.get("proposal"):
-        return await _async_review_decision_context(hass, data, token, sentence, language, messages, local)
-    return await _async_review_context(hass, data, token, sentence, language, messages, local)
+        return await _async_review_decision_context(hass, data, access_key, sentence, language, messages, local)
+    return await _async_review_context(hass, data, access_key, sentence, language, messages, local)
 
 
-async def async_prepare_chat_context(hass: Any, data: Any, token: Any, sentence: str,
+async def async_prepare_chat_context(hass: Any, data: Any, access_key: Any, sentence: str,
                                      language: str, messages: Any, local: dict,
                                      cancel: asyncio.Event) -> dict:
     """Internal Chat admission preserves the shared execution and approval boundaries."""
     if not local.get("proposal"):
-        result = await _async_review_decision_context(hass, data, token, sentence, language, messages, local,
+        result = await _async_review_decision_context(hass, data, access_key, sentence, language, messages, local,
                                                       prepare=True, cancel=cancel)
     else:
-        result = await _async_review_context(hass, data, token, sentence, language, messages, local,
+        result = await _async_review_context(hass, data, access_key, sentence, language, messages, local,
                                              prepare=True, cancel=cancel)
     from .conversation_log import record_current
     record_current("routing", {"route": "decision_result", "stage": "context",
@@ -138,7 +138,7 @@ async def async_prepare_chat_context(hass: Any, data: Any, token: Any, sentence:
     return result
 
 
-async def _async_review_context(hass: Any, data: Any, token: Any, sentence: str,
+async def _async_review_context(hass: Any, data: Any, access_key: Any, sentence: str,
                                 language: str, messages: Any, local: dict, *, prepare: bool = False,
                                 cancel: asyncio.Event | None = None, source_plan: dict | None = None,
                                 decision_candidate: bool = False) -> dict:
@@ -159,7 +159,7 @@ async def _async_review_context(hass: Any, data: Any, token: Any, sentence: str,
         return result("cancelled")
     if prepare and not context_execution_eligible(hass, data, lang):
         return result("context_unverified")
-    authority = RoutingAuthority.capture(data, token)
+    authority = RoutingAuthority.capture(data, access_key)
     if authority.current(hass) is None:
         return result("authority_changed")
     runtime = data.decision_shadow
@@ -213,13 +213,13 @@ async def _async_review_context(hass: Any, data: Any, token: Any, sentence: str,
                                         request_budget=data.decision_budget, request_limit=authority.settings.decision_request_budget,
                                         metrics=runtime.metrics, metric_scope="chat" if prepare else "preview")
             def request_guard() -> None:
-                latest_token = authority.current(hass)
-                if latest_token is None or store.resolve(account, purpose='decision') != cfg:
+                latest_access_key = authority.current(hass)
+                if latest_access_key is None or store.resolve(account, purpose='decision') != cfg:
                     raise DecisionError('authority_changed')
-                latest_state = _state(hass, latest_token, sentence, lang, history, proposal)
+                latest_state = _state(hass, latest_access_key, sentence, lang, history, proposal)
                 if decision_candidate and latest_state is not None:
                     latest_state[0]['candidate_source'] = 'decision'
-                if latest_state != snapshot or not source_current(latest_token):
+                if latest_state != snapshot or not source_current(latest_access_key):
                     raise DecisionError('context_changed')
             provider.request_guard = request_guard
             async with asyncio.timeout(authority.settings.decision_timeout_ms / 1000):
@@ -296,7 +296,7 @@ async def _async_review_context(hass: Any, data: Any, token: Any, sentence: str,
         finished(task)
 
 
-async def _async_review_decision_context(hass: Any, data: Any, token: Any, sentence: str,
+async def _async_review_decision_context(hass: Any, data: Any, access_key: Any, sentence: str,
                                          language: str, messages: Any, local: dict, *, prepare: bool = False,
                                          cancel: asyncio.Event | None = None) -> dict:
     """Resolve an explicit latest request, then review it against intact history before effects."""
@@ -317,7 +317,7 @@ async def _async_review_decision_context(hass: Any, data: Any, token: Any, sente
         return result("invalid_context")
     if local.get("proposal") or local.get("reason") not in ("no_match", "no_target", "unsupported"):
         return result("local_unavailable")
-    authority = RoutingAuthority.capture(data, token)
+    authority = RoutingAuthority.capture(data, access_key)
     current = authority.current(hass)
     if current is None:
         return result("authority_changed")

@@ -23,7 +23,7 @@ from custom_components.phoenix_mcp.esphome_builder import (
 from custom_components.phoenix_mcp.tools import esphome
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
 from tests.test_mcp_esphome_tools import (
     _ApprStore,
     _call,
@@ -31,7 +31,7 @@ from tests.test_mcp_esphome_tools import (
     _esphome_entry,
     _json,
     _runtime,
-    _token,
+    _access_key,
     _yaml_token,
 )
 
@@ -100,7 +100,7 @@ class FakeBuilder:
         return next(a for c, a in self.calls if c == command)
 
 
-async def _run(tool, args, token, hass, builder, data=None):
+async def _run(tool, args, access_key, hass, builder, data=None):
     args = dict(args)
     if tool == "get_esphome_job":
         if "job_id" in args:
@@ -108,15 +108,15 @@ async def _run(tool, args, token, hass, builder, data=None):
         elif "file" in args:
             args = {"lookup": {"kind": "file", "id": args["file"]}}
     with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, builder):
-        return await _call_tool(tool, args, token, hass, data or MagicMock())
+        return await _call_tool(tool, args, access_key, hass, data or MagicMock())
 
 
 class TestGating:
     @pytest.mark.parametrize("tool", list(TOOLS))
     async def test_cap_denied(self, hass, esphome_dir, tool):
         args, cap = TOOLS[tool]
-        token = _flash_token(**{cap: "deny"})
-        content, outcome, _ = await _run(tool, args, token, hass, FakeBuilder())
+        access_key = _flash_token(**{cap: "deny"})
+        content, outcome, _ = await _run(tool, args, access_key, hass, FakeBuilder())
         assert outcome == "denied"
         assert "Forbidden" in content["content"][0]["text"]
 
@@ -243,11 +243,11 @@ class TestCompile:
     async def test_read_only_scope_cannot_start_a_build(self, hass, esphome_dir, esphome_entries):
         """Creating a build for a device is a write on that device."""
         _esphome_entry(hass, esphome_entries, runtime=_runtime())
-        token = _token(cap_esphome_yaml="allow", permissions=PermissionTree(
+        access_key = _access_key(cap_esphome_yaml="allow", permissions=PermissionTree(
             domains={"sensor": PermissionNode(state="YELLOW")}))
         builder = FakeBuilder()
         content, outcome, _ = await _run(
-            "compile_esphome_firmware", {"file": FILE}, token, hass, builder)
+            "compile_esphome_firmware", {"file": FILE}, access_key, hass, builder)
 
         assert outcome == "denied"
         assert builder.calls == []
@@ -285,14 +285,14 @@ async def test_force_local_wrong_shapes_refuse_before_network(hass, esphome_dir,
                                          ("install_esphome_firmware", "firmware/install")])
 async def test_job_start_rechecks_scope_after_inflight_lookup(hass, esphome_dir, esphome_entries, tool, command):
     _esphome_entry(hass, esphome_entries, runtime=_runtime())
-    token = _flash_token()
+    access_key = _flash_token()
 
     def revoke(_args):
-        token.permissions.domains["sensor"].state = "RED"
+        access_key.permissions.domains["sensor"].state = "RED"
         return []
 
     builder = FakeBuilder(**{"firmware/get_jobs": revoke})
-    _, outcome, _ = await _run(tool, {"file": FILE}, token, hass, builder)
+    _, outcome, _ = await _run(tool, {"file": FILE}, access_key, hass, builder)
     assert outcome == "denied"
     assert command not in builder.commands
 
@@ -357,12 +357,12 @@ class TestInstall:
         from custom_components.phoenix_mcp.mcp_view import _execute_install_esphome_firmware
 
         _esphome_entry(hass, esphome_entries, runtime=_runtime())
-        token = _token(cap_esphome_flash="allow", permissions=PermissionTree(
+        access_key = _access_key(cap_esphome_flash="allow", permissions=PermissionTree(
             domains={"sensor": PermissionNode(state="YELLOW")}))
         builder = FakeBuilder()
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, builder):
             _content, outcome, _ = await _execute_install_esphome_firmware(
-                {"file": FILE}, token, hass, MagicMock())
+                {"file": FILE}, access_key, hass, MagicMock())
 
         assert outcome == "denied"
         assert builder.calls == []
@@ -385,14 +385,14 @@ class TestJobScoping:
     ):
         """A job id must not be an oracle for another device's build."""
         _esphome_entry(hass, esphome_entries, runtime=_runtime())
-        token = _token(cap_esphome_yaml="allow", permissions=PermissionTree(
+        access_key = _access_key(cap_esphome_yaml="allow", permissions=PermissionTree(
             domains={"light": PermissionNode(state="GREEN")}))
 
         missing, missing_outcome, _ = await _run(
-            "get_esphome_job", {"job_id": "nosuchjob"}, token, hass,
+            "get_esphome_job", {"job_id": "nosuchjob"}, access_key, hass,
             FakeBuilder(**{"firmware/get_job": None}))
         denied, denied_outcome, _ = await _run(
-            "get_esphome_job", {"job_id": JOB}, token, hass,
+            "get_esphome_job", {"job_id": JOB}, access_key, hass,
             FakeBuilder(**{"firmware/get_job": _job()}))
 
         assert missing["content"] == denied["content"]
@@ -1118,11 +1118,11 @@ class TestWaiting:
 
     async def test_scoping_applies(self, hass, esphome_dir, esphome_entries):
         _esphome_entry(hass, esphome_entries, runtime=_runtime())
-        token = _token(cap_esphome_yaml="allow", permissions=PermissionTree(
+        access_key = _access_key(cap_esphome_yaml="allow", permissions=PermissionTree(
             domains={"light": PermissionNode(state="GREEN")}))
         builder = FakeBuilder(**{"firmware/get_job": _job()})
         content, outcome, _ = await _run(
-            "wait_for_esphome_job", {"job_id": JOB}, token, hass, builder)
+            "wait_for_esphome_job", {"job_id": JOB}, access_key, hass, builder)
         assert outcome == "denied"
         assert content["content"][0]["text"] == "No such firmware job."
 
@@ -1152,22 +1152,22 @@ class TestCancel:
 
     async def test_scoping_applies(self, hass, esphome_dir, esphome_entries):
         _esphome_entry(hass, esphome_entries, runtime=_runtime())
-        token = _token(cap_esphome_yaml="allow", permissions=PermissionTree(
+        access_key = _access_key(cap_esphome_yaml="allow", permissions=PermissionTree(
             domains={"light": PermissionNode(state="GREEN")}))
         builder = FakeBuilder(**{"firmware/get_job": _job()})
         _content, outcome, _ = await _run(
-            "cancel_esphome_job", {"job_id": JOB}, token, hass, builder)
+            "cancel_esphome_job", {"job_id": JOB}, access_key, hass, builder)
 
         assert outcome == "denied"
         assert "firmware/cancel" not in builder.commands
 
 
 class TestDeviceLogs:
-    async def _capture(self, hass, token, args, result):
+    async def _capture(self, hass, access_key, args, result):
         capture = AsyncMock(return_value=result)
         with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_CAPTURE_PATCH, capture):
             content, outcome, resource = await _call(
-                "get_esphome_device_logs", args, token, hass)
+                "get_esphome_device_logs", args, access_key, hass)
         return content, outcome, resource, capture
 
     async def test_captures_and_reports_the_window(self, hass, esphome_dir):
@@ -1202,10 +1202,10 @@ class TestDeviceLogs:
     async def test_read_scope_is_enough(self, hass, esphome_dir, esphome_entries):
         """Reading a console observes rather than changes, so READ is the bar."""
         _esphome_entry(hass, esphome_entries, runtime=_runtime())
-        token = _token(cap_esphome_yaml="allow", permissions=PermissionTree(
+        access_key = _access_key(cap_esphome_yaml="allow", permissions=PermissionTree(
             domains={"sensor": PermissionNode(state="YELLOW")}))
         _content, outcome, _r, _c = await self._capture(
-            hass, token, {"file": FILE}, BuilderResult(output="line"))
+            hass, access_key, {"file": FILE}, BuilderResult(output="line"))
         assert outcome == "allowed"
 
 

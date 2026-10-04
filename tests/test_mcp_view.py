@@ -14,8 +14,8 @@ from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import (
     DOMAIN,
     MAX_REQUEST_BODY_BYTES,
-    TOKEN_LENGTH,
-    TOKEN_PREFIX,
+    ACCESS_KEY_LENGTH,
+    ACCESS_KEY_PREFIX,
 )
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import (
@@ -26,12 +26,12 @@ from custom_components.phoenix_mcp.mcp_view import (
     _dispatch_mcp,
 )
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter, RateLimitResult
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord, TokenStore
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord, AccessKeyStore
 from tests.log_fixtures import attach_log_store, make_log_entry, make_log_store
 
 
 def _raw_token() -> str:
-    return TOKEN_PREFIX + secrets.token_hex(32)
+    return ACCESS_KEY_PREFIX + secrets.token_hex(32)
 
 
 def _make_token(
@@ -47,12 +47,12 @@ def _make_token(
     rate_limit_burst: int = 10,
     revoked: bool = False,
     permissions: PermissionTree | None = None,
-) -> tuple[TokenRecord, str]:
+) -> tuple[AccessKeyRecord, str]:
     from homeassistant.util.dt import utcnow
 
     raw = _raw_token()
     token_hash = hashlib.sha256(raw.encode()).hexdigest()
-    record = TokenRecord(
+    record = AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="test-token",
         token_hash=token_hash,
@@ -74,12 +74,12 @@ def _make_token(
     return record, raw
 
 
-def _make_data(token: TokenRecord | None = None) -> PhoenixData:
-    store = MagicMock(spec=TokenStore)
-    if token is not None:
-        store.get_token_by_hash.return_value = token
+def _make_data(access_key: AccessKeyRecord | None = None) -> PhoenixData:
+    store = MagicMock(spec=AccessKeyStore)
+    if access_key is not None:
+        store.get_access_key_by_hash.return_value = access_key
     else:
-        store.get_token_by_hash.return_value = None
+        store.get_access_key_by_hash.return_value = None
     store.get_settings.return_value = MagicMock(
         kill_switch=False,
         mesa_mode="off",
@@ -163,8 +163,8 @@ def _make_context_view(data: PhoenixData, hass: MagicMock | None = None) -> Phoe
 async def test_streamable_batch_dispatches_sequentially_and_isolates_failures():
     from custom_components.phoenix_mcp.mcp_view import _handle_streamable_batch
 
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
     rl = RateLimitResult(allowed=True, rate_limiting_enabled=True, limit=60, remaining=59, reset=9999999999)
 
@@ -182,7 +182,7 @@ async def test_streamable_batch_dispatches_sequentially_and_isolates_failures():
         {"jsonrpc": "2.0", "id": 3, "method": "c"},
     ]
     with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=fake_dispatch):
-        resp = await _handle_streamable_batch(items, token, rl, hass, data, "rid", "127.0.0.1", "http://h")
+        resp = await _handle_streamable_batch(items, access_key, rl, hass, data, "rid", "127.0.0.1", "http://h")
 
     assert resp.status == 200
     body = json.loads(resp.text)
@@ -199,8 +199,8 @@ async def test_streamable_batch_dispatches_sequentially_and_isolates_failures():
 
 @pytest.mark.asyncio
 async def test_mcp_401_missing_auth_header():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     request = _make_request(method="POST", headers={})
 
@@ -209,13 +209,13 @@ async def test_mcp_401_missing_auth_header():
     from aiohttp import web
     assert isinstance(result, web.Response)
     assert result.status == 401
-    data.store.get_token_by_hash.assert_not_called()
+    data.store.get_access_key_by_hash.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_mcp_401_token_missing_phx_prefix():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     bad = "xxxx_" + secrets.token_hex(32)
     request = _make_request(method="POST", headers={"Authorization": f"Bearer {bad}"})
@@ -223,43 +223,43 @@ async def test_mcp_401_token_missing_phx_prefix():
     result = await view.post(request)
 
     assert result.status == 401
-    data.store.get_token_by_hash.assert_not_called()
+    data.store.get_access_key_by_hash.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_mcp_401_token_wrong_length_short():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
-    short = TOKEN_PREFIX + secrets.token_hex(32)[:-1]  # 67 chars total
-    assert len(short) == TOKEN_LENGTH - 1
+    short = ACCESS_KEY_PREFIX + secrets.token_hex(32)[:-1]  # 67 chars total
+    assert len(short) == ACCESS_KEY_LENGTH - 1
     request = _make_request(method="POST", headers={"Authorization": f"Bearer {short}"})
 
     result = await view.post(request)
 
     assert result.status == 401
-    data.store.get_token_by_hash.assert_not_called()
+    data.store.get_access_key_by_hash.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_mcp_401_token_wrong_length_long():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
-    long_tok = TOKEN_PREFIX + secrets.token_hex(32) + "a"  # 69 chars total
-    assert len(long_tok) == TOKEN_LENGTH + 1
+    long_tok = ACCESS_KEY_PREFIX + secrets.token_hex(32) + "a"  # 69 chars total
+    assert len(long_tok) == ACCESS_KEY_LENGTH + 1
     request = _make_request(method="POST", headers={"Authorization": f"Bearer {long_tok}"})
 
     result = await view.post(request)
 
     assert result.status == 401
-    data.store.get_token_by_hash.assert_not_called()
+    data.store.get_access_key_by_hash.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_mcp_401_llat_jwt_format_rejected():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     llat = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.payload.signature"
     request = _make_request(method="POST", headers={"Authorization": f"Bearer {llat}"})
@@ -267,13 +267,13 @@ async def test_mcp_401_llat_jwt_format_rejected():
     result = await view.post(request)
 
     assert result.status == 401
-    data.store.get_token_by_hash.assert_not_called()
+    data.store.get_access_key_by_hash.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_mcp_401_token_in_query_param():
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     request = _make_request(
         method="POST",
@@ -288,8 +288,8 @@ async def test_mcp_401_token_in_query_param():
 
 @pytest.mark.asyncio
 async def test_mcp_401_access_token_in_query_param():
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     request = _make_request(
         method="POST",
@@ -306,8 +306,8 @@ async def test_mcp_401_access_token_in_query_param():
 
 @pytest.mark.asyncio
 async def test_mcp_post_413_body_too_large():
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     request = _make_request(
         method="POST",
@@ -322,8 +322,8 @@ async def test_mcp_post_413_body_too_large():
 
 @pytest.mark.asyncio
 async def test_mcp_post_413_body_too_large_streaming():
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     big_body = b"x" * (MAX_REQUEST_BODY_BYTES + 1)
     request = _make_request(
@@ -339,8 +339,8 @@ async def test_mcp_post_413_body_too_large_streaming():
 
 @pytest.mark.asyncio
 async def test_mcp_post_initialize_returns_result_inline():
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).encode()
     request = _make_request(
@@ -363,8 +363,8 @@ async def test_mcp_post_initialize_returns_result_inline():
 async def test_mcp_post_body_drains_partial_stream():
     """A tool-call body split across multiple reads (aiohttp's normal short-read
     behaviour) must still be fully assembled before parsing, not truncated."""
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     body = json.dumps(
         {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"note": "x" * 300}}
@@ -396,8 +396,8 @@ async def test_mcp_post_body_drains_partial_stream():
 
 @pytest.mark.asyncio
 async def test_mcp_post_notification_returns_202():
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     body = json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"}).encode()
     request = _make_request(
@@ -419,8 +419,8 @@ async def test_mcp_post_non_dict_params_is_invalid_params_not_500():
     JSON-RPC -32602, not escape post() as an AttributeError that aiohttp turns into
     a 500.
     """
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": [1]}).encode()
     request = _make_request(method="POST", headers={"Authorization": f"Bearer {raw}"}, body=body)
@@ -435,8 +435,8 @@ async def test_mcp_post_non_dict_params_is_invalid_params_not_500():
 
 @pytest.mark.asyncio
 async def test_mcp_post_non_string_method_is_invalid_request():
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     body = json.dumps({"jsonrpc": "2.0", "id": 7, "method": ["bad"]}).encode()
     request = _make_request(method="POST", headers={"Authorization": f"Bearer {raw}"}, body=body)
@@ -453,8 +453,8 @@ async def test_mcp_post_non_string_method_is_invalid_request():
 async def test_mcp_post_response_object_accepted_202():
     """A JSON-RPC response object (no method, carries result) is accepted with no
     reply per the Streamable HTTP transport, not answered 'method not found'."""
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "result": {"ok": True}}).encode()
     request = _make_request(method="POST", headers={"Authorization": f"Bearer {raw}"}, body=body)
@@ -468,8 +468,8 @@ async def test_mcp_post_response_object_accepted_202():
 async def test_streamable_batch_bad_params_is_invalid_params_not_internal_error():
     from custom_components.phoenix_mcp.mcp_view import _handle_streamable_batch
 
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
     rl = RateLimitResult(allowed=True, rate_limiting_enabled=True, limit=60, remaining=59, reset=9999999999)
 
@@ -477,7 +477,7 @@ async def test_streamable_batch_bad_params_is_invalid_params_not_internal_error(
         {"jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": [1]},
         {"jsonrpc": "2.0", "id": 2, "method": ["bad"]},
     ]
-    resp = await _handle_streamable_batch(items, token, rl, hass, data, "rid", "127.0.0.1", "http://h")
+    resp = await _handle_streamable_batch(items, access_key, rl, hass, data, "rid", "127.0.0.1", "http://h")
 
     body = json.loads(resp.text)
     assert body[0]["error"]["code"] == -32602  # invalid params, not -32603
@@ -488,8 +488,8 @@ async def test_streamable_batch_bad_params_is_invalid_params_not_internal_error(
 
 @pytest.mark.asyncio
 async def test_mcp_post_rejects_untrusted_origin():
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).encode()
     request = _make_request(
@@ -505,8 +505,8 @@ async def test_mcp_post_rejects_untrusted_origin():
 
 @pytest.mark.asyncio
 async def test_mcp_post_allows_trusted_origin():
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).encode()
     request = _make_request(
@@ -523,8 +523,8 @@ async def test_mcp_post_allows_trusted_origin():
 @pytest.mark.asyncio
 async def test_mcp_post_absent_origin_allowed():
     """Real (non-browser) MCP clients send no Origin; that must never be blocked."""
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).encode()
     request = _make_request(method="POST", headers={"Authorization": f"Bearer {raw}"}, body=body)
@@ -538,8 +538,8 @@ async def test_mcp_post_absent_origin_allowed():
 async def test_mcp_post_malformed_origin_is_403_not_500():
     # A malformed Origin (e.g. "http://[::1") makes HA's URL parser raise; it
     # must be a uniform 403, never an unauthenticated 500.
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}}).encode()
     request = _make_request(
@@ -558,8 +558,8 @@ async def test_mcp_post_malformed_origin_is_403_not_500():
 async def test_mcp_post_rejects_non_finite_numbers():
     # json.loads accepts NaN/Infinity by default; those defeat range checks and
     # can reach HA services, so the body parse must reject them.
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     body = b'{"jsonrpc": "2.0", "id": 1, "method": "ping", "params": {"x": NaN}}'
     request = _make_request(method="POST", headers={"Authorization": f"Bearer {raw}"}, body=body)
@@ -571,8 +571,8 @@ async def test_mcp_post_rejects_non_finite_numbers():
 @pytest.mark.asyncio
 async def test_mcp_notification_gets_no_response():
     # A JSON-RPC notification omits `id` and must not dispatch a request method without an ID.
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     body = json.dumps({"jsonrpc": "2.0", "method": "ping"}).encode()  # no id
     request = _make_request(method="POST", headers={"Authorization": f"Bearer {raw}"}, body=body)
@@ -592,8 +592,8 @@ async def test_mcp_notification_gets_no_response():
 async def test_mcp_malformed_no_id_is_invalid_request_not_notification():
     # A malformed object without `id` is NOT a valid notification; it must get an
     # Invalid Request error with id null, not be silently swallowed with 202.
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     for bad in ({"jsonrpc": "2.0", "method": 7}, {"jsonrpc": "2.0", "params": {}}):
         request = _make_request(
@@ -617,8 +617,8 @@ async def test_mcp_invalid_id_is_refused_and_never_dispatched(bad_id):
     included because bool subclasses int in Python, so `id: true` would pass every
     type check and be echoed back as `true`.
     """
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     body = json.dumps({
         "jsonrpc": "2.0", "id": bad_id, "method": "tools/call",
@@ -642,8 +642,8 @@ async def test_mcp_invalid_id_is_refused_and_never_dispatched(bad_id):
 @pytest.mark.parametrize("good_id", ["abc", 1, 0, -5])
 async def test_mcp_valid_id_shapes_still_dispatch(good_id):
     # The refusal above must not narrow what a conforming client may send.
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     body = json.dumps({"jsonrpc": "2.0", "id": good_id, "method": "ping"}).encode()
     request = _make_request(
@@ -659,8 +659,8 @@ async def test_mcp_valid_id_shapes_still_dispatch(good_id):
 
 @pytest.mark.asyncio
 async def test_mcp_invalid_id_in_a_batch_errors_only_that_item():
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     body = json.dumps([
         {"jsonrpc": "2.0", "id": {}, "method": "ping"},
@@ -686,8 +686,8 @@ async def test_mcp_batch_spends_one_rate_limit_unit_per_item():
     unit tests says nothing about the batch path calling it, and the request-level
     check alone charges a batch once.
     """
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     batch = [{"jsonrpc": "2.0", "id": i, "method": "ping"} for i in range(10)]
     request = _make_request(
@@ -712,10 +712,10 @@ async def test_mcp_batch_over_the_rate_limit_is_refused_before_any_item_runs():
     batch, execute all 50, and only then be throttled. Nothing is dispatched before
     this check, so refusing the whole batch leaves nothing half-applied.
     """
-    token, raw = _make_token()
-    token.rate_limit_requests = 10
-    token.rate_limit_burst = 0
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    access_key.rate_limit_requests = 10
+    access_key.rate_limit_burst = 0
+    data = _make_data(access_key)
     # A REAL limiter: the factory's MagicMock returns a truthy .allowed for every
     # call, so it would report the batch as admitted whatever the budget said.
     # The view does its own check() for the request itself; doing one here too
@@ -740,10 +740,10 @@ async def test_mcp_batch_over_the_burst_ceiling_is_refused():
     # A batch lands in one instant, so its whole cost falls in one burst window.
     # Checking only the minute limit would let 60/min with burst 10/sec run 50
     # items.
-    token, raw = _make_token()
-    token.rate_limit_requests = 60
-    token.rate_limit_burst = 10
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    access_key.rate_limit_requests = 60
+    access_key.rate_limit_burst = 10
+    data = _make_data(access_key)
     data.rate_limiter = RateLimiter()
     view = _make_mcp_view(data)
     batch = [{"jsonrpc": "2.0", "id": i, "method": "ping"} for i in range(50)]
@@ -766,10 +766,10 @@ async def test_mcp_batch_response_headers_report_the_batch_spend():
     items were charged, would answer X-RateLimit-Remaining: 59 after a 50-item
     batch.
     """
-    token, raw = _make_token()
-    token.rate_limit_requests = 60
-    token.rate_limit_burst = 0
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    access_key.rate_limit_requests = 60
+    access_key.rate_limit_burst = 0
+    data = _make_data(access_key)
     data.rate_limiter = RateLimiter()
     view = _make_mcp_view(data)
     batch = [{"jsonrpc": "2.0", "id": i, "method": "ping"} for i in range(50)]
@@ -786,8 +786,8 @@ async def test_mcp_batch_response_headers_report_the_batch_spend():
 @pytest.mark.asyncio
 async def test_mcp_single_request_charges_nothing_extra():
     # A lone request is not a batch and must keep costing exactly one unit.
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
     request = _make_request(
         method="POST", headers={"Authorization": f"Bearer {raw}"},
@@ -804,8 +804,8 @@ async def test_mcp_positional_params_notification_gets_no_response():
     # JSON-RPC allows array (positional) params. A no-id request with array params
     # is a valid notification Phoenix MCP can't dispatch, so it must get NO response, but a
     # request (with id) still gets -32602 since Phoenix MCP only dispatches by-name.
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     view = _make_mcp_view(data)
 
     notif = {"jsonrpc": "2.0", "method": "ping", "params": []}  # no id
@@ -827,8 +827,8 @@ async def test_mcp_positional_params_notification_gets_no_response():
 async def test_streamable_batch_positional_params_notification_dropped():
     from custom_components.phoenix_mcp.mcp_view import _handle_streamable_batch
 
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
     rl = RateLimitResult(allowed=True, rate_limiting_enabled=True, limit=60, remaining=59, reset=9999999999)
 
@@ -836,7 +836,7 @@ async def test_streamable_batch_positional_params_notification_dropped():
         {"jsonrpc": "2.0", "method": "ping", "params": []},          # notification: dropped
         {"jsonrpc": "2.0", "id": 2, "method": "ping", "params": []},  # request: -32602
     ]
-    resp = await _handle_streamable_batch(items, token, rl, hass, data, "rid", "127.0.0.1", "http://h")
+    resp = await _handle_streamable_batch(items, access_key, rl, hass, data, "rid", "127.0.0.1", "http://h")
     body = json.loads(resp.text)
     assert len(body) == 1
     assert body[0]["id"] == 2 and body[0]["error"]["code"] == -32602
@@ -846,8 +846,8 @@ async def test_streamable_batch_positional_params_notification_dropped():
 async def test_streamable_batch_malformed_no_id_still_gets_error_entry():
     from custom_components.phoenix_mcp.mcp_view import _handle_streamable_batch
 
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
     rl = RateLimitResult(allowed=True, rate_limiting_enabled=True, limit=60, remaining=59, reset=9999999999)
 
@@ -855,7 +855,7 @@ async def test_streamable_batch_malformed_no_id_still_gets_error_entry():
         {"jsonrpc": "2.0", "method": 7},           # malformed, no id
         {"jsonrpc": "2.0", "method": "ping"},       # valid notification, no id
     ]
-    resp = await _handle_streamable_batch(items, token, rl, hass, data, "rid", "127.0.0.1", "http://h")
+    resp = await _handle_streamable_batch(items, access_key, rl, hass, data, "rid", "127.0.0.1", "http://h")
     body = json.loads(resp.text)
     # The malformed item produces an Invalid Request (id null); the valid
     # notification produces no entry. So exactly one entry, and it is the error.
@@ -876,12 +876,12 @@ def test_validate_number_range_rejects_nan_and_inf():
 
 @pytest.mark.asyncio
 async def test_tools_list_includes_read_tools_always():
-    token, _ = _make_token()  # no write scope
-    data = _make_data(token)
+    access_key, _ = _make_token()  # no write scope
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, _o = await _dispatch_mcp(
-        "tools/list", 1, {}, token, hass, data, "127.0.0.1",
+        "tools/list", 1, {}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local"
     )
 
@@ -902,12 +902,12 @@ async def test_tools_list_includes_read_tools_always():
 async def test_initialize_includes_token_aware_instructions():
     # Channel A: the MCP initialize result carries a token-aware primer that
     # names the token's confirm-gated caps and links to the skill endpoint.
-    token, _ = _make_token(cap_automation_write="confirm")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_automation_write="confirm")
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, _o = await _dispatch_mcp(
-        "initialize", 1, {}, token, hass, data, "127.0.0.1",
+        "initialize", 1, {}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local"
     )
 
@@ -927,13 +927,13 @@ async def test_initialize_includes_token_aware_instructions():
 async def test_initialize_nudges_find_available_actions_when_authoring_and_search():
     # The authoring-discoverability nudge appears for a token that can author AND
     # search (find_available_actions is the entity-scoped, any-entity moments path).
-    token, _ = _make_token(cap_automation_write="allow")
-    token.cap_search = "allow"
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_automation_write="allow")
+    access_key.cap_search = "allow"
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, _o = await _dispatch_mcp(
-        "initialize", 1, {}, token, hass, data, "127.0.0.1",
+        "initialize", 1, {}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local",
     )
     instr = result["result"]["instructions"]
@@ -946,12 +946,12 @@ async def test_initialize_omits_authoring_nudge_without_search():
     # Without search, find_available_actions is unavailable, so there is no nudge
     # (this keeps the always-on primer clean for tokens the guidance does not apply
     # to).
-    token, _ = _make_token(cap_automation_write="allow")  # cap_search defaults to deny
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_automation_write="allow")  # cap_search defaults to deny
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, _o = await _dispatch_mcp(
-        "initialize", 1, {}, token, hass, data, "127.0.0.1",
+        "initialize", 1, {}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local",
     )
     assert "Before authoring an automation" not in result["result"]["instructions"]
@@ -978,12 +978,12 @@ async def test_skill_view_serves_markdown_unauthenticated():
 
 @pytest.mark.asyncio
 async def test_tools_list_hides_control_tools_without_write_scope():
-    token, _ = _make_token()  # no GREEN grants, not pass_through
-    data = _make_data(token)
+    access_key, _ = _make_token()  # no GREEN grants, not pass_through
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, _o = await _dispatch_mcp(
-        "tools/list", 1, {}, token, hass, data, "127.0.0.1",
+        "tools/list", 1, {}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local"
     )
 
@@ -1000,12 +1000,12 @@ async def test_tools_list_hides_control_tools_without_write_scope():
 
 @pytest.mark.asyncio
 async def test_tools_list_shows_control_tools_with_write_scope():
-    token, _ = _make_token(permissions=PermissionTree(domains={"light": PermissionNode(state="GREEN")}))
-    data = _make_data(token)
+    access_key, _ = _make_token(permissions=PermissionTree(domains={"light": PermissionNode(state="GREEN")}))
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, _o = await _dispatch_mcp(
-        "tools/list", 1, {}, token, hass, data, "127.0.0.1",
+        "tools/list", 1, {}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local"
     )
 
@@ -1016,12 +1016,12 @@ async def test_tools_list_shows_control_tools_with_write_scope():
 
 @pytest.mark.asyncio
 async def test_tools_list_pass_through_has_write_scope():
-    token, _ = _make_token(pass_through=True)
-    data = _make_data(token)
+    access_key, _ = _make_token(pass_through=True)
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, _o = await _dispatch_mcp(
-        "tools/list", 1, {}, token, hass, data, "127.0.0.1",
+        "tools/list", 1, {}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local"
     )
 
@@ -1033,13 +1033,13 @@ async def test_tools_list_pass_through_has_write_scope():
 @pytest.mark.asyncio
 async def test_tools_list_announce_all_overrides_gating():
     # A read-only token with announce_all_tools sees the full surface.
-    token, _ = _make_token()
-    token.announce_all_tools = True
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    access_key.announce_all_tools = True
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, _o = await _dispatch_mcp(
-        "tools/list", 1, {}, token, hass, data, "127.0.0.1",
+        "tools/list", 1, {}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local"
     )
 
@@ -1056,12 +1056,12 @@ async def test_tools_list_announce_all_overrides_gating():
 
 @pytest.mark.asyncio
 async def test_tools_list_excludes_system_tools_when_flags_false():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, _o = await _dispatch_mcp(
-        "tools/list", 1, {}, token, hass, data, "127.0.0.1",
+        "tools/list", 1, {}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local"
     )
 
@@ -1072,17 +1072,17 @@ async def test_tools_list_excludes_system_tools_when_flags_false():
 
 @pytest.mark.asyncio
 async def test_tools_list_includes_system_tools_when_flags_true():
-    token, _ = _make_token(
+    access_key, _ = _make_token(
         cap_config_read="allow",
         cap_template_render="allow",
         cap_restart="allow",
         cap_automation_write="allow",
     )
-    data = _make_data(token)
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, _o = await _dispatch_mcp(
-        "tools/list", 1, {}, token, hass, data, "127.0.0.1",
+        "tools/list", 1, {}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local"
     )
 
@@ -1094,12 +1094,12 @@ async def test_tools_list_includes_system_tools_when_flags_true():
 @pytest.mark.asyncio
 async def test_tools_list_pass_through_non_exempt_flags_auto_granted():
     """Pass-through grants non-exempt flag tools automatically, but not exempt-flag tools."""
-    token, _ = _make_token(pass_through=True)
-    data = _make_data(token)
+    access_key, _ = _make_token(pass_through=True)
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, _o = await _dispatch_mcp(
-        "tools/list", 1, {}, token, hass, data, "127.0.0.1",
+        "tools/list", 1, {}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local"
     )
 
@@ -1115,17 +1115,17 @@ async def test_tools_list_pass_through_non_exempt_flags_auto_granted():
 @pytest.mark.asyncio
 async def test_tools_list_pass_through_with_exempt_flags():
     """Pass-through + explicit exempt flags yields all system tools."""
-    token, _ = _make_token(
+    access_key, _ = _make_token(
         pass_through=True,
         cap_restart="allow",
         cap_automation_write="allow",
         cap_script_write="allow",
     )
-    data = _make_data(token)
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, _o = await _dispatch_mcp(
-        "tools/list", 1, {}, token, hass, data, "127.0.0.1",
+        "tools/list", 1, {}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local"
     )
 
@@ -1138,8 +1138,8 @@ async def test_tools_list_pass_through_with_exempt_flags():
 
 @pytest.mark.asyncio
 async def test_tools_call_get_state_denied_entity_not_accessible():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve:
@@ -1150,7 +1150,7 @@ async def test_tools_call_get_state_denied_entity_not_accessible():
             "tools/call",
             3,
             {"name": "get_state", "arguments": {"entity_id": "light.kitchen", "projection": {"kind": "compact"}}},
-            token,
+            access_key,
             hass,
             data,
             "127.0.0.1",
@@ -1165,8 +1165,8 @@ async def test_tools_call_get_state_denied_entity_not_accessible():
 
 @pytest.mark.asyncio
 async def test_tools_call_get_state_success():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
 
     state_mock = MagicMock()
     state_mock.entity_id = "light.kitchen"
@@ -1187,7 +1187,7 @@ async def test_tools_call_get_state_success():
                 "tools/call",
                 3,
                 {"name": "get_state", "arguments": {"entity_id": "light.kitchen", "projection": {"kind": "compact"}}},
-                token,
+                access_key,
                 hass,
                 data,
                 "127.0.0.1",
@@ -1209,8 +1209,8 @@ async def test_tools_call_unhandled_exception_returns_clean_error_not_hang():
     # handling, it can hang an MCP client instead of failing fast. It must come back
     # as a normal, well-formed JSON-RPC result with a generic, non-leaking message
     # so the agent can react.
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     with patch(
@@ -1221,7 +1221,7 @@ async def test_tools_call_unhandled_exception_returns_clean_error_not_hang():
             "tools/call",
             3,
             {"name": "HassTurnOn", "arguments": {"name": ["a", "b"]}},
-            token,
+            access_key,
             hass,
             data,
             "127.0.0.1",
@@ -1240,8 +1240,8 @@ async def test_tools_call_unhandled_exception_returns_clean_error_not_hang():
 
 @pytest.mark.asyncio
 async def test_tools_call_get_state_not_found_entity_same_response_as_denied():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve:
@@ -1252,7 +1252,7 @@ async def test_tools_call_get_state_not_found_entity_same_response_as_denied():
             "tools/call",
             3,
             {"name": "get_state", "arguments": {"entity_id": "light.ghost"}},
-            token,
+            access_key,
             hass,
             data,
             "127.0.0.1",
@@ -1266,7 +1266,7 @@ async def test_tools_call_get_state_not_found_entity_same_response_as_denied():
             "tools/call",
             4,
             {"name": "get_state", "arguments": {"entity_id": "light.ghost"}},
-            token,
+            access_key,
             hass,
             data,
             "127.0.0.1",
@@ -1423,8 +1423,8 @@ def test_project_state_modes():
 
 @pytest.mark.asyncio
 async def test_tools_call_get_state_lean_default_and_detailed():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
     hass.states.get.return_value = MagicMock()
     full = {
@@ -1441,12 +1441,12 @@ async def test_tools_call_get_state_lean_default_and_detailed():
             res_lean, _m, _r, out_lean = await _dispatch_mcp(
                 "tools/call", 3,
                 {"name": "get_state", "arguments": {"entity_id": "light.kitchen", "projection": {"kind": "compact"}}},
-                token, hass, data, "127.0.0.1", base_url="http://h",
+                access_key, hass, data, "127.0.0.1", base_url="http://h",
             )
             res_full, _m2, _r2, out_full = await _dispatch_mcp(
                 "tools/call", 4,
                 {"name": "get_state", "arguments": {"entity_id": "light.kitchen", "projection": {"kind": "full"}}},
-                token, hass, data, "127.0.0.1", base_url="http://h",
+                access_key, hass, data, "127.0.0.1", base_url="http://h",
             )
     assert out_lean == "allowed" and out_full == "allowed"
     lean = json.loads(res_lean["result"]["content"][0]["text"])
@@ -1462,12 +1462,12 @@ async def test_tools_call_get_state_lean_default_and_detailed():
 
 @pytest.mark.asyncio
 async def test_get_logbook_forbidden_without_cap():
-    token, _ = _make_token(cap_log_read="deny")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_log_read="deny")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     res, _m, _r, outcome = await _dispatch_mcp(
         "tools/call", 3, {"name": "get_logbook", "arguments": {}},
-        token, hass, data, "127.0.0.1", base_url="http://h",
+        access_key, hass, data, "127.0.0.1", base_url="http://h",
     )
     assert outcome == "denied"
     assert res["result"].get("isError") is True
@@ -1475,8 +1475,8 @@ async def test_get_logbook_forbidden_without_cap():
 
 @pytest.mark.asyncio
 async def test_get_logbook_scopes_to_accessible_entities():
-    token, _ = _make_token(cap_log_read="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_log_read="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     from custom_components.phoenix_mcp.policy_engine import Permission
 
@@ -1496,7 +1496,7 @@ async def test_get_logbook_scopes_to_accessible_entities():
          patch("custom_components.phoenix_mcp.mcp_view.async_ws_command", new=AsyncMock(return_value=entries)):
         res, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 3, {"name": "get_logbook", "arguments": {}},
-            token, hass, data, "127.0.0.1", base_url="http://h",
+            access_key, hass, data, "127.0.0.1", base_url="http://h",
         )
     assert outcome == "allowed"
     payload = json.loads(res["result"]["content"][0]["text"])
@@ -1506,8 +1506,8 @@ async def test_get_logbook_scopes_to_accessible_entities():
 
 @pytest.mark.asyncio
 async def test_get_calendar_events_returns_events_for_accessible_calendar():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
     from datetime import date
     from homeassistant.components.calendar import CalendarEntity, CalendarEvent, DATA_COMPONENT
@@ -1520,7 +1520,7 @@ async def test_get_calendar_events_returns_events_for_accessible_calendar():
         res, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 3,
             {"name": "get_calendar_events", "arguments": {"entity_id": "calendar.fam"}},
-            token, hass, data, "127.0.0.1", base_url="http://h",
+            access_key, hass, data, "127.0.0.1", base_url="http://h",
         )
     assert outcome == "allowed"
     payload = json.loads(res["result"]["content"][0]["text"])
@@ -1530,30 +1530,30 @@ async def test_get_calendar_events_returns_events_for_accessible_calendar():
 
 @pytest.mark.asyncio
 async def test_get_calendar_events_rejects_non_calendar_entity():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
     from custom_components.phoenix_mcp.policy_engine import Permission
     with patch("custom_components.phoenix_mcp.tools.calendar.resolve", return_value=Permission.READ), patch("custom_components.phoenix_mcp.helpers.resolve", return_value=Permission.READ):
         res, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 3,
             {"name": "get_calendar_events", "arguments": {"entity_id": "light.kitchen"}},
-            token, hass, data, "127.0.0.1", base_url="http://h",
+            access_key, hass, data, "127.0.0.1", base_url="http://h",
         )
     assert outcome == "invalid_request"
 
 
 @pytest.mark.asyncio
 async def test_get_calendar_events_not_found_when_inaccessible():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
     from custom_components.phoenix_mcp.policy_engine import Permission
     with patch("custom_components.phoenix_mcp.tools.calendar.resolve", return_value=Permission.NO_ACCESS):
         res, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 3,
             {"name": "get_calendar_events", "arguments": {"entity_id": "calendar.fam"}},
-            token, hass, data, "127.0.0.1", base_url="http://h",
+            access_key, hass, data, "127.0.0.1", base_url="http://h",
         )
     assert outcome == "denied"
 
@@ -1562,12 +1562,12 @@ async def test_get_calendar_events_not_found_when_inaccessible():
 
 @pytest.mark.asyncio
 async def test_list_blueprints_forbidden_without_cap():
-    token, _ = _make_token(cap_config_read="deny")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_config_read="deny")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     res, _m, _r, outcome = await _dispatch_mcp(
         "tools/call", 3, {"name": "list_blueprints", "arguments": {}},
-        token, hass, data, "127.0.0.1", base_url="http://h",
+        access_key, hass, data, "127.0.0.1", base_url="http://h",
     )
     assert outcome == "denied"
     assert res["result"].get("isError") is True
@@ -1575,8 +1575,8 @@ async def test_list_blueprints_forbidden_without_cap():
 
 @pytest.mark.asyncio
 async def test_list_blueprints_lists_with_inputs():
-    token, _ = _make_token(cap_config_read="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_config_read="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     bp = MagicMock()
     bp.metadata = {"name": "Motion Light", "description": "d", "input": {"motion": {}}, "source_url": "u"}
@@ -1586,7 +1586,7 @@ async def test_list_blueprints_lists_with_inputs():
          patch("homeassistant.components.script.async_get_blueprints", return_value=dom_bp):
         res, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 3, {"name": "list_blueprints", "arguments": {"domain": "automation"}},
-            token, hass, data, "127.0.0.1", base_url="http://h",
+            access_key, hass, data, "127.0.0.1", base_url="http://h",
         )
     assert outcome == "allowed"
     payload = json.loads(res["result"]["content"][0]["text"])
@@ -1602,8 +1602,8 @@ async def test_list_blueprints_lists_with_inputs():
 @pytest.mark.asyncio
 async def test_list_blueprints_warns_when_a_domain_cannot_be_read():
     """A domain that fails to read must not vanish, or a short list looks complete."""
-    token, _ = _make_token(cap_config_read="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_config_read="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     with patch("homeassistant.components.automation.async_get_blueprints",
                side_effect=RuntimeError("boom")), \
@@ -1611,7 +1611,7 @@ async def test_list_blueprints_warns_when_a_domain_cannot_be_read():
                side_effect=RuntimeError("boom")):
         res, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 3, {"name": "list_blueprints", "arguments": {}},
-            token, hass, data, "127.0.0.1", base_url="http://h",
+            access_key, hass, data, "127.0.0.1", base_url="http://h",
         )
     assert outcome == "allowed"
     payload = json.loads(res["result"]["content"][0]["text"])
@@ -1622,8 +1622,8 @@ async def test_list_blueprints_warns_when_a_domain_cannot_be_read():
 
 @pytest.mark.asyncio
 async def test_list_blueprints_warns_about_blueprints_that_failed_to_load():
-    token, _ = _make_token(cap_config_read="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_config_read="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     ok = MagicMock()
     ok.metadata = {"name": "Fine"}
@@ -1634,7 +1634,7 @@ async def test_list_blueprints_warns_about_blueprints_that_failed_to_load():
     with patch("homeassistant.components.automation.async_get_blueprints", return_value=dom_bp):
         res, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 3, {"name": "list_blueprints", "arguments": {"domain": "automation"}},
-            token, hass, data, "127.0.0.1", base_url="http://h",
+            access_key, hass, data, "127.0.0.1", base_url="http://h",
         )
     assert outcome == "allowed"
     payload = json.loads(res["result"]["content"][0]["text"])
@@ -1661,35 +1661,35 @@ def _bp_env(hass, tmp_path, body="blueprint:\n  name: X\ntrigger:\n  - platform:
     return dom_bp
 
 
-async def _get_blueprint(args, token, hass, data, dom_bp):
+async def _get_blueprint(args, access_key, hass, data, dom_bp):
     with patch("homeassistant.components.automation.async_get_blueprints", return_value=dom_bp), \
          patch("homeassistant.components.script.async_get_blueprints", return_value=dom_bp):
         return await _dispatch_mcp(
             "tools/call", 3, {"name": "get_blueprint", "arguments": args},
-            token, hass, data, "127.0.0.1", base_url="http://h",
+            access_key, hass, data, "127.0.0.1", base_url="http://h",
         )
 
 
 @pytest.mark.asyncio
 async def test_get_blueprint_forbidden_without_cap(tmp_path):
-    token, _ = _make_token(cap_config_read="deny")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_config_read="deny")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     dom_bp = _bp_env(hass, tmp_path)
     res, _m, _r, outcome = await _get_blueprint(
-        {"domain": "automation", "path": "author/motion.yaml"}, token, hass, data, dom_bp)
+        {"domain": "automation", "path": "author/motion.yaml"}, access_key, hass, data, dom_bp)
     assert outcome == "denied"
     assert res["result"].get("isError") is True
 
 
 @pytest.mark.asyncio
 async def test_get_blueprint_returns_source_with_inputs(tmp_path):
-    token, _ = _make_token(cap_config_read="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_config_read="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     dom_bp = _bp_env(hass, tmp_path)
     res, _m, _r, outcome = await _get_blueprint(
-        {"domain": "automation", "path": "author/motion.yaml"}, token, hass, data, dom_bp)
+        {"domain": "automation", "path": "author/motion.yaml"}, access_key, hass, data, dom_bp)
     assert outcome == "allowed"
     body = json.loads(res["result"]["content"][0]["text"])
     assert body["name"] == "Motion Light"
@@ -1700,12 +1700,12 @@ async def test_get_blueprint_returns_source_with_inputs(tmp_path):
 
 @pytest.mark.asyncio
 async def test_get_blueprint_unknown_path_not_found(tmp_path):
-    token, _ = _make_token(cap_config_read="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_config_read="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     dom_bp = _bp_env(hass, tmp_path)
     res, _m, _r, outcome = await _get_blueprint(
-        {"domain": "automation", "path": "author/nope.yaml"}, token, hass, data, dom_bp)
+        {"domain": "automation", "path": "author/nope.yaml"}, access_key, hass, data, dom_bp)
     assert outcome == "not_found"
     assert res["result"].get("isError") is True
 
@@ -1714,47 +1714,47 @@ async def test_get_blueprint_unknown_path_not_found(tmp_path):
 @pytest.mark.parametrize("path", ["../../secrets.yaml", "/etc/passwd", "author/../../../x.yaml"])
 async def test_get_blueprint_traversal_is_not_expressible(tmp_path, path):
     """The path must match a key HA enumerated, so traversal never reaches the disk."""
-    token, _ = _make_token(cap_config_read="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_config_read="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     dom_bp = _bp_env(hass, tmp_path)
     _res, _m, _r, outcome = await _get_blueprint(
-        {"domain": "automation", "path": path}, token, hass, data, dom_bp)
+        {"domain": "automation", "path": path}, access_key, hass, data, dom_bp)
     assert outcome == "not_found"
 
 
 @pytest.mark.asyncio
 async def test_get_blueprint_reports_a_blueprint_that_failed_to_load(tmp_path):
-    token, _ = _make_token(cap_config_read="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_config_read="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     dom_bp = MagicMock()
     dom_bp.async_get_blueprints = AsyncMock(return_value={"a/bad.yaml": ValueError("bad yaml")})
     res, _m, _r, outcome = await _get_blueprint(
-        {"domain": "automation", "path": "a/bad.yaml"}, token, hass, data, dom_bp)
+        {"domain": "automation", "path": "a/bad.yaml"}, access_key, hass, data, dom_bp)
     assert outcome == "invalid_request"
     assert "failed to load" in res["result"]["content"][0]["text"]
 
 
 @pytest.mark.asyncio
 async def test_get_blueprint_rejects_a_bad_domain(tmp_path):
-    token, _ = _make_token(cap_config_read="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_config_read="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     dom_bp = _bp_env(hass, tmp_path)
     _res, _m, _r, outcome = await _get_blueprint(
-        {"domain": "light", "path": "author/motion.yaml"}, token, hass, data, dom_bp)
+        {"domain": "light", "path": "author/motion.yaml"}, access_key, hass, data, dom_bp)
     assert outcome == "invalid_request"
 
 
 @pytest.mark.asyncio
 async def test_get_blueprint_missing_path_argument(tmp_path):
-    token, _ = _make_token(cap_config_read="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_config_read="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     dom_bp = _bp_env(hass, tmp_path)
     _res, _m, _r, outcome = await _get_blueprint(
-        {"domain": "automation"}, token, hass, data, dom_bp)
+        {"domain": "automation"}, access_key, hass, data, dom_bp)
     assert outcome == "invalid_request"
 
 
@@ -1762,12 +1762,12 @@ async def test_get_blueprint_missing_path_argument(tmp_path):
 async def test_get_blueprint_oversized_file_refused(tmp_path):
     from custom_components.phoenix_mcp.const import MAX_FILE_BYTES
 
-    token, _ = _make_token(cap_config_read="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_config_read="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     dom_bp = _bp_env(hass, tmp_path, body="x" * (MAX_FILE_BYTES + 1))
     res, _m, _r, outcome = await _get_blueprint(
-        {"domain": "automation", "path": "author/motion.yaml"}, token, hass, data, dom_bp)
+        {"domain": "automation", "path": "author/motion.yaml"}, access_key, hass, data, dom_bp)
     assert outcome == "invalid_request"
     assert "maximum readable size" in res["result"]["content"][0]["text"]
 
@@ -1780,13 +1780,13 @@ async def test_get_logs_errors_when_system_log_not_loaded():
 
     An empty list would claim "no warnings or errors", the opposite of the truth.
     """
-    token, _ = _make_token(cap_log_read="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_log_read="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     hass.data = {DOMAIN: data}  # no "system_log" key
     res, _m, _r, outcome = await _dispatch_mcp(
         "tools/call", 3, {"name": "get_logs", "arguments": {}},
-        token, hass, data, "127.0.0.1", base_url="http://h",
+        access_key, hass, data, "127.0.0.1", base_url="http://h",
     )
     assert outcome == "invalid_request"
     assert res["result"].get("isError") is True
@@ -1795,13 +1795,13 @@ async def test_get_logs_errors_when_system_log_not_loaded():
 
 @pytest.mark.asyncio
 async def test_get_logs_returns_entries_when_system_log_present():
-    token, _ = _make_token(cap_log_read="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_log_read="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     attach_log_store(hass, make_log_store([make_log_entry()]))
     res, _m, _r, outcome = await _dispatch_mcp(
         "tools/call", 3, {"name": "get_logs", "arguments": {}},
-        token, hass, data, "127.0.0.1", base_url="http://h",
+        access_key, hass, data, "127.0.0.1", base_url="http://h",
     )
     assert outcome == "allowed"
     assert json.loads(res["result"]["content"][0]["text"])["count"] == 1
@@ -1817,13 +1817,13 @@ async def test_get_logs_refuses_info_rather_than_answering_as_warning():
     warnings back with nothing saying INFO is not collected, so a quiet result would
     read as "nothing was logged" instead of "that level is unavailable".
     """
-    token, _ = _make_token(cap_log_read="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_log_read="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     hass.data = {DOMAIN: data, "system_log": MagicMock(records={})}
     res, _m, _r, outcome = await _dispatch_mcp(
         "tools/call", 3, {"name": "get_logs", "arguments": {"level": "INFO"}},
-        token, hass, data, "127.0.0.1", base_url="http://h",
+        access_key, hass, data, "127.0.0.1", base_url="http://h",
     )
     assert outcome == "invalid_request"
     assert res["result"].get("isError") is True
@@ -1836,13 +1836,13 @@ async def test_get_logs_denied_token_never_learns_about_its_own_level():
 
     The cap check runs first.
     """
-    token, _ = _make_token(cap_log_read="deny")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_log_read="deny")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     hass.data = {DOMAIN: data, "system_log": MagicMock(records={})}
     res, _m, _r, outcome = await _dispatch_mcp(
         "tools/call", 3, {"name": "get_logs", "arguments": {"level": "INFO"}},
-        token, hass, data, "127.0.0.1", base_url="http://h",
+        access_key, hass, data, "127.0.0.1", base_url="http://h",
     )
     assert outcome == "denied"
     assert "INFO" not in res["result"]["content"][0]["text"]
@@ -1852,13 +1852,13 @@ async def test_get_logs_denied_token_never_learns_about_its_own_level():
 async def test_get_logs_wrong_shaped_level_degrades_to_the_default():
     """A wrong SHAPE is absent (str_arg), not a value to refuse: a message about
     "True" describes an argument nobody typed."""
-    token, _ = _make_token(cap_log_read="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_log_read="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     hass.data = {DOMAIN: data, "system_log": MagicMock(records={})}
     res, _m, _r, outcome = await _dispatch_mcp(
         "tools/call", 3, {"name": "get_logs", "arguments": {"level": ["INFO"]}},
-        token, hass, data, "127.0.0.1", base_url="http://h",
+        access_key, hass, data, "127.0.0.1", base_url="http://h",
     )
     assert outcome == "allowed"
 
@@ -1877,14 +1877,14 @@ def test_get_logs_schema_offers_only_the_collected_levels():
 
 @pytest.mark.asyncio
 async def test_get_logbook_errors_on_non_list_result():
-    token, _ = _make_token(cap_log_read="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_log_read="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     with patch("custom_components.phoenix_mcp.mcp_view.async_ws_command",
                new=AsyncMock(return_value={"unexpected": "shape"})):
         res, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 3, {"name": "get_logbook", "arguments": {}},
-            token, hass, data, "127.0.0.1", base_url="http://h",
+            access_key, hass, data, "127.0.0.1", base_url="http://h",
         )
     assert outcome == "invalid_request"
     assert res["result"].get("isError") is True
@@ -1894,15 +1894,15 @@ async def test_get_logbook_errors_on_non_list_result():
 
 @pytest.mark.asyncio
 async def test_tools_call_restart_ha_denied_without_cap_restart():
-    token, _ = _make_token(cap_restart="deny", pass_through=False)
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_restart="deny", pass_through=False)
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, outcome = await _dispatch_mcp(
         "tools/call",
         5,
         {"name": "restart_ha", "arguments": {}},
-        token,
+        access_key,
         hass,
         data,
         "127.0.0.1",
@@ -1915,15 +1915,15 @@ async def test_tools_call_restart_ha_denied_without_cap_restart():
 
 @pytest.mark.asyncio
 async def test_tools_call_restart_ha_denied_for_pass_through_without_cap_restart():
-    token, _ = _make_token(cap_restart="deny", pass_through=True)
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_restart="deny", pass_through=True)
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, outcome = await _dispatch_mcp(
         "tools/call",
         6,
         {"name": "restart_ha", "arguments": {}},
-        token,
+        access_key,
         hass,
         data,
         "127.0.0.1",
@@ -1949,8 +1949,8 @@ async def test_authoring_validator_drift_is_not_reported_as_invalid_config():
     """
     from custom_components.phoenix_mcp.tools import authoring
 
-    token, _ = _make_token(cap_automation_write="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_automation_write="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     async def _boom(*_a, **_k):
@@ -1960,7 +1960,7 @@ async def test_authoring_validator_drift_is_not_reported_as_invalid_config():
         result, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 7,
             {"name": "create_automation", "arguments": {"config": {"alias": "x"}}},
-            token, hass, data, "127.0.0.1", base_url="http://homeassistant.local",
+            access_key, hass, data, "127.0.0.1", base_url="http://homeassistant.local",
         )
 
     assert outcome == "invalid_request"
@@ -1976,8 +1976,8 @@ async def test_authoring_invalid_config_still_gets_the_domain_guidance():
 
     from custom_components.phoenix_mcp.tools import authoring
 
-    token, _ = _make_token(cap_automation_write="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_automation_write="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     async def _invalid(*_a, **_k):
@@ -1987,7 +1987,7 @@ async def test_authoring_invalid_config_still_gets_the_domain_guidance():
         result, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 7,
             {"name": "create_automation", "arguments": {"config": {"alias": "x"}}},
-            token, hass, data, "127.0.0.1", base_url="http://homeassistant.local",
+            access_key, hass, data, "127.0.0.1", base_url="http://homeassistant.local",
         )
 
     assert outcome == "invalid_request"
@@ -2006,8 +2006,8 @@ async def test_authoring_write_failure_is_not_audited_as_denied():
     """
     from custom_components.phoenix_mcp.tools import authoring
 
-    token, _ = _make_token(cap_automation_write="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_automation_write="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     async def _ok(*_a, **_k):
@@ -2021,7 +2021,7 @@ async def test_authoring_write_failure_is_not_audited_as_denied():
         result, _m, _r, outcome = await _dispatch_mcp(
             "tools/call", 7,
             {"name": "create_automation", "arguments": {"config": {"alias": "x"}}},
-            token, hass, data, "127.0.0.1", base_url="http://homeassistant.local",
+            access_key, hass, data, "127.0.0.1", base_url="http://homeassistant.local",
         )
 
     assert outcome == "invalid_request", "a write failure must not be audited as a policy denial"
@@ -2033,15 +2033,15 @@ async def test_authoring_write_failure_is_not_audited_as_denied():
 @pytest.mark.asyncio
 async def test_tools_call_create_automation_invalid_config_rejected():
     """Empty config dict fails HA validation and returns invalid_request."""
-    token, _ = _make_token(cap_automation_write="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_automation_write="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, outcome = await _dispatch_mcp(
         "tools/call",
         7,
         {"name": "create_automation", "arguments": {"config": {}}},
-        token,
+        access_key,
         hass,
         data,
         "127.0.0.1",
@@ -2056,15 +2056,15 @@ async def test_tools_call_create_automation_invalid_config_rejected():
 async def test_tools_call_create_automation_confirm_mode_invalid_config_rejected_before_pending():
     """An invalid config must fail fast even under confirm mode, not sail through
     as a false pending_approval that can only fail once an admin approves it."""
-    token, _ = _make_token(cap_automation_write="confirm")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_automation_write="confirm")
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, outcome = await _dispatch_mcp(
         "tools/call",
         7,
         {"name": "create_automation", "arguments": {"config": {}}},
-        token,
+        access_key,
         hass,
         data,
         "127.0.0.1",
@@ -2077,15 +2077,15 @@ async def test_tools_call_create_automation_confirm_mode_invalid_config_rejected
 
 @pytest.mark.asyncio
 async def test_tools_call_edit_automation_confirm_mode_invalid_config_rejected_before_pending():
-    token, _ = _make_token(cap_automation_write="confirm")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_automation_write="confirm")
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, outcome = await _dispatch_mcp(
         "tools/call",
         7,
         {"name": "edit_automation", "arguments": {"automation_id": "abc", "config": {}}},
-        token,
+        access_key,
         hass,
         data,
         "127.0.0.1",
@@ -2101,15 +2101,15 @@ async def test_tools_call_create_automation_denied_before_validation_no_leak():
     """A cap=deny token gets the uniform Forbidden message, never a validation
     detail about its own (invalid) config - deny must be checked before the
     precheck runs, not after."""
-    token, _ = _make_token(cap_automation_write="deny")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_automation_write="deny")
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, outcome = await _dispatch_mcp(
         "tools/call",
         7,
         {"name": "create_automation", "arguments": {"config": {}}},
-        token,
+        access_key,
         hass,
         data,
         "127.0.0.1",
@@ -2124,15 +2124,15 @@ async def test_tools_call_create_automation_denied_before_validation_no_leak():
 
 @pytest.mark.asyncio
 async def test_tools_call_automation_denied_without_flag():
-    token, _ = _make_token(cap_automation_write="deny")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_automation_write="deny")
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, outcome = await _dispatch_mcp(
         "tools/call",
         8,
         {"name": "delete_automation", "arguments": {"automation_id": "abc"}},
-        token,
+        access_key,
         hass,
         data,
         "127.0.0.1",
@@ -2149,15 +2149,15 @@ async def test_tools_call_automation_denied_without_flag():
 async def test_tools_call_create_script_confirm_mode_invalid_config_rejected_before_pending():
     """Same precheck as create_automation: an invalid script config must not
     become a pending approval that only fails after an admin approves it."""
-    token, _ = _make_token(cap_script_write="confirm")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_script_write="confirm")
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, outcome = await _dispatch_mcp(
         "tools/call",
         7,
         {"name": "create_script", "arguments": {"script_id": "s1", "config": {}}},
-        token,
+        access_key,
         hass,
         data,
         "127.0.0.1",
@@ -2170,15 +2170,15 @@ async def test_tools_call_create_script_confirm_mode_invalid_config_rejected_bef
 
 @pytest.mark.asyncio
 async def test_tools_call_edit_script_confirm_mode_invalid_config_rejected_before_pending():
-    token, _ = _make_token(cap_script_write="confirm")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_script_write="confirm")
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, outcome = await _dispatch_mcp(
         "tools/call",
         7,
         {"name": "edit_script", "arguments": {"script_id": "s1", "config": {}}},
-        token,
+        access_key,
         hass,
         data,
         "127.0.0.1",
@@ -2192,15 +2192,15 @@ async def test_tools_call_edit_script_confirm_mode_invalid_config_rejected_befor
 @pytest.mark.asyncio
 async def test_tools_call_create_script_bad_id_confirm_mode_rejected_before_pending():
     """The script_id format check is also structural, so it must fail fast too."""
-    token, _ = _make_token(cap_script_write="confirm")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_script_write="confirm")
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, outcome = await _dispatch_mcp(
         "tools/call",
         7,
         {"name": "create_script", "arguments": {"script_id": "Not Valid!", "config": {"sequence": []}}},
-        token,
+        access_key,
         hass,
         data,
         "127.0.0.1",
@@ -2220,8 +2220,8 @@ async def test_tools_call_garbled_tool_name_is_capped_before_dispatch_and_loggin
     affects a legitimate call."""
     from custom_components.phoenix_mcp.const import MAX_TOOL_NAME_LENGTH
 
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     garbled = "search_entities" + "<_key>domain</arg_key><arg_value>x</arg_value>" * 20
@@ -2231,7 +2231,7 @@ async def test_tools_call_garbled_tool_name_is_capped_before_dispatch_and_loggin
         "tools/call",
         7,
         {"name": garbled, "arguments": {}},
-        token,
+        access_key,
         hass,
         data,
         "127.0.0.1",
@@ -2251,12 +2251,12 @@ async def test_tools_call_garbled_tool_name_is_capped_before_dispatch_and_loggin
 
 @pytest.mark.asyncio
 async def test_resources_list_returns_server_info():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, outcome = await _dispatch_mcp(
-        "resources/list", 9, {}, token, hass, data, "127.0.0.1",
+        "resources/list", 9, {}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local"
     )
 
@@ -2267,12 +2267,12 @@ async def test_resources_list_returns_server_info():
 
 @pytest.mark.asyncio
 async def test_resource_templates_list_returns_an_audited_empty_catalog():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, method, resource, outcome = await _dispatch_mcp(
-        "resources/templates/list", 10, {}, token, hass, data, "127.0.0.1",
+        "resources/templates/list", 10, {}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local"
     )
 
@@ -2291,13 +2291,13 @@ async def test_resource_templates_list_returns_an_audited_empty_catalog():
 
 @pytest.mark.asyncio
 async def test_resources_read_server_info():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
     hass.states.async_all.return_value = []
 
     result, _m, _r, outcome = await _dispatch_mcp(
-        "resources/read", 10, {"uri": "phx://server-info"}, token, hass, data, "127.0.0.1",
+        "resources/read", 10, {"uri": "phx://server-info"}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local"
     )
 
@@ -2305,18 +2305,18 @@ async def test_resources_read_server_info():
     contents = result["result"]["contents"]
     assert len(contents) == 1
     payload = json.loads(contents[0]["text"])
-    assert payload["access_key_name"] == token.name
+    assert payload["access_key_name"] == access_key.name
     assert "capability_flags" in payload
 
 
 @pytest.mark.asyncio
 async def test_resources_read_unknown_uri_returns_error():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, outcome = await _dispatch_mcp(
-        "resources/read", 11, {"uri": "phx://nonexistent"}, token, hass, data, "127.0.0.1",
+        "resources/read", 11, {"uri": "phx://nonexistent"}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local"
     )
 
@@ -2328,12 +2328,12 @@ async def test_resources_read_unknown_uri_returns_error():
 
 @pytest.mark.asyncio
 async def test_unknown_method_with_id_returns_jsonrpc_error():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, outcome = await _dispatch_mcp(
-        "nonexistent/method", 99, {}, token, hass, data, "127.0.0.1",
+        "nonexistent/method", 99, {}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local"
     )
 
@@ -2345,12 +2345,12 @@ async def test_unknown_method_with_id_returns_jsonrpc_error():
 
 @pytest.mark.asyncio
 async def test_notification_no_id_returns_no_response():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     result, _m, _r, _o = await _dispatch_mcp(
-        "notifications/initialized", None, {}, token, hass, data, "127.0.0.1",
+        "notifications/initialized", None, {}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local"
     )
 
@@ -2359,7 +2359,7 @@ async def test_notification_no_id_returns_no_response():
 
 # --- context endpoint ---
 
-def _make_token_with_permissions(entities: dict[str, PermissionNode]) -> tuple[TokenRecord, str]:
+def _make_token_with_permissions(entities: dict[str, PermissionNode]) -> tuple[AccessKeyRecord, str]:
     tree = PermissionTree(entities=entities)
     return _make_token(permissions=tree)
 
@@ -2378,10 +2378,10 @@ def _make_hass_with_states(data: PhoenixData, entity_ids: list[str]) -> MagicMoc
 
 @pytest.mark.asyncio
 async def test_context_plain_entity_with_hint_appears():
-    token, raw = _make_token_with_permissions({
+    access_key, raw = _make_token_with_permissions({
         "light.kitchen": PermissionNode(state="GREEN", hint="The main kitchen light")
     })
-    data = _make_data(token)
+    data = _make_data(access_key)
 
     with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve, \
          patch("custom_components.phoenix_mcp.mcp_view.get_effective_hint", return_value="The main kitchen light"):
@@ -2394,7 +2394,7 @@ async def test_context_plain_entity_with_hint_appears():
 
         mock_resolve.side_effect = resolve_side_effect
         hass = _make_hass_with_states(data, ["light.kitchen"])
-        text = _build_context_plain(token, hass)
+        text = _build_context_plain(access_key, hass)
 
     assert "light.kitchen" in text
     assert "The main kitchen light" in text
@@ -2403,10 +2403,10 @@ async def test_context_plain_entity_with_hint_appears():
 
 @pytest.mark.asyncio
 async def test_context_plain_entity_without_hint_renders_normally():
-    token, raw = _make_token_with_permissions({
+    access_key, raw = _make_token_with_permissions({
         "light.kitchen": PermissionNode(state="GREEN", hint=None)
     })
-    data = _make_data(token)
+    data = _make_data(access_key)
 
     with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve, \
          patch("custom_components.phoenix_mcp.mcp_view.get_effective_hint", return_value=None):
@@ -2419,7 +2419,7 @@ async def test_context_plain_entity_without_hint_renders_normally():
 
         mock_resolve.side_effect = resolve_side_effect
         hass = _make_hass_with_states(data, ["light.kitchen"])
-        text = _build_context_plain(token, hass)
+        text = _build_context_plain(access_key, hass)
 
     assert "light.kitchen" in text
     assert '"' not in text.split("light.kitchen")[1].split("\n")[0]
@@ -2427,17 +2427,17 @@ async def test_context_plain_entity_without_hint_renders_normally():
 
 @pytest.mark.asyncio
 async def test_context_plain_read_permission_shows_read_only():
-    token, _ = _make_token_with_permissions({
+    access_key, _ = _make_token_with_permissions({
         "sensor.temp": PermissionNode(state="YELLOW")
     })
-    data = _make_data(token)
+    data = _make_data(access_key)
 
     with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve, \
          patch("custom_components.phoenix_mcp.mcp_view.get_effective_hint", return_value=None):
         from custom_components.phoenix_mcp.policy_engine import Permission
         mock_resolve.return_value = Permission.READ
         hass = _make_hass_with_states(data, ["sensor.temp"])
-        text = _build_context_plain(token, hass)
+        text = _build_context_plain(access_key, hass)
 
     assert "sensor.temp (READ)" in text
     assert "READ/WRITE" not in text
@@ -2445,10 +2445,10 @@ async def test_context_plain_read_permission_shows_read_only():
 
 @pytest.mark.asyncio
 async def test_context_json_entity_with_hint():
-    token, _ = _make_token_with_permissions({
+    access_key, _ = _make_token_with_permissions({
         "switch.relay_1": PermissionNode(state="GREEN", hint="Holiday lights power switch")
     })
-    data = _make_data(token)
+    data = _make_data(access_key)
 
     with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve, \
          patch("custom_components.phoenix_mcp.mcp_view.get_effective_hint", return_value="Holiday lights power switch"):
@@ -2465,7 +2465,7 @@ async def test_context_json_entity_with_hint():
                 mock_dr_mod.async_get.return_value = mock_dev_reg
 
                 hass = _make_hass_with_states(data, ["switch.relay_1"])
-                payload = _build_context_json(token, hass)
+                payload = _build_context_json(access_key, hass)
 
     entity_entry = next(e for e in payload["entities"] if e["entity_id"] == "switch.relay_1")
     assert entity_entry["hint"] == "Holiday lights power switch"
@@ -2474,10 +2474,10 @@ async def test_context_json_entity_with_hint():
 
 @pytest.mark.asyncio
 async def test_context_json_entity_without_hint_has_no_hint_key():
-    token, _ = _make_token_with_permissions({
+    access_key, _ = _make_token_with_permissions({
         "light.hall": PermissionNode(state="GREEN", hint=None)
     })
-    data = _make_data(token)
+    data = _make_data(access_key)
 
     with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve, \
          patch("custom_components.phoenix_mcp.mcp_view.get_effective_hint", return_value=None):
@@ -2494,7 +2494,7 @@ async def test_context_json_entity_without_hint_has_no_hint_key():
                 mock_dr_mod.async_get.return_value = mock_dev_reg
 
                 hass = _make_hass_with_states(data, ["light.hall"])
-                payload = _build_context_json(token, hass)
+                payload = _build_context_json(access_key, hass)
 
     entity_entry = next(e for e in payload["entities"] if e["entity_id"] == "light.hall")
     assert "hint" not in entity_entry
@@ -2502,8 +2502,8 @@ async def test_context_json_entity_without_hint_has_no_hint_key():
 
 @pytest.mark.asyncio
 async def test_context_json_includes_capability_flags():
-    token, _ = _make_token(cap_config_read="allow", cap_restart="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_config_read="allow", cap_restart="allow")
+    data = _make_data(access_key)
 
     with patch("custom_components.phoenix_mcp.mcp_view.resolve") as mock_resolve:
         from custom_components.phoenix_mcp.policy_engine import Permission
@@ -2515,7 +2515,7 @@ async def test_context_json_includes_capability_flags():
                 mock_dr_mod.async_get.return_value = MagicMock()
 
                 hass = _make_hass_with_states(data, [])
-                payload = _build_context_json(token, hass)
+                payload = _build_context_json(access_key, hass)
 
     assert payload["capability_flags"]["cap_config_read"] == "allow"
     assert payload["capability_flags"]["cap_restart"] == "allow"
@@ -2524,8 +2524,8 @@ async def test_context_json_includes_capability_flags():
 
 @pytest.mark.asyncio
 async def test_context_endpoint_returns_plain_text_by_default():
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     view = _make_context_view(data, hass)
@@ -2539,8 +2539,8 @@ async def test_context_endpoint_returns_plain_text_by_default():
 
 @pytest.mark.asyncio
 async def test_context_endpoint_returns_json_with_format_param():
-    token, raw = _make_token()
-    data = _make_data(token)
+    access_key, raw = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     view = _make_context_view(data, hass)
@@ -2564,8 +2564,8 @@ async def test_context_endpoint_returns_json_with_format_param():
 
 @pytest.mark.asyncio
 async def test_context_endpoint_401_without_auth():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     view = _make_context_view(data, hass)
@@ -2579,11 +2579,11 @@ async def test_context_endpoint_401_without_auth():
 # ---- HassTurnOn/Off physical-control gating ----------------------------------
 
 
-def _make_physical_token(cap_physical_control: str) -> TokenRecord:
+def _make_physical_token(cap_physical_control: str) -> AccessKeyRecord:
     from homeassistant.util.dt import utcnow
 
     raw = _raw_token()
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="phys-token",
         token_hash=hashlib.sha256(raw.encode()).hexdigest(),
@@ -2595,7 +2595,7 @@ def _make_physical_token(cap_physical_control: str) -> TokenRecord:
 
 
 def _fake_action_done(calls):
-    async def _fake_intent_action(tool, domain, service, sd, entities, h, token=None, args=None):
+    async def _fake_intent_action(tool, domain, service, sd, entities, h, access_key=None, args=None):
         calls.append((domain, service, tuple(entities)))
         body = json.dumps({
             "speech": {}, "response_type": "action_done",
@@ -2612,18 +2612,18 @@ async def test_call_service_cover_toggle_denied_without_physical_control(hass):
     # has WRITE on the cover but physical control denied.
     from custom_components.phoenix_mcp.data import PhoenixData
     from custom_components.phoenix_mcp.mcp_view import _tool_call_service
-    from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree
+    from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
 
     perms = PermissionTree(entities={"cover.g": PermissionNode(state="GREEN")})
-    token, _ = _make_token(permissions=perms)
-    token.cap_physical_control = "deny"
+    access_key, _ = _make_token(permissions=perms)
+    access_key.cap_physical_control = "deny"
     store = MagicMock()
     store.get_settings.return_value = MagicMock(mesa_mode="off")
     data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
 
     result, outcome, _res = await _tool_call_service(
         {"service": {"domain": "cover", "name": "toggle"}, "targets": [{"kind": "entity", "ids": ["cover.g"]}]},
-        token, hass, data, "rid", "1.2.3.4",
+        access_key, hass, data, "rid", "1.2.3.4",
     )
     assert outcome == "denied"
     assert result.get("isError") is True
@@ -2633,8 +2633,8 @@ async def test_call_service_cover_toggle_denied_without_physical_control(hass):
 async def test_turn_on_allow_includes_physical_entities():
     from custom_components.phoenix_mcp.tools.native import _tool_hass_turn_on
 
-    token = _make_physical_token("allow")
-    data = _make_data(token)
+    access_key = _make_physical_token("allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     calls: list = []
 
@@ -2642,7 +2642,7 @@ async def test_turn_on_allow_includes_physical_entities():
                return_value=["light.kitchen", "lock.front_door"]), \
          patch("custom_components.phoenix_mcp.tools.native._tool_intent_action", side_effect=_fake_action_done(calls)), \
          patch("custom_components.phoenix_mcp.tools.native._gate", new=AsyncMock(return_value=None)) as gate:
-        result = await _tool_hass_turn_on({"area": "Kitchen"}, token, hass, data, "rid", None)
+        result = await _tool_hass_turn_on({"area": "Kitchen"}, access_key, hass, data, "rid", None)
 
     # The light goes via homeassistant.turn_on; the lock must go via lock.lock,
     # because homeassistant.turn_on cannot operate a lock on current HA.
@@ -2657,12 +2657,12 @@ async def test_turn_on_allow_includes_physical_entities():
 async def test_turn_on_deny_strips_physical_entities():
     from custom_components.phoenix_mcp.tools.native import _tool_hass_turn_on
 
-    token = _make_physical_token("deny")
-    data = _make_data(token)
+    access_key = _make_physical_token("deny")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     captured = {}
 
-    async def _fake_intent_action(tool, domain, service, sd, entities, h, token=None, args=None):
+    async def _fake_intent_action(tool, domain, service, sd, entities, h, access_key=None, args=None):
         captured["entities"] = entities
         return ({"content": []}, "allowed", tool)
 
@@ -2670,7 +2670,7 @@ async def test_turn_on_deny_strips_physical_entities():
                return_value=["light.kitchen", "lock.front_door"]), \
          patch("custom_components.phoenix_mcp.tools.native._tool_intent_action", side_effect=_fake_intent_action), \
          patch("custom_components.phoenix_mcp.tools.native._gate", new=AsyncMock(return_value=None)) as gate:
-        await _tool_hass_turn_on({"area": "Kitchen"}, token, hass, data, "rid", None)
+        await _tool_hass_turn_on({"area": "Kitchen"}, access_key, hass, data, "rid", None)
 
     assert captured["entities"] == ["light.kitchen"]
     gate.assert_not_called()
@@ -2680,8 +2680,8 @@ async def test_turn_on_deny_strips_physical_entities():
 async def test_turn_on_confirm_with_physical_creates_pending():
     from custom_components.phoenix_mcp.tools.native import _tool_hass_turn_on
 
-    token = _make_physical_token("confirm")
-    data = _make_data(token)
+    access_key = _make_physical_token("confirm")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     pending = ({"content": [], "_pending": True}, "pending_approval", "approval:HassTurnOn:x")
     intent = AsyncMock()
@@ -2690,7 +2690,7 @@ async def test_turn_on_confirm_with_physical_creates_pending():
                return_value=["light.kitchen", "lock.front_door"]), \
          patch("custom_components.phoenix_mcp.tools.native._tool_intent_action", new=intent), \
          patch("custom_components.phoenix_mcp.tools.native._gate", new=AsyncMock(return_value=pending)) as gate:
-        result = await _tool_hass_turn_on({"area": "Kitchen"}, token, hass, data, "rid", None)
+        result = await _tool_hass_turn_on({"area": "Kitchen"}, access_key, hass, data, "rid", None)
 
     assert result == pending
     gate.assert_awaited_once()
@@ -2702,12 +2702,12 @@ async def test_turn_on_confirm_with_physical_creates_pending():
 async def test_turn_on_confirm_without_physical_fires_immediately():
     from custom_components.phoenix_mcp.tools.native import _tool_hass_turn_on
 
-    token = _make_physical_token("confirm")
-    data = _make_data(token)
+    access_key = _make_physical_token("confirm")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     captured = {}
 
-    async def _fake_intent_action(tool, domain, service, sd, entities, h, token=None, args=None):
+    async def _fake_intent_action(tool, domain, service, sd, entities, h, access_key=None, args=None):
         captured["entities"] = entities
         return ({"content": []}, "allowed", tool)
 
@@ -2715,7 +2715,7 @@ async def test_turn_on_confirm_without_physical_fires_immediately():
                return_value=["light.kitchen", "switch.fan"]), \
          patch("custom_components.phoenix_mcp.tools.native._tool_intent_action", side_effect=_fake_intent_action), \
          patch("custom_components.phoenix_mcp.tools.native._gate", new=AsyncMock(return_value=None)) as gate:
-        await _tool_hass_turn_on({"area": "Kitchen"}, token, hass, data, "rid", None)
+        await _tool_hass_turn_on({"area": "Kitchen"}, access_key, hass, data, "rid", None)
 
     assert captured["entities"] == ["light.kitchen", "switch.fan"]
     gate.assert_not_called()
@@ -2726,15 +2726,15 @@ async def test_execute_turn_on_includes_physical_under_confirm():
     """Approved executors must actuate physical locks through lock.lock."""
     from custom_components.phoenix_mcp.tools.native import _execute_hass_turn_on
 
-    token = _make_physical_token("confirm")
-    data = _make_data(token)
+    access_key = _make_physical_token("confirm")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     calls: list = []
 
     with patch("custom_components.phoenix_mcp.tools.native.resolve_intent_entities",
                return_value=["light.kitchen", "lock.front_door"]), \
          patch("custom_components.phoenix_mcp.tools.native._tool_intent_action", side_effect=_fake_action_done(calls)):
-        await _execute_hass_turn_on({"area": "Kitchen"}, token, hass, data)
+        await _execute_hass_turn_on({"area": "Kitchen"}, access_key, hass, data)
 
     assert ("lock", "lock", ("lock.front_door",)) in calls
 
@@ -2785,12 +2785,12 @@ async def test_set_position_routes_cover_and_valve_by_domain():
     """HassSetPosition dispatches cover vs valve position services per entity domain."""
     from custom_components.phoenix_mcp.tools.native import _execute_hass_set_position
 
-    token = _make_physical_token("allow")
-    data = _make_data(token)
+    access_key = _make_physical_token("allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     calls: list = []
 
-    async def _fake_intent_action(tool, domain, service, sd, entities, h, token=None, args=None):
+    async def _fake_intent_action(tool, domain, service, sd, entities, h, access_key=None, args=None):
         calls.append((domain, service, tuple(entities), dict(sd)))
         body = json.dumps({
             "speech": {}, "response_type": "action_done",
@@ -2801,7 +2801,7 @@ async def test_set_position_routes_cover_and_valve_by_domain():
     with patch("custom_components.phoenix_mcp.tools.native.resolve_intent_entities",
                return_value=["valve.irrigation"]) as resolver, \
          patch("custom_components.phoenix_mcp.tools.native._tool_intent_action", side_effect=_fake_intent_action):
-        result = await _execute_hass_set_position({"name": "Irrigation Valve", "position": 50}, token, hass, data)
+        result = await _execute_hass_set_position({"name": "Irrigation Valve", "position": 50}, access_key, hass, data)
 
     # Default resolution spans both position-capable domains.
     assert resolver.call_args.kwargs["domains"] == ["cover", "valve"]
@@ -2812,7 +2812,7 @@ async def test_set_position_routes_cover_and_valve_by_domain():
     with patch("custom_components.phoenix_mcp.tools.native.resolve_intent_entities",
                return_value=["cover.garage"]), \
          patch("custom_components.phoenix_mcp.tools.native._tool_intent_action", side_effect=_fake_intent_action):
-        await _execute_hass_set_position({"name": "Garage", "position": 30}, token, hass, data)
+        await _execute_hass_set_position({"name": "Garage", "position": 30}, access_key, hass, data)
     assert calls == [("cover", "set_cover_position", ("cover.garage",), {"position": 30})]
 
 
@@ -2822,12 +2822,12 @@ async def test_set_position_mixed_domains_merged():
     domain service and merges the action_done responses."""
     from custom_components.phoenix_mcp.tools.native import _execute_hass_set_position
 
-    token = _make_physical_token("allow")
-    data = _make_data(token)
+    access_key = _make_physical_token("allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     calls: list = []
 
-    async def _fake_intent_action(tool, domain, service, sd, entities, h, token=None, args=None):
+    async def _fake_intent_action(tool, domain, service, sd, entities, h, access_key=None, args=None):
         calls.append((domain, service, tuple(entities), dict(sd)))
         body = json.dumps({
             "speech": {}, "response_type": "action_done",
@@ -2838,7 +2838,7 @@ async def test_set_position_mixed_domains_merged():
     with patch("custom_components.phoenix_mcp.tools.native.resolve_intent_entities",
                return_value=["cover.patio_awning", "valve.irrigation"]), \
          patch("custom_components.phoenix_mcp.tools.native._tool_intent_action", side_effect=_fake_intent_action):
-        result = await _execute_hass_set_position({"area": "Patio", "position": 50}, token, hass, data)
+        result = await _execute_hass_set_position({"area": "Patio", "position": 50}, access_key, hass, data)
 
     assert ("cover", "set_cover_position", ("cover.patio_awning",), {"position": 50}) in calls
     assert ("valve", "set_valve_position", ("valve.irrigation",), {"position": 50}) in calls
@@ -2886,9 +2886,9 @@ async def test_turn_on_confirm_creates_real_approval_then_executor_actuates(hass
         def set_pending_approvals(self, v: list) -> None:
             self._p = v
 
-    token = _make_physical_token("confirm")
+    access_key = _make_physical_token("confirm")
     store = _ApprStore()
-    from custom_components.phoenix_mcp.token_store import GlobalSettings
+    from custom_components.phoenix_mcp.access_key_store import GlobalSettings
     store.get_settings = lambda: GlobalSettings(mesa_mode="off")
     data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
     hass.data[DOMAIN] = data
@@ -2907,7 +2907,7 @@ async def test_turn_on_confirm_creates_real_approval_then_executor_actuates(hass
         result = await _call_tool(
             "intent__HassTurnOn",
             {"area": "Hall"},
-            token,
+            access_key,
             hass,
             data,
             "rid-1",
@@ -2925,7 +2925,7 @@ async def test_turn_on_confirm_creates_real_approval_then_executor_actuates(hass
         assert isinstance(appr["args"][APPROVAL_TARGETS_KEY]["fingerprint"], str)
 
         # Approving re-runs from the SAVED args and actuates lock.lock for real.
-        out = await async_execute_approved_tool("HassTurnOn", appr["args"], token, hass, data)
+        out = await async_execute_approved_tool("HassTurnOn", appr["args"], access_key, hass, data)
         await hass.async_block_till_done()
 
     assert out[1] == "allowed"
@@ -2967,11 +2967,11 @@ async def test_inline_confirm_returns_executed_result_on_approval(hass):
         result={"tool_result": {"content": [{"type": "text", "text": "done"}]}, "outcome": "allowed"},
     )
     data = _inline_wait_data([record])
-    token = _make_physical_token("confirm")
-    token.confirm_inline_wait_seconds = 60
+    access_key = _make_physical_token("confirm")
+    access_key.confirm_inline_wait_seconds = 60
     approval = SimpleNamespace(id="appr-1", tool_name="create_scene", expires_at=None)
 
-    task = asyncio.create_task(_await_inline_confirm(hass, data, token, approval))
+    task = asyncio.create_task(_await_inline_confirm(hass, data, access_key, approval))
     await asyncio.sleep(0.01)  # let the bus listener register
     hass.bus.async_fire("phoenix_mcp_approval_resolved", {"approval_id": "appr-1"})
     content, outcome, resource = await task
@@ -2996,11 +2996,11 @@ async def test_inline_confirm_reports_rejection_without_retry(hass):
     from custom_components.phoenix_mcp.tool_common import _await_inline_confirm
 
     data = _inline_wait_data([_approval_record("rejected", rejected_reason="admin_cancelled")])
-    token = _make_physical_token("confirm")
-    token.confirm_inline_wait_seconds = 60
+    access_key = _make_physical_token("confirm")
+    access_key.confirm_inline_wait_seconds = 60
     approval = SimpleNamespace(id="appr-1", tool_name="create_scene", expires_at=None)
 
-    task = asyncio.create_task(_await_inline_confirm(hass, data, token, approval))
+    task = asyncio.create_task(_await_inline_confirm(hass, data, access_key, approval))
     await asyncio.sleep(0.01)
     hass.bus.async_fire("phoenix_mcp_approval_resolved", {"approval_id": "appr-1"})
     content, outcome, _ = await task
@@ -3026,12 +3026,12 @@ async def test_inline_confirm_falls_back_to_pending_on_timeout(hass):
     from custom_components.phoenix_mcp.tool_common import _await_inline_confirm
 
     data = _inline_wait_data([])
-    token = _make_physical_token("confirm")
-    token.confirm_inline_wait_seconds = 60
+    access_key = _make_physical_token("confirm")
+    access_key.confirm_inline_wait_seconds = 60
     approval = SimpleNamespace(id="appr-1", tool_name="create_scene", expires_at=None)
 
     with patch("custom_components.phoenix_mcp.mcp_view.asyncio.wait_for", side_effect=TimeoutError):
-        content, outcome, _ = await _await_inline_confirm(hass, data, token, approval)
+        content, outcome, _ = await _await_inline_confirm(hass, data, access_key, approval)
 
     assert outcome == "pending_approval"
     body = json.loads(content["content"][0]["text"])
@@ -3049,21 +3049,21 @@ async def test_gate_routes_to_inline_wait_only_when_opted_in():
 
     approval = SimpleNamespace(id="appr-1", tool_name="create_scene", expires_at=None)
     pending = SimpleNamespace(is_deny=False, is_pending=True, approval=approval)
-    token = _make_physical_token("confirm")
+    access_key = _make_physical_token("confirm")
     data = _inline_wait_data([])
     hass = MagicMock()
 
     sentinel = ({"content": []}, "pending_approval", "approval:create_scene:appr-1")
     with patch("custom_components.phoenix_mcp.tool_common.async_evaluate_capability", new=AsyncMock(return_value=pending)), \
          patch("custom_components.phoenix_mcp.tool_common._await_inline_confirm", new=AsyncMock(return_value=sentinel)) as inline:
-        token.confirm_inline_wait_seconds = 0
-        out_off = await _gate("cap_scene_write", token, hass, data,
+        access_key.confirm_inline_wait_seconds = 0
+        out_off = await _gate("cap_scene_write", access_key, hass, data,
                               tool_name="create_scene", args={}, request_id="r", client_ip=None, diff={})
         assert inline.await_count == 0
         assert out_off[1] == "pending_approval"
 
-        token.confirm_inline_wait_seconds = 60
-        out_on = await _gate("cap_scene_write", token, hass, data,
+        access_key.confirm_inline_wait_seconds = 60
+        out_on = await _gate("cap_scene_write", access_key, hass, data,
                              tool_name="create_scene", args={}, request_id="r", client_ip=None, diff={})
         assert inline.await_count == 1
         assert out_on is sentinel
@@ -3080,20 +3080,20 @@ async def test_a_mesa_confirm_honours_the_inline_wait_like_a_capability_confirm(
     from custom_components.phoenix_mcp.tool_common import _pending_or_inline
 
     approval = SimpleNamespace(id="appr-9", tool_name="call_service", expires_at=None)
-    token = _make_physical_token("confirm")
+    access_key = _make_physical_token("confirm")
     data = _inline_wait_data([])
     hass = MagicMock()
 
     sentinel = ({"content": []}, "pending_approval", "approval:call_service:appr-9")
     with patch("custom_components.phoenix_mcp.tool_common._await_inline_confirm",
                new=AsyncMock(return_value=sentinel)) as inline:
-        token.confirm_inline_wait_seconds = 0
-        out_off = await _pending_or_inline(hass, data, token, approval)
+        access_key.confirm_inline_wait_seconds = 0
+        out_off = await _pending_or_inline(hass, data, access_key, approval)
         assert inline.await_count == 0
         assert out_off[1] == "pending_approval"
 
-        token.confirm_inline_wait_seconds = 60
-        out_on = await _pending_or_inline(hass, data, token, approval)
+        access_key.confirm_inline_wait_seconds = 60
+        out_on = await _pending_or_inline(hass, data, access_key, approval)
         assert inline.await_count == 1
         assert out_on is sentinel
 
@@ -3152,23 +3152,23 @@ def test_polling_an_approval_that_never_ran_carries_no_note():
 
 # --- stale-tool-list advisory (soft tools/list_changed) ---
 
-async def _dt_call(token, hass, data, msg_id=1):
+async def _dt_call(access_key, hass, data, msg_id=1):
     """One benign tools/call; returns the result content list."""
     result, _m, _r, _o = await _dispatch_mcp(
         "tools/call", msg_id, {"name": "llm__GetDateTime", "arguments": {}},
-        token, hass, data, "127.0.0.1", base_url="http://homeassistant.local",
+        access_key, hass, data, "127.0.0.1", base_url="http://homeassistant.local",
     )
     return result["result"]["content"]
 
 
 @pytest.mark.asyncio
 async def test_legacy_native_name_remains_callable_but_is_not_advertised():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     listed, _m, _r, _o = await _dispatch_mcp(
-        "tools/list", 1, {}, token, hass, data, "127.0.0.1",
+        "tools/list", 1, {}, access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local",
     )
     names = {tool["name"] for tool in listed["result"]["tools"]}
@@ -3177,7 +3177,7 @@ async def test_legacy_native_name_remains_callable_but_is_not_advertised():
 
     called, method, resource, outcome = await _dispatch_mcp(
         "tools/call", 2, {"name": "GetDateTime", "arguments": {}},
-        token, hass, data, "127.0.0.1",
+        access_key, hass, data, "127.0.0.1",
         base_url="http://homeassistant.local",
     )
     assert called["result"].get("isError") is not True
@@ -3193,32 +3193,32 @@ def _has_advisory(content) -> bool:
 
 @pytest.mark.asyncio
 async def test_stale_advisory_fires_once_per_epoch_and_resets_on_list():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     # Fresh fetch of the tool list echoes the settings version.
-    await _dispatch_mcp("tools/list", 1, {}, token, hass, data, "127.0.0.1",
+    await _dispatch_mcp("tools/list", 1, {}, access_key, hass, data, "127.0.0.1",
                         base_url="http://homeassistant.local")
-    assert token.tools_list_version == token.settings_version
-    assert not _has_advisory(await _dt_call(token, hass, data, 2))
+    assert access_key.tools_list_version == access_key.settings_version
+    assert not _has_advisory(await _dt_call(access_key, hass, data, 2))
 
     # Operator changes the token's settings after the fetch: advise ONCE.
-    token.settings_version += 1
-    assert _has_advisory(await _dt_call(token, hass, data, 3))
-    assert not _has_advisory(await _dt_call(token, hass, data, 4))
+    access_key.settings_version += 1
+    assert _has_advisory(await _dt_call(access_key, hass, data, 3))
+    assert not _has_advisory(await _dt_call(access_key, hass, data, 4))
 
     # A further change starts a new staleness epoch: advise once more.
-    token.settings_version += 1
-    assert _has_advisory(await _dt_call(token, hass, data, 5))
-    assert not _has_advisory(await _dt_call(token, hass, data, 6))
+    access_key.settings_version += 1
+    assert _has_advisory(await _dt_call(access_key, hass, data, 5))
+    assert not _has_advisory(await _dt_call(access_key, hass, data, 6))
 
     # A fresh tools/list clears everything.
-    await _dispatch_mcp("tools/list", 7, {}, token, hass, data, "127.0.0.1",
+    await _dispatch_mcp("tools/list", 7, {}, access_key, hass, data, "127.0.0.1",
                         base_url="http://homeassistant.local")
-    assert token.tools_list_version == token.settings_version
-    assert token.id not in data.stale_tools_advised
-    assert not _has_advisory(await _dt_call(token, hass, data, 8))
+    assert access_key.tools_list_version == access_key.settings_version
+    assert access_key.id not in data.stale_tools_advised
+    assert not _has_advisory(await _dt_call(access_key, hass, data, 8))
 
 
 def _has_catalog_advisory(content) -> bool:
@@ -3239,41 +3239,41 @@ async def test_a_deploy_advises_that_tool_schemas_may_have_changed():
     """
     from custom_components.phoenix_mcp import mcp_view
 
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
-    await _dispatch_mcp("tools/list", 1, {}, token, hass, data, "127.0.0.1",
+    await _dispatch_mcp("tools/list", 1, {}, access_key, hass, data, "127.0.0.1",
                         base_url="http://homeassistant.local")
-    assert token.tools_catalog_fingerprint == mcp_view._TOOL_CATALOG_FINGERPRINT
-    assert not _has_catalog_advisory(await _dt_call(token, hass, data, 2))
+    assert access_key.tools_catalog_fingerprint == mcp_view._TOOL_CATALOG_FINGERPRINT
+    assert not _has_catalog_advisory(await _dt_call(access_key, hass, data, 2))
 
     # A deploy: what this client fetched differs from what the build serves.
-    token.tools_catalog_fingerprint = "0000deadbeef0000"
-    assert _has_catalog_advisory(await _dt_call(token, hass, data, 3))
-    assert not _has_catalog_advisory(await _dt_call(token, hass, data, 4))
+    access_key.tools_catalog_fingerprint = "0000deadbeef0000"
+    assert _has_catalog_advisory(await _dt_call(access_key, hass, data, 3))
+    assert not _has_catalog_advisory(await _dt_call(access_key, hass, data, 4))
 
     # Reconnecting is the only fix, and it clears the notice.
-    await _dispatch_mcp("tools/list", 5, {}, token, hass, data, "127.0.0.1",
+    await _dispatch_mcp("tools/list", 5, {}, access_key, hass, data, "127.0.0.1",
                         base_url="http://homeassistant.local")
-    assert not _has_catalog_advisory(await _dt_call(token, hass, data, 6))
+    assert not _has_catalog_advisory(await _dt_call(access_key, hass, data, 6))
 
 
 @pytest.mark.asyncio
 async def test_a_token_that_never_recorded_a_fingerprint_is_never_catalog_stale():
     """Empty means no baseline, not staleness.
 
-    token_store cannot import mcp_view to learn the current fingerprint (the
+    access_key_store cannot import mcp_view to learn the current fingerprint (the
     dependency runs the other way), so a record written before this field
     existed has nothing to compare against. Advising on empty would fire once
     for every token on upgrade, for nothing.
     """
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
-    assert token.tools_catalog_fingerprint == ""
-    assert not _has_catalog_advisory(await _dt_call(token, hass, data, 1))
+    assert access_key.tools_catalog_fingerprint == ""
+    assert not _has_catalog_advisory(await _dt_call(access_key, hass, data, 1))
 
 
 def test_the_catalog_advisory_does_not_send_the_agent_to_the_capability_summary():
@@ -3330,22 +3330,22 @@ async def test_stale_advisory_suppressed_for_agentcli():
     and its call does not consume the staleness epoch for a real client."""
     from custom_components.phoenix_mcp.const import AGENTCLI_CLIENT_IP
 
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
-    token.settings_version += 1  # stale relative to tools_list_version (0)
+    access_key.settings_version += 1  # stale relative to tools_list_version (0)
 
     # An agentCLI-sentinel call gets no advisory and does not mark the epoch.
     res_ac, _m, _r, _o = await _dispatch_mcp(
         "tools/call", 1, {"name": "llm__GetDateTime", "arguments": {}},
-        token, hass, data, AGENTCLI_CLIENT_IP, base_url="http://homeassistant.local",
+        access_key, hass, data, AGENTCLI_CLIENT_IP, base_url="http://homeassistant.local",
     )
     assert not _has_advisory(res_ac["result"]["content"])
-    assert token.id not in data.stale_tools_advised
+    assert access_key.id not in data.stale_tools_advised
 
     # A real external client on the same token still gets advised once.
-    assert _has_advisory(await _dt_call(token, hass, data, 2))
+    assert _has_advisory(await _dt_call(access_key, hass, data, 2))
 
 
 @pytest.mark.asyncio
@@ -3354,32 +3354,32 @@ async def test_stale_advisory_suppressed_for_assist():
     never gets the advisory and does not consume the staleness epoch."""
     from custom_components.phoenix_mcp.const import ASSIST_CLIENT_IP
 
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
-    token.settings_version += 1
+    access_key.settings_version += 1
 
     res, _m, _r, _o = await _dispatch_mcp(
         "tools/call", 1, {"name": "llm__GetDateTime", "arguments": {}},
-        token, hass, data, ASSIST_CLIENT_IP, base_url="http://homeassistant.local",
+        access_key, hass, data, ASSIST_CLIENT_IP, base_url="http://homeassistant.local",
     )
     assert not _has_advisory(res["result"]["content"])
-    assert token.id not in data.stale_tools_advised
-    assert _has_advisory(await _dt_call(token, hass, data, 2))
+    assert access_key.id not in data.stale_tools_advised
+    assert _has_advisory(await _dt_call(access_key, hass, data, 2))
 
 
 @pytest.mark.asyncio
 async def test_stale_advisory_tagged_in_audit():
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _make_hass(data)
-    token.settings_version += 1  # never listed since the change
+    access_key.settings_version += 1  # never listed since the change
 
-    await _dt_call(token, hass, data)
+    await _dt_call(access_key, hass, data)
     kwargs = data.audit.record.call_args.kwargs
     assert kwargs["stale_tools_advisory"] is True
 
-    await _dt_call(token, hass, data, 2)
+    await _dt_call(access_key, hass, data, 2)
     kwargs = data.audit.record.call_args.kwargs
     assert kwargs["stale_tools_advisory"] is False
 
@@ -3388,11 +3388,11 @@ async def test_stale_advisory_tagged_in_audit():
 async def test_legacy_token_never_stale_on_upgrade():
     # Records written before the counters existed load with
     # tools_list_version == settings_version, so no spurious advisory.
-    token, _ = _make_token()
-    raw = token.to_storage_dict()
+    access_key, _ = _make_token()
+    raw = access_key.to_storage_dict()
     del raw["settings_version"]
     del raw["tools_list_version"]
-    loaded = TokenRecord.from_dict(raw)
+    loaded = AccessKeyRecord.from_dict(raw)
     data = _make_data(loaded)
     hass = _make_hass(data)
     assert not _has_advisory(await _dt_call(loaded, hass, data))
@@ -3425,7 +3425,7 @@ async def test_call_service_surfaces_validation_error_as_invalid_request(hass):
 
     hass.services.async_register("climate", "set_temperature", _raise)
 
-    token, _ = _make_token(pass_through=True)
+    access_key, _ = _make_token(pass_through=True)
     store = MagicMock()
     store.get_settings.return_value = MagicMock(mesa_mode="off")
     data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
@@ -3437,7 +3437,7 @@ async def test_call_service_surfaces_validation_error_as_invalid_request(hass):
             "entity_id": entry.entity_id,
             "service_data": {"temperature": 22},
         },
-        token,
+        access_key,
         hass,
         data,
     )
@@ -3480,7 +3480,7 @@ async def test_call_service_surfaces_schema_rejection_as_invalid_request(hass):
         schema=vol.Schema({vol.Required("message"): str}),
     )
 
-    token, _ = _make_token(pass_through=True)
+    access_key, _ = _make_token(pass_through=True)
     store = MagicMock()
     store.get_settings.return_value = MagicMock(mesa_mode="off")
     data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
@@ -3492,7 +3492,7 @@ async def test_call_service_surfaces_schema_rejection_as_invalid_request(hass):
             "entity_id": entry.entity_id,
             "service_data": {"message": "hi"},
         },
-        token,
+        access_key,
         hass,
         data,
     )
@@ -3522,12 +3522,12 @@ async def test_intent_action_surfaces_schema_rejection_as_invalid_request(hass):
         schema=vol.Schema({vol.Required("message"): str}),
     )
 
-    token, _ = _make_token(pass_through=True)
-    hass.data[DOMAIN] = _make_data(token)
+    access_key, _ = _make_token(pass_through=True)
+    hass.data[DOMAIN] = _make_data(access_key)
 
     result, outcome, _res = await _tool_intent_action(
         "HassBroadcast", "notify", "persistent_notification",
-        {"message": "hi"}, ["light.kitchen"], hass, token,
+        {"message": "hi"}, ["light.kitchen"], hass, access_key,
     )
     assert outcome == "invalid_request"
     assert result.get("isError") is True
@@ -3558,7 +3558,7 @@ async def test_call_service_service_not_found_stays_generic_forbidden(hass):
 
     hass.services.async_register("light", "make_bright", _raise)
 
-    token, _ = _make_token(pass_through=True)
+    access_key, _ = _make_token(pass_through=True)
     store = MagicMock()
     store.get_settings.return_value = MagicMock(mesa_mode="off")
     data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
@@ -3570,7 +3570,7 @@ async def test_call_service_service_not_found_stays_generic_forbidden(hass):
             "entity_id": entry.entity_id,
             "service_data": {},
         },
-        token,
+        access_key,
         hass,
         data,
     )
@@ -3605,8 +3605,8 @@ async def test_call_service_service_not_found_hints_verbs_for_core_domain(hass):
     # HA would for a service that is not actually registered.
     hass.services.async_register("valve", "open", _raise)
 
-    token, _ = _make_token(pass_through=True)
-    token.cap_physical_control = "allow"
+    access_key, _ = _make_token(pass_through=True)
+    access_key.cap_physical_control = "allow"
     store = MagicMock()
     store.get_settings.return_value = MagicMock(mesa_mode="off")
     data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
@@ -3618,7 +3618,7 @@ async def test_call_service_service_not_found_hints_verbs_for_core_domain(hass):
             "entity_id": entry.entity_id,
             "service_data": {},
         },
-        token,
+        access_key,
         hass,
         data,
     )
@@ -3650,15 +3650,15 @@ async def test_no_target_reload_executes_bare_without_entity_flattening(hass):
 
     hass.services.async_register("automation", "reload", _reload_handler)
 
-    token, _ = _make_token()
-    token.cap_yaml_edit = "allow"
+    access_key, _ = _make_token()
+    access_key.cap_yaml_edit = "allow"
     store = MagicMock()
     store.get_settings.return_value = MagicMock(mesa_mode="off")
     data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
 
     result, outcome, _res = await _execute_call_service(
         {"domain": "automation", "service": "reload"},
-        token, hass, data,
+        access_key, hass, data,
     )
     assert outcome == "allowed"
     assert result.get("isError") is not True
@@ -3679,15 +3679,15 @@ async def test_no_target_reload_denied_without_cap_yaml_edit(hass):
 
     hass.services.async_register("automation", "reload", _reload_handler)
 
-    token, _ = _make_token()
-    token.cap_yaml_edit = "deny"
+    access_key, _ = _make_token()
+    access_key.cap_yaml_edit = "deny"
     store = MagicMock()
     store.get_settings.return_value = MagicMock(mesa_mode="off")
     data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
 
     result, outcome, _res = await _tool_call_service(
         {"service": {"domain": "automation", "name": "reload"}},
-        token, hass, data, "rid-nt", "1.2.3.4",
+        access_key, hass, data, "rid-nt", "1.2.3.4",
     )
     assert outcome == "denied"
     assert result.get("isError") is True
@@ -3723,14 +3723,14 @@ async def test_no_target_reload_pending_under_confirm(hass):
 
     hass.services.async_register("automation", "reload", _reload_handler)
 
-    token, _ = _make_token()
-    token.cap_yaml_edit = "confirm"
+    access_key, _ = _make_token()
+    access_key.cap_yaml_edit = "confirm"
     store = _ApprStore()
     data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
 
     result, outcome, _res = await _tool_call_service(
         {"service": {"domain": "automation", "name": "reload"}},
-        token, hass, data, "rid-nt2", "1.2.3.4",
+        access_key, hass, data, "rid-nt2", "1.2.3.4",
     )
     assert outcome == "pending_approval"
     assert called == []
@@ -3746,15 +3746,15 @@ async def test_dry_run_no_target_reload_predicts_cap_yaml_edit(hass):
     from custom_components.phoenix_mcp.data import PhoenixData
     from custom_components.phoenix_mcp.mcp_view import _tool_dry_run_service
 
-    token, _ = _make_token()
-    token.cap_search = "allow"
-    token.cap_yaml_edit = "confirm"
+    access_key, _ = _make_token()
+    access_key.cap_search = "allow"
+    access_key.cap_yaml_edit = "confirm"
     store = MagicMock()
     store.get_settings.return_value = MagicMock(mesa_mode="off")
     data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
 
     result, outcome, _res = await _tool_dry_run_service(
-        {"service": {"domain": "automation", "name": "reload"}}, token, hass, data,
+        {"service": {"domain": "automation", "name": "reload"}}, access_key, hass, data,
     )
     assert outcome == "allowed"
     body = json.loads(result["content"][0]["text"])
@@ -3838,9 +3838,9 @@ async def test_prompts_list_returns_the_assist_prompt_for_a_pass_through_token()
 
     from homeassistant.helpers import llm as ha_llm
 
-    token, _ = _make_token()
-    token.pass_through = True
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    access_key.pass_through = True
+    data = _make_data(access_key)
     hass = _make_hass(data)
 
     async def _fake_get_api(hass_, api_id, llm_context):
@@ -3848,7 +3848,7 @@ async def test_prompts_list_returns_the_assist_prompt_for_a_pass_through_token()
 
     with patch.object(ha_llm, "async_get_api", new=_fake_get_api):
         res, _m, _r, _o = await _dispatch_mcp(
-            "prompts/list", 1, {}, token, hass, data, "127.0.0.1",
+            "prompts/list", 1, {}, access_key, hass, data, "127.0.0.1",
             base_url="http://homeassistant.local",
         )
 
@@ -3881,15 +3881,15 @@ async def test_inline_wait_is_skipped_when_the_token_already_has_one_pending():
     from custom_components.phoenix_mcp.tool_common import _pending_or_inline
 
     approval = SimpleNamespace(id="appr-2", tool_name="create_scene", expires_at=None)
-    token = _make_physical_token("confirm")
-    token.confirm_inline_wait_seconds = 60
-    token.id = "tid"
+    access_key = _make_physical_token("confirm")
+    access_key.confirm_inline_wait_seconds = 60
+    access_key.id = "tid"
     # Something else from this token is already waiting on the operator.
     data = _inline_wait_data([_pending_for("appr-1")])
 
     with patch("custom_components.phoenix_mcp.tool_common._await_inline_confirm",
                new=AsyncMock()) as inline:
-        _content, outcome, _resource = await _pending_or_inline(MagicMock(), data, token, approval)
+        _content, outcome, _resource = await _pending_or_inline(MagicMock(), data, access_key, approval)
 
     assert inline.await_count == 0
     assert outcome == "pending_approval"
@@ -3906,15 +3906,15 @@ async def test_the_first_confirm_still_waits():
     from custom_components.phoenix_mcp.tool_common import _pending_or_inline
 
     approval = SimpleNamespace(id="appr-1", tool_name="create_scene", expires_at=None)
-    token = _make_physical_token("confirm")
-    token.confirm_inline_wait_seconds = 60
-    token.id = "tid"
+    access_key = _make_physical_token("confirm")
+    access_key.confirm_inline_wait_seconds = 60
+    access_key.id = "tid"
     data = _inline_wait_data([])
 
     sentinel = ({"content": []}, "pending_approval", "approval:create_scene:appr-1")
     with patch("custom_components.phoenix_mcp.tool_common._await_inline_confirm",
                new=AsyncMock(return_value=sentinel)) as inline:
-        out = await _pending_or_inline(MagicMock(), data, token, approval)
+        out = await _pending_or_inline(MagicMock(), data, access_key, approval)
 
     assert inline.await_count == 1
     assert out is sentinel
@@ -3931,15 +3931,15 @@ async def test_the_calls_own_approval_does_not_count_as_a_backlog():
     from custom_components.phoenix_mcp.tool_common import _pending_or_inline
 
     approval = SimpleNamespace(id="appr-1", tool_name="create_scene", expires_at=None)
-    token = _make_physical_token("confirm")
-    token.confirm_inline_wait_seconds = 60
-    token.id = "tid"
+    access_key = _make_physical_token("confirm")
+    access_key.confirm_inline_wait_seconds = 60
+    access_key.id = "tid"
     # The ONLY pending record is this call's own.
     data = _inline_wait_data([_pending_for("appr-1")])
 
     with patch("custom_components.phoenix_mcp.tool_common._await_inline_confirm",
                new=AsyncMock(return_value=("x", "pending_approval", "r"))) as inline:
-        await _pending_or_inline(MagicMock(), data, token, approval)
+        await _pending_or_inline(MagicMock(), data, access_key, approval)
 
     assert inline.await_count == 1
 
@@ -3951,14 +3951,14 @@ async def test_another_tokens_backlog_does_not_suppress_this_tokens_wait():
     from custom_components.phoenix_mcp.tool_common import _pending_or_inline
 
     approval = SimpleNamespace(id="appr-2", tool_name="create_scene", expires_at=None)
-    token = _make_physical_token("confirm")
-    token.confirm_inline_wait_seconds = 60
-    token.id = "tid"
+    access_key = _make_physical_token("confirm")
+    access_key.confirm_inline_wait_seconds = 60
+    access_key.id = "tid"
     data = _inline_wait_data([_pending_for("appr-9", token_id="someone-else")])
 
     with patch("custom_components.phoenix_mcp.tool_common._await_inline_confirm",
                new=AsyncMock(return_value=("x", "pending_approval", "r"))) as inline:
-        await _pending_or_inline(MagicMock(), data, token, approval)
+        await _pending_or_inline(MagicMock(), data, access_key, approval)
 
     assert inline.await_count == 1
 
@@ -3976,11 +3976,11 @@ async def test_wait_for_many_returns_at_once_when_all_already_resolved(hass):
     b = _approval_record("rejected", rejected_reason="nope")
     b["id"] = "appr-2"
     data = _inline_wait_data([a, b])
-    token = _make_physical_token("confirm")
-    token.id = "tid"
+    access_key = _make_physical_token("confirm")
+    access_key.id = "tid"
 
     content, outcome, resource = await _tool_wait_for_approval(
-        {"approval_ids": ["appr-1", "appr-2"]}, token, hass, data)
+        {"approval_ids": ["appr-1", "appr-2"]}, access_key, hass, data)
 
     body = json.loads(content["content"][0]["text"])
     assert outcome == "allowed" and resource == "approvals:2"
@@ -4004,11 +4004,11 @@ async def test_wait_for_many_reports_which_ones_are_still_outstanding(hass):
     still = _approval_record("pending")
     still["id"] = "appr-2"
     data = _inline_wait_data([done, still])
-    token = _make_physical_token("confirm")
-    token.id = "tid"
+    access_key = _make_physical_token("confirm")
+    access_key.id = "tid"
 
     content, outcome, _r = await _tool_wait_for_approval(
-        {"approval_ids": ["appr-1", "appr-2"], "timeout": 0}, token, hass, data)
+        {"approval_ids": ["appr-1", "appr-2"], "timeout": 0}, access_key, hass, data)
 
     body = json.loads(content["content"][0]["text"])
     assert outcome == "allowed"
@@ -4024,13 +4024,13 @@ async def test_wait_for_many_refuses_another_tokens_approval(hass):
     other["id"] = "appr-1"
     other["token_id"] = "someone-else"
     data = _inline_wait_data([other])
-    token = _make_physical_token("confirm")
-    token.id = "tid"
+    access_key = _make_physical_token("confirm")
+    access_key.id = "tid"
 
     theirs, outcome_theirs, _r1 = await _tool_wait_for_approval(
-        {"approval_ids": ["appr-1"]}, token, hass, data)
+        {"approval_ids": ["appr-1"]}, access_key, hass, data)
     ghost, outcome_ghost, _r2 = await _tool_wait_for_approval(
-        {"approval_ids": ["appr-nope"]}, token, hass, data)
+        {"approval_ids": ["appr-nope"]}, access_key, hass, data)
 
     assert outcome_theirs == outcome_ghost == "not_found"
     assert theirs == ghost
@@ -4042,10 +4042,10 @@ async def test_wait_for_many_rejects_a_malformed_list(hass, bad):
     from custom_components.phoenix_mcp.mcp_view import _tool_wait_for_approval
 
     data = _inline_wait_data([])
-    token = _make_physical_token("confirm")
-    token.id = "tid"
+    access_key = _make_physical_token("confirm")
+    access_key.id = "tid"
     _content, outcome, _r = await _tool_wait_for_approval(
-        {"approval_ids": bad}, token, hass, data)
+        {"approval_ids": bad}, access_key, hass, data)
     assert outcome == "invalid_request"
 
 
@@ -4092,11 +4092,11 @@ async def test_wait_for_many_summarizes_results_so_a_batch_fits_in_one_reply(has
         rec["tool_name"] = "edit_automation"
         records.append(rec)
     data = _inline_wait_data(records)
-    token = _make_physical_token("confirm")
-    token.id = "tid"
+    access_key = _make_physical_token("confirm")
+    access_key.id = "tid"
 
     content, outcome, _r = await _tool_wait_for_approval(
-        {"approval_ids": [r["id"] for r in records]}, token, hass, data)
+        {"approval_ids": [r["id"] for r in records]}, access_key, hass, data)
 
     raw = content["content"][0]["text"]
     body = json.loads(raw)
@@ -4132,11 +4132,11 @@ async def test_wait_for_many_keeps_a_failed_execution_readable(hass):
     good = _approval_record("approved", result={"tool_result": _authoring_result()})
     good["id"] = "appr-2"
     data = _inline_wait_data([bad, good])
-    token = _make_physical_token("confirm")
-    token.id = "tid"
+    access_key = _make_physical_token("confirm")
+    access_key.id = "tid"
 
     content, _o, _r = await _tool_wait_for_approval(
-        {"approval_ids": ["appr-1", "appr-2"]}, token, hass, data)
+        {"approval_ids": ["appr-1", "appr-2"]}, access_key, hass, data)
 
     first, second = json.loads(content["content"][0]["text"])["approvals"]
     assert first["result_is_error"] is True
@@ -4158,10 +4158,10 @@ async def test_single_id_wait_still_returns_the_full_result(hass):
     rec = _approval_record("approved", result={"tool_result": _authoring_result()})
     rec["id"] = "appr-1"
     data = _inline_wait_data([rec])
-    token = _make_physical_token("confirm")
-    token.id = "tid"
+    access_key = _make_physical_token("confirm")
+    access_key.id = "tid"
 
-    content, outcome, _r = await _tool_wait_for_approval({"approval_id": "appr-1"}, token, hass, data)
+    content, outcome, _r = await _tool_wait_for_approval({"approval_id": "appr-1"}, access_key, hass, data)
     assert outcome == "invalid_request" and content["isError"] is True
 
 
@@ -4174,11 +4174,11 @@ async def test_wait_for_many_reports_a_pending_record_with_no_result_fields(hass
     still = _approval_record("pending")
     still["id"] = "appr-1"
     data = _inline_wait_data([still])
-    token = _make_physical_token("confirm")
-    token.id = "tid"
+    access_key = _make_physical_token("confirm")
+    access_key.id = "tid"
 
     content, _o, _r = await _tool_wait_for_approval(
-        {"approval_ids": ["appr-1"], "timeout": 0}, token, hass, data)
+        {"approval_ids": ["appr-1"], "timeout": 0}, access_key, hass, data)
 
     entry = json.loads(content["content"][0]["text"])["approvals"][0]
     assert entry["status"] == "pending"
@@ -4193,11 +4193,11 @@ async def test_wait_for_many_dedupes_repeated_ids(hass):
     rec = _approval_record("approved", result={"tool_result": {"content": []}})
     rec["id"] = "appr-1"
     data = _inline_wait_data([rec])
-    token = _make_physical_token("confirm")
-    token.id = "tid"
+    access_key = _make_physical_token("confirm")
+    access_key.id = "tid"
 
     content, _o, resource = await _tool_wait_for_approval(
-        {"approval_ids": ["appr-1", "appr-1"]}, token, hass, data)
+        {"approval_ids": ["appr-1", "appr-1"]}, access_key, hass, data)
 
     body = json.loads(content["content"][0]["text"])
     assert len(body["approvals"]) == 1 and resource == "approvals:1"
@@ -4210,11 +4210,11 @@ async def test_single_id_form_is_untouched(hass):
 
     rec = _approval_record("approved", result={"tool_result": {"content": []}})
     data = _inline_wait_data([rec])
-    token = _make_physical_token("confirm")
-    token.id = "tid"
+    access_key = _make_physical_token("confirm")
+    access_key.id = "tid"
 
     content, outcome, _r = await _tool_wait_for_approval(
-        {"approval_id": "appr-1"}, token, hass, data)
+        {"approval_id": "appr-1"}, access_key, hass, data)
     assert outcome == "invalid_request" and content["isError"] is True
 
 
@@ -4222,13 +4222,13 @@ async def test_single_id_form_is_untouched(hass):
 async def test_untargeted_service_refusal_explains_unsupported_targetless_calls(hass, domain, service):
     from custom_components.phoenix_mcp.mcp_view import _tool_call_service, _execute_call_service
 
-    token, _ = _make_token(pass_through=True)
-    data = _make_data(token)
+    access_key, _ = _make_token(pass_through=True)
+    data = _make_data(access_key)
     hass.data[DOMAIN] = data
     for handler in (_tool_call_service, _execute_call_service):
         args = ({"service": {"domain": domain, "name": service, "data": {"message": "fixture"}}}
                 if handler is _tool_call_service else
                 {"domain": domain, "service": service, "service_data": {"message": "fixture"}})
-        response, outcome, _ = await handler(args, token, hass, data)
+        response, outcome, _ = await handler(args, access_key, hass, data)
         assert outcome == "invalid_request"
         assert "Targetless services outside the supported allowlist are unavailable" in response["content"][0]["text"]

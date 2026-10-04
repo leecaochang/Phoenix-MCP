@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, screen, waitFor } from "@testing-library/react";
 
-const listTokens = vi.fn();
+const listAccessKeys = vi.fn();
 
 vi.mock("../api", () => ({
-  api: { listTokens: (...a: unknown[]) => listTokens(...a) },
+  api: { listAccessKeys: (...a: unknown[]) => listAccessKeys(...a) },
 }));
 
 import { AssistBridgeSettings } from "../components/AssistBridgeSettings";
@@ -17,7 +17,7 @@ function settings(over: Partial<GlobalSettings> = {}): GlobalSettings {
 describe("AssistBridgeSettings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listTokens.mockResolvedValue([{ id: "tok-1", name: "voice-token" }]);
+    listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "voice-token" }]);
   });
 
   it("lists tokens and binds the selected one", async () => {
@@ -37,7 +37,7 @@ describe("AssistBridgeSettings", () => {
   it("unbinds via the 'Not bound' option (empty string)", async () => {
     const onChange = vi.fn();
     render(<AssistBridgeSettings settings={settings({ assist_bound_token_id: "tok-1" })} onChange={onChange} saving={false} />);
-    await waitFor(() => expect(listTokens).toHaveBeenCalled());
+    await waitFor(() => expect(listAccessKeys).toHaveBeenCalled());
     fireEvent.change(screen.getByLabelText("Assist bound access key"), { target: { value: "" } });
     expect(onChange).toHaveBeenCalledWith("assist_bound_token_id", "");
   });

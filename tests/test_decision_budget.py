@@ -132,8 +132,8 @@ async def test_authority_checked_after_reservation_before_any_network():
 
 
 @pytest.mark.parametrize('value', [-1, True, '10', 1.5, 100001, None, 0, 25, 100000])
-async def test_admin_budget_validates_integer_bounds(hass, token_store, value):
-    changes, error = await _validated_settings_patch({'decision_request_budget': value}, SimpleNamespace(store=token_store), hass, 'rid')
+async def test_admin_budget_validates_integer_bounds(hass, access_key_store, value):
+    changes, error = await _validated_settings_patch({'decision_request_budget': value}, SimpleNamespace(store=access_key_store), hass, 'rid')
     if type(value) is int and 0 <= value <= 100000:
         assert error is None and changes['decision_request_budget'] == value
     else:

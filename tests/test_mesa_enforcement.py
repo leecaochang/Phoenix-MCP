@@ -21,13 +21,13 @@ from custom_components.phoenix_mcp.mesa import (
     evaluate_service_entities,
 )
 import custom_components.phoenix_mcp.mesa as mesa_module
-from custom_components.phoenix_mcp.token_store import GlobalSettings
+from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 from custom_components.phoenix_mcp.mesa_core import ControlMode, MetadataOrigin, SemanticProfile
-from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 
 
-def _token() -> TokenRecord:
-    return TokenRecord(
+def _access_key() -> AccessKeyRecord:
+    return AccessKeyRecord(
         id="tok",
         name="t",
         token_hash="x",
@@ -56,7 +56,7 @@ def _set_profile(runtime, entity_id, control_mode, *, enforcement_mode=None):
 
 def _evaluate(runtime, mode, entities, **kw):
     return evaluate_service_entities(
-        runtime, mode, _token(), entities,
+        runtime, mode, _access_key(), entities,
         domain="light", service="turn_on", service_data={}, session_id="s", **kw,
     )
 
@@ -177,7 +177,7 @@ def test_each_entity_is_evaluated_against_its_exact_service_data():
     verdict = evaluate_service_entities(
         runtime,
         "enforced",
-        _token(),
+        _access_key(),
         ["media_player.one", "media_player.two"],
         domain="media_player",
         service="volume_set",
@@ -228,7 +228,7 @@ async def test_one_mesa_approval_preserves_every_entity_specific_value(
     outcome = await async_apply_mesa_to_call(
         hass,
         data,
-        _token(),
+        _access_key(),
         domain="media_player",
         service="volume_set",
         service_data={},
@@ -277,7 +277,7 @@ async def test_custom_mesa_approval_preserves_tool_args_and_diff(
     outcome = await async_apply_mesa_to_call(
         hass,
         data,
-        _token(),
+        _access_key(),
         domain="zigbee",
         service="set_property",
         service_data={"property": "led_mode", "value": "on"},
@@ -318,7 +318,7 @@ async def test_require_all_mesa_denies_mixed_allowed_and_blocked(
     outcome = await async_apply_mesa_to_call(
         hass,
         data,
-        _token(),
+        _access_key(),
         domain="zigbee",
         service="set_property",
         service_data={"property": "led_mode", "value": "on"},

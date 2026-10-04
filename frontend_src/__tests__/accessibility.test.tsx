@@ -4,7 +4,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { PermissionSelector } from "../components/PermissionSelector";
 import { TagInput } from "../components/TagInput";
 import { AuditTable } from "../components/AuditTable";
-import { TokenCreateModal } from "../components/TokenCreateModal";
+import { AccessKeyCreateModal } from "../components/AccessKeyCreateModal";
 import { Loading } from "../components/common";
 import type { AuditEntry } from "../types";
 
@@ -57,7 +57,7 @@ describe("accessibility regressions", () => {
     render(
       <AuditTable
         entries={[entry]}
-        tokenNames={{ "tok-1": "demo" }}
+        accessKeyNames={{ "tok-1": "demo" }}
       />,
     );
 
@@ -141,7 +141,7 @@ describe("accessibility regressions", () => {
     const { container } = render(
       <AuditTable
         entries={[entry]}
-        tokenNames={{ "tok-1": "demo" }}
+        accessKeyNames={{ "tok-1": "demo" }}
       />,
     );
 
@@ -151,7 +151,7 @@ describe("accessibility regressions", () => {
 
   it("associates the token-name validation error with the input", () => {
     render(
-      <TokenCreateModal
+      <AccessKeyCreateModal
         existingNames={[]}
         onCreated={() => undefined}
         onClose={() => undefined}
@@ -161,7 +161,7 @@ describe("accessibility regressions", () => {
 
     const input = screen.getByLabelText("Name (required)");
     // Valid name: no error state advertised.
-    fireEvent.change(input, { target: { value: "my_token" } });
+    fireEvent.change(input, { target: { value: "my_access_key" } });
     expect(input).not.toHaveAttribute("aria-invalid");
     // Too-short name: aria-invalid + described-by the alert-role error.
     fireEvent.change(input, { target: { value: "ab" } });

@@ -90,13 +90,13 @@ class DecisionShadow:
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
 
-    def start(self, hass: Any, data: Any, token: Any, sentence: object,
+    def start(self, hass: Any, data: Any, access_key: Any, sentence: object,
               language: object, *, observe: bool = False, targets: bool = False,
               prepare: bool = False, observe_chat: bool = False, ingress: str = "voice",
               joint_only: bool = False) -> asyncio.Task | None:
         if self.task is not None:
             return None
-        authority = RoutingAuthority.capture(data, token)
+        authority = RoutingAuthority.capture(data, access_key)
         task = hass.async_create_background_task(
             self._evaluate(hass, data, authority, sentence, language, targets, prepare, ingress, joint_only), "phoenix_decision_shadow")
         self.task = task
@@ -235,11 +235,11 @@ class DecisionShadow:
             return result("provider_fallback")
         if not confident_choice(category):
             return result("low_probability")
-        token = authority.current(hass)
-        if token is None:
+        access_key = authority.current(hass)
+        if access_key is None:
             return result("authority_changed")
         try:
-            snapshot = capture_sequential_targets(hass, token, category["choice"])
+            snapshot = capture_sequential_targets(hass, access_key, category["choice"])
             if not snapshot.targets:
                 return result("no_target")
             operation = numeric_operation(DECISION_TARGET_INTENTS[category["choice"]])
@@ -256,11 +256,11 @@ class DecisionShadow:
             answer = await provider.select_target(session, sentence, category["choice"], snapshot.targets, timeout_ms, language)
             source_value = (await hass.async_add_executor_job(read_explicit_percentage, sentence, language)
                             if operation is not None else None)
-            token = authority.current(hass)
-            if token is None:
+            access_key = authority.current(hass)
+            if access_key is None:
                 return result("authority_changed")
             try:
-                current = capture_sequential_targets(hass, token, category["choice"])
+                current = capture_sequential_targets(hass, access_key, category["choice"])
             except DecisionError:
                 return result("targets_changed")
             if current != snapshot:
@@ -287,7 +287,7 @@ class DecisionShadow:
                 selection["value_check"] = compare_percentage(source_value, proposal[operation.proposal_field])
             if prepare:
                 from .command_execution import _capture_plan, _digest
-                plan = _capture_plan(hass, authority.data, token, proposal, ingress=ingress)
+                plan = _capture_plan(hass, authority.data, access_key, proposal, ingress=ingress)
                 if plan is None:
                     return result("targets_changed")
                 plan["decision_target_evidence"] = _digest(proposal)
@@ -298,7 +298,7 @@ class DecisionShadow:
             return result(str(error))
 
 
-async def async_preview_decision(hass: Any, data: Any, token: Any, sentence: str,
+async def async_preview_decision(hass: Any, data: Any, access_key: Any, sentence: str,
                                  language: object, local: dict, *, targets: bool = False,
                                  prepare: bool = False, ingress: str = "voice",
                                  cancel: asyncio.Event | None = None, joint_only: bool = False) -> dict:
@@ -306,7 +306,7 @@ async def async_preview_decision(hass: Any, data: Any, token: Any, sentence: str
     if local["reason"] not in ("no_match", "unsupported", "no_target"):
         return {"reason": "local_match" if local["proposal"] else "local_unavailable",
                 "decision": None, "executed": False, "elapsed_ms": 0}
-    task = data.decision_shadow.start(hass, data, token, sentence, language, targets=targets, prepare=prepare, ingress=ingress, joint_only=joint_only)
+    task = data.decision_shadow.start(hass, data, access_key, sentence, language, targets=targets, prepare=prepare, ingress=ingress, joint_only=joint_only)
     if task is None:
         return {"reason": "busy", "decision": None, "executed": False, "elapsed_ms": 0}
     cancelled = {"reason": "cancelled", "decision": None, "executed": False, "elapsed_ms": 0}

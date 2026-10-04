@@ -442,7 +442,7 @@
       "codexHeaderValueLabel": "Header-Wert",
       "codexServerNameLabel": "Servername",
       "connectAgentTitle": "Phoenix MCP mit Ihrem KI-Agenten verbinden",
-      "connectIntro": "Fügen Sie Phoenix MCP in Ihrem Agenten als MCP-Server hinzu. Die Authentifizierung erfolgt mit <code>Authorization: Bearer <token></code>, nicht über die Home Assistant-Anmeldung oder OAuth. Verwenden Sie HTTPS über nicht vertrauenswürdige Netzwerke. Halten Sie Bearer-Zugriffsschlüssel aus dem Shell-Verlauf, geteilten Dateien, Screenshots und der Versionskontrolle fern. Erneuern Sie offengelegte Zugriffsschlüssel.",
+      "connectIntro": "Fügen Sie Phoenix MCP in Ihrem Agenten als MCP-Server hinzu. Die Authentifizierung erfolgt mit <code>Authorization: Bearer phx_...</code>, nicht über die Home Assistant-Anmeldung oder OAuth. Verwenden Sie HTTPS über nicht vertrauenswürdige Netzwerke. Halten Sie Bearer-Zugriffsschlüssel aus dem Shell-Verlauf, geteilten Dateien, Screenshots und der Versionskontrolle fern. Erneuern Sie offengelegte Zugriffsschlüssel.",
       "connectLater": "Später verbinden",
       "connectTitle": "Verbinden Sie Ihren ersten KI-Agenten",
       "connected": "Verbunden! Ihr Agent hat Phoenix MCP erreicht.",
@@ -608,7 +608,7 @@
       "nameDuplicateError": "Ein Zugriffsschlüssel mit diesem Namen (oder einem entsprechenden Slug) ist bereits vorhanden.",
       "nameFormatError": "Der Name muss 3-32 Zeichen lang sein: Buchstaben, Ziffern, _ oder -.",
       "nameLabel": "Name (erforderlich)",
-      "namePlaceholder": "my_token",
+      "namePlaceholder": "my_access_key",
       "nameRuleError": "3-32 Zeichen: Buchstaben, Zahlen, Bindestriche oder Unterstriche.",
       "off": "aus",
       "on": "an",
@@ -2284,8 +2284,8 @@
     }
   },
   "notification": {
-    "approval.message": "Zugriffsschlüssel „{token}“ hat eine Genehmigung angefordert.\n\n[In Phoenix MCP prüfen]({url})",
-    "rate_limit.message": "Phoenix MCP: Zugriffsschlüssel „{token}“ hat sein Ratenlimit erreicht.",
+    "approval.message": "Zugriffsschlüssel „{access_key}“ hat eine Genehmigung angefordert.\n\n[In Phoenix MCP prüfen]({url})",
+    "rate_limit.message": "Phoenix MCP: Zugriffsschlüssel „{access_key}“ hat sein Ratenlimit erreicht.",
     "rate_limit.title": "Phoenix MCP-Alarm"
   },
   "voice": {

@@ -14,7 +14,7 @@ from custom_components.phoenix_mcp.const import DOMAIN, DECISION_REFERENCE_CHECK
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.decision_provider import DecisionProvider
 from custom_components.phoenix_mcp.decision_reference import async_preview_reference
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
 
 HISTORY = [{'role': 'user', 'content': 'turn on Desk lamp'},
            {'role': 'assistant', 'content': 'Command sent.'}]
@@ -33,31 +33,31 @@ def wire(route='light_off', reference='bound', constraints='clear', probability=
 
 
 @pytest.fixture
-async def reference_home(hass, token_store):
-    token, _ = await token_store.async_create_token('reference', 'test')
-    token.permissions = PermissionTree(domains={'light': PermissionNode(state='GREEN')})
-    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+async def reference_home(hass, access_key_store):
+    access_key, _ = await access_key_store.async_create_access_key('reference', 'test')
+    access_key.permissions = PermissionTree(domains={'light': PermissionNode(state='GREEN')})
+    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
     store = agentcli.AgentCliStore(AsyncMock())
     hass.data['_phoenix_agentcli_store'] = store
     account = await store.add('typesafe', {'api_key': 'reference-private-key', 'model': 'jev-latest'})
-    await token_store.async_patch_settings(decision_provider_id=account, command_routing_timeout_ms=5000)
+    await access_key_store.async_patch_settings(decision_provider_id=account, command_routing_timeout_ms=5000)
     assert await async_setup_component(hass, 'homeassistant', {})
     assert await async_setup_component(hass, 'conversation', {})
     entry = er.async_get(hass).async_get_or_create('light', 'test', 'desk', original_name='Desk lamp')
     hass.states.async_set(entry.entity_id, 'off', {'friendly_name': 'Desk lamp', 'access_token': 'never-share-state'})
     async_expose_entity(hass, 'conversation', entry.entity_id, True)
-    local = await async_evaluate_command(hass, data, token, HISTORY[0]['content'], 'en', preview=True)
+    local = await async_evaluate_command(hass, data, access_key, HISTORY[0]['content'], 'en', preview=True)
     assert local['reason'] == 'supported'
-    yield data, token, store, account, entry.entity_id
+    yield data, access_key, store, account, entry.entity_id
     data.decision_shadow.cancel()
     if data.decision_shadow.task:
         await asyncio.gather(data.decision_shadow.task, return_exceptions=True)
 
 
 async def preview(hass, home, **kwargs):
-    data, token, *_ = home
-    return await async_preview_reference(hass, data, token, kwargs.get('sentence', 'turn it off'),
+    data, access_key, *_ = home
+    return await async_preview_reference(hass, data, access_key, kwargs.get('sentence', 'turn it off'),
         kwargs.get('language', 'en'), kwargs.get('history', HISTORY), kwargs.get('local', MISS))
 
 
@@ -93,7 +93,7 @@ async def test_reference_preview_has_fixed_target_and_no_execution(hass, referen
     ('unexposed', 'local_unavailable'), ('busy', 'busy'), ('revoked', 'authority_changed'),
 ])
 async def test_ineligible_reference_never_calls_provider(hass, reference_home, case, reason):
-    data, token, _, _, entity_id = reference_home
+    data, access_key, _, _, entity_id = reference_home
     kwargs = {}; history = deepcopy(HISTORY)
     if case == 'language': kwargs['language'] = 'xx'
     if case == 'structured': history[0]['content'] = [{'type': 'text', 'text': 'turn on Desk lamp'}]
@@ -109,7 +109,7 @@ async def test_ineligible_reference_never_calls_provider(hass, reference_home, c
         async_expose_entity(hass, 'conversation', other.entity_id, True)
     if case == 'unexposed': async_expose_entity(hass, 'conversation', entity_id, False)
     if case == 'busy': data.decision_shadow.task = asyncio.create_task(asyncio.sleep(20))
-    if case == 'revoked': token.revoked = True
+    if case == 'revoked': access_key.revoked = True
     with patch.object(DecisionProvider, '_request') as request:
         result = await preview(hass, reference_home, history=history, **kwargs)
     assert result['reason'] == reason
@@ -136,16 +136,16 @@ async def test_reference_requires_all_complete_confident_checks(hass, reference_
 @pytest.mark.parametrize('change,reason', [('scope', 'context_changed'), ('name', 'context_changed'),
     ('competitor', 'context_changed'), ('account', 'authority_changed'), ('revoke', 'authority_changed')])
 async def test_reference_rechecks_authority_and_competitors_after_wait(hass, reference_home, change, reason):
-    _, token, store, account, entity_id = reference_home
+    _, access_key, store, account, entity_id = reference_home
     async def response(*args):
-        if change == 'scope': token.permissions.domains['light'].state = 'RED'
+        if change == 'scope': access_key.permissions.domains['light'].state = 'RED'
         if change == 'name': er.async_get(hass).async_update_entity(entity_id, aliases={'New alias'})
         if change == 'competitor':
             other = er.async_get(hass).async_get_or_create('light', 'test', 'other', original_name='Other lamp')
             hass.states.async_set(other.entity_id, 'off')
             async_expose_entity(hass, 'conversation', other.entity_id, True)
         if change == 'account': await store.set_model(account, 'other-model')
-        if change == 'revoke': token.revoked = True
+        if change == 'revoke': access_key.revoked = True
         return wire()
     with patch.object(DecisionProvider, '_request', side_effect=response):
         result = await preview(hass, reference_home)
@@ -176,8 +176,8 @@ async def test_reference_deadline_releases_shared_slot(hass, reference_home):
 
 
 async def test_readable_anchor_cannot_become_a_write_candidate(hass, reference_home):
-    _, token, *_ = reference_home
-    token.permissions.domains['light'].state = 'YELLOW'
+    _, access_key, *_ = reference_home
+    access_key.permissions.domains['light'].state = 'YELLOW'
     history = [{'role': 'user', 'content': 'what is the state of Desk lamp'}, HISTORY[1]]
     with patch.object(DecisionProvider, '_request', AsyncMock(return_value=wire())) as request:
         result = await preview(hass, reference_home, history=history)
@@ -203,8 +203,8 @@ async def test_competitor_change_during_anchor_recognition_skips_provider(hass, 
 
 async def prepare(hass, home, *, cancel=None):
     from custom_components.phoenix_mcp.decision_reference import async_prepare_chat_reference
-    data, token, *_ = home
-    return await async_prepare_chat_reference(hass, data, token, 'turn it off', 'en', HISTORY, MISS,
+    data, access_key, *_ = home
+    return await async_prepare_chat_reference(hass, data, access_key, 'turn it off', 'en', HISTORY, MISS,
                                               cancel if cancel is not None else asyncio.Event())
 
 
@@ -212,13 +212,13 @@ async def prepare(hass, home, *, cancel=None):
     'account', 'account_restored', 'scope', 'alias', 'competitor', 'voice', 'context', 'language', 'revision'])
 async def test_reference_plan_binds_proposal_account_and_complete_catalog(hass, reference_home, change):
     from custom_components.phoenix_mcp.command_execution import plan_is_current
-    data, token, store, account, entity_id = reference_home
+    data, access_key, store, account, entity_id = reference_home
     await data.store.async_patch_settings(agentcli_routing_mode='auto')
     with patch.object(DecisionProvider, '_request', AsyncMock(return_value=wire())):
         result = await prepare(hass, reference_home)
     assert result['reason'] == 'plan_ready'
     plan = result['_plan']
-    assert plan_is_current(plan, hass, data, token)
+    assert plan_is_current(plan, hass, data, access_key)
     assert 'turn it off' not in repr(plan) and 'Command sent.' not in repr(plan)
     assert result['executed'] is False and not data.store.get_pending_approvals()
     if change == 'proposal': plan['proposal']['intent'] = 'HassTurnOn'
@@ -230,7 +230,7 @@ async def test_reference_plan_binds_proposal_account_and_complete_catalog(hass, 
     if change in ('account', 'account_restored'):
         await store.set_model(account, 'other')
         if change == 'account_restored': await store.set_model(account, 'jev-latest')
-    if change == 'scope': token.permissions.domains['light'].state = 'RED'
+    if change == 'scope': access_key.permissions.domains['light'].state = 'RED'
     if change == 'alias': er.async_get(hass).async_update_entity(entity_id, aliases={'New name'})
     if change == 'competitor':
         other = er.async_get(hass).async_get_or_create('light', 'test', 'other', original_name='Other')
@@ -240,7 +240,7 @@ async def test_reference_plan_binds_proposal_account_and_complete_catalog(hass, 
     if change == 'context': plan['context_review'] = {}
     if change == 'language': plan['reference_review']['language'] = 'es'
     if change == 'revision': plan['reference_review']['model'] = 'unqualified'
-    assert plan_is_current(plan, hass, data, token) is (change == 'none')
+    assert plan_is_current(plan, hass, data, access_key) is (change == 'none')
 
 
 @pytest.mark.parametrize('case,calls', [('mode', 0), ('account', 0), ('revision', 1), ('cancelled', 0)])

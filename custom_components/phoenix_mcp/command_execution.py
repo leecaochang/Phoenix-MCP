@@ -37,7 +37,7 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=str).encode()).hexdigest()
 
 
-def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str, *,
+def _target_fingerprint(hass: Any, access_key: Any, entity_id: str, intent: str, *,
                         devices: DeviceRegistrySnapshot | None = None) -> str | None:
     """Return a digest of the target's identity and command state, or None if ineligible.
 
@@ -55,7 +55,7 @@ def _target_fingerprint(hass: Any, token: Any, entity_id: str, intent: str, *,
     if (state is None or (intent != "PhoenixStateSummary" and (state.state == "unavailable" or (state.state == "unknown" and not unknown_action))) or entry is None
             or entry.disabled_by or entry.hidden_by or entry.platform == "group"
             or (intent == "PhoenixStateSummary" and entry.entity_category is not None)
-            or "entity_id" in state.attributes or resolve(entity_id, token, hass) not in permissions
+            or "entity_id" in state.attributes or resolve(entity_id, access_key, hass) not in permissions
             or not async_should_expose(hass, "conversation", entity_id)):
         return None
     entity_command = COMMAND_ROUTING_ENTITY_INTENTS.get(intent)
@@ -105,10 +105,10 @@ def _temporal_current(hass: Any, proposal: dict) -> bool:
                for eid in proposal.get("entity_ids", []))
 
 
-def _capture_plan(hass: Any, data: Any, token: Any, proposal: dict, *, ingress: str = "voice") -> dict | None:
+def _capture_plan(hass: Any, data: Any, access_key: Any, proposal: dict, *, ingress: str = "voice") -> dict | None:
     if 'clarification' in proposal:
         from .command_clarification import clarification_current
-        if not clarification_current(hass, data, token, proposal):
+        if not clarification_current(hass, data, access_key, proposal):
             return None
     if proposal["intent"] not in COMMAND_ROUTING_READ_INTENTS and service_arguments(proposal) is None:
         return None
@@ -120,17 +120,17 @@ def _capture_plan(hass: Any, data: Any, token: Any, proposal: dict, *, ingress: 
         return None
     if proposal['intent'] == 'PhoenixStateSummary':
         from .command_summary import summary_current
-        if not summary_current(hass, token, proposal):
+        if not summary_current(hass, access_key, proposal):
             return None
-    fingerprints = {entity_id: _target_fingerprint(hass, token, entity_id, proposal["intent"])
+    fingerprints = {entity_id: _target_fingerprint(hass, access_key, entity_id, proposal["intent"])
                     for entity_id in proposal["entity_ids"]}
     if not fingerprints or any(value is None for value in fingerprints.values()):
         return None
-    return {"proposal": proposal, "fingerprints": fingerprints, "token_id": token.id, "ingress": ingress,
-            "token_version": token.settings_version, "settings": _digest(data.store.get_settings().to_dict())}
+    return {"proposal": proposal, "fingerprints": fingerprints, "token_id": access_key.id, "ingress": ingress,
+            "token_version": access_key.settings_version, "settings": _digest(data.store.get_settings().to_dict())}
 
 
-def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
+def _decision_plan_current(plan: dict, hass: Any, data: Any, access_key: Any) -> bool:
     if "decision_category" not in plan:
         return "decision_batch" not in plan
     from .agentcli import decision_account_fingerprint, loaded_decision_account
@@ -192,7 +192,7 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
         if (temporal or typed) and (review["value"] != plan["proposal"].get("value")
                          or review["proposal"] != _digest(plan["proposal"]) or not _temporal_current(hass, plan["proposal"])):
             return False
-        snapshot = capture_batch_targets(hass, token, numeric_preview=numeric or review.get("catalog_numeric", False), extended=True, temporal=temporal)
+        snapshot = capture_batch_targets(hass, access_key, numeric_preview=numeric or review.get("catalog_numeric", False), extended=True, temporal=temporal)
         if batch_catalog_digest(snapshot) != review["catalog"] or category not in snapshot[1]:
             return False
         catalog_digest = snapshot[1][category].digest()
@@ -201,7 +201,7 @@ def _decision_plan_current(plan: dict, hass: Any, data: Any, token: Any) -> bool
                 and DECISION_TARGET_INTENTS.get(category) == plan["proposal"]["intent"]
                 and plan.get("decision_account") is not None
                 and decision_account_fingerprint(hass, settings.decision_provider_id) == plan["decision_account"]
-                and (catalog_digest or capture_sequential_targets(hass, token, category).digest()) == plan.get("decision_catalog"))
+                and (catalog_digest or capture_sequential_targets(hass, access_key, category).digest()) == plan.get("decision_catalog"))
 
 
 def _context_plan_current(plan: dict, hass: Any, data: Any) -> bool:
@@ -256,14 +256,14 @@ def _reference_plan_current(plan: dict, hass: Any, data: Any) -> bool:
     )
 
 
-def plan_is_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
+def plan_is_current(plan: dict, hass: Any, data: Any, access_key: Any) -> bool:
     """Recheck identity, scope, availability, capabilities and configuration."""
     try:
         settings = data.store.get_settings()
         proposal = plan["proposal"]
         if 'clarification' in proposal:
             from .command_clarification import clarification_current
-            if not clarification_current(hass, data, token, proposal):
+            if not clarification_current(hass, data, access_key, proposal):
                 return False
         if proposal["intent"] not in COMMAND_ROUTING_READ_INTENTS and service_arguments(proposal) is None:
             return False
@@ -273,7 +273,7 @@ def plan_is_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
             return False
         if proposal['intent'] == 'PhoenixStateSummary':
             from .command_summary import summary_current
-            if not summary_current(hass, token, proposal):
+            if not summary_current(hass, access_key, proposal):
                 return False
         if not _temporal_current(hass, proposal):
             return False
@@ -282,26 +282,26 @@ def plan_is_current(plan: dict, hass: Any, data: Any, token: Any) -> bool:
             enabled = effective_routing_mode(settings, "chat") in ("local", "hybrid")
         elif ingress == "voice":
             enabled = (settings.voice_agent_enabled and effective_routing_mode(settings) in ("local", "hybrid")
-                       and settings.voice_agent_token_id == token.id)
+                       and settings.voice_agent_token_id == access_key.id)
         else:
             return False
         return bool(
-            enabled and token.is_valid() and token.id == plan["token_id"]
-            and token.settings_version == plan["token_version"]
+            enabled and access_key.is_valid() and access_key.id == plan["token_id"]
+            and access_key.settings_version == plan["token_version"]
             and _digest(settings.to_dict()) == plan["settings"]
-            and _decision_plan_current(plan, hass, data, token)
+            and _decision_plan_current(plan, hass, data, access_key)
             and _context_plan_current(plan, hass, data)
             and _reference_plan_current(plan, hass, data)
             and proposal["entity_ids"] and set(proposal["entity_ids"]) == set(plan["fingerprints"])
             and all(plan["fingerprints"][eid] is not None and
-                    _target_fingerprint(hass, token, eid, proposal["intent"]) == plan["fingerprints"][eid]
+                    _target_fingerprint(hass, access_key, eid, proposal["intent"]) == plan["fingerprints"][eid]
                     for eid in proposal["entity_ids"])
         )
     except (KeyError, TypeError, ValueError, AttributeError):
         return False
 
 
-def bind_service_plan(args: dict, hass: Any, data: Any, token: Any) -> dict | None:
+def bind_service_plan(args: dict, hass: Any, data: Any, access_key: Any) -> dict | None:
     """Attach constraints from trusted turn context; refuse caller-supplied plans."""
     if COMMAND_ROUTING_PLAN_KEY in args:
         return None
@@ -309,16 +309,16 @@ def bind_service_plan(args: dict, hass: Any, data: Any, token: Any) -> dict | No
     if plan is None:
         return args
     bound = {**args, COMMAND_ROUTING_PLAN_KEY: plan}
-    return bound if service_plan_is_current(bound, hass, data, token) else None
+    return bound if service_plan_is_current(bound, hass, data, access_key) else None
 
 
-def service_plan_is_current(args: dict, hass: Any, data: Any, token: Any,
+def service_plan_is_current(args: dict, hass: Any, data: Any, access_key: Any,
                             entities: list[str] | None = None) -> bool:
     """Saved approval constraints only restrict the ordinary service executor."""
     if COMMAND_ROUTING_PLAN_KEY not in args:
         return True
     plan = args[COMMAND_ROUTING_PLAN_KEY]
-    if not isinstance(plan, dict) or not plan_is_current(plan, hass, data, token):
+    if not isinstance(plan, dict) or not plan_is_current(plan, hass, data, access_key):
         return False
     proposal = plan["proposal"]
     expected = service_arguments(proposal)
@@ -340,7 +340,7 @@ class LocalCommandReply:
     statistics_completed: bool = False
 
 
-async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
+async def _dispatch_command(hass: Any, data: Any, access_key: Any, plan: dict,
                             authority: RoutingAuthority, base_url: str,
                             include_review_links: bool, *, client_ip: str = VOICE_AGENT_CLIENT_IP,
                             cancel: asyncio.Event | None = None, language: object = "en") -> LocalCommandReply:
@@ -348,16 +348,16 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
     from .agentcli import dispatch_tool_result, _parse_pending
     from .mcp_view import _dispatch_mcp
 
-    await data.agent_recovery.reconcile(data.store, token.id)
+    await data.agent_recovery.reconcile(data.store, access_key.id)
     current = authority.current(hass)
     if cancel is not None and cancel.is_set():
         return LocalCommandReply(voice_text(language, "local_cancelled"), "cancelled")
     if current is None or not plan_is_current(plan, hass, data, current):
         return LocalCommandReply(voice_text(language, "token_unavailable"), "unauthorized")
-    token = replace(current, confirm_inline_wait_seconds=0)
+    access_key = replace(current, confirm_inline_wait_seconds=0)
     proposal = plan["proposal"]
     read = proposal["intent"] in COMMAND_ROUTING_READ_INTENTS
-    if not read and data.agent_recovery.blocks(token.id):
+    if not read and data.agent_recovery.blocks(access_key.id):
         return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
     arguments: dict[str, Any]
     if proposal['intent'] == 'PhoenixStateSummary':
@@ -379,7 +379,7 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
     context = _local_plan.set(plan)
     try:
         response, _method, _resource, outcome = await dispatch_agent_tool(
-            _dispatch_mcp, hass=hass, data=data, token=token, name=name, arguments=arguments,
+            _dispatch_mcp, hass=hass, data=data, access_key=access_key, name=name, arguments=arguments,
             tool_id=request_id, request_id=request_id, client_ip=client_ip, base_url=base_url,
         )
     except RecoveryRequired:
@@ -389,7 +389,7 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
     if authority.current(hass) is None:
         return LocalCommandReply(voice_text(language, "outcome_unknown" if not read else "token_unavailable"), "outcome_unknown")
     result = dispatch_tool_result(response)
-    pending = _parse_pending(result, outcome=outcome, data=data, token_id=token.id,
+    pending = _parse_pending(result, outcome=outcome, data=data, token_id=access_key.id,
                              tool_name=name, request_id=request_id)
     if pending:
         text = voice_text(language, "local_pending")
@@ -412,12 +412,12 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
                 continue
     if proposal['intent'] == 'PhoenixStateSummary':
         from .command_summary import summary_text
-        summary_reply = summary_text(proposal, payload, language) if plan_is_current(plan, hass, data, token) else None
+        summary_reply = summary_text(proposal, payload, language) if plan_is_current(plan, hass, data, access_key) else None
         return LocalCommandReply(summary_reply or voice_text(language, 'local_read_failed'), outcome='ok' if summary_reply is not None else 'failed', allows_local_followup=summary_reply is not None, statistics_completed=summary_reply is not None)
     if not isinstance(payload, dict):
         return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
     if read:
-        if not plan_is_current(plan, hass, data, token):
+        if not plan_is_current(plan, hass, data, access_key):
             return LocalCommandReply(voice_text(language, "token_unavailable"), "unauthorized")
         attributes = payload.get("attributes", {})
         if not isinstance(attributes, dict):
@@ -450,61 +450,61 @@ async def _dispatch_command(hass: Any, data: Any, token: Any, plan: dict,
 
 
 @recovery_turn
-async def _run_local_command(hass: Any, data: Any, token: Any, plan: dict,
+async def _run_local_command(hass: Any, data: Any, access_key: Any, plan: dict,
                              authority: RoutingAuthority, base_url: str,
                              include_review_links: bool, language: object = "en") -> LocalCommandReply:
     """Voice owns a complete non-streaming command recovery turn."""
-    return await _dispatch_command(hass, data, token, plan, authority, base_url, include_review_links, language=language)
+    return await _dispatch_command(hass, data, access_key, plan, authority, base_url, include_review_links, language=language)
 
 
-async def async_execute_chat_command(hass: Any, data: Any, token: Any, proposal: dict,
+async def async_execute_chat_command(hass: Any, data: Any, access_key: Any, proposal: dict,
                                      authority: RoutingAuthority, base_url: str,
                                      client_ip: str, cancel: asyncio.Event, *, language: object = "en") -> LocalCommandReply | None:
     """Reuse the outer Chat recovery turn; None permits pre-dispatch fallback."""
     try:
-        plan = _capture_plan(hass, data, token, proposal, ingress="chat")
+        plan = _capture_plan(hass, data, access_key, proposal, ingress="chat")
     except Exception as exc:
         log_internal_failure(_LOGGER, "command_execution", exc)
         return None
     if plan is None:
         return None
-    return await async_execute_chat_plan(hass, data, token, plan, authority, base_url, client_ip, cancel, language=language)
+    return await async_execute_chat_plan(hass, data, access_key, plan, authority, base_url, client_ip, cancel, language=language)
 
 
-async def async_execute_chat_plan(hass: Any, data: Any, token: Any, plan: dict,
+async def async_execute_chat_plan(hass: Any, data: Any, access_key: Any, plan: dict,
                                   authority: RoutingAuthority, base_url: str,
                                   client_ip: str, cancel: asyncio.Event, *, language: object = "en") -> LocalCommandReply:
     """Consume the frozen Chat plan within its outer recovery turn, without replay."""
     if plan.get("ingress") != "chat":
         return LocalCommandReply(voice_text(language, "token_unavailable"), "unauthorized")
     try:
-        return await _dispatch_command(hass, data, token, plan, authority, base_url, True,
+        return await _dispatch_command(hass, data, access_key, plan, authority, base_url, True,
                                        client_ip=client_ip, cancel=cancel, language=language)
     except Exception as exc:
         log_internal_failure(_LOGGER, "command_execution", exc)
         return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
 
 
-async def async_execute_local_command(hass: Any, data: Any, token: Any, proposal: dict,
+async def async_execute_local_command(hass: Any, data: Any, access_key: Any, proposal: dict,
                                       authority: RoutingAuthority, base_url: str,
                                       include_review_links: bool = False, *, language: object = "en") -> str | None:
     """None allows provider fallback only before any local dispatch is attempted."""
     try:
-        plan = _capture_plan(hass, data, token, proposal)
+        plan = _capture_plan(hass, data, access_key, proposal)
     except Exception as exc:
         log_internal_failure(_LOGGER, "command_execution", exc)
         return None
     if plan is None:
         return None
-    return await async_execute_command_plan(hass, data, token, plan, authority, base_url, include_review_links, language=language)
+    return await async_execute_command_plan(hass, data, access_key, plan, authority, base_url, include_review_links, language=language)
 
 
-async def async_execute_command_plan(hass: Any, data: Any, token: Any, plan: dict,
+async def async_execute_command_plan(hass: Any, data: Any, access_key: Any, plan: dict,
                                       authority: RoutingAuthority, base_url: str,
                                       include_review_links: bool = False, *, language: object = "en") -> str:
     """Consume the exact frozen plan; never replan or fall back after this boundary."""
     try:
-        reply = await _run_local_command(hass, data, token, plan, authority, base_url, include_review_links, language=language)
+        reply = await _run_local_command(hass, data, access_key, plan, authority, base_url, include_review_links, language=language)
         from .routing_statistics import local_result
         local_result(reply, "decision" if plan.get("decision_category") else "local")
         return reply.text

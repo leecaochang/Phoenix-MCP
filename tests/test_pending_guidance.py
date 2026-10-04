@@ -80,16 +80,16 @@ class TestSurfacesAgree:
         from unittest.mock import MagicMock
 
         from custom_components.phoenix_mcp.mcp_view import _build_instructions
-        from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
+        from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
         from homeassistant.util.dt import utcnow
 
-        token = TokenRecord(
+        access_key = AccessKeyRecord(
             id="t", name="t", token_hash="x", created_at=utcnow(),
             created_by="u", permissions=PermissionTree(),
         )
         data = MagicMock()
         data.store.get_settings.return_value = SimpleNamespace(mesa_mode="off")
-        return _build_instructions(token, data, hass)
+        return _build_instructions(access_key, data, hass)
 
     def test_the_primer_names_the_plural_wait(self, primer):
         assert "wait_for_approval ONCE with approval_ids" in primer

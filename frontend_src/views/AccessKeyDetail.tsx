@@ -1,14 +1,14 @@
 import { BusyInput, BusySelect } from "../components/BusyButton";
 import { BusyButton } from "../components/BusyButton";
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import type { TokenRecord, PatchTokenBody } from "../types";
+import type { AccessKeyRecord, PatchAccessKeyBody } from "../types";
 import PHOENIX_ICON from "../../custom_components/phoenix_mcp/brand/icon.png";
 import { api } from "../api";
 import { Loading, ErrorMsg } from "../index";
-import { formatDateTime, tokenStatus, tokenStatusLabel } from "../utils";
+import { formatDateTime, accessKeyStatus, accessKeyStatusLabel } from "../utils";
 import type { LinkScope } from "../components/MesaProfileLink";
 import { Modal } from "../components/Modal";
-import { RawTokenDisplay } from "../components/TokenCreateModal";
+import { RawAccessKeyDisplay } from "../components/AccessKeyCreateModal";
 import { ConnectInstructions } from "../components/ConnectInstructions";
 import { CapabilityMatrix, CAP_NAMES } from "../components/CapabilityMatrix";
 import type { EsphomeAvailability } from "../components/CapabilityMatrix";
@@ -33,14 +33,14 @@ import { tRich } from "../i18n/rich";
 // allow and confirm (per-request gating, enforced live) does NOT need a reconnect.
 // pass_through and announce_all_tools change the announced set wholesale. Persona
 // changes surface here as capability changes.
-function toolGatingChanged(a: TokenRecord, b: TokenRecord): boolean {
+function toolGatingChanged(a: AccessKeyRecord, b: AccessKeyRecord): boolean {
   const capCrossedDeny = CAP_NAMES.some((c) => (a[c] === "deny") !== (b[c] === "deny"));
   return capCrossedDeny || a.pass_through !== b.pass_through || a.announce_all_tools !== b.announce_all_tools;
 }
 
 // The destructive actions on this page, each behind its own confirm modal.
 // Exactly one can be in flight at a time; see the `action` state below.
-type TokenAction = "revoke" | "rotate" | "passThrough" | "clearPerms";
+type AccessKeyAction = "revoke" | "rotate" | "passThrough" | "clearPerms";
 
 interface Props {
   tokenId: string;
@@ -96,7 +96,7 @@ function ConfirmModal({ title, body, checkLabel, confirmLabel, confirmClass, loa
   );
 }
 
-function RotatedTokenModal({ rawToken, tokenName, onClose }: { rawToken: string; tokenName: string; onClose: () => void }) {
+function RotatedAccessKeyModal({ rawAccessKey, accessKeyName, onClose }: { rawAccessKey: string; accessKeyName: string; onClose: () => void }) {
   const [closeEnabled, setCloseEnabled] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -107,9 +107,9 @@ function RotatedTokenModal({ rawToken, tokenName, onClose }: { rawToken: string;
 
   return (
     <Modal titleId="rotated-token-title" onClose={closeEnabled ? onClose : undefined}>
-      <h3 className="modal-title" id="rotated-token-title">{t("tokens.tokenRotatedTitle", { name: tokenName })}</h3>
-      <RawTokenDisplay
-        rawToken={rawToken}
+      <h3 className="modal-title" id="rotated-token-title">{t("tokens.tokenRotatedTitle", { name: accessKeyName })}</h3>
+      <RawAccessKeyDisplay
+        rawAccessKey={rawAccessKey}
         note={<p>{tRich("tokens.rotatedNote", { strong: (c) => <strong>{c}</strong> })}</p>}
       />
       <div className="banner banner-info">
@@ -117,7 +117,7 @@ function RotatedTokenModal({ rawToken, tokenName, onClose }: { rawToken: string;
       </div>
       <details className="connect-details">
         <summary>{t("tokens.helpConnect")}</summary>
-        <ConnectInstructions token={rawToken} tokenName={tokenName} />
+        <ConnectInstructions accessKey={rawAccessKey} accessKeyName={accessKeyName} />
       </details>
       <div className="modal-actions">
         <button
@@ -133,14 +133,14 @@ function RotatedTokenModal({ rawToken, tokenName, onClose }: { rawToken: string;
   );
 }
 
-export function ToolAnnouncementToggle({ token, onUpdate }: { token: TokenRecord; onUpdate: (t: TokenRecord) => void }) {
+export function ToolAnnouncementToggle({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUpdate: (t: AccessKeyRecord) => void }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  async function patch(body: PatchTokenBody) {
+  async function patch(body: PatchAccessKeyBody) {
     setSaving(true);
     setError(null);
     try {
-      const updated = await api.patchToken(token.id, body);
+      const updated = await api.patchAccessKey(accessKey.id, body);
       onUpdate(updated);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("tokens.updateFailed"));
@@ -161,7 +161,7 @@ export function ToolAnnouncementToggle({ token, onUpdate }: { token: TokenRecord
           <BusyInput
             type="checkbox"
             aria-label={t("tokens.announceAllLabel")}
-            checked={!!token.announce_all_tools}
+            checked={!!accessKey.announce_all_tools}
             busy={saving}
             onChange={(e) => patch({ announce_all_tools: e.target.checked })}
           />
@@ -177,8 +177,8 @@ export function ToolAnnouncementToggle({ token, onUpdate }: { token: TokenRecord
           <BusyInput
             type="checkbox"
             aria-label={t("tokens.assistExposureLabel")}
-            checked={!!token.use_assist_exposure}
-            busy={saving} disabled={!token.pass_through}
+            checked={!!accessKey.use_assist_exposure}
+            busy={saving} disabled={!accessKey.pass_through}
             onChange={(e) => patch({ use_assist_exposure: e.target.checked })}
           />
           <span className="toggle-switch-track" />
@@ -189,7 +189,7 @@ export function ToolAnnouncementToggle({ token, onUpdate }: { token: TokenRecord
           <span>{t("tokens.inlineWaitLabel")}</span>
           <small>
             {t("tokens.inlineWaitHelp")}
-            {(token.confirm_inline_wait_seconds ?? 0) === 0 && (
+            {(accessKey.confirm_inline_wait_seconds ?? 0) === 0 && (
               <> <em> {t("tokens.inlineWaitDisabled")}</em></>
             )}
           </small>
@@ -197,12 +197,12 @@ export function ToolAnnouncementToggle({ token, onUpdate }: { token: TokenRecord
         <BusySelect
           className="input input-auto"
           aria-label={t("tokens.inlineWaitAria")}
-          value={token.confirm_inline_wait_seconds ?? 0}
+          value={accessKey.confirm_inline_wait_seconds ?? 0}
           busy={saving}
           onChange={(e) => patch({ confirm_inline_wait_seconds: Number(e.target.value) })}
         >
           <option value={0}>{t("tokens.inlineWaitOff")}</option>
-          {inlineWaitOptions(token.confirm_inline_wait_seconds ?? 0).map((s) => (
+          {inlineWaitOptions(accessKey.confirm_inline_wait_seconds ?? 0).map((s) => (
             <option key={s} value={s}>{t("tokens.secondsOption", { s })}</option>
           ))}
         </BusySelect>
@@ -248,7 +248,7 @@ interface SettingsSnap {
   permissions: import("../types").PermissionTree;
 }
 
-function snapOfToken(tok: TokenRecord): SettingsSnap {
+function snapOfAccessKey(tok: AccessKeyRecord): SettingsSnap {
   return {
     caps: Object.fromEntries(CAP_NAMES.map((c) => [c, tok[c]])),
     pass_through: tok.pass_through,
@@ -261,7 +261,7 @@ function snapOfToken(tok: TokenRecord): SettingsSnap {
   };
 }
 
-function snapOfPreset(p: import("../types").TokenPreset): SettingsSnap {
+function snapOfPreset(p: import("../types").AccessKeyPreset): SettingsSnap {
   return {
     caps: Object.fromEntries(CAP_NAMES.map((c) => [c, p.caps[c] ?? "deny"])),
     pass_through: p.pass_through,
@@ -332,10 +332,10 @@ function snapDiffLines(from: SettingsSnap, to: SettingsSnap): string[] {
   return lines;
 }
 
-// Inline-editable preset name: same onblur-save pattern as EditableTokenName.
+// Inline-editable preset name: same onblur-save pattern as EditableAccessKeyName.
 function EditablePresetName(
   { tokenId, preset, onUpdate }:
-  { tokenId: string; preset: import("../types").TokenPreset; onUpdate: (t: TokenRecord) => void },
+  { tokenId: string; preset: import("../types").AccessKeyPreset; onUpdate: (t: AccessKeyRecord) => void },
 ) {
   const [value, setValue] = useState(preset.name);
   const [saving, setSaving] = useState(false);
@@ -385,17 +385,17 @@ function EditablePresetName(
   );
 }
 
-type PresetAction = { kind: "switch" | "revert" | "delete"; preset: import("../types").TokenPreset };
+type PresetAction = { kind: "switch" | "revert" | "delete"; preset: import("../types").AccessKeyPreset };
 
-function PresetsCard({ token, onUpdate }: { token: TokenRecord; onUpdate: (t: TokenRecord) => void }) {
+function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUpdate: (t: AccessKeyRecord) => void }) {
   const [action, setAction] = useState<PresetAction | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [ptConfirmed, setPtConfirmed] = useState(false);
 
-  const active = token.presets.find((p) => p.id === token.active_preset_id) ?? null;
-  const liveSnap = snapOfToken(token);
+  const active = accessKey.presets.find((p) => p.id === accessKey.active_preset_id) ?? null;
+  const liveSnap = snapOfAccessKey(accessKey);
   // Unsaved changes on the active preset: what a switch would save back into it,
   // and what a revert would discard.
   const dirtyLines = active ? snapDiffLines(snapOfPreset(active), liveSnap) : [];
@@ -407,10 +407,10 @@ function PresetsCard({ token, onUpdate }: { token: TokenRecord; onUpdate: (t: To
     setError(null);
     try {
       if (action.kind === "delete") {
-        onUpdate(await api.deletePreset(token.id, action.preset.id));
+        onUpdate(await api.deletePreset(accessKey.id, action.preset.id));
       } else {
-        const needsPtConfirm = action.preset.pass_through && !token.pass_through;
-        onUpdate(await api.applyPreset(token.id, action.preset.id, needsPtConfirm));
+        const needsPtConfirm = action.preset.pass_through && !accessKey.pass_through;
+        onUpdate(await api.applyPreset(accessKey.id, action.preset.id, needsPtConfirm));
       }
       setAction(null);
       setPtConfirmed(false);
@@ -427,7 +427,7 @@ function PresetsCard({ token, onUpdate }: { token: TokenRecord; onUpdate: (t: To
     setBusy(true);
     setError(null);
     try {
-      onUpdate(await api.createPreset(token.id, name));
+      onUpdate(await api.createPreset(accessKey.id, name));
       setNewName("");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("tokens.presetCreateFailed"));
@@ -437,7 +437,7 @@ function PresetsCard({ token, onUpdate }: { token: TokenRecord; onUpdate: (t: To
   }
 
   const needsPtConfirm = action != null && action.kind !== "delete"
-    && action.preset.pass_through && !token.pass_through;
+    && action.preset.pass_through && !accessKey.pass_through;
   const applyLines = action && action.kind !== "delete"
     ? snapDiffLines(liveSnap, snapOfPreset(action.preset))
     : [];
@@ -505,11 +505,11 @@ function PresetsCard({ token, onUpdate }: { token: TokenRecord; onUpdate: (t: To
         </Modal>
       )}
 
-      {token.presets.map((p) => {
-        const isActive = p.id === token.active_preset_id;
+      {accessKey.presets.map((p) => {
+        const isActive = p.id === accessKey.active_preset_id;
         return (
           <div key={p.id} className={`preset-row${isActive ? " preset-row-active" : ""}`}>
-            <EditablePresetName tokenId={token.id} preset={p} onUpdate={onUpdate} />
+            <EditablePresetName tokenId={accessKey.id} preset={p} onUpdate={onUpdate} />
             {isActive && <span className="badge badge-green">{t("tokens.presetActive")}</span>}
             {isActive && dirty && <span className="badge badge-amber" title={t("tokens.presetModifiedTitle")}>{t("tokens.presetModified")}</span>}
             <span className="preset-row-actions">
@@ -532,7 +532,7 @@ function PresetsCard({ token, onUpdate }: { token: TokenRecord; onUpdate: (t: To
           </div>
         );
       })}
-      {token.presets.length === 0 && (
+      {accessKey.presets.length === 0 && (
         <p className="preset-empty">{t("tokens.presetEmpty")}</p>
       )}
 
@@ -542,20 +542,20 @@ function PresetsCard({ token, onUpdate }: { token: TokenRecord; onUpdate: (t: To
           placeholder={t("tokens.presetNewName")}
           value={newName}
           maxLength={40}
-          busy={busy} disabled={token.presets.length >= MAX_PRESETS}
+          busy={busy} disabled={accessKey.presets.length >= MAX_PRESETS}
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") createPreset(); }}
           aria-label={t("tokens.presetNewName")}
         />
         <BusyButton
           className="btn btn-outline btn-sm"
-          busy={busy} disabled={!newName.trim() || token.presets.length >= MAX_PRESETS}
+          busy={busy} disabled={!newName.trim() || accessKey.presets.length >= MAX_PRESETS}
           onClick={createPreset}
         >
           {t("tokens.presetSaveCurrent")}
         </BusyButton>
       </div>
-      {token.presets.length >= MAX_PRESETS && (
+      {accessKey.presets.length >= MAX_PRESETS && (
         <small className="preset-hint">{t("tokens.presetMax", { max: MAX_PRESETS })}</small>
       )}
       {!action && error && <ErrorMsg msg={error} />}
@@ -571,29 +571,29 @@ function PresetsCard({ token, onUpdate }: { token: TokenRecord; onUpdate: (t: To
 // the server reject a name that clashes with another token. Escape cancels.
 const TOKEN_NAME_RE = /^[A-Za-z0-9_-]{3,32}$/;
 
-function EditableTokenName({ token, onRenamed }: { token: TokenRecord; onRenamed: (t: TokenRecord) => void }) {
-  const [value, setValue] = useState(token.name);
+function EditableAccessKeyName({ accessKey, onRenamed }: { accessKey: AccessKeyRecord; onRenamed: (t: AccessKeyRecord) => void }) {
+  const [value, setValue] = useState(accessKey.name);
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { setValue(token.name); setErr(null); }, [token.name]);
+  useEffect(() => { setValue(accessKey.name); setErr(null); }, [accessKey.name]);
 
   async function commit() {
     const next = value.trim();
-    if (next === token.name) { setValue(token.name); setErr(null); return; }
+    if (next === accessKey.name) { setValue(accessKey.name); setErr(null); return; }
     if (!TOKEN_NAME_RE.test(next)) {
       setErr(t("tokens.nameRuleError"));
-      setValue(token.name);
+      setValue(accessKey.name);
       return;
     }
     setSaving(true);
     setErr(null);
     try {
-      const updated = await api.patchToken(token.id, { name: next });
+      const updated = await api.patchAccessKey(accessKey.id, { name: next });
       onRenamed(updated);
     } catch (e: unknown) {
       setErr(e instanceof Error ? e.message : t("tokens.renameFailed"));
-      setValue(token.name);
+      setValue(accessKey.name);
     } finally {
       setSaving(false);
     }
@@ -614,7 +614,7 @@ function EditableTokenName({ token, onRenamed }: { token: TokenRecord; onRenamed
         onBlur={commit}
         onKeyDown={(e) => {
           if (e.key === "Enter") { e.preventDefault(); (e.target as HTMLInputElement).blur(); }
-          else if (e.key === "Escape") { setValue(token.name); setErr(null); (e.target as HTMLInputElement).blur(); }
+          else if (e.key === "Escape") { setValue(accessKey.name); setErr(null); (e.target as HTMLInputElement).blur(); }
         }}
       />
       {err && <span className="token-name-error" role="alert">{err}</span>}
@@ -622,8 +622,8 @@ function EditableTokenName({ token, onRenamed }: { token: TokenRecord; onRenamed
   );
 }
 
-export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = false, esphome = null }: Props) {
-  const [token, setToken] = useState<TokenRecord | null>(null);
+export function AccessKeyDetailView({ tokenId, onBack, onRefresh, presetsEnabled = false, esphome = null }: Props) {
+  const [accessKey, setAccessKey] = useState<AccessKeyRecord | null>(null);
   const [mesaProfileEntities, setMesaProfileEntities] = useState<Set<string>>(new Set());
   const [mesaProfileDevices, setMesaProfileDevices] = useState<Set<string>>(new Set());
   const [mesaProfileDomains, setMesaProfileDomains] = useState<Set<string>>(new Set());
@@ -635,13 +635,13 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
   const [error, setError] = useState<string | null>(null);
   // One destructive action at a time, by construction: a single state makes
   // "two modals open at once" unrepresentable.
-  const [action, setAction] = useState<{ kind: TokenAction; busy: boolean } | null>(null);
-  const openAction = (kind: TokenAction) => setAction({ kind, busy: false });
+  const [action, setAction] = useState<{ kind: AccessKeyAction; busy: boolean } | null>(null);
+  const openAction = (kind: AccessKeyAction) => setAction({ kind, busy: false });
   const closeAction = () => setAction(null);
   const setActionBusy = (busy: boolean) => setAction((a) => (a ? { ...a, busy } : a));
-  const isOpen = (kind: TokenAction) => action?.kind === kind;
-  const isBusy = (kind: TokenAction) => action?.kind === kind && action.busy;
-  const [rotatedRawToken, setRotatedRawToken] = useState<string | null>(null);
+  const isOpen = (kind: AccessKeyAction) => action?.kind === kind;
+  const isBusy = (kind: AccessKeyAction) => action?.kind === kind && action.busy;
+  const [rotatedRawAccessKey, setRotatedRawAccessKey] = useState<string | null>(null);
   const [showSelectByPicker, setShowSelectByPicker] = useState(false);
   const [entityTree, setEntityTree] = useState<import("../types").EntityTree | null>(null);
   // Set when a change alters the announced tool list, to remind the operator to
@@ -671,8 +671,8 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
     setLoading(true);
     setError(null);
     try {
-      const data = await api.getToken(tokenId);
-      setToken(data);
+      const data = await api.getAccessKey(tokenId);
+      setAccessKey(data);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("tokens.loadFailed"));
     } finally {
@@ -682,15 +682,15 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
 
   useEffect(() => { load(); }, [load]);
 
-  // setToken wrapper for the config editors (persona, capabilities, tool
+  // setAccessKey wrapper for the config editors (persona, capabilities, tool
   // announcement, pass-through). If the change alters the announced tool list and
   // the token has been used by a client, raise the reconnect reminder.
-  const applyTokenUpdate = useCallback((updated: TokenRecord) => {
-    if (token && updated.last_used_at && toolGatingChanged(token, updated)) {
+  const applyAccessKeyUpdate = useCallback((updated: AccessKeyRecord) => {
+    if (accessKey && updated.last_used_at && toolGatingChanged(accessKey, updated)) {
       setReconnectNeeded(true);
     }
-    setToken(updated);
-  }, [token]);
+    setAccessKey(updated);
+  }, [accessKey]);
 
   useEffect(() => {
     api.getEntityTree().then(setEntityTree).catch(() => null);
@@ -732,11 +732,11 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
   async function revoke() {
     setActionBusy(true);
     try {
-      await api.revokeToken(tokenId);
+      await api.revokeAccessKey(tokenId);
       // Any open Agent Chat window (panel or floating) drops the revoked token
       // from its own list and reselects/clears, instead of continuing to show
       // (and let the user submit against) a token that no longer works.
-      window.dispatchEvent(new CustomEvent("phx-tokens-changed"));
+      window.dispatchEvent(new CustomEvent("phx-access-keys-changed"));
       onBack();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("tokens.revokeFailed"));
@@ -747,9 +747,9 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
   async function rotate() {
     setActionBusy(true);
     try {
-      const resp = await api.rotateToken(tokenId);
-      const { token: rawToken } = resp as { token: string };
-      setRotatedRawToken(rawToken);
+      const resp = await api.rotateAccessKey(tokenId);
+      const { token: rawAccessKey } = resp;
+      setRotatedRawAccessKey(rawAccessKey);
       onRefresh?.();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("tokens.rotateFailed"));
@@ -763,7 +763,7 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
     setActionBusy(true);
     try {
       const updatedTree = await api.setPermissions(tokenId, { domains: {}, devices: {}, entities: {} });
-      setToken((prev) => prev ? { ...prev, permissions: updatedTree } : prev);
+      setAccessKey((prev) => prev ? { ...prev, permissions: updatedTree } : prev);
       setPermissionsVersion((v) => v + 1);
       setCollapseTreeKey((k) => k + 1);
       closeAction();
@@ -778,9 +778,9 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
   async function enablePassThrough() {
     setActionBusy(true);
     try {
-      const body: PatchTokenBody = { pass_through: true, confirm_pass_through: true };
-      const updated = await api.patchToken(tokenId, body);
-      applyTokenUpdate(updated);
+      const body: PatchAccessKeyBody = { pass_through: true, confirm_pass_through: true };
+      const updated = await api.patchAccessKey(tokenId, body);
+      applyAccessKeyUpdate(updated);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("tokens.enablePtFailed"));
     } finally {
@@ -789,21 +789,21 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
   }
 
   if (loading) return <Loading />;
-  if (error && !token) return <div><button className="btn btn-text" onClick={onBack}>{t("tokens.back")}</button><ErrorMsg msg={error} /></div>;
-  if (!token) return null;
+  if (error && !accessKey) return <div><button className="btn btn-text" onClick={onBack}>{t("tokens.back")}</button><ErrorMsg msg={error} /></div>;
+  if (!accessKey) return null;
 
-  if (rotatedRawToken) {
-    return <RotatedTokenModal rawToken={rotatedRawToken} tokenName={token.name} onClose={() => setRotatedRawToken(null)} />;
+  if (rotatedRawAccessKey) {
+    return <RotatedAccessKeyModal rawAccessKey={rotatedRawAccessKey} accessKeyName={accessKey.name} onClose={() => setRotatedRawAccessKey(null)} />;
   }
 
-  const status = tokenStatus(token);
+  const status = accessKeyStatus(accessKey);
   const statusClass = status === "Active" ? "badge-green" : status === "Expired" ? "badge-grey" : "badge-red";
 
   // One-line summaries shown on the collapsed Advanced cards.
-  const personaDef = PERSONAS.find((p) => p.key === token.persona);
+  const personaDef = PERSONAS.find((p) => p.key === accessKey.persona);
   const personaLabel = personaDef ? t(personaDef.labelKey) : t("personas.custom.label");
   const capCounts = CAP_NAMES.reduce(
-    (acc, k) => { acc[token[k]] = (acc[token[k]] ?? 0) + 1; return acc; },
+    (acc, k) => { acc[accessKey[k]] = (acc[accessKey[k]] ?? 0) + 1; return acc; },
     { allow: 0, confirm: 0, deny: 0 } as Record<string, number>,
   );
   const capsSummary = t("tokens.capsSummary", {
@@ -812,18 +812,18 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
     confirm: capCounts.confirm,
     deny: capCounts.deny,
   });
-  const announceSummary = token.announce_all_tools
+  const announceSummary = accessKey.announce_all_tools
     ? t("tokens.announceSummaryAll")
     : t("tokens.announceSummaryScoped");
-  const rateSummary = token.rate_limit_requests > 0
-    ? t("tokens.rateSummary", { requests: token.rate_limit_requests, burst: token.rate_limit_burst })
+  const rateSummary = accessKey.rate_limit_requests > 0
+    ? t("tokens.rateSummary", { requests: accessKey.rate_limit_requests, burst: accessKey.rate_limit_burst })
     : t("tokens.rateSummaryNone");
-  const activePreset = token.presets.find((p) => p.id === token.active_preset_id) ?? null;
+  const activePreset = accessKey.presets.find((p) => p.id === accessKey.active_preset_id) ?? null;
   const presetsSummary = activePreset
-    ? (snapDiffLines(snapOfPreset(activePreset), snapOfToken(token)).length > 0
+    ? (snapDiffLines(snapOfPreset(activePreset), snapOfAccessKey(accessKey)).length > 0
       ? t("tokens.presetsSummaryModified", { name: activePreset.name })
       : activePreset.name)
-    : t("tokens.presetsSummarySaved", { count: token.presets.length });
+    : t("tokens.presetsSummarySaved", { count: accessKey.presets.length });
 
   return (
     <div className="token-detail-wrap">
@@ -897,7 +897,7 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
           </div>
         )}
 
-        {token.pass_through && (
+        {accessKey.pass_through && (
           <div className="pass-through-header-banner">
             <p>
               {tRich("tokens.ptHeaderBanner", { strong: (c) => <strong className="text-warning">{c}</strong> })}
@@ -911,11 +911,11 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
             <div className="token-card-header">
               <div className="token-card-name-row">
                 <img src={PHOENIX_ICON} className="token-card-icon" alt="" />
-                <EditableTokenName token={token} onRenamed={(u) => { applyTokenUpdate(u); onRefresh?.(); }} />
+                <EditableAccessKeyName accessKey={accessKey} onRenamed={(u) => { applyAccessKeyUpdate(u); onRefresh?.(); }} />
               </div>
               <div className="token-card-badges">
-                <span className={`badge ${statusClass}`}>{tokenStatusLabel(status)}</span>
-                {token.pass_through
+                <span className={`badge ${statusClass}`}>{accessKeyStatusLabel(status)}</span>
+                {accessKey.pass_through
                   ? <span className="badge badge-amber">{t("tokens.passThrough")}</span>
                   : <span className="badge badge-blue">{t("tokens.scoped")}</span>}
               </div>
@@ -925,13 +925,13 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
               <div className="token-card-meta">
                 <div className="token-meta-table">
                   <span className="stat-label">{t("tokens.colCreated")}</span>
-                  <span title={token.created_at ? localeDateTime(token.created_at) : undefined}>{formatDateTime(token.created_at)}</span>
+                  <span title={accessKey.created_at ? localeDateTime(accessKey.created_at) : undefined}>{formatDateTime(accessKey.created_at)}</span>
                   <span className="stat-label">{t("tokens.colUpdated")}</span>
-                  <span title={token.updated_at ? localeDateTime(token.updated_at) : undefined}>{formatDateTime(token.updated_at)}</span>
+                  <span title={accessKey.updated_at ? localeDateTime(accessKey.updated_at) : undefined}>{formatDateTime(accessKey.updated_at)}</span>
                   <span className="stat-label">{t("tokens.colExpires")}</span>
-                  <span>{formatDateTime(token.expires_at)}</span>
+                  <span>{formatDateTime(accessKey.expires_at)}</span>
                   <span className="stat-label">{t("tokens.colLastUsed")}</span>
-                  <span>{formatDateTime(token.last_used_at)}</span>
+                  <span>{formatDateTime(accessKey.last_used_at)}</span>
                 </div>
               </div>
 
@@ -939,7 +939,7 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
                 <button className="btn btn-outline btn-sm token-action-btn" onClick={() => openAction("rotate")}>
                   {t("tokens.rotate")}
                 </button>
-                {!token.pass_through && (
+                {!accessKey.pass_through && (
                   <button className="btn btn-warning btn-sm token-action-btn" onClick={() => openAction("passThrough")}>
                     {t("tokens.enablePtLabel")}
                   </button>
@@ -957,7 +957,7 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
               {t("tokens.emulatorTitle")}
               <DocsHelpLink path="panel.html#emulator" label={t("tokens.emulatorTitle")} />
             </h3>
-            {token.pass_through ? (
+            {accessKey.pass_through ? (
               <p style={{ fontSize: 13, color: "var(--phx-text-2)", margin: 0 }}>
                 {t("tokens.emulatorPassThrough")}
               </p>
@@ -980,34 +980,34 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
         <div className="two-col">
           <div>
             <CollapsibleCard title={t("tokens.cardPersona")} summary={personaLabel} defaultOpen persistKey="phx:fold:persona" docsPath="capabilities.html#personas">
-              <PersonaPicker token={token} onUpdate={applyTokenUpdate} esphome={esphome} />
+              <PersonaPicker accessKey={accessKey} onUpdate={applyAccessKeyUpdate} esphome={esphome} />
             </CollapsibleCard>
 
             {presetsEnabled && (
               <CollapsibleCard title={t("tokens.cardPresets")} summary={presetsSummary} persistKey="phx:fold:presets" docsPath="panel.html#presets">
-                <PresetsCard token={token} onUpdate={applyTokenUpdate} />
+                <PresetsCard accessKey={accessKey} onUpdate={applyAccessKeyUpdate} />
               </CollapsibleCard>
             )}
 
             <div className="advanced-section-label">{t("tokens.advanced")}</div>
             <CollapsibleCard title={t("tokens.cardCapabilities")} summary={capsSummary} persistKey="phx:fold:capabilities" docsPath="capabilities.html#capability-flags">
-              <CapabilityMatrix token={token} onUpdate={applyTokenUpdate} esphome={esphome} />
+              <CapabilityMatrix accessKey={accessKey} onUpdate={applyAccessKeyUpdate} esphome={esphome} />
             </CollapsibleCard>
             <CollapsibleCard title={t("tokens.cardToolAnnouncement")} summary={announceSummary} persistKey="phx:fold:announce" docsPath="operations.html#advanced-token-options">
-              <ToolAnnouncementToggle token={token} onUpdate={applyTokenUpdate} />
+              <ToolAnnouncementToggle accessKey={accessKey} onUpdate={applyAccessKeyUpdate} />
             </CollapsibleCard>
             <CollapsibleCard title={t("tokens.cardRateLimiting")} summary={rateSummary} persistKey="phx:fold:ratelimit" docsPath="operations.html#rate-limiting">
-              <RateLimitConfig token={token} onUpdate={setToken} />
+              <RateLimitConfig accessKey={accessKey} onUpdate={setAccessKey} />
             </CollapsibleCard>
 
-            {!token.pass_through && (
+            {!accessKey.pass_through && (
               <div className="card">
                 <h3 className="card-header">
                   {t("tokens.permissionSummary")}
                   <DocsHelpLink path="panel.html#summary" label={t("tokens.permissionSummary")} />
                 </h3>
                 <PermissionSummary
-                  permissions={token.permissions}
+                  permissions={accessKey.permissions}
                   entityTree={entityTree}
                   onEntityClick={revealNode}
                   mesaProfileEntities={mesaProfileEntities}
@@ -1018,13 +1018,13 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
           </div>
 
           <div>
-            {token.pass_through ? (
+            {accessKey.pass_through ? (
               <div className="card">
                 <h3 className="card-header">
                   {t("tokens.permissionsTree")}
                   <DocsHelpLink path="panel.html#permission-tree" label={t("tokens.permissionsTree")} />
                 </h3>
-                <PassThroughNotice token={token} onUpdate={applyTokenUpdate} />
+                <PassThroughNotice accessKey={accessKey} onUpdate={applyAccessKeyUpdate} />
               </div>
             ) : (
               <div className="card">
@@ -1049,9 +1049,9 @@ export function TokenDetailView({ tokenId, onBack, onRefresh, presetsEnabled = f
                 </div>
                 <EntityTree
                   tokenId={tokenId}
-                  permissions={token.permissions}
+                  permissions={accessKey.permissions}
                   onPermissionsChange={(tree) => {
-                    setToken((current) => current?.id === token.id ? { ...current, permissions: tree } : current);
+                    setAccessKey((current) => current?.id === accessKey.id ? { ...current, permissions: tree } : current);
                     setPermissionsVersion((v) => v + 1);
                   }}
                   onEntityClick={revealNode}

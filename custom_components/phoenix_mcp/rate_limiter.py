@@ -199,6 +199,6 @@ class RateLimiter:
         """Destroy all rate limit state (call on wipe action)."""
         self._windows.clear()
 
-    def active_token_count(self) -> int:
+    def active_access_key_count(self) -> int:
         """Return the number of tokens with active rate limit windows."""
         return len(self._windows)

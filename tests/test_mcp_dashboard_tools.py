@@ -28,7 +28,7 @@ from custom_components.phoenix_mcp.tools.lovelace import (
     _build_diff_set_dashboard_config,
     _execute_set_dashboard_config,
 )
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
 from custom_components.phoenix_mcp.ws_dispatch import (
     WsDashboardNotFoundError,
@@ -37,10 +37,10 @@ from custom_components.phoenix_mcp.ws_dispatch import (
 )
 
 
-def _token(tree: PermissionTree | None = None, **caps) -> TokenRecord:
+def _access_key(tree: PermissionTree | None = None, **caps) -> AccessKeyRecord:
     base = {"cap_lovelace_write": "allow"}
     base.update(caps)
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x", created_at=utcnow(),
         created_by="u", permissions=tree or PermissionTree(domains={}), **base,
     )
@@ -56,8 +56,8 @@ def _json(content: dict) -> dict:
     return json.loads(content["content"][0]["text"])
 
 
-async def _call(name, args, token, hass, data=None):
-    return await _call_tool(name, args, token, hass, data if data is not None else MagicMock())
+async def _call(name, args, access_key, hass, data=None):
+    return await _call_tool(name, args, access_key, hass, data if data is not None else MagicMock())
 
 
 @pytest.fixture
@@ -75,23 +75,23 @@ async def lovelace_env(hass: HomeAssistant):
 class TestGetDashboardConfig:
     async def test_deny_without_cap(self, hass, lovelace_env):
         h, _light = lovelace_env
-        _, outcome, _ = await _call("get_dashboard_config", {}, _token(cap_lovelace_write="deny"), h)
+        _, outcome, _ = await _call("get_dashboard_config", {}, _access_key(cap_lovelace_write="deny"), h)
         assert outcome == "denied"
 
     async def test_autogen_returns_not_found(self, hass, lovelace_env):
         h, _light = lovelace_env
         # The default dashboard has no stored config until something is saved.
-        _, outcome, _ = await _call("get_dashboard_config", {}, _token(), h)
+        _, outcome, _ = await _call("get_dashboard_config", {}, _access_key(), h)
         assert outcome == "not_found"
 
     async def test_reads_and_redacts_out_of_scope_entities(self, hass, lovelace_env):
         h, light = lovelace_env
-        token = _token(tree=PermissionTree(domains={"light": PermissionNode(state="GREEN")}))
+        access_key = _access_key(tree=PermissionTree(domains={"light": PermissionNode(state="GREEN")}))
         data, _v = _data()
         cfg = {"views": [{"cards": [{"type": "entities", "entities": [light, "sensor.secret"]}]}]}
-        await _call("set_dashboard_config", {"config": cfg}, token, h, data)
+        await _call("set_dashboard_config", {"config": cfg}, access_key, h, data)
 
-        content, outcome, _ = await _call("get_dashboard_config", {}, token, h)
+        content, outcome, _ = await _call("get_dashboard_config", {}, access_key, h)
         assert outcome == "allowed"
         ents = _json(content)["config"]["views"][0]["cards"][0]["entities"]
         assert light in ents  # in scope, kept
@@ -102,15 +102,15 @@ class TestSetDashboardConfig:
     async def test_deny_without_cap(self, hass, lovelace_env):
         h, _light = lovelace_env
         _, outcome, _ = await _call(
-            "set_dashboard_config", {"config": {"views": []}}, _token(cap_lovelace_write="deny"), h)
+            "set_dashboard_config", {"config": {"views": []}}, _access_key(cap_lovelace_write="deny"), h)
         assert outcome == "denied"
 
     async def test_writes_and_records_version(self, hass, lovelace_env):
         h, _light = lovelace_env
-        token = _token()
+        access_key = _access_key()
         data, versions = _data()
         cfg = {"views": [{"title": "A"}]}
-        _c, outcome, _ = await _call("set_dashboard_config", {"config": cfg}, token, h, data)
+        _c, outcome, _ = await _call("set_dashboard_config", {"config": cfg}, access_key, h, data)
         assert outcome == "allowed"
         assert await async_get_lovelace_config(h, None) == cfg  # persisted
 
@@ -124,25 +124,25 @@ class TestSetDashboardConfig:
         that can only fail once an admin approves it."""
         h, _light = lovelace_env
         _, outcome, _ = await _call(
-            "set_dashboard_config", {"config": "not-a-dict"}, _token(cap_lovelace_write="confirm"), h)
+            "set_dashboard_config", {"config": "not-a-dict"}, _access_key(cap_lovelace_write="confirm"), h)
         assert outcome == "invalid_request"
 
     async def test_redacted_read_cannot_be_written_back(self, hass, lovelace_env):
         """The full-layout writer must not persist a lossy read's placeholder."""
         h, light = lovelace_env
-        token = _token(tree=PermissionTree(domains={"light": PermissionNode(state="GREEN")}))
+        access_key = _access_key(tree=PermissionTree(domains={"light": PermissionNode(state="GREEN")}))
         data, _versions = _data()
         original = {
             "views": [{"cards": [{"type": "entities", "entities": [light, "sensor.secret"]}]}]
         }
-        await _call("set_dashboard_config", {"config": original}, token, h, data)
-        read = _json((await _call("get_dashboard_config", {}, token, h))[0])
+        await _call("set_dashboard_config", {"config": original}, access_key, h, data)
+        read = _json((await _call("get_dashboard_config", {}, access_key, h))[0])
         assert REDACTION_SENTINEL in read["config"]["views"][0]["cards"][0]["entities"]
 
         content, outcome, _ = await _call(
             "set_dashboard_config",
             {"config": read["config"], "expected_hash": read["content_hash"]},
-            token, h, data,
+            access_key, h, data,
         )
 
         assert outcome == "invalid_request"
@@ -158,7 +158,7 @@ class TestSetDashboardConfig:
         with patch.object(lovelace_tools, "_gate", new=AsyncMock()) as gate:
             _, outcome, _ = await _call(
                 "set_dashboard_config", {"config": config},
-                _token(cap_lovelace_write="confirm"), h,
+                _access_key(cap_lovelace_write="confirm"), h,
             )
         assert outcome == "invalid_request"
         gate.assert_not_awaited()
@@ -166,13 +166,13 @@ class TestSetDashboardConfig:
     async def test_executor_rechecks_redaction_guard(self, hass, lovelace_env):
         """Approval-time execution must reject a sentinel introduced after gating."""
         h, _light = lovelace_env
-        token = _token()
+        access_key = _access_key()
         data, _versions = _data()
         original = {"views": [{"title": "A"}]}
-        await _call("set_dashboard_config", {"config": original}, token, h, data)
+        await _call("set_dashboard_config", {"config": original}, access_key, h, data)
 
         _, outcome, _ = await _execute_set_dashboard_config(
-            {"config": {"views": [{"title": REDACTION_SENTINEL}]}}, token, h, data,
+            {"config": {"views": [{"title": REDACTION_SENTINEL}]}}, access_key, h, data,
         )
 
         assert outcome == "invalid_request"
@@ -180,10 +180,10 @@ class TestSetDashboardConfig:
 
     async def test_second_set_is_an_edit(self, hass, lovelace_env):
         h, _light = lovelace_env
-        token = _token()
+        access_key = _access_key()
         data, versions = _data()
-        await _call("set_dashboard_config", {"config": {"views": [{"title": "A"}]}}, token, h, data)
-        await _call("set_dashboard_config", {"config": {"views": [{"title": "B"}]}}, token, h, data)
+        await _call("set_dashboard_config", {"config": {"views": [{"title": "A"}]}}, access_key, h, data)
+        await _call("set_dashboard_config", {"config": {"views": [{"title": "B"}]}}, access_key, h, data)
         hist = versions.list_for("dashboard", "lovelace")
         assert [v.action for v in hist] == ["edit", "create"]
         assert hist[0].before == {"views": [{"title": "A"}]} and hist[0].after == {"views": [{"title": "B"}]}
@@ -194,35 +194,35 @@ class TestDashboardContentHash:
 
     async def test_get_reports_content_hash(self, hass, lovelace_env):
         h, _light = lovelace_env
-        token = _token()
+        access_key = _access_key()
         data, _v = _data()
         cfg = {"views": [{"title": "A"}]}
-        await _call("set_dashboard_config", {"config": cfg}, token, h, data)
-        content, _, _ = await _call("get_dashboard_config", {}, token, h)
+        await _call("set_dashboard_config", {"config": cfg}, access_key, h, data)
+        content, _, _ = await _call("get_dashboard_config", {}, access_key, h)
         assert _json(content)["content_hash"] == content_hash(cfg)
 
     async def test_matching_hash_writes(self, hass, lovelace_env):
         h, _light = lovelace_env
-        token = _token()
+        access_key = _access_key()
         data, _v = _data()
-        await _call("set_dashboard_config", {"config": {"views": [{"title": "A"}]}}, token, h, data)
-        got = _json((await _call("get_dashboard_config", {}, token, h))[0])
+        await _call("set_dashboard_config", {"config": {"views": [{"title": "A"}]}}, access_key, h, data)
+        got = _json((await _call("get_dashboard_config", {}, access_key, h))[0])
         _, outcome, _ = await _call(
             "set_dashboard_config",
             {"config": {"views": [{"title": "B"}]}, "expected_hash": got["content_hash"]},
-            token, h, data)
+            access_key, h, data)
         assert outcome == "allowed"
         assert await async_get_lovelace_config(h, None) == {"views": [{"title": "B"}]}
 
     async def test_stale_hash_conflicts_and_does_not_write(self, hass, lovelace_env):
         h, _light = lovelace_env
-        token = _token()
+        access_key = _access_key()
         data, _v = _data()
-        await _call("set_dashboard_config", {"config": {"views": [{"title": "A"}]}}, token, h, data)
+        await _call("set_dashboard_config", {"config": {"views": [{"title": "A"}]}}, access_key, h, data)
         _, outcome, _ = await _call(
             "set_dashboard_config",
             {"config": {"views": [{"title": "B"}]}, "expected_hash": content_hash({"views": ["stale"]})},
-            token, h, data)
+            access_key, h, data)
         assert outcome == "invalid_request"
         assert await async_get_lovelace_config(h, None) == {"views": [{"title": "A"}]}  # untouched
 
@@ -238,18 +238,18 @@ class TestDashboardContentHash:
         _, outcome, _ = await _call(
             "set_dashboard_config",
             {"config": {"views": [{"title": "X"}]}, "expected_hash": content_hash({"views": []})},
-            _token(), h, _data()[0])
+            _access_key(), h, _data()[0])
         assert outcome == "invalid_request"
         assert await async_get_lovelace_config(h, None) is None  # nothing stored
 
     async def test_executor_stale_hash_conflict_at_apply_time(self, hass, lovelace_env):
         h, _light = lovelace_env
-        token = _token()
+        access_key = _access_key()
         data, _v = _data()
-        await _call("set_dashboard_config", {"config": {"views": [{"title": "A"}]}}, token, h, data)
+        await _call("set_dashboard_config", {"config": {"views": [{"title": "A"}]}}, access_key, h, data)
         _, outcome, _ = await _execute_set_dashboard_config(
             {"config": {"views": [{"title": "B"}]}, "expected_hash": content_hash({"views": ["stale"]})},
-            token, h, data)
+            access_key, h, data)
         assert outcome == "invalid_request"
         assert await async_get_lovelace_config(h, None) == {"views": [{"title": "A"}]}
 
@@ -274,7 +274,7 @@ class TestDashboardReadFailureIsNotAbsence:
             content, outcome, _ = await _call(
                 "set_dashboard_config",
                 {"config": {"views": []}, "expected_hash": content_hash({"views": []})},
-                _token(), h, _data()[0])
+                _access_key(), h, _data()[0])
         assert outcome == "invalid_request"
         assert "Could not read dashboard" in content["content"][0]["text"]
 
@@ -285,17 +285,17 @@ class TestDashboardReadFailureIsNotAbsence:
             _, outcome, _ = await _call(
                 "set_dashboard_config",
                 {"config": {"views": []}, "expected_hash": content_hash({"views": []})},
-                _token(), h, _data()[0])
+                _access_key(), h, _data()[0])
         assert outcome == "invalid_request"
 
     async def test_executor_errors_on_read_failure_and_does_not_write(self, hass, lovelace_env):
         h, _light = lovelace_env
-        token = _token()
+        access_key = _access_key()
         data, _v = _data()
-        await _call("set_dashboard_config", {"config": {"views": [{"title": "A"}]}}, token, h, data)
+        await _call("set_dashboard_config", {"config": {"views": [{"title": "A"}]}}, access_key, h, data)
         with self._patch_read(WsDispatchError("socket gone")):
             content, outcome, _ = await _execute_set_dashboard_config(
-                {"config": {"views": [{"title": "B"}]}}, token, h, data)
+                {"config": {"views": [{"title": "B"}]}}, access_key, h, data)
         assert outcome == "invalid_request"
         assert "Could not read dashboard" in content["content"][0]["text"]
         assert await async_get_lovelace_config(h, None) == {"views": [{"title": "A"}]}
@@ -310,7 +310,7 @@ class TestDashboardReadFailureIsNotAbsence:
             read.side_effect = [WsDashboardNotFoundError("unknown dashboard"),
                                WsDashboardNotFoundError("unknown dashboard"), after]
             _, outcome, _ = await _execute_set_dashboard_config(
-                {"config": {"views": [{"title": "New"}]}}, _token(), h, data)
+                {"config": {"views": [{"title": "New"}]}}, _access_key(), h, data)
         assert outcome == "allowed"
         assert versions.list_recent()[0].action == "create"
 
@@ -319,30 +319,30 @@ class TestSetDashboardDiff:
     async def test_before_empty_for_new_dashboard(self, hass, lovelace_env):
         h, _light = lovelace_env
         diff = await _build_diff_set_dashboard_config(
-            {"config": {"views": [{"title": "A"}]}}, _token(), h)
+            {"config": {"views": [{"title": "A"}]}}, _access_key(), h)
         assert diff["kind"] == "yaml_diff"
         assert diff["before"] is None  # nothing stored yet
         assert "A" in diff["after"]
 
     async def test_before_shows_current_layout_on_edit(self, hass, lovelace_env):
         h, _light = lovelace_env
-        token = _token()
+        access_key = _access_key()
         data, _v = _data()
-        await _call("set_dashboard_config", {"config": {"views": [{"title": "A"}]}}, token, h, data)
+        await _call("set_dashboard_config", {"config": {"views": [{"title": "A"}]}}, access_key, h, data)
         # The approval diff for a subsequent set must show the CURRENT layout as
         # "before", not a hard-coded None.
         diff = await _build_diff_set_dashboard_config(
-            {"config": {"views": [{"title": "B"}]}}, token, h)
+            {"config": {"views": [{"title": "B"}]}}, access_key, h)
         assert diff["before"] is not None and "A" in diff["before"]
         assert "B" in diff["after"]
 
     async def test_before_redacts_out_of_scope_entities(self, hass, lovelace_env):
         h, light = lovelace_env
-        token = _token(tree=PermissionTree(domains={"light": PermissionNode(state="GREEN")}))
+        access_key = _access_key(tree=PermissionTree(domains={"light": PermissionNode(state="GREEN")}))
         data, _v = _data()
         cfg = {"views": [{"cards": [{"type": "entities", "entities": [light, "sensor.secret"]}]}]}
-        await _call("set_dashboard_config", {"config": cfg}, token, h, data)
-        diff = await _build_diff_set_dashboard_config({"config": {"views": []}}, token, h)
+        await _call("set_dashboard_config", {"config": cfg}, access_key, h, data)
+        diff = await _build_diff_set_dashboard_config({"config": {"views": []}}, access_key, h)
         assert diff["before"] is not None
         assert "sensor.secret" not in diff["before"] and "<redacted>" in diff["before"]
 
@@ -350,10 +350,10 @@ class TestSetDashboardDiff:
 class TestDashboardRestore:
     async def test_restore_reapplies_as_rollback(self, hass, lovelace_env):
         h, _light = lovelace_env
-        token = _token()
+        access_key = _access_key()
         data, versions = _data()
-        await _call("set_dashboard_config", {"config": {"views": [{"title": "A"}]}}, token, h, data)
-        await _call("set_dashboard_config", {"config": {"views": [{"title": "B"}]}}, token, h, data)
+        await _call("set_dashboard_config", {"config": {"views": [{"title": "A"}]}}, access_key, h, data)
+        await _call("set_dashboard_config", {"config": {"views": [{"title": "B"}]}}, access_key, h, data)
 
         create_ver = versions.list_for("dashboard", "lovelace")[-1]  # the create (A)
         _r, outcome, _res = await async_restore_version(create_ver, "admin-1", h, data)

@@ -18,7 +18,7 @@ const { apiMock } = vi.hoisted(() => {
     "cap_integration_write", "cap_integration_reconfigure", "cap_lovelace_write", "cap_registry_write", "cap_radio_write",
     "cap_backup", "cap_filesystem", "cap_yaml_edit",
   ];
-  const token = {
+  const accessKey = {
     id: "tok-1", name: "shell-token", created_at: new Date().toISOString(),
     created_by: "admin", expires_at: null, revoked: false, last_used_at: null,
     updated_at: null, pass_through: false, announce_all_tools: false,
@@ -28,7 +28,7 @@ const { apiMock } = vi.hoisted(() => {
     ...Object.fromEntries(CAPS.map((c) => [c, "deny"])),
   };
   const approval = {
-    id: "ap-9", token_id: token.id, token_name: token.name,
+    id: "ap-9", token_id: accessKey.id, token_name: accessKey.name,
     cap_name: "cap_restart", tool_name: "restart_ha", args: {},
     status: "pending", created_at: new Date().toISOString(),
     expires_at: new Date(Date.now() + 60_000).toISOString(),
@@ -42,13 +42,13 @@ const { apiMock } = vi.hoisted(() => {
     agentcli_global: true,
   };
   const apiMock = {
-    listTokens: async () => [token],
+    listAccessKeys: async () => [accessKey],
     getSettings: async () => settings,
     listApprovals: async () => ({ approvals: [], total: 3 }),
     getApproval: async () => approval,
     getEntityHints: async () => ({ entity_hints: {} }),
     getAgentCliProviders: async () => ({ instances: [], default_instance_id: null }),
-    listArchivedTokens: async () => [],
+    listArchivedAccessKeys: async () => [],
   };
   return { apiMock };
 });

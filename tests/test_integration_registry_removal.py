@@ -26,12 +26,12 @@ from custom_components.phoenix_mcp.mcp_view import (
 )
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
-from custom_components.phoenix_mcp.token_store import (
+from custom_components.phoenix_mcp.access_key_store import (
     GlobalSettings,
     PermissionNode,
     PermissionTree,
-    TokenRecord,
-    TokenStore,
+    AccessKeyRecord,
+    AccessKeyStore,
 )
 
 
@@ -54,8 +54,8 @@ def _profile(key: str, mode: str) -> SemanticProfile:
     )
 
 
-def _token(env: dict, *, cap: str = "allow", device_state: str = "GREEN") -> TokenRecord:
-    return TokenRecord(
+def _access_key(env: dict, *, cap: str = "allow", device_state: str = "GREEN") -> AccessKeyRecord:
+    return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="integration-remove-test",
         token_hash="x",
@@ -70,11 +70,11 @@ def _token(env: dict, *, cap: str = "allow", device_state: str = "GREEN") -> Tok
 
 
 async def _data(hass: HomeAssistant, mesa_mode: str = "off") -> PhoenixData:
-    store = MagicMock(spec=TokenStore)
+    store = MagicMock(spec=AccessKeyStore)
     store.async_lock = asyncio.Lock()
     store.async_save = AsyncMock()
     store.get_settings.return_value = GlobalSettings(mesa_mode=mesa_mode)
-    store.list_tokens.return_value = []
+    store.list_access_keys.return_value = []
     store.get_entity_hints.return_value = {}
     store.get_pending_approvals.return_value = []
     data = PhoenixData(
@@ -149,8 +149,8 @@ async def test_preview_reports_exact_consumers_shared_owners_and_phoenix_refs(
         second.entry_id,
     )
     data = await _data(hass, "enforced")
-    token = _token(env)
-    data.store.list_tokens.return_value = [token]
+    access_key = _access_key(env)
+    data.store.list_access_keys.return_value = [access_key]
     data.store.get_entity_hints.return_value = {env["entity_id"]: "Retained hint"}
     data.store.get_pending_approvals.return_value = [{
         "id": "pending-ref",
@@ -167,7 +167,7 @@ async def test_preview_reports_exact_consumers_shared_owners_and_phoenix_refs(
     )
     decision = _config_entry_action_decision(
         data,
-        token,
+        access_key,
         hass,
         env["entry"],
         actions=["remove"],
@@ -187,7 +187,7 @@ async def test_preview_reports_exact_consumers_shared_owners_and_phoenix_refs(
         ),
     ):
         diff = await _build_diff_remove_integration(
-            {"entry_id": env["entry_id"]}, token, hass, data, decision
+            {"entry_id": env["entry_id"]}, access_key, hass, data, decision
         )
     preview = diff["preview"]
     assert preview["affected_entities"] == [env["entity_id"]]
@@ -218,7 +218,7 @@ async def test_success_uses_ha_remove_and_records_non_restorable_cleanup(
         content, outcome, _ = await _call_tool(
             "remove_integration",
             {"entry_id": env["entry_id"]},
-            _token(env),
+            _access_key(env),
             hass,
             data,
         )
@@ -276,7 +276,7 @@ async def test_shared_device_survives_with_remaining_owner(hass: HomeAssistant):
         content, outcome, _ = await _call_tool(
             "remove_integration",
             {"entry_id": env["entry_id"]},
-            _token(env),
+            _access_key(env),
             hass,
             data,
         )
@@ -300,7 +300,7 @@ async def test_exception_reports_observed_unchanged_state_without_version(
         content, outcome, _ = await _call_tool(
             "remove_integration",
             {"entry_id": env["entry_id"]},
-            _token(env),
+            _access_key(env),
             hass,
             data,
         )
@@ -325,7 +325,7 @@ async def test_exception_after_removal_reports_actual_success(hass: HomeAssistan
         content, outcome, _ = await _call_tool(
             "remove_integration",
             {"entry_id": env["entry_id"]},
-            _token(env),
+            _access_key(env),
             hass,
             data,
         )
@@ -346,7 +346,7 @@ async def test_pending_removal_revalidates_membership_and_permission(
         _content, outcome, _ = await _call_tool(
             "remove_integration",
             {"entry_id": env["entry_id"]},
-            _token(env, cap="confirm"),
+            _access_key(env, cap="confirm"),
             hass,
             data,
         )
@@ -364,7 +364,7 @@ async def test_pending_removal_revalidates_membership_and_permission(
     hass.states.async_set(joined.entity_id, "2")
     with patch.object(hass.config_entries, "async_remove", new=AsyncMock()) as remove_mock:
         content, outcome, _ = await async_execute_approved_tool(
-            "remove_integration", approved_args, _token(env), hass, data
+            "remove_integration", approved_args, _access_key(env), hass, data
         )
     assert outcome == "denied"
     assert "changed after approval" in content["content"][0]["text"]
@@ -373,7 +373,7 @@ async def test_pending_removal_revalidates_membership_and_permission(
     _content, outcome, _ = await async_execute_approved_tool(
         "remove_integration",
         approved_args,
-        _token(env, device_state="RED"),
+        _access_key(env, device_state="RED"),
         hass,
         data,
     )
@@ -390,7 +390,7 @@ async def test_new_read_only_profile_invalidates_pending_removal(
         _content, outcome, _ = await _call_tool(
             "remove_integration",
             {"entry_id": env["entry_id"]},
-            _token(env, cap="confirm"),
+            _access_key(env, cap="confirm"),
             hass,
             data,
         )
@@ -401,7 +401,7 @@ async def test_new_read_only_profile_invalidates_pending_removal(
     )
     with patch.object(hass.config_entries, "async_remove", new=AsyncMock()) as remove_mock:
         content, outcome, _ = await async_execute_approved_tool(
-            "remove_integration", approved_args, _token(env), hass, data
+            "remove_integration", approved_args, _access_key(env), hass, data
         )
     assert outcome == "denied"
     assert "changed after approval" in content["content"][0]["text"]
@@ -416,14 +416,14 @@ async def test_entity_less_and_phoenix_entries_fail_closed(hass: HomeAssistant):
     content, outcome, _ = await _call_tool(
         "remove_integration",
         {"entry_id": empty.entry_id},
-        _token(env),
+        _access_key(env),
         hass,
         data,
     )
     assert outcome == "not_found"
     assert "Integration not found" in content["content"][0]["text"]
 
-    pass_through = TokenRecord(
+    pass_through = AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="entityless-remove-pass-through",
         token_hash="x",
@@ -448,7 +448,7 @@ async def test_entity_less_and_phoenix_entries_fail_closed(hass: HomeAssistant):
     content, outcome, _ = await _call_tool(
         "remove_integration",
         {"entry_id": phoenix.entry_id},
-        _token(env),
+        _access_key(env),
         hass,
         data,
     )

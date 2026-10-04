@@ -17,18 +17,18 @@ from custom_components.phoenix_mcp.const import (
     DEFAULT_RATE_LIMIT_BURST,
     DEFAULT_RATE_LIMIT_REQUESTS,
     STORAGE_VERSION,
-    TOKEN_LENGTH,
-    TOKEN_PREFIX,
+    ACCESS_KEY_LENGTH,
+    ACCESS_KEY_PREFIX,
     TOOL_ROUTING_SETTINGS,
 )
-from custom_components.phoenix_mcp.token_store import (
-    ArchivedTokenRecord,
+from custom_components.phoenix_mcp.access_key_store import (
+    ArchivedAccessKeyRecord,
     GlobalSettings,
     PermissionNode,
     PermissionTree,
-    TokenRecord,
-    TokenStore,
-    token_name_slug as _slugify,
+    AccessKeyRecord,
+    AccessKeyStore,
+    access_key_name_slug as _slugify,
     hmac_compare,
 )
 
@@ -90,7 +90,7 @@ class TestPermissionTree:
 
 
 # ---------------------------------------------------------------------------
-# TokenRecord
+# AccessKeyRecord
 # ---------------------------------------------------------------------------
 
 
@@ -104,62 +104,62 @@ class TestTokenRecord:
             "created_by": "user1",
         }
         defaults.update(kwargs)
-        return TokenRecord(**defaults)
+        return AccessKeyRecord(**defaults)
 
     def test_is_valid_active(self):
-        token = self._make()
-        assert token.is_valid() is True
+        access_key = self._make()
+        assert access_key.is_valid() is True
 
     def test_is_valid_revoked(self):
-        token = self._make(revoked=True)
-        assert token.is_valid() is False
+        access_key = self._make(revoked=True)
+        assert access_key.is_valid() is False
 
     def test_is_expired_no_expiry(self):
-        token = self._make()
-        assert token.is_expired() is False
+        access_key = self._make()
+        assert access_key.is_expired() is False
 
     def test_is_expired_past(self):
-        token = self._make(expires_at=utcnow() - timedelta(seconds=1))
-        assert token.is_expired() is True
-        assert token.is_valid() is False
+        access_key = self._make(expires_at=utcnow() - timedelta(seconds=1))
+        assert access_key.is_expired() is True
+        assert access_key.is_valid() is False
 
     def test_is_expired_future(self):
-        token = self._make(expires_at=utcnow() + timedelta(days=1))
-        assert token.is_expired() is False
+        access_key = self._make(expires_at=utcnow() + timedelta(days=1))
+        assert access_key.is_expired() is False
 
     def test_round_trip(self):
-        token = self._make(
+        access_key = self._make(
             expires_at=utcnow() + timedelta(days=7),
             pass_through=True,
             cap_restart="allow",
             permissions=PermissionTree(domains={"light": PermissionNode(state="GREEN")}),
         )
-        restored = TokenRecord.from_dict(token.to_storage_dict())
-        assert restored.id == token.id
-        assert restored.name == token.name
+        restored = AccessKeyRecord.from_dict(access_key.to_storage_dict())
+        assert restored.id == access_key.id
+        assert restored.name == access_key.name
         assert restored.pass_through is True
         assert restored.cap_restart == "allow"
         assert restored.permissions.domains["light"].state == "GREEN"
 
     def test_from_dict_defaults(self):
-        token = TokenRecord.from_dict({
+        access_key = AccessKeyRecord.from_dict({
             "id": "x",
             "name": "x",
             "token_hash": "x",
             "created_at": utcnow().isoformat(),
             "created_by": "user1",
         })
-        assert token.rate_limit_requests == DEFAULT_RATE_LIMIT_REQUESTS
-        assert token.rate_limit_burst == DEFAULT_RATE_LIMIT_BURST
-        assert token.revoked is False
-        assert token.pass_through is False
-        assert token.announce_all_tools is False
+        assert access_key.rate_limit_requests == DEFAULT_RATE_LIMIT_REQUESTS
+        assert access_key.rate_limit_burst == DEFAULT_RATE_LIMIT_BURST
+        assert access_key.revoked is False
+        assert access_key.pass_through is False
+        assert access_key.announce_all_tools is False
 
     def test_from_dict_fills_new_caps_to_deny(self):
         # A record persisted before a capability existed carries only the older
         # caps. Loading must default every missing cap to deny (no storage version
         # bump is involved), never raise or leave it unset.
-        token = TokenRecord.from_dict({
+        access_key = AccessKeyRecord.from_dict({
             "id": "x",
             "name": "x",
             "token_hash": "x",
@@ -168,22 +168,22 @@ class TestTokenRecord:
             "cap_config_read": CAP_ALLOW,
             "cap_automation_write": CAP_ALLOW,
         })
-        assert token.cap_config_read == CAP_ALLOW
-        assert token.cap_automation_write == CAP_ALLOW
+        assert access_key.cap_config_read == CAP_ALLOW
+        assert access_key.cap_automation_write == CAP_ALLOW
         for cap_name in (
             "cap_search", "cap_registry_read", "cap_traces", "cap_diagnostics",
             "cap_scene_write", "cap_helper_write", "cap_integration_write",
             "cap_lovelace_write", "cap_registry_write", "cap_radio_write",
             "cap_backup", "cap_filesystem", "cap_yaml_edit",
         ):
-            assert getattr(token, cap_name) == CAP_DENY
+            assert getattr(access_key, cap_name) == CAP_DENY
 
     def test_announce_all_tools_round_trip(self):
-        token = self._make()
-        token.announce_all_tools = True
-        d = token.to_dict()
+        access_key = self._make()
+        access_key.announce_all_tools = True
+        d = access_key.to_dict()
         assert d["announce_all_tools"] is True
-        restored = TokenRecord.from_dict(token.to_storage_dict())
+        restored = AccessKeyRecord.from_dict(access_key.to_storage_dict())
         assert restored.announce_all_tools is True
 
     def test_from_dict_naive_expires_at_normalized_to_utc(self):
@@ -191,16 +191,16 @@ class TestTokenRecord:
         # aware: a naive value makes every comparison against aware UTC raise
         # TypeError, and the startup expiry sweep runs during setup, so one bad
         # record would abort the whole integration.
-        token = TokenRecord.from_dict({
+        access_key = AccessKeyRecord.from_dict({
             "id": "x", "name": "x", "token_hash": "x",
             "created_at": utcnow().isoformat(), "created_by": "user1",
             "expires_at": "2030-01-01T12:00:00",
         })
-        assert token.expires_at is not None
-        assert token.expires_at.tzinfo is not None
-        assert token.is_expired() is False
+        assert access_key.expires_at is not None
+        assert access_key.expires_at.tzinfo is not None
+        assert access_key.is_expired() is False
 
-        past = TokenRecord.from_dict({
+        past = AccessKeyRecord.from_dict({
             "id": "y", "name": "y", "token_hash": "y",
             "created_at": utcnow().isoformat(), "created_by": "user1",
             "expires_at": "2020-01-01T12:00:00",
@@ -209,7 +209,7 @@ class TestTokenRecord:
 
     def test_from_dict_rate_limits_sanitized(self):
         def _load(requests, burst):
-            return TokenRecord.from_dict({
+            return AccessKeyRecord.from_dict({
                 "id": "x", "name": "x", "token_hash": "x",
                 "created_at": utcnow().isoformat(), "created_by": "user1",
                 "rate_limit_requests": requests, "rate_limit_burst": burst,
@@ -236,30 +236,30 @@ class TestTokenRecord:
         # tree granting nothing, instead of raising AttributeError and killing
         # the record.
         for garbage in (None, "corrupt", [1, 2], 7):
-            token = TokenRecord.from_dict({
+            access_key = AccessKeyRecord.from_dict({
                 "id": "x", "name": "x", "token_hash": "x",
                 "created_at": utcnow().isoformat(), "created_by": "user1",
                 "permissions": garbage,
             })
-            assert token.permissions.domains == {}
-            assert token.permissions.devices == {}
-            assert token.permissions.entities == {}
+            assert access_key.permissions.domains == {}
+            assert access_key.permissions.devices == {}
+            assert access_key.permissions.entities == {}
 
 
 # ---------------------------------------------------------------------------
-# ArchivedTokenRecord
+# ArchivedAccessKeyRecord
 # ---------------------------------------------------------------------------
 
 
 class TestArchivedTokenRecord:
     def test_round_trip(self):
         now = utcnow()
-        record = ArchivedTokenRecord(
+        record = ArchivedAccessKeyRecord(
             id="a", name="b", token_hash="c",
             created_at=now, created_by="u", revoked_at=now,
             revoked=True,
         )
-        restored = ArchivedTokenRecord.from_dict(record.to_storage_dict())
+        restored = ArchivedAccessKeyRecord.from_dict(record.to_storage_dict())
         assert restored.id == "a"
         assert restored.revoked is True
 
@@ -401,14 +401,14 @@ class TestGlobalSettings:
 
 
 # ---------------------------------------------------------------------------
-# TokenStore - creation and loading
+# AccessKeyStore - creation and loading
 # ---------------------------------------------------------------------------
 
 
 class TestTokenStoreLoad:
-    async def test_empty_load(self, token_store):
-        assert token_store.list_tokens() == []
-        assert token_store.list_archived() == []
+    async def test_empty_load(self, access_key_store):
+        assert access_key_store.list_access_keys() == []
+        assert access_key_store.list_archived() == []
 
     async def test_load_with_existing_data(self, hass):
         now = utcnow()
@@ -428,12 +428,12 @@ class TestTokenStoreLoad:
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
 
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
-            store = await TokenStore.async_create(hass)
+        with patch("custom_components.phoenix_mcp.access_key_store._PhoenixStore", return_value=mock_store):
+            store = await AccessKeyStore.async_create(hass)
 
-        tokens = store.list_tokens()
-        assert len(tokens) == 1
-        assert tokens[0].name == "mytoken"
+        access_keys = store.list_access_keys()
+        assert len(access_keys) == 1
+        assert access_keys[0].name == "mytoken"
         assert store.get_settings().kill_switch is True
 
     async def test_load_skips_unparseable_records_and_keeps_siblings(self, hass):
@@ -460,11 +460,11 @@ class TestTokenStoreLoad:
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
 
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
-            store = await TokenStore.async_create(hass)
+        with patch("custom_components.phoenix_mcp.access_key_store._PhoenixStore", return_value=mock_store):
+            store = await AccessKeyStore.async_create(hass)
 
-        tokens = store.list_tokens()
-        assert [t.id for t in tokens] == ["tok-good"]
+        access_keys = store.list_access_keys()
+        assert [t.id for t in access_keys] == ["tok-good"]
         assert store.list_archived() == []
 
     @pytest.mark.parametrize("bad_created_at", ["not-a-date", "", "2026-13-45T99:99:99"])
@@ -474,7 +474,7 @@ class TestTokenStoreLoad:
         """An unparseable created_at (non-optional) skips the record.
 
         _parse_dt returns None for anything it cannot parse, which would build a
-        TokenRecord with a None created_at: it loads looking valid and crashes
+        AccessKeyRecord with a None created_at: it loads looking valid and crashes
         later at an expiry comparison or .isoformat(). Raising routes it into the
         same skip-and-warn handler as every other corruption.
         """
@@ -490,10 +490,10 @@ class TestTokenStoreLoad:
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
 
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
-            store = await TokenStore.async_create(hass)
+        with patch("custom_components.phoenix_mcp.access_key_store._PhoenixStore", return_value=mock_store):
+            store = await AccessKeyStore.async_create(hass)
 
-        assert [t.id for t in store.list_tokens()] == ["tok-good"]
+        assert [t.id for t in store.list_access_keys()] == ["tok-good"]
 
     async def test_load_skips_an_archived_record_with_an_unparseable_revoked_at(self, hass):
         """Same rule for an archived record's revoked_at, also non-optional."""
@@ -513,8 +513,8 @@ class TestTokenStoreLoad:
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
 
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
-            store = await TokenStore.async_create(hass)
+        with patch("custom_components.phoenix_mcp.access_key_store._PhoenixStore", return_value=mock_store):
+            store = await AccessKeyStore.async_create(hass)
 
         assert [t.id for t in store.list_archived()] == ["arch-good"]
 
@@ -525,9 +525,9 @@ class TestTokenStoreLoad:
             mock_store = AsyncMock()
             mock_store.async_load = AsyncMock(return_value=corrupt_root)
             mock_store.async_save = AsyncMock()
-            with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
-                store = await TokenStore.async_create(hass)
-            assert store.list_tokens() == []
+            with patch("custom_components.phoenix_mcp.access_key_store._PhoenixStore", return_value=mock_store):
+                store = await AccessKeyStore.async_create(hass)
+            assert store.list_access_keys() == []
             assert store.list_archived() == []
             assert store.get_pending_approvals() == []
             mock_store.async_save.assert_awaited()  # cleaned form healed to disk
@@ -549,9 +549,9 @@ class TestTokenStoreLoad:
         mock_store = AsyncMock()
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
-            store = await TokenStore.async_create(hass)
-        assert store.list_tokens() == []
+        with patch("custom_components.phoenix_mcp.access_key_store._PhoenixStore", return_value=mock_store):
+            store = await AccessKeyStore.async_create(hass)
+        assert store.list_access_keys() == []
         assert store.list_archived() == []
         assert store.get_pending_approvals() == []
         assert store.get_settings().kill_switch is False
@@ -576,9 +576,9 @@ class TestTokenStoreLoad:
         mock_store = AsyncMock()
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
-            store = await TokenStore.async_create(hass)
-        assert [t.id for t in store.list_tokens()] == ["tok1"]
+        with patch("custom_components.phoenix_mcp.access_key_store._PhoenixStore", return_value=mock_store):
+            store = await AccessKeyStore.async_create(hass)
+        assert [t.id for t in store.list_access_keys()] == ["tok1"]
         mock_store.async_save.assert_not_awaited()
 
     async def test_load_falsy_root_healed_but_fresh_install_not(self, hass):
@@ -588,17 +588,17 @@ class TestTokenStoreLoad:
             mock_store = AsyncMock()
             mock_store.async_load = AsyncMock(return_value=corrupt_root)
             mock_store.async_save = AsyncMock()
-            with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
-                store = await TokenStore.async_create(hass)
-            assert store.list_tokens() == []
+            with patch("custom_components.phoenix_mcp.access_key_store._PhoenixStore", return_value=mock_store):
+                store = await AccessKeyStore.async_create(hass)
+            assert store.list_access_keys() == []
             mock_store.async_save.assert_awaited()
 
         fresh = AsyncMock()
         fresh.async_load = AsyncMock(return_value=None)
         fresh.async_save = AsyncMock()
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=fresh):
-            store = await TokenStore.async_create(hass)
-        assert store.list_tokens() == []
+        with patch("custom_components.phoenix_mcp.access_key_store._PhoenixStore", return_value=fresh):
+            store = await AccessKeyStore.async_create(hass)
+        assert store.list_access_keys() == []
         fresh.async_save.assert_not_awaited()
 
     async def test_load_discards_non_dict_approval_members(self, hass):
@@ -616,8 +616,8 @@ class TestTokenStoreLoad:
         mock_store = AsyncMock()
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
-            store = await TokenStore.async_create(hass)
+        with patch("custom_components.phoenix_mcp.access_key_store._PhoenixStore", return_value=mock_store):
+            store = await AccessKeyStore.async_create(hass)
         assert store.get_pending_approvals() == [good_approval]
         mock_store.async_save.assert_awaited()  # cleaned form healed
 
@@ -641,225 +641,225 @@ class TestTokenStoreLoad:
         mock_store = AsyncMock()
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=mock_store):
-            store = await TokenStore.async_create(hass)
-        tok = store.list_tokens()[0]
+        with patch("custom_components.phoenix_mcp.access_key_store._PhoenixStore", return_value=mock_store):
+            store = await AccessKeyStore.async_create(hass)
+        tok = store.list_access_keys()[0]
         assert tok.pass_through is False
         assert tok.use_assist_exposure is False
         assert tok.announce_all_tools is False
 
 
 # ---------------------------------------------------------------------------
-# TokenStore - token creation
+# AccessKeyStore - token creation
 # ---------------------------------------------------------------------------
 
 
 class TestTokenCreation:
-    async def test_create_returns_raw_token_and_record(self, token_store):
-        record, raw = await token_store.async_create_token("mytoken", "user1")
-        assert raw.startswith(TOKEN_PREFIX)
-        assert len(raw) == TOKEN_LENGTH
+    async def test_create_returns_raw_token_and_record(self, access_key_store):
+        record, raw = await access_key_store.async_create_access_key("mytoken", "user1")
+        assert raw.startswith(ACCESS_KEY_PREFIX)
+        assert len(raw) == ACCESS_KEY_LENGTH
         assert record.name == "mytoken"
         assert record.created_by == "user1"
 
-    async def test_raw_token_not_stored(self, token_store):
-        record, raw = await token_store.async_create_token("t1", "u")
+    async def test_raw_token_not_stored(self, access_key_store):
+        record, raw = await access_key_store.async_create_access_key("t1", "u")
         expected_hash = _sha256(raw)
         assert record.token_hash == expected_hash
         assert raw not in record.token_hash
 
-    async def test_create_saves_immediately(self, token_store, mock_store):
-        await token_store.async_create_token("t1", "u")
+    async def test_create_saves_immediately(self, access_key_store, mock_store):
+        await access_key_store.async_create_access_key("t1", "u")
         mock_store.async_save.assert_called()
 
-    async def test_create_with_expiry(self, token_store):
+    async def test_create_with_expiry(self, access_key_store):
         expiry = utcnow() + timedelta(days=30)
-        record, _ = await token_store.async_create_token("t1", "u", expires_at=expiry)
+        record, _ = await access_key_store.async_create_access_key("t1", "u", expires_at=expiry)
         assert record.expires_at == expiry
 
-    async def test_create_pass_through(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u", pass_through=True)
+    async def test_create_pass_through(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u", pass_through=True)
         assert record.pass_through is True
 
-    async def test_burst_coerced_to_zero_when_requests_zero(self, token_store):
-        record, _ = await token_store.async_create_token(
+    async def test_burst_coerced_to_zero_when_requests_zero(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key(
             "t1", "u", rate_limit_requests=0, rate_limit_burst=10
         )
         assert record.rate_limit_burst == 0
 
-    async def test_burst_preserved_when_requests_nonzero(self, token_store):
-        record, _ = await token_store.async_create_token(
+    async def test_burst_preserved_when_requests_nonzero(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key(
             "t1", "u", rate_limit_requests=30, rate_limit_burst=5
         )
         assert record.rate_limit_burst == 5
 
-    async def test_default_rate_limits(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
+    async def test_default_rate_limits(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
         assert record.rate_limit_requests == DEFAULT_RATE_LIMIT_REQUESTS
         assert record.rate_limit_burst == DEFAULT_RATE_LIMIT_BURST
 
-    async def test_default_capability_flags_all_deny(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
+    async def test_default_capability_flags_all_deny(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
         assert record.cap_automation_write == "deny"
         assert record.cap_config_read == "deny"
         assert record.cap_template_render == "deny"
         assert record.cap_restart == "deny"
         assert record.persona == "custom"
 
-    async def test_multiple_tokens_have_unique_ids(self, token_store):
-        r1, _ = await token_store.async_create_token("t1", "u")
-        r2, _ = await token_store.async_create_token("t2", "u")
+    async def test_multiple_tokens_have_unique_ids(self, access_key_store):
+        r1, _ = await access_key_store.async_create_access_key("t1", "u")
+        r2, _ = await access_key_store.async_create_access_key("t2", "u")
         assert r1.id != r2.id
 
-    async def test_multiple_tokens_have_unique_hashes(self, token_store):
-        r1, _ = await token_store.async_create_token("t1", "u")
-        r2, _ = await token_store.async_create_token("t2", "u")
+    async def test_multiple_tokens_have_unique_hashes(self, access_key_store):
+        r1, _ = await access_key_store.async_create_access_key("t1", "u")
+        r2, _ = await access_key_store.async_create_access_key("t2", "u")
         assert r1.token_hash != r2.token_hash
 
 
 # ---------------------------------------------------------------------------
-# TokenStore - lookup
+# AccessKeyStore - lookup
 # ---------------------------------------------------------------------------
 
 
 class TestTokenLookup:
-    async def test_get_by_id(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        found = token_store.get_token_by_id(record.id)
+    async def test_get_by_id(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        found = access_key_store.get_access_key_by_id(record.id)
         assert found is not None
         assert found.id == record.id
 
-    async def test_get_by_id_missing(self, token_store):
-        assert token_store.get_token_by_id("nonexistent") is None
+    async def test_get_by_id_missing(self, access_key_store):
+        assert access_key_store.get_access_key_by_id("nonexistent") is None
 
-    async def test_get_by_hash(self, token_store):
-        record, raw = await token_store.async_create_token("t1", "u")
+    async def test_get_by_hash(self, access_key_store):
+        record, raw = await access_key_store.async_create_access_key("t1", "u")
         presented_hash = _sha256(raw)
-        found = token_store.get_token_by_hash(presented_hash)
+        found = access_key_store.get_access_key_by_hash(presented_hash)
         assert found is not None
         assert found.id == record.id
 
-    async def test_get_by_hash_wrong_value(self, token_store):
-        await token_store.async_create_token("t1", "u")
-        assert token_store.get_token_by_hash(_sha256("wrong")) is None
+    async def test_get_by_hash_wrong_value(self, access_key_store):
+        await access_key_store.async_create_access_key("t1", "u")
+        assert access_key_store.get_access_key_by_hash(_sha256("wrong")) is None
 
-    async def test_get_archived_by_hash(self, token_store):
-        record, raw = await token_store.async_create_token("t1", "u")
-        await token_store.async_archive_token(record.id, revoked=True)
+    async def test_get_archived_by_hash(self, access_key_store):
+        record, raw = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_archive_access_key(record.id, revoked=True)
         presented_hash = _sha256(raw)
-        found = token_store.get_archived_by_hash(presented_hash)
+        found = access_key_store.get_archived_by_hash(presented_hash)
         assert found is not None
         assert found.id == record.id
 
 
 # ---------------------------------------------------------------------------
-# TokenStore - listing
+# AccessKeyStore - listing
 # ---------------------------------------------------------------------------
 
 
 class TestTokenListing:
-    async def test_list_tokens_empty(self, token_store):
-        assert token_store.list_tokens() == []
+    async def test_list_tokens_empty(self, access_key_store):
+        assert access_key_store.list_access_keys() == []
 
-    async def test_list_tokens_contains_created(self, token_store):
-        r1, _ = await token_store.async_create_token("t1", "u")
-        r2, _ = await token_store.async_create_token("t2", "u")
-        ids = {t.id for t in token_store.list_tokens()}
+    async def test_list_tokens_contains_created(self, access_key_store):
+        r1, _ = await access_key_store.async_create_access_key("t1", "u")
+        r2, _ = await access_key_store.async_create_access_key("t2", "u")
+        ids = {t.id for t in access_key_store.list_access_keys()}
         assert r1.id in ids
         assert r2.id in ids
 
-    async def test_active_token_count(self, token_store):
-        assert token_store.active_token_count() == 0
-        await token_store.async_create_token("t1", "u")
-        assert token_store.active_token_count() == 1
-        await token_store.async_create_token("t2", "u")
-        assert token_store.active_token_count() == 2
+    async def test_active_token_count(self, access_key_store):
+        assert access_key_store.active_access_key_count() == 0
+        await access_key_store.async_create_access_key("t1", "u")
+        assert access_key_store.active_access_key_count() == 1
+        await access_key_store.async_create_access_key("t2", "u")
+        assert access_key_store.active_access_key_count() == 2
 
-    async def test_list_archived_empty(self, token_store):
-        assert token_store.list_archived() == []
+    async def test_list_archived_empty(self, access_key_store):
+        assert access_key_store.list_archived() == []
 
 
 # ---------------------------------------------------------------------------
-# TokenStore - archival
+# AccessKeyStore - archival
 # ---------------------------------------------------------------------------
 
 
 class TestTokenArchival:
-    async def test_revoke_moves_to_archived(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        await token_store.async_archive_token(record.id, revoked=True)
-        assert token_store.get_token_by_id(record.id) is None
-        archived = token_store.list_archived()
+    async def test_revoke_moves_to_archived(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_archive_access_key(record.id, revoked=True)
+        assert access_key_store.get_access_key_by_id(record.id) is None
+        archived = access_key_store.list_archived()
         assert len(archived) == 1
         assert archived[0].id == record.id
         assert archived[0].revoked is True
 
-    async def test_expire_archived_with_revoked_false(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        await token_store.async_archive_token(record.id, revoked=False)
-        archived = token_store.list_archived()
+    async def test_expire_archived_with_revoked_false(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_archive_access_key(record.id, revoked=False)
+        archived = access_key_store.list_archived()
         assert archived[0].revoked is False
 
-    async def test_archive_saves_immediately(self, token_store, mock_store):
+    async def test_archive_saves_immediately(self, access_key_store, mock_store):
         mock_store.async_save.reset_mock()
-        record, _ = await token_store.async_create_token("t1", "u")
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
         mock_store.async_save.reset_mock()
-        await token_store.async_archive_token(record.id, revoked=True)
+        await access_key_store.async_archive_access_key(record.id, revoked=True)
         mock_store.async_save.assert_called()
 
-    async def test_archive_nonexistent_returns_none(self, token_store):
-        result = await token_store.async_archive_token("no-such-id", revoked=True)
+    async def test_archive_nonexistent_returns_none(self, access_key_store):
+        result = await access_key_store.async_archive_access_key("no-such-id", revoked=True)
         assert result is None
 
-    async def test_archive_retains_audit_fields(self, token_store):
+    async def test_archive_retains_audit_fields(self, access_key_store):
         expiry = utcnow() + timedelta(days=1)
-        record, _ = await token_store.async_create_token("t1", "u", expires_at=expiry)
-        token_store.update_last_used(record.id, utcnow())
-        archived = await token_store.async_archive_token(record.id, revoked=True)
+        record, _ = await access_key_store.async_create_access_key("t1", "u", expires_at=expiry)
+        access_key_store.update_last_used(record.id, utcnow())
+        archived = await access_key_store.async_archive_access_key(record.id, revoked=True)
         assert archived.name == "t1"
         assert archived.created_by == "u"
         assert archived.expires_at == expiry
         assert archived.last_used_at is not None
 
-    async def test_permission_tree_not_in_archived(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        archived = await token_store.async_archive_token(record.id, revoked=True)
+    async def test_permission_tree_not_in_archived(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        archived = await access_key_store.async_archive_access_key(record.id, revoked=True)
         assert not hasattr(archived, "permissions")
 
 
 # ---------------------------------------------------------------------------
-# TokenStore - patching
+# AccessKeyStore - patching
 # ---------------------------------------------------------------------------
 
 
 class TestTokenPatch:
-    async def test_patch_pass_through(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        updated = await token_store.async_patch_token(record.id, pass_through=True)
+    async def test_patch_pass_through(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        updated = await access_key_store.async_patch_access_key(record.id, pass_through=True)
         assert updated.pass_through is True
 
-    async def test_patch_announce_all_tools(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
+    async def test_patch_announce_all_tools(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
         assert record.announce_all_tools is False
-        updated = await token_store.async_patch_token(record.id, announce_all_tools=True)
+        updated = await access_key_store.async_patch_access_key(record.id, announce_all_tools=True)
         assert updated.announce_all_tools is True
 
-    async def test_patch_rate_limit(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        updated = await token_store.async_patch_token(
+    async def test_patch_rate_limit(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        updated = await access_key_store.async_patch_access_key(
             record.id, rate_limit_requests=30, rate_limit_burst=5
         )
         assert updated.rate_limit_requests == 30
         assert updated.rate_limit_burst == 5
 
-    async def test_patch_rate_requests_zero_coerces_burst(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u", rate_limit_burst=10)
-        updated = await token_store.async_patch_token(record.id, rate_limit_requests=0)
+    async def test_patch_rate_requests_zero_coerces_burst(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u", rate_limit_burst=10)
+        updated = await access_key_store.async_patch_access_key(record.id, rate_limit_requests=0)
         assert updated.rate_limit_burst == 0
 
-    async def test_patch_capability_flags(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        updated = await token_store.async_patch_token(
+    async def test_patch_capability_flags(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        updated = await access_key_store.async_patch_access_key(
             record.id,
             cap_restart="allow",
             cap_config_read="allow",
@@ -871,188 +871,188 @@ class TestTokenPatch:
         assert updated.cap_automation_write == "allow"
         assert updated.cap_template_render == "allow"
 
-    async def test_patch_cap_change_after_persona_drops_to_custom(self, token_store):
+    async def test_patch_cap_change_after_persona_drops_to_custom(self, access_key_store):
         """Changing a cap after applying a persona switches the persona to custom."""
         from custom_components.phoenix_mcp.personas import get_persona_caps
 
-        record, _ = await token_store.async_create_token("t1", "u")
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
         # Seed the voice_assistant persona.
-        await token_store.async_patch_token(
+        await access_key_store.async_patch_access_key(
             record.id,
             persona="voice_assistant",
             **get_persona_caps("voice_assistant"),
         )
-        assert token_store.get_token_by_id(record.id).persona == "voice_assistant"
+        assert access_key_store.get_access_key_by_id(record.id).persona == "voice_assistant"
 
         # Override cap_automation_write (was deny in voice_assistant). Persona should re-derive.
-        updated = await token_store.async_patch_token(
+        updated = await access_key_store.async_patch_access_key(
             record.id,
             cap_automation_write="allow",
         )
         assert updated.cap_automation_write == "allow"
         assert updated.persona == "custom"
 
-    async def test_patch_cap_change_can_promote_to_matching_persona(self, token_store):
+    async def test_patch_cap_change_can_promote_to_matching_persona(self, access_key_store):
         """If the post-change caps match a different preset exactly, that preset is detected."""
         from custom_components.phoenix_mcp.personas import get_persona_caps
 
-        record, _ = await token_store.async_create_token("t1", "u")
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
         # Start from automation_builder.
-        await token_store.async_patch_token(
+        await access_key_store.async_patch_access_key(
             record.id,
             persona="automation_builder",
             **get_persona_caps("automation_builder"),
         )
-        assert token_store.get_token_by_id(record.id).persona == "automation_builder"
+        assert access_key_store.get_access_key_by_id(record.id).persona == "automation_builder"
 
         # Patch exactly the caps that differ between automation_builder and
         # power_user; the resulting set matches power_user, so the label promotes.
         ab = get_persona_caps("automation_builder")
         pu = get_persona_caps("power_user")
         diff = {cap: mode for cap, mode in pu.items() if ab.get(cap) != mode}
-        updated = await token_store.async_patch_token(record.id, **diff)
+        updated = await access_key_store.async_patch_access_key(record.id, **diff)
         assert updated.persona == "power_user"
 
-    async def test_patch_non_cap_change_does_not_touch_persona(self, token_store):
+    async def test_patch_non_cap_change_does_not_touch_persona(self, access_key_store):
         """Patching only rate-limit fields does not re-derive the persona."""
         from custom_components.phoenix_mcp.personas import get_persona_caps
 
-        record, _ = await token_store.async_create_token("t1", "u")
-        await token_store.async_patch_token(
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_patch_access_key(
             record.id,
             persona="voice_assistant",
             **get_persona_caps("voice_assistant"),
         )
-        updated = await token_store.async_patch_token(record.id, rate_limit_requests=30)
+        updated = await access_key_store.async_patch_access_key(record.id, rate_limit_requests=30)
         assert updated.persona == "voice_assistant"
         assert updated.rate_limit_requests == 30
 
-    async def test_patch_saves_immediately(self, token_store, mock_store):
-        record, _ = await token_store.async_create_token("t1", "u")
+    async def test_patch_saves_immediately(self, access_key_store, mock_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
         mock_store.async_save.reset_mock()
-        await token_store.async_patch_token(record.id, cap_restart="allow")
+        await access_key_store.async_patch_access_key(record.id, cap_restart="allow")
         mock_store.async_save.assert_called()
 
-    async def test_patch_nonexistent_returns_none(self, token_store):
-        result = await token_store.async_patch_token("no-such-id", cap_restart="allow")
+    async def test_patch_nonexistent_returns_none(self, access_key_store):
+        result = await access_key_store.async_patch_access_key("no-such-id", cap_restart="allow")
         assert result is None
 
-    async def test_patch_applies_name_and_ignores_immutable(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        await token_store.async_patch_token(record.id, name="renamed-x", created_by="hacker")
-        fetched = token_store.get_token_by_id(record.id)
+    async def test_patch_applies_name_and_ignores_immutable(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_patch_access_key(record.id, name="renamed-x", created_by="hacker")
+        fetched = access_key_store.get_access_key_by_id(record.id)
         assert fetched.name == "renamed-x"   # name is mutable (rename)
         assert fetched.created_by == "u"     # created_by stays immutable (ignored)
 
-    async def test_name_slug_exists_excludes_self(self, token_store):
-        a, _ = await token_store.async_create_token("alpha", "u")
-        await token_store.async_create_token("beta", "u")
-        assert token_store.name_slug_exists("beta") is True
-        assert token_store.name_slug_exists("beta", exclude_token_id=a.id) is True   # beta is a different token
-        assert token_store.name_slug_exists("alpha", exclude_token_id=a.id) is False  # only match is self
+    async def test_name_slug_exists_excludes_self(self, access_key_store):
+        a, _ = await access_key_store.async_create_access_key("alpha", "u")
+        await access_key_store.async_create_access_key("beta", "u")
+        assert access_key_store.name_slug_exists("beta") is True
+        assert access_key_store.name_slug_exists("beta", exclude_access_key_id=a.id) is True   # beta is a different token
+        assert access_key_store.name_slug_exists("alpha", exclude_access_key_id=a.id) is False  # only match is self
 
 
 # ---------------------------------------------------------------------------
-# TokenStore - permissions
+# AccessKeyStore - permissions
 # ---------------------------------------------------------------------------
 
 
 class TestPermissions:
-    async def test_set_full_permission_tree(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
+    async def test_set_full_permission_tree(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
         tree = PermissionTree(
             domains={"light": PermissionNode(state="GREEN")},
             entities={"sensor.temp": PermissionNode(state="YELLOW", hint="temp sensor")},
         )
-        updated = await token_store.async_set_permissions(record.id, tree)
+        updated = await access_key_store.async_set_permissions(record.id, tree)
         assert updated.permissions.domains["light"].state == "GREEN"
         assert updated.permissions.entities["sensor.temp"].hint == "temp sensor"
 
-    async def test_patch_permission_node_set(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        await token_store.async_patch_permission_node(
+    async def test_patch_permission_node_set(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_patch_permission_node(
             record.id, "domains", "light", "GREEN", hint="ceiling lights"
         )
-        token = token_store.get_token_by_id(record.id)
-        assert token.permissions.domains["light"].state == "GREEN"
-        assert token.permissions.domains["light"].hint == "ceiling lights"
+        access_key = access_key_store.get_access_key_by_id(record.id)
+        assert access_key.permissions.domains["light"].state == "GREEN"
+        assert access_key.permissions.domains["light"].hint == "ceiling lights"
 
-    async def test_patch_permission_node_grey_removes_node(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        await token_store.async_patch_permission_node(record.id, "domains", "light", "GREEN")
-        await token_store.async_patch_permission_node(record.id, "domains", "light", "GREY")
-        token = token_store.get_token_by_id(record.id)
-        assert "light" not in token.permissions.domains
+    async def test_patch_permission_node_grey_removes_node(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_patch_permission_node(record.id, "domains", "light", "GREEN")
+        await access_key_store.async_patch_permission_node(record.id, "domains", "light", "GREY")
+        access_key = access_key_store.get_access_key_by_id(record.id)
+        assert "light" not in access_key.permissions.domains
 
-    async def test_patch_permission_node_invalid_type_returns_none(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        result = await token_store.async_patch_permission_node(
+    async def test_patch_permission_node_invalid_type_returns_none(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        result = await access_key_store.async_patch_permission_node(
             record.id, "invalid_type", "light", "GREEN"
         )
         assert result is None
 
-    async def test_permissions_save_immediately(self, token_store, mock_store):
-        record, _ = await token_store.async_create_token("t1", "u")
+    async def test_permissions_save_immediately(self, access_key_store, mock_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
         mock_store.async_save.reset_mock()
-        await token_store.async_patch_permission_node(record.id, "domains", "light", "GREEN")
+        await access_key_store.async_patch_permission_node(record.id, "domains", "light", "GREEN")
         mock_store.async_save.assert_called()
 
-    async def test_set_permissions_nonexistent_returns_none(self, token_store):
-        result = await token_store.async_set_permissions("no-such-id", PermissionTree())
+    async def test_set_permissions_nonexistent_returns_none(self, access_key_store):
+        result = await access_key_store.async_set_permissions("no-such-id", PermissionTree())
         assert result is None
 
 
 # ---------------------------------------------------------------------------
-# TokenStore - last_used_at
+# AccessKeyStore - last_used_at
 # ---------------------------------------------------------------------------
 
 
 class TestLastUsed:
-    async def test_update_last_used_in_memory(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
+    async def test_update_last_used_in_memory(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
         ts = utcnow()
-        token_store.update_last_used(record.id, ts)
-        token = token_store.get_token_by_id(record.id)
-        assert token.last_used_at == ts
+        access_key_store.update_last_used(record.id, ts)
+        access_key = access_key_store.get_access_key_by_id(record.id)
+        assert access_key.last_used_at == ts
 
-    async def test_update_last_used_nonexistent_no_error(self, token_store):
-        token_store.update_last_used("no-such-id", utcnow())
+    async def test_update_last_used_nonexistent_no_error(self, access_key_store):
+        access_key_store.update_last_used("no-such-id", utcnow())
 
-    async def test_flush_last_used_calls_save(self, token_store, mock_store):
-        record, _ = await token_store.async_create_token(name="usage-token", created_by="u")
-        token_store.update_last_used(record.id, utcnow())
+    async def test_flush_last_used_calls_save(self, access_key_store, mock_store):
+        record, _ = await access_key_store.async_create_access_key(name="usage-token", created_by="u")
+        access_key_store.update_last_used(record.id, utcnow())
         mock_store.async_save.reset_mock()
-        await token_store.async_flush_last_used()
+        await access_key_store.async_flush_last_used()
         mock_store.async_save.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
-# TokenStore - archived deletion
+# AccessKeyStore - archived deletion
 # ---------------------------------------------------------------------------
 
 
 class TestArchivedDeletion:
-    async def test_delete_archived_removes_record(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        await token_store.async_archive_token(record.id, revoked=True)
-        result = await token_store.async_delete_archived(record.id)
+    async def test_delete_archived_removes_record(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_archive_access_key(record.id, revoked=True)
+        result = await access_key_store.async_delete_archived(record.id)
         assert result is True
-        assert token_store.list_archived() == []
+        assert access_key_store.list_archived() == []
 
-    async def test_delete_archived_saves_immediately(self, token_store, mock_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        await token_store.async_archive_token(record.id, revoked=True)
+    async def test_delete_archived_saves_immediately(self, access_key_store, mock_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_archive_access_key(record.id, revoked=True)
         mock_store.async_save.reset_mock()
-        await token_store.async_delete_archived(record.id)
+        await access_key_store.async_delete_archived(record.id)
         mock_store.async_save.assert_called()
 
-    async def test_delete_archived_nonexistent_returns_false(self, token_store):
-        result = await token_store.async_delete_archived("no-such-id")
+    async def test_delete_archived_nonexistent_returns_false(self, access_key_store):
+        result = await access_key_store.async_delete_archived("no-such-id")
         assert result is False
 
 
 # ---------------------------------------------------------------------------
-# TokenStore - settings
+# AccessKeyStore - settings
 # ---------------------------------------------------------------------------
 
 
@@ -1069,48 +1069,48 @@ class TestSettings:
         assert "tool_routing_version" not in settings
         storage = AsyncMock()
         storage.async_load.return_value = {"version": STORAGE_VERSION, "settings": settings}
-        with patch("custom_components.phoenix_mcp.token_store._PhoenixStore", return_value=storage):
-            store = await TokenStore.async_create(hass)
+        with patch("custom_components.phoenix_mcp.access_key_store._PhoenixStore", return_value=storage):
+            store = await AccessKeyStore.async_create(hass)
         assert store.get_settings().to_dict() == settings
         storage.async_save.assert_not_awaited()
 
-    async def test_deliberate_review_opt_in_survives_reload(self, token_store, mock_store):
+    async def test_deliberate_review_opt_in_survives_reload(self, access_key_store, mock_store):
         updates = {key: "observe" for key in TOOL_ROUTING_SETTINGS.values()}
-        await token_store.async_patch_settings(**updates)
+        await access_key_store.async_patch_settings(**updates)
         persisted = mock_store.async_save.call_args.args[0]
         mock_store.async_load.return_value = persisted
         mock_store.async_save.reset_mock()
-        await token_store.async_load()
-        assert all(token_store.get_settings().to_dict()[key] == mode for key, mode in updates.items())
+        await access_key_store.async_load()
+        assert all(access_key_store.get_settings().to_dict()[key] == mode for key, mode in updates.items())
         mock_store.async_save.assert_not_awaited()
 
-    async def test_get_settings_defaults(self, token_store):
-        settings = token_store.get_settings()
+    async def test_get_settings_defaults(self, access_key_store):
+        settings = access_key_store.get_settings()
         assert settings.kill_switch is False
         assert settings.log_allowed is True
 
-    async def test_patch_settings(self, token_store):
-        updated = await token_store.async_patch_settings(kill_switch=True, log_client_ip=False)
+    async def test_patch_settings(self, access_key_store):
+        updated = await access_key_store.async_patch_settings(kill_switch=True, log_client_ip=False)
         assert updated.kill_switch is True
         assert updated.log_client_ip is False
-        assert token_store.get_settings().kill_switch is True
+        assert access_key_store.get_settings().kill_switch is True
 
-    async def test_patch_settings_saves_immediately(self, token_store, mock_store):
+    async def test_patch_settings_saves_immediately(self, access_key_store, mock_store):
         mock_store.async_save.reset_mock()
-        await token_store.async_patch_settings(kill_switch=True)
+        await access_key_store.async_patch_settings(kill_switch=True)
         mock_store.async_save.assert_called()
 
 
 # ---------------------------------------------------------------------------
-# TokenStore - wipe
+# AccessKeyStore - wipe
 # ---------------------------------------------------------------------------
 
 
 class TestWipe:
-    async def test_wipe_clears_all(self, token_store):
-        await token_store.async_create_token("t1", "u")
-        await token_store.async_create_token("t2", "u")
-        await token_store.async_patch_settings(
+    async def test_wipe_clears_all(self, access_key_store):
+        await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_create_access_key("t2", "u")
+        await access_key_store.async_patch_settings(
             kill_switch=True,
             decision_provider_id="decision-account",
             decision_timeout_ms=12345,
@@ -1129,10 +1129,10 @@ class TestWipe:
             ai_task_conversation_style="technical",
             ai_task_detail_level="concise",
         )
-        await token_store.async_wipe()
-        assert token_store.list_tokens() == []
-        assert token_store.list_archived() == []
-        settings = token_store.get_settings()
+        await access_key_store.async_wipe()
+        assert access_key_store.list_access_keys() == []
+        assert access_key_store.list_archived() == []
+        settings = access_key_store.get_settings()
         assert settings.kill_switch is False
         assert (settings.agentcli_conversation_style, settings.agentcli_detail_level,
                 settings.agentcli_home_focused) == ("direct", "concise", False)
@@ -1151,35 +1151,35 @@ class TestWipe:
         assert not settings.decision_shadow_enabled
         assert not settings.agentcli_routing_shadow_enabled
 
-    async def test_wipe_saves_immediately(self, token_store, mock_store):
+    async def test_wipe_saves_immediately(self, access_key_store, mock_store):
         mock_store.async_save.reset_mock()
-        await token_store.async_wipe()
+        await access_key_store.async_wipe()
         mock_store.async_save.assert_called()
 
-    async def test_wipe_clears_pending_approvals(self, token_store):
+    async def test_wipe_clears_pending_approvals(self, access_key_store):
         # An orphaned pending approval must not survive a wipe (and thus must not
         # be persisted back to disk by the async_save inside async_wipe).
-        token_store.set_pending_approvals([
+        access_key_store.set_pending_approvals([
             {"id": "ap1", "token_id": "gone", "status": "pending"},
         ])
-        await token_store.async_wipe()
-        assert token_store.get_pending_approvals() == []
+        await access_key_store.async_wipe()
+        assert access_key_store.get_pending_approvals() == []
 
 
 # ---------------------------------------------------------------------------
-# TokenStore - slug uniqueness
+# AccessKeyStore - slug uniqueness
 # ---------------------------------------------------------------------------
 
 
 class TestSlugUniqueness:
-    async def test_same_name_slug_detected(self, token_store):
-        await token_store.async_create_token("my-token", "u")
-        assert token_store.name_slug_exists("my-token") is True
-        assert token_store.name_slug_exists("my_token") is True
+    async def test_same_name_slug_detected(self, access_key_store):
+        await access_key_store.async_create_access_key("my-token", "u")
+        assert access_key_store.name_slug_exists("my-token") is True
+        assert access_key_store.name_slug_exists("my_token") is True
 
-    async def test_different_name_not_collision(self, token_store):
-        await token_store.async_create_token("my-token", "u")
-        assert token_store.name_slug_exists("other-token") is False
+    async def test_different_name_not_collision(self, access_key_store):
+        await access_key_store.async_create_access_key("my-token", "u")
+        assert access_key_store.name_slug_exists("other-token") is False
 
     async def test_slugify(self):
         assert _slugify("my-token") == "my_token"
@@ -1215,24 +1215,24 @@ class TestHmacCompare:
 
 
 class TestConcurrentPatch:
-    async def test_async_lock_prevents_interleaving(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
+    async def test_async_lock_prevents_interleaving(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
         results = []
 
         async def patch_and_record(value):
-            async with token_store.async_lock:
-                await token_store.async_patch_token(
+            async with access_key_store.async_lock:
+                await access_key_store.async_patch_access_key(
                     record.id, rate_limit_requests=value
                 )
-                token = token_store.get_token_by_id(record.id)
-                results.append(token.rate_limit_requests)
+                access_key = access_key_store.get_access_key_by_id(record.id)
+                results.append(access_key.rate_limit_requests)
 
         await asyncio.gather(patch_and_record(10), patch_and_record(20))
         assert len(results) == 2
         assert set(results) == {10, 20}
 
-    async def test_async_lock_is_asyncio_lock(self, token_store):
-        assert isinstance(token_store.async_lock, asyncio.Lock)
+    async def test_async_lock_is_asyncio_lock(self, access_key_store):
+        assert isinstance(access_key_store.async_lock, asyncio.Lock)
 
 
 # ---------------------------------------------------------------------------
@@ -1241,14 +1241,14 @@ class TestConcurrentPatch:
 
 
 class TestPresets:
-    async def test_add_preset_snapshots_current_and_marks_active(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        await token_store.async_patch_token(record.id, cap_restart=CAP_ALLOW)
-        await token_store.async_set_permissions(
+    async def test_add_preset_snapshots_current_and_marks_active(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_patch_access_key(record.id, cap_restart=CAP_ALLOW)
+        await access_key_store.async_set_permissions(
             record.id,
             PermissionTree(entities={"light.a": PermissionNode(state="GREEN")}),
         )
-        updated = await token_store.async_add_preset(record.id, "Baseline")
+        updated = await access_key_store.async_add_preset(record.id, "Baseline")
         assert len(updated.presets) == 1
         preset = updated.presets[0]
         assert updated.active_preset_id == preset.id
@@ -1259,29 +1259,29 @@ class TestPresets:
         updated.permissions.entities["light.a"].state = "RED"
         assert preset.permissions.entities["light.a"].state == "GREEN"
 
-    async def test_preset_round_trip_through_storage(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        await token_store.async_add_preset(record.id, "Baseline")
-        token = token_store.get_token_by_id(record.id)
-        loaded = TokenRecord.from_dict(token.to_storage_dict())
+    async def test_preset_round_trip_through_storage(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_add_preset(record.id, "Baseline")
+        access_key = access_key_store.get_access_key_by_id(record.id)
+        loaded = AccessKeyRecord.from_dict(access_key.to_storage_dict())
         assert len(loaded.presets) == 1
-        assert loaded.presets[0].to_dict() == token.presets[0].to_dict()
-        assert loaded.active_preset_id == token.active_preset_id
-        assert loaded.settings_version == token.settings_version
-        assert loaded.tools_list_version == token.tools_list_version
+        assert loaded.presets[0].to_dict() == access_key.presets[0].to_dict()
+        assert loaded.active_preset_id == access_key.active_preset_id
+        assert loaded.settings_version == access_key.settings_version
+        assert loaded.tools_list_version == access_key.tools_list_version
         # Persisted deliberately: a deploy is only detectable across the HA
         # restart that applies it, so an in-memory-only fingerprint would lose
         # the very baseline the comparison needs.
-        token.tools_catalog_fingerprint = "abc123abc123abc1"
-        assert TokenRecord.from_dict(
-            token.to_storage_dict()).tools_catalog_fingerprint == "abc123abc123abc1"
+        access_key.tools_catalog_fingerprint = "abc123abc123abc1"
+        assert AccessKeyRecord.from_dict(
+            access_key.to_storage_dict()).tools_catalog_fingerprint == "abc123abc123abc1"
 
-    async def test_corrupt_preset_dropped_token_survives(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        await token_store.async_add_preset(record.id, "Baseline")
-        raw = token_store.get_token_by_id(record.id).to_storage_dict()
+    async def test_corrupt_preset_dropped_token_survives(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_add_preset(record.id, "Baseline")
+        raw = access_key_store.get_access_key_by_id(record.id).to_storage_dict()
         del raw["presets"][0]["id"]
-        loaded = TokenRecord.from_dict(raw)
+        loaded = AccessKeyRecord.from_dict(raw)
         assert loaded.presets == []
         # The dangling active reference is cleared with it.
         assert loaded.active_preset_id is None
@@ -1291,15 +1291,15 @@ class TestPresets:
             "id": "tid", "name": "t", "token_hash": "h",
             "created_at": utcnow().isoformat(), "created_by": "u",
         }
-        loaded = TokenRecord.from_dict(base)
+        loaded = AccessKeyRecord.from_dict(base)
         assert loaded.presets == [] and loaded.active_preset_id is None
         assert loaded.settings_version == 1
         assert loaded.tools_list_version == 1
         # tools_list_version defaults to the LOADED settings_version so an
         # upgrade never makes an existing token look stale.
-        loaded = TokenRecord.from_dict({**base, "settings_version": 5})
+        loaded = AccessKeyRecord.from_dict({**base, "settings_version": 5})
         assert loaded.tools_list_version == 5
-        # The catalog fingerprint has NO such fallback: token_store cannot import
+        # The catalog fingerprint has NO such fallback: access_key_store cannot import
         # mcp_view to learn the current one, so a legacy record has no baseline
         # and empty must read as "never recorded", never as stale.
         assert loaded.tools_catalog_fingerprint == ""
@@ -1314,152 +1314,152 @@ class TestPresets:
             "id": "tid", "name": "t", "token_hash": "h",
             "created_at": utcnow().isoformat(), "created_by": "u",
         }
-        assert TokenRecord.from_dict({**base, "confirm_inline_wait_seconds": 30}).confirm_inline_wait_seconds == 30
+        assert AccessKeyRecord.from_dict({**base, "confirm_inline_wait_seconds": 30}).confirm_inline_wait_seconds == 30
         # Over the cap clamps to 180; a below-floor positive clamps up to 30;
         # 0/negative/garbage means off (0).
-        assert TokenRecord.from_dict({**base, "confirm_inline_wait_seconds": 999}).confirm_inline_wait_seconds == 180
-        assert TokenRecord.from_dict({**base, "confirm_inline_wait_seconds": 10}).confirm_inline_wait_seconds == 30
-        assert TokenRecord.from_dict({**base, "confirm_inline_wait_seconds": 0}).confirm_inline_wait_seconds == 0
-        assert TokenRecord.from_dict({**base, "confirm_inline_wait_seconds": -5}).confirm_inline_wait_seconds == 0
-        assert TokenRecord.from_dict({**base, "confirm_inline_wait_seconds": "x"}).confirm_inline_wait_seconds == 0
+        assert AccessKeyRecord.from_dict({**base, "confirm_inline_wait_seconds": 999}).confirm_inline_wait_seconds == 180
+        assert AccessKeyRecord.from_dict({**base, "confirm_inline_wait_seconds": 10}).confirm_inline_wait_seconds == 30
+        assert AccessKeyRecord.from_dict({**base, "confirm_inline_wait_seconds": 0}).confirm_inline_wait_seconds == 0
+        assert AccessKeyRecord.from_dict({**base, "confirm_inline_wait_seconds": -5}).confirm_inline_wait_seconds == 0
+        assert AccessKeyRecord.from_dict({**base, "confirm_inline_wait_seconds": "x"}).confirm_inline_wait_seconds == 0
         # Full serializer round trip preserves a valid value.
-        loaded = TokenRecord.from_dict({**base, "confirm_inline_wait_seconds": 90})
-        assert TokenRecord.from_dict(loaded.to_storage_dict()).confirm_inline_wait_seconds == 90
+        loaded = AccessKeyRecord.from_dict({**base, "confirm_inline_wait_seconds": 90})
+        assert AccessKeyRecord.from_dict(loaded.to_storage_dict()).confirm_inline_wait_seconds == 90
 
-    async def test_inline_wait_patch_clamps(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        updated = await token_store.async_patch_token(record.id, confirm_inline_wait_seconds=999)
+    async def test_inline_wait_patch_clamps(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        updated = await access_key_store.async_patch_access_key(record.id, confirm_inline_wait_seconds=999)
         assert updated.confirm_inline_wait_seconds == 180
         # 0 is a valid patch (disable, the unattended-agent mode).
-        updated = await token_store.async_patch_token(record.id, confirm_inline_wait_seconds=0)
+        updated = await access_key_store.async_patch_access_key(record.id, confirm_inline_wait_seconds=0)
         assert updated.confirm_inline_wait_seconds == 0
 
-    async def test_inline_wait_snapshotted_in_preset(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        await token_store.async_patch_token(record.id, confirm_inline_wait_seconds=60)
-        updated = await token_store.async_add_preset(record.id, "Baseline")
+    async def test_inline_wait_snapshotted_in_preset(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_patch_access_key(record.id, confirm_inline_wait_seconds=60)
+        updated = await access_key_store.async_add_preset(record.id, "Baseline")
         assert updated.presets[0].confirm_inline_wait_seconds == 60
 
-    async def test_duplicate_name_case_insensitive_raises(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        await token_store.async_add_preset(record.id, "Baseline")
+    async def test_duplicate_name_case_insensitive_raises(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        await access_key_store.async_add_preset(record.id, "Baseline")
         try:
-            await token_store.async_add_preset(record.id, "baseline")
+            await access_key_store.async_add_preset(record.id, "baseline")
             raise AssertionError("expected ValueError")
         except ValueError:
             pass
 
-    async def test_preset_cap_enforced(self, token_store):
-        from custom_components.phoenix_mcp.const import MAX_PRESETS_PER_TOKEN
+    async def test_preset_cap_enforced(self, access_key_store):
+        from custom_components.phoenix_mcp.const import MAX_PRESETS_PER_ACCESS_KEY
 
-        record, _ = await token_store.async_create_token("t1", "u")
-        for i in range(MAX_PRESETS_PER_TOKEN):
-            await token_store.async_add_preset(record.id, f"p{i}")
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        for i in range(MAX_PRESETS_PER_ACCESS_KEY):
+            await access_key_store.async_add_preset(record.id, f"p{i}")
         try:
-            await token_store.async_add_preset(record.id, "one-too-many")
+            await access_key_store.async_add_preset(record.id, "one-too-many")
             raise AssertionError("expected ValueError")
         except ValueError:
             pass
 
-    async def test_rename_preset(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        updated = await token_store.async_add_preset(record.id, "Old")
+    async def test_rename_preset(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        updated = await access_key_store.async_add_preset(record.id, "Old")
         pid = updated.presets[0].id
-        updated = await token_store.async_rename_preset(record.id, pid, "New")
+        updated = await access_key_store.async_rename_preset(record.id, pid, "New")
         assert updated.presets[0].name == "New"
         try:
-            await token_store.async_rename_preset(record.id, "ghost", "X")
+            await access_key_store.async_rename_preset(record.id, "ghost", "X")
             raise AssertionError("expected LookupError")
         except LookupError:
             pass
 
-    async def test_delete_active_preset_refused(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        updated = await token_store.async_add_preset(record.id, "A")
+    async def test_delete_active_preset_refused(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        updated = await access_key_store.async_add_preset(record.id, "A")
         pid_a = updated.presets[0].id
-        updated = await token_store.async_add_preset(record.id, "B")
+        updated = await access_key_store.async_add_preset(record.id, "B")
         pid_b = updated.presets[1].id
         assert updated.active_preset_id == pid_b
         try:
-            await token_store.async_delete_preset(record.id, pid_b)
+            await access_key_store.async_delete_preset(record.id, pid_b)
             raise AssertionError("expected ValueError")
         except ValueError:
             pass
-        updated = await token_store.async_delete_preset(record.id, pid_a)
+        updated = await access_key_store.async_delete_preset(record.id, pid_a)
         assert [p.id for p in updated.presets] == [pid_b]
 
-    async def test_sync_preset_absorbs_live_state(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        updated = await token_store.async_add_preset(record.id, "A")
+    async def test_sync_preset_absorbs_live_state(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        updated = await access_key_store.async_add_preset(record.id, "A")
         preset = updated.presets[0]
         created_at = preset.created_at
-        await token_store.async_patch_token(record.id, cap_restart=CAP_ALLOW)
-        updated = await token_store.async_sync_preset(record.id, preset.id)
+        await access_key_store.async_patch_access_key(record.id, cap_restart=CAP_ALLOW)
+        updated = await access_key_store.async_sync_preset(record.id, preset.id)
         synced = updated.presets[0]
         assert synced.caps["cap_restart"] == CAP_ALLOW
         assert synced.id == preset.id and synced.name == "A"
         assert synced.created_at == created_at
 
-    async def test_seed_default_presets_idempotent(self, token_store):
+    async def test_seed_default_presets_idempotent(self, access_key_store):
         from custom_components.phoenix_mcp.const import DEFAULT_PRESET_NAME
 
-        bare, _ = await token_store.async_create_token("bare", "u")
-        preset_owner, _ = await token_store.async_create_token("owner", "u")
-        await token_store.async_add_preset(preset_owner.id, "Mine")
+        bare, _ = await access_key_store.async_create_access_key("bare", "u")
+        preset_owner, _ = await access_key_store.async_create_access_key("owner", "u")
+        await access_key_store.async_add_preset(preset_owner.id, "Mine")
 
-        assert await token_store.async_seed_default_presets() == 1
-        seeded = token_store.get_token_by_id(bare.id)
+        assert await access_key_store.async_seed_default_presets() == 1
+        seeded = access_key_store.get_access_key_by_id(bare.id)
         assert seeded.presets[0].name == DEFAULT_PRESET_NAME
         assert seeded.active_preset_id == seeded.presets[0].id
-        owner = token_store.get_token_by_id(preset_owner.id)
+        owner = access_key_store.get_access_key_by_id(preset_owner.id)
         assert [p.name for p in owner.presets] == ["Mine"]
-        assert await token_store.async_seed_default_presets() == 0
+        assert await access_key_store.async_seed_default_presets() == 0
 
-    async def test_create_token_seeds_when_enabled(self, token_store):
+    async def test_create_token_seeds_when_enabled(self, access_key_store):
         from custom_components.phoenix_mcp.const import DEFAULT_PRESET_NAME
 
-        await token_store.async_patch_settings(token_presets_enabled=True)
-        record, _ = await token_store.async_create_token("t1", "u")
+        await access_key_store.async_patch_settings(token_presets_enabled=True)
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
         assert record.presets[0].name == DEFAULT_PRESET_NAME
         assert record.active_preset_id == record.presets[0].id
 
 
 class TestSettingsVersion:
-    async def test_cap_patch_bumps_and_keeps_active_preset(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
-        updated = await token_store.async_add_preset(record.id, "A")
+    async def test_cap_patch_bumps_and_keeps_active_preset(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
+        updated = await access_key_store.async_add_preset(record.id, "A")
         active = updated.active_preset_id
         before = updated.settings_version
-        updated = await token_store.async_patch_token(record.id, cap_restart=CAP_ALLOW)
+        updated = await access_key_store.async_patch_access_key(record.id, cap_restart=CAP_ALLOW)
         assert updated.settings_version == before + 1
         # Workspace model: manual edits are the active preset's unsaved state,
         # they never clear the active label.
         assert updated.active_preset_id == active
 
-    async def test_name_only_rename_does_not_bump(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
+    async def test_name_only_rename_does_not_bump(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
         before = record.settings_version
-        updated = await token_store.async_patch_token(record.id, name="renamed")
+        updated = await access_key_store.async_patch_access_key(record.id, name="renamed")
         assert updated.settings_version == before
 
-    async def test_inline_wait_patch_does_not_bump(self, token_store):
+    async def test_inline_wait_patch_does_not_bump(self, access_key_store):
         # confirm_inline_wait_seconds changes neither tools nor caps, so it must
         # not fire the stale-tools advisory (like a bare rename).
-        record, _ = await token_store.async_create_token("t1", "u")
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
         before = record.settings_version
-        updated = await token_store.async_patch_token(record.id, confirm_inline_wait_seconds=60)
+        updated = await access_key_store.async_patch_access_key(record.id, confirm_inline_wait_seconds=60)
         assert updated.confirm_inline_wait_seconds == 60
         assert updated.settings_version == before
 
-    async def test_permission_writes_bump(self, token_store):
-        record, _ = await token_store.async_create_token("t1", "u")
+    async def test_permission_writes_bump(self, access_key_store):
+        record, _ = await access_key_store.async_create_access_key("t1", "u")
         before = record.settings_version
-        await token_store.async_set_permissions(record.id, PermissionTree())
-        assert token_store.get_token_by_id(record.id).settings_version == before + 1
-        await token_store.async_patch_permission_node(
+        await access_key_store.async_set_permissions(record.id, PermissionTree())
+        assert access_key_store.get_access_key_by_id(record.id).settings_version == before + 1
+        await access_key_store.async_patch_permission_node(
             record.id, "entities", "light.a", "GREEN"
         )
-        assert token_store.get_token_by_id(record.id).settings_version == before + 2
+        assert access_key_store.get_access_key_by_id(record.id).settings_version == before + 2
 
     def test_settings_toggle_round_trip(self):
         assert GlobalSettings.from_dict({"token_presets_enabled": True}).token_presets_enabled is True

@@ -16,13 +16,13 @@ from .decision_context import async_prepare_chat_context, context_execution_elig
 from .helpers import voice_text
 
 
-async def async_route_chat_command(hass: Any, data: Any, token: Any,
+async def async_route_chat_command(hass: Any, data: Any, access_key: Any,
                                    messages: list[dict], language: object,
                                    cancel: asyncio.Event, *, base_url: str, client_ip: str,
                                    emit: Callable[[str, dict], Awaitable[None]]) -> bool:
     """True continues the provider; False means this turn has already finished."""
     from .home_companion import is_companion
-    if is_companion(token):
+    if is_companion(access_key):
         return True
     settings = data.store.get_settings()
     mode = effective_routing_mode(settings, "chat")
@@ -34,8 +34,8 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
             or not isinstance(messages[-1]["content"], str)):
         return True
     assert isinstance(language, str)
-    authority = RoutingAuthority.capture(data, token)
-    binding = [token.id, token.token_hash, token.settings_version, language, authority.settings_values]
+    authority = RoutingAuthority.capture(data, access_key)
+    binding = [access_key.id, access_key.token_hash, access_key.settings_version, language, authority.settings_values]
     from .command_clarification import (async_clarification_reply, clarification_binding, clarification_prompt, is_clarification_cancel)
     clarification_key = ['chat', messages[:-1]]
     clarification_scope = clarification_binding(hass, authority, language)
@@ -86,7 +86,7 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
     if cancel.is_set() or authority.current(hass) is None:
         return await stop()
     if pending is not None:
-        selected, reply_text = await async_clarification_reply(hass, data, token, pending, sentence, language, ingress='chat')
+        selected, reply_text = await async_clarification_reply(hass, data, access_key, pending, sentence, language, ingress='chat')
         current = authority.current(hass)
         if current is None or cancel.is_set() or messages != snapshot:
             return await stop()
@@ -99,7 +99,7 @@ async def async_route_chat_command(hass: Any, data: Any, token: Any,
             return await finish(reply or LocalCommandReply(voice_text(language, 'local_clarification_expired')), route='local')
         # A new full command is independent; the one-use choice has been consumed.
         contextual = False
-    result = await async_evaluate_command(hass, data, token, sentence, language, ingress="chat", clarify=execute and not contextual)
+    result = await async_evaluate_command(hass, data, access_key, sentence, language, ingress="chat", clarify=execute and not contextual)
     current = authority.current(hass)
     if cancel.is_set() or current is None or (followup and messages != snapshot):
         return await stop()

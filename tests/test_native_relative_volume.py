@@ -14,7 +14,7 @@ from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.mcp_view import async_execute_approved_tool
 from custom_components.phoenix_mcp.policy_engine import Permission
-from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.tools.native import (
     _execute_hass_set_volume_relative,
     _tool_hass_set_volume_relative,
@@ -23,8 +23,8 @@ from custom_components.phoenix_mcp.tools.native import (
 NATIVE = "custom_components.phoenix_mcp.tools.native"
 
 
-def _token() -> TokenRecord:
-    return TokenRecord(
+def _access_key() -> AccessKeyRecord:
+    return AccessKeyRecord(
         id="token",
         name="test",
         token_hash="x",
@@ -104,7 +104,7 @@ async def test_confirmation_covers_the_complete_frozen_target_mapping():
     ):
         result = await _tool_hass_set_volume_relative(
             {"name": "Speakers", "volume_step": 25},
-            _token(),
+            _access_key(),
             hass,
             data,
             request_id="rid",
@@ -137,7 +137,7 @@ async def test_mesa_denial_refuses_the_whole_plan_before_dispatch():
         AsyncMock(return_value=gate_result),
     ), patch(f"{NATIVE}.fire_mesa_blocked_event"):
         _response, outcome, _resource = await _execute_hass_set_volume_relative(
-            _plan(), _token(), hass, data,
+            _plan(), _access_key(), hass, data,
         )
 
     assert outcome == "denied"
@@ -163,7 +163,7 @@ async def test_approved_execution_reuses_levels_instead_of_recomputing_state(has
         AsyncMock(return_value=gate_result),
     ) as mesa_gate:
         _response, outcome, _resource = await async_execute_approved_tool(
-            "HassSetVolumeRelative", saved_args, _token(), hass, data,
+            "HassSetVolumeRelative", saved_args, _access_key(), hass, data,
         )
 
     assert outcome == "allowed"
@@ -193,7 +193,7 @@ async def test_partial_group_failures_are_reported(failure, reason):
     hass.services.async_call.side_effect = service_call
     with patch(f"{NATIVE}.resolve", return_value=Permission.WRITE):
         response, outcome, _resource = await _execute_hass_set_volume_relative(
-            _plan(), _token(), hass, _data(with_mesa=False),
+            _plan(), _access_key(), hass, _data(with_mesa=False),
         )
 
     assert outcome == "allowed"
@@ -219,7 +219,7 @@ async def test_distinct_volume_groups_dispatch_concurrently():
     hass.services.async_call.side_effect = service_call
     with patch(f"{NATIVE}.resolve", return_value=Permission.WRITE):
         response, outcome, _resource = await _execute_hass_set_volume_relative(
-            _plan(), _token(), hass, _data(with_mesa=False),
+            _plan(), _access_key(), hass, _data(with_mesa=False),
         )
 
     body = json.loads(response["content"][0]["text"])
@@ -261,7 +261,7 @@ async def test_distinct_volume_groups_have_a_fixed_concurrency_ceiling():
     }
     with patch(f"{NATIVE}.resolve", return_value=Permission.WRITE):
         response, outcome, _resource = await _execute_hass_set_volume_relative(
-            plan, _token(), hass, _data(with_mesa=False),
+            plan, _access_key(), hass, _data(with_mesa=False),
         )
 
     body = json.loads(response["content"][0]["text"])
@@ -300,7 +300,7 @@ async def test_relative_volume_uses_one_deadline_and_reports_undispatched_groups
         f"{NATIVE}.PROXY_TIMEOUT_SECONDS", 0.02,
     ):
         response, outcome, _resource = await _execute_hass_set_volume_relative(
-            plan, _token(), hass, _data(with_mesa=False),
+            plan, _access_key(), hass, _data(with_mesa=False),
         )
 
     body = json.loads(response["content"][0]["text"])
@@ -340,7 +340,7 @@ async def test_deadline_stops_queue_when_service_suppresses_cancellation():
         f"{NATIVE}.PROXY_TIMEOUT_SECONDS", 0.02,
     ):
         response, outcome, _resource = await _execute_hass_set_volume_relative(
-            plan, _token(), hass, _data(with_mesa=False),
+            plan, _access_key(), hass, _data(with_mesa=False),
         )
 
     body = json.loads(response["content"][0]["text"])
@@ -380,7 +380,7 @@ async def test_relative_volume_cancellation_stops_workers_and_propagates():
     }
     with patch(f"{NATIVE}.resolve", return_value=Permission.WRITE):
         task = asyncio.create_task(_execute_hass_set_volume_relative(
-            plan, _token(), hass, _data(with_mesa=False),
+            plan, _access_key(), hass, _data(with_mesa=False),
         ))
         await started.wait()
         task.cancel()
@@ -406,7 +406,7 @@ async def test_all_failed_groups_keep_details_with_deterministic_outcome(reverse
         plan["target_levels"].reverse()
     with patch(f"{NATIVE}.resolve", return_value=Permission.WRITE):
         response, outcome, _resource = await _execute_hass_set_volume_relative(
-            plan, _token(), hass, _data(with_mesa=False),
+            plan, _access_key(), hass, _data(with_mesa=False),
         )
 
     body = json.loads(response["content"][0]["text"])
@@ -427,7 +427,7 @@ async def test_unversioned_frozen_plan_is_refused_before_dispatch():
     plan.pop("_relative_volume_plan_version")
 
     response, outcome, _resource = await _execute_hass_set_volume_relative(
-        plan, _token(), hass, _data(with_mesa=False),
+        plan, _access_key(), hass, _data(with_mesa=False),
     )
 
     assert outcome == "invalid_request"
@@ -447,7 +447,7 @@ async def test_missing_current_volume_refuses_before_mesa_or_dispatch():
     ), patch(f"{NATIVE}.async_apply_mesa_to_call", mesa_gate):
         response, outcome, _resource = await _tool_hass_set_volume_relative(
             {"name": "Speakers", "volume_step": 25},
-            _token(),
+            _access_key(),
             hass,
             _data(with_mesa=True),
         )

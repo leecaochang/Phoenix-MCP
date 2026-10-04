@@ -4,9 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { PermissionSelector } from "../components/PermissionSelector";
 import { DashboardPreview } from "../components/DashboardPreview";
 import { Modal } from "../components/Modal";
-import type { TokenRecord } from "../types";
+import type { AccessKeyRecord } from "../types";
 
-vi.mock("../api", () => ({ api: { patchToken: vi.fn() } }));
+vi.mock("../api", () => ({ api: { patchAccessKey: vi.fn() } }));
 import { api } from "../api";
 import { CapabilityMatrix } from "../components/CapabilityMatrix";
 
@@ -62,23 +62,23 @@ it("keeps Tab trapped and restores the exact shadow-root opener", () => {
 });
 
 it("saves a capability only on explicit activation and retains focus while saving", async () => {
-  let finish!: (token: TokenRecord) => void;
-  vi.mocked(api.patchToken).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
-  const token = { id: "test", cap_automation_write: "deny" } as TokenRecord;
+  let finish!: (accessKey: AccessKeyRecord) => void;
+  vi.mocked(api.patchAccessKey).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  const accessKey = { id: "test", cap_automation_write: "deny" } as AccessKeyRecord;
   const onUpdate = vi.fn();
-  render(<CapabilityMatrix token={token} onUpdate={onUpdate} />);
+  render(<CapabilityMatrix accessKey={accessKey} onUpdate={onUpdate} />);
   const group = screen.getByRole("group", { name: "Manage automations" });
   const deny = within(group).getByRole("button", { name: "Deny" });
   const confirm = within(group).getByRole("button", { name: "Confirm" });
   deny.focus();
   const user = userEvent.setup();
   await user.keyboard("{ArrowRight}{ArrowRight}");
-  expect(api.patchToken).not.toHaveBeenCalled();
+  expect(api.patchAccessKey).not.toHaveBeenCalled();
   confirm.focus();
   await user.keyboard("{Enter}");
-  expect(api.patchToken).toHaveBeenCalledExactlyOnceWith("test", { cap_automation_write: "confirm" });
+  expect(api.patchAccessKey).toHaveBeenCalledExactlyOnceWith("test", { cap_automation_write: "confirm" });
   expect(confirm).toHaveFocus();
   expect(confirm).not.toBeDisabled();
-  finish({ ...token, cap_automation_write: "confirm" });
+  finish({ ...accessKey, cap_automation_write: "confirm" });
   await waitFor(() => expect(onUpdate).toHaveBeenCalled());
 });

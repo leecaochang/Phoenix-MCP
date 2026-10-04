@@ -41,7 +41,7 @@ class TargetSnapshot:
         return _digest({"targets": self.targets, "fingerprints": self.fingerprints})
 
 
-def capture_targets(hass: Any, token: Any, category: str, *,
+def capture_targets(hass: Any, access_key: Any, category: str, *,
                     devices: DeviceRegistrySnapshot | None = None,
                     max_targets: int = DECISION_MAX_TARGETS, compact: bool = False,
                     max_bytes: int = DECISION_MAX_TARGET_BYTES) -> TargetSnapshot:
@@ -62,11 +62,11 @@ def capture_targets(hass: Any, token: Any, category: str, *,
             raise DecisionError("target_metadata_too_large")
         if len(value) > DECISION_MAX_TARGET_TEXT:
             raise CatalogLimitError(category, "text_length", len(value), DECISION_MAX_TARGET_TEXT)
-        return redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(value) or "", token, hass)
+        return redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(value) or "", access_key, hass)
 
     for state in sorted(hass.states.async_all(command_domain(intent)), key=lambda item: item.entity_id):
         entity_id = state.entity_id
-        fingerprint = _target_fingerprint(hass, token, entity_id, intent, devices=devices)
+        fingerprint = _target_fingerprint(hass, access_key, entity_id, intent, devices=devices)
         if fingerprint is None:
             continue
         if len(targets) >= max_targets:
@@ -119,14 +119,14 @@ def capture_targets(hass: Any, token: Any, category: str, *,
     return TargetSnapshot(targets, fingerprints)
 
 
-def capture_sequential_targets(hass: Any, token: Any, category: str) -> TargetSnapshot:
+def capture_sequential_targets(hass: Any, access_key: Any, category: str) -> TargetSnapshot:
     """Preserve small catalogs and losslessly expand larger generic selections."""
     try:
-        return capture_targets(hass, token, category)
+        return capture_targets(hass, access_key, category)
     except CatalogLimitError as error:
         if error.details["bound"] not in ("target_count", "metadata_bytes"):
             raise
-    return capture_targets(hass, token, category, compact=True,
+    return capture_targets(hass, access_key, category, compact=True,
                            max_targets=DECISION_SEQUENTIAL_MAX_TARGETS,
                            max_bytes=DECISION_SEQUENTIAL_TARGET_BYTES)
 

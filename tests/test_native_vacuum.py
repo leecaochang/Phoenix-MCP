@@ -29,7 +29,7 @@ from custom_components.phoenix_mcp.const import (
     VACUUM_RETURN_HOME_BIT,
     VACUUM_START_BIT,
 )
-from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.tools.native import (
     _areas_matching,
     _tool_hass_vacuum_clean_area,
@@ -41,8 +41,8 @@ from custom_components.phoenix_mcp.tools.native import (
 NATIVE = "custom_components.phoenix_mcp.tools.native"
 
 
-def _token() -> TokenRecord:
-    return TokenRecord(
+def _access_key() -> AccessKeyRecord:
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x", created_at=utcnow(),
         created_by="u", permissions=PermissionTree(),
     )
@@ -110,7 +110,7 @@ async def test_vacuum_action_pins_domain_and_filters_by_feature(handler, service
     action = AsyncMock(return_value=({}, "allowed", "x"))
     with patch(f"{NATIVE}.resolve_intent_entities", resolve), \
             patch(f"{NATIVE}._tool_intent_action", action):
-        await handler({"area": "Kitchen"}, _token(), hass)
+        await handler({"area": "Kitchen"}, _access_key(), hass)
 
     # An area-only call is pinned to vacuum and must not resolve every writable
     # entity in that area. Wrong explicit domains are refused by the selector tests
@@ -129,7 +129,7 @@ async def test_vacuum_action_pins_domain_and_filters_by_feature(handler, service
 
 
 async def test_clean_area_requires_an_area():
-    _resp, outcome, _res = await _tool_hass_vacuum_clean_area({}, _token(), MagicMock())
+    _resp, outcome, _res = await _tool_hass_vacuum_clean_area({}, _access_key(), MagicMock())
     assert outcome == "invalid_request"
 
 
@@ -139,7 +139,7 @@ async def test_clean_area_refuses_an_unmatched_area_without_saying_so():
     patcher = _patch_areas([_area("kitchen", "Kitchen")])
     try:
         resp, outcome, _res = await _tool_hass_vacuum_clean_area(
-            {"area": "Nowhere"}, _token(), MagicMock())
+            {"area": "Nowhere"}, _access_key(), MagicMock())
     finally:
         patcher.stop()
     assert outcome == "denied"
@@ -162,7 +162,7 @@ async def test_clean_area_passes_the_area_as_service_data_not_as_a_selector():
         with patch(f"{NATIVE}.resolve_intent_entities", resolve), \
                 patch(f"{NATIVE}._tool_intent_action", action):
             await _tool_hass_vacuum_clean_area(
-                {"area": "study", "name": "Rosie"}, _token(), hass)
+                {"area": "study", "name": "Rosie"}, _access_key(), hass)
     finally:
         patcher.stop()
 
@@ -184,7 +184,7 @@ async def test_clean_area_filters_to_vacuums_that_support_it():
     try:
         with patch(f"{NATIVE}.resolve_intent_entities", resolve), \
                 patch(f"{NATIVE}._tool_intent_action", action):
-            await _tool_hass_vacuum_clean_area({"area": "Study"}, _token(), hass)
+            await _tool_hass_vacuum_clean_area({"area": "Study"}, _access_key(), hass)
     finally:
         patcher.stop()
     assert action.call_args.args[4] == ["vacuum.rosie"]
@@ -194,7 +194,7 @@ async def test_clean_area_rejects_a_wrong_shaped_area():
     # str_arg degrades a list to absent rather than stringifying it, so this is
     # the missing-argument path and not a lookup for the literal "['Study']".
     _resp, outcome, _res = await _tool_hass_vacuum_clean_area(
-        {"area": ["Study"]}, _token(), MagicMock())
+        {"area": ["Study"]}, _access_key(), MagicMock())
     assert outcome == "invalid_request"
 
 

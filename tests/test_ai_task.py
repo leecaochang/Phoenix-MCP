@@ -19,7 +19,7 @@ from custom_components.phoenix_mcp.agent_recovery import AgentRecovery
 from custom_components.phoenix_mcp import ai_task, agentcli
 from custom_components.phoenix_mcp.agentcli import AiTaskError, async_run_ai_task
 from custom_components.phoenix_mcp.const import AGENTCLI_MAX_TURN_OUTPUT_BYTES, AI_TASK_CLIENT_IP, DOMAIN
-from custom_components.phoenix_mcp.token_store import GlobalSettings
+from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 from homeassistant.exceptions import HomeAssistantError
 
 
@@ -426,7 +426,7 @@ async def test_ai_task_raises_when_the_provider_blows_the_output_budget():
     HomeAssistantError. Shares AGENTCLI_MAX_TURN_OUTPUT_BYTES with the interactive
     loop.
     """
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     provider = _MockProvider()
     huge = {"role": "assistant", "content": "x" * (AGENTCLI_MAX_TURN_OUTPUT_BYTES + 1)}
@@ -437,7 +437,7 @@ async def test_ai_task_raises_when_the_provider_blows_the_output_budget():
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"), \
          pytest.raises(AiTaskError, match="too much output"):
         await async_run_ai_task(
-            MagicMock(), data, token, provider, MagicMock(), "http://h", "summarize")
+            MagicMock(), data, access_key, provider, MagicMock(), "http://h", "summarize")
 
     # Rejected before the append, so it never entered the re-sent transcript.
     assert provider.tool_result_batches == []
@@ -453,18 +453,18 @@ async def test_ai_task_raises_when_it_runs_out_of_steps():
     operator at the prompt instead of Steps before check-in); without one it must not
     return an empty string to the automation.
     """
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     provider = _MockProvider()
     stream = _staged_stream([_tool_ev("get_state", "t1"), _done("tool_use")])
     with patch.object(agentcli, "_stream_turn_resilient", stream), \
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch.object(agentcli, "_current_dispatch_token", return_value=token), \
+         patch.object(agentcli, "_current_dispatch_access_key", return_value=access_key), \
          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=_dispatch_ok("on")), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"), \
          pytest.raises(AiTaskError, match="ran out of steps"):
         await async_run_ai_task(
-            MagicMock(), data, token, provider, MagicMock(), "http://h", "summarize",
+            MagicMock(), data, access_key, provider, MagicMock(), "http://h", "summarize",
             max_iterations=3)
 
 
@@ -476,7 +476,7 @@ async def test_ai_task_raises_on_a_truncated_result():
     must not surface as a JSON parse error (the wrong cause), and without one it
     must not return a half-written answer that looks complete.
     """
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     provider = _MockProvider()
     stream = _staged_stream([
@@ -489,25 +489,25 @@ async def test_ai_task_raises_on_a_truncated_result():
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"), \
          pytest.raises(AiTaskError, match="output length limit"):
         await async_run_ai_task(
-            MagicMock(), data, token, provider, MagicMock(), "http://h", "summarize")
+            MagicMock(), data, access_key, provider, MagicMock(), "http://h", "summarize")
 
 
 @pytest.mark.asyncio
 async def test_ai_task_stops_after_one_round_when_authority_is_lost():
     """A dead token buys one closing round here too, not max_iterations of them."""
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     provider = _MockProvider()
     dispatch = _dispatch_ok("should not run")
     stream = _staged_stream([_tool_ev("call_service", "t1"), _done("tool_use")])
     with patch.object(agentcli, "_stream_turn_resilient", stream), \
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch.object(agentcli, "_current_dispatch_token", return_value=None), \
+         patch.object(agentcli, "_current_dispatch_access_key", return_value=None), \
          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=dispatch), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
         with pytest.raises(AiTaskError):
             await async_run_ai_task(
-                MagicMock(), data, token, provider, MagicMock(), "http://h", "x",
+                MagicMock(), data, access_key, provider, MagicMock(), "http://h", "x",
                 max_iterations=20)
 
     assert dispatch.calls == []
@@ -519,7 +519,7 @@ async def test_generate_free_text_happy_path():
     data = _make_data(**_FULL)
     store = MagicMock()
     store.resolve.return_value = SimpleNamespace(model="m")
-    with patch.object(agentcli, "_current_dispatch_token", return_value=_make_token()), \
+    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_token()), \
          patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
          patch.object(agentcli, "build_provider", return_value=_MockProvider()), \
          patch.object(agentcli, "async_run_ai_task", AsyncMock(return_value="A plain summary.")):
@@ -533,7 +533,7 @@ async def test_generate_structured_parses_json():
     store = MagicMock()
     store.resolve.return_value = SimpleNamespace(model="m")
     schema = vol.Schema({vol.Required("summary"): str})
-    with patch.object(agentcli, "_current_dispatch_token", return_value=_make_token()), \
+    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_token()), \
          patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
          patch.object(agentcli, "build_provider", return_value=_MockProvider()), \
          patch.object(agentcli, "async_run_ai_task", AsyncMock(return_value='{"summary": "ok"}')) as rt:
@@ -560,7 +560,7 @@ async def test_generate_kill_switch_raises_unavailable():
 @pytest.mark.asyncio
 async def test_generate_token_gone_raises():
     data = _make_data(**_FULL)
-    with patch.object(agentcli, "_current_dispatch_token", return_value=None):
+    with patch.object(agentcli, "_current_dispatch_access_key", return_value=None):
         with pytest.raises(HomeAssistantError, match="access key"):
             await ai_task.async_generate_ai_task_data(MagicMock(), data, "x", None)
 
@@ -570,7 +570,7 @@ async def test_generate_wraps_loop_error():
     data = _make_data(**_FULL)
     store = MagicMock()
     store.resolve.return_value = SimpleNamespace(model="m")
-    with patch.object(agentcli, "_current_dispatch_token", return_value=_make_token()), \
+    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_token()), \
          patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
          patch.object(agentcli, "build_provider", return_value=_MockProvider()), \
          patch.object(agentcli, "async_run_ai_task", AsyncMock(side_effect=AiTaskError("model down"))):
@@ -592,7 +592,7 @@ def _dispatch_ok(text):
 
 @pytest.mark.asyncio
 async def test_run_ai_task_tool_then_answer_uses_ai_task_sentinel():
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     provider = _MockProvider()
     dispatch = _dispatch_ok('{"state": "on"}')
@@ -602,17 +602,17 @@ async def test_run_ai_task_tool_then_answer_uses_ai_task_sentinel():
     )
     with patch.object(agentcli, "_stream_turn_resilient", stream), \
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch.object(agentcli, "_current_dispatch_token", return_value=token), \
+         patch.object(agentcli, "_current_dispatch_access_key", return_value=access_key), \
          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=dispatch), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
-        text = await async_run_ai_task(MagicMock(), data, token, provider, MagicMock(), "http://h", "instr")
+        text = await async_run_ai_task(MagicMock(), data, access_key, provider, MagicMock(), "http://h", "instr")
     assert text == "final answer"
     assert dispatch.calls == [{"client_ip": AI_TASK_CLIENT_IP, "name": "get_state"}]
 
 
 @pytest.mark.asyncio
 async def test_run_ai_task_includes_structure_directive_in_system_prompt():
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     capture: dict = {}
     stream = _staged_stream(
@@ -623,7 +623,7 @@ async def test_run_ai_task_includes_structure_directive_in_system_prompt():
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
         text = await async_run_ai_task(
-            MagicMock(), data, token, _MockProvider(), MagicMock(), "http://h", "instr",
+            MagicMock(), data, access_key, _MockProvider(), MagicMock(), "http://h", "instr",
             structure_json={"type": "object", "properties": {"a": {"type": "integer"}}},
         )
     assert text == '{"a": 1}'
@@ -635,7 +635,7 @@ async def test_run_ai_task_includes_structure_directive_in_system_prompt():
 
 @pytest.mark.asyncio
 async def test_run_ai_task_free_text_uses_selected_style_and_detail():
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data(
         ai_task_conversation_style="technical", ai_task_detail_level="detailed",
     )
@@ -648,7 +648,7 @@ async def test_run_ai_task_free_text_uses_selected_style_and_detail():
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
         text = await async_run_ai_task(
-            MagicMock(), data, token, _MockProvider(), MagicMock(), "http://h", "instr",
+            MagicMock(), data, access_key, _MockProvider(), MagicMock(), "http://h", "instr",
         )
     assert text == "result"
     assert "precise terminology" in capture["system_prompt"]
@@ -660,12 +660,12 @@ async def test_run_ai_task_free_text_uses_selected_style_and_detail():
 
 @pytest.mark.asyncio
 async def test_run_ai_task_pending_becomes_queued_without_blocking():
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     provider = _MockProvider()
     record = SimpleNamespace(
         id="ap1", status="pending", expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
-        token_id=token.id, tool_name="call_service", request_id="",
+        token_id=access_key.id, tool_name="call_service", request_id="",
     )
 
     async def dispatch_pending(method, msg_id, params, *a, **k):
@@ -678,11 +678,11 @@ async def test_run_ai_task_pending_becomes_queued_without_blocking():
     )
     with patch.object(agentcli, "_stream_turn_resilient", stream), \
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch.object(agentcli, "_current_dispatch_token", return_value=token), \
+         patch.object(agentcli, "_current_dispatch_access_key", return_value=access_key), \
          patch.object(agentcli, "get_approval", return_value=record), \
          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=dispatch_pending), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
-        text = await async_run_ai_task(MagicMock(), data, token, provider, MagicMock(), "http://h", "unlock")
+        text = await async_run_ai_task(MagicMock(), data, access_key, provider, MagicMock(), "http://h", "unlock")
     assert text == "queued"
     fed_back = provider.tool_result_batches[0][0]["result_text"]
     assert "queued_for_approval" in fed_back
@@ -690,14 +690,14 @@ async def test_run_ai_task_pending_becomes_queued_without_blocking():
 
 @pytest.mark.asyncio
 async def test_run_ai_task_error_raises_aitaskerror():
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     stream = _staged_stream([{"type": agentcli.EV_ERROR, "message": "boom"}])
     with patch.object(agentcli, "_stream_turn_resilient", stream), \
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
         with pytest.raises(AiTaskError, match="boom"):
-            await async_run_ai_task(MagicMock(), data, token, _MockProvider(), MagicMock(), "http://h", "hi")
+            await async_run_ai_task(MagicMock(), data, access_key, _MockProvider(), MagicMock(), "http://h", "hi")
 
 
 def test_probatio_structure_serialization_does_not_import_legacy_converter(monkeypatch):

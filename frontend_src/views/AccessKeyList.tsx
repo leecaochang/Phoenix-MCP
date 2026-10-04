@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
-import type { TokenRecord, ArchivedTokenRecord } from "../types";
-import { TokenCreateModal } from "../components/TokenCreateModal";
-import { ArchivedTokenTable } from "../components/ArchivedTokenTable";
+import type { AccessKeyRecord, ArchivedAccessKeyRecord } from "../types";
+import { AccessKeyCreateModal } from "../components/AccessKeyCreateModal";
+import { ArchivedAccessKeyTable } from "../components/ArchivedAccessKeyTable";
 import { api } from "../api";
 import { Loading, ErrorMsg, RefreshIcon } from "../index";
-import { formatDate, tokenStatus, tokenStatusLabel } from "../utils";
+import { formatDate, accessKeyStatus, accessKeyStatusLabel } from "../utils";
 import { compareStrings, localeDateTime, t } from "../i18n";
 
-const MAX_ACTIVE_TOKENS_WARNING = 50;
+const MAX_ACTIVE_ACCESS_KEYS_WARNING = 50;
 
 function relativeTime(iso: string | null): string {
   if (!iso) return t("common.never");
@@ -31,7 +31,7 @@ function SortArrow({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; 
 }
 
 interface Props {
-  tokens: TokenRecord[];
+  accessKeys: AccessKeyRecord[];
   loading: boolean;
   error: string | null;
   onRefresh: () => void;
@@ -43,10 +43,10 @@ interface Props {
   onOpenSettings: () => void;
 }
 
-export function TokenListView({ tokens, loading, error, onRefresh, onOpenDetail, onLaunchWizard, showCreate, onOpenCreate, onCloseCreate, onOpenSettings }: Props) {
+export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpenDetail, onLaunchWizard, showCreate, onOpenCreate, onCloseCreate, onOpenSettings }: Props) {
   const [filter, setFilter] = useState("");
   const [showArchived, setShowArchived] = useState(false);
-  const [archived, setArchived] = useState<ArchivedTokenRecord[] | null>(null);
+  const [archived, setArchived] = useState<ArchivedAccessKeyRecord[] | null>(null);
   const [archivedLoading, setArchivedLoading] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
@@ -54,7 +54,7 @@ export function TokenListView({ tokens, loading, error, onRefresh, onOpenDetail,
   const refreshArchived = useCallback(async () => {
     setArchivedLoading(true);
     try {
-      setArchived(await api.listArchivedTokens());
+      setArchived(await api.listArchivedAccessKeys());
     } catch {
       setArchived([]);
     } finally {
@@ -76,11 +76,11 @@ export function TokenListView({ tokens, loading, error, onRefresh, onOpenDetail,
     return sortDir === "asc" ? "ascending" : "descending";
   }
 
-  const filtered = tokens.filter((t) => {
+  const filtered = accessKeys.filter((t) => {
     const q = filter.toLowerCase();
     if (!q) return true;
-    const status = tokenStatus(t);
-    return [t.name, status, tokenStatusLabel(status)]
+    const status = accessKeyStatus(t);
+    return [t.name, status, accessKeyStatusLabel(status)]
       .some((value) => value.toLowerCase().includes(q));
   });
 
@@ -90,7 +90,7 @@ export function TokenListView({ tokens, loading, error, onRefresh, onOpenDetail,
     switch (sortKey) {
       case "name":     va = a.name.toLowerCase();   vb = b.name.toLowerCase(); break;
       case "mode":     va = a.pass_through ? "1" : "0"; vb = b.pass_through ? "1" : "0"; break;
-      case "status":   va = tokenStatusLabel(tokenStatus(a)); vb = tokenStatusLabel(tokenStatus(b)); break;
+      case "status":   va = accessKeyStatusLabel(accessKeyStatus(a)); vb = accessKeyStatusLabel(accessKeyStatus(b)); break;
       case "created":  va = a.created_at ?? "";      vb = b.created_at ?? ""; break;
       case "updated":  va = a.updated_at ?? "";      vb = b.updated_at ?? ""; break;
       case "expires":  va = a.expires_at ?? "9999";  vb = b.expires_at ?? "9999"; break;
@@ -102,7 +102,7 @@ export function TokenListView({ tokens, loading, error, onRefresh, onOpenDetail,
     return sortDir === "asc" ? comparison : -comparison;
   });
 
-  function handleCreated(record: TokenRecord) {
+  function handleCreated(record: AccessKeyRecord) {
     onRefresh();
     onCloseCreate();
     onOpenDetail(record.id);
@@ -128,7 +128,7 @@ export function TokenListView({ tokens, loading, error, onRefresh, onOpenDetail,
   // First run: no tokens and no filter. Show an onboarding hero that launches
   // the wizard instead of the empty table. The create modal is still mounted
   // here so the header "Create Token" button works in the empty state.
-  if (!loading && !error && tokens.length === 0 && !filter && !showArchived) {
+  if (!loading && !error && accessKeys.length === 0 && !filter && !showArchived) {
     return (
       <div className="view-root">
         <div className="card wizard-hero">
@@ -141,8 +141,8 @@ export function TokenListView({ tokens, loading, error, onRefresh, onOpenDetail,
           </div>
         </div>
         {showCreate && (
-          <TokenCreateModal
-            existingNames={tokens.map((t) => t.name)}
+          <AccessKeyCreateModal
+            existingNames={accessKeys.map((t) => t.name)}
             onCreated={handleCreated}
             onClose={onCloseCreate}
             onOpenSettings={onOpenSettings}
@@ -154,9 +154,9 @@ export function TokenListView({ tokens, loading, error, onRefresh, onOpenDetail,
 
   return (
     <div className="view-root">
-      {tokens.length >= MAX_ACTIVE_TOKENS_WARNING && (
+      {accessKeys.length >= MAX_ACTIVE_ACCESS_KEYS_WARNING && (
         <div className="banner banner-warn">
-          {t("tokens.maxWarning", { max: MAX_ACTIVE_TOKENS_WARNING })}
+          {t("tokens.maxWarning", { max: MAX_ACTIVE_ACCESS_KEYS_WARNING })}
         </div>
       )}
 
@@ -228,7 +228,7 @@ export function TokenListView({ tokens, loading, error, onRefresh, onOpenDetail,
                 </tr>
               )}
               {sorted.map((tok) => {
-                const status = tokenStatus(tok);
+                const status = accessKeyStatus(tok);
                 const statusClass = status === "Active" ? "badge-green" : status === "Expired" ? "badge-grey" : "badge-red";
                 return (
                   <tr
@@ -257,7 +257,7 @@ export function TokenListView({ tokens, loading, error, onRefresh, onOpenDetail,
                         ? <span className="badge badge-amber">{t("tokens.passThrough")}</span>
                         : <span className="badge badge-blue">{t("tokens.scoped")}</span>}
                     </td>
-                    <td><span className={`badge ${statusClass}`}>{tokenStatusLabel(status)}</span></td>
+                    <td><span className={`badge ${statusClass}`}>{accessKeyStatusLabel(status)}</span></td>
                     <td title={tok.created_at ? localeDateTime(tok.created_at) : undefined}>{formatDate(tok.created_at)}</td>
                     <td title={tok.updated_at ? localeDateTime(tok.updated_at) : undefined}>{relativeTime(tok.updated_at)}</td>
                     <td>{formatDate(tok.expires_at)}</td>
@@ -278,8 +278,8 @@ export function TokenListView({ tokens, loading, error, onRefresh, onOpenDetail,
           {archivedLoading ? (
             <Loading />
           ) : (
-            <ArchivedTokenTable
-              tokens={archived ?? []}
+            <ArchivedAccessKeyTable
+              accessKeys={archived ?? []}
               onDeleted={handleArchivedDeleted}
             />
           )}
@@ -287,8 +287,8 @@ export function TokenListView({ tokens, loading, error, onRefresh, onOpenDetail,
       )}
 
       {showCreate && (
-        <TokenCreateModal
-          existingNames={tokens.map((t) => t.name)}
+        <AccessKeyCreateModal
+          existingNames={accessKeys.map((t) => t.name)}
           onCreated={handleCreated}
           onClose={onCloseCreate}
           onOpenSettings={onOpenSettings}

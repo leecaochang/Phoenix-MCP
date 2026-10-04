@@ -53,7 +53,7 @@ class TestDisabled:
     def test_zero_requests_no_window_created(self):
         rl = _rl()
         rl.check("tok", rate_limit_requests=0, rate_limit_burst=0)
-        assert rl.active_token_count() == 0
+        assert rl.active_access_key_count() == 0
 
 
 # ---------------------------------------------------------------------------
@@ -375,9 +375,9 @@ class TestDestroy:
         rl = _rl()
         for name in ["t1", "t2", "t3"]:
             _check(rl, name, requests=5, burst=10)
-        assert rl.active_token_count() == 3
+        assert rl.active_access_key_count() == 3
         rl.destroy_all()
-        assert rl.active_token_count() == 0
+        assert rl.active_access_key_count() == 0
 
     def test_destroy_all_allows_requests_again(self):
         t0 = 1_000_000.0
@@ -425,13 +425,13 @@ class TestTokenIsolation:
 
     def test_active_token_count_tracks_correctly(self):
         rl = _rl()
-        assert rl.active_token_count() == 0
+        assert rl.active_access_key_count() == 0
         _check(rl, "tok1", requests=5, burst=10)
-        assert rl.active_token_count() == 1
+        assert rl.active_access_key_count() == 1
         _check(rl, "tok2", requests=5, burst=10)
-        assert rl.active_token_count() == 2
+        assert rl.active_access_key_count() == 2
         rl.destroy("tok1")
-        assert rl.active_token_count() == 1
+        assert rl.active_access_key_count() == 1
 
 
 # ---------------------------------------------------------------------------

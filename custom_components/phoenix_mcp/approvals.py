@@ -14,13 +14,13 @@ from .helpers import notification_text
 from .const import (
     APPROVAL_DEFAULT_TTL_SECONDS,
     DOMAIN,
-    MAX_PENDING_APPROVALS_PER_TOKEN, APPROVAL_HISTORY_LIMIT, APPROVAL_HISTORY_DAYS, APPROVAL_PAYLOAD_RETENTION_SECONDS,
+    MAX_PENDING_APPROVALS_PER_ACCESS_KEY, APPROVAL_HISTORY_LIMIT, APPROVAL_HISTORY_DAYS, APPROVAL_PAYLOAD_RETENTION_SECONDS,
 )
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-    from .token_store import TokenStore
+    from .access_key_store import AccessKeyStore
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,12 +39,12 @@ TERMINAL_STATUSES = frozenset({
     STATUS_CANCELLED,
 })
 
-REASON_TOKEN_INACTIVE = "token_inactive"
+REASON_ACCESS_KEY_INACTIVE = "token_inactive"
 REASON_CAPABILITY_DENIED = "capability_denied"
 REASON_KILL_SWITCH = "kill_switch"
 REASON_ADMIN_CANCELLED = "admin_cancelled"
 REASON_REVOKED = "token_revoked"
-REASON_TOKEN_EXPIRED = "token_expired"
+REASON_ACCESS_KEY_EXPIRED = "token_expired"
 REASON_WIPED = "phoenix_mcp_data_wiped"
 # The execution claim was persisted but Home Assistant stopped before its
 # outcome was saved, so whether the side effect landed is UNKNOWN.
@@ -62,7 +62,7 @@ REASON_AGENT_CHAT_ENDED = "agent_chat_ended"
 
 
 class PendingApprovalCapacityError(Exception):
-    """Raised when a token already holds MAX_PENDING_APPROVALS_PER_TOKEN entries."""
+    """Raised when a token already holds MAX_PENDING_APPROVALS_PER_ACCESS_KEY entries."""
 
 
 @dataclass
@@ -182,7 +182,7 @@ def _new_approval_id() -> str:
 
 
 async def async_create_pending_approval(
-    store: TokenStore,
+    store: AccessKeyStore,
     *,
     token_id: str,
     token_name: str,
@@ -200,13 +200,13 @@ async def async_create_pending_approval(
     Raises PendingApprovalCapacityError if the token is at the per-token cap.
     """
     raw = store.get_pending_approvals()
-    pending_for_token = sum(
+    pending_for_access_key = sum(
         1 for entry in raw
         if entry.get("token_id") == token_id and entry.get("status") == STATUS_PENDING
     )
-    if pending_for_token >= MAX_PENDING_APPROVALS_PER_TOKEN:
+    if pending_for_access_key >= MAX_PENDING_APPROVALS_PER_ACCESS_KEY:
         raise PendingApprovalCapacityError(
-            f"access key {token_id} already has {pending_for_token} pending approvals"
+            f"access key {token_id} already has {pending_for_access_key} pending approvals"
         )
     from .household_authority import household_authority
 
@@ -234,7 +234,7 @@ async def async_create_pending_approval(
     return approval
 
 
-def get_approval(store: TokenStore, approval_id: str) -> PendingApproval | None:
+def get_approval(store: AccessKeyStore, approval_id: str) -> PendingApproval | None:
     """Return the approval, or None if it is missing or its stored record is corrupt."""
     for entry in store.get_pending_approvals():
         if entry.get("id") == approval_id:
@@ -247,7 +247,7 @@ def get_approval(store: TokenStore, approval_id: str) -> PendingApproval | None:
 
 
 def list_approvals(
-    store: TokenStore,
+    store: AccessKeyStore,
     *,
     status: str | None = None,
     token_id: str | None = None,
@@ -268,7 +268,7 @@ def list_approvals(
 
 
 async def async_update_approval_status(
-    store: TokenStore,
+    store: AccessKeyStore,
     approval_id: str,
     *,
     status: str,
@@ -305,7 +305,7 @@ async def async_update_approval_status(
 
 
 async def async_mark_execution_started(
-    store: TokenStore,
+    store: AccessKeyStore,
     approval_id: str,
     *,
     approved_by_user_id: str,
@@ -358,7 +358,7 @@ async def async_mark_execution_started(
 
 
 async def async_clear_execution_marker(
-    store: TokenStore,
+    store: AccessKeyStore,
     approval_id: str,
 ) -> None:
     """Undo async_mark_execution_started for an attempt that provably never ran.
@@ -394,7 +394,7 @@ async def async_clear_execution_marker(
 
 
 async def async_reconcile_interrupted_approvals(
-    store: TokenStore,
+    store: AccessKeyStore,
     *,
     skip_ids: set[str] | frozenset[str] | None = None,
 ) -> list[PendingApproval]:
@@ -442,8 +442,8 @@ async def async_reconcile_interrupted_approvals(
     return changed
 
 
-async def async_cancel_approvals_for_token(
-    store: TokenStore,
+async def async_cancel_approvals_for_access_key(
+    store: AccessKeyStore,
     token_id: str,
     reason: str,
     *,
@@ -483,11 +483,11 @@ async def async_cancel_approvals_for_token(
 
 
 def collect_pending_approvals_for_wipe(
-    store: TokenStore, reason: str,
+    store: AccessKeyStore, reason: str,
 ) -> list[PendingApproval]:
     """Return the currently-pending approvals as cancelled records, read-only.
 
-    Used by the admin wipe: TokenStore.async_wipe clears the whole approval queue,
+    Used by the admin wipe: AccessKeyStore.async_wipe clears the whole approval queue,
     so this does NOT mutate or persist the store. It builds the terminal records
     the caller needs to dismiss notifications and fire phoenix_mcp_approval_resolved
     after the wipe. There is no skip_ids: the wipe deletes every record, so an
@@ -508,7 +508,7 @@ def collect_pending_approvals_for_wipe(
 
 
 async def async_expire_overdue_approval_records(
-    store: TokenStore,
+    store: AccessKeyStore,
     *,
     skip_ids: set[str] | frozenset[str] | None = None,
 ) -> list[PendingApproval]:
@@ -627,7 +627,7 @@ def create_approval_notification(hass: HomeAssistant, approval: PendingApproval)
         hass,
         message=notification_text(
             hass, "approval.message",
-            token=approval.token_name,
+            access_key=approval.token_name,
             url=f"/phoenix-mcp/approvals/{approval.id}",
         ),
         title=notification_text(hass, "approval.title"),
@@ -644,7 +644,7 @@ def dismiss_approval_notification(hass: HomeAssistant, approval_id: str) -> None
     )
 
 
-async def async_prune_terminal_approvals(store: TokenStore, *, skip_ids: set[str] | None = None) -> None:
+async def async_prune_terminal_approvals(store: AccessKeyStore, *, skip_ids: set[str] | None = None) -> None:
     """Bound resolved history and retire raw payloads; caller holds the store lock."""
     now = utcnow()
     protected, resolved = [], []

@@ -541,10 +541,10 @@ class ConversationLog:
             _current.reset(ctx)
 
     @best_effort
-    def bind_chat(self, handle: Any, client_id: Any, token: Any, *, has_history: bool) -> None:
+    def bind_chat(self, handle: Any, client_id: Any, access_key: Any, *, has_history: bool) -> None:
         """Correlate explicit chat identity only, never shared credentials or timing."""
         entry = self.entry(handle)
-        if entry is None or getattr(token, "persona", None) == "home_companion":
+        if entry is None or getattr(access_key, "persona", None) == "home_companion":
             return
         try:
             identifier = UUID(client_id) if isinstance(client_id, str) and len(client_id) == 36 else None
@@ -552,7 +552,7 @@ class ConversationLog:
             return
         if identifier is None:
             return
-        key = hashlib.sha256(f"{token.id}:{identifier}".encode()).hexdigest()
+        key = hashlib.sha256(f"{access_key.id}:{identifier}".encode()).hexdigest()
         previous = next((e for e in reversed(list(self._entries.values()))
                          if e.get("chat_key") == key and e is not entry), None) if has_history else None
         entry.update(chat_key=key, thread_id=previous["thread_id"] if previous else entry["id"],
@@ -766,10 +766,10 @@ def recorded_exchange(run: Callable) -> Callable:
         log = recorder(data)
         parent = _current.get()
         own = parent is None
-        token = values["token"]
+        access_key = values["access_key"]
         source = values["client_ip"] if values["client_ip"] in {"agentcli", "assist", "voice", "ai_task", "home_companion"} else "mcp"
-        handle = log.begin(source, metadata={"request_id": values.get("request_id"), "access_key_id": token.id,
-                                            "access_key_name": token.name, "client_ip": values["client_ip"], "session_ref": _transport.get()}) if own else parent
+        handle = log.begin(source, metadata={"request_id": values.get("request_id"), "access_key_id": access_key.id,
+                                            "access_key_name": access_key.name, "client_ip": values["client_ip"], "session_ref": _transport.get()}) if own else parent
         ctx = _current.set(handle)
         parent_tool_id = _tool.get()
         call_ctx = _tool.set(uuid4().hex)
@@ -843,10 +843,10 @@ def recorded_chat(run: Callable) -> Callable:
         if isinstance(prompt, list) and not all(isinstance(block, dict) and block.get("type") in {
                 "text", "input_text", "image", "image_url", "input_image"} for block in prompt):
             prompt = None
-        handle = log.begin("agentcli", prompt=prompt, metadata={"access_key_id": kwargs["token"].id, "access_key_name": kwargs["token"].name})
-        log.bind_chat(handle, chat_id, kwargs["token"], has_history=len(messages) > 1)
+        handle = log.begin("agentcli", prompt=prompt, metadata={"access_key_id": kwargs["access_key"].id, "access_key_name": kwargs["access_key"].name})
+        log.bind_chat(handle, chat_id, kwargs["access_key"], has_history=len(messages) > 1)
         ctx = _current.set(handle)
-        record_identity(token=kwargs["token"], config=getattr(kwargs.get("provider"), "cfg", None))
+        record_identity(access_key=kwargs["access_key"], config=getattr(kwargs.get("provider"), "cfg", None))
         emit = kwargs["emit"]
         # This transient input to the scrubber is bounded and discarded at turn end.
         # Fragment-by-fragment redaction would leak credentials split across chunks.
@@ -921,7 +921,7 @@ def recorded_chat(run: Callable) -> Callable:
     return wrapped
 
 
-def record_identity(*, token: Any = None, config: Any = None) -> None:
+def record_identity(*, access_key: Any = None, config: Any = None) -> None:
     """Copy only safe selected identities, never credentials or provider envelopes."""
     try:
         handle = _current.get()
@@ -932,7 +932,7 @@ def record_identity(*, token: Any = None, config: Any = None) -> None:
         if entry is None:
             return
         metadata = dict(entry["metadata"])
-        values = {"access_key_id": getattr(token, "id", None), "access_key_name": getattr(token, "name", None),
+        values = {"access_key_id": getattr(access_key, "id", None), "access_key_name": getattr(access_key, "name", None),
                   "provider": getattr(config, "kind", None), "model": getattr(config, "model", None)}
         # Delegated work cannot replace the originating turn's selected identity.
         for key, value in values.items():
@@ -1009,9 +1009,9 @@ def _scrub_argument_text(raw: str, *, hide_ip: bool) -> str:
             raise ValueError("payload budget")
         if match.start() < cursor:
             continue
-        token = match[0]
+        access_key = match[0]
         # A broken escape cannot be decoded safely. Omit the argument payload.
-        decoded = json.loads(token if token.endswith('"') and len(token) > 1 else token + '"')
+        decoded = json.loads(access_key if access_key.endswith('"') and len(access_key) > 1 else access_key + '"')
         end = match.end()
         colon = end
         while colon < len(raw) and raw[colon].isspace():
@@ -1026,10 +1026,10 @@ def _scrub_argument_text(raw: str, *, hide_ip: bool) -> str:
             except ValueError:
                 # Incomplete secret values can contain spaces or punctuation.
                 end = len(raw)
-            pieces.extend((raw[cursor:match.start()], token, raw[match.end():start], '"<redacted>"'))
+            pieces.extend((raw[cursor:match.start()], access_key, raw[match.end():start], '"<redacted>"'))
         else:
             clean = sanitized(decoded, max_bytes=CONVERSATION_LOG_SCAN_BYTES, hide_ip=hide_ip)
-            pieces.extend((raw[cursor:match.start()], token if clean == decoded else json.dumps(clean, ensure_ascii=False)))
+            pieces.extend((raw[cursor:match.start()], access_key if clean == decoded else json.dumps(clean, ensure_ascii=False)))
         cursor = end
     pieces.append(raw[cursor:])
     return sanitized("".join(pieces), max_bytes=CONVERSATION_LOG_SCAN_BYTES, hide_ip=hide_ip)

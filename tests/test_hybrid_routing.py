@@ -18,22 +18,22 @@ from custom_components.phoenix_mcp.decision_provider import DecisionError, Decis
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
 
 
 @pytest.fixture
-async def hybrid_home(hass, token_store, immediate_command_observation):
-    token, _ = await token_store.async_create_token("hybrid", "test", rate_limit_requests=0)
-    token.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
-    token.cap_physical_control = "allow"
-    data = PhoenixData(store=token_store, rate_limiter=RateLimiter(), audit=AuditLog())
+async def hybrid_home(hass, access_key_store, immediate_command_observation):
+    access_key, _ = await access_key_store.async_create_access_key("hybrid", "test", rate_limit_requests=0)
+    access_key.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
+    access_key.cap_physical_control = "allow"
+    data = PhoenixData(store=access_key_store, rate_limiter=RateLimiter(), audit=AuditLog())
     hass.data[DOMAIN] = data
     store = agentcli.AgentCliStore(AsyncMock())
     hass.data["_phoenix_agentcli_store"] = store
     # Generic sequential protocol; jev_hybrid_home configures the qualified JEV variant.
     decision = await store.add("typesafe", {"api_key": "decision-secret", "model": "test-model"})
     chat = await store.add("deepseek", {"api_key": "chat-secret", "model": "chat"})
-    await token_store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=token.id,
+    await access_key_store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=access_key.id,
         voice_agent_provider_id=chat, voice_agent_model="chat", voice_agent_routing_mode="hybrid",
         decision_provider_id=decision, mesa_mode="off", command_routing_timeout_ms=5000)
     assert await async_setup_component(hass, "homeassistant", {})
@@ -41,7 +41,7 @@ async def hybrid_home(hass, token_store, immediate_command_observation):
     registry = er.async_get(hass)
     entry = registry.async_get_or_create("light", "test", "desk", original_name="Desk lamp")
     hass.states.async_set(entry.entity_id, "off", {"friendly_name": "Desk lamp", "supported_color_modes": ["brightness"]})
-    yield data, token, store, decision, entry.entity_id
+    yield data, access_key, store, decision, entry.entity_id
     data.decision_shadow.cancel()
     if data.decision_shadow.task:
         await asyncio.gather(data.decision_shadow.task, return_exceptions=True)
@@ -74,7 +74,7 @@ async def run_voice(hass, home, *, category="light_on", sentence="Please illumin
 @pytest.mark.parametrize("routing_mode", ["hybrid", "auto"])
 async def test_two_requests_dispatch_once_and_do_not_duplicate_shadow(hass, hybrid_home, category, service, extra, routing_mode):
     await hybrid_home[0].store.async_patch_settings(voice_agent_routing_mode=routing_mode)
-    data, token, _, _, entity_id = hybrid_home
+    data, access_key, _, _, entity_id = hybrid_home
     await data.store.async_patch_settings(decision_shadow_enabled=True)
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
@@ -87,12 +87,12 @@ async def test_two_requests_dispatch_once_and_do_not_duplicate_shadow(hass, hybr
     provider.assert_not_called()
     assert data.decision_shadow.observations == 0
     assert data.decision_shadow.summary()["hybrid"] == {"evaluations": 1, "reasons": {"plan_ready": 1}}
-    assert data.agent_recovery.records(token.id) == []
+    assert data.agent_recovery.records(access_key.id) == []
 
 
 async def test_state_query_uses_existing_scoped_read(hass, hybrid_home):
-    _, token, *_ = hybrid_home
-    token.permissions = PermissionTree(domains={"light": PermissionNode(state="YELLOW")})
+    _, access_key, *_ = hybrid_home
+    access_key.permissions = PermissionTree(domains={"light": PermissionNode(state="YELLOW")})
     with patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call:
         answer, remote, provider = await run_voice(hass, hybrid_home, category="state_query")
     assert answer == "The state is Off."
@@ -122,7 +122,7 @@ async def test_exact_local_match_spends_no_decision_request(hass, hybrid_home):
     ("brightness_declined", 1, "numeric_unverified"),
 ])
 async def test_pre_dispatch_declines_keep_regular_provider(hass, hybrid_home, case, expected_calls, reason):
-    data, token, *_ = hybrid_home
+    data, access_key, *_ = hybrid_home
     async def respond(session, method, path, timeout, payload):
         if case in ("timeout", "unavailable"):
             raise DecisionError(case)
@@ -140,7 +140,7 @@ async def test_pre_dispatch_declines_keep_regular_provider(hass, hybrid_home, ca
         return answer
     local = {"reason": "timeout" if case == "local_timeout" else "sentence_trigger" if case == "trigger" else "no_match",
              "proposal": None, "elapsed_ms": 1, "route": "provider"}
-    if case == "no_scope": token.permissions = PermissionTree()
+    if case == "no_scope": access_key.permissions = PermissionTree()
     if case == "busy": data.decision_shadow.task = asyncio.create_task(asyncio.Event().wait())
     with (patch("custom_components.phoenix_mcp.command_routing.async_evaluate_command", AsyncMock(return_value=local)),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
@@ -168,12 +168,12 @@ async def set_mesa(hass, home, mode):
 @pytest.mark.parametrize("routing_mode", ["hybrid", "auto"])
 async def test_decision_execution_preserves_mesa_and_approval(hass, hybrid_home, restriction, routing_mode):
     await hybrid_home[0].store.async_patch_settings(voice_agent_routing_mode=routing_mode)
-    data, token, *_ = hybrid_home
+    data, access_key, *_ = hybrid_home
     if restriction.startswith("mesa_") or restriction == "pass_through":
         await set_mesa(hass, hybrid_home, restriction[5:] if restriction.startswith("mesa_") else "prohibited")
     else:
-        token.cap_physical_control = restriction
-    if restriction == "pass_through": token.pass_through = True
+        access_key.cap_physical_control = restriction
+    if restriction == "pass_through": access_key.pass_through = True
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, hybrid_home)
@@ -191,7 +191,7 @@ async def test_decision_execution_preserves_mesa_and_approval(hass, hybrid_home,
 
 
 async def mutate(hass, home, change):
-    data, token, store, account, entity_id = home
+    data, access_key, store, account, entity_id = home
     registry = er.async_get(hass)
     if change == "account": await store.set_model(account, "new-model")
     elif change == "model_restored":
@@ -200,8 +200,8 @@ async def mutate(hass, home, change):
         await store.set_model(account, original)
     elif change == "deleted": await store.delete(account)
     elif change == "settings": await data.store.async_patch_settings(voice_agent_routing_mode="local")
-    elif change == "revoked": token.revoked = True
-    elif change == "scope": token.permissions = PermissionTree()
+    elif change == "revoked": access_key.revoked = True
+    elif change == "scope": access_key.permissions = PermissionTree()
     elif change == "name": registry.async_update_entity(entity_id, name="Different lamp")
     elif change == "new_candidate":
         entry = registry.async_get_or_create("light", "test", "other", original_name="Desk lamp")
@@ -214,7 +214,7 @@ async def mutate(hass, home, change):
 @pytest.mark.parametrize("change", ["none", "account", "model_restored", "deleted", "settings", "revoked", "scope", "name", "new_candidate", "mesa"])
 @pytest.mark.parametrize("category,service", [("light_on", "turn_on"), ("light_off", "turn_off")])
 async def test_saved_decision_approval_revalidates_account_and_full_catalog(hass, hybrid_home, change, category, service):
-    data, token, _, _, entity_id = hybrid_home
+    data, access_key, _, _, entity_id = hybrid_home
     await set_mesa(hass, hybrid_home, "confirm")
     with patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])):
         answer, _, _ = await run_voice(hass, hybrid_home, category=category)
@@ -224,7 +224,7 @@ async def test_saved_decision_approval_revalidates_account_and_full_catalog(hass
     await mutate(hass, hybrid_home, change)
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], record["args"], token, hass, data)
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], record["args"], access_key, hass, data)
     if change == "none":
         assert outcome == "allowed"
         call.assert_awaited_once_with("light", service, {"entity_id": [entity_id]},
@@ -266,7 +266,7 @@ async def test_changed_authority_during_decision_stops_turn(hass, hybrid_home, c
 
 
 async def test_uncertain_effect_blocks_replay_and_next_write(hass, hybrid_home):
-    data, token, *_ = hybrid_home
+    data, access_key, *_ = hybrid_home
     # Exercise service recovery even when HA sentence loading is cold.
     await data.store.async_patch_settings(command_routing_timeout_ms=5000)
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
@@ -274,7 +274,7 @@ async def test_uncertain_effect_blocks_replay_and_next_write(hass, hybrid_home):
         first, _, provider = await run_voice(hass, hybrid_home)
         second, _, fallback = await run_voice(hass, hybrid_home)
     assert "This action may have run" in first and "This action may have run" in second
-    assert data.agent_recovery.blocks(token.id)
+    assert data.agent_recovery.blocks(access_key.id)
     call.assert_awaited_once()
     provider.assert_not_called()
     fallback.assert_not_called()
@@ -403,13 +403,13 @@ async def test_preexisting_numeric_decision_approval_cannot_execute(hass, hybrid
     from custom_components.phoenix_mcp.approval_targets import bind_targets
     from custom_components.phoenix_mcp.command_execution import _capture_plan, plan_is_current
     from custom_components.phoenix_mcp.decision_targets import capture_targets
-    data, token, _, account, entity_id = hybrid_home
+    data, access_key, _, account, entity_id = hybrid_home
     await data.store.async_patch_settings(agentcli_routing_mode="hybrid")
     proposal = {"intent": "HassLightSet", "entity_ids": [entity_id], "brightness_pct": percent}
-    plan = _capture_plan(hass, data, token, proposal, ingress=ingress)
-    assert plan_is_current(plan, hass, data, token)  # A recognized local value still qualifies.
+    plan = _capture_plan(hass, data, access_key, proposal, ingress=ingress)
+    assert plan_is_current(plan, hass, data, access_key)  # A recognized local value still qualifies.
     plan.update(decision_category="light_brightness",
-                decision_catalog=capture_targets(hass, token, "light_brightness").digest(),
+                decision_catalog=capture_targets(hass, access_key, "light_brightness").digest(),
                 decision_account=agentcli.decision_account_fingerprint(hass, account))
     if value_check is not None:
         plan["value_check"] = {**value_check, "source_value": percent}
@@ -418,7 +418,7 @@ async def test_preexisting_numeric_decision_approval_cannot_execute(hass, hybrid
     args = bind_targets(args, [entity_id], hass)
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool("call_service", args, token, hass, data)
+        _, outcome, _ = await mcp_view.async_execute_approved_tool("call_service", args, access_key, hass, data)
     assert outcome == "denied"
     call.assert_not_called()
     # The otherwise identical recognized local plan can execute; legacy decision
@@ -427,7 +427,7 @@ async def test_preexisting_numeric_decision_approval_cannot_execute(hass, hybrid
         del plan[key]
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as control):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool("call_service", args, token, hass, data)
+        _, outcome, _ = await mcp_view.async_execute_approved_tool("call_service", args, access_key, hass, data)
     assert outcome == "allowed"
     control.assert_awaited_once()
 
@@ -453,15 +453,15 @@ async def jev_numeric_home(hass, jev_hybrid_home, request):
     from homeassistant.components.cover import CoverEntityFeature
     from homeassistant.components.media_player import MediaPlayerEntityFeature
     category, domain, field, service, service_field, divisor = request.param
-    data, token, store, account, entity_id = jev_hybrid_home
-    token.permissions.domains[domain] = PermissionNode(state='GREEN')
+    data, access_key, store, account, entity_id = jev_hybrid_home
+    access_key.permissions.domains[domain] = PermissionNode(state='GREEN')
     if domain != 'light':
         entry = er.async_get(hass).async_get_or_create(domain, 'test', 'device', original_name='Test device')
         entity_id = entry.entity_id
         feature = CoverEntityFeature.SET_POSITION if domain == 'cover' else MediaPlayerEntityFeature.VOLUME_SET
         hass.states.async_set(entity_id, 'open' if domain == 'cover' else 'idle', {'supported_features': feature})
         async_expose_entity(hass, 'conversation', entity_id, True)
-    return (data, token, store, account, entity_id), request.param
+    return (data, access_key, store, account, entity_id), request.param
 
 
 def numeric_reply(payload, home, spec, *, percent=37, category=None, model='jev-1.13.0'):
@@ -513,7 +513,7 @@ async def test_numeric_disagreement_or_uncertainty_falls_back_without_execution(
                                     'scope', 'new_candidate', 'mesa'])
 async def test_numeric_approval_binds_evidence_catalog_and_current_authority(hass, jev_numeric_home, change):
     home, spec = jev_numeric_home
-    data, token, _, _, _ = home
+    data, access_key, _, _, _ = home
     await set_mesa(hass, home, 'confirm')
     async def respond(session, method, path, timeout, payload): return numeric_reply(payload, home, spec)
     with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
@@ -534,7 +534,7 @@ async def test_numeric_approval_binds_evidence_catalog_and_current_authority(has
     else: await mutate(hass, home, change)
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     assert outcome == ('allowed' if change == 'none' else 'denied')
     assert call.await_count == (1 if change == 'none' else 0)
 
@@ -602,12 +602,12 @@ async def test_jev_joint_routes_one_request_through_existing_executor(hass, jev_
     ("unadvertised_route", "malformed"),
 ])
 async def test_jev_joint_declines_without_sequential_retry(hass, jev_hybrid_home, case, reason):
-    data, token, *_ = jev_hybrid_home
+    data, access_key, *_ = jev_hybrid_home
     if case in ("category_scope", "unadvertised_route"):
-        token.permissions = PermissionTree(domains={"light": PermissionNode(state="YELLOW")})
+        access_key.permissions = PermissionTree(domains={"light": PermissionNode(state="YELLOW")})
     if case == "category_scope":
         entry = er.async_get(hass).async_get_or_create("light", "test", "zz_scope_control")
-        token.permissions.entities[entry.entity_id] = PermissionNode(state="GREEN")
+        access_key.permissions.entities[entry.entity_id] = PermissionNode(state="GREEN")
         hass.states.async_set(entry.entity_id, "off")
         async_expose_entity(hass, "conversation", entry.entity_id, True)
     async def respond(session, method, path, timeout, payload):
@@ -639,8 +639,8 @@ async def test_jev_joint_declines_without_sequential_retry(hass, jev_hybrid_home
 
 async def test_jev_large_union_keeps_all_candidates_in_one_joint_request(hass, jev_hybrid_home):
     from custom_components.phoenix_mcp.const import DECISION_MAX_TARGETS
-    _, token, *_ = jev_hybrid_home
-    token.permissions.domains["sensor"] = PermissionNode(state="YELLOW")
+    _, access_key, *_ = jev_hybrid_home
+    access_key.permissions.domains["sensor"] = PermissionNode(state="YELLOW")
     for index in range(DECISION_MAX_TARGETS):
         entry = er.async_get(hass).async_get_or_create("sensor", "test", f"reading_{index}")
         hass.states.async_set(entry.entity_id, "20")
@@ -656,10 +656,10 @@ async def test_jev_large_union_keeps_all_candidates_in_one_joint_request(hass, j
 
 @pytest.mark.parametrize("restriction", ["prohibited", "read_only", "confirm", "pass_through"])
 async def test_jev_joint_preserves_mesa(hass, jev_hybrid_home, restriction):
-    data, token, *_ = jev_hybrid_home
+    data, access_key, *_ = jev_hybrid_home
     await set_mesa(hass, jev_hybrid_home, "prohibited" if restriction == "pass_through" else restriction)
     if restriction == "pass_through":
-        token.pass_through = True
+        access_key.pass_through = True
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
         answer, remote, provider = await run_voice(hass, jev_hybrid_home, request=jev_response)
@@ -676,8 +676,8 @@ async def test_jev_joint_preserves_mesa(hass, jev_hybrid_home, restriction):
 
 @pytest.mark.parametrize("change", ["none", "account", "model_restored", "scope", "name", "new_candidate", "read_competitor", "mesa", "missing_target_evidence", "wrong_target_evidence"])
 async def test_jev_joint_approval_binds_full_union_and_model(hass, jev_hybrid_home, change):
-    data, token, _, _, entity_id = jev_hybrid_home
-    token.permissions.domains["sensor"] = PermissionNode(state="YELLOW")
+    data, access_key, _, _, entity_id = jev_hybrid_home
+    access_key.permissions.domains["sensor"] = PermissionNode(state="YELLOW")
     for index in range(60):
         entry = er.async_get(hass).async_get_or_create("sensor", "test", f"catalog_{index}")
         hass.states.async_set(entry.entity_id, "20")
@@ -700,7 +700,7 @@ async def test_jev_joint_approval_binds_full_union_and_model(hass, jev_hybrid_ho
         await mutate(hass, jev_hybrid_home, change)
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], record["args"], token, hass, data)
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], record["args"], access_key, hass, data)
     if change == "none":
         assert outcome == "allowed"
         call.assert_awaited_once_with("light", "turn_on", {"entity_id": [entity_id]}, blocking=True, return_response=False)
@@ -808,7 +808,7 @@ async def expanded_numeric_home(hass, jev_hybrid_home, request):
     category, value = request.param
     intent = DECISION_TARGET_INTENTS[category]
     operation = numeric_operation(intent)
-    data, token, store, account, _ = jev_hybrid_home
+    data, access_key, store, account, _ = jev_hybrid_home
     attrs = {
         'fan': {'supported_features': FanEntityFeature.SET_SPEED},
         'valve': {'supported_features': ValveEntityFeature.SET_POSITION},
@@ -821,11 +821,11 @@ async def expanded_numeric_home(hass, jev_hybrid_home, request):
         'input_number': {'min': -10, 'max': 10, 'step': 0.5},
         'light': {'supported_color_modes': ['color_temp'], 'min_color_temp_kelvin': 2000, 'max_color_temp_kelvin': 6500},
     }[operation.domain]
-    token.permissions.domains[operation.domain] = PermissionNode(state='GREEN')
+    access_key.permissions.domains[operation.domain] = PermissionNode(state='GREEN')
     entry = er.async_get(hass).async_get_or_create(operation.domain, 'test', 'numeric_extra', original_name='Test control')
     hass.states.async_set(entry.entity_id, 'on', {'friendly_name': 'Test control', **attrs})
     async_expose_entity(hass, 'conversation', entry.entity_id, True)
-    home = data, token, store, account, entry.entity_id
+    home = data, access_key, store, account, entry.entity_id
     return home, category, intent, operation, value
 
 
@@ -856,13 +856,13 @@ async def test_expanded_native_values_use_guarded_service_once(hass, expanded_nu
 @pytest.mark.parametrize('change', ['range', 'unit', 'step', 'value'])
 async def test_native_numeric_approval_rechecks_bounds_units_and_value(hass, jev_hybrid_home, change):
     home = jev_hybrid_home
-    data, token, store, account, _ = home
-    token.permissions.domains['number'] = PermissionNode(state='GREEN')
+    data, access_key, store, account, _ = home
+    access_key.permissions.domains['number'] = PermissionNode(state='GREEN')
     entry = er.async_get(hass).async_get_or_create('number', 'test', 'level', original_name='Level')
     attributes = {'min': -10, 'max': 10, 'step': 0.5, 'unit_of_measurement': 'dB'}
     hass.states.async_set(entry.entity_id, '0', attributes)
     async_expose_entity(hass, 'conversation', entry.entity_id, True)
-    home = data, token, store, account, entry.entity_id
+    home = data, access_key, store, account, entry.entity_id
     await set_mesa(hass, home, 'confirm')
     async def respond(session, method, path, timeout, payload):
         return scalar_reply(payload, entry.entity_id, 'number_value')
@@ -878,7 +878,7 @@ async def test_native_numeric_approval_rechecks_bounds_units_and_value(hass, jev
         hass.states.async_set(entry.entity_id, '0', attributes)
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     assert outcome == 'denied'
     call.assert_not_called()
 
@@ -924,14 +924,14 @@ async def test_explicit_foreign_unit_cannot_be_authorized_by_model(hass, expande
 
 @pytest.fixture
 async def temporal_home(hass, jev_hybrid_home):
-    data, token, store, account, _ = jev_hybrid_home
-    token.permissions.domains['input_datetime'] = PermissionNode(state='GREEN')
+    data, access_key, store, account, _ = jev_hybrid_home
+    access_key.permissions.domains['input_datetime'] = PermissionNode(state='GREEN')
     entry = er.async_get(hass).async_get_or_create('input_datetime', 'test', 'appointment', original_name='Appointment')
     hass.states.async_set(entry.entity_id, '2026-12-24 10:00:00', {
         'friendly_name': 'Appointment', 'has_date': True, 'has_time': True,
         'year': 2026, 'month': 12, 'day': 24, 'hour': 10, 'minute': 0, 'second': 0})
     async_expose_entity(hass, 'conversation', entry.entity_id, True)
-    return data, token, store, account, entry.entity_id
+    return data, access_key, store, account, entry.entity_id
 
 
 def temporal_wire(payload, entity_id, category='helper_datetime', value='value'):
@@ -971,9 +971,9 @@ async def test_temporal_helpers_dispatch_only_the_exact_requested_field(hass, te
 @pytest.mark.parametrize('large', [False, True])
 @pytest.mark.parametrize('change', ['none', 'value', 'flags', 'timezone', 'competitor', 'permission'])
 async def test_temporal_approval_revalidates_value_catalog_and_authority(hass, temporal_home, change, large):
-    data, token, _, _, entity_id = temporal_home
+    data, access_key, _, _, entity_id = temporal_home
     if large:
-        token.permissions.domains['sensor'] = PermissionNode(state='YELLOW')
+        access_key.permissions.domains['sensor'] = PermissionNode(state='YELLOW')
         for index in range(300):
             entry = er.async_get(hass).async_get_or_create('sensor', 'test', f'competitor_{index}')
             hass.states.async_set(entry.entity_id, '20', {'friendly_name': f'Competing reading {index}'})
@@ -997,23 +997,23 @@ async def test_temporal_approval_revalidates_value_catalog_and_authority(hass, t
         entry = er.async_get(hass).async_get_or_create('input_datetime', 'test', 'other', original_name='Appointment')
         hass.states.async_set(entry.entity_id, '2026-12-24', {'has_date': True, 'has_time': False})
         async_expose_entity(hass, 'conversation', entry.entity_id, True)
-    elif change == 'permission': token.permissions.domains['input_datetime'] = PermissionNode(state='RED')
+    elif change == 'permission': access_key.permissions.domains['input_datetime'] = PermissionNode(state='RED')
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     assert outcome == ('allowed' if change == 'none' else 'denied')
     assert call.await_count == (1 if change == 'none' else 0)
 
 
 @pytest.mark.parametrize('change', ['timezone', 'account', 'permission', 'flags', 'value_declined', 'wrong_kind', 'malformed'])
 async def test_temporal_model_wait_cannot_authorize_changed_or_invalid_request(hass, temporal_home, change):
-    data, token, store, account, entity_id = temporal_home
+    data, access_key, store, account, entity_id = temporal_home
     async def respond(*args):
         body = temporal_wire(args[4], entity_id, 'helper_time' if change == 'wrong_kind' else 'helper_datetime',
                              'none' if change == 'value_declined' else 'value')
         if change == 'timezone': await hass.config.async_set_time_zone('America/New_York')
         elif change == 'account': await store.set_model(account, 'changed')
-        elif change == 'permission': token.permissions.domains['input_datetime'] = PermissionNode(state='RED')
+        elif change == 'permission': access_key.permissions.domains['input_datetime'] = PermissionNode(state='RED')
         elif change == 'flags':
             state = hass.states.get(entity_id)
             hass.states.async_set(entity_id, state.state, {**state.attributes, 'has_time': False})
@@ -1029,11 +1029,11 @@ async def test_temporal_model_wait_cannot_authorize_changed_or_invalid_request(h
 
 async def test_temporal_preview_is_inert(hass, temporal_home):
     from custom_components.phoenix_mcp.decision_batch import async_preview_batch
-    data, token, _, _, entity_id = temporal_home
+    data, access_key, _, _, entity_id = temporal_home
     async def respond(*args): return temporal_wire(args[4], entity_id)
     with (patch.object(DecisionProvider, '_request', side_effect=respond),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        result = await async_preview_batch(hass, data, token, 'Set Appointment to 2026-12-25 18:30', 'en',
+        result = await async_preview_batch(hass, data, access_key, 'Set Appointment to 2026-12-25 18:30', 'en',
                                            {'reason': 'no_match', 'proposal': None})
     assert result['reason'] == 'target_selected', result
     assert result['proposal']['value'] == '2026-12-25 18:30:00'
@@ -1048,8 +1048,8 @@ async def entity_command_home(hass, jev_hybrid_home, request):
     from custom_components.phoenix_mcp.entity_commands import _FEATURES
     category, value = request.param
     domain, service, field, options, feature, _ = COMMAND_ROUTING_ENTITY_COMMANDS[category]
-    data, token, store, account, _ = jev_hybrid_home
-    token.permissions.domains[domain] = PermissionNode(state='GREEN')
+    data, access_key, store, account, _ = jev_hybrid_home
+    access_key.permissions.domains[domain] = PermissionNode(state='GREEN')
     hass.services.async_register(domain, service, AsyncMock())
     entry = er.async_get(hass).async_get_or_create(domain, 'test', 'helper', original_name='Test helper')
     attrs = {'friendly_name': 'Test helper'}
@@ -1057,7 +1057,7 @@ async def entity_command_home(hass, jev_hybrid_home, request):
     if options: attrs[options] = ['Away', 'Home']
     hass.states.async_set(entry.entity_id, 'unknown' if domain in ('button', 'input_button', 'scene') else 'off', attrs)
     async_expose_entity(hass, 'conversation', entry.entity_id, True)
-    return (data, token, store, account, entry.entity_id), category, value, DECISION_ENTITY_CATEGORIES[category], (domain, service, field)
+    return (data, access_key, store, account, entry.entity_id), category, value, DECISION_ENTITY_CATEGORIES[category], (domain, service, field)
 
 
 def entity_command_wire(payload, entity_id, category, value=None):
@@ -1095,7 +1095,7 @@ async def test_entity_commands_reach_guarded_dispatch(hass, entity_command_home)
 @pytest.mark.parametrize('change', ['none', 'option', 'value', 'service', 'permission'])
 async def test_entity_value_approval_preserves_current_options_and_exact_value(hass, entity_command_home, change):
     home, category, value, _, _ = entity_command_home
-    data, token, _, _, entity_id = home
+    data, access_key, _, _, entity_id = home
     await set_mesa(hass, home, 'confirm')
     async def respond(*args): return entity_command_wire(args[4], entity_id, category, value)
     with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
@@ -1108,10 +1108,10 @@ async def test_entity_value_approval_preserves_current_options_and_exact_value(h
         record['args'][COMMAND_ROUTING_PLAN_KEY]['proposal']['value'] = 'Home'
         record['args']['service_data']['option'] = 'Home'
     elif change == 'service': hass.services.async_remove('select', 'select_option')
-    elif change == 'permission': token.permissions.domains['select'] = PermissionNode(state='RED')
+    elif change == 'permission': access_key.permissions.domains['select'] = PermissionNode(state='RED')
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     assert outcome == ('allowed' if change == 'none' else 'denied')
     assert call.await_count == (1 if change == 'none' else 0)
 
@@ -1132,12 +1132,12 @@ async def test_entity_value_wait_rechecks_options(hass, entity_command_home):
 
 @pytest.mark.parametrize('duration,allowed', [('00:05:00', True), ('05:00', False), ('five minutes', True), ('one hour and thirty minutes', True)])
 async def test_explicit_timer_duration_uses_existing_named_timer_only(hass, jev_hybrid_home, duration, allowed):
-    data, token, store, account, _ = jev_hybrid_home
-    token.permissions.domains['timer'] = PermissionNode(state='GREEN')
+    data, access_key, store, account, _ = jev_hybrid_home
+    access_key.permissions.domains['timer'] = PermissionNode(state='GREEN')
     entry = er.async_get(hass).async_get_or_create('timer', 'test', 'test_timer', original_name='Test timer')
     hass.states.async_set(entry.entity_id, 'idle', {'friendly_name': 'Test timer', 'duration': '0:01:00'})
     async_expose_entity(hass, 'conversation', entry.entity_id, True)
-    home = data, token, store, account, entry.entity_id
+    home = data, access_key, store, account, entry.entity_id
     async def respond(*args): return temporal_wire(args[4], entry.entity_id, 'timer_duration')
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
@@ -1151,12 +1151,12 @@ async def test_explicit_timer_duration_uses_existing_named_timer_only(hass, jev_
 
 
 async def test_counter_absolute_value_is_exact_and_guarded(hass, jev_hybrid_home):
-    data, token, store, account, _ = jev_hybrid_home
-    token.permissions.domains['counter'] = PermissionNode(state='GREEN')
+    data, access_key, store, account, _ = jev_hybrid_home
+    access_key.permissions.domains['counter'] = PermissionNode(state='GREEN')
     entry = er.async_get(hass).async_get_or_create('counter', 'test', 'test_counter', original_name='Test counter')
     hass.states.async_set(entry.entity_id, '0', {'friendly_name': 'Test counter'})
     async_expose_entity(hass, 'conversation', entry.entity_id, True)
-    home = data, token, store, account, entry.entity_id
+    home = data, access_key, store, account, entry.entity_id
     async def respond(*args): return scalar_reply(args[4], entry.entity_id, 'counter_value')
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
@@ -1183,7 +1183,7 @@ async def test_entity_on_off_can_use_local_intent_without_decision_provider(hass
 @pytest.mark.parametrize('change', ['none', 'numeric_competitor', 'option', 'conflicting_value'])
 async def test_numbered_options_share_one_decision_and_bind_the_complete_catalog(hass, entity_command_home, change):
     home, category, value, _, (domain, service, field) = entity_command_home
-    data, token, _, _, entity_id = home
+    data, access_key, _, _, entity_id = home
     hass.states.async_set(entity_id, 'Home', {'friendly_name': 'Test helper', 'options': ['Home', value]})
     await set_mesa(hass, home, 'confirm')
     async def respond(*args):
@@ -1204,7 +1204,7 @@ async def test_numbered_options_share_one_decision_and_bind_the_complete_catalog
     provider.assert_not_called()
     record = data.store.get_pending_approvals()[0]
     if change == 'numeric_competitor':
-        token.permissions.domains['number'] = PermissionNode(state='GREEN')
+        access_key.permissions.domains['number'] = PermissionNode(state='GREEN')
         entry = er.async_get(hass).async_get_or_create('number', 'test', 'competing', original_name='Test helper')
         hass.states.async_set(entry.entity_id, '2', {'min': 0, 'max': 10, 'step': 1})
         async_expose_entity(hass, 'conversation', entry.entity_id, True)
@@ -1212,7 +1212,7 @@ async def test_numbered_options_share_one_decision_and_bind_the_complete_catalog
         hass.states.async_set(entity_id, 'Home', {'friendly_name': 'Test helper', 'options': ['Home']})
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     assert outcome == ('allowed' if change == 'none' else 'denied')
     assert call.await_count == (1 if change == 'none' else 0)
     if change == 'none':
@@ -1222,7 +1222,7 @@ async def test_numbered_options_share_one_decision_and_bind_the_complete_catalog
 @pytest.mark.parametrize('entity_command_home', [('select_option', '2')], indirect=True)
 async def test_numeric_setting_remains_numeric_with_numbered_options_present(hass, entity_command_home):
     home, *_ = entity_command_home
-    data, token, store, account, option_id = home
+    data, access_key, store, account, option_id = home
     hass.states.async_set(option_id, '2', {'friendly_name': 'Test helper', 'options': ['2', '37']})
     light_id = next(state.entity_id for state in hass.states.async_all('light'))
     async def respond(*args):
@@ -1286,7 +1286,7 @@ async def test_fixed_controls_dispatch_exact_native_fields(hass, entity_command_
 @pytest.mark.parametrize('change', ['none', 'feature', 'arguments', 'permission'])
 async def test_fixed_control_approval_rechecks_features_and_arguments(hass, entity_command_home, change):
     home, category, value, _, _ = entity_command_home
-    data, token, _, _, entity_id = home
+    data, access_key, _, _, entity_id = home
     await set_mesa(hass, home, 'confirm')
     async def respond(*args): return entity_command_wire(args[4], entity_id, category, value)
     with patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])):
@@ -1299,10 +1299,10 @@ async def test_fixed_control_approval_rechecks_features_and_arguments(hass, enti
     elif change == 'arguments':
         record['args']['service_data'] = {'is_volume_muted': False} if category == 'media_mute' else {'direction': 'forward'}
     elif change == 'permission':
-        token.permissions.domains[entity_id.split('.')[0]] = PermissionNode(state='RED')
+        access_key.permissions.domains[entity_id.split('.')[0]] = PermissionNode(state='RED')
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     assert outcome == ('allowed' if change == 'none' else 'denied')
     assert call.await_count == (1 if change == 'none' else 0)
 
@@ -1310,14 +1310,14 @@ async def test_fixed_control_approval_rechecks_features_and_arguments(hass, enti
 @pytest.mark.parametrize('change', ['none', 'scope', 'exposure', 'attribute'])
 async def test_joint_attribute_read_reaches_scoped_read_tool_and_rechecks_changes(hass, jev_hybrid_home, change):
     home = jev_hybrid_home
-    _, token, _, _, entity_id = home
-    token.permissions.domains['light'].state = 'YELLOW'
-    token.cap_physical_control = 'deny'
+    _, access_key, _, _, entity_id = home
+    access_key.permissions.domains['light'].state = 'YELLOW'
+    access_key.cap_physical_control = 'deny'
     hass.states.async_set(entity_id, 'on', {'friendly_name': 'Desk lamp', 'brightness': 94})
     async def respond(*args):
         payload = args[4]
         assert '94' not in json.dumps(payload['state']['targets'])
-        if change == 'scope': token.permissions.domains['light'].state = 'RED'
+        if change == 'scope': access_key.permissions.domains['light'].state = 'RED'
         if change == 'exposure': async_expose_entity(hass, 'conversation', entity_id, False)
         if change == 'attribute': hass.states.async_set(entity_id, 'on', {'friendly_name': 'Desk lamp'})
         return entity_command_wire(payload, entity_id, 'attribute_read', 'brightness')
@@ -1356,7 +1356,7 @@ async def test_structured_requests_keep_original_text_and_normal_provider(hass, 
 @pytest.mark.parametrize('confirm', [False, True])
 async def test_generic_large_catalog_dispatch_and_approval_revalidation(hass, hybrid_home, confirm):
     """A grouped plan reaches shared execution; later competitor changes invalidate approval."""
-    data, token, store, _, entity_id = hybrid_home
+    data, access_key, store, _, entity_id = hybrid_home
     account = await store.add('typesafe', {'base_url': 'http://example.test/v1', 'model': 'local-model'})
     await data.store.async_patch_settings(decision_provider_id=account)
     registry = er.async_get(hass)
@@ -1387,9 +1387,9 @@ async def test_generic_large_catalog_dispatch_and_approval_revalidation(hass, hy
         approval = data.store.get_pending_approvals()[0]
         plan = approval['args'][COMMAND_ROUTING_PLAN_KEY]
         from custom_components.phoenix_mcp.command_execution import _decision_plan_current
-        assert _decision_plan_current(plan, hass, data, token)
+        assert _decision_plan_current(plan, hass, data, access_key)
         registry.async_update_entity(other.entity_id, aliases={'Desk lamp'})
-        assert not _decision_plan_current(plan, hass, data, token)
+        assert not _decision_plan_current(plan, hass, data, access_key)
 
 
 @pytest.mark.parametrize('mode', ['hybrid', 'auto', 'local_shadow', 'local'])
@@ -1416,8 +1416,8 @@ async def test_custom_sentence_keeps_precedence_through_voice(
 @pytest.mark.parametrize('duration,expected', [('00:00:00', None), ('zero seconds', None),
                                              ('00:00:01', '0:00:01'), ('23:59:59', '23:59:59')])
 async def test_timer_duration_preserves_real_ha_runtime_semantics(hass, jev_hybrid_home, initial_state, duration, expected):
-    data, token, *_ = jev_hybrid_home
-    token.permissions.domains['timer'] = PermissionNode(state='GREEN')
+    data, access_key, *_ = jev_hybrid_home
+    access_key.permissions.domains['timer'] = PermissionNode(state='GREEN')
     assert await async_setup_component(hass, 'timer', {'timer': {'test_timer': {'name': 'Test timer', 'duration': '00:05:00'}}})
     entity_id = 'timer.test_timer'
     async_expose_entity(hass, 'conversation', entity_id, True)
@@ -1450,18 +1450,18 @@ async def test_timer_duration_preserves_real_ha_runtime_semantics(hass, jev_hybr
 
 async def test_saved_zero_duration_plan_is_rejected_at_execution(hass, jev_hybrid_home):
     from custom_components.phoenix_mcp.command_execution import _capture_plan, plan_is_current
-    data, token, *_ = jev_hybrid_home
-    token.permissions.domains['timer'] = PermissionNode(state='GREEN')
+    data, access_key, *_ = jev_hybrid_home
+    access_key.permissions.domains['timer'] = PermissionNode(state='GREEN')
     entry = er.async_get(hass).async_get_or_create('timer', 'test', 'test_timer', original_name='Test timer')
     hass.states.async_set(entry.entity_id, 'idle', {'friendly_name': 'Test timer', 'duration': '0:05:00'})
     async_expose_entity(hass, 'conversation', entry.entity_id, True)
     proposal = {'intent': 'PhoenixTimerDuration', 'entity_ids': [entry.entity_id], 'value': '00:00:01'}
     # Keep the saved plan's bindings valid so only value validation can reject it.
-    plan = _capture_plan(hass, data, token, proposal)
+    plan = _capture_plan(hass, data, access_key, proposal)
     assert plan is not None
-    assert plan_is_current(plan, hass, data, token)
+    assert plan_is_current(plan, hass, data, access_key)
     plan['proposal']['value'] = '00:00:00'
-    assert not plan_is_current(plan, hass, data, token)
+    assert not plan_is_current(plan, hass, data, access_key)
 
 
 @pytest.mark.parametrize('ingress', ['voice', 'chat'])
@@ -1469,7 +1469,7 @@ async def test_confident_missing_name_cannot_prepare_a_color_write(hass, jev_hyb
     """A catalog-valid winner still needs identity evidence in the current request."""
     from custom_components.phoenix_mcp.decision_shadow import async_preview_decision
     from custom_components.phoenix_mcp.command_execution import _capture_plan
-    data, token, _, _, entity_id = jev_hybrid_home
+    data, access_key, _, _, entity_id = jev_hybrid_home
     await data.store.async_patch_settings(agentcli_routing_mode='auto')
     hass.services.async_register('light', 'turn_on', AsyncMock())
     hass.states.async_set(entity_id, 'off', {
@@ -1484,7 +1484,7 @@ async def test_confident_missing_name_cannot_prepare_a_color_write(hass, jev_hyb
         return body
     with (patch.object(DecisionProvider, '_request', AsyncMock(side_effect=respond)) as remote,
           patch('custom_components.phoenix_mcp.decision_batch._capture_plan', wraps=_capture_plan) as capture):
-        result = await async_preview_decision(hass, data, token, 'Set Audit Missing Lamp to blue.', 'en',
+        result = await async_preview_decision(hass, data, access_key, 'Set Audit Missing Lamp to blue.', 'en',
             {'reason': 'no_match', 'proposal': None}, targets=True, prepare=True, ingress=ingress)
     remote.assert_awaited_once()
     assert result.get('target_selection', {}).get('reason') == 'target_unverified', result

@@ -1,22 +1,22 @@
 import { useState, useEffect } from "react";
-import type { TokenRecord, PatchTokenBody } from "../types";
+import type { AccessKeyRecord, PatchAccessKeyBody } from "../types";
 import { api } from "../api";
 import { t } from "../i18n";
 
 interface Props {
-  token: TokenRecord;
-  onUpdate: (updated: TokenRecord) => void;
+  accessKey: AccessKeyRecord;
+  onUpdate: (updated: AccessKeyRecord) => void;
 }
 
-export function RateLimitConfig({ token, onUpdate }: Props) {
-  const [requests, setRequests] = useState(String(token.rate_limit_requests));
-  const [burst, setBurst] = useState(String(token.rate_limit_burst));
+export function RateLimitConfig({ accessKey, onUpdate }: Props) {
+  const [requests, setRequests] = useState(String(accessKey.rate_limit_requests));
+  const [burst, setBurst] = useState(String(accessKey.rate_limit_burst));
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setRequests(String(token.rate_limit_requests));
-    setBurst(String(token.rate_limit_burst));
-  }, [token.rate_limit_requests, token.rate_limit_burst]);
+    setRequests(String(accessKey.rate_limit_requests));
+    setBurst(String(accessKey.rate_limit_burst));
+  }, [accessKey.rate_limit_requests, accessKey.rate_limit_burst]);
 
   const requestsNum = parseInt(requests, 10);
   const burstDisabled = isNaN(requestsNum) || requestsNum === 0;
@@ -30,11 +30,11 @@ export function RateLimitConfig({ token, onUpdate }: Props) {
     }
     setError(null);
     try {
-      const body: PatchTokenBody = {
+      const body: PatchAccessKeyBody = {
         rate_limit_requests: reqNum,
         rate_limit_burst: burstNum,
       };
-      const updated = await api.patchToken(token.id, body);
+      const updated = await api.patchAccessKey(accessKey.id, body);
       onUpdate(updated);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("tokens.rateSaveFailed"));

@@ -39,7 +39,7 @@ from ..data import PhoenixData
 from ..tool_contracts import normalize_tool_args, unknown_argument_error
 from ..helpers import content_hash, diff_summary_fields as _summary, effective_cap, redact_secrets_in_text as _redact_secrets_in_text, str_arg, str_list_arg, version_summary_fields as _version_summary
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _read_text_capped, _record_version, _restore_ctx, _text_file_cas_conflict, _tool_error, _tool_success, _truncate, _usable_path_arg, _version_content_payload, _write_text_atomic, redaction_sentinel_path
-from ..token_store import TokenRecord
+from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes, yaml_patch
 
 _LOGGER = logging.getLogger(__name__)
@@ -94,7 +94,7 @@ async def _file_recovery_precheck(
 
 async def _recoverable_file_write(
     *, path: str, rel: str, before_exists: bool, before_content: str | None,
-    content: str, token: TokenRecord, data: PhoenixData, operation: str,
+    content: str, access_key: AccessKeyRecord, data: PhoenixData, operation: str,
     display_path: str, hass: HomeAssistant, snapshot_type: str = "authored_file",
     return_result: bool = False, recovery_id_out: dict[str, str] | None = None,
 ) -> tuple[dict, str, str] | None:
@@ -105,7 +105,7 @@ async def _recoverable_file_write(
         before = await hass.async_add_executor_job(_authored_file_snapshot, rel, before_exists, before_content, snapshot_type)
         expected = await hass.async_add_executor_job(_authored_file_snapshot, rel, True, content, snapshot_type)
         async with recovery.resource(resource):
-            rid = await recovery.begin(resource, operation, token.id, before,
+            rid = await recovery.begin(resource, operation, access_key.id, before,
                 expected=expected)
             if recovery_id_out is not None:
                 recovery_id_out["recovery_id"] = rid
@@ -163,7 +163,7 @@ async def _recoverable_file_write(
 
 
 async def _recoverable_file_delete(
-    *, path: str, rel: str, before_content: str, token: TokenRecord,
+    *, path: str, rel: str, before_content: str, access_key: AccessKeyRecord,
     data: PhoenixData, operation: str, hass: HomeAssistant,
 ) -> tuple[dict, str, str]:
     """Delete one scoped authored file only after persisting and rechecking it."""
@@ -172,7 +172,7 @@ async def _recoverable_file_delete(
     try:
         before = await hass.async_add_executor_job(_authored_file_snapshot, rel, True, before_content)
         async with recovery.resource(resource):
-            rid = await recovery.begin(resource, operation, token.id, before,
+            rid = await recovery.begin(resource, operation, access_key.id, before,
                 expected=_authored_file_snapshot(rel, False, None))
             try:
                 await recovery.mark(rid, "dispatching")
@@ -260,10 +260,10 @@ def _listdir(target: str) -> list[dict]:
 
 
 async def _tool_list_files(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: list files in an allowed config directory."""
-    if effective_cap(token, "cap_filesystem") == CAP_DENY:
+    if effective_cap(access_key, "cap_filesystem") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "list_files"
     error = unknown_argument_error("list_files", args)
     if error:
@@ -283,10 +283,10 @@ async def _tool_list_files(
 
 
 async def _tool_read_file(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read a UTF-8 text file from an allowed config directory."""
-    if effective_cap(token, "cap_filesystem") == CAP_DENY:
+    if effective_cap(access_key, "cap_filesystem") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "read_file"
     error = unknown_argument_error("read_file", args)
     if error:
@@ -325,11 +325,11 @@ def _file_write_precheck(args: dict, hass: HomeAssistant, tool_name: str) -> tup
 
 
 async def _tool_write_file(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: write a file under an allowed config directory (Confirm-gated)."""
-    if effective_cap(token, "cap_filesystem") == CAP_DENY:
+    if effective_cap(access_key, "cap_filesystem") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "write_file"
     error = unknown_argument_error("write_file", args)
     if error:
@@ -348,17 +348,17 @@ async def _tool_write_file(
     if pre is not None:
         return pre
     blocked = await _gate(
-        "cap_filesystem", token, hass, data,
+        "cap_filesystem", access_key, hass, data,
         tool_name="write_file", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_write_file(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_write_file(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_write_file(args, token, hass, data)
+    return await _execute_write_file(args, access_key, hass, data)
 
 
 async def _execute_write_file(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     path = args.get("path", "")
     content = args.get("content")
@@ -392,13 +392,13 @@ async def _execute_write_file(
         recovery_result = await _recoverable_file_write(
             path=target, rel=rel, before_exists=existed,
             before_content=before_content, content=content,
-            token=token, data=data, operation="write_file",
+            access_key=access_key, data=data, operation="write_file",
             display_path=path, hass=hass, recovery_id_out=recovery_receipt,
         )
     if recovery_result is not None:
         return recovery_result
     await _record_version(
-        data, token, resource_type="file", resource_id=rel,
+        data, access_key, resource_type="file", resource_id=rel,
         action="edit" if existed else "create",
         before=_version_content_payload(before_content, path=rel),
         after=_version_content_payload(content, path=rel),
@@ -491,10 +491,10 @@ def _yaml_fragment(text: str, key: str) -> tuple[bool, Any]:
 
 
 async def _tool_get_yaml_config(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read a YAML config file, or one key inside it."""
-    if effective_cap(token, "cap_yaml_edit") == CAP_DENY:
+    if effective_cap(access_key, "cap_yaml_edit") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_yaml_config"
     error = unknown_argument_error("get_yaml_config", args)
     if error:
@@ -824,11 +824,11 @@ def _yaml_write_target(hass: HomeAssistant, args: dict) -> tuple[str, str] | Non
 
 
 async def _tool_set_yaml_config(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: replace a YAML configuration file whole (Confirm-gated)."""
-    if effective_cap(token, "cap_yaml_edit") == CAP_DENY:
+    if effective_cap(access_key, "cap_yaml_edit") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_yaml_config"
     error = unknown_argument_error("set_yaml_config", args)
     if error:
@@ -866,17 +866,17 @@ async def _tool_set_yaml_config(
     if pre is not None:
         return pre
     blocked = await _gate(
-        "cap_yaml_edit", token, hass, data,
+        "cap_yaml_edit", access_key, hass, data,
         tool_name="set_yaml_config", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_set_yaml_config(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_set_yaml_config(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_set_yaml_config(args, token, hass, data)
+    return await _execute_set_yaml_config(args, access_key, hass, data)
 
 
 async def _execute_set_yaml_config(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     content = args.get("content")
     if not isinstance(content, str):
@@ -939,7 +939,7 @@ async def _execute_set_yaml_config(
         recovery_result = await _recoverable_file_write(
             path=path, rel=rel, before_exists=existed,
             before_content=before_content, content=content,
-            token=token, data=data, operation="set_yaml_config",
+            access_key=access_key, data=data, operation="set_yaml_config",
             display_path=rel, hass=hass, snapshot_type="yaml_file",
             recovery_id_out=recovery_receipt,
         )
@@ -947,7 +947,7 @@ async def _execute_set_yaml_config(
             return recovery_result
         # Inside the lock so the history cannot record two writes out of order.
         await _record_version(
-            data, token, resource_type="yaml_config", resource_id=rel,
+            data, access_key, resource_type="yaml_config", resource_id=rel,
             action="edit" if existed else "create",
             before=_version_content_payload(before_content),
             after=_version_content_payload(content),
@@ -1061,7 +1061,7 @@ def _prepare_yaml_patch(
 
 
 async def _tool_patch_yaml_config(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: change ONE key inside a YAML configuration file (Confirm-gated).
@@ -1072,7 +1072,7 @@ async def _tool_patch_yaml_config(
     never resent, so they cannot be lost either.
     """
     tool = "patch_yaml_config"
-    if effective_cap(token, "cap_yaml_edit") == CAP_DENY:
+    if effective_cap(access_key, "cap_yaml_edit") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     args, error = normalize_tool_args(tool, args)
     if error:
@@ -1100,17 +1100,17 @@ async def _tool_patch_yaml_config(
     if pre is not None:
         return pre
     blocked = await _gate(
-        "cap_yaml_edit", token, hass, data,
+        "cap_yaml_edit", access_key, hass, data,
         tool_name=tool, args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_patch_yaml_config(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_patch_yaml_config(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_patch_yaml_config(args, token, hass, data)
+    return await _execute_patch_yaml_config(args, access_key, hass, data)
 
 
 async def _execute_patch_yaml_config(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     tool = "patch_yaml_config"
     target = _yaml_write_target(hass, args)
@@ -1157,7 +1157,7 @@ async def _execute_patch_yaml_config(
         recovery_result = await _recoverable_file_write(
             path=path, rel=rel, before_exists=existed,
             before_content=before_content, content=content,
-            token=token, data=data, operation=tool,
+            access_key=access_key, data=data, operation=tool,
             display_path=rel, hass=hass, snapshot_type="yaml_file",
             recovery_id_out=recovery_receipt,
         )
@@ -1167,7 +1167,7 @@ async def _execute_patch_yaml_config(
         # The snapshot is the WHOLE file on both sides, so a restore reproduces
         # configuration.yaml exactly as any other yaml_config version does.
         await _record_version(
-            data, token, resource_type="yaml_config", resource_id=rel,
+            data, access_key, resource_type="yaml_config", resource_id=rel,
             action="edit" if existed else "create",
             before=_version_content_payload(before_content),
             after=_version_content_payload(content),
@@ -1205,7 +1205,7 @@ def _read_capped_if_file(path: str) -> str | None:
     return None
 
 
-async def _build_diff_write_file(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+async def _build_diff_write_file(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     path = args.get("path", "")
     content = args.get("content") if isinstance(args.get("content"), str) else ""
     target = _resolve_fs_path(hass, path)
@@ -1224,7 +1224,7 @@ async def _build_diff_write_file(args: dict, token: TokenRecord, hass: HomeAssis
     }
 
 
-async def _build_diff_set_yaml_config(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+async def _build_diff_set_yaml_config(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     raw_content = args.get("content")
     content: str = raw_content if isinstance(raw_content, str) else ""
     # Best-effort like every diff builder: an unresolvable path still produces a
@@ -1267,7 +1267,7 @@ async def _build_diff_set_yaml_config(args: dict, token: TokenRecord, hass: Home
     }
 
 
-async def _build_diff_patch_yaml_config(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+async def _build_diff_patch_yaml_config(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """The addressed key's before and after, which is the point of the tool.
 
     Both sides describe the same thing (the key's VALUE, not the pair), and the

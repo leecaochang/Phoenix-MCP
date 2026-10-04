@@ -24,15 +24,15 @@ from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.const import MAX_COMPARE_LIST_VALUES, MAX_COMPARE_VALUE_CHARS
 from custom_components.phoenix_mcp.mcp_view import _call_tool
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from unittest.mock import MagicMock
 
 
-def _token(domains=("climate", "sensor"), **caps) -> TokenRecord:
+def _access_key(domains=("climate", "sensor"), **caps) -> AccessKeyRecord:
     tree = PermissionTree(domains={d: PermissionNode(state="GREEN") for d in domains})
     base = {"cap_search": "allow"}
     base.update(caps)
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x",
         created_at=utcnow(), created_by="u", permissions=tree, **base,
     )
@@ -42,17 +42,17 @@ def _json(content: dict) -> dict:
     return json.loads(content["content"][0]["text"])
 
 
-async def _compare(hass, token, entity_id="climate.old", compare_to="climate.new"):
+async def _compare(hass, access_key, entity_id="climate.old", compare_to="climate.new"):
     return await _call_tool(
         "compare_entities",
         {"entity_id": entity_id, "compare_to": compare_to},
-        token, hass, MagicMock(),
+        access_key, hass, MagicMock(),
     )
 
 
 class TestGating:
     async def test_cap_search_denied(self, hass):
-        _, outcome, resource = await _compare(hass, _token(cap_search="deny"))
+        _, outcome, resource = await _compare(hass, _access_key(cap_search="deny"))
         assert outcome == "denied"
         assert resource == "compare_entities"
 
@@ -66,7 +66,7 @@ class TestGating:
         {"entity_id": ["climate.old"], "compare_to": "climate.new"},
     ])
     async def test_missing_or_wrong_shaped_arguments(self, hass, args):
-        content, outcome, _ = await _call_tool("compare_entities", args, _token(), hass, MagicMock())
+        content, outcome, _ = await _call_tool("compare_entities", args, _access_key(), hass, MagicMock())
         assert outcome == "invalid_request"
         assert "Missing required argument" in content["content"][0]["text"]
 
@@ -77,9 +77,9 @@ class TestScopeRefusalsAreIndistinguishable:
     async def test_out_of_scope_and_nonexistent_match_byte_for_byte(self, hass):
         hass.states.async_set("climate.old", "cool", {})
         hass.states.async_set("lock.secret", "locked", {})
-        token = _token()  # climate + sensor only, no lock
-        out_of_scope, o1, r1 = await _compare(hass, token, compare_to="lock.secret")
-        nonexistent, o2, r2 = await _compare(hass, token, compare_to="lock.absent")
+        access_key = _access_key()  # climate + sensor only, no lock
+        out_of_scope, o1, r1 = await _compare(hass, access_key, compare_to="lock.secret")
+        nonexistent, o2, r2 = await _compare(hass, access_key, compare_to="lock.absent")
         assert (o1, o2) == ("not_found", "not_found")
         assert out_of_scope == nonexistent
 
@@ -87,12 +87,12 @@ class TestScopeRefusalsAreIndistinguishable:
         """The resource lands in the audit log, so naming the id there would make
         the log itself the oracle the response body refuses to be."""
         hass.states.async_set("climate.old", "cool", {})
-        _, _, resource = await _compare(hass, _token(), compare_to="lock.secret")
+        _, _, resource = await _compare(hass, _access_key(), compare_to="lock.secret")
         assert resource == "compare_entities"
 
     async def test_registry_only_entity_with_no_state_is_not_found(self, hass):
         hass.states.async_set("climate.old", "cool", {})
-        _, outcome, _ = await _compare(hass, _token(), compare_to="climate.never_set")
+        _, outcome, _ = await _compare(hass, _access_key(), compare_to="climate.never_set")
         assert outcome == "not_found"
 
 
@@ -107,7 +107,7 @@ class TestTheFourMigrationTraps:
         hass.states.async_set("climate.new", "cool", {
             "preset_modes": ["speed", "nano", "nanosleep", "eco"],
         })
-        content, outcome, _ = await _compare(hass, _token())
+        content, outcome, _ = await _compare(hass, _access_key())
         assert outcome == "allowed"
         entry = next(c for c in _json(content)["changed"] if c["attribute"] == "preset_modes")
         assert entry["removed"] == ["boost", "wind_free", "wind_free_sleep"]
@@ -121,7 +121,7 @@ class TestTheFourMigrationTraps:
         """Trap 2: a scalar pair, so the caller sees the direction of the move."""
         hass.states.async_set("climate.old", "cool", {"min_temp": 7, "max_temp": 35})
         hass.states.async_set("climate.new", "cool", {"min_temp": 16.0, "max_temp": 30.0})
-        content, _, _ = await _compare(hass, _token())
+        content, _, _ = await _compare(hass, _access_key())
         changed = {c["attribute"]: c for c in _json(content)["changed"]}
         assert changed["min_temp"]["value"] == 7
         assert changed["min_temp"]["compare_value"] == 16.0
@@ -133,7 +133,7 @@ class TestTheFourMigrationTraps:
         rendered value change from 26.0 to 26."""
         hass.states.async_set("climate.old", "cool", {"temperature": 26.0})
         hass.states.async_set("climate.new", "cool", {"temperature": 26.0, "target_temp_step": 1.0})
-        content, _, _ = await _compare(hass, _token())
+        content, _, _ = await _compare(hass, _access_key())
         body = _json(content)
         assert body["added_in_compare_to"] == [{"attribute": "target_temp_step", "value": 1.0}]
         assert body["missing_in_compare_to"] == []
@@ -148,7 +148,7 @@ class TestTheFourMigrationTraps:
             "options": ["idle", "active", "pause"], "friendly_name": "Machine State",
         })
         content, _, _ = await _compare(
-            hass, _token(), entity_id="sensor.old_job", compare_to="sensor.new_machine",
+            hass, _access_key(), entity_id="sensor.old_job", compare_to="sensor.new_machine",
         )
         body = _json(content)
         assert body["state"] == "finish"
@@ -163,7 +163,7 @@ class TestReportShape:
         attrs = {"min_temp": 7, "hvac_modes": ["off", "cool"], "friendly_name": "A/C"}
         hass.states.async_set("climate.old", "cool", attrs)
         hass.states.async_set("climate.new", "cool", dict(attrs))
-        body = _json((await _compare(hass, _token()))[0])
+        body = _json((await _compare(hass, _access_key()))[0])
         assert body["changed"] == []
         assert body["missing_in_compare_to"] == []
         assert body["added_in_compare_to"] == []
@@ -174,7 +174,7 @@ class TestReportShape:
         real migration shape, so a domain mismatch is reported, never refused."""
         hass.states.async_set("sensor.old", "42", {})
         hass.states.async_set("climate.new", "cool", {})
-        body = _json((await _compare(hass, _token(), "sensor.old", "climate.new"))[0])
+        body = _json((await _compare(hass, _access_key(), "sensor.old", "climate.new"))[0])
         assert body["domain"] == "sensor"
         assert body["compare_domain"] == "climate"
         assert body["state"] == "42"
@@ -188,12 +188,12 @@ class TestReportShape:
         """
         hass.states.async_set("climate.old", "cool", {})
         hass.states.async_set("climate.new", "cool", {})
-        assert "get_history" in _json((await _compare(hass, _token()))[0])["note"]
+        assert "get_history" in _json((await _compare(hass, _access_key()))[0])["note"]
 
     async def test_reordered_list_says_so_rather_than_showing_two_empty_arrays(self, hass):
         hass.states.async_set("climate.old", "cool", {"hvac_modes": ["off", "cool", "heat"]})
         hass.states.async_set("climate.new", "cool", {"hvac_modes": ["heat", "off", "cool"]})
-        body = _json((await _compare(hass, _token()))[0])
+        body = _json((await _compare(hass, _access_key()))[0])
         entry = next(c for c in body["changed"] if c["attribute"] == "hvac_modes")
         assert entry["reordered"] is True
         assert entry["removed"] == [] and entry["added"] == []
@@ -202,7 +202,7 @@ class TestReportShape:
         hass.states.async_set("climate.old", "cool", {"hvac_modes": ["off", "cool"]})
         hass.states.async_set("climate.new", "cool", {"hvac_modes": ["cool", "heat"]})
         entry = next(
-            c for c in _json((await _compare(hass, _token()))[0])["changed"]
+            c for c in _json((await _compare(hass, _access_key()))[0])["changed"]
             if c["attribute"] == "hvac_modes"
         )
         assert "reordered" not in entry
@@ -217,7 +217,7 @@ class TestValuesAreBounded:
         hass.states.async_set("climate.old", "cool", {"effect_list": old})
         hass.states.async_set("climate.new", "cool", {"effect_list": new})
         entry = next(
-            c for c in _json((await _compare(hass, _token()))[0])["changed"]
+            c for c in _json((await _compare(hass, _access_key()))[0])["changed"]
             if c["attribute"] == "effect_list"
         )
         assert len(entry["removed"]) == MAX_COMPARE_LIST_VALUES
@@ -230,7 +230,7 @@ class TestValuesAreBounded:
         hass.states.async_set("climate.old", "cool", {"note": "a" * (MAX_COMPARE_VALUE_CHARS + 50)})
         hass.states.async_set("climate.new", "cool", {"note": "b"})
         entry = next(
-            c for c in _json((await _compare(hass, _token()))[0])["changed"]
+            c for c in _json((await _compare(hass, _access_key()))[0])["changed"]
             if c["attribute"] == "note"
         )
         assert entry["value"].startswith("a" * MAX_COMPARE_VALUE_CHARS)
@@ -246,7 +246,7 @@ class TestValuesAreBounded:
         hass.states.async_set("climate.old", "cool", {"payload": value})
         hass.states.async_set("climate.new", "cool", {"payload": []})
         entry = next(
-            c for c in _json((await _compare(hass, _token()))[0])["changed"]
+            c for c in _json((await _compare(hass, _access_key()))[0])["changed"]
             if c["attribute"] == "payload"
         )
         assert entry["value"] == {"omitted": marker}
@@ -258,7 +258,7 @@ class TestValuesAreBounded:
             "big": [f"v{i}" for i in range(MAX_COMPARE_LIST_VALUES + 1)],
         })
         hass.states.async_set("climate.new", "cool", {})
-        body = _json((await _compare(hass, _token()))[0])
+        body = _json((await _compare(hass, _access_key()))[0])
         assert body["missing_in_compare_to"][0]["value"] == {
             "omitted": f"list with {MAX_COMPARE_LIST_VALUES + 1} entries"
         }
@@ -278,7 +278,7 @@ class TestAnOfflineEntityIsNotReportedAsAPoorReplacement:
             "temperature": 22, "fan_mode": "auto", "min_temp": 7,
         })
         hass.states.async_set("climate.new", "unavailable", {})
-        body = _json((await _compare(hass, _token()))[0])
+        body = _json((await _compare(hass, _access_key()))[0])
         assert len(body["warnings"]) == 1
         assert "climate.new" in body["warnings"][0]
         assert "unavailable" in body["warnings"][0]
@@ -294,14 +294,14 @@ class TestAnOfflineEntityIsNotReportedAsAPoorReplacement:
         integration's."""
         hass.states.async_set("climate.old", "cool", {"min_temp": 7})
         hass.states.async_set("climate.new", "off", {"restored": True})
-        body = _json((await _compare(hass, _token()))[0])
+        body = _json((await _compare(hass, _access_key()))[0])
         assert len(body["warnings"]) == 1
         assert "climate.new" in body["warnings"][0]
 
     async def test_both_sides_offline_warns_about_both(self, hass):
         hass.states.async_set("climate.old", "unavailable", {})
         hass.states.async_set("climate.new", "unavailable", {})
-        body = _json((await _compare(hass, _token()))[0])
+        body = _json((await _compare(hass, _access_key()))[0])
         assert len(body["warnings"]) == 2
         assert "climate.old" in body["warnings"][0]
         assert "climate.new" in body["warnings"][1]
@@ -311,7 +311,7 @@ class TestAnOfflineEntityIsNotReportedAsAPoorReplacement:
         present is a field the reader learns to skip."""
         hass.states.async_set("climate.old", "cool", {"min_temp": 7})
         hass.states.async_set("climate.new", "cool", {"min_temp": 7})
-        assert "warnings" not in _json((await _compare(hass, _token()))[0])
+        assert "warnings" not in _json((await _compare(hass, _access_key()))[0])
 
     async def test_unknown_is_not_warned_about(self, hass):
         """An entity with no value yet still publishes its attributes, so
@@ -319,7 +319,7 @@ class TestAnOfflineEntityIsNotReportedAsAPoorReplacement:
         ignore the field."""
         hass.states.async_set("climate.old", "cool", {"min_temp": 7})
         hass.states.async_set("climate.new", "unknown", {"min_temp": 7, "max_temp": 30})
-        assert "warnings" not in _json((await _compare(hass, _token()))[0])
+        assert "warnings" not in _json((await _compare(hass, _access_key()))[0])
 
 
 class TestSensitiveAttributesCannotReappearAsADifference:
@@ -332,7 +332,7 @@ class TestSensitiveAttributesCannotReappearAsADifference:
         hass.states.async_set("climate.new", "cool", {
             "access_token": "NEW-SECRET", "entity_picture": "/api/new", "min_temp": 7,
         })
-        content, outcome, _ = await _compare(hass, _token())
+        content, outcome, _ = await _compare(hass, _access_key())
         assert outcome == "allowed"
         raw = content["content"][0]["text"]
         assert "OLD-SECRET" not in raw and "NEW-SECRET" not in raw

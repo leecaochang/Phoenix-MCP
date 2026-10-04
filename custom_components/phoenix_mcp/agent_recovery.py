@@ -19,7 +19,7 @@ from .const import DOMAIN
 
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
-    from .token_store import TokenStore
+    from .access_key_store import AccessKeyStore
 
 STORAGE_KEY = "phoenix_mcp_agent_recovery"
 MAX_RECORDS = 200
@@ -170,7 +170,7 @@ class AgentRecovery:
     def interrupted(self, rid: str) -> None:
         self._active.discard(rid)
 
-    async def reconcile(self, store: TokenStore, token_id: str) -> None:
+    async def reconcile(self, store: AccessKeyStore, token_id: str) -> None:
         """Use an attributed HA approval receipt; never infer from device state."""
         for rid, record in list(self._records.items()):
             if record["token_id"] != token_id or rid in self._active or record.get("dispatch_result") == "received":
@@ -269,7 +269,7 @@ def tool_is_read_only(name: str) -> bool:
 
 
 async def dispatch_agent_tool(
-    dispatch: Any, *, hass: HomeAssistant, data: Any, token: Any,
+    dispatch: Any, *, hass: HomeAssistant, data: Any, access_key: Any,
     name: str, arguments: dict, tool_id: Any, request_id: str,
     client_ip: str, base_url: str,
 ) -> tuple:
@@ -281,11 +281,11 @@ async def dispatch_agent_tool(
              and not tool_is_read_only(name))
     try:
         if write:
-            await recovery.reconcile(data.store, token.id)
-            await recovery.begin(token.id, name, request_id)
+            await recovery.reconcile(data.store, access_key.id)
+            await recovery.begin(access_key.id, name, request_id)
         response = await dispatch(
             "tools/call", tool_id, {"name": name, "arguments": arguments},
-            token, hass, data, client_ip, base_url, request_id=request_id,
+            access_key, hass, data, client_ip, base_url, request_id=request_id,
         )
         if write:
             msg, _method, _resource, outcome = response

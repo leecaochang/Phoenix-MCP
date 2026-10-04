@@ -67,25 +67,25 @@ TEMPLATE_FAILURE_MESSAGES = {
     "worker": "Template worker failed. Check Phoenix diagnostics.",
 }
 
-TOKEN_PREFIX = "phx_"
-TOKEN_HEX_LENGTH = 64
-TOKEN_LENGTH = len(TOKEN_PREFIX) + TOKEN_HEX_LENGTH
+ACCESS_KEY_PREFIX = "phx_"
+ACCESS_KEY_HEX_LENGTH = 64
+ACCESS_KEY_LENGTH = len(ACCESS_KEY_PREFIX) + ACCESS_KEY_HEX_LENGTH
 
-TOKEN_NAME_REGEX = re.compile(r"^[A-Za-z0-9_\-]{3,32}$")
+ACCESS_KEY_NAME_REGEX = re.compile(r"^[A-Za-z0-9_\-]{3,32}$")
 
 DEFAULT_RATE_LIMIT_REQUESTS = 60
 DEFAULT_RATE_LIMIT_BURST = 10
 
 # Token settings presets (named snapshots of a token's full configuration,
 # switchable from the panel; gated by settings.token_presets_enabled).
-MAX_PRESETS_PER_TOKEN = 8
+MAX_PRESETS_PER_ACCESS_KEY = 8
 PRESET_NAME_MAX_LENGTH = 40
 DEFAULT_PRESET_NAME = "Default preset"
 
 FLUSH_INTERVAL = datetime.timedelta(minutes=5)
 EXPIRY_CHECK_INTERVAL = datetime.timedelta(minutes=1)
 SENSOR_PUSH_INTERVAL = datetime.timedelta(hours=1)
-# Coalescing window for per-request sensor state writes (update_token_counter):
+# Coalescing window for per-request sensor state writes (update_access_key_counter):
 # the first request after a flush schedules one write this many seconds out and
 # further requests ride it, so a busy token produces at most one state_changed
 # per window instead of one per request.
@@ -113,7 +113,7 @@ CONFIG_RECOVERY_SWEEP_INTERVAL = datetime.timedelta(seconds=30)
 CONFIG_RECOVERY_SWEEP_BATCH = 4
 CONFIG_RECOVERY_OBSERVATION_TIMEOUT = 5
 CONFIG_RECOVERY_APPROVAL_CAP = "__configuration_recovery__"
-CONFIG_RECOVERY_APPROVAL_TOKEN = "__configuration_recovery__"
+CONFIG_RECOVERY_APPROVAL_ACCESS_KEY = "__configuration_recovery__"
 CONFIG_RECOVERY_UNRESOLVED = frozenset({"prepared", "dispatching", "partial", "unknown"})
 # Template's config flow type menu. Keep this in sync with the supported HA
 # Template platforms; _flow_step_body intersects it with the installed flow's
@@ -732,7 +732,7 @@ CAP_CONFIRM = "confirm"
 CAP_MODES = frozenset({CAP_DENY, CAP_ALLOW, CAP_CONFIRM})
 CAP_GRANT_TRANSITIONS = frozenset({(CAP_DENY, CAP_CONFIRM), (CAP_DENY, CAP_ALLOW), (CAP_CONFIRM, CAP_ALLOW)})
 
-# Canonical list of all capability names. Every cap_* field on TokenRecord
+# Canonical list of all capability names. Every cap_* field on AccessKeyRecord
 # must appear here. Adding a new cap is a three-step change: add to this list,
 # add to CAPABILITY_TIERS, and update the persona table in personas.py.
 CAPABILITY_NAMES = (
@@ -958,7 +958,7 @@ ESPHOME_BUILDER_LOG_CAPTURE_SECONDS = 15
 ESPHOME_BUILDER_LOG_CAPTURE_MAX_SECONDS = 60
 
 # Pending-approval queue limits.
-MAX_PENDING_APPROVALS_PER_TOKEN = 100
+MAX_PENDING_APPROVALS_PER_ACCESS_KEY = 100
 APPROVAL_DEFAULT_TTL_SECONDS = 3600
 APPROVAL_SWEEP_INTERVAL = datetime.timedelta(minutes=5)
 
@@ -1765,9 +1765,9 @@ NOTIFICATION_TEMPLATES: dict[str, str] = {
     "approval.title": "Phoenix MCP",
     # The link label is inside the markdown, so it has to be part of the string;
     # the URL is substituted and must not be translated.
-    "approval.message": "Access Key '{token}' requested approval.\n\n[Review in Phoenix MCP]({url})",
+    "approval.message": "Access key '{access_key}' requested approval.\n\n[Review in Phoenix MCP]({url})",
     "rate_limit.title": "Phoenix MCP Alert",
-    "rate_limit.message": "Phoenix MCP: access key '{token}' has hit its rate limit.",
+    "rate_limit.message": "Phoenix MCP: access key '{access_key}' has hit its rate limit.",
 }
 
 # The sentences the voice agent speaks when it declines a turn. Unlike a

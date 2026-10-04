@@ -13,8 +13,8 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 const listApprovals = vi.fn();
 const getApproval = vi.fn();
 const listVersions = vi.fn();
-const listTokens = vi.fn();
-const listArchivedTokens = vi.fn();
+const listAccessKeys = vi.fn();
+const listArchivedAccessKeys = vi.fn();
 
 vi.mock("../api", () => ({
   api: {
@@ -24,8 +24,8 @@ vi.mock("../api", () => ({
     rejectApproval: vi.fn(),
     batchApproveApprovals: vi.fn(),
     listVersions: (...a: unknown[]) => listVersions(...a),
-    listTokens: (...a: unknown[]) => listTokens(...a),
-    listArchivedTokens: (...a: unknown[]) => listArchivedTokens(...a),
+    listAccessKeys: (...a: unknown[]) => listAccessKeys(...a),
+    listArchivedAccessKeys: (...a: unknown[]) => listArchivedAccessKeys(...a),
   },
 }));
 
@@ -72,7 +72,7 @@ function version(alias: string) {
     alias,
     action: "create",
     token_id: "t1",
-    token_name: "my_token",
+    token_name: "my_access_key",
     approved_by_user_id: null,
     timestamp: "2026-01-01T00:00:00Z",
     has_before: false,
@@ -119,8 +119,8 @@ describe("ApprovalsView discards a superseded response", () => {
 describe("ChangesView discards a superseded response", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listTokens.mockResolvedValue([]);
-    listArchivedTokens.mockResolvedValue([]);
+    listAccessKeys.mockResolvedValue([]);
+    listArchivedAccessKeys.mockResolvedValue([]);
   });
 
   it("a slow first page cannot land after a newer refresh", async () => {

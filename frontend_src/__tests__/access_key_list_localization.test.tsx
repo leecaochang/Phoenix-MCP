@@ -5,8 +5,8 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import de from "../../custom_components/phoenix_mcp/catalogs/de.json";
 import en from "../../custom_components/phoenix_mcp/catalogs/en.json";
 import { flattenCatalog, primeTranslations, setFormatLocale } from "../i18n";
-import type { TokenRecord } from "../types";
-import { TokenListView } from "../views/TokenList";
+import type { AccessKeyRecord } from "../types";
+import { AccessKeyListView } from "../views/AccessKeyList";
 
 beforeAll(() => {
   primeTranslations({ ...flattenCatalog(en.panel), ...flattenCatalog(de.panel) });
@@ -18,7 +18,7 @@ afterAll(() => {
   setFormatLocale({ language: "en" }, "en");
 });
 
-function token(overrides: Partial<TokenRecord>): TokenRecord {
+function accessKey(overrides: Partial<AccessKeyRecord>): AccessKeyRecord {
   return {
     id: "active",
     name: "Active token",
@@ -79,10 +79,10 @@ const callbacks = {
   onOpenSettings: vi.fn(),
 };
 
-function renderList(tokens: TokenRecord[]) {
+function renderList(accessKeys: AccessKeyRecord[]) {
   return render(
-    <TokenListView
-      tokens={tokens}
+    <AccessKeyListView
+      accessKeys={accessKeys}
       loading={false}
       error={null}
       showCreate={false}
@@ -94,8 +94,8 @@ function renderList(tokens: TokenRecord[]) {
 describe("localized token statuses", () => {
   it("filters by the same localized label the table displays", () => {
     renderList([
-      token({ id: "active", name: "Daily agent" }),
-      token({ id: "expired", name: "Old agent", expires_at: "2020-01-01T00:00:00Z" }),
+      accessKey({ id: "active", name: "Daily agent" }),
+      accessKey({ id: "expired", name: "Old agent", expires_at: "2020-01-01T00:00:00Z" }),
     ]);
 
     fireEvent.change(screen.getByRole("textbox", { name: de.panel.tokens.filterAria }), {
@@ -108,9 +108,9 @@ describe("localized token statuses", () => {
 
   it("sorts status rows by their localized display labels", () => {
     renderList([
-      token({ id: "active", name: "Active row" }),
-      token({ id: "expired", name: "Expired row", expires_at: "2020-01-01T00:00:00Z" }),
-      token({ id: "revoked", name: "Revoked row", revoked: true }),
+      accessKey({ id: "active", name: "Active row" }),
+      accessKey({ id: "expired", name: "Expired row", expires_at: "2020-01-01T00:00:00Z" }),
+      accessKey({ id: "revoked", name: "Revoked row", revoked: true }),
     ]);
 
     fireEvent.click(screen.getByRole("button", { name: /Status/ }));
@@ -128,7 +128,7 @@ describe("token dates", () => {
       locale: { date_format: "YMD", time_format: "24", time_zone: "server" },
       config: { time_zone: "Asia/Tokyo" },
     }, "en-US");
-    renderList([token({ created_at: "2026-03-04T22:05:06Z" })]);
+    renderList([accessKey({ created_at: "2026-03-04T22:05:06Z" })]);
     expect(screen.getByText("2026/3/5")).toHaveAttribute("title", "2026/3/5, 07:05:06");
   });
 });

@@ -399,7 +399,7 @@
       "nameDuplicateError": "Une clé d’accès portant ce nom (ou un slug équivalent) existe déjà.",
       "nameFormatError": "Le nom doit contenir 3 à 32 caractères : lettres, chiffres, _ ou -.",
       "nameLabel": "Nom (obligatoire)",
-      "namePlaceholder": "my_token",
+      "namePlaceholder": "my_access_key",
       "nameRuleError": "3 à 32 caractères : lettres, chiffres, tirets ou traits de soulignement.",
       "off": "désactivé",
       "on": "activé",
@@ -722,7 +722,7 @@
       "codexHeaderValueLabel": "Valeur d'en-tête",
       "codexServerNameLabel": "Nom du serveur",
       "connectAgentTitle": "Connecter Phoenix MCP à votre agent IA",
-      "connectIntro": "Ajoutez Phoenix MCP en tant que serveur MCP dans votre agent. Il s'authentifie avec <code>Authorization: Bearer <token></code>, et non avec la connexion Home Assistant ou OAuth. Utilisez HTTPS sur les réseaux non fiables. Excluez les clés d’accès bearer de l’historique du terminal, des fichiers partagés, des captures d’écran et du contrôle de version. Renouvelez toute clé d’accès divulguée.",
+      "connectIntro": "Ajoutez Phoenix MCP en tant que serveur MCP dans votre agent. Il s'authentifie avec <code>Authorization: Bearer phx_...</code>, et non avec la connexion Home Assistant ou OAuth. Utilisez HTTPS sur les réseaux non fiables. Excluez les clés d’accès bearer de l’historique du terminal, des fichiers partagés, des captures d’écran et du contrôle de version. Renouvelez toute clé d’accès divulguée.",
       "connectLater": "Connecter plus tard",
       "connectTitle": "Connecter votre premier agent IA",
       "connected": "Connecté ! Votre agent a atteint Phoenix MCP.",
@@ -2284,8 +2284,8 @@
     }
   },
   "notification": {
-    "approval.message": "La clé d’accès « {token} » a demandé une approbation.\n\n[Consulter dans Phoenix MCP]({url})",
-    "rate_limit.message": "Phoenix MCP : la clé d’accès « {token} » a atteint sa limite de débit.",
+    "approval.message": "La clé d’accès « {access_key} » a demandé une approbation.\n\n[Consulter dans Phoenix MCP]({url})",
+    "rate_limit.message": "Phoenix MCP : la clé d’accès « {access_key} » a atteint sa limite de débit.",
     "rate_limit.title": "Alerte Phoenix MCP"
   },
   "voice": {

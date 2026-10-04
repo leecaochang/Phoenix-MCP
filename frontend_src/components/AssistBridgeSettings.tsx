@@ -1,6 +1,6 @@
 import { BusySelect } from "./BusyButton";
 import { useEffect, useState } from "react";
-import type { GlobalSettings, TokenRecord } from "../types";
+import type { GlobalSettings, AccessKeyRecord } from "../types";
 import { api } from "../api";
 import { DocsHelpLink } from "./common";
 import { t } from "../i18n";
@@ -20,12 +20,12 @@ export function AssistBridgeSettings({
   onChange: (key: keyof GlobalSettings, value: boolean | string) => void;
   saving: boolean;
 }) {
-  const [tokens, setTokens] = useState<TokenRecord[]>([]);
+  const [accessKeys, setAccessKeys] = useState<AccessKeyRecord[]>([]);
   const supported = settings.assist_api_supported !== false;
   const boundId = settings.assist_bound_token_id ?? "";
 
   useEffect(() => {
-    api.listTokens().then(setTokens).catch(() => setTokens([]));
+    api.listAccessKeys().then(setAccessKeys).catch(() => setAccessKeys([]));
   }, []);
 
   return (
@@ -56,7 +56,7 @@ export function AssistBridgeSettings({
           onChange={(e) => onChange("assist_bound_token_id", e.target.value)}
         >
           <option value="">{t("settings.assistNotBound")}</option>
-          {tokens.map((tok) => (
+          {accessKeys.map((tok) => (
             <option key={tok.id} value={tok.id}>{tok.name}</option>
           ))}
         </BusySelect>

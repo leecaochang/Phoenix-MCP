@@ -296,7 +296,7 @@ function sandboxBootstrap(): void {
         formatEntityAttributeName: (_entity: any, key: string) => key,
         formatEntityAttributeValue: (entity: any, key: string) => String(entity.attributes?.[key] ?? ""),
         callWS: (message: unknown) => rpc("ws", message), callApi: (...args: unknown[]) => rpc("api", args),
-        callService: refuse, fetchWithAuth: refuse, sendWS: refuse, refreshTokens: refuse,
+        callService: refuse, fetchWithAuth: refuse, sendWS: refuse, refreshAccessKeys: refuse,
         connection: { sendMessagePromise: (message: unknown) => rpc("ws", message),
           sendMessage: refuse, subscribeEvents: async () => () => {},
           subscribeMessage: async (callback: (value: unknown) => void, message: any) => {

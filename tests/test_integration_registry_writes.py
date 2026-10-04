@@ -31,12 +31,12 @@ from custom_components.phoenix_mcp.policy_engine import (
 )
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
-from custom_components.phoenix_mcp.token_store import (
+from custom_components.phoenix_mcp.access_key_store import (
     GlobalSettings,
     PermissionNode,
     PermissionTree,
-    TokenRecord,
-    TokenStore,
+    AccessKeyRecord,
+    AccessKeyStore,
 )
 
 
@@ -59,15 +59,15 @@ def _profile(key: str, mode: str, reason: str = "Integration safety test") -> Se
     )
 
 
-def _token(
+def _access_key(
     env: dict,
     *,
     cap: str = "allow",
     device_state: str = "GREEN",
     domain_state: str = "GREEN",
     entity_states: dict[str, str] | None = None,
-) -> TokenRecord:
-    return TokenRecord(
+) -> AccessKeyRecord:
+    return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="integration-write-test",
         token_hash="x",
@@ -89,11 +89,11 @@ def _token(
 
 
 async def _data(hass: HomeAssistant, mesa_mode: str = "off") -> PhoenixData:
-    store = MagicMock(spec=TokenStore)
+    store = MagicMock(spec=AccessKeyStore)
     store.async_lock = asyncio.Lock()
     store.async_save = AsyncMock()
     store.get_settings.return_value = GlobalSettings(mesa_mode=mesa_mode)
-    store.list_tokens.return_value = []
+    store.list_access_keys.return_value = []
     store.get_entity_hints.return_value = {}
     store.get_pending_approvals.return_value = []
     data = PhoenixData(
@@ -144,9 +144,9 @@ async def test_scoped_write_requires_every_entity_and_exact_device(
     hass: HomeAssistant, integration_env
 ):
     data = await _data(hass)
-    for token in (
-        _token(integration_env, device_state="YELLOW"),
-        _token(
+    for access_key in (
+        _access_key(integration_env, device_state="YELLOW"),
+        _access_key(
             integration_env,
             entity_states={integration_env["entity_ids"][0]: "YELLOW"},
         ),
@@ -154,14 +154,14 @@ async def test_scoped_write_requires_every_entity_and_exact_device(
         context = config_entry_registry_context(integration_env["entry_id"], hass)
         assert context is not None
         assert context.device_ids == (integration_env["device_id"],)
-        assert token.pass_through is False
+        assert access_key.pass_through is False
         assert resolve_config_entry_registry_write(
-            integration_env["entry_id"], token, hass
+            integration_env["entry_id"], access_key, hass
         ).value != "write"
         content, outcome, _ = await _call_tool(
             "set_integration",
             {"entry_id": integration_env["entry_id"], "changes": {"title": "Blocked"}},
-            token,
+            access_key,
             hass,
             data,
         )
@@ -177,7 +177,7 @@ async def test_resource_less_scoped_entry_fails_closed(hass: HomeAssistant):
     _content, outcome, _ = await _call_tool(
         "set_integration",
         {"entry_id": entry.entry_id, "changes": {"title": "No resources"}},
-        _token(env),
+        _access_key(env),
         hass,
         data,
     )
@@ -196,7 +196,7 @@ async def test_metadata_noop_skips_gate_and_version(
                 "entry_id": integration_env["entry_id"],
                 "changes": {"title": integration_env["entry"].title},
             },
-            _token(integration_env, cap="confirm"),
+            _access_key(integration_env, cap="confirm"),
             hass,
             data,
         )
@@ -212,7 +212,7 @@ async def test_metadata_update_polling_reload_and_version_restore(
     entry = integration_env["entry"]
     entry.mock_state(hass, ConfigEntryState.LOADED)
     data = await _data(hass)
-    token = _token(integration_env)
+    access_key = _access_key(integration_env)
     with patch.object(
         hass.config_entries, "async_reload", new=AsyncMock(return_value=True)
     ) as reload_mock:
@@ -226,7 +226,7 @@ async def test_metadata_update_polling_reload_and_version_restore(
                     "pref_disable_polling": True,
                 },
             },
-            token,
+            access_key,
             hass,
             data,
         )
@@ -296,7 +296,7 @@ async def test_title_only_does_not_reload(hass: HomeAssistant, integration_env):
         content, outcome, _ = await _call_tool(
             "set_integration",
             {"entry_id": integration_env["entry_id"], "changes": {"title": "Title only"}},
-            _token(integration_env),
+            _access_key(integration_env),
             hass,
             data,
         )
@@ -316,7 +316,7 @@ async def test_enable_disable_user_only_and_truthful_reload(
         content, outcome, _ = await _call_tool(
             "set_integration_enabled",
             {"entry_id": entry.entry_id, "enabled": False},
-            _token(integration_env),
+            _access_key(integration_env),
             hass,
             data,
         )
@@ -328,7 +328,7 @@ async def test_enable_disable_user_only_and_truthful_reload(
     _content, outcome, _ = await _call_tool(
         "set_integration_enabled",
         {"entry_id": entry.entry_id, "enabled": True},
-        _token(integration_env),
+        _access_key(integration_env),
         hass,
         data,
     )
@@ -344,7 +344,7 @@ async def test_reload_refuses_disabled_and_records_no_version(
     _content, outcome, _ = await _call_tool(
         "reload_integration",
         {"entry_id": entry.entry_id},
-        _token(integration_env),
+        _access_key(integration_env),
         hass,
         data,
     )
@@ -372,7 +372,7 @@ async def test_integration_scope_mesa_controls_rename_and_reload(
         integration_env["entry"].domain,
         _profile(integration_env["entry"].domain, control_mode),
     )
-    token = _token(integration_env)
+    access_key = _access_key(integration_env)
     for tool_name, args in (
         (
             "set_integration",
@@ -384,7 +384,7 @@ async def test_integration_scope_mesa_controls_rename_and_reload(
             hass.config_entries, "async_reload", new=AsyncMock(return_value=True)
         ):
             content, outcome, _ = await _call_tool(
-                tool_name, args, token, hass, data
+                tool_name, args, access_key, hass, data
             )
         assert outcome == expected
         if expected == "allowed":
@@ -399,7 +399,7 @@ async def test_integration_scope_read_only_blocks_disable_and_enable(
         integration_env["entry"].domain,
         _profile(integration_env["entry"].domain, "read_only"),
     )
-    token = _token(integration_env)
+    access_key = _access_key(integration_env)
     set_disabled = AsyncMock(return_value=True)
     with patch.object(
         hass.config_entries, "async_set_disabled_by", new=set_disabled
@@ -407,7 +407,7 @@ async def test_integration_scope_read_only_blocks_disable_and_enable(
         _content, outcome, _ = await _call_tool(
             "set_integration_enabled",
             {"entry_id": integration_env["entry_id"], "enabled": False},
-            token,
+            access_key,
             hass,
             data,
         )
@@ -421,7 +421,7 @@ async def test_integration_scope_read_only_blocks_disable_and_enable(
         _content, outcome, _ = await _call_tool(
             "set_integration_enabled",
             {"entry_id": integration_env["entry_id"], "enabled": True},
-            token,
+            access_key,
             hass,
             data,
         )
@@ -439,7 +439,7 @@ async def test_entityless_entry_fails_closed_when_mesa_is_active(
     )
     entry.add_to_hass(hass)
     data = await _data(hass, "enforced")
-    token = TokenRecord(
+    access_key = AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="entityless-pass-through",
         token_hash="x",
@@ -451,7 +451,7 @@ async def test_entityless_entry_fails_closed_when_mesa_is_active(
     content, outcome, _ = await _call_tool(
         "set_integration",
         {"entry_id": entry.entry_id, "changes": {"title": "Still blocked"}},
-        token,
+        access_key,
         hass,
         data,
     )
@@ -473,7 +473,7 @@ async def test_capability_approval_pins_membership_and_mesa(
         _content, outcome, _ = await _call_tool(
             "reload_integration",
             {"entry_id": integration_env["entry_id"]},
-            _token(integration_env, cap="confirm"),
+            _access_key(integration_env, cap="confirm"),
             hass,
             data,
         )
@@ -496,7 +496,7 @@ async def test_capability_approval_pins_membership_and_mesa(
         content, outcome, _ = await async_execute_approved_tool(
             "reload_integration",
             approved_args,
-            _token(integration_env),
+            _access_key(integration_env),
             hass,
             data,
         )

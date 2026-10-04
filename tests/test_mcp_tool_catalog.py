@@ -20,10 +20,10 @@ from custom_components.phoenix_mcp.tool_defs import (
     _NATIVE_TOOL_NAMES,
     _NATIVE_TOOL_PUBLIC_TO_INTERNAL,
 )
-from custom_components.phoenix_mcp.token_store import (
+from custom_components.phoenix_mcp.access_key_store import (
     PermissionNode,
     PermissionTree,
-    TokenRecord,
+    AccessKeyRecord,
 )
 
 _HINT_KEYS = {"readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"}
@@ -139,11 +139,11 @@ def test_open_world_is_exactly_the_blueprint_tools():
 async def test_tools_list_exposes_annotations_and_still_strips_cap():
     from tests.test_mcp_view import _make_data, _make_hass, _make_token
 
-    token, _ = _make_token()
-    token.announce_all_tools = True
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    access_key.announce_all_tools = True
+    data = _make_data(access_key)
     res, _m, _r, _o = await mcp_view._dispatch_mcp(
-        "tools/list", 1, {}, token, _make_hass(data), data, "127.0.0.1",
+        "tools/list", 1, {}, access_key, _make_hass(data), data, "127.0.0.1",
         base_url="http://homeassistant.local",
     )
     tools = res["result"]["tools"]
@@ -186,8 +186,8 @@ def test_catalog_payload_metrics_cover_representative_profiles_and_provider_wire
         "announce_all": announce_all,
     }
     metrics = {
-        name: agentcli.catalog_payload_metrics(token, _make_data(token))
-        for name, token in profiles.items()
+        name: agentcli.catalog_payload_metrics(access_key, _make_data(access_key))
+        for name, access_key in profiles.items()
     }
     assert metrics == {
         "read_only": {
@@ -255,13 +255,13 @@ async def test_announcement_mirrors_agree_across_esphome_availability(integratio
     from custom_components.phoenix_mcp import agentcli
     from tests.test_mcp_view import _make_data, _make_hass, _make_token
 
-    token, _ = _make_token()
+    access_key, _ = _make_token()
     # Grant every cap the ESPHome tools gate on, so this test varies only the
     # availability dimension it is about.
-    token.cap_esphome_yaml = "allow"
-    token.cap_esphome_flash = "allow"
-    token.cap_diagnostics = "allow"
-    data = _make_data(token)
+    access_key.cap_esphome_yaml = "allow"
+    access_key.cap_esphome_flash = "allow"
+    access_key.cap_diagnostics = "allow"
+    data = _make_data(access_key)
     hass = _make_hass(data)
     hass.config.components = {"esphome"} if integration else set()
     data.hass = hass
@@ -270,12 +270,12 @@ async def test_announcement_mirrors_agree_across_esphome_availability(integratio
     with patch("custom_components.phoenix_mcp.tools.esphome._esphome_dashboard", return_value=dashboard), \
             patch.object(hass.config_entries, "async_entries", return_value=[]):
         res, _m, _r, _o = await mcp_view._dispatch_mcp(
-            "tools/list", 1, {}, token, hass, data, "127.0.0.1",
+            "tools/list", 1, {}, access_key, hass, data, "127.0.0.1",
             base_url="http://homeassistant.local",
         )
         announced = {t["name"] for t in res["result"]["tools"]}
-        agent_names = {t["name"] for t in agentcli.build_mcp_tool_list(token, data)}
-        gate_map = mcp_view._tool_gate_map(token, data, hass)
+        agent_names = {t["name"] for t in agentcli.build_mcp_tool_list(access_key, data)}
+        gate_map = mcp_view._tool_gate_map(access_key, data, hass)
 
     assert announced == agent_names, "tools/list and the Agent Chat list diverged"
 
@@ -549,12 +549,12 @@ def test_cap_tied_reads_are_not_reported_as_needing_approval():
     Asserts the behaviour rather than the predicate, so a refactor that keeps the
     sets aligned but changes the bucketing still fails here.
     """
-    token = TokenRecord(
+    access_key = AccessKeyRecord(
         id="t1", name="t", token_hash="x", created_at=utcnow(), created_by="u",
         permissions=PermissionTree(domains={"light": PermissionNode(state="GREEN")}),
         **{cap: "confirm" for cap in const.CAPABILITY_NAMES},
     )
-    gate_map = mcp_view._tool_gate_map(token, SimpleNamespace(mesa=None), None)
+    gate_map = mcp_view._tool_gate_map(access_key, SimpleNamespace(mesa=None), None)
     for read_tool in ("get_automation", "get_script", "get_dashboard_config", "get_yaml_config"):
         assert read_tool not in gate_map["needs_approval"], read_tool
         assert read_tool in gate_map["usable"], read_tool
@@ -571,9 +571,9 @@ def test_list_integrations_is_visible_with_either_integration_capability():
     )
     definition = next(d for d in _all_defs() if d["name"] == "list_integrations")
     for granted in ("cap_integration_write", "cap_integration_reconfigure"):
-        token = TokenRecord(**base, **{granted: "allow"})
-        assert mcp_view._tool_is_announced(definition, token, False, None)
-    denied = TokenRecord(**base)
+        access_key = AccessKeyRecord(**base, **{granted: "allow"})
+        assert mcp_view._tool_is_announced(definition, access_key, False, None)
+    denied = AccessKeyRecord(**base)
     assert not mcp_view._tool_is_announced(definition, denied, False, None)
 
 
@@ -585,9 +585,9 @@ def test_recognize_intent_is_visible_with_search_or_config_read():
     )
     definition = next(d for d in _all_defs() if d["name"] == "recognize_intent")
     for granted in ("cap_search", "cap_config_read"):
-        token = TokenRecord(**base, **{granted: "allow"})
-        assert mcp_view._tool_is_announced(definition, token, False, None)
-    denied = TokenRecord(**base)
+        access_key = AccessKeyRecord(**base, **{granted: "allow"})
+        assert mcp_view._tool_is_announced(definition, access_key, False, None)
+    denied = AccessKeyRecord(**base)
     assert not mcp_view._tool_is_announced(definition, denied, False, None)
     assert "recognize_intent" not in mcp_view._EXECUTOR_REGISTRY
     assert definition["annotations"]["readOnlyHint"] is True

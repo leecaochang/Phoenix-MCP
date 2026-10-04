@@ -12,7 +12,7 @@ interface Props {
   // Current token_id -> name, so a renamed token's existing audit rows show its
   // current name. The stored entry.token_name is the fallback for tokens no
   // longer active (archived/revoked) and for admin actions.
-  tokenNames?: Record<string, string>;
+  accessKeyNames?: Record<string, string>;
 }
 
 function auditEntryKey(entry: AuditEntry): string {
@@ -22,11 +22,11 @@ function auditEntryKey(entry: AuditEntry): string {
   return `${entry.request_id}:${entry.timestamp}:${entry.method}`;
 }
 
-function formatTokenName(name: string): string {
+function formatAccessKeyName(name: string): string {
   return name.replace(/^(admin):(.+)$/, "$1 ($2)");
 }
 
-function formatTokenNameShort(name: string): string {
+function formatAccessKeyNameShort(name: string): string {
   return name.replace(/^(admin):(.{4}).+(.{4})$/, "$1 ($2...$3)");
 }
 
@@ -88,9 +88,9 @@ function DetailRow({ label, value, mono }: { label: string; value: string; mono?
   );
 }
 
-function EntryDetailModal({ entry, tokenName, onClose, onNavigatePrevious, onNavigateNext }: {
+function EntryDetailModal({ entry, accessKeyName, onClose, onNavigatePrevious, onNavigateNext }: {
   entry: AuditEntry;
-  tokenName: string;
+  accessKeyName: string;
   onClose: () => void;
   onNavigatePrevious?: () => void;
   onNavigateNext?: () => void;
@@ -112,9 +112,9 @@ function EntryDetailModal({ entry, tokenName, onClose, onNavigatePrevious, onNav
       <DetailRow label={t("audit.rowTime")} value={formatTs(entry.timestamp)} />
       <DetailRow
         label={t("audit.rowToken")}
-        value={tokenName !== entry.token_name
-          ? `${formatTokenName(tokenName)} (${formatTokenName(entry.token_name)})`
-          : formatTokenName(tokenName)}
+        value={accessKeyName !== entry.token_name
+          ? `${formatAccessKeyName(accessKeyName)} (${formatAccessKeyName(entry.token_name)})`
+          : formatAccessKeyName(accessKeyName)}
       />
       <DetailRow label={t("audit.rowMode")} value={entry.pass_through ? t("tokens.passThrough") : t("tokens.scoped")} />
       <DetailRow label={t("audit.rowMethod")} value={entry.method} mono />
@@ -140,14 +140,14 @@ function EntryDetailModal({ entry, tokenName, onClose, onNavigatePrevious, onNav
   );
 }
 
-export function AuditTable({ entries, loading, tokenNames }: Props) {
+export function AuditTable({ entries, loading, accessKeyNames }: Props) {
   const [selected, setSelected] = useState<AuditEntry | null>(null);
   const [sortKey, setSortKey] = useState<SortKey>("timestamp");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   // Prefer the token's current name (by id) over the snapshot stored on the row,
   // so a rename is reflected in its historical audit entries.
-  const displayName = (e: AuditEntry): string => tokenNames?.[e.token_id] ?? e.token_name;
+  const displayName = (e: AuditEntry): string => accessKeyNames?.[e.token_id] ?? e.token_name;
 
   if (loading) {
     return <div className="loading-wrap"><div className="spinner" /><span>{t("common.loading")}</span></div>;
@@ -201,7 +201,7 @@ export function AuditTable({ entries, loading, tokenNames }: Props) {
         <EntryDetailModal
           key={auditEntryKey(selected)}
           entry={selected}
-          tokenName={displayName(selected)}
+          accessKeyName={displayName(selected)}
           onClose={() => setSelected(null)}
           onNavigatePrevious={selectedIndex > 0 ? () => setSelected(sorted[selectedIndex - 1]) : undefined}
           onNavigateNext={selectedIndex >= 0 && selectedIndex < sorted.length - 1
@@ -235,7 +235,7 @@ export function AuditTable({ entries, loading, tokenNames }: Props) {
                   <span className="outcome-badge mesa-advisory-badge" title={t("audit.mesaAdvisory")} aria-label={t("audit.mesaAdvisory")}>MESA</span>
                 )}
               </td>
-              <td title={formatTokenName(displayName(entry))}>
+              <td title={formatAccessKeyName(displayName(entry))}>
                 {/* The row's own onClick (above) makes the whole row clickable
                     for the mouse; this button keeps it keyboard- and screen-
                     reader-accessible (tab to it, Enter/Space to open the
@@ -249,7 +249,7 @@ export function AuditTable({ entries, loading, tokenNames }: Props) {
                   onClick={(e) => { e.stopPropagation(); setSelected(entry); }}
                   aria-label={t("audit.openEntryAria", { outcome: outcomeLabel(entry), name: displayName(entry) })}
                 >
-                  {formatTokenNameShort(displayName(entry))}
+                  {formatAccessKeyNameShort(displayName(entry))}
                 </button>
               </td>
               <td>

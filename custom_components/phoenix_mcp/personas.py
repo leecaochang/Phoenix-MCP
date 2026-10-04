@@ -356,15 +356,15 @@ def get_persona_caps(persona: str) -> dict[str, str] | None:
     return PERSONA_DEFINITIONS.get(persona)
 
 
-def matches_persona(token_caps: dict[str, str], persona: str) -> bool:
+def matches_persona(access_key_caps: dict[str, str], persona: str) -> bool:
     """Check whether a token's current cap values exactly match a persona's defaults."""
     expected = get_persona_caps(persona)
     if expected is None:
         return False
-    return all(token_caps.get(cap) == mode for cap, mode in expected.items())
+    return all(access_key_caps.get(cap) == mode for cap, mode in expected.items())
 
 
-def detect_persona(token_caps: dict[str, str]) -> str:
+def detect_persona(access_key_caps: dict[str, str]) -> str:
     """Identify which persona (if any) a token's current caps match.
 
     Returns PERSONA_CUSTOM when the cap values do not exactly match any preset.
@@ -382,6 +382,6 @@ def detect_persona(token_caps: dict[str, str]) -> str:
         PERSONA_POWER_USER,
         PERSONA_HOME_ADMIN,
     ):
-        if matches_persona(token_caps, name):
+        if matches_persona(access_key_caps, name):
             return name
     return PERSONA_CUSTOM

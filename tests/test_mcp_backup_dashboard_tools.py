@@ -17,15 +17,15 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp import mcp_view
 from custom_components.phoenix_mcp.tools import lovelace as lovelace_tools
 from custom_components.phoenix_mcp.mcp_view import _EXECUTOR_REGISTRY, _call_tool
-from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery
 from custom_components.phoenix_mcp.ws_dispatch import WsDispatchError, async_ws_command
 
 
-def _token(**caps) -> TokenRecord:
+def _access_key(**caps) -> AccessKeyRecord:
     base = {"cap_backup": "allow", "cap_lovelace_write": "allow"}
     base.update(caps)
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x",
         created_at=utcnow(), created_by="u", permissions=PermissionTree(), **base,
     )
@@ -35,10 +35,10 @@ def _json(content: dict) -> dict:
     return json.loads(content["content"][0]["text"])
 
 
-async def _call(name, args, token, hass):
+async def _call(name, args, access_key, hass):
     data = MagicMock()
     data.config_recovery = ConfigurationRecovery()
-    return await _call_tool(name, args, token, hass, data)
+    return await _call_tool(name, args, access_key, hass, data)
 
 
 def _patch_ws(return_value):
@@ -96,7 +96,7 @@ class TestRestoreRemoved:
 
 class TestBackup:
     async def test_list_deny(self, hass):
-        _, outcome, _ = await _call("list_backups", {}, _token(cap_backup="deny"), hass)
+        _, outcome, _ = await _call("list_backups", {}, _access_key(cap_backup="deny"), hass)
         assert outcome == "denied"
 
     async def test_list_projects_and_sorts(self, hass):
@@ -113,7 +113,7 @@ class TestBackup:
             "backup/agents/info": {"agents": [{"agent_id": "hassio.local"}]},
         }
         with _patch_ws_map(mapping) as m:
-            content, outcome, _ = await _call("list_backups", {}, _token(), hass)
+            content, outcome, _ = await _call("list_backups", {}, _access_key(), hass)
         assert outcome == "allowed"
         assert "backup/info" in [c.args[1] for c in m.await_args_list]
         body = _json(content)
@@ -129,7 +129,7 @@ class TestBackup:
                  for i in range(1, 6)]
         mapping = {"backup/info": {"backups": backs}, "backup/agents/info": {"agents": []}}
         with _patch_ws_map(mapping):
-            content, outcome, _ = await _call("list_backups", {"limit": 2}, _token(), hass)
+            content, outcome, _ = await _call("list_backups", {"limit": 2}, _access_key(), hass)
         body = _json(content)
         assert body["total"] == 5
         assert body["returned"] == 2
@@ -142,7 +142,7 @@ class TestBackup:
             "backup/generate": {"backup_job_id": "abc"},
         }
         with _patch_ws_map(mapping) as m:
-            content, outcome, _ = await _call("create_backup", {"name": "Nightly"}, _token(), hass)
+            content, outcome, _ = await _call("create_backup", {"name": "Nightly"}, _access_key(), hass)
         assert outcome == "allowed"
         gen = [c for c in m.await_args_list if c.args[1] == "backup/generate"][0]
         assert gen.args[2]["agent_ids"] == ["hassio.local"]  # not backup.local
@@ -152,18 +152,18 @@ class TestBackup:
     async def test_create_no_agents_errors(self, hass):
         mapping = {"backup/agents/info": {"agents": []}, "backup/generate": {"backup_job_id": "x"}}
         with _patch_ws_map(mapping):
-            _, outcome, _ = await _call("create_backup", {}, _token(), hass)
+            _, outcome, _ = await _call("create_backup", {}, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_create_explicit_agent_honored(self, hass):
         with _patch_ws({"backup_job_id": "z"}) as m:
-            _, outcome, _ = await _call("create_backup", {"agent_ids": ["my.agent"]}, _token(), hass)
+            _, outcome, _ = await _call("create_backup", {"agent_ids": ["my.agent"]}, _access_key(), hass)
         assert outcome == "allowed"
         gen = [c for c in m.await_args_list if c.args[1] == "backup/generate"][0]
         assert gen.args[2]["agent_ids"] == ["my.agent"]
 
     async def test_create_deny(self, hass):
-        _, outcome, _ = await _call("create_backup", {}, _token(cap_backup="deny"), hass)
+        _, outcome, _ = await _call("create_backup", {}, _access_key(cap_backup="deny"), hass)
         assert outcome == "denied"
 
 
@@ -181,7 +181,7 @@ class TestBackupAgentReadFailure:
 
     async def test_list_backups_warns_and_still_succeeds(self, hass):
         with self._patch_agents_fail():
-            content, outcome, _ = await _call("list_backups", {}, _token(), hass)
+            content, outcome, _ = await _call("list_backups", {}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["available_agents"] == []
@@ -193,13 +193,13 @@ class TestBackupAgentReadFailure:
             "backup/agents/info": {"agents": [{"agent_id": "backup.local"}]},
         }
         with _patch_ws_map(mapping):
-            content, outcome, _ = await _call("list_backups", {}, _token(), hass)
+            content, outcome, _ = await _call("list_backups", {}, _access_key(), hass)
         assert outcome == "allowed"
         assert "warnings" not in _json(content)
 
     async def test_create_backup_reports_the_read_failure_not_no_agents(self, hass):
         with self._patch_agents_fail():
-            content, outcome, _ = await _call("create_backup", {}, _token(), hass)
+            content, outcome, _ = await _call("create_backup", {}, _access_key(), hass)
         assert outcome == "invalid_request"
         text = content["content"][0]["text"]
         assert "Failed to determine available backup agents" in text
@@ -207,34 +207,34 @@ class TestBackupAgentReadFailure:
 
     async def test_create_backup_never_dispatches_generate_on_read_failure(self, hass):
         with self._patch_agents_fail() as m:
-            await _call("create_backup", {}, _token(), hass)
+            await _call("create_backup", {}, _access_key(), hass)
         assert not [c for c in m.await_args_list if c.args[1] == "backup/generate"]
 
 
 class TestDashboard:
     async def test_list(self, hass):
         with _patch_lovelace_ws([{"url_path": "lovelace-x", "title": "X"}]) as m:
-            content, outcome, _ = await _call("list_dashboards", {}, _token(), hass)
+            content, outcome, _ = await _call("list_dashboards", {}, _access_key(), hass)
         assert outcome == "allowed"
         assert m.await_args.args[1] == "lovelace/dashboards/list"
 
     async def test_create(self, hass):
         with _patch_lovelace_ws({"id": "d1", "url_path": "lovelace-new", "title": "New"}) as m:
             content, outcome, _ = await _call(
-                "create_dashboard", {"config": {"url_path": "lovelace-new", "title": "New"}}, _token(), hass)
+                "create_dashboard", {"config": {"url_path": "lovelace-new", "title": "New"}}, _access_key(), hass)
         assert outcome == "allowed"
         calls = [call.args for call in m.await_args_list]
         create = next(call for call in calls if call[1] == "lovelace/dashboards/create")
         assert create[2]["url_path"] == "lovelace-new"
 
     async def test_create_empty_config(self, hass):
-        _, outcome, _ = await _call("create_dashboard", {"config": {}}, _token(), hass)
+        _, outcome, _ = await _call("create_dashboard", {"config": {}}, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_edit(self, hass):
         with _patch_lovelace_ws({"id": "d1", "title": "Renamed"}) as m:
             content, outcome, _ = await _call(
-                "edit_dashboard", {"dashboard_id": "d1", "config": {"title": "Renamed"}}, _token(), hass)
+                "edit_dashboard", {"dashboard_id": "d1", "config": {"title": "Renamed"}}, _access_key(), hass)
         assert outcome == "allowed"
         calls = [call.args for call in m.await_args_list]
         update = next(call for call in calls if call[1] == "lovelace/dashboards/update")
@@ -253,7 +253,7 @@ class TestDashboard:
         content, outcome, _ = await _call(
             "edit_dashboard",
             {"dashboard_id": seeded["id"], "config": {"title": "Updated map"}},
-            _token(),
+            _access_key(),
             hass,
         )
 
@@ -264,17 +264,17 @@ class TestDashboard:
         assert updated["title"] == "Updated map"
 
     async def test_edit_missing_id(self, hass):
-        _, outcome, _ = await _call("edit_dashboard", {"dashboard_id": "", "config": {"title": "x"}}, _token(), hass)
+        _, outcome, _ = await _call("edit_dashboard", {"dashboard_id": "", "config": {"title": "x"}}, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_delete(self, hass):
         with _patch_lovelace_ws(None) as m:
-            content, outcome, _ = await _call("delete_dashboard", {"dashboard_id": "d1"}, _token(), hass)
+            content, outcome, _ = await _call("delete_dashboard", {"dashboard_id": "d1"}, _access_key(), hass)
         assert outcome == "allowed"
         calls = [call.args for call in m.await_args_list]
         delete = next(call for call in calls if call[1] == "lovelace/dashboards/delete")
         assert delete[2] == {"dashboard_id": "d1"}
 
     async def test_deny(self, hass):
-        _, outcome, _ = await _call("create_dashboard", {"config": {"url_path": "x"}}, _token(cap_lovelace_write="deny"), hass)
+        _, outcome, _ = await _call("create_dashboard", {"config": {"url_path": "x"}}, _access_key(cap_lovelace_write="deny"), hass)
         assert outcome == "denied"

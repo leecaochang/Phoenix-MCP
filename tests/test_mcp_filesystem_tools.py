@@ -22,14 +22,14 @@ from custom_components.phoenix_mcp.mcp_view import (
     _call_tool,
     _execute_write_file,
 )
-from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.tools import config_files
 
 
-def _token(**caps) -> TokenRecord:
+def _access_key(**caps) -> AccessKeyRecord:
     base = {"cap_filesystem": "allow"}
     base.update(caps)
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x",
         created_at=utcnow(), created_by="u", permissions=PermissionTree(), **base,
     )
@@ -39,8 +39,8 @@ def _json(content: dict) -> dict:
     return json.loads(content["content"][0]["text"])
 
 
-async def _call(name, args, token, hass):
-    return await _call_tool(name, args, token, hass, _data())
+async def _call(name, args, access_key, hass):
+    return await _call_tool(name, args, access_key, hass, _data())
 
 
 def _data():
@@ -68,24 +68,24 @@ class TestExecutorRegistration:
 
 class TestReadFile:
     async def test_deny(self, hass, fs_env):
-        _, outcome, _ = await _call("read_file", {"path": "www/hello.txt"}, _token(cap_filesystem="deny"), hass)
+        _, outcome, _ = await _call("read_file", {"path": "www/hello.txt"}, _access_key(cap_filesystem="deny"), hass)
         assert outcome == "denied"
 
     async def test_read(self, hass, fs_env):
-        content, outcome, _ = await _call("read_file", {"path": "www/hello.txt"}, _token(), hass)
+        content, outcome, _ = await _call("read_file", {"path": "www/hello.txt"}, _access_key(), hass)
         assert outcome == "allowed"
         assert _json(content)["content"] == "hi there"
 
     async def test_read_reports_content_hash(self, hass, fs_env):
-        content, _, _ = await _call("read_file", {"path": "www/hello.txt"}, _token(), hass)
+        content, _, _ = await _call("read_file", {"path": "www/hello.txt"}, _access_key(), hass)
         assert _json(content)["content_hash"] == content_hash("hi there")
 
     async def test_traversal_refused(self, hass, fs_env):
-        content, outcome, _ = await _call("read_file", {"path": "www/../secrets.yaml"}, _token(), hass)
+        content, outcome, _ = await _call("read_file", {"path": "www/../secrets.yaml"}, _access_key(), hass)
         assert outcome == "not_found"  # outside allowlist looks identical to missing
 
     async def test_missing(self, hass, fs_env):
-        _, outcome, _ = await _call("read_file", {"path": "www/nope.txt"}, _token(), hass)
+        _, outcome, _ = await _call("read_file", {"path": "www/nope.txt"}, _access_key(), hass)
         assert outcome == "not_found"
 
 
@@ -94,7 +94,7 @@ class TestWriteFile:
         source = "class DeferredCard {\n  constructor() {\n    this.session = 0;\n  }\n}\n"
         data = _data()
         result, outcome, _ = await _call_tool(
-            "write_file", {"path": "www/counter.js", "content": source}, _token(), hass, data)
+            "write_file", {"path": "www/counter.js", "content": source}, _access_key(), hass, data)
         assert outcome == "allowed"
         with open(hass.config.path("www/counter.js"), encoding="utf-8") as stream:
             assert stream.read() == source
@@ -111,7 +111,7 @@ class TestWriteFile:
                 stream.write(secret)
         args = {"path": "www/counter.js", "content": "this.session = 0;" if existing else secret}
         with patch.object(config_files, "_gate", new_callable=AsyncMock) as gate:
-            result, outcome, _ = await _call("write_file", args, _token(cap_filesystem="confirm"), hass)
+            result, outcome, _ = await _call("write_file", args, _access_key(cap_filesystem="confirm"), hass)
         assert outcome == "invalid_request"
         gate.assert_not_awaited()
         message = result["content"][0]["text"]
@@ -126,7 +126,7 @@ class TestWriteFile:
         pending = ({"status": "pending_approval"}, "pending_approval", "write_file")
         with patch.object(config_files, "_gate", new_callable=AsyncMock, return_value=pending) as gate:
             result = await _call("write_file", {"path": "www/counter.js", "content": "this.session = 0;"},
-                                 _token(cap_filesystem="confirm"), hass)
+                                 _access_key(cap_filesystem="confirm"), hass)
         assert result == pending
         gate.assert_awaited_once()
         assert not os.path.exists(hass.config.path("www/counter.js"))
@@ -137,7 +137,7 @@ class TestWriteFile:
             stream.write("password: existing-secret")
         data = _data()
         result, outcome, _ = await _execute_write_file(
-            {"path": "www/hello.txt", "content": "this.session = 0;"}, _token(), hass, data)
+            {"path": "www/hello.txt", "content": "this.session = 0;"}, _access_key(), hass, data)
         assert outcome == "invalid_request" and result["isError"]
         assert data.config_recovery.records() == []
         with open(path, encoding="utf-8") as stream:
@@ -149,7 +149,7 @@ class TestWriteFile:
         ) as gate:
             result, outcome, _ = await _call(
                 "write_file", {"path": "www/hello.txt", "content": "ok"},
-                _token(cap_filesystem="confirm"), hass)
+                _access_key(cap_filesystem="confirm"), hass)
         assert outcome == "invalid_request" and "read completely" in result["content"][0]["text"]
         gate.assert_not_awaited()
 
@@ -157,17 +157,17 @@ class TestWriteFile:
         with patch.object(config_files, "_gate", new_callable=AsyncMock) as gate:
             result, outcome, _ = await _call(
                 "write_file", {"path": "www/secret.js", "content": "password: secret", "force": True},
-                _token(cap_filesystem="confirm"), hass)
+                _access_key(cap_filesystem="confirm"), hass)
         assert outcome == "invalid_request" and result["isError"]
         gate.assert_not_awaited()
 
     async def test_deny(self, hass, fs_env):
-        _, outcome, _ = await _call("write_file", {"path": "themes/x.yaml", "content": "a"}, _token(cap_filesystem="deny"), hass)
+        _, outcome, _ = await _call("write_file", {"path": "themes/x.yaml", "content": "a"}, _access_key(cap_filesystem="deny"), hass)
         assert outcome == "denied"
 
     async def test_write_creates_file(self, hass, fs_env):
         content, outcome, _ = await _call(
-            "write_file", {"path": "themes/mytheme.yaml", "content": "a: 1"}, _token(), hass)
+            "write_file", {"path": "themes/mytheme.yaml", "content": "a: 1"}, _access_key(), hass)
         assert outcome == "allowed"
         assert isinstance(_json(content).get("recovery_id"), str)
         written = os.path.join(hass.config.config_dir, "themes", "mytheme.yaml")
@@ -176,30 +176,30 @@ class TestWriteFile:
             assert f.read() == "a: 1"
 
     async def test_traversal_refused(self, hass, fs_env):
-        content, outcome, _ = await _call("write_file", {"path": "../evil.yaml", "content": "x"}, _token(), hass)
+        content, outcome, _ = await _call("write_file", {"path": "../evil.yaml", "content": "x"}, _access_key(), hass)
         assert outcome == "denied"
         assert not os.path.isfile(os.path.join(hass.config.config_dir, "evil.yaml"))
 
     async def test_non_string_content(self, hass, fs_env):
-        _, outcome, _ = await _call("write_file", {"path": "themes/x.yaml", "content": 123}, _token(), hass)
+        _, outcome, _ = await _call("write_file", {"path": "themes/x.yaml", "content": 123}, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_non_string_content_confirm_mode_rejected_before_pending(self, hass, fs_env):
         """A doomed write fails before any approval is created, even in confirm mode."""
         _, outcome, _ = await _call(
-            "write_file", {"path": "themes/x.yaml", "content": 123}, _token(cap_filesystem="confirm"), hass)
+            "write_file", {"path": "themes/x.yaml", "content": 123}, _access_key(cap_filesystem="confirm"), hass)
         assert outcome == "invalid_request"
 
     async def test_traversal_refused_confirm_mode_rejected_before_pending(self, hass, fs_env):
         _, outcome, _ = await _call(
-            "write_file", {"path": "../evil.yaml", "content": "x"}, _token(cap_filesystem="confirm"), hass)
+            "write_file", {"path": "../evil.yaml", "content": "x"}, _access_key(cap_filesystem="confirm"), hass)
         assert outcome == "denied"
         assert not os.path.isfile(os.path.join(hass.config.config_dir, "evil.yaml"))
 
     async def test_matching_hash_writes(self, hass, fs_env):
-        h = _json((await _call("read_file", {"path": "www/hello.txt"}, _token(), hass))[0])["content_hash"]
+        h = _json((await _call("read_file", {"path": "www/hello.txt"}, _access_key(), hass))[0])["content_hash"]
         _, outcome, _ = await _call(
-            "write_file", {"path": "www/hello.txt", "content": "updated", "expected_hash": h}, _token(), hass)
+            "write_file", {"path": "www/hello.txt", "content": "updated", "expected_hash": h}, _access_key(), hass)
         assert outcome == "allowed"
         with open(os.path.join(hass.config.config_dir, "www", "hello.txt"), encoding="utf-8") as f:
             assert f.read() == "updated"
@@ -208,7 +208,7 @@ class TestWriteFile:
         _, outcome, _ = await _call(
             "write_file",
             {"path": "www/hello.txt", "content": "clobber", "expected_hash": content_hash("what I read earlier")},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
         with open(os.path.join(hass.config.config_dir, "www", "hello.txt"), encoding="utf-8") as f:
             assert f.read() == "hi there"  # untouched
@@ -216,7 +216,7 @@ class TestWriteFile:
     async def test_executor_stale_hash_conflict_at_apply_time(self, hass, fs_env):
         _, outcome, _ = await _execute_write_file(
             {"path": "www/hello.txt", "content": "new", "expected_hash": content_hash("stale")},
-            _token(), hass, _data())
+            _access_key(), hass, _data())
         assert outcome == "invalid_request"
         with open(os.path.join(hass.config.config_dir, "www", "hello.txt"), encoding="utf-8") as f:
             assert f.read() == "hi there"
@@ -224,12 +224,12 @@ class TestWriteFile:
 
 class TestListFiles:
     async def test_root_lists_allowed_dirs(self, hass, fs_env):
-        content, outcome, _ = await _call("list_files", {}, _token(), hass)
+        content, outcome, _ = await _call("list_files", {}, _access_key(), hass)
         assert outcome == "allowed"
         assert _json(content)["directories"] == ["www", "themes", "custom_templates"]
 
     async def test_list_dir(self, hass, fs_env):
-        content, outcome, _ = await _call("list_files", {"path": "www"}, _token(), hass)
+        content, outcome, _ = await _call("list_files", {"path": "www"}, _access_key(), hass)
         assert outcome == "allowed"
         names = [e["name"] for e in _json(content)["entries"]]
         assert "hello.txt" in names
@@ -247,7 +247,7 @@ async def test_symlink_below_allowed_root_cannot_escape_config_jail(hass, fs_env
     path.write_text("outside-secret")
     os.symlink(outside, hass.config.path("www/escape"), target_is_directory=True)
     try:
-        result, outcome, _ = await _call(name, args, _token(), hass)
+        result, outcome, _ = await _call(name, args, _access_key(), hass)
         assert outcome != "allowed"
         assert "outside-secret" not in str(result)
         assert path.read_text() == "outside-secret"
@@ -263,8 +263,8 @@ async def test_config_sibling_with_allowed_prefix_is_outside_jail(hass, fs_env, 
     sibling = Path(hass.config.path("www2"))
     sibling.mkdir()
     (sibling / "private.txt").write_text("private fixture")
-    result, outcome, _ = await _call("read_file", {"path": path}, _token(), hass)
+    result, outcome, _ = await _call("read_file", {"path": path}, _access_key(), hass)
     assert outcome == "not_found"
     assert "private fixture" not in str(result)
-    _, allowed, _ = await _call("read_file", {"path": "www/hello.txt"}, _token(), hass)
+    _, allowed, _ = await _call("read_file", {"path": "www/hello.txt"}, _access_key(), hass)
     assert allowed == "allowed"

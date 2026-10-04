@@ -29,7 +29,7 @@ from custom_components.phoenix_mcp.const import MAX_DIFF_INLINE_BYTES, MAX_REQUE
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool as _mcp_call_tool, async_restore_version
 from custom_components.phoenix_mcp.tools.authoring import _read_automations_yaml
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
 
 pytestmark = pytest.mark.usefixtures("immediate_authoring_observation")
@@ -64,8 +64,8 @@ def _data() -> tuple[PhoenixData, VersionStore]:
     return data, versions
 
 
-def _token(tree: PermissionTree | None = None, **caps) -> TokenRecord:
-    return TokenRecord(
+def _access_key(tree: PermissionTree | None = None, **caps) -> AccessKeyRecord:
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x", created_at=utcnow(),
         created_by="u", permissions=tree or PermissionTree(domains={}), **caps,
     )
@@ -98,25 +98,25 @@ class TestAutomationCapture:
 
     async def test_create_edit_delete_record_history(self, hass, env):
         data, versions = _data()
-        token = _token(cap_automation_write="allow")
+        access_key = _access_key(cap_automation_write="allow")
         cfg = {
             "alias": "A",
             "trigger": [{"platform": "state", "entity_id": "input_boolean.x"}],
             "action": [{"service": "homeassistant.toggle", "entity_id": "input_boolean.x"}],
         }
-        created = _text((await _call_tool("create_automation", {"config": cfg}, token, hass, data))[0])
+        created = _text((await _call_tool("create_automation", {"config": cfg}, access_key, hass, data))[0])
         aid = created["id"]
 
-        current = _text((await _call_tool("get_automation", {"automation_id": aid}, token, hass, data))[0])
+        current = _text((await _call_tool("get_automation", {"automation_id": aid}, access_key, hass, data))[0])
         await _call_tool(
-            "edit_automation", {"automation_id": aid, "config": dict(cfg, alias="A2"), "expected_hash": current["content_hash"]}, token, hass, data)
-        await _call_tool("delete_automation", {"automation_id": aid}, token, hass, data)
+            "edit_automation", {"automation_id": aid, "config": dict(cfg, alias="A2"), "expected_hash": current["content_hash"]}, access_key, hass, data)
+        await _call_tool("delete_automation", {"automation_id": aid}, access_key, hass, data)
 
         history = versions.list_for("automation", aid)
         assert [v.action for v in history] == ["delete", "edit", "create"]  # newest first
         delete_rec, edit_rec, create_rec = history
         assert create_rec.before is None and create_rec.after.get("alias") == "A"
-        assert create_rec.token_name == token.name
+        assert create_rec.token_name == access_key.name
         assert edit_rec.before.get("alias") == "A" and edit_rec.after.get("alias") == "A2"
         assert delete_rec.before.get("alias") == "A2" and delete_rec.after is None
 
@@ -129,14 +129,14 @@ class TestScriptCapture:
 
     async def test_create_edit_delete_record_history(self, hass, env):
         data, versions = _data()
-        token = _token(cap_script_write="allow")
+        access_key = _access_key(cap_script_write="allow")
         sid = "phx_test_script"
         cfg = {"alias": "S", "sequence": [{"service": "homeassistant.toggle", "entity_id": "input_boolean.x"}]}
 
-        await _call_tool("create_script", {"script_id": sid, "config": cfg}, token, hass, data)
+        await _call_tool("create_script", {"script_id": sid, "config": cfg}, access_key, hass, data)
         await _call_tool(
-            "edit_script", {"script_id": sid, "config": dict(cfg, alias="S2")}, token, hass, data)
-        await _call_tool("delete_script", {"script_id": sid}, token, hass, data)
+            "edit_script", {"script_id": sid, "config": dict(cfg, alias="S2")}, access_key, hass, data)
+        await _call_tool("delete_script", {"script_id": sid}, access_key, hass, data)
 
         history = versions.list_for("script", sid)
         assert [v.action for v in history] == ["delete", "edit", "create"]
@@ -162,16 +162,16 @@ class TestSceneCapture:
         tree = PermissionTree(domains={
             "light": PermissionNode(state="GREEN"), "scene": PermissionNode(state="GREEN"),
         })
-        token = _token(tree=tree, cap_scene_write="allow", cap_registry_read="allow")
+        access_key = _access_key(tree=tree, cap_scene_write="allow", cap_registry_read="allow")
 
         created = _text((await _call_tool(
             "create_scene", {"config": {"name": "Movie", "entities": {light_entity: "on"}}},
-            token, hass, data))[0])
+            access_key, hass, data))[0])
         sid = created["scene_id"]
         await _call_tool(
             "edit_scene", {"scene_id": sid, "config": {"name": "Movie2", "entities": {light_entity: "off"}}},
-            token, hass, data)
-        await _call_tool("delete_scene", {"scene_id": sid}, token, hass, data)
+            access_key, hass, data)
+        await _call_tool("delete_scene", {"scene_id": sid}, access_key, hass, data)
 
         history = versions.list_for("scene", sid)
         assert [v.action for v in history] == ["delete", "edit", "create"]
@@ -197,11 +197,11 @@ class TestAutomationRestore:
 
     async def test_restore_existing_reapplies_as_rollback(self, hass, env):
         data, versions = _data()
-        token = _token(cap_automation_write="allow")
-        created = _text((await _call_tool("create_automation", {"config": self._cfg("A")}, token, hass, data))[0])
+        access_key = _access_key(cap_automation_write="allow")
+        created = _text((await _call_tool("create_automation", {"config": self._cfg("A")}, access_key, hass, data))[0])
         aid = created["id"]
-        current = _text((await _call_tool("get_automation", {"automation_id": aid}, token, hass, data))[0])
-        await _call_tool("edit_automation", {"automation_id": aid, "config": self._cfg("B"), "expected_hash": current["content_hash"]}, token, hass, data)
+        current = _text((await _call_tool("get_automation", {"automation_id": aid}, access_key, hass, data))[0])
+        await _call_tool("edit_automation", {"automation_id": aid, "config": self._cfg("B"), "expected_hash": current["content_hash"]}, access_key, hass, data)
 
         create_ver = versions.list_for("automation", aid)[-1]  # oldest is the create
         _result, outcome, _r = await async_restore_version(create_ver, "admin-1", hass, data)
@@ -219,11 +219,11 @@ class TestAutomationRestore:
         # An edit version holds before=A, after=B. Restoring side="before" re-applies
         # the prior config (A); side="after" re-applies the change (B).
         data, versions = _data()
-        token = _token(cap_automation_write="allow")
-        created = _text((await _call_tool("create_automation", {"config": self._cfg("A")}, token, hass, data))[0])
+        access_key = _access_key(cap_automation_write="allow")
+        created = _text((await _call_tool("create_automation", {"config": self._cfg("A")}, access_key, hass, data))[0])
         aid = created["id"]
-        current = _text((await _call_tool("get_automation", {"automation_id": aid}, token, hass, data))[0])
-        await _call_tool("edit_automation", {"automation_id": aid, "config": self._cfg("B"), "expected_hash": current["content_hash"]}, token, hass, data)
+        current = _text((await _call_tool("get_automation", {"automation_id": aid}, access_key, hass, data))[0])
+        await _call_tool("edit_automation", {"automation_id": aid, "config": self._cfg("B"), "expected_hash": current["content_hash"]}, access_key, hass, data)
 
         edit_ver = versions.list_for("automation", aid)[0]  # newest is the edit (before A / after B)
         assert edit_ver.before.get("alias") == "A"
@@ -237,8 +237,8 @@ class TestAutomationRestore:
     async def test_restore_missing_side_errors(self, hass, env):
         # Restoring the "before" of a create (before is None) is rejected cleanly.
         data, versions = _data()
-        token = _token(cap_automation_write="allow")
-        created = _text((await _call_tool("create_automation", {"config": self._cfg("A")}, token, hass, data))[0])
+        access_key = _access_key(cap_automation_write="allow")
+        created = _text((await _call_tool("create_automation", {"config": self._cfg("A")}, access_key, hass, data))[0])
         aid = created["id"]
         create_ver = versions.list_for("automation", aid)[0]
         result, outcome, _r = await async_restore_version(create_ver, "admin-1", hass, data, side="before")
@@ -247,10 +247,10 @@ class TestAutomationRestore:
 
     async def test_restore_deleted_recreates_in_place(self, hass, env):
         data, versions = _data()
-        token = _token(cap_automation_write="allow")
-        created = _text((await _call_tool("create_automation", {"config": self._cfg("A")}, token, hass, data))[0])
+        access_key = _access_key(cap_automation_write="allow")
+        created = _text((await _call_tool("create_automation", {"config": self._cfg("A")}, access_key, hass, data))[0])
         aid = created["id"]
-        await _call_tool("delete_automation", {"automation_id": aid}, token, hass, data)
+        await _call_tool("delete_automation", {"automation_id": aid}, access_key, hass, data)
 
         delete_ver = versions.list_for("automation", aid)[0]  # newest is the delete
         result, outcome, _r = await async_restore_version(delete_ver, "admin-1", hass, data)
@@ -268,10 +268,10 @@ class TestAutomationRestore:
     async def test_restore_deleted_is_idempotent(self, hass, env):
         # Repeated restores must update the original automation, not duplicate it.
         data, versions = _data()
-        token = _token(cap_automation_write="allow")
-        created = _text((await _call_tool("create_automation", {"config": self._cfg("A")}, token, hass, data))[0])
+        access_key = _access_key(cap_automation_write="allow")
+        created = _text((await _call_tool("create_automation", {"config": self._cfg("A")}, access_key, hass, data))[0])
         aid = created["id"]
-        await _call_tool("delete_automation", {"automation_id": aid}, token, hass, data)
+        await _call_tool("delete_automation", {"automation_id": aid}, access_key, hass, data)
 
         delete_ver = versions.list_for("automation", aid)[0]
         await async_restore_version(delete_ver, "admin-1", hass, data)
@@ -323,16 +323,16 @@ class TestRestoreEndpoint:
 
         data, versions = _data()
         hass.data[DOMAIN] = data
-        token = _token(cap_automation_write="allow")
+        access_key = _access_key(cap_automation_write="allow")
         cfg = {
             "alias": "A",
             "trigger": [{"platform": "state", "entity_id": "input_boolean.x"}],
             "action": [{"service": "homeassistant.toggle", "entity_id": "input_boolean.x"}],
         }
-        created = _text((await _call_tool("create_automation", {"config": cfg}, token, hass, data))[0])
+        created = _text((await _call_tool("create_automation", {"config": cfg}, access_key, hass, data))[0])
         aid = created["id"]
-        current = _text((await _call_tool("get_automation", {"automation_id": aid}, token, hass, data))[0])
-        await _call_tool("edit_automation", {"automation_id": aid, "config": dict(cfg, alias="B"), "expected_hash": current["content_hash"]}, token, hass, data)
+        current = _text((await _call_tool("get_automation", {"automation_id": aid}, access_key, hass, data))[0])
+        await _call_tool("edit_automation", {"automation_id": aid, "config": dict(cfg, alias="B"), "expected_hash": current["content_hash"]}, access_key, hass, data)
         return data, versions, aid
 
     def _alias(self, hass, aid):
@@ -406,11 +406,11 @@ class TestRestoreEndpoint:
 class TestRawWriteCapture:
     async def test_yaml_config_records_create_then_edit(self, hass):
         data, versions = _data()
-        token = _token(cap_yaml_edit="allow")
+        access_key = _access_key(cap_yaml_edit="allow")
         first_content = _SEED_YAML + "default_config:\n"
         second_content = first_content + "foo: bar\n"
-        await _call_tool("set_yaml_config", {"content": first_content}, token, hass, data)
-        await _call_tool("set_yaml_config", {"content": second_content}, token, hass, data)
+        await _call_tool("set_yaml_config", {"content": first_content}, access_key, hass, data)
+        await _call_tool("set_yaml_config", {"content": second_content}, access_key, hass, data)
 
         # configuration.yaml may or may not already exist, so assert on the
         # before/after content chain rather than on create-vs-edit of the first write.
@@ -429,10 +429,10 @@ class TestRawWriteCapture:
         never break a write), so a wiring mistake would otherwise look like a pass.
         """
         data, versions = _data()
-        token = _token(cap_yaml_edit="allow")
+        access_key = _access_key(cap_yaml_edit="allow")
         await _call_tool(
             "patch_yaml_config", {"key": "recorder", "content": "purge_keep_days: 10\n"},
-            token, hass, data)
+            access_key, hass, data)
         rec = versions.list_for("yaml_config", "configuration.yaml")[0]
         assert rec.before["content"] == _SEED_YAML
         assert "purge_keep_days: 10" in rec.after["content"]
@@ -445,13 +445,13 @@ class TestRawWriteCapture:
 
     async def test_write_file_records_create_then_edit(self, hass):
         data, versions = _data()
-        token = _token(cap_filesystem="allow")
+        access_key = _access_key(cap_filesystem="allow")
         rel = "www/phx_cap_test.js"
         target = os.path.join(hass.config.config_dir, "www", "phx_cap_test.js")
         if os.path.exists(target):  # the test config dir can persist across runs
             os.remove(target)
-        await _call_tool("write_file", {"path": rel, "content": "v1"}, token, hass, data)
-        await _call_tool("write_file", {"path": rel, "content": "v2"}, token, hass, data)
+        await _call_tool("write_file", {"path": rel, "content": "v1"}, access_key, hass, data)
+        await _call_tool("write_file", {"path": rel, "content": "v2"}, access_key, hass, data)
 
         history = versions.list_for("file", rel)
         assert [v.action for v in history] == ["edit", "create"]
@@ -461,9 +461,9 @@ class TestRawWriteCapture:
 
     async def test_oversized_content_stored_as_truncated_marker(self, hass):
         data, versions = _data()
-        token = _token(cap_yaml_edit="allow")
+        access_key = _access_key(cap_yaml_edit="allow")
         big = _SEED_YAML + "# " + "x" * (MAX_DIFF_INLINE_BYTES + 50)
-        await _call_tool("set_yaml_config", {"content": big}, token, hass, data)
+        await _call_tool("set_yaml_config", {"content": big}, access_key, hass, data)
         rec = versions.list_for("yaml_config", "configuration.yaml")[0]
         assert rec.after["content"] is None
         assert rec.after["truncated"] is True
@@ -473,11 +473,11 @@ class TestRawWriteCapture:
 class TestRawWriteRestore:
     async def test_restore_yaml_reapplies_and_records_rollback(self, hass):
         data, versions = _data()
-        token = _token(cap_yaml_edit="allow")
+        access_key = _access_key(cap_yaml_edit="allow")
         content_a = _SEED_YAML + "a: 1\n"
         content_b = _SEED_YAML + "b: 2\n"
-        await _call_tool("set_yaml_config", {"content": content_a}, token, hass, data)
-        await _call_tool("set_yaml_config", {"content": content_b}, token, hass, data)
+        await _call_tool("set_yaml_config", {"content": content_a}, access_key, hass, data)
+        await _call_tool("set_yaml_config", {"content": content_b}, access_key, hass, data)
         create_ver = versions.list_for("yaml_config", "configuration.yaml")[-1]  # after == content_a
 
         result, _outcome, _res = await async_restore_version(create_ver, "admin-1", hass, data)
@@ -493,10 +493,10 @@ class TestRawWriteRestore:
 
     async def test_restore_file_reapplies(self, hass):
         data, versions = _data()
-        token = _token(cap_filesystem="allow")
+        access_key = _access_key(cap_filesystem="allow")
         rel = "www/phx_restore_test.js"
-        await _call_tool("write_file", {"path": rel, "content": "first"}, token, hass, data)
-        await _call_tool("write_file", {"path": rel, "content": "second"}, token, hass, data)
+        await _call_tool("write_file", {"path": rel, "content": "first"}, access_key, hass, data)
+        await _call_tool("write_file", {"path": rel, "content": "second"}, access_key, hass, data)
         create_ver = versions.list_for("file", rel)[-1]  # after == "first"
 
         await async_restore_version(create_ver, "admin-2", hass, data)
@@ -506,9 +506,9 @@ class TestRawWriteRestore:
 
     async def test_restore_truncated_version_refused(self, hass):
         data, versions = _data()
-        token = _token(cap_yaml_edit="allow")
+        access_key = _access_key(cap_yaml_edit="allow")
         big = _SEED_YAML + "# " + "y" * (MAX_DIFF_INLINE_BYTES + 50)
-        await _call_tool("set_yaml_config", {"content": big}, token, hass, data)
+        await _call_tool("set_yaml_config", {"content": big}, access_key, hass, data)
         rec = versions.list_for("yaml_config", "configuration.yaml")[0]
         result, outcome, _res = await async_restore_version(rec, "admin-3", hass, data)
         assert outcome == "invalid_request"
@@ -529,7 +529,7 @@ class TestEntityRegistryWrite:
     @staticmethod
     def _token_rw():
         tree = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
-        return _token(tree=tree, cap_registry_write="allow", cap_registry_read="allow")
+        return _access_key(tree=tree, cap_registry_write="allow", cap_registry_read="allow")
 
     async def test_set_entity_updates_and_versions(self, hass, env):
         eid, area_id = env
@@ -588,7 +588,7 @@ class TestEntityRegistryWrite:
     ):
         eid, area_id = env
         data, versions = _data()
-        token = self._token_rw()
+        access_key = self._token_rw()
         label = lr.async_get(hass).async_create("Registry test")
         category = cr.async_get(hass).async_create(
             name="Registry category", scope="test_scope"
@@ -606,7 +606,7 @@ class TestEntityRegistryWrite:
                 "add_labels": [label.label_id],
                 "categories": {"test_scope": category.category_id},
             },
-            token,
+            access_key,
             hass,
             data,
         )
@@ -634,7 +634,7 @@ class TestEntityRegistryWrite:
                 "remove_labels": [label.label_id],
                 "categories": {"test_scope": None},
             },
-            token,
+            access_key,
             hass,
             data,
         )
@@ -669,7 +669,7 @@ class TestEntityRegistryWrite:
     ):
         eid, _area = env
         data, _versions = _data()
-        token = _token(
+        access_key = _access_key(
             tree=PermissionTree(
                 entities={eid: PermissionNode(state="GREEN")}
             ),
@@ -680,7 +680,7 @@ class TestEntityRegistryWrite:
             content, outcome, _ = await _call_tool(
                 "set_entity",
                 {"entity_id": eid, "enabled": False},
-                token,
+                access_key,
                 hass,
                 data,
             )
@@ -694,9 +694,9 @@ class TestEntityRegistryWrite:
     ):
         eid, _area = env
         data, _versions = _data()
-        token = self._token_rw()
+        access_key = self._token_rw()
         _, outcome, _ = await _call_tool(
-            "set_entity", {"entity_id": eid, "enabled": False}, token, hass, data
+            "set_entity", {"entity_id": eid, "enabled": False}, access_key, hass, data
         )
         assert outcome == "allowed"
         assert er.async_get(hass).async_get(eid).disabled_by == er.RegistryEntryDisabler.USER
@@ -704,13 +704,13 @@ class TestEntityRegistryWrite:
         _, outcome, _ = await _call_tool(
             "set_entity",
             {"entity_id": eid, "name": "While disabled"},
-            token,
+            access_key,
             hass,
             data,
         )
         assert outcome == "allowed"
         content, outcome, _ = await _call_tool(
-            "set_entity", {"entity_id": eid, "enabled": True}, token, hass, data
+            "set_entity", {"entity_id": eid, "enabled": True}, access_key, hass, data
         )
         assert outcome == "allowed"
         assert er.async_get(hass).async_get(eid).disabled_by is None
@@ -790,13 +790,13 @@ class TestEntityRegistryWrite:
         eid, _area = env
         data, _versions = _data()
         gate = AsyncMock(return_value=({}, "pending_approval", "approval"))
-        token = _token(
+        access_key = _access_key(
             tree=PermissionTree(domains={"light": PermissionNode(state="GREEN")}),
             cap_registry_write="confirm",
         )
         with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
             content, outcome, _ = await _call_tool(
-                "set_entity", {"entity_id": eid, **args}, token, hass, data
+                "set_entity", {"entity_id": eid, **args}, access_key, hass, data
             )
         assert outcome == "invalid_request"
         assert fragment in content["content"][0]["text"]
@@ -811,7 +811,7 @@ class TestEntityRegistryWrite:
         )
 
         eid, _area = env
-        token = self._token_rw()
+        access_key = self._token_rw()
         label_registry = lr.async_get(hass)
         label = label_registry.async_create("Approval-window label")
         category_registry = cr.async_get(hass)
@@ -838,11 +838,11 @@ class TestEntityRegistryWrite:
             ),
         ]
         for args, delete_reference, fragment in cases:
-            assert _registry_write_precheck(args, token, hass, "set_entity") is None
+            assert _registry_write_precheck(args, access_key, hass, "set_entity") is None
             delete_reference()
             data, _versions = _data()
             content, outcome, _ = await _execute_set_entity(
-                args, token, hass, data
+                args, access_key, hass, data
             )
             assert outcome == "invalid_request"
             assert fragment in content["content"][0]["text"]
@@ -851,8 +851,8 @@ class TestEntityRegistryWrite:
         eid, _area = env
         data, _ = _data()
         tree = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
-        token = _token(tree=tree, cap_registry_write="deny")
-        _, outcome, _ = await _call_tool("set_entity", {"entity_id": eid, "name": "X"}, token, hass, data)
+        access_key = _access_key(tree=tree, cap_registry_write="deny")
+        _, outcome, _ = await _call_tool("set_entity", {"entity_id": eid, "name": "X"}, access_key, hass, data)
         assert outcome == "denied"
 
     async def test_deny_token_is_not_a_scope_oracle(self, hass, env):
@@ -862,11 +862,11 @@ class TestEntityRegistryWrite:
         hass.states.async_set("lock.front_door", "locked", {})  # exists, out of scope
         data, _ = _data()
         tree = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
-        token = _token(tree=tree, cap_registry_write="deny")
+        access_key = _access_key(tree=tree, cap_registry_write="deny")
         bodies = []
         for target in (eid, "lock.front_door", "light.ghost_nonexistent"):
             content, outcome, _ = await _call_tool(
-                "set_entity", {"entity_id": target, "name": "X"}, token, hass, data)
+                "set_entity", {"entity_id": target, "name": "X"}, access_key, hass, data)
             assert outcome == "denied"
             bodies.append(content["content"][0]["text"])
         assert len(set(bodies)) == 1
@@ -876,8 +876,8 @@ class TestEntityRegistryWrite:
         data, _ = _data()
         # YELLOW is READ only; registry edits require WRITE.
         tree = PermissionTree(domains={"light": PermissionNode(state="YELLOW")})
-        token = _token(tree=tree, cap_registry_write="allow")
-        _, outcome, _ = await _call_tool("set_entity", {"entity_id": eid, "name": "X"}, token, hass, data)
+        access_key = _access_key(tree=tree, cap_registry_write="allow")
+        _, outcome, _ = await _call_tool("set_entity", {"entity_id": eid, "name": "X"}, access_key, hass, data)
         assert outcome == "denied"
 
     async def test_set_entity_unknown_area_rejected(self, hass, env):
@@ -910,7 +910,7 @@ class TestEntityRegistryWrite:
             content, outcome, _ = await _call_tool(
                 "set_entity",
                 {"entity_id": eid, "area_id": area_id},
-                _token(
+                _access_key(
                     tree=PermissionTree(domains={"light": PermissionNode(state="GREEN")}),
                     cap_registry_write="confirm",
                 ),
@@ -944,7 +944,7 @@ class TestEntityRegistryWrite:
             content, outcome, _ = await _call_tool(
                 "set_entity",
                 {"entity_id": eid, "changes": unsupported},
-                _token(
+                _access_key(
                     tree=PermissionTree(domains={"light": PermissionNode(state="GREEN")}),
                     cap_registry_write="confirm",
                 ),
@@ -996,13 +996,13 @@ class TestEntityRegistryWrite:
         )
 
         eid, area_id = env
-        token = self._token_rw()
+        access_key = self._token_rw()
         args = {"entity_id": eid, "area_id": area_id}
-        assert _registry_write_precheck(args, token, hass, "set_entity") is None
+        assert _registry_write_precheck(args, access_key, hass, "set_entity") is None
 
         ar.async_get(hass).async_delete(area_id)
         data, _ = _data()
-        _, outcome, _ = await _execute_set_entity(args, token, hass, data)
+        _, outcome, _ = await _execute_set_entity(args, access_key, hass, data)
 
         assert outcome == "invalid_request"
         assert er.async_get(hass).async_get(eid).area_id is None
@@ -1026,7 +1026,7 @@ class TestEntityRegistryWrite:
         )
         hass.states.async_remove(eid)
 
-        entity_only = _token(
+        entity_only = _access_key(
             tree=PermissionTree(
                 entities={eid: PermissionNode(state="GREEN")}
             ),

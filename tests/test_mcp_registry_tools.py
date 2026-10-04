@@ -26,21 +26,21 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.mcp_view import _call_tool
 from custom_components.phoenix_mcp.household_authority import household_scope
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
 
-def _token(
+def _access_key(
     cap_registry_read: str = "allow",
     cap_search: str = "allow",
     permissions: PermissionTree | None = None,
     **caps,
-) -> TokenRecord:
+) -> AccessKeyRecord:
     """Token that grants READ/WRITE on the light domain and the zone.home entity."""
     tree = permissions or PermissionTree(
         domains={"light": PermissionNode(state="GREEN")},
         entities={"zone.home": PermissionNode(state="YELLOW")},
     )
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="reg-token",
         token_hash="x",
@@ -138,10 +138,10 @@ def reg_env(hass: HomeAssistant):
     }
 
 
-async def _call(name: str, args: dict, token: TokenRecord, hass: HomeAssistant) -> tuple[dict, str, str]:
+async def _call(name: str, args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[dict, str, str]:
     data = MagicMock()
     data.mesa = None  # MESA-off path; per-tool MESA behavior is tested separately
-    return await _call_tool(name, args, token, hass, data)
+    return await _call_tool(name, args, access_key, hass, data)
 
 
 @pytest.mark.parametrize("pass_through", [False, True])
@@ -151,48 +151,48 @@ async def test_household_registry_reads_intersect_ha_permissions(hass, hass_admi
     empty_floor = fr.async_get(hass).async_create("Empty private floor")
     empty_area = ar.async_get(hass).async_create("Empty private area")
     ar.async_get(hass).async_update(empty_area.id, floor_id=empty_floor.floor_id)
-    token = _token(pass_through=pass_through)
+    access_key = _access_key(pass_through=pass_through)
     # A Phoenix device grant cannot enlarge the requesting HA user's authority.
-    token.permissions.devices[reg_env["sensor_hub"].id] = PermissionNode(state="GREEN")
+    access_key.permissions.devices[reg_env["sensor_hub"].id] = PermissionNode(state="GREEN")
     async with household_scope(hass, Context(user_id=user.id)):
         for tool, key, expected in (("list_areas", "areas", {"Kitchen"}),
                                     ("list_floors", "floors", {"Ground"}),
                                     ("list_devices", "devices", {"Living Hub"})):
-            content, outcome, _ = await _call(tool, {}, token, hass)
+            content, outcome, _ = await _call(tool, {}, access_key, hass)
             assert outcome == "allowed", content
             assert {row["name"] for row in _result_json(content)[key]} == expected
-        content, outcome, _ = await _call("get_device", {"device_id": reg_env["hub"].id}, token, hass)
+        content, outcome, _ = await _call("get_device", {"device_id": reg_env["hub"].id}, access_key, hass)
         assert outcome == "allowed"
         assert _result_json(content)["entities"] == [reg_env["light_kitchen"]]
-        hidden = await _call("get_device", {"device_id": reg_env["sensor_hub"].id}, token, hass)
-        missing = await _call("get_device", {"device_id": "absent"}, token, hass)
+        hidden = await _call("get_device", {"device_id": reg_env["sensor_hub"].id}, access_key, hass)
+        missing = await _call("get_device", {"device_id": "absent"}, access_key, hass)
         assert hidden[:2] == missing[:2]
         assert hidden[1] == "not_found"
 
 
 @pytest.mark.parametrize("pass_through", [False, True])
 async def test_unidentified_registry_reads_keep_the_bound_token_scope(hass, reg_env, pass_through):
-    token = _token(pass_through=pass_through)
+    access_key = _access_key(pass_through=pass_through)
     async with household_scope(hass):
-        content, outcome, _ = await _call("get_device", {"device_id": reg_env["hub"].id}, token, hass)
+        content, outcome, _ = await _call("get_device", {"device_id": reg_env["hub"].id}, access_key, hass)
         assert outcome == "allowed"
         assert reg_env["light_kitchen"] in _result_json(content)["entities"]
-        token.cap_registry_read = "deny"
-        assert (await _call("get_device", {"device_id": reg_env["hub"].id}, token, hass))[1] == ("allowed" if pass_through else "denied")
+        access_key.cap_registry_read = "deny"
+        assert (await _call("get_device", {"device_id": reg_env["hub"].id}, access_key, hass))[1] == ("allowed" if pass_through else "denied")
 
 
 class TestCapGate:
     @pytest.mark.parametrize("tool", ["list_areas", "list_floors", "list_zones", "list_devices", "get_device"])
     async def test_deny_without_cap(self, hass, reg_env, tool):
-        token = _token(cap_registry_read="deny")
-        content, outcome, _ = await _call(tool, {"device_id": reg_env["hub"].id}, token, hass)
+        access_key = _access_key(cap_registry_read="deny")
+        content, outcome, _ = await _call(tool, {"device_id": reg_env["hub"].id}, access_key, hass)
         assert outcome == "denied"
         assert content.get("isError") is True
 
 
 class TestListAreas:
     async def test_only_accessible_areas(self, hass, reg_env):
-        content, outcome, _ = await _call("list_areas", {}, _token(), hass)
+        content, outcome, _ = await _call("list_areas", {}, _access_key(), hass)
         assert outcome == "allowed"
         body = _result_json(content)
         names = {a["name"] for a in body["areas"]}
@@ -204,7 +204,7 @@ class TestListAreas:
 
 class TestListFloors:
     async def test_floor_rollup(self, hass, reg_env):
-        content, outcome, _ = await _call("list_floors", {}, _token(), hass)
+        content, outcome, _ = await _call("list_floors", {}, _access_key(), hass)
         assert outcome == "allowed"
         body = _result_json(content)
         assert body["count"] == 1
@@ -216,7 +216,7 @@ class TestListFloors:
 
 class TestListZones:
     async def test_accessible_zone(self, hass, reg_env):
-        content, outcome, _ = await _call("list_zones", {}, _token(), hass)
+        content, outcome, _ = await _call("list_zones", {}, _access_key(), hass)
         assert outcome == "allowed"
         body = _result_json(content)
         assert [z["entity_id"] for z in body["zones"]] == ["zone.home"]
@@ -225,7 +225,7 @@ class TestListZones:
 
 class TestListDevices:
     async def test_only_accessible_devices(self, hass, reg_env):
-        content, outcome, _ = await _call("list_devices", {}, _token(), hass)
+        content, outcome, _ = await _call("list_devices", {}, _access_key(), hass)
         assert outcome == "allowed"
         body = _result_json(content)
         ids = {d["device_id"] for d in body["devices"]}
@@ -252,7 +252,7 @@ class TestListDevices:
         )
         hass.states.async_set(entity.entity_id, "on")
 
-        listed, _, _ = await _call("list_devices", {}, _token(), hass)
+        listed, _, _ = await _call("list_devices", {}, _access_key(), hass)
         rows = {row["device_id"]: row for row in _result_json(listed)["devices"]}
         assert rows[child.id]["area_id"] == reg_env["kitchen"].id
         assert rows[child.id]["via_device_id"] is None
@@ -260,11 +260,11 @@ class TestListDevices:
         assert rows[child.id]["manufacturer"] is None
 
         parent, _, _ = await _call(
-            "get_device", {"device_id": reg_env["hub"].id}, _token(), hass
+            "get_device", {"device_id": reg_env["hub"].id}, _access_key(), hass
         )
         assert _result_json(parent)["child_device_ids"] == [child.id]
 
-        areas, _, _ = await _call("list_areas", {}, _token(), hass)
+        areas, _, _ = await _call("list_areas", {}, _access_key(), hass)
         kitchen = next(
             row
             for row in _result_json(areas)["areas"]
@@ -277,16 +277,16 @@ class TestListDevices:
         dr.async_get(hass).async_update_device(
             device.id, disabled_by=dr.DeviceEntryDisabler.USER
         )
-        token = _token(permissions=PermissionTree(
+        access_key = _access_key(permissions=PermissionTree(
             devices={device.id: PermissionNode(state="YELLOW")}
         ))
 
-        enabled, _, _ = await _call("list_devices", {}, token, hass)
+        enabled, _, _ = await _call("list_devices", {}, access_key, hass)
         disabled, _, _ = await _call(
-            "list_devices", {"registry_state": "disabled"}, token, hass
+            "list_devices", {"registry_state": "disabled"}, access_key, hass
         )
         all_devices, _, _ = await _call(
-            "list_devices", {"registry_state": "all"}, token, hass
+            "list_devices", {"registry_state": "all"}, access_key, hass
         )
         assert _result_json(enabled)["devices"] == []
         assert [row["device_id"] for row in _result_json(disabled)["devices"]] == [
@@ -298,7 +298,7 @@ class TestListDevices:
 
     async def test_invalid_registry_state_is_refused(self, hass, reg_env):
         content, outcome, _ = await _call(
-            "list_devices", {"registry_state": "orphaned"}, _token(), hass
+            "list_devices", {"registry_state": "orphaned"}, _access_key(), hass
         )
         assert outcome == "invalid_request"
         assert "enabled, disabled, all" in content["content"][0]["text"]
@@ -309,10 +309,10 @@ class TestListDevices:
             identifiers={("test_integration", "entityless")},
             name="Entityless",
         )
-        token = _token(permissions=PermissionTree(
+        access_key = _access_key(permissions=PermissionTree(
             devices={device.id: PermissionNode(state="YELLOW")}
         ))
-        content, outcome, _ = await _call("list_devices", {}, token, hass)
+        content, outcome, _ = await _call("list_devices", {}, access_key, hass)
         assert outcome == "allowed"
         row = _result_json(content)["devices"][0]
         assert row["device_id"] == device.id
@@ -325,11 +325,11 @@ class TestListDevices:
         er.async_get(hass).async_update_entity(
             entity_id, disabled_by=er.RegistryEntryDisabler.DEVICE
         )
-        token = _token(permissions=PermissionTree(
+        access_key = _access_key(permissions=PermissionTree(
             entities={entity_id: PermissionNode(state="GREEN")}
         ))
         content, _, _ = await _call(
-            "list_devices", {"registry_state": "all"}, token, hass
+            "list_devices", {"registry_state": "all"}, access_key, hass
         )
         assert _result_json(content)["devices"] == []
 
@@ -341,11 +341,11 @@ class TestListDevices:
         dr.async_get(hass).async_update_device(
             device.id, disabled_by=dr.DeviceEntryDisabler.USER
         )
-        token = _token(permissions=PermissionTree(
+        access_key = _access_key(permissions=PermissionTree(
             entities={entity_id: PermissionNode(state="GREEN")}
         ))
         content, _, _ = await _call(
-            "list_devices", {"registry_state": "all"}, token, hass
+            "list_devices", {"registry_state": "all"}, access_key, hass
         )
         assert _result_json(content)["devices"] == []
 
@@ -357,11 +357,11 @@ class TestListDevices:
         er.async_get(hass).async_update_entity(
             entity_id, disabled_by=er.RegistryEntryDisabler.DEVICE
         )
-        token = _token(permissions=PermissionTree(
+        access_key = _access_key(permissions=PermissionTree(
             domains={"sensor": PermissionNode(state="YELLOW")}
         ))
         content, _, _ = await _call(
-            "list_devices", {"registry_state": "all"}, token, hass
+            "list_devices", {"registry_state": "all"}, access_key, hass
         )
         assert [row["device_id"] for row in _result_json(content)["devices"]] == [
             device.id
@@ -369,15 +369,15 @@ class TestListDevices:
 
     async def test_device_red_overrides_attached_domain_grant(self, hass, reg_env):
         device = reg_env["hub"]
-        token = _token(permissions=PermissionTree(
+        access_key = _access_key(permissions=PermissionTree(
             domains={"light": PermissionNode(state="GREEN")},
             devices={device.id: PermissionNode(state="RED")},
         ))
-        content, _, _ = await _call("list_devices", {}, token, hass)
+        content, _, _ = await _call("list_devices", {}, access_key, hass)
         assert _result_json(content)["devices"] == []
 
     async def test_assist_exposure_does_not_leak_other_devices(self, hass, reg_env):
-        token = _token(
+        access_key = _access_key(
             permissions=PermissionTree(),
             pass_through=True,
             use_assist_exposure=True,
@@ -390,7 +390,7 @@ class TestListDevices:
             "custom_components.phoenix_mcp.tools.discovery.assist_expose_check",
             return_value=exposed,
         ):
-            content, _, _ = await _call("list_devices", {}, token, hass)
+            content, _, _ = await _call("list_devices", {}, access_key, hass)
         assert [row["device_id"] for row in _result_json(content)["devices"]] == [
             reg_env["hub"].id
         ]
@@ -403,18 +403,18 @@ class TestListDevices:
             identifiers={("phoenix_mcp", "internal")},
             name="Internal",
         )
-        token = _token(permissions=PermissionTree(
+        access_key = _access_key(permissions=PermissionTree(
             devices={device.id: PermissionNode(state="GREEN")}
         ))
         content, _, _ = await _call(
-            "list_devices", {"registry_state": "all"}, token, hass
+            "list_devices", {"registry_state": "all"}, access_key, hass
         )
         assert _result_json(content)["devices"] == []
 
 
 class TestGetDevice:
     async def test_accessible_device(self, hass, reg_env):
-        content, outcome, _ = await _call("get_device", {"device_id": reg_env["hub"].id}, _token(), hass)
+        content, outcome, _ = await _call("get_device", {"device_id": reg_env["hub"].id}, _access_key(), hass)
         assert outcome == "allowed"
         body = _result_json(content)
         assert body["entities"] == [reg_env["light_kitchen"]]
@@ -424,7 +424,7 @@ class TestGetDevice:
         self, hass, reg_env
     ):
         device = reg_env["hub"]
-        token = _token(permissions=PermissionTree(
+        access_key = _access_key(permissions=PermissionTree(
             devices={device.id: PermissionNode(state="GREEN")},
             entities={
                 reg_env["light_kitchen"]: PermissionNode(state="RED"),
@@ -432,7 +432,7 @@ class TestGetDevice:
             },
         ))
         content, outcome, _ = await _call(
-            "get_device", {"device_id": device.id}, token, hass
+            "get_device", {"device_id": device.id}, access_key, hass
         )
         assert outcome == "allowed"
         body = _result_json(content)
@@ -449,19 +449,19 @@ class TestGetDevice:
         dr.async_get(hass).async_update_device(child.id, via_device_id=parent.id)
 
         child_only, _, _ = await _call(
-            "get_device", {"device_id": child.id}, _token(), hass
+            "get_device", {"device_id": child.id}, _access_key(), hass
         )
         assert _result_json(child_only)["via_device_id"] is None
 
-        token = _token(permissions=PermissionTree(devices={
+        access_key = _access_key(permissions=PermissionTree(devices={
             parent.id: PermissionNode(state="YELLOW"),
             child.id: PermissionNode(state="YELLOW"),
         }))
         child_result, _, _ = await _call(
-            "get_device", {"device_id": child.id}, token, hass
+            "get_device", {"device_id": child.id}, access_key, hass
         )
         parent_result, _, _ = await _call(
-            "get_device", {"device_id": parent.id}, token, hass
+            "get_device", {"device_id": parent.id}, access_key, hass
         )
         assert _result_json(child_result)["via_device_id"] == parent.id
         assert _result_json(parent_result)["child_device_ids"] == [child.id]
@@ -474,7 +474,7 @@ class TestGetDevice:
             serial_number="SERIAL-SECRET-123",
         )
         content, outcome, _ = await _call(
-            "get_device", {"device_id": device.id}, _token(), hass
+            "get_device", {"device_id": device.id}, _access_key(), hass
         )
         assert outcome == "allowed"
         body = _result_json(content)
@@ -494,37 +494,37 @@ class TestGetDevice:
         }]
 
     async def test_missing_device_not_found(self, hass, reg_env):
-        content, outcome, _ = await _call("get_device", {"device_id": "does_not_exist"}, _token(), hass)
+        content, outcome, _ = await _call("get_device", {"device_id": "does_not_exist"}, _access_key(), hass)
         assert outcome == "not_found"
         assert content.get("isError") is True
 
     async def test_inaccessible_device_identical_not_found(self, hass, reg_env):
         # Sensor Hub exists but has only a denied entity: must look identical to a
         # nonexistent device (no existence oracle).
-        missing, missing_outcome, _ = await _call("get_device", {"device_id": "does_not_exist"}, _token(), hass)
-        hidden, hidden_outcome, _ = await _call("get_device", {"device_id": reg_env["sensor_hub"].id}, _token(), hass)
+        missing, missing_outcome, _ = await _call("get_device", {"device_id": "does_not_exist"}, _access_key(), hass)
+        hidden, hidden_outcome, _ = await _call("get_device", {"device_id": reg_env["sensor_hub"].id}, _access_key(), hass)
         assert hidden_outcome == missing_outcome == "not_found"
         assert hidden == missing
 
     async def test_missing_arg(self, hass, reg_env):
-        content, outcome, _ = await _call("get_device", {}, _token(), hass)
+        content, outcome, _ = await _call("get_device", {}, _access_key(), hass)
         assert outcome == "invalid_request"
 
 
 class TestSearchEntities:
     async def test_deny_without_cap(self, hass, reg_env):
-        content, outcome, _ = await _call("search_entities", {}, _token(cap_search="deny"), hass)
+        content, outcome, _ = await _call("search_entities", {}, _access_key(cap_search="deny"), hass)
         assert outcome == "denied"
         assert content.get("isError") is True
 
     async def test_query_matches_name(self, hass, reg_env):
-        content, outcome, _ = await _call("search_entities", {"query": "kitchen"}, _token(), hass)
+        content, outcome, _ = await _call("search_entities", {"query": "kitchen"}, _access_key(), hass)
         assert outcome == "allowed"
         ids = [e["entity_id"] for e in _result_json(content)["entities"]]
         assert ids == ["light.kitchen"]
 
     async def test_domain_filter(self, hass, reg_env):
-        content, _, _ = await _call("search_entities", {"domain": "light"}, _token(), hass)
+        content, _, _ = await _call("search_entities", {"domain": "light"}, _access_key(), hass)
         ids = {e["entity_id"] for e in _result_json(content)["entities"]}
         assert ids == {"light.kitchen", "light.bedroom"}
 
@@ -535,17 +535,17 @@ class TestSearchEntities:
         into one string; treating it as one literal (nonexistent) domain would
         match nothing.
         """
-        content, _, _ = await _call("search_entities", {"domain": "light,zone"}, _token(), hass)
+        content, _, _ = await _call("search_entities", {"domain": "light,zone"}, _access_key(), hass)
         ids = {e["entity_id"] for e in _result_json(content)["entities"]}
         assert ids == {"light.kitchen", "light.bedroom", "zone.home"}
 
     async def test_denied_domain_returns_empty(self, hass, reg_env):
         # sensor.garage is not granted, so a sensor search returns nothing.
-        content, _, _ = await _call("search_entities", {"domain": "sensor"}, _token(), hass)
+        content, _, _ = await _call("search_entities", {"domain": "sensor"}, _access_key(), hass)
         assert _result_json(content)["entities"] == []
 
     async def test_state_and_area_filter(self, hass, reg_env):
-        content, _, _ = await _call("search_entities", {"state": "on", "area": "Kitchen"}, _token(), hass)
+        content, _, _ = await _call("search_entities", {"state": "on", "area": "Kitchen"}, _access_key(), hass)
         ids = [e["entity_id"] for e in _result_json(content)["entities"]]
         assert ids == ["light.kitchen"]
 
@@ -556,27 +556,27 @@ class TestSearchEntities:
     async def test_device_class_filter_excludes_non_matching(self, hass, reg_env):
         hass.states.async_set("light.kitchen", "on",
                               {"friendly_name": "Kitchen Light", "device_class": "outlet"})
-        content, _, _ = await _call("search_entities", {"device_class": "outlet"}, _token(), hass)
+        content, _, _ = await _call("search_entities", {"device_class": "outlet"}, _access_key(), hass)
         ids = {e["entity_id"] for e in _result_json(content)["entities"]}
         # bedroom has no device_class, so the filter must drop it.
         assert ids == {"light.kitchen"}
 
     async def test_unavailable_filter_excludes_healthy_entities(self, hass, reg_env):
         hass.states.async_set("light.bedroom", "unavailable", {})
-        content, _, _ = await _call("search_entities", {"unavailable": True}, _token(), hass)
+        content, _, _ = await _call("search_entities", {"unavailable": True}, _access_key(), hass)
         ids = {e["entity_id"] for e in _result_json(content)["entities"]}
         assert ids == {"light.bedroom"}, "an 'on' light must not survive the unavailable filter"
 
     async def test_area_filter_excludes_entities_with_no_area(self, hass, reg_env):
         """zone.home has no area at all, so an area filter must drop it."""
-        content, _, _ = await _call("search_entities", {"area": "Kitchen"}, _token(), hass)
+        content, _, _ = await _call("search_entities", {"area": "Kitchen"}, _access_key(), hass)
         ids = {e["entity_id"] for e in _result_json(content)["entities"]}
         assert "zone.home" not in ids
         assert ids == {"light.kitchen"}
 
     async def test_area_filter_excludes_a_different_area(self, hass, reg_env):
         """light.bedroom has an area, just the wrong one: the other skip branch."""
-        content, _, _ = await _call("search_entities", {"area": "Bedroom"}, _token(), hass)
+        content, _, _ = await _call("search_entities", {"area": "Bedroom"}, _access_key(), hass)
         ids = {e["entity_id"] for e in _result_json(content)["entities"]}
         assert ids == {"light.bedroom"}
 
@@ -588,18 +588,18 @@ class TestSearchEntities:
         no real entity has) would silently zero every result.
         """
         content, _, _ = await _call(
-            "search_entities", {"domain": "light", "device_class": ""}, _token(), hass)
+            "search_entities", {"domain": "light", "device_class": ""}, _access_key(), hass)
         ids = {e["entity_id"] for e in _result_json(content)["entities"]}
         assert ids == {"light.kitchen", "light.bedroom"}
 
     async def test_empty_string_state_is_not_a_filter(self, hass, reg_env):
         content, _, _ = await _call(
-            "search_entities", {"domain": "light", "state": ""}, _token(), hass)
+            "search_entities", {"domain": "light", "state": ""}, _access_key(), hass)
         ids = {e["entity_id"] for e in _result_json(content)["entities"]}
         assert ids == {"light.kitchen", "light.bedroom"}
 
     async def test_empty_string_domain_is_not_a_filter(self, hass, reg_env):
-        content, _, _ = await _call("search_entities", {"domain": ""}, _token(), hass)
+        content, _, _ = await _call("search_entities", {"domain": ""}, _access_key(), hass)
         ids = {e["entity_id"] for e in _result_json(content)["entities"]}
         assert ids == {"light.kitchen", "light.bedroom", "zone.home"}
 
@@ -611,14 +611,14 @@ class TestSearchEntities:
         from the string raises TypeError and fails every call with this argument.
         """
         content, outcome, _ = await _call(
-            "search_entities", {"query": "kitchen", "stale_hours": 999999}, _token(), hass)
+            "search_entities", {"query": "kitchen", "stale_hours": 999999}, _access_key(), hass)
         assert outcome == "allowed"
         # A state just set by the fixture is nowhere near 999999 hours stale.
         assert _result_json(content)["entities"] == []
 
     async def test_stale_hours_zero_includes_everything(self, hass, reg_env):
         content, outcome, _ = await _call(
-            "search_entities", {"query": "kitchen", "stale_hours": 0}, _token(), hass)
+            "search_entities", {"query": "kitchen", "stale_hours": 0}, _access_key(), hass)
         assert outcome == "allowed"
         ids = [e["entity_id"] for e in _result_json(content)["entities"]]
         assert ids == ["light.kitchen"]
@@ -629,7 +629,7 @@ class TestSearchEntities:
         data.store.get_settings.return_value = SimpleNamespace(mesa_mode="advisory")
         with patch("custom_components.phoenix_mcp.tools.discovery.entity_control_mode", return_value="read_only"):
             content, outcome, _ = await _call_tool(
-                "search_entities", {"query": "kitchen"}, _token(), hass, data)
+                "search_entities", {"query": "kitchen"}, _access_key(), hass, data)
         assert outcome == "allowed"
         row = _result_json(content)["entities"][0]
         assert row["control_mode"] == "read_only"
@@ -640,7 +640,7 @@ class TestSearchEntities:
         data.store.get_settings.return_value = SimpleNamespace(mesa_mode="advisory")
         with patch("custom_components.phoenix_mcp.tools.discovery.entity_control_mode", return_value="autonomous"):
             content, _, _ = await _call_tool(
-                "search_entities", {"query": "kitchen"}, _token(), hass, data)
+                "search_entities", {"query": "kitchen"}, _access_key(), hass, data)
         assert "control_mode" not in _result_json(content)["entities"][0]
 
     async def test_entity_category_annotated(self, hass, reg_env):
@@ -655,20 +655,20 @@ class TestSearchEntities:
             entity_category=EntityCategory.CONFIG,
         )
         hass.states.async_set(diag.entity_id, "off", {"friendly_name": "Calibration"})
-        content, outcome, _ = await _call("search_entities", {"query": "calibration"}, _token(), hass)
+        content, outcome, _ = await _call("search_entities", {"query": "calibration"}, _access_key(), hass)
         assert outcome == "allowed"
         row = _result_json(content)["entities"][0]
         assert row["entity_id"] == diag.entity_id
         assert row["entity_category"] == "config"
 
     async def test_entity_category_omitted_for_primary(self, hass, reg_env):
-        content, _, _ = await _call("search_entities", {"query": "kitchen"}, _token(), hass)
+        content, _, _ = await _call("search_entities", {"query": "kitchen"}, _access_key(), hass)
         assert "entity_category" not in _result_json(content)["entities"][0]
 
     async def test_typo_falls_back_to_fuzzy(self, hass, reg_env):
         # A misspelled query matches nothing exactly, so the fuzzy fallback runs
         # and surfaces the closest entity, flagged as approximate.
-        content, outcome, _ = await _call("search_entities", {"query": "kitchne"}, _token(), hass)
+        content, outcome, _ = await _call("search_entities", {"query": "kitchne"}, _access_key(), hass)
         assert outcome == "allowed"
         body = _result_json(content)
         assert body["fuzzy_fallback"] is True
@@ -676,14 +676,14 @@ class TestSearchEntities:
 
     async def test_exact_match_does_not_flag_fuzzy(self, hass, reg_env):
         # The common path (exact match found) is untouched: no fuzzy flag at all.
-        content, _, _ = await _call("search_entities", {"query": "kitchen"}, _token(), hass)
+        content, _, _ = await _call("search_entities", {"query": "kitchen"}, _access_key(), hass)
         body = _result_json(content)
         assert "fuzzy_fallback" not in body
         assert [e["entity_id"] for e in body["entities"]] == ["light.kitchen"]
 
     async def test_far_off_query_still_empty(self, hass, reg_env):
         # A query nowhere near any entity stays empty even through the fallback.
-        content, _, _ = await _call("search_entities", {"query": "xyzzyqwertz"}, _token(), hass)
+        content, _, _ = await _call("search_entities", {"query": "xyzzyqwertz"}, _access_key(), hass)
         body = _result_json(content)
         assert body["entities"] == []
         assert "fuzzy_fallback" not in body
@@ -697,7 +697,7 @@ class TestSearchEntities:
         ent_reg.async_update_entity(
             entry.entity_id, disabled_by=er.RegistryEntryDisabler.USER
         )
-        content, _, _ = await _call("search_entities", {}, _token(), hass)
+        content, _, _ = await _call("search_entities", {}, _access_key(), hass)
         ids = {row["entity_id"] for row in _result_json(content)["entities"]}
         assert entry.entity_id not in ids
 
@@ -712,7 +712,7 @@ class TestSearchEntities:
         )
         content, outcome, _ = await _call(
             "search_entities", {"registry_state": "disabled", "query": "disabled search"},
-            _token(), hass,
+            _access_key(), hass,
         )
         assert outcome == "allowed"
         rows = _result_json(content)["entities"]
@@ -732,9 +732,9 @@ class TestSearchEntities:
         ent_reg.async_update_entity(
             entry.entity_id, disabled_by=er.RegistryEntryDisabler.USER
         )
-        enabled, _, _ = await _call("search_entities", {}, _token(), hass)
+        enabled, _, _ = await _call("search_entities", {}, _access_key(), hass)
         disabled, _, _ = await _call(
-            "search_entities", {"registry_state": "disabled"}, _token(), hass
+            "search_entities", {"registry_state": "disabled"}, _access_key(), hass
         )
         assert entry.entity_id not in {
             row["entity_id"] for row in _result_json(enabled)["entities"]
@@ -757,11 +757,11 @@ class TestSearchEntities:
         ent_reg.async_update_entity(
             entry.entity_id, disabled_by=er.RegistryEntryDisabler.USER
         )
-        token = _token(permissions=PermissionTree(devices={
+        access_key = _access_key(permissions=PermissionTree(devices={
             reg_env["sensor_hub"].id: PermissionNode(state="YELLOW")
         }))
         content, _, _ = await _call(
-            "search_entities", {"registry_state": "disabled"}, token, hass
+            "search_entities", {"registry_state": "disabled"}, access_key, hass
         )
         assert [row["entity_id"] for row in _result_json(content)["entities"]] == [
             entry.entity_id
@@ -776,11 +776,11 @@ class TestSearchEntities:
         ent_reg.async_update_entity(
             entry.entity_id, disabled_by=er.RegistryEntryDisabler.USER
         )
-        token = _token(permissions=PermissionTree(entities={
+        access_key = _access_key(permissions=PermissionTree(entities={
             entry.entity_id: PermissionNode(state="GREEN")
         }))
         content, _, _ = await _call(
-            "search_entities", {"registry_state": "disabled"}, token, hass
+            "search_entities", {"registry_state": "disabled"}, access_key, hass
         )
         assert _result_json(content)["entities"] == []
 
@@ -792,7 +792,7 @@ class TestSearchEntities:
         )
         content, _, _ = await _call(
             "search_entities", {"registry_state": "all", "query": "missing state"},
-            _token(), hass,
+            _access_key(), hass,
         )
         row = _result_json(content)["entities"][0]
         assert row["entity_id"] == entry.entity_id
@@ -801,7 +801,7 @@ class TestSearchEntities:
 
     async def test_invalid_registry_state_is_rejected(self, hass, reg_env):
         _, outcome, _ = await _call(
-            "search_entities", {"registry_state": "everything"}, _token(), hass
+            "search_entities", {"registry_state": "everything"}, _access_key(), hass
         )
         assert outcome == "invalid_request"
 
@@ -824,7 +824,7 @@ class TestDescribeRegistryOnlyEntity:
             categories={"scope": "safe-category"},
         )
         content, outcome, _ = await _call(
-            "describe_entity", {"entity_id": entry.entity_id}, _token(), hass
+            "describe_entity", {"entity_id": entry.entity_id}, _access_key(), hass
         )
         assert outcome == "allowed"
         body = _result_json(content)
@@ -856,22 +856,22 @@ class TestDescribeRegistryOnlyEntity:
         ent_reg.async_update_entity(
             entry.entity_id, disabled_by=er.RegistryEntryDisabler.USER
         )
-        token = _token(permissions=PermissionTree(entities={
+        access_key = _access_key(permissions=PermissionTree(entities={
             entry.entity_id: PermissionNode(state="GREEN")
         }))
         _, outcome, _ = await _call(
-            "describe_entity", {"entity_id": entry.entity_id}, token, hass
+            "describe_entity", {"entity_id": entry.entity_id}, access_key, hass
         )
         assert outcome == "not_found"
 
 
 class TestGetOverview:
     async def test_deny_without_cap(self, hass, reg_env):
-        _, outcome, _ = await _call("get_overview", {}, _token(cap_search="deny"), hass)
+        _, outcome, _ = await _call("get_overview", {}, _access_key(cap_search="deny"), hass)
         assert outcome == "denied"
 
     async def test_counts(self, hass, reg_env):
-        content, outcome, _ = await _call("get_overview", {}, _token(), hass)
+        content, outcome, _ = await _call("get_overview", {}, _access_key(), hass)
         assert outcome == "allowed"
         body = _result_json(content)
         assert body["total_accessible_entities"] == 3  # 2 lights + zone.home
@@ -884,7 +884,7 @@ class TestGetOverview:
         data = MagicMock()
         data.mesa = MagicMock()
         data.store.get_settings.return_value = SimpleNamespace(mesa_mode="enforced")
-        content, _, _ = await _call_tool("get_overview", {}, _token(), hass, data)
+        content, _, _ = await _call_tool("get_overview", {}, _access_key(), hass, data)
         assert _result_json(content)["mesa_mode"] == "enforced"
 
     @staticmethod
@@ -908,7 +908,7 @@ class TestGetOverview:
     async def test_mesa_restrictions_present_with_cap(self, hass, reg_env):
         data = await self._data_with_authored(hass, "enforced")
         content, _, _ = await _call_tool(
-            "get_overview", {}, _token(cap_config_read="allow"), hass, data)
+            "get_overview", {}, _access_key(cap_config_read="allow"), hass, data)
         body = _result_json(content)
         assert body["mesa_mode"] == "enforced"
         r = body["mesa_restrictions"]
@@ -917,7 +917,7 @@ class TestGetOverview:
 
     async def test_mesa_restrictions_omitted_without_cap(self, hass, reg_env):
         data = await self._data_with_authored(hass, "enforced")
-        content, _, _ = await _call_tool("get_overview", {}, _token(), hass, data)
+        content, _, _ = await _call_tool("get_overview", {}, _access_key(), hass, data)
         body = _result_json(content)
         assert body["mesa_mode"] == "enforced"
         assert "mesa_restrictions" not in body  # cap_config_read defaults to deny
@@ -925,17 +925,17 @@ class TestGetOverview:
     async def test_mesa_restrictions_omitted_when_off(self, hass, reg_env):
         data = await self._data_with_authored(hass, "off")
         content, _, _ = await _call_tool(
-            "get_overview", {}, _token(cap_config_read="allow"), hass, data)
+            "get_overview", {}, _access_key(cap_config_read="allow"), hass, data)
         assert "mesa_restrictions" not in _result_json(content)
 
 
 class TestDescribeArea:
     async def test_deny_without_cap(self, hass, reg_env):
-        _, outcome, _ = await _call("describe_area", {"area": "Kitchen"}, _token(cap_search="deny"), hass)
+        _, outcome, _ = await _call("describe_area", {"area": "Kitchen"}, _access_key(cap_search="deny"), hass)
         assert outcome == "denied"
 
     async def test_describe_by_name(self, hass, reg_env):
-        content, outcome, _ = await _call("describe_area", {"area": "kitchen"}, _token(), hass)
+        content, outcome, _ = await _call("describe_area", {"area": "kitchen"}, _access_key(), hass)
         assert outcome == "allowed"
         body = _result_json(content)
         assert body["name"] == "Kitchen"
@@ -945,13 +945,13 @@ class TestDescribeArea:
 
     async def test_empty_area_identical_not_found(self, hass, reg_env):
         # Garage exists but all its entities are denied: identical to nonexistent.
-        missing, missing_outcome, _ = await _call("describe_area", {"area": "Nowhere"}, _token(), hass)
-        hidden, hidden_outcome, _ = await _call("describe_area", {"area": "Garage"}, _token(), hass)
+        missing, missing_outcome, _ = await _call("describe_area", {"area": "Nowhere"}, _access_key(), hass)
+        hidden, hidden_outcome, _ = await _call("describe_area", {"area": "Garage"}, _access_key(), hass)
         assert hidden_outcome == missing_outcome == "not_found"
         assert hidden == missing
 
     async def test_missing_arg(self, hass, reg_env):
-        _, outcome, _ = await _call("describe_area", {}, _token(), hass)
+        _, outcome, _ = await _call("describe_area", {}, _access_key(), hass)
         assert outcome == "invalid_request"
 
 
@@ -961,33 +961,33 @@ def _data_no_mesa():
     return data
 
 
-def _lock_token(cap_physical_control: str = "deny") -> TokenRecord:
+def _lock_token(cap_physical_control: str = "deny") -> AccessKeyRecord:
     tree = PermissionTree(domains={"lock": PermissionNode(state="GREEN")})
-    return _token(permissions=tree, cap_physical_control=cap_physical_control)
+    return _access_key(permissions=tree, cap_physical_control=cap_physical_control)
 
 
 class TestFindAvailableActions:
     async def test_deny_without_cap(self, hass, reg_env):
         content, outcome, _ = await _call_tool(
             "find_available_actions", {"entity_id": reg_env["light_kitchen"]},
-            _token(cap_search="deny"), hass, _data_no_mesa(),
+            _access_key(cap_search="deny"), hass, _data_no_mesa(),
         )
         assert outcome == "denied"
 
     async def test_inaccessible_identical_not_found(self, hass, reg_env):
-        token = _token()
+        access_key = _access_key()
         missing, missing_o, _ = await _call_tool(
-            "find_available_actions", {"entity_id": "light.ghost"}, token, hass, _data_no_mesa())
+            "find_available_actions", {"entity_id": "light.ghost"}, access_key, hass, _data_no_mesa())
         # sensor.garage exists but is denied to this token.
         hidden, hidden_o, _ = await _call_tool(
-            "find_available_actions", {"entity_id": "sensor.garage"}, token, hass, _data_no_mesa())
+            "find_available_actions", {"entity_id": "sensor.garage"}, access_key, hass, _data_no_mesa())
         assert hidden_o == missing_o == "not_found"
         assert hidden == missing
 
     async def test_writable_service_available(self, hass, reg_env):
         content, outcome, _ = await _call_tool(
             "find_available_actions", {"entity_id": reg_env["light_kitchen"]},
-            _token(), hass, _data_no_mesa())
+            _access_key(), hass, _data_no_mesa())
         assert outcome == "allowed"
         body = _result_json(content)
         assert body["writable"] is True
@@ -1013,7 +1013,7 @@ class TestFindAvailableActions:
 
     async def test_missing_arg(self, hass, reg_env):
         _, outcome, _ = await _call_tool(
-            "find_available_actions", {}, _token(), hass, _data_no_mesa())
+            "find_available_actions", {}, _access_key(), hass, _data_no_mesa())
         assert outcome == "invalid_request"
 
     async def test_includes_semantic_moments_for_any_read_entity(self, hass, reg_env, monkeypatch):
@@ -1028,7 +1028,7 @@ class TestFindAvailableActions:
         )
         content, outcome, _ = await _call_tool(
             "find_available_actions", {"entity_id": reg_env["light_kitchen"]},
-            _token(), hass, _data_no_mesa())
+            _access_key(), hass, _data_no_mesa())
         assert outcome == "allowed"
         body = _result_json(content)
         assert body["semantic_moments"][0]["id"] == "light.turned_on"
@@ -1043,7 +1043,7 @@ class TestFindAvailableActions:
         )
         content, _, _ = await _call_tool(
             "find_available_actions", {"entity_id": reg_env["light_kitchen"]},
-            _token(), hass, _data_no_mesa())
+            _access_key(), hass, _data_no_mesa())
         assert "semantic_moments" not in _result_json(content)
 
 
@@ -1105,10 +1105,10 @@ class TestEntityAliases:
     def _aliases(self, hass, entity_id):
         return list(er.async_get(hass).async_get(entity_id).aliases)
 
-    async def _set(self, hass, entity_id, token=None, **args):
+    async def _set(self, hass, entity_id, access_key=None, **args):
         return await _call(
             "set_entity", {"entity_id": entity_id, "changes": args},
-            token or _token(cap_registry_write="allow"), hass,
+            access_key or _access_key(cap_registry_write="allow"), hass,
         )
 
     async def test_ha_seeds_the_sentinel_on_a_real_entity(self, hass, reg_env):
@@ -1270,7 +1270,7 @@ class TestEntityAliases:
         try:
             _, outcome, _ = await _execute_set_entity(
                 {"entity_id": eid, "aliases": [None, "snapshot alias"]},
-                _token(cap_registry_write="allow"), hass, MagicMock(),
+                _access_key(cap_registry_write="allow"), hass, MagicMock(),
             )
         finally:
             _restore_ctx.reset(marker)
@@ -1284,7 +1284,7 @@ class TestEntityAliases:
         await self._set(hass, eid, add_aliases=["lounge lamp"])
         content, outcome, _ = await _call(
             "describe_entity", {"entity_id": eid},
-            _token(cap_registry_write="allow"), hass)
+            _access_key(cap_registry_write="allow"), hass)
         assert outcome == "allowed"
         aliases = json.loads(content["content"][0]["text"])["aliases"]
         assert "lounge lamp" in aliases
@@ -1300,9 +1300,9 @@ class TestEntityAliases:
         from custom_components.phoenix_mcp.mcp_view import _build_diff_set_entity
 
         eid = reg_env["light_kitchen"]
-        token = _token(cap_registry_write="allow")
+        access_key = _access_key(cap_registry_write="allow")
         diff = await _build_diff_set_entity(
-            {"entity_id": eid, "add_aliases": ["lounge lamp"]}, token, hass)
+            {"entity_id": eid, "add_aliases": ["lounge lamp"]}, access_key, hass)
         preview = diff["preview"]["aliases"]
         own_name = er.async_get_full_entity_name(
             hass, er.async_get(hass).async_get(eid))
@@ -1334,7 +1334,7 @@ class TestSearchMembership:
         hass.states.async_set("light.aggregate", "on", attrs)
         content, outcome, _ = await _call("search_entities", {
             "query": "light.aggregate", "include_membership": True,
-        }, _token(), hass)
+        }, _access_key(), hass)
         assert outcome == "allowed"
         row = _result_json(content)["entities"][0]
         assert {k: row[k] for k in ("is_group", "member_entity_ids") if k in row} == expected
@@ -1342,7 +1342,7 @@ class TestSearchMembership:
     @pytest.mark.parametrize("collection", [list, tuple, set, frozenset])
     async def test_collection_types(self, hass, reg_env, collection):
         hass.states.async_set("light.aggregate", "on", {"entity_id": collection(["light.kitchen"])})
-        content, _, _ = await _call("search_entities", {"query": "aggregate", "include_membership": True}, _token(), hass)
+        content, _, _ = await _call("search_entities", {"query": "aggregate", "include_membership": True}, _access_key(), hass)
         assert _result_json(content)["entities"][0]["member_entity_ids"] == ["light.kitchen"]
 
     @pytest.mark.parametrize("query", ["light.kitchen", "kitchen", "kitchne"])
@@ -1357,22 +1357,22 @@ class TestSearchMembership:
         content, _, _ = await _call("search_entities", {
             "query": query, "area": "Kitchen", "state": "on", "domain": "light",
             "limit": 1, "include_membership": True,
-        }, _token(), hass)
+        }, _access_key(), hass)
         row = _result_json(content)["entities"][0]
         assert row["member_entity_ids"] == ["light.bedroom", "light.kitchen"]
 
     async def test_default_does_not_compute_metadata(self, hass, reg_env):
         with patch("custom_components.phoenix_mcp.tools.discovery._search_membership", side_effect=AssertionError):
             for args in ({}, {"include_membership": False}):
-                content, _, _ = await _call("search_entities", args, _token(), hass)
+                content, _, _ = await _call("search_entities", args, _access_key(), hass)
                 assert all("is_group" not in row and "member_entity_ids" not in row
                            for row in _result_json(content)["entities"])
 
     @pytest.mark.parametrize("value", [None, 1, 0, "true", [], {}])
     async def test_argument_validation_and_capability_precedence(self, hass, reg_env, value):
         args = {"include_membership": value}
-        assert (await _call("search_entities", args, _token(), hass))[1] == "invalid_request"
-        assert (await _call("search_entities", args, _token(cap_search="deny"), hass))[1] == "denied"
+        assert (await _call("search_entities", args, _access_key(), hass))[1] == "invalid_request"
+        assert (await _call("search_entities", args, _access_key(cap_search="deny"), hass))[1] == "denied"
 
     async def test_registry_only_parent_and_member(self, hass, reg_env):
         registry = er.async_get(hass)
@@ -1380,24 +1380,24 @@ class TestSearchMembership:
                                              suggested_object_id="disabled_member")
         registry.async_update_entity(entry.entity_id, disabled_by=er.RegistryEntryDisabler.USER)
         hass.states.async_set("light.kitchen", "on", {"entity_id": [entry.entity_id]})
-        content, _, _ = await _call("search_entities", {"registry_state": "all", "include_membership": True}, _token(), hass)
+        content, _, _ = await _call("search_entities", {"registry_state": "all", "include_membership": True}, _access_key(), hass)
         rows = {row["entity_id"]: row for row in _result_json(content)["entities"]}
         assert rows[entry.entity_id]["is_group"] is None
         assert "member_entity_ids" not in rows[entry.entity_id]
         assert rows["light.kitchen"]["member_entity_ids"] == [entry.entity_id]
-        token = _token(permissions=PermissionTree(entities={
+        access_key = _access_key(permissions=PermissionTree(entities={
             "light.kitchen": PermissionNode(state="YELLOW"), entry.entity_id: PermissionNode(state="GREEN"),
         }))
-        content, _, _ = await _call("search_entities", {"include_membership": True}, token, hass)
+        content, _, _ = await _call("search_entities", {"include_membership": True}, access_key, hass)
         assert _result_json(content)["entities"][0]["member_entity_ids"] == []
 
     async def test_red_ancestor(self, hass, reg_env):
         hass.states.async_set("light.kitchen", "on", {"entity_id": ["sensor.garage"]})
-        token = _token(permissions=PermissionTree(
+        access_key = _access_key(permissions=PermissionTree(
             domains={"light": PermissionNode(state="GREEN"), "sensor": PermissionNode(state="RED")},
             entities={"sensor.garage": PermissionNode(state="GREEN")},
         ))
-        content, _, _ = await _call("search_entities", {"query": "kitchen", "include_membership": True}, token, hass)
+        content, _, _ = await _call("search_entities", {"query": "kitchen", "include_membership": True}, access_key, hass)
         assert _result_json(content)["entities"][0]["member_entity_ids"] == []
 
     @pytest.mark.parametrize("exposure", [False, True])
@@ -1406,7 +1406,7 @@ class TestSearchMembership:
         with patch("homeassistant.components.homeassistant.exposed_entities.async_should_expose",
                    side_effect=lambda hass, assistant, eid: eid != "sensor.garage"):
             content, _, _ = await _call("search_entities", {"query": "kitchen", "include_membership": True},
-                                        _token(pass_through=True, use_assist_exposure=exposure), hass)
+                                        _access_key(pass_through=True, use_assist_exposure=exposure), hass)
         assert _result_json(content)["entities"][0]["member_entity_ids"] == (
             ["light.bedroom"] if exposure else ["light.bedroom", "sensor.garage"])
 
@@ -1415,27 +1415,27 @@ class TestSearchMembership:
         from custom_components.phoenix_mcp.const import MAX_SEARCH_MEMBERS
 
         hass.states.async_set("light.aggregate", "on", {"entity_id": ["light.kitchen"] * (MAX_SEARCH_MEMBERS + 1)})
-        assert _search_membership("light.aggregate", _token(), hass, None, [4096]) == {"is_group": None}
+        assert _search_membership("light.aggregate", _access_key(), hass, None, [4096]) == {"is_group": None}
         hass.states.async_set("light.aggregate", "on", {"entity_id": ["light.kitchen", "light.bedroom"]})
-        assert _search_membership("light.aggregate", _token(), hass, None, [1]) == {"is_group": None}
+        assert _search_membership("light.aggregate", _access_key(), hass, None, [1]) == {"is_group": None}
         budget = [2]
-        assert _search_membership("light.aggregate", _token(), hass, None, budget)["is_group"] is True
+        assert _search_membership("light.aggregate", _access_key(), hass, None, budget)["is_group"] is True
         assert budget == [0]
-        assert _search_membership("light.aggregate", _token(), hass, None, budget) == {"is_group": None}
+        assert _search_membership("light.aggregate", _access_key(), hass, None, budget) == {"is_group": None}
 
     async def test_fuzzy_wait_rechecks_parent_and_members(self, hass, reg_env):
         from custom_components.phoenix_mcp.tools.discovery import _tool_search_entities
 
-        token = _token()
+        access_key = _access_key()
         hass.states.async_set("light.kitchen", "on", {"entity_id": ["light.bedroom"]})
 
         async def rank_after_change(func, matches, query):
-            token.permissions.entities["light.bedroom"] = PermissionNode(state="RED")
+            access_key.permissions.entities["light.bedroom"] = PermissionNode(state="RED")
             return func(matches, query)
 
         data = MagicMock(mesa=None)
         with patch.object(hass, "async_add_executor_job", side_effect=rank_after_change):
-            content, _, _ = await _tool_search_entities({"query": "kitchne", "include_membership": True}, token, hass, data)
+            content, _, _ = await _tool_search_entities({"query": "kitchne", "include_membership": True}, access_key, hass, data)
         assert _result_json(content)["entities"][0]["member_entity_ids"] == []
 
         async def rank_after_removal(func, matches, query):
@@ -1444,7 +1444,7 @@ class TestSearchMembership:
             return func(matches, query)
 
         with patch.object(hass, "async_add_executor_job", side_effect=rank_after_removal):
-            content, _, _ = await _tool_search_entities({"query": "kitchne", "include_membership": True}, token, hass, data)
+            content, _, _ = await _tool_search_entities({"query": "kitchne", "include_membership": True}, access_key, hass, data)
         assert _result_json(content)["entities"] == []
 
     @pytest.mark.parametrize("change", ["revoke", "policy", "kill_switch"])
@@ -1455,27 +1455,27 @@ class TestSearchMembership:
         )
         from custom_components.phoenix_mcp.tools.discovery import _tool_search_entities
 
-        token = _token()
+        access_key = _access_key()
         data = MagicMock(mesa=None, ready=True, shutting_down=False)
         data.store.get_settings.return_value.kill_switch = False
-        data.store.get_token_by_hash.return_value = token
+        data.store.get_access_key_by_hash.return_value = access_key
         hass.data[DOMAIN] = data
 
         async def rank_after_change(func, matches, query):
             if change == "revoke":
-                data.store.get_token_by_hash.return_value = None
+                data.store.get_access_key_by_hash.return_value = None
             elif change == "policy":
-                token.settings_version += 1
+                access_key.settings_version += 1
             else:
                 data.store.get_settings.return_value.kill_switch = True
             return func(matches, query)
 
-        authority = request_authority.set(RequestAuthority(hass, data, token.id, token.token_hash))
-        version = policy_version.set(token.settings_version)
+        authority = request_authority.set(RequestAuthority(hass, data, access_key.id, access_key.token_hash))
+        version = policy_version.set(access_key.settings_version)
         try:
             with patch.object(hass, "async_add_executor_job", side_effect=rank_after_change):
                 with pytest.raises(AuthorityChangedError):
-                    await _tool_search_entities({"query": "kitchne", "include_membership": True}, token, hass, data)
+                    await _tool_search_entities({"query": "kitchne", "include_membership": True}, access_key, hass, data)
         finally:
             policy_version.reset(version)
             request_authority.reset(authority)
@@ -1487,10 +1487,10 @@ class TestSearchMembership:
         hass.states.async_set("light.kitchen", "on", {"entity_id": ["light.bedroom"]})
         hass.states.async_set("light.bedroom", "off", {"entity_id": ["light.kitchen"]})
         with patch("custom_components.phoenix_mcp.tools.discovery.MAX_SEARCH_MEMBER_CHECKS", 1):
-            content, _, _ = await _call("search_entities", {"domain": "light", "include_membership": True}, _token(), hass)
+            content, _, _ = await _call("search_entities", {"domain": "light", "include_membership": True}, _access_key(), hass)
         rows = _result_json(content)["entities"]
         assert sum(row["is_group"] is True for row in rows) == 1
         assert sum(row["is_group"] is None for row in rows) == 1
         assert all("member_entity_ids" not in row for row in rows if row["is_group"] is None)
         hass.states.async_set("light.kitchen", "on", {"entity_id": ["light." + "x" * MAX_SEARCH_MEMBER_ID_LEN]})
-        assert _search_membership("light.kitchen", _token(), hass, None, [4096]) == {"is_group": None}
+        assert _search_membership("light.kitchen", _access_key(), hass, None, [4096]) == {"is_group": None}

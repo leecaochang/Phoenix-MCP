@@ -280,7 +280,7 @@ class TestVersionDetail:
 
 async def test_restore_audit_keeps_admin_actor_and_opaque_source_identity():
     from custom_components.phoenix_mcp.audit import AuditLog
-    from custom_components.phoenix_mcp.token_store import GlobalSettings
+    from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 
     data = _data()
     data.audit = AuditLog()

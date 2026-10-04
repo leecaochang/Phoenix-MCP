@@ -11,7 +11,7 @@ from custom_components.phoenix_mcp.const import DOMAIN, TOOL_ROUTING_SETTINGS
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.decision_history import pending_context_history
 from custom_components.phoenix_mcp.decision_provider import DecisionError, DecisionProvider
-from custom_components.phoenix_mcp.token_store import GlobalSettings
+from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 
 CATALOG = [{"name": name, "description": description, "inputSchema": {"type": "object"},
             "annotations": {"readOnlyHint": name != "call_service"}}
@@ -32,21 +32,21 @@ def history(calls=None, dialect="claude"):
 
 
 @pytest.fixture
-async def home(hass, token_store):
-    token, _ = await token_store.async_create_token("router", "test")
-    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+async def home(hass, access_key_store):
+    access_key, _ = await access_key_store.async_create_access_key("router", "test")
+    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
     store = agentcli.AgentCliStore(AsyncMock())
     account = await store.add("typesafe", {"api_key": "private-test-key", "model": "jev-latest"})
     hass.data['_phoenix_agentcli_store'] = store
-    await token_store.async_patch_settings(decision_provider_id=account, agentcli_tool_routing_mode="observe")
+    await access_key_store.async_patch_settings(decision_provider_id=account, agentcli_tool_routing_mode="observe")
     with patch.object(agentcli, 'build_mcp_tool_list', return_value=deepcopy(CATALOG)):
-        yield data, token, store, account
+        yield data, access_key, store, account
 
 
 async def review(hass, home, **overrides):
-    data, token, _, _ = home
-    turn = overrides.pop('turn', tool_routing.create_review_state(data, token, 'chat'))
+    data, access_key, _, _ = home
+    turn = overrides.pop('turn', tool_routing.create_review_state(data, access_key, 'chat'))
     args = dict(surface="chat", language="en", messages=history(), calls=deepcopy(CALLS),
                 system="Respect the user restrictions.", remaining_rounds=2)
     args.update(overrides)
@@ -95,13 +95,13 @@ async def test_unqualified_advice_sends_nothing(hass, home):
 
 @pytest.mark.parametrize('change', ['revoke', 'scope', 'kill', 'account', 'catalog', 'context'])
 async def test_wait_rechecks(hass, home, change):
-    data, token, store, account = home
+    data, access_key, store, account = home
     messages = history()
     async def choose(*args):
         if change == 'revoke':
-            await data.store.async_archive_token(token.id, revoked=True)
+            await data.store.async_archive_access_key(access_key.id, revoked=True)
         elif change == 'scope':
-            token.settings_version += 1
+            access_key.settings_version += 1
         elif change == 'kill':
             await data.store.async_patch_settings(kill_switch=True)
         elif change == 'account':
@@ -134,8 +134,8 @@ async def test_advisory_failure_preserves_planner(hass, home, error):
 
 async def test_turn_bounds_and_cancel(hass, home, monkeypatch):
     qualify(monkeypatch)
-    data, token, _, _ = home
-    turn = tool_routing.create_review_state(data, token, 'chat')
+    data, access_key, _, _ = home
+    turn = tool_routing.create_review_state(data, access_key, 'chat')
     with patch.object(DecisionProvider, 'select_tool', AsyncMock(return_value={'tool': 'get_state', 'model': 'test-model'})) as choose:
         for _ in range(3):
             await review(hass, home, turn=turn)
@@ -188,7 +188,7 @@ def test_settings_roundtrip_and_untrusted_values():
 @pytest.mark.parametrize('next_choice', ['fresh', 'original', 'provider_error'])
 async def test_loops_withhold_whole_batch_then_dispatch_fresh_arguments(hass, home, monkeypatch, surface, dialect, next_choice):
     qualify(monkeypatch)
-    data, token, _, _ = home
+    data, access_key, _, _ = home
     await data.store.async_patch_settings(**{TOOL_ROUTING_SETTINGS[surface]: 'advise'})
     provider = (agentcli.ClaudeProvider if dialect == 'claude' else agentcli.OpenAICompatProvider)(
         agentcli.ProviderConfig('claude' if dialect == 'claude' else 'chatgpt', 'model', 'https://unused'))
@@ -216,11 +216,11 @@ async def test_loops_withhold_whole_batch_then_dispatch_fresh_arguments(hass, ho
             patch.object(agentcli, '_agentcli_time_context', return_value=''), \
             patch('custom_components.phoenix_mcp.mcp_view._build_instructions', return_value='Respect restrictions.'):
         if surface == 'chat':
-            await agentcli.async_run_agent_turn(hass=hass, data=data, token=token, provider=provider, session=None,
+            await agentcli.async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider, session=None,
                 messages=history()[:1], options={}, client_ip='test', base_url='', emit=AsyncMock(), cancel=asyncio.Event(),
                 routing_language='en', max_iterations=3)
         else:
-            result = await agentcli._run_headless_turn(hass, data, token, provider, None, '', system='Respect restrictions.',
+            result = await agentcli._run_headless_turn(hass, data, access_key, provider, None, '', system='Respect restrictions.',
                 seed=history()[0]['content'], client_ip='test', max_iterations=3, routing_surface=surface, routing_language='en')
             if next_choice == 'provider_error':
                 assert result.outcome == agentcli.TURN_PROVIDER_ERROR
@@ -233,16 +233,16 @@ async def test_loops_withhold_whole_batch_then_dispatch_fresh_arguments(hass, ho
         assert dispatch.call_args.kwargs['arguments'] == {'hours': 12}
     assert 'Not executed' in json.dumps(rounds[1])
     assert 'first' in json.dumps(rounds[1]) and 'second' in json.dumps(rounds[1])
-    assert not data.agent_recovery.blocks(token.id)
+    assert not data.agent_recovery.blocks(access_key.id)
 
 
 async def test_review_uses_exact_surface_catalog_and_rejects_new_announcements(hass, home):
-    data, token, _, _ = home
+    data, access_key, _, _ = home
     agentcli.build_mcp_tool_list.return_value.append({
         'name': 'llm__GetDateTime', 'description': 'Current local time', 'inputSchema': {'type': 'object'}})
-    announced = agentcli.build_agent_tool_list(token, data, 'chat')
+    announced = agentcli.build_agent_tool_list(access_key, data, 'chat')
     assert len(announced) == 3
-    assert len(agentcli.build_agent_tool_list(token, data, 'voice')) == 4
+    assert len(agentcli.build_agent_tool_list(access_key, data, 'voice')) == 4
     with patch.object(DecisionProvider, 'select_tool', AsyncMock(return_value={'tool': 'get_state', 'model': 'test-model'})) as choose:
         assert (await review(hass, home, announced_tools=announced)).reason == 'agreement'
         assert list(choose.call_args.args[1]['catalog'].values()) == announced
@@ -292,9 +292,9 @@ async def test_provider_refuses_incomplete_or_unsound_choices(case, reason):
 
 
 async def test_post_reservation_guard_stops_http(hass, home):
-    data, token, _, _ = home
+    data, access_key, _, _ = home
     async def reserve(limit):
-        token.settings_version += 1
+        access_key.settings_version += 1
     session = MagicMock()
     with patch.object(data.decision_budget, 'reserve', reserve), \
             patch('custom_components.phoenix_mcp.tool_routing.async_get_clientsession', return_value=session):
@@ -304,9 +304,9 @@ async def test_post_reservation_guard_stops_http(hass, home):
 
 async def test_one_correction_even_if_planner_disagrees(hass, home, monkeypatch):
     qualify(monkeypatch)
-    data, token, _, _ = home
+    data, access_key, _, _ = home
     await data.store.async_patch_settings(agentcli_tool_routing_mode='advise')
-    turn = tool_routing.create_review_state(data, token, 'chat')
+    turn = tool_routing.create_review_state(data, access_key, 'chat')
     with patch.object(DecisionProvider, 'select_tool', AsyncMock(return_value={'tool': 'get_history', 'model': 'test-model'})) as choose:
         assert (await review(hass, home, turn=turn)).action == 'replan'
         assert (await review(hass, home, turn=turn)).reason == 'limit'
@@ -345,8 +345,8 @@ def test_telemetry_cannot_retain_private_values():
 
 @pytest.mark.parametrize('surface', ['chat', 'voice', 'ai_task'])
 def test_companion_cannot_admit_decision_review(home, surface):
-    data, token, _, _ = home
-    token.persona = 'home_companion'
+    data, access_key, _, _ = home
+    access_key.persona = 'home_companion'
     with patch.object(tool_routing.RoutingAuthority, 'capture', side_effect=AssertionError('Must not capture review authority')):
-        state = tool_routing.create_review_state(data, token, surface)
+        state = tool_routing.create_review_state(data, access_key, surface)
     assert state.authority is None

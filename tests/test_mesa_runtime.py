@@ -22,7 +22,7 @@ from custom_components.phoenix_mcp.mesa import (
     build_expand_target,
 )
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
-from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 from homeassistant.util.dt import utcnow
 
 
@@ -33,8 +33,8 @@ def _write_sidecar(hass: HomeAssistant, domain: str, body: dict) -> None:
         json.dump(body, fh)
 
 
-def _token(persona: str = "voice_assistant") -> TokenRecord:
-    return TokenRecord(
+def _access_key(persona: str = "voice_assistant") -> AccessKeyRecord:
+    return AccessKeyRecord(
         id="tok-1",
         name="my_token",
         token_hash="x",
@@ -425,7 +425,7 @@ async def test_async_wipe_clears_all_profiles_and_caches(hass: HomeAssistant):
 
 
 def test_build_caller_context_maps_token():
-    ctx = build_caller_context(_token("automation_builder"), session_id="sess-9")
+    ctx = build_caller_context(_access_key("automation_builder"), session_id="sess-9")
     assert ctx.caller_id == "tok-1"
     assert ctx.display_name == "my_token"
     assert ctx.roles == ["automation_builder"]

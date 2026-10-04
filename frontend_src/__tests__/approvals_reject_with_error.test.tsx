@@ -25,7 +25,7 @@ function record(over: Partial<ApprovalRecord> = {}): ApprovalRecord {
   return {
     id: "appr_1",
     token_id: "t1",
-    token_name: "my_token",
+    token_name: "my_access_key",
     tool_name: "add_dashboard_card",
     cap_name: "cap_lovelace_write",
     args: { view_index: 0, card: { type: "custom:apexcharts-card", series: [] } },

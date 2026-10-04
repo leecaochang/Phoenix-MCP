@@ -36,20 +36,20 @@ def reference_execution_eligible(hass: Any, data: Any, language: object) -> bool
                 and cfg and (cfg.kind, cfg.base_url, cfg.model) in DECISION_REFERENCE_EXECUTION_MODELS)
 
 
-async def async_preview_reference(hass: Any, data: Any, token: Any, sentence: str,
+async def async_preview_reference(hass: Any, data: Any, access_key: Any, sentence: str,
                                   language: str, messages: Any, local: dict) -> dict:
     """Administrator previews never return execution plans."""
-    return await _async_review_reference(hass, data, token, sentence, language, messages, local)
+    return await _async_review_reference(hass, data, access_key, sentence, language, messages, local)
 
 
-async def async_prepare_chat_reference(hass: Any, data: Any, token: Any, sentence: str,
+async def async_prepare_chat_reference(hass: Any, data: Any, access_key: Any, sentence: str,
                                         language: str, messages: Any, local: dict, cancel: asyncio.Event) -> dict:
     """Return a bound plan only to the internal Chat routing ingress."""
-    return await _async_review_reference(hass, data, token, sentence, language, messages, local,
+    return await _async_review_reference(hass, data, access_key, sentence, language, messages, local,
                                          prepare=True, cancel=cancel)
 
 
-async def _async_review_reference(hass: Any, data: Any, token: Any, sentence: str,
+async def _async_review_reference(hass: Any, data: Any, access_key: Any, sentence: str,
                                   language: str, messages: Any, local: dict, *, prepare: bool = False,
                                   cancel: asyncio.Event | None = None) -> dict:
     """Share the decision slot; all effects still belong to the guarded executor."""
@@ -72,7 +72,7 @@ async def _async_review_reference(hass: Any, data: Any, token: Any, sentence: st
         return result("cancelled")
     if prepare and not reference_execution_eligible(hass, data, lang):
         return result("context_unverified")
-    authority = RoutingAuthority.capture(data, token)
+    authority = RoutingAuthority.capture(data, access_key)
     if authority.current(hass) is None:
         return result("authority_changed")
     runtime = data.decision_shadow

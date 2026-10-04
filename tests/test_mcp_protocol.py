@@ -35,21 +35,21 @@ _BASE_URL = "http://homeassistant.local"
 
 
 def _env(**token_kwargs):
-    token, raw = _make_token(**token_kwargs)
-    data = _make_data(token)
+    access_key, raw = _make_token(**token_kwargs)
+    data = _make_data(access_key)
     hass = _make_hass(data)
-    return token, raw, data, hass
+    return access_key, raw, data, hass
 
 
 def _strict_env(**token_kwargs):
-    token, raw, data, hass = _env(**token_kwargs)
+    access_key, raw, data, hass = _env(**token_kwargs)
     data.enforce_mcp_lifecycle = True
-    return token, raw, data, hass
+    return access_key, raw, data, hass
 
 
-def _delete_request(raw_token: str, session_id: str | None = None):
+def _delete_request(raw_access_key: str, session_id: str | None = None):
     headers = {"Mcp-Session-Id": session_id} if session_id is not None else None
-    request = _make_request({}, "application/json", raw_token, headers)
+    request = _make_request({}, "application/json", raw_access_key, headers)
     request.method = "DELETE"
     return request
 
@@ -75,9 +75,9 @@ def _modern_headers(method: str, name: str | None = None) -> dict[str, str]:
 
 
 async def _dispatch(method: str, params: dict | None = None, msg_id=1, **token_kwargs):
-    token, _raw, data, hass = _env(**token_kwargs)
+    access_key, _raw, data, hass = _env(**token_kwargs)
     return await _dispatch_mcp(
-        method, msg_id, params or {}, token, hass, data, "127.0.0.1",
+        method, msg_id, params or {}, access_key, hass, data, "127.0.0.1",
         base_url=_BASE_URL,
     )
 
@@ -135,10 +135,10 @@ class TestServerDiscover:
         assert caps["resources"]["subscribe"] is False
 
     async def test_is_audited(self):
-        token, _raw, data, hass = _env()
+        access_key, _raw, data, hass = _env()
         with patch.object(mcp_view, "_log") as logged:
             await _dispatch_mcp(
-                "server/discover", 1, {}, token, hass, data, "127.0.0.1",
+                "server/discover", 1, {}, access_key, hass, data, "127.0.0.1",
                 base_url=_BASE_URL)
         assert logged.call_count == 1
         assert logged.call_args.kwargs["method"] == "server/discover"
@@ -149,15 +149,15 @@ class TestServerDiscover:
         # "it can be unauthenticated" an easy assumption. It carries this
         # token's own capability primer, so it is behind the bearer token like
         # everything else on this endpoint.
-        _token, raw, data, hass = _env()
-        data.store.get_token_by_hash.return_value = None
+        _access_key, raw, data, hass = _env()
+        data.store.get_access_key_by_hash.return_value = None
         resp = await _view(hass).post(_make_request(
             {"jsonrpc": "2.0", "id": 1, "method": "server/discover"},
             "application/json", raw))
         assert resp.status == 401
 
     async def test_no_handshake_required(self):
-        _token, raw, _data, hass = _strict_env()
+        _access_key, raw, _data, hass = _strict_env()
         resp = await _view(hass).post(_make_request(
             _modern_body("server/discover", msg_id=9),
             "application/json", raw, _modern_headers("server/discover")))
@@ -251,14 +251,14 @@ class TestModernProtocolEra:
         self, body, headers
     ):
         """A client response cannot bypass required modern metadata mirrors."""
-        _token, raw, _data, hass = _strict_env()
+        _access_key, raw, _data, hass = _strict_env()
         resp = await _view(hass).post(_make_request(
             body, "application/json", raw, headers))
         assert resp.status == 400
         assert json.loads(resp.text)["error"]["code"] == -32600
 
     async def test_modern_result_has_discriminator_identity_and_private_cache_hints(self):
-        _token, raw, _data, hass = _strict_env()
+        _access_key, raw, _data, hass = _strict_env()
         resp = await _view(hass).post(_make_request(
             _modern_body("tools/list"),
             "application/json",
@@ -272,7 +272,7 @@ class TestModernProtocolEra:
         assert result["_meta"]["io.modelcontextprotocol/serverInfo"]["name"] == "Phoenix MCP"
 
     async def test_header_body_version_mismatch_is_a_recognized_modern_error(self):
-        _token, raw, _data, hass = _strict_env()
+        _access_key, raw, _data, hass = _strict_env()
         headers = _modern_headers("ping")
         headers["MCP-Protocol-Version"] = "1900-01-01"
         resp = await _view(hass).post(_make_request(
@@ -281,7 +281,7 @@ class TestModernProtocolEra:
         assert json.loads(resp.text)["error"]["code"] == -32020
 
     async def test_unsupported_version_lists_both_supported_eras(self):
-        _token, raw, _data, hass = _strict_env()
+        _access_key, raw, _data, hass = _strict_env()
         body = _modern_body("ping")
         body["params"]["_meta"][
             "io.modelcontextprotocol/protocolVersion"
@@ -299,7 +299,7 @@ class TestModernProtocolEra:
         }
 
     async def test_method_and_name_headers_are_validated(self):
-        _token, raw, _data, hass = _strict_env()
+        _access_key, raw, _data, hass = _strict_env()
         body = _modern_body("tools/call", params={"name": "ping", "arguments": {}})
         for headers in (
             _modern_headers("tools/list", "ping"),
@@ -311,7 +311,7 @@ class TestModernProtocolEra:
             assert json.loads(resp.text)["error"]["code"] == -32020
 
     async def test_modern_batch_is_rejected_before_dispatch(self):
-        _token, raw, _data, hass = _strict_env()
+        _access_key, raw, _data, hass = _strict_env()
         resp = await _view(hass).post(_make_request(
             [_modern_body("ping")],
             "application/json",
@@ -322,7 +322,7 @@ class TestModernProtocolEra:
         assert json.loads(resp.text)["error"]["code"] == -32600
 
     async def test_modern_initialize_is_not_a_supported_method(self):
-        _token, raw, _data, hass = _strict_env()
+        _access_key, raw, _data, hass = _strict_env()
         resp = await _view(hass).post(_make_request(
             _modern_body("initialize"),
             "application/json",
@@ -380,7 +380,7 @@ class TestRequestCorrelation:
     async def test_authenticated_protocol_failures_are_audited_with_response_id(
         self, body, headers, status, code,
     ):
-        _token, raw, _data, hass = _strict_env()
+        _access_key, raw, _data, hass = _strict_env()
         with patch.object(mcp_view, "_log") as logged:
             resp = await _view(hass).post(_make_request(
                 body, "application/json", raw, headers))
@@ -393,7 +393,7 @@ class TestRequestCorrelation:
         assert logged.call_args.kwargs["outcome"] == "invalid_request"
 
     async def test_json_audit_row_uses_the_http_request_id(self):
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         with patch.object(mcp_view, "_log") as logged:
             resp = await _view(hass).post(_make_request(
                 {"jsonrpc": "2.0", "id": 1, "method": "ping"},
@@ -406,7 +406,7 @@ class TestRequestCorrelation:
         ]
 
     async def test_sse_audit_row_uses_the_http_request_id(self):
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         hass.loop = asyncio.get_running_loop()
         stream = _FakeStream()
         with _stream_patch(stream), patch.object(mcp_view, "_log") as logged:
@@ -421,7 +421,7 @@ class TestRequestCorrelation:
         ]
 
     async def test_notification_audit_row_uses_the_http_request_id(self):
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         with patch.object(mcp_view, "_log") as logged:
             resp = await _view(hass).post(_make_request(
                 {"jsonrpc": "2.0", "method": "notifications/initialized"},
@@ -435,7 +435,7 @@ class TestRequestCorrelation:
         ]
 
     async def test_era_rejected_method_audit_row_uses_the_http_request_id(self):
-        _token, raw, _data, hass = _strict_env()
+        _access_key, raw, _data, hass = _strict_env()
         with patch.object(mcp_view, "_log") as logged:
             resp = await _view(hass).post(_make_request(
                 _modern_body("initialize"),
@@ -450,7 +450,7 @@ class TestRequestCorrelation:
         ]
 
     async def test_legacy_batch_audit_rows_share_the_parent_http_request_id(self):
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         body = [
             {"jsonrpc": "2.0", "id": 1, "method": "ping"},
             {"jsonrpc": "2.0", "id": 2, "method": "ping"},
@@ -480,7 +480,7 @@ class TestLegacyProtocolEra:
         }
 
     async def test_initialize_session_then_initialized_notification_enables_operations(self):
-        _token, raw, _data, hass = _strict_env()
+        _access_key, raw, _data, hass = _strict_env()
         init = await _view(hass).post(_make_request(
             self._initialize_body(), "application/json", raw))
         session_id = init.headers["Mcp-Session-Id"]
@@ -506,7 +506,7 @@ class TestLegacyProtocolEra:
         assert "resultType" not in json.loads(tools.text)["result"]
 
     async def test_operation_without_initialize_is_refused(self):
-        _token, raw, _data, hass = _strict_env()
+        _access_key, raw, _data, hass = _strict_env()
         resp = await _view(hass).post(_make_request(
             {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
             "application/json", raw))
@@ -514,7 +514,7 @@ class TestLegacyProtocolEra:
         assert json.loads(resp.text)["error"]["code"] == -32000
 
     async def test_unknown_supplied_session_returns_recovery_404(self):
-        _token, raw, _data, hass = _strict_env()
+        _access_key, raw, _data, hass = _strict_env()
         resp = await _view(hass).post(_make_request(
             {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
             "application/json",
@@ -525,7 +525,7 @@ class TestLegacyProtocolEra:
         assert json.loads(resp.text)["error"]["code"] == -32000
 
     async def test_expired_supplied_session_returns_recovery_404(self):
-        _token, raw, data, hass = _strict_env()
+        _access_key, raw, data, hass = _strict_env()
         init = await _view(hass).post(_make_request(
             self._initialize_body(), "application/json", raw))
         session_id = init.headers["Mcp-Session-Id"]
@@ -540,9 +540,9 @@ class TestLegacyProtocolEra:
         assert resp.status == 404
 
     async def test_delete_releases_session_and_reclaims_per_token_quota(self):
-        _token, raw, data, hass = _strict_env()
+        _access_key, raw, data, hass = _strict_env()
         session_ids = []
-        for _ in range(mcp_view._MCP_LEGACY_SESSION_TOKEN_LIMIT):
+        for _ in range(mcp_view._MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT):
             init = await _view(hass).post(_make_request(
                 self._initialize_body(), "application/json", raw))
             assert init.status == 200
@@ -560,13 +560,13 @@ class TestLegacyProtocolEra:
             self._initialize_body(), "application/json", raw))
         assert retried.status == 200
         assert retried.headers["Mcp-Session-Id"] not in session_ids
-        assert len(data.mcp_sessions) == mcp_view._MCP_LEGACY_SESSION_TOKEN_LIMIT
+        assert len(data.mcp_sessions) == mcp_view._MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT
 
     async def test_delete_releases_global_legacy_session_slot(self):
-        token, raw, data, hass = _strict_env()
+        access_key, raw, data, hass = _strict_env()
         session_id = "owned-session"
         now = mcp_view.time.monotonic()
-        data.mcp_sessions[session_id] = {"token_id": token.id, "last_seen": now}
+        data.mcp_sessions[session_id] = {"token_id": access_key.id, "last_seen": now}
         for index in range(mcp_view._MCP_LEGACY_SESSION_LIMIT - 1):
             data.mcp_sessions[f"other-{index}"] = {
                 "token_id": f"other-token-{index}",
@@ -587,32 +587,32 @@ class TestLegacyProtocolEra:
         assert len(data.mcp_sessions) == mcp_view._MCP_LEGACY_SESSION_LIMIT
 
     async def test_delete_requires_auth_and_preserves_another_tokens_session(self):
-        _token, raw, data, hass = _strict_env()
+        _access_key, raw, data, hass = _strict_env()
         session_id = "foreign-session"
         data.mcp_sessions[session_id] = {
             "token_id": "another-token",
             "last_seen": mcp_view.time.monotonic(),
         }
 
-        data.store.get_token_by_hash.return_value = None
+        data.store.get_access_key_by_hash.return_value = None
         unauthorized = await _view(hass).delete(_delete_request(raw, session_id))
         assert unauthorized.status == 401
         assert session_id in data.mcp_sessions
 
-        data.store.get_token_by_hash.return_value = _token
+        data.store.get_access_key_by_hash.return_value = _access_key
         foreign = await _view(hass).delete(_delete_request(raw, session_id))
         assert foreign.status == 404
         assert json.loads(foreign.text)["error"] == "not_found"
         assert session_id in data.mcp_sessions
 
     async def test_delete_requires_a_session_id(self):
-        _token, raw, _data, hass = _strict_env()
+        _access_key, raw, _data, hass = _strict_env()
         response = await _view(hass).delete(_delete_request(raw))
         assert response.status == 400
         assert json.loads(response.text)["error"] == "invalid_request"
 
     async def test_initialize_must_not_be_batched(self):
-        _token, raw, _data, hass = _strict_env()
+        _access_key, raw, _data, hass = _strict_env()
         resp = await _view(hass).post(_make_request(
             [self._initialize_body()], "application/json", raw))
         assert resp.status == 400
@@ -629,7 +629,7 @@ class TestUnknownMethod:
     async def test_legacy_unknown_method_preserves_session_with_rpc_error(self):
         # A legacy session is preserved: HTTP 200 carrying a -32601 body. Only a
         # modern request gets the 404 that marks an MCP endpoint lacking the method.
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         resp = await _view(hass).post(_make_request(_UNKNOWN, "application/json", raw))
         assert resp.status == 200
         assert json.loads(resp.text)["error"]["code"] == -32601
@@ -637,7 +637,7 @@ class TestUnknownMethod:
     async def test_legacy_unknown_method_uses_json_error_for_sse_clients(self):
         # The check sits ahead of the framing choice because preparing a stream
         # puts a 200 on the wire and the status can no longer be set.
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         stream = _FakeStream()
         with _stream_patch(stream):
             resp = await _view(hass).post(_make_request(
@@ -648,7 +648,7 @@ class TestUnknownMethod:
 
     async def test_unknown_notification_is_accepted(self):
         # A valid envelope whose method the server does not implement owes no reply.
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         resp = await _view(hass).post(_make_request(
             {"jsonrpc": "2.0", "method": "notifications/cancelled"},
             "application/json", raw))
@@ -657,14 +657,14 @@ class TestUnknownMethod:
     async def test_batch_keeps_the_error_in_the_body(self):
         # A batch is one HTTP response for N items, so a per-item status cannot
         # be expressed; the JSON-RPC error carries it instead.
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         resp = await _view(hass).post(_make_request([_UNKNOWN], "application/json", raw))
         assert resp.status == 200
         assert json.loads(resp.text)[0]["error"]["code"] == -32601
 
     @pytest.mark.parametrize("method", sorted(_MCP_METHODS))
     async def test_known_methods_are_never_404(self, method):
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         body = {"jsonrpc": "2.0", "id": 1, "method": method, "params": {}}
         if method.startswith("notifications/") or method == "initialized":
             body.pop("id")
@@ -712,23 +712,23 @@ async def test_session_quota_cannot_evict_another_token():
     victim_id = mcp_view._open_legacy_session(data, victim)
     allocated = [mcp_view._open_legacy_session(data, attacker) for _ in range(300)]
     assert victim_id in data.mcp_sessions
-    assert sum(s is not None for s in allocated) == mcp_view._MCP_LEGACY_SESSION_TOKEN_LIMIT
-    assert len(data.mcp_sessions) == 1 + mcp_view._MCP_LEGACY_SESSION_TOKEN_LIMIT
+    assert sum(s is not None for s in allocated) == mcp_view._MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT
+    assert len(data.mcp_sessions) == 1 + mcp_view._MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT
 
 
 async def test_global_session_capacity_refuses_without_eviction():
-    token, _, data, _ = _strict_env()
+    access_key, _, data, _ = _strict_env()
     for i in range(mcp_view._MCP_LEGACY_SESSION_LIMIT):
         data.mcp_sessions[str(i)] = {'token_id': str(i), 'last_seen': mcp_view.time.monotonic()}
     original = dict(data.mcp_sessions)
-    assert mcp_view._open_legacy_session(data, token) is None
+    assert mcp_view._open_legacy_session(data, access_key) is None
     assert data.mcp_sessions == original
 
 
 async def test_session_capacity_returns_retryable_http_error():
-    token, raw, data, hass = _strict_env()
-    for _ in range(mcp_view._MCP_LEGACY_SESSION_TOKEN_LIMIT):
-        assert mcp_view._open_legacy_session(data, token)
+    access_key, raw, data, hass = _strict_env()
+    for _ in range(mcp_view._MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT):
+        assert mcp_view._open_legacy_session(data, access_key)
     response = await _view(hass).post(_make_request(
         TestLegacyProtocolEra._initialize_body(), 'application/json', raw))
     assert response.status == 429
@@ -737,8 +737,8 @@ async def test_session_capacity_returns_retryable_http_error():
 
 
 async def test_legacy_batch_and_single_reject_same_modern_only_method():
-    token, raw, data, hass = _strict_env()
-    session = mcp_view._open_legacy_session(data, token)
+    access_key, raw, data, hass = _strict_env()
+    session = mcp_view._open_legacy_session(data, access_key)
     data.mcp_sessions[session]['initialized'] = True
     headers = {'Mcp-Session-Id': session}
     discover = {'jsonrpc': '2.0', 'id': 1, 'method': 'server/discover'}

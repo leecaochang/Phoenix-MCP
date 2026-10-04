@@ -1160,7 +1160,7 @@
       "nameDuplicateError": "已存在同名（或等价 slug）的访问密钥。",
       "nameFormatError": "名称必须为 3-32 个字符：字母、数字、_ 或 -。",
       "nameLabel": "名称（必填）",
-      "namePlaceholder": "my_token",
+      "namePlaceholder": "my_access_key",
       "nameRuleError": "3-32 个字符：字母、数字、连字符或下划线。",
       "off": "关",
       "on": "开",
@@ -1673,7 +1673,7 @@
       "codexHeaderValueLabel": "请求头值",
       "codexServerNameLabel": "服务器名称",
       "connectAgentTitle": "把 Phoenix MCP 连接到您的 AI 智能体",
-      "connectIntro": "在您的智能体中把 Phoenix MCP 添加为 MCP 服务器。它使用 <code>Authorization: Bearer <token></code> 进行认证，而不是 Home Assistant 登录或 OAuth。 通过不可信网络连接时请使用 HTTPS。不要将持有者访问密钥写入命令行历史、共享文件、截图或版本控制。访问密钥泄露后请轮换。",
+      "connectIntro": "在您的智能体中把 Phoenix MCP 添加为 MCP 服务器。它使用 <code>Authorization: Bearer phx_...</code> 进行认证，而不是 Home Assistant 登录或 OAuth。 通过不可信网络连接时请使用 HTTPS。不要将持有者访问密钥写入命令行历史、共享文件、截图或版本控制。访问密钥泄露后请轮换。",
       "connectLater": "稍后连接",
       "connectTitle": "连接您的第一个 AI 智能体",
       "connected": "已连接！您的智能体已成功访问 Phoenix MCP。",
@@ -2284,8 +2284,8 @@
     }
   },
   "notification": {
-    "approval.message": "访问密钥“{token}”请求审批。\n\n[在 Phoenix MCP 中查看]({url})",
-    "rate_limit.message": "Phoenix MCP：访问密钥“{token}”已达到速率限制。",
+    "approval.message": "访问密钥“{access_key}”请求审批。\n\n[在 Phoenix MCP 中查看]({url})",
+    "rate_limit.message": "Phoenix MCP：访问密钥“{access_key}”已达到速率限制。",
     "rate_limit.title": "Phoenix MCP 警告"
   },
   "voice": {

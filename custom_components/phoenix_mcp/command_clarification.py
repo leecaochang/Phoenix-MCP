@@ -63,7 +63,7 @@ def _recognition(record: dict) -> Any:
         unmatched_entities={}, intent_metadata={})
 
 
-def capture_choices(hass: Any, data: Any, token: Any, recognized: Any, *,
+def capture_choices(hass: Any, data: Any, access_key: Any, recognized: Any, *,
                     ingress: str = 'voice', voice_origin: dict | None = None) -> dict | None:
     """Offer the whole small ambiguous set only when every alternative is eligible."""
     from .command_routing import _proposal
@@ -71,17 +71,17 @@ def capture_choices(hass: Any, data: Any, token: Any, recognized: Any, *,
     from homeassistant.helpers import area_registry as ar
 
     ids: list[str] = []
-    reason, proposal = _proposal(recognized, token, hass, candidates=ids)
+    reason, proposal = _proposal(recognized, access_key, hass, candidates=ids)
     if reason != 'no_target' or proposal or not 2 <= len(ids) <= COMMAND_CLARIFICATION_MAX_CHOICES:
         return None
     alternatives = []
     for entity_id in ids:
-        _, candidate = _proposal(recognized, token, hass, selected=entity_id)
+        _, candidate = _proposal(recognized, access_key, hass, selected=entity_id)
         if candidate is None:
             return None
         if voice_origin is not None:
             candidate['voice_origin'] = deepcopy(voice_origin)
-        plan = _capture_plan(hass, data, token, candidate, ingress=ingress)
+        plan = _capture_plan(hass, data, access_key, candidate, ingress=ingress)
         if plan is None:
             return None
         alternatives.append({'entity_id': entity_id, 'proposal': candidate, 'fingerprints': plan['fingerprints']})
@@ -94,12 +94,12 @@ def capture_choices(hass: Any, data: Any, token: Any, recognized: Any, *,
             'ingress': ingress, 'voice_origin': voice_origin}
 
 
-def clarification_current(hass: Any, data: Any, token: Any, proposal: dict) -> bool:
+def clarification_current(hass: Any, data: Any, access_key: Any, proposal: dict) -> bool:
     """Bind the selected target and all competitors through dispatch and approval."""
     proof = proposal.get('clarification')
     if not isinstance(proof, dict):
         return False
-    current = capture_choices(hass, data, token, _recognition(proof['recognition']),
+    current = capture_choices(hass, data, access_key, _recognition(proof['recognition']),
         ingress=proof['ingress'], voice_origin=proof['voice_origin'])
     bare = {key: value for key, value in proposal.items() if key != 'clarification'}
     return current == proof and any(item['proposal'] == bare for item in proof['alternatives'])
@@ -115,7 +115,7 @@ def is_clarification_cancel(text: str) -> bool:
     return text.strip().casefold().rstrip('.!?。！？') in COMMAND_CLARIFICATION_CANCEL
 
 
-async def async_clarification_reply(hass: Any, data: Any, token: Any, request: dict,
+async def async_clarification_reply(hass: Any, data: Any, access_key: Any, request: dict,
                                     text: str, language: str, *, ingress: str,
                                     voice_origin: dict | None = None) -> tuple[dict | None, str | None]:
     """Only a bare numbered choice or exact ID can complete one pending request."""
@@ -138,12 +138,12 @@ async def async_clarification_reply(hass: Any, data: Any, token: Any, request: d
     if selected is None:
         # Consume once even when the user starts a different command.
         return None, None
-    fresh = await async_evaluate_command(hass, data, token, request['sentence'], language,
+    fresh = await async_evaluate_command(hass, data, access_key, request['sentence'], language,
         ingress=ingress, voice_origin=voice_origin, clarify=True)
     if fresh.get('_clarification') != request:
         return None, voice_text(language, 'local_clarification_expired')
     proposal = deepcopy(selected['proposal'])
     proposal['clarification'] = deepcopy(request['choices'])
-    if not clarification_current(hass, data, token, proposal):
+    if not clarification_current(hass, data, access_key, proposal):
         return None, voice_text(language, 'local_clarification_expired')
     return proposal, None

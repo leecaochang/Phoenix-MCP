@@ -369,7 +369,7 @@ async def _async_generate_ai_task_data(
     """
     from .agentcli import (  # noqa: PLC0415
         AiTaskError,
-        _current_dispatch_token,
+        _current_dispatch_access_key,
         _get_secret_store,
         build_provider,
         async_run_ai_task,
@@ -381,8 +381,8 @@ async def _async_generate_ai_task_data(
     if not _is_fully_configured(settings):
         raise HomeAssistantError("The Phoenix MCP AI Task entity is not fully configured.")
 
-    token = _current_dispatch_token(data, settings.ai_task_token_id)
-    if token is None:
+    access_key = _current_dispatch_access_key(data, settings.ai_task_token_id)
+    if access_key is None:
         raise HomeAssistantError("The Phoenix MCP AI Task entity's access key is no longer available.")
 
     store = await _get_secret_store(hass)
@@ -391,14 +391,14 @@ async def _async_generate_ai_task_data(
         raise HomeAssistantError("The Phoenix MCP AI Task entity is not fully configured.")
 
     from .conversation_log import record_identity
-    record_identity(token=token, config=cfg)
+    record_identity(access_key=access_key, config=cfg)
 
     structure_json = _structure_to_json(structure)
     provider = build_provider(cfg)
     session = async_get_clientsession(hass)
     try:
         text = await async_run_ai_task(
-            hass, data, token, provider, session, _base_url(hass), instructions,
+            hass, data, access_key, provider, session, _base_url(hass), instructions,
             structure_json=structure_json,
             max_iterations=data.store.get_settings().agentcli_max_iterations,
         )

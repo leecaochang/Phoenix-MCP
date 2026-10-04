@@ -40,7 +40,7 @@ from ..helpers import (
     version_summary_fields as _version_summary,
 )
 from ..policy_engine import Permission, filter_service_response, resolve
-from ..token_store import TokenRecord
+from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
     _gate,
@@ -123,10 +123,10 @@ def _referenced_entities(prefs: Any, _depth: int = 0) -> list[str]:
 
 
 async def _tool_get_energy_config(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read the Energy dashboard preferences (cap_config_read)."""
-    if effective_cap(token, "cap_config_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_config_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_energy_config"
 
     configured = True
@@ -150,15 +150,15 @@ async def _tool_get_energy_config(
         _LOGGER.warning("get_energy_config: unexpected prefs type %s", type(prefs).__name__)
         prefs, configured = _default_prefs(), False
 
-    body = _scoped_body(prefs, configured, token, hass)
+    body = _scoped_body(prefs, configured, access_key, hass)
     # Included on every read rather than behind a flag: a caller asking what the
     # dashboard depends on needs to know which dependencies are ALREADY dead.
-    body["issues"] = await _energy_issues(prefs, token, hass) if configured else []
+    body["issues"] = await _energy_issues(prefs, access_key, hass) if configured else []
     return _tool_success(json.dumps(body, default=str)), "allowed", "get_energy_config"
 
 
 async def _tool_get_solar_forecast(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read solar production forecasts (cap_config_read).
 
@@ -168,7 +168,7 @@ async def _tool_get_solar_forecast(
     nothing here to scope, but the result is filtered anyway rather than trusted to
     stay that shape.
     """
-    if effective_cap(token, "cap_config_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_config_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_solar_forecast"
     try:
         forecast = await async_ws_command(hass, "energy/solar_forecast", {})
@@ -186,14 +186,14 @@ async def _tool_get_solar_forecast(
         forecast = {}
     body = {
         "configured": bool(forecast),
-        "forecasts": filter_service_response(_plain(forecast), token, hass),
+        "forecasts": filter_service_response(_plain(forecast), access_key, hass),
     }
     return _tool_success(json.dumps(body, default=str)), "allowed", "get_solar_forecast"
 
 
-def _scoped_body(prefs: dict, configured: bool, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _scoped_body(prefs: dict, configured: bool, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """The token-scoped response body. Shared by the read and the write's result."""
-    scoped = filter_service_response(prefs, token, hass)
+    scoped = filter_service_response(prefs, access_key, hass)
     return {
         "configured": configured,
         **{key: scoped.get(key) or [] for key in _PREFS_KEYS},
@@ -235,7 +235,7 @@ def _entry_label(key: str, index: int, prefs: dict) -> str:
 
 
 async def _energy_issues(
-    prefs: dict, token: TokenRecord, hass: HomeAssistant
+    prefs: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> list[dict] | None:
     """Flatten energy/validate into one scoped, labelled list of problems.
 
@@ -269,7 +269,7 @@ async def _energy_issues(
                 })
     # Scoped last, over plain containers, so an issue naming an entity this token
     # cannot resolve reports the redaction sentinel rather than the id.
-    return filter_service_response(issues, token, hass)
+    return filter_service_response(issues, access_key, hass)
 
 
 # ---------------------------------------------------------------------------
@@ -473,7 +473,7 @@ def _new_source(source_type: str) -> dict:
     return source
 
 
-def _check_writable_statistic(value: Any, field: str, token: TokenRecord, hass: HomeAssistant) -> str:
+def _check_writable_statistic(value: Any, field: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> str:
     """Validate one statistic id the caller wants WRITTEN into the preferences.
 
     Applied only to values being written, never to the ones used to ADDRESS an
@@ -488,7 +488,7 @@ def _check_writable_statistic(value: Any, field: str, token: TokenRecord, hass: 
         return statistic
     if not valid_entity_id(statistic):
         raise _OpError(f"{field}: {statistic!r} is not a valid entity id or external statistic id.")
-    if resolve(statistic, token, hass) in (Permission.NO_ACCESS, Permission.DENY, Permission.NOT_FOUND):
+    if resolve(statistic, access_key, hass) in (Permission.NO_ACCESS, Permission.DENY, Permission.NOT_FOUND):
         # Byte-identical for out-of-scope and nonexistent, so the refusal is not an
         # existence oracle. Naming the field is safe: it is the caller's own argument.
         raise _OpError(
@@ -498,7 +498,7 @@ def _check_writable_statistic(value: Any, field: str, token: TokenRecord, hass: 
     return statistic
 
 
-def _source_fields_arg(args: dict, source_type: str, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _source_fields_arg(args: dict, source_type: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """The caller's source fields, validated against the type's own schema.
 
     An explicit null is kept rather than skipped: clearing a price or a cost
@@ -523,7 +523,7 @@ def _source_fields_arg(args: dict, source_type: str, token: TokenRecord, hass: H
             out[field] = None
             continue
         if field in _STATISTIC_FIELDS:
-            out[field] = _check_writable_statistic(value, field, token, hass)
+            out[field] = _check_writable_statistic(value, field, access_key, hass)
             continue
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise _OpError(f"{field} must be a number or null.")
@@ -536,7 +536,7 @@ def _source_fields_arg(args: dict, source_type: str, token: TokenRecord, hass: H
     return out
 
 
-def _apply_op(prefs: dict, args: dict, token: TokenRecord, hass: HomeAssistant) -> tuple[dict, dict]:
+def _apply_op(prefs: dict, args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> tuple[dict, dict]:
     """Apply ONE addressed operation to a copy of prefs.
 
     Returns (new_prefs, summary), where summary carries the fields the diff and
@@ -551,7 +551,7 @@ def _apply_op(prefs: dict, args: dict, token: TokenRecord, hass: HomeAssistant) 
     device_name = str_arg(args.get("device_name")).strip()
 
     if op == "replace_statistic":
-        new_statistic = _check_writable_statistic(args.get("new_statistic"), "new_statistic", token, hass)
+        new_statistic = _check_writable_statistic(args.get("new_statistic"), "new_statistic", access_key, hass)
         old = statistic
         label = device_name or statistic
         if not old:
@@ -569,7 +569,7 @@ def _apply_op(prefs: dict, args: dict, token: TokenRecord, hass: HomeAssistant) 
         return new, {"op": op, "label": label, "old_statistic": old, "new_statistic": new_statistic}
 
     if op == "add_device":
-        new_statistic = _check_writable_statistic(args.get("statistic"), "statistic", token, hass)
+        new_statistic = _check_writable_statistic(args.get("statistic"), "statistic", access_key, hass)
         for key in _DEVICE_KEYS:
             for entry in new.get(key) or []:
                 if isinstance(entry, dict) and entry.get("stat_consumption") == new_statistic:
@@ -633,7 +633,7 @@ def _apply_op(prefs: dict, args: dict, token: TokenRecord, hass: HomeAssistant) 
     source_type = str_arg(args.get("source_type")).strip().lower()
     if source_type not in _SOURCE_TYPES:
         raise _OpError(f"source_type must be one of: {', '.join(_SOURCE_TYPES)}.")
-    fields = _source_fields_arg(args, source_type, token, hass)
+    fields = _source_fields_arg(args, source_type, access_key, hass)
     sources = new.setdefault("energy_sources", [])
     existing = next(
         (s for s in sources if isinstance(s, dict) and s.get("type") == source_type), None
@@ -734,7 +734,7 @@ def _sentinel_refusal(args: dict) -> str | None:
     return None
 
 
-def _preview_rows(prefs: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _preview_rows(prefs: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """A compact, scoped view of the preferences for the panel's visual preview.
 
     Structured rows rather than a JSON string: diff.before/after go through
@@ -745,7 +745,7 @@ def _preview_rows(prefs: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
     resolve previews as the sentinel rather than being disclosed to whoever opens
     the approval.
     """
-    scoped = filter_service_response(prefs, token, hass)
+    scoped = filter_service_response(prefs, access_key, hass)
     sources = []
     for source in scoped.get("energy_sources") or []:
         if not isinstance(source, dict):
@@ -775,7 +775,7 @@ def _preview_rows(prefs: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
     return {"sources": sources, "devices": devices}
 
 
-async def _build_diff_edit_energy_config(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+async def _build_diff_edit_energy_config(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """Approval diff for one Energy edit, in the operator's terms.
 
     Best-effort and never raises: the precheck has already validated, and a diff
@@ -787,15 +787,15 @@ async def _build_diff_edit_energy_config(args: dict, token: TokenRecord, hass: H
     }
     try:
         before = await _read_prefs_raw(hass)
-        after, summary = _apply_op(before, args, token, hass)
+        after, summary = _apply_op(before, args, access_key, hass)
         diff.update(_summary(f"edit_energy_config.{summary['op']}", **{
             k: v for k, v in summary.items() if k != "op"
         }))
-        diff["before"] = _truncate(json.dumps(filter_service_response(before, token, hass), indent=2, default=str))
-        diff["after"] = _truncate(json.dumps(filter_service_response(after, token, hass), indent=2, default=str))
+        diff["before"] = _truncate(json.dumps(filter_service_response(before, access_key, hass), indent=2, default=str))
+        diff["after"] = _truncate(json.dumps(filter_service_response(after, access_key, hass), indent=2, default=str))
         diff["preview"] = {
             **{k: v for k, v in summary.items() if k != "op"},
-            "energy": {"before": _preview_rows(before, token, hass), "after": _preview_rows(after, token, hass)},
+            "energy": {"before": _preview_rows(before, access_key, hass), "after": _preview_rows(after, access_key, hass)},
         }
     except Exception:  # noqa: BLE001 - diagnostic only
         diff.setdefault("summary", "Change the Energy dashboard configuration")
@@ -803,7 +803,7 @@ async def _build_diff_edit_energy_config(args: dict, token: TokenRecord, hass: H
 
 
 async def _tool_edit_energy_config(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: change ONE addressed part of the Energy dashboard (Confirm-gated).
@@ -815,7 +815,7 @@ async def _tool_edit_energy_config(
     change during the approval window is caught.
     """
     tool = "edit_energy_config"
-    if effective_cap(token, "cap_energy_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_energy_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     args, error = normalize_tool_args(tool, args)
     if error:
@@ -825,7 +825,7 @@ async def _tool_edit_energy_config(
         return _tool_error(refusal), "invalid_request", tool
     try:
         before = await _read_prefs_raw(hass)
-        after, summary = _apply_op(before, args, token, hass)
+        after, summary = _apply_op(before, args, access_key, hass)
         _verify_structure(before, after, summary["op"])
     except _OpError as err:
         return _tool_error(str(err)), "invalid_request", tool
@@ -834,25 +834,25 @@ async def _tool_edit_energy_config(
         return _tool_error("Could not read the Energy dashboard configuration."), "invalid_request", tool
 
     blocked = await _gate(
-        "cap_energy_write", token, hass, data,
+        "cap_energy_write", access_key, hass, data,
         tool_name=tool, args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_edit_energy_config(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_edit_energy_config(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_edit_energy_config(args, token, hass, data)
+    return await _execute_edit_energy_config(args, access_key, hass, data)
 
 
 async def _execute_edit_energy_config(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Side-effect path for edit_energy_config. Assumes the capability is satisfied."""
     tool = "edit_energy_config"
-    if effective_cap(token, "cap_energy_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_energy_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     try:
         before = await _read_prefs_raw(hass)
-        after, summary = _apply_op(before, args, token, hass)
+        after, summary = _apply_op(before, args, access_key, hass)
         _verify_structure(before, after, summary["op"])
     except _OpError as err:
         return _tool_error(str(err)), "invalid_request", tool
@@ -867,7 +867,7 @@ async def _execute_edit_energy_config(
             # Persist the exact raw preferences before dispatch. This is an
             # Energy-owned snapshot, independent of the redacted agent view.
             before_snapshot = _energy_recovery_snapshot(before)
-            rid = await recovery.begin(resource, tool, token.id, before_snapshot,
+            rid = await recovery.begin(resource, tool, access_key.id, before_snapshot,
                 expected=_energy_recovery_snapshot(after))
             try:
                 await recovery.mark(rid, "dispatching")
@@ -902,7 +902,7 @@ async def _execute_edit_energy_config(
                         return _tool_success(json.dumps({
                             "status": "partial", "saved": False, "recovery_id": rid,
                             "message": "Energy preferences were submitted but readback differs; inspect configuration recovery before retrying.",
-                            **_scoped_body(observed, True, token, hass),
+                            **_scoped_body(observed, True, access_key, hass),
                         }, default=str)), "allowed", "energy:preferences"
                 except Exception:  # noqa: BLE001 - a committed write with failed readback is uncertain
                     await recovery.mark(rid, "unknown", readback="unavailable")
@@ -916,7 +916,7 @@ async def _execute_edit_energy_config(
         return _tool_error("Could not verify the Energy configuration change; inspect configuration recovery before retrying."), "invalid_request", tool
 
     await _record_version(
-        data, token, resource_type="energy", resource_id="preferences",
+        data, access_key, resource_type="energy", resource_id="preferences",
         action="edit", before=before, after=after, alias="Energy dashboard",
         summary=_version_summary(
             "energy.sources",
@@ -926,7 +926,7 @@ async def _execute_edit_energy_config(
     )
     body = {
         "saved": True, "recovery_id": rid,
-        **{k: v for k, v in summary.items()}, **_scoped_body(after, True, token, hass),
+        **{k: v for k, v in summary.items()}, **_scoped_body(after, True, access_key, hass),
     }
     return _tool_success(json.dumps(body, default=str)), "allowed", "energy:preferences"
 
@@ -961,13 +961,13 @@ def validate_energy_recovery_snapshot(snapshot: dict[str, Any]) -> dict[str, Any
 
 
 def validate_energy_recovery_scope(
-    snapshot: dict[str, Any], token: TokenRecord, hass: HomeAssistant,
+    snapshot: dict[str, Any], access_key: AccessKeyRecord, hass: HomeAssistant,
 ) -> None:
     """Refuse restores whose entity references exceed the token's current scope."""
     prefs = validate_energy_recovery_snapshot(snapshot)
     for entity_id in _referenced_entities(prefs):
         try:
-            _check_writable_statistic(entity_id, "recovery", token, hass)
+            _check_writable_statistic(entity_id, "recovery", access_key, hass)
         except _OpError:
             raise ConfigurationRecoveryError(
                 "The Energy snapshot references an entity outside this access key's current scope."
@@ -981,7 +981,7 @@ async def energy_recovery_target(hass: HomeAssistant) -> dict[str, Any]:
 
 
 def energy_recovery_diff(before: dict[str, Any], after: dict[str, Any], side: str,
-                         token: TokenRecord, hass: HomeAssistant) -> dict[str, Any]:
+                         access_key: AccessKeyRecord, hass: HomeAssistant) -> dict[str, Any]:
     """Build a scoped, family-specific restore diff for Energy preferences."""
     old_prefs = before.get("preferences", {}) if isinstance(before, dict) else {}
     new_prefs = after["preferences"]
@@ -989,30 +989,30 @@ def energy_recovery_diff(before: dict[str, Any], after: dict[str, Any], side: st
         "kind": "config_diff",
         "summary": "Restore Energy dashboard preferences",
         "target": {"type": "energy", "id": "preferences", "label": "Energy dashboard"},
-        "before": json.dumps(filter_service_response(old_prefs, token, hass), indent=2, sort_keys=True, default=str),
-        "after": json.dumps(filter_service_response(new_prefs, token, hass), indent=2, sort_keys=True, default=str),
+        "before": json.dumps(filter_service_response(old_prefs, access_key, hass), indent=2, sort_keys=True, default=str),
+        "after": json.dumps(filter_service_response(new_prefs, access_key, hass), indent=2, sort_keys=True, default=str),
         "preview": {"side": side, "energy": {
-            "before": _scoped_body(old_prefs, True, token, hass),
-            "after": _scoped_body(new_prefs, True, token, hass),
+            "before": _scoped_body(old_prefs, True, access_key, hass),
+            "after": _scoped_body(new_prefs, True, access_key, hass),
         }},
     }
 
 
-async def restore_energy_configuration(snapshot: dict[str, Any], token: TokenRecord,
+async def restore_energy_configuration(snapshot: dict[str, Any], access_key: AccessKeyRecord,
                                        hass: HomeAssistant, data: PhoenixData) -> tuple[dict, str, str]:
     """Restore one Energy snapshot, recording and verifying the whole transaction."""
     tool = "restore_configuration"
-    if effective_cap(token, "cap_energy_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_energy_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     try:
         wanted = validate_energy_recovery_snapshot(snapshot)
-        validate_energy_recovery_scope(snapshot, token, hass)
+        validate_energy_recovery_scope(snapshot, access_key, hass)
         recovery = data.config_recovery
         resource = "energy:preferences"
         async with recovery.resource(resource):
             before = await _read_prefs_raw(hass)
             before_snapshot = _energy_recovery_snapshot(before)
-            rid = await recovery.begin(resource, tool, token.id, before_snapshot, source=snapshot, expected=snapshot)
+            rid = await recovery.begin(resource, tool, access_key.id, before_snapshot, source=snapshot, expected=snapshot)
             try:
                 await recovery.mark(rid, "dispatching")
                 check_request_authority()
@@ -1030,7 +1030,7 @@ async def restore_energy_configuration(snapshot: dict[str, Any], token: TokenRec
                 await recovery.mark(rid, "verified", observed_hash=content_hash(observed))
                 await recovery.set_source(rid, _energy_recovery_snapshot(observed))
                 await _record_version(
-                    data, token, resource_type="energy", resource_id="preferences",
+                    data, access_key, resource_type="energy", resource_id="preferences",
                     action="edit", before=before, after=observed, alias="Energy dashboard",
                     summary=_version_summary(
                         "energy.sources", count=len(observed.get("energy_sources") or []),
@@ -1039,7 +1039,7 @@ async def restore_energy_configuration(snapshot: dict[str, Any], token: TokenRec
                 )
                 return _tool_success(json.dumps({
                     "status": "verified", "recovery_id": rid,
-                    **_scoped_body(observed, True, token, hass),
+                    **_scoped_body(observed, True, access_key, hass),
                 }, default=str)), "allowed", tool
             except WsDispatchError as err:
                 await recovery.mark(rid, "unknown", error="save_or_readback_failed")
@@ -1058,7 +1058,7 @@ async def restore_energy_configuration(snapshot: dict[str, Any], token: TokenRec
 
 
 async def async_restore_energy_prefs(
-    snapshot: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    snapshot: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Restore a whole Energy preferences snapshot (admin version rollback only).
 
@@ -1080,7 +1080,7 @@ async def async_restore_energy_prefs(
         _LOGGER.exception("restore energy preferences failed")
         return _tool_error(f"Home Assistant rejected the Energy configuration: {err}"), "invalid_request", tool
     await _record_version(
-        data, token, resource_type="energy", resource_id="preferences",
+        data, access_key, resource_type="energy", resource_id="preferences",
         action="edit", before=before, after=snapshot, alias="Energy dashboard",
         summary=_version_summary(
             "energy.sources",
@@ -1089,7 +1089,7 @@ async def async_restore_energy_prefs(
         ),
     )
     return (
-        _tool_success(json.dumps({"saved": True, **_scoped_body(snapshot, True, token, hass)}, default=str)),
+        _tool_success(json.dumps({"saved": True, **_scoped_body(snapshot, True, access_key, hass)}, default=str)),
         "allowed",
         "energy:preferences",
     )

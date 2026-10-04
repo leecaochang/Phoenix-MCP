@@ -64,11 +64,11 @@ from ..tool_common import (
 from ..policy_engine import (
     _ENTITY_ID_RE,
     Permission,
-    filter_entities_for_token,
+    filter_entities_for_access_key,
     resolve,
     resolve_registry_access,
 )
-from ..token_store import TokenRecord
+from ..access_key_store import AccessKeyRecord
 from ..template_scope import HelperScopeError, template_entities, validate_template_selectors
 
 _LOGGER = logging.getLogger(__name__)
@@ -134,7 +134,7 @@ class _HelperMesaContext:
 
 def _helper_mesa_context(
     data: PhoenixData,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     entity_ids: list[str] | tuple[str, ...],
     *,
     action: str,
@@ -156,7 +156,7 @@ def _helper_mesa_context(
                 entity_id,
                 evaluate_registry_action(
                     data,
-                    token,
+                    access_key,
                     entity_id,
                     action=action,
                     registry_domain="helper",
@@ -263,7 +263,7 @@ def _helper_mesa_error(
 
 def _fire_helper_mesa_blocks(
     hass: HomeAssistant,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     context: _HelperMesaContext,
 ) -> None:
     blocked = [
@@ -272,7 +272,7 @@ def _fire_helper_mesa_blocks(
         if decision.decision == "deny"
     ]
     if blocked:
-        fire_mesa_blocked_event(hass, token, blocked)
+        fire_mesa_blocked_event(hass, access_key, blocked)
 
 
 def _helper_mesa_diff(diff: dict, context: _HelperMesaContext) -> dict:
@@ -284,7 +284,7 @@ def _helper_mesa_diff(diff: dict, context: _HelperMesaContext) -> dict:
 
 async def _helper_mesa_approval_gate(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     *,
@@ -296,7 +296,7 @@ async def _helper_mesa_approval_gate(
 ) -> tuple[dict, tuple[dict, str, str] | None]:
     """Merge inherited MESA with the ordinary helper capability approval."""
     if context.decision == "deny":
-        _fire_helper_mesa_blocks(hass, token, context)
+        _fire_helper_mesa_blocks(hass, access_key, context)
         return args, _helper_mesa_error(context)
     approval_args = {**args, _HELPER_MESA_FINGERPRINT: context.fingerprint}
 
@@ -308,7 +308,7 @@ async def _helper_mesa_approval_gate(
 
     blocked = await _gate(
         "cap_helper_write",
-        token,
+        access_key,
         hass,
         data,
         tool_name=tool_name,
@@ -323,7 +323,7 @@ async def _helper_mesa_approval_gate(
         approval = await async_create_mesa_approval(
             hass,
             data,
-            token,
+            access_key,
             args=approval_args,
             diff=await _diff(),
             request_id=request_id,
@@ -331,14 +331,14 @@ async def _helper_mesa_approval_gate(
             tool_name=tool_name,
         )
         return approval_args, await _pending_or_inline(
-            hass, data, token, approval
+            hass, data, access_key, approval
         )
     return approval_args, None
 
 
 def _enforce_helper_mesa_context(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     entity_ids: list[str] | tuple[str, ...],
@@ -349,7 +349,7 @@ def _enforce_helper_mesa_context(
 ) -> _HelperMesaContext | tuple[dict, str, str]:
     context = _helper_mesa_context(
         data,
-        token,
+        access_key,
         entity_ids,
         action=action,
         service_data=service_data,
@@ -369,7 +369,7 @@ def _enforce_helper_mesa_context(
     if context.decision == "deny" or (
         context.decision == "confirm" and not confirmed
     ):
-        _fire_helper_mesa_blocks(hass, token, context)
+        _fire_helper_mesa_blocks(hass, access_key, context)
         return _helper_mesa_error(context)
     if context.warnings:
         _mesa_advisory_ctx.set(True)
@@ -463,14 +463,14 @@ def _person_trackers(item: dict[str, Any]) -> tuple[str, ...] | None:
 
 
 def _person_relationships_accessible(
-    item: dict[str, Any], token: TokenRecord, hass: HomeAssistant, *, write: bool,
+    item: dict[str, Any], access_key: AccessKeyRecord, hass: HomeAssistant, *, write: bool,
 ) -> bool:
     trackers = _person_trackers(item)
     if trackers is None:
         return False
     allowed = {Permission.WRITE} if write else {Permission.READ, Permission.WRITE}
     return all(
-        resolve_registry_access(entity_id, token, hass) in allowed
+        resolve_registry_access(entity_id, access_key, hass) in allowed
         for entity_id in trackers
     )
 
@@ -594,7 +594,7 @@ async def _prepare_config_flow_helper(
     hass: HomeAssistant,
     helper_type: str,
     steps: list[dict[str, Any]],
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
 ) -> tuple[str, Any]:
     """Replay a helper flow without ever submitting its final form.
 
@@ -624,7 +624,7 @@ async def _prepare_config_flow_helper(
             if menu_error := _creation_menu_error(body, supplied):
                 return "error", menu_error
             denied = _unwritable_option_entities(
-                supplied["data"], token, hass,
+                supplied["data"], access_key, hass,
                 template_type=supplied["step_id"] if helper_type == "template" and supplied["step_id"] != "user" else None,
             )
             if denied:
@@ -699,10 +699,10 @@ def _resolve_helper_entity_id(hass: HomeAssistant, helper_type: str, helper_id: 
 
 
 async def _tool_list_helpers(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: list accessible helper entities with their editable helper id."""
-    if effective_cap(token, "cap_registry_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_registry_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "list_helpers"
     type_filter = args.get("helper_type")
     registry = er.async_get(hass)
@@ -741,7 +741,7 @@ async def _tool_list_helpers(
         }
     from ..const import TEMPLATE_RECOVERY_TYPES
     helpers: list[dict] = []
-    for e in filter_entities_for_token(hass.states.async_all(), token, hass):
+    for e in filter_entities_for_access_key(hass.states.async_all(), access_key, hass):
         domain = e["entity_id"].split(".")[0]
         registry_entry = registry.async_get(e["entity_id"])
         is_template_helper = (
@@ -763,7 +763,7 @@ async def _tool_list_helpers(
         if domain == "person" and (
             stored_item is None
             or not _person_relationships_accessible(
-                stored_item, token, hass, write=False
+                stored_item, access_key, hass, write=False
             )
         ):
             continue
@@ -906,7 +906,7 @@ def _helper_write_precheck(args: dict, tool_name: str, *, require_id: bool) -> t
 
 
 def _scoped_helper_create_scope_error(
-    helper_type: str, token: TokenRecord
+    helper_type: str, access_key: AccessKeyRecord
 ) -> str | None:
     """Require inherited WRITE scope before creating a scoped helper entity.
 
@@ -916,9 +916,9 @@ def _scoped_helper_create_scope_error(
     the concrete entity because an entity-specific RED rule may override the
     inherited grant once the final entity_id is known.
     """
-    if token.pass_through:
+    if access_key.pass_through:
         return None
-    domain = token.permissions.domains.get(helper_type)
+    domain = access_key.permissions.domains.get(helper_type)
     if domain is not None and domain.state == "GREEN":
         return None
     return (
@@ -961,10 +961,10 @@ async def _tag_create_absence_error(
 
 
 def _person_relationship_scope_error(
-    config: dict[str, Any], token: TokenRecord, hass: HomeAssistant,
+    config: dict[str, Any], access_key: AccessKeyRecord, hass: HomeAssistant,
 ) -> str | None:
     """Require WRITE for every person tracker without identifying hidden links."""
-    if not _person_relationships_accessible(config, token, hass, write=True):
+    if not _person_relationships_accessible(config, access_key, hass, write=True):
         return (
             "This person references an unavailable or out-of-scope device "
             "tracker. Write access to every linked tracker is required; nothing changed."
@@ -993,7 +993,7 @@ def _scoped_helper_approval_context(
 
 
 async def _scoped_helper_context(
-    args: dict, token: TokenRecord, hass: HomeAssistant, tool_name: str,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, tool_name: str,
 ) -> tuple[dict[str, Any] | None, tuple[dict, str, str] | None]:
     """Resolve one writable scoped storage helper and its stored config.
 
@@ -1004,7 +1004,7 @@ async def _scoped_helper_context(
     helper_type = str(args.get("helper_type") or "")
     helper_id = str(args.get("helper_id") or "").strip()
     entity_id = _resolve_helper_entity_id(hass, helper_type, helper_id)
-    if entity_id is None or resolve(entity_id, token, hass) != Permission.WRITE:
+    if entity_id is None or resolve(entity_id, access_key, hass) != Permission.WRITE:
         return None, (
             _tool_error("Helper not found."), "not_found",
             f"helper:{helper_type}:{helper_id}",
@@ -1040,7 +1040,7 @@ async def _scoped_helper_context(
             f"helper:{helper_type}:{helper_id}",
         )
     if helper_type == "person" and not _person_relationships_accessible(
-        item, token, hass, write=True
+        item, access_key, hass, write=True
     ):
         return None, (
             _tool_error(
@@ -1054,13 +1054,13 @@ async def _scoped_helper_context(
 
 
 async def _bind_scoped_helper_context(
-    args: dict, token: TokenRecord, hass: HomeAssistant, tool_name: str,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, tool_name: str,
 ) -> tuple[dict, tuple[dict, str, str] | None]:
     """Attach an exact stable snapshot to edit/delete approval arguments."""
     helper_type = str(args.get("helper_type") or "")
     if helper_type not in _SCOPED_STORAGE_HELPER_TYPES:
         return args, None
-    context, error = await _scoped_helper_context(args, token, hass, tool_name)
+    context, error = await _scoped_helper_context(args, access_key, hass, tool_name)
     if error is not None:
         return args, error
     assert context is not None
@@ -1074,13 +1074,13 @@ async def _bind_scoped_helper_context(
 
 
 async def _revalidate_scoped_helper_context(
-    args: dict, token: TokenRecord, hass: HomeAssistant, tool_name: str,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, tool_name: str,
 ) -> tuple[dict[str, Any] | None, tuple[dict, str, str] | None]:
     """Re-check helper scope, storage ownership, and any approval snapshot."""
     helper_type = str(args.get("helper_type") or "")
     if helper_type not in _SCOPED_STORAGE_HELPER_TYPES:
         return None, None
-    context, error = await _scoped_helper_context(args, token, hass, tool_name)
+    context, error = await _scoped_helper_context(args, access_key, hass, tool_name)
     if error is not None:
         return None, error
     assert context is not None
@@ -1102,11 +1102,11 @@ async def _revalidate_scoped_helper_context(
 
 
 async def _tool_create_helper(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: create a helper (Confirm-gated)."""
-    if effective_cap(token, "cap_helper_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_helper_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "create_helper"
     helper_type = args.get("helper_type")
     if _valid_helper_type(helper_type):
@@ -1120,7 +1120,7 @@ async def _tool_create_helper(
             return pre
         if helper_type in _SCOPED_STORAGE_HELPER_TYPES:
             if scope_error := _scoped_helper_create_scope_error(
-                str(helper_type), token
+                str(helper_type), access_key
             ):
                 return _tool_error(scope_error), "denied", "create_helper"
             if absence_error := await _tag_create_absence_error(
@@ -1129,7 +1129,7 @@ async def _tool_create_helper(
                 return absence_error
             if helper_type == "person" and (
                 relationship_error := _person_relationship_scope_error(
-                    dict_arg(args.get("config")), token, hass
+                    dict_arg(args.get("config")), access_key, hass
                 )
             ):
                 return _tool_error(relationship_error), "denied", "create_helper"
@@ -1157,7 +1157,7 @@ async def _tool_create_helper(
             return _tool_error(error), "invalid_request", "create_helper"
         flow_steps = cast(list[dict[str, Any]], steps)
         status, detail = await _prepare_config_flow_helper(
-            hass, str(helper_type), flow_steps, token
+            hass, str(helper_type), flow_steps, access_key
         )
         if status == "form":
             return (
@@ -1180,7 +1180,7 @@ async def _tool_create_helper(
     create_entity = _helper_create_mesa_entity(str(helper_type), args, hass)
     mesa_context = _helper_mesa_context(
         data,
-        token,
+        access_key,
         [create_entity],
         action="create",
         service_data={
@@ -1194,18 +1194,18 @@ async def _tool_create_helper(
         return mesa_context
     approval_args, blocked = await _helper_mesa_approval_gate(
         args,
-        token,
+        access_key,
         hass,
         data,
         context=mesa_context,
         tool_name="create_helper",
         request_id=request_id,
         client_ip=client_ip,
-        diff_builder=lambda: _build_diff_create_helper(args, token, hass),
+        diff_builder=lambda: _build_diff_create_helper(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_create_helper(approval_args, token, hass, data)
+    return await _execute_create_helper(approval_args, access_key, hass, data)
 
 
 async def _read_helper_config(hass: HomeAssistant, helper_type: str, helper_id: str) -> dict | None:
@@ -1227,14 +1227,14 @@ async def _read_helper_config(hass: HomeAssistant, helper_type: str, helper_id: 
 
 
 async def _execute_create_helper(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     helper_type = args.get("helper_type")
     config = args.get("config")
     create_entity = _helper_create_mesa_entity(str(helper_type), args, hass)
     mesa_context = _enforce_helper_mesa_context(
         args,
-        token,
+        access_key,
         hass,
         data,
         [create_entity],
@@ -1256,7 +1256,7 @@ async def _execute_create_helper(
             return _tool_error(error), "invalid_request", "create_helper"
         flow_steps = cast(list[dict[str, Any]], steps)
         status, detail = await _prepare_config_flow_helper(
-            hass, str(helper_type), flow_steps, token
+            hass, str(helper_type), flow_steps, access_key
         )
         if status == "scope_error":
             return _tool_error(str(detail)), "denied", "create_helper"
@@ -1276,7 +1276,7 @@ async def _execute_create_helper(
             )
             return _tool_error(message), "invalid_request", "create_helper"
         return await _execute_config_flow_helper(
-            str(helper_type), flow_steps, token, hass, data,
+            str(helper_type), flow_steps, access_key, hass, data,
             create_mesa_context=mesa_context,
         )
     if not isinstance(config, dict) or not config:
@@ -1285,7 +1285,7 @@ async def _execute_create_helper(
     if pre is not None:
         return pre
     if helper_type in _SCOPED_STORAGE_HELPER_TYPES:
-        if scope_error := _scoped_helper_create_scope_error(str(helper_type), token):
+        if scope_error := _scoped_helper_create_scope_error(str(helper_type), access_key):
             return _tool_error(scope_error), "denied", "create_helper"
         if absence_error := await _tag_create_absence_error(
             args, hass, "create_helper"
@@ -1293,7 +1293,7 @@ async def _execute_create_helper(
             return absence_error
         if helper_type == "person" and (
             relationship_error := _person_relationship_scope_error(
-                config, token, hass
+                config, access_key, hass
             )
         ):
             return _tool_error(relationship_error), "denied", "create_helper"
@@ -1345,7 +1345,7 @@ async def _execute_create_helper(
         if new_id is not None else None
     )
     if helper_type in _SCOPED_STORAGE_HELPER_TYPES:
-        if entity_id is None or resolve(entity_id, token, hass) != Permission.WRITE:
+        if entity_id is None or resolve(entity_id, access_key, hass) != Permission.WRITE:
             if new_id is not None:
                 try:
                     await async_ws_command(
@@ -1373,7 +1373,7 @@ async def _execute_create_helper(
             )
         if helper_type == "person" and (
             not isinstance(item, dict)
-            or not _person_relationships_accessible(item, token, hass, write=True)
+            or not _person_relationships_accessible(item, access_key, hass, write=True)
         ):
             if new_id is not None:
                 try:
@@ -1426,7 +1426,7 @@ async def _execute_create_helper(
     post_mesa = (
         _helper_mesa_context(
             data,
-            token,
+            access_key,
             [entity_id] if entity_id is not None else [],
             action="create",
             service_data={"helper_type": helper_type, "config": config},
@@ -1437,7 +1437,7 @@ async def _execute_create_helper(
     if isinstance(post_mesa, tuple):
         post_error = post_mesa
     elif post_mesa.decision == "deny":
-        _fire_helper_mesa_blocks(hass, token, post_mesa)
+        _fire_helper_mesa_blocks(hass, access_key, post_mesa)
         post_error = _helper_mesa_error(post_mesa)
     elif post_mesa.decision == "confirm" and not (
         _restore_ctx.get() is not None
@@ -1477,7 +1477,7 @@ async def _execute_create_helper(
     )
     version_after = public_item if helper_type == "person" else config
     await _record_version(
-        data, token, resource_type="helper", resource_id=f"{helper_type}:{new_id}",
+        data, access_key, resource_type="helper", resource_id=f"{helper_type}:{new_id}",
         action="create", before=None, after=version_after, alias=config.get("name"),
     )
     return _tool_success(json.dumps({"helper_type": helper_type, "helper": public_item}, default=str)), "allowed", f"helper:{helper_type}"
@@ -1486,7 +1486,7 @@ async def _execute_create_helper(
 async def _execute_config_flow_helper(
     helper_type: str,
     steps: list[dict[str, Any]],
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     *,
@@ -1513,7 +1513,7 @@ async def _execute_config_flow_helper(
             if terminal is not (index == len(steps) - 1):
                 return _tool_error("The helper flow's final boundary changed; nothing was submitted."), "invalid_request", "create_helper"
             denied = _unwritable_option_entities(
-                supplied["data"], token, hass,
+                supplied["data"], access_key, hass,
                 template_type=supplied["step_id"] if helper_type == "template" and supplied["step_id"] != "user" else None,
             )
             if denied:
@@ -1526,7 +1526,7 @@ async def _execute_config_flow_helper(
                 )
             from ..request_authority import check_request_authority
             check_request_authority()
-            fresh_mesa = _helper_mesa_context(data, token,
+            fresh_mesa = _helper_mesa_context(data, access_key,
                 [_helper_create_mesa_entity(helper_type, {"flow_steps": steps}, hass)],
                 action="create", service_data={"helper_type": helper_type, "config": None, "flow_steps": steps},
                 session_id="create_helper_execute")
@@ -1621,7 +1621,7 @@ async def _execute_config_flow_helper(
             )
     post_mesa = _helper_mesa_context(
         data,
-        token,
+        access_key,
         entity_ids,
         action="create",
         service_data={"helper_type": helper_type},
@@ -1631,7 +1631,7 @@ async def _execute_config_flow_helper(
     if isinstance(post_mesa, tuple):
         post_error = post_mesa
     elif post_mesa.decision == "deny":
-        _fire_helper_mesa_blocks(hass, token, post_mesa)
+        _fire_helper_mesa_blocks(hass, access_key, post_mesa)
         post_error = _helper_mesa_error(post_mesa)
     elif post_mesa.decision == "confirm" and not (
         _restore_ctx.get() is not None
@@ -1664,7 +1664,7 @@ async def _execute_config_flow_helper(
         _mesa_advisory_ctx.set(True)
     await _record_version(
         data,
-        token,
+        access_key,
         resource_type="config_entry",
         resource_id=entry.entry_id,
         action="create",
@@ -1693,11 +1693,11 @@ async def _execute_config_flow_helper(
 
 
 async def _tool_edit_helper(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: edit a helper (Confirm-gated)."""
-    if effective_cap(token, "cap_helper_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_helper_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "edit_helper"
     if args.get("helper_type") in TEMPLATE_RECOVERY_TYPES:
         helper_id = str(args.get("helper_id") or "").strip()
@@ -1713,13 +1713,13 @@ async def _tool_edit_helper(
                 return _tool_error("config must be a non-empty object of Template settings."), "invalid_request", "edit_helper"
             return await _tool_set_config_entry_options(
                 {"entry_id": entry.entry_id, "settings": settings},
-                token, hass, data, request_id=request_id, client_ip=client_ip,
+                access_key, hass, data, request_id=request_id, client_ip=client_ip,
             )
     pre = _helper_write_precheck(args, "edit_helper", require_id=True)
     if pre is not None:
         return pre
     approval_args, context_error = await _bind_scoped_helper_context(
-        args, token, hass, "edit_helper"
+        args, access_key, hass, "edit_helper"
     )
     if context_error is not None:
         return context_error
@@ -1727,7 +1727,7 @@ async def _tool_edit_helper(
         args.get("config")
     ) and (
         relationship_error := _person_relationship_scope_error(
-            dict_arg(args.get("config")), token, hass
+            dict_arg(args.get("config")), access_key, hass
         )
     ):
         return _tool_error(relationship_error), "denied", "edit_helper"
@@ -1738,7 +1738,7 @@ async def _tool_edit_helper(
         return _tool_error("Helper not found."), "not_found", f"helper:{helper_type}:{helper_id}"
     mesa_context = _helper_mesa_context(
         data,
-        token,
+        access_key,
         [entity_id],
         action="edit",
         service_data={"helper_type": helper_type, "config": args.get("config")},
@@ -1748,21 +1748,21 @@ async def _tool_edit_helper(
         return mesa_context
     approval_args, blocked = await _helper_mesa_approval_gate(
         approval_args,
-        token,
+        access_key,
         hass,
         data,
         context=mesa_context,
         tool_name="edit_helper",
         request_id=request_id,
         client_ip=client_ip,
-        diff_builder=lambda: _build_diff_edit_helper(approval_args, token, hass),
+        diff_builder=lambda: _build_diff_edit_helper(approval_args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_edit_helper(approval_args, token, hass, data)
+    return await _execute_edit_helper(approval_args, access_key, hass, data)
 
 
-async def _protected_storage_helper_write(args, token, hass, data, before, payload, *, deleting=False):
+async def _protected_storage_helper_write(args, access_key, hass, data, before, payload, *, deleting=False):
     """Retain a durable safety copy and verify storage readback after one dispatch."""
     from ..config_recovery import ConfigurationRecoveryError
     from ..request_authority import check_request_authority
@@ -1785,7 +1785,7 @@ async def _protected_storage_helper_write(args, token, hass, data, before, paylo
     public = _public_helper_config(helper_type, before) if helper_type == "person" else before
     rid = None
     async with recovery.resource(key):
-        rid = await recovery.begin(key, operation, token.id, {
+        rid = await recovery.begin(key, operation, access_key.id, {
             "snapshot_type": "storage_helper", "helper_type": helper_type,
             "helper_id": helper_id, "config": public,
         }, expected={
@@ -1799,7 +1799,7 @@ async def _protected_storage_helper_write(args, token, hass, data, before, paylo
             if current != before:
                 await recovery.mark(rid, "not_applied")
                 raise ConfigurationRecoveryError("Helper configuration changed while saving its safety copy.")
-            _, error = await _revalidate_scoped_helper_context(args, token, hass, operation)
+            _, error = await _revalidate_scoped_helper_context(args, access_key, hass, operation)
             if error is not None:
                 await recovery.mark(rid, "not_applied")
                 raise ConfigurationRecoveryError("Helper authority changed before dispatch.")
@@ -1807,7 +1807,7 @@ async def _protected_storage_helper_write(args, token, hass, data, before, paylo
             entity_id = _resolve_helper_entity_id(hass, helper_type, helper_id)
             if entity_id is None:
                 raise ConfigurationRecoveryError("Helper identity changed before dispatch.")
-            context = _enforce_helper_mesa_context(args, token, hass, data, [entity_id],
+            context = _enforce_helper_mesa_context(args, access_key, hass, data, [entity_id],
                 action="delete" if deleting else "edit",
                 service_data={"helper_type": helper_type} if deleting else {"helper_type": helper_type, "config": args["config"]},
                 session_id=operation)
@@ -1828,7 +1828,7 @@ async def _protected_storage_helper_write(args, token, hass, data, before, paylo
 
 
 async def _execute_edit_helper(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     helper_type = args.get("helper_type")
     helper_id = str(args.get("helper_id") or "").strip()
@@ -1843,7 +1843,7 @@ async def _execute_edit_helper(
     if pre is not None:
         return pre
     scoped_context, context_error = await _revalidate_scoped_helper_context(
-        args, token, hass, "edit_helper"
+        args, access_key, hass, "edit_helper"
     )
     if context_error is not None:
         return context_error
@@ -1856,7 +1856,7 @@ async def _execute_edit_helper(
         return _tool_error("Helper not found."), "not_found", f"helper:{helper_type}:{helper_id}"
     mesa_context = _enforce_helper_mesa_context(
         args,
-        token,
+        access_key,
         hass,
         data,
         [entity_id],
@@ -1874,7 +1874,7 @@ async def _execute_edit_helper(
     if helper_type == "person":
         if "device_trackers" in config and (
             relationship_error := _person_relationship_scope_error(
-                config, token, hass
+                config, access_key, hass
             )
         ):
             return _tool_error(relationship_error), "denied", "edit_helper"
@@ -1890,7 +1890,7 @@ async def _execute_edit_helper(
         }
     payload = {f"{helper_type}_id": helper_id, **config}
     try:
-        item = await _protected_storage_helper_write(args, token, hass, data, before_cfg, payload)
+        item = await _protected_storage_helper_write(args, access_key, hass, data, before_cfg, payload)
     except Exception:
         return _tool_error("Helper edit was not verified. Inspect configuration recovery and current Home Assistant state before retrying."), "invalid_request", "edit_helper"
     public_before = (
@@ -1905,18 +1905,18 @@ async def _execute_edit_helper(
     )
     version_after = public_item if helper_type == "person" else config
     await _record_version(
-        data, token, resource_type="helper", resource_id=f"{helper_type}:{helper_id}",
+        data, access_key, resource_type="helper", resource_id=f"{helper_type}:{helper_id}",
         action="edit", before=public_before, after=version_after, alias=config.get("name"),
     )
     return _tool_success(json.dumps({"helper_type": helper_type, "helper": public_item}, default=str)), "allowed", f"helper:{helper_type}:{helper_id}"
 
 
 async def _tool_delete_helper(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: delete a helper (Confirm-gated)."""
-    if effective_cap(token, "cap_helper_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_helper_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_helper"
     from ..const import TEMPLATE_RECOVERY_TYPES
     if args.get("helper_type") in TEMPLATE_RECOVERY_TYPES:
@@ -1929,7 +1929,7 @@ async def _tool_delete_helper(
         if registry_entry is not None and registry_entry.platform == "template" and entry is not None and entry.domain == "template":
             from ..mcp_view import _tool_remove_integration
             return await _tool_remove_integration(
-                {"entry_id": entry.entry_id}, token, hass, data,
+                {"entry_id": entry.entry_id}, access_key, hass, data,
                 request_id=request_id, client_ip=client_ip,
             )
     pre = _helper_write_precheck(
@@ -1938,7 +1938,7 @@ async def _tool_delete_helper(
     if pre is not None:
         return pre
     approval_args, context_error = await _bind_scoped_helper_context(
-        args, token, hass, "delete_helper"
+        args, access_key, hass, "delete_helper"
     )
     if context_error is not None:
         return context_error
@@ -1949,7 +1949,7 @@ async def _tool_delete_helper(
         return _tool_error("Helper not found."), "not_found", f"helper:{helper_type}:{helper_id}"
     mesa_context = _helper_mesa_context(
         data,
-        token,
+        access_key,
         [entity_id],
         action="delete",
         service_data={"helper_type": helper_type},
@@ -1959,22 +1959,22 @@ async def _tool_delete_helper(
         return mesa_context
     approval_args, blocked = await _helper_mesa_approval_gate(
         approval_args,
-        token,
+        access_key,
         hass,
         data,
         context=mesa_context,
         tool_name="delete_helper",
         request_id=request_id,
         client_ip=client_ip,
-        diff_builder=lambda: _build_diff_delete_helper(approval_args, token, hass),
+        diff_builder=lambda: _build_diff_delete_helper(approval_args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_delete_helper(approval_args, token, hass, data)
+    return await _execute_delete_helper(approval_args, access_key, hass, data)
 
 
 async def _execute_delete_helper(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     helper_type = args.get("helper_type")
     helper_id = str(args.get("helper_id") or "").strip()
@@ -1983,7 +1983,7 @@ async def _execute_delete_helper(
     if not helper_id:
         return _tool_error("helper_id is required."), "invalid_request", "delete_helper"
     scoped_context, context_error = await _revalidate_scoped_helper_context(
-        args, token, hass, "delete_helper"
+        args, access_key, hass, "delete_helper"
     )
     if context_error is not None:
         return context_error
@@ -1994,7 +1994,7 @@ async def _execute_delete_helper(
         return _tool_error("Helper not found."), "not_found", f"helper:{helper_type}:{helper_id}"
     mesa_context = _enforce_helper_mesa_context(
         args,
-        token,
+        access_key,
         hass,
         data,
         [entity_id],
@@ -2010,7 +2010,7 @@ async def _execute_delete_helper(
         else await _read_helper_config(hass, str(helper_type), str(helper_id))
     )
     try:
-        await _protected_storage_helper_write(args, token, hass, data, before_cfg,
+        await _protected_storage_helper_write(args, access_key, hass, data, before_cfg,
             {f"{helper_type}_id": helper_id}, deleting=True)
     except Exception:
         return _tool_error("Helper deletion was not verified. Inspect configuration recovery and current Home Assistant state before retrying."), "invalid_request", "delete_helper"
@@ -2020,14 +2020,14 @@ async def _execute_delete_helper(
         else before_cfg
     )
     await _record_version(
-        data, token, resource_type="helper", resource_id=f"{helper_type}:{helper_id}",
+        data, access_key, resource_type="helper", resource_id=f"{helper_type}:{helper_id}",
         action="delete", before=public_before, after=None,
         alias=public_before.get("name") if isinstance(public_before, dict) else None,
     )
     return _tool_success(f"Helper '{helper_id}' deleted successfully."), "allowed", f"helper:{helper_type}:{helper_id}"
 
 
-def _build_diff_create_helper(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _build_diff_create_helper(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     helper_type = args.get("helper_type")
     config = dict_arg(args.get("config"))
     flow_steps = args.get("flow_steps") if isinstance(args.get("flow_steps"), list) else []
@@ -2051,7 +2051,7 @@ def _build_diff_create_helper(args: dict, token: TokenRecord, hass: HomeAssistan
     }
 
 
-def _build_diff_edit_helper(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _build_diff_edit_helper(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     helper_type = args.get("helper_type")
     helper_id = str(args.get("helper_id") or "").strip()
     config = dict_arg(args.get("config"))
@@ -2065,7 +2065,7 @@ def _build_diff_edit_helper(args: dict, token: TokenRecord, hass: HomeAssistant)
     }
 
 
-def _build_diff_delete_helper(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _build_diff_delete_helper(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     helper_type = args.get("helper_type")
     helper_id = str(args.get("helper_id") or "").strip()
     entity_id = _resolve_helper_entity_id(hass, str(helper_type), helper_id)
@@ -2380,7 +2380,7 @@ async def _abort_flow(hass: HomeAssistant, mechanism: str | None, flow_id: str |
 
 
 async def _tool_get_config_entry_options(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read one helper config entry's options and the schema for them.
 
@@ -2390,7 +2390,7 @@ async def _tool_get_config_entry_options(
     operator's UI.
     """
     tool = "get_helper_settings"
-    if effective_cap(token, "cap_helper_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_helper_write") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", tool
     entry = await _helper_config_entry(hass, args.get("entry_id"))
     if entry is None:
@@ -2500,7 +2500,7 @@ def _template_options_after_form(options: dict, payload: dict, schema: vol.Schem
 
 
 def _unwritable_option_entities(
-    options: Any, token: TokenRecord, hass: HomeAssistant, *, template_type: str | None = None,
+    options: Any, access_key: AccessKeyRecord, hass: HomeAssistant, *, template_type: str | None = None,
 ) -> list[str]:
     """Entities in an options payload the token may not WRITE.
 
@@ -2515,12 +2515,12 @@ def _unwritable_option_entities(
         validate_template_selectors(options, template_type)
     return sorted(
         eid for eid in _entities_in_options(options)
-        if resolve(eid, token, hass) != Permission.WRITE
+        if resolve(eid, access_key, hass) != Permission.WRITE
     )
 
 
 def _config_entry_settings_precheck(
-    settings: Any, entry: Any, mechanism: str | None, token: TokenRecord,
+    settings: Any, entry: Any, mechanism: str | None, access_key: AccessKeyRecord,
     hass: HomeAssistant, tool: str,
 ) -> tuple[dict, str, str] | None:
     """Refuse a doomed reconfigure before an approval is created."""
@@ -2533,7 +2533,7 @@ def _config_entry_settings_precheck(
         )
     try:
         denied = _unwritable_option_entities(
-            settings, token, hass,
+            settings, access_key, hass,
             template_type=entry.options.get("template_type") if entry.domain == "template" else None,
         )
     except HelperScopeError as exc:
@@ -2551,7 +2551,7 @@ def _config_entry_settings_precheck(
 
 
 async def _build_diff_set_config_entry_options(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> dict:
     entry = await _helper_config_entry(hass, args.get("entry_id"))
     mechanism = _settings_mechanism(entry) if entry is not None else None
@@ -2576,7 +2576,7 @@ async def _build_diff_set_config_entry_options(
     }
 
 
-async def _preflight_template_settings(hass, entry, settings, token, *, intended=None):
+async def _preflight_template_settings(hass, entry, settings, access_key, *, intended=None):
     """Validate an options form without submitting or creating a recovery barrier."""
     from ..template_recovery import template_snapshot
 
@@ -2594,7 +2594,7 @@ async def _preflight_template_settings(hass, entry, settings, token, *, intended
         payload = schema(_settings_form_payload(result, settings))
         # Check retained values too, after HA has built the complete form.
         options = _template_options_after_form(before["options"], payload, schema)
-        denied = _unwritable_option_entities(options, token, hass, template_type=entry.options["template_type"])
+        denied = _unwritable_option_entities(options, access_key, hass, template_type=entry.options["template_type"])
         if denied:
             return _tool_error("Template references are outside this access key's write scope."), "denied", "set_helper_settings"
         if intended is not None:
@@ -2609,7 +2609,7 @@ async def _preflight_template_settings(hass, entry, settings, token, *, intended
 
 
 async def _tool_set_config_entry_options(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: change one helper config entry's settings (Confirm-gated).
@@ -2625,14 +2625,14 @@ async def _tool_set_config_entry_options(
     `editable_settings` from get_helper_settings with the change applied.
     """
     tool = "set_helper_settings"
-    if effective_cap(token, "cap_helper_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_helper_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     entry = await _helper_config_entry(hass, args.get("entry_id"))
     if entry is None:
         return _tool_error(_NOT_A_HELPER_ENTRY), "not_found", tool
     mechanism = _settings_mechanism(entry)
     pre = _config_entry_settings_precheck(
-        args.get("settings"), entry, mechanism, token, hass, tool)
+        args.get("settings"), entry, mechanism, access_key, hass, tool)
     if pre is not None:
         return pre
     conflict = _cas_conflict(
@@ -2640,7 +2640,7 @@ async def _tool_set_config_entry_options(
     if conflict is not None:
         return conflict
     if entry.domain == "template":
-        refusal = await _preflight_template_settings(hass, entry, args["settings"], token)
+        refusal = await _preflight_template_settings(hass, entry, args["settings"], access_key)
         if refusal is not None:
             return refusal
     entity_ids = _config_entry_helper_mesa_entities(hass, entry, data)
@@ -2648,7 +2648,7 @@ async def _tool_set_config_entry_options(
         return entity_ids
     mesa_context = _helper_mesa_context(
         data,
-        token,
+        access_key,
         entity_ids,
         action="settings",
         service_data={"helper_type": entry.domain, "settings": args.get("settings")},
@@ -2658,53 +2658,53 @@ async def _tool_set_config_entry_options(
         return mesa_context
     approval_args, blocked = await _helper_mesa_approval_gate(
         args,
-        token,
+        access_key,
         hass,
         data,
         context=mesa_context,
         tool_name=tool,
         request_id=request_id,
         client_ip=client_ip,
-        diff_builder=lambda: _build_diff_set_config_entry_options(args, token, hass),
+        diff_builder=lambda: _build_diff_set_config_entry_options(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_set_config_entry_options(approval_args, token, hass, data)
+    return await _execute_set_config_entry_options(approval_args, access_key, hass, data)
 
 
 async def _execute_set_config_entry_options(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Run a helper settings write, wrapping Template entries in configuration recovery."""
     from ..config_recovery import ConfigurationRecoveryError
     from ..template_recovery import protect_template, template_snapshot
 
-    if effective_cap(token, "cap_helper_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_helper_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_helper_settings"
     entry = hass.config_entries.async_get_entry(str(args.get("entry_id") or ""))
     if entry is None or entry.domain != "template":
-        return await _apply_config_entry_options(args, token, hass, data)
+        return await _apply_config_entry_options(args, access_key, hass, data)
     tool = "set_helper_settings"
-    pre = _config_entry_settings_precheck(args.get("settings"), entry, _settings_mechanism(entry), token, hass, tool)
+    pre = _config_entry_settings_precheck(args.get("settings"), entry, _settings_mechanism(entry), access_key, hass, tool)
     if pre is not None:
         return pre
     entities = _config_entry_helper_mesa_entities(hass, entry, data)
     if isinstance(entities, tuple):
         return entities
-    mesa = _enforce_helper_mesa_context(args, token, hass, data, entities, action="settings",
+    mesa = _enforce_helper_mesa_context(args, access_key, hass, data, entities, action="settings",
         service_data={"helper_type": entry.domain, "settings": args.get("settings")}, session_id=tool)
     if isinstance(mesa, tuple):
         return mesa
     wanted: dict = {}
-    refusal = await _preflight_template_settings(hass, entry, args["settings"], token, intended=wanted)
+    refusal = await _preflight_template_settings(hass, entry, args["settings"], access_key, intended=wanted)
     if refusal is not None:
         return refusal
     rid = None
     try:
-        async with protect_template(hass, data, token, entry, tool, expected=wanted) as rid:
+        async with protect_template(hass, data, access_key, entry, tool, expected=wanted) as rid:
             saved = data.config_recovery.get(rid)
             assert saved is not None
-            result = await _apply_config_entry_options(args, token, hass, data, recovery_before=saved["before"])
+            result = await _apply_config_entry_options(args, access_key, hass, data, recovery_before=saved["before"])
             current = hass.config_entries.async_get_entry(entry.entry_id)
             if result[1] == "denied":
                 # The apply driver only returns policy refusals before submission.
@@ -2728,7 +2728,7 @@ async def _execute_set_config_entry_options(
 
 
 async def _apply_config_entry_options(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData, *, record_history: bool = True, recovery_before: dict | None = None
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData, *, record_history: bool = True, recovery_before: dict | None = None
 ) -> tuple[dict, str, str]:
     tool = "set_helper_settings"
     entry = await _helper_config_entry(hass, args.get("entry_id"))
@@ -2738,7 +2738,7 @@ async def _apply_config_entry_options(
     settings = args.get("settings")
     # Re-validated at apply time, not only pre-gate: the entry, the token's tree
     # and the entities named can all move while an approval waits.
-    pre = _config_entry_settings_precheck(settings, entry, mechanism, token, hass, tool)
+    pre = _config_entry_settings_precheck(settings, entry, mechanism, access_key, hass, tool)
     if pre is not None:
         return pre
     before = _settings_store(entry, mechanism)
@@ -2752,7 +2752,7 @@ async def _apply_config_entry_options(
         return entity_ids
     mesa_context = _enforce_helper_mesa_context(
         args,
-        token,
+        access_key,
         hass,
         data,
         entity_ids,
@@ -2781,7 +2781,7 @@ async def _apply_config_entry_options(
             if isinstance(fresh_entities, tuple):
                 await _abort_flow(hass, mechanism, flow_id)
                 return fresh_entities
-            fresh_mesa = _enforce_helper_mesa_context(args, token, hass, data, fresh_entities,
+            fresh_mesa = _enforce_helper_mesa_context(args, access_key, hass, data, fresh_entities,
                 action="settings", service_data={"helper_type": entry.domain, "settings": settings},
                 session_id="set_helper_settings_execute")
             if isinstance(fresh_mesa, tuple):
@@ -2791,7 +2791,7 @@ async def _apply_config_entry_options(
         if entry.domain == "template":
             payload = result["data_schema"](payload)
             options = _template_options_after_form(dict(entry.options), payload, result["data_schema"])
-            denied = _unwritable_option_entities(options, token, hass, template_type=entry.options["template_type"])
+            denied = _unwritable_option_entities(options, access_key, hass, template_type=entry.options["template_type"])
             if denied:
                 await _abort_flow(hass, mechanism, flow_id)
                 return _tool_error("Template references are outside this access key's write scope."), "denied", tool
@@ -2840,7 +2840,7 @@ async def _apply_config_entry_options(
         return _tool_error("Template settings readback did not match the completed flow; inspect recovery before retrying."), "invalid_request", tool
     if record_history:
         await _record_version(
-            data, token, resource_type="config_entry", resource_id=entry.entry_id,
+            data, access_key, resource_type="config_entry", resource_id=entry.entry_id,
             action="edit", before=version_before,
             after=template_snapshot(hass, applied_entry) if entry.domain == "template" else after, alias=entry.title,
             summary=_version_summary("config_entry.options", subject=entry.title),

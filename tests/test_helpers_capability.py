@@ -15,10 +15,10 @@ from custom_components.phoenix_mcp.const import (
     PASS_THROUGH_EXEMPT_CAPS,
 )
 from custom_components.phoenix_mcp.helpers import effective_cap, effective_caps
-from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 
 
-def _token(**overrides) -> TokenRecord:
+def _access_key(**overrides) -> AccessKeyRecord:
     defaults = dict(
         id="t",
         name="test",
@@ -28,7 +28,7 @@ def _token(**overrides) -> TokenRecord:
         permissions=PermissionTree(),
     )
     defaults.update(overrides)
-    return TokenRecord(**defaults)
+    return AccessKeyRecord(**defaults)
 
 
 # --- non-exempt cap (cap_config_read) -----------------------------------------
@@ -38,19 +38,19 @@ class TestNonExemptCap:
     """cap_config_read is NOT pass-through exempt: pass-through bypasses deny, not confirm."""
 
     def test_scoped_deny(self):
-        tok = _token(cap_config_read=CAP_DENY)
+        tok = _access_key(cap_config_read=CAP_DENY)
         assert effective_cap(tok, "cap_config_read") == CAP_DENY
 
     def test_scoped_allow(self):
-        tok = _token(cap_config_read=CAP_ALLOW)
+        tok = _access_key(cap_config_read=CAP_ALLOW)
         assert effective_cap(tok, "cap_config_read") == CAP_ALLOW
 
     def test_pass_through_overrides_deny(self):
-        tok = _token(cap_config_read=CAP_DENY, pass_through=True)
+        tok = _access_key(cap_config_read=CAP_DENY, pass_through=True)
         assert effective_cap(tok, "cap_config_read") == CAP_ALLOW
 
     def test_pass_through_keeps_allow(self):
-        tok = _token(cap_config_read=CAP_ALLOW, pass_through=True)
+        tok = _access_key(cap_config_read=CAP_ALLOW, pass_through=True)
         assert effective_cap(tok, "cap_config_read") == CAP_ALLOW
 
 
@@ -61,23 +61,23 @@ class TestExemptCap:
     """cap_restart IS pass-through exempt, so its configured value is used as-is."""
 
     def test_scoped_deny(self):
-        tok = _token(cap_restart=CAP_DENY)
+        tok = _access_key(cap_restart=CAP_DENY)
         assert effective_cap(tok, "cap_restart") == CAP_DENY
 
     def test_pass_through_does_not_override_deny(self):
-        tok = _token(cap_restart=CAP_DENY, pass_through=True)
+        tok = _access_key(cap_restart=CAP_DENY, pass_through=True)
         assert effective_cap(tok, "cap_restart") == CAP_DENY
 
     def test_scoped_allow(self):
-        tok = _token(cap_restart=CAP_ALLOW)
+        tok = _access_key(cap_restart=CAP_ALLOW)
         assert effective_cap(tok, "cap_restart") == CAP_ALLOW
 
     def test_pass_through_keeps_allow(self):
-        tok = _token(cap_restart=CAP_ALLOW, pass_through=True)
+        tok = _access_key(cap_restart=CAP_ALLOW, pass_through=True)
         assert effective_cap(tok, "cap_restart") == CAP_ALLOW
 
     def test_confirm_preserved_under_pass_through(self):
-        tok = _token(cap_restart=CAP_CONFIRM, pass_through=True)
+        tok = _access_key(cap_restart=CAP_CONFIRM, pass_through=True)
         assert effective_cap(tok, "cap_restart") == CAP_CONFIRM
 
 
@@ -90,7 +90,7 @@ class TestConfirmHonoredUnderPassThrough:
     def test_non_exempt_confirm_routes_through_gate(self):
         # cap_config_read is non-exempt: pass-through upgrades deny to allow
         # but must leave confirm alone.
-        tok = _token(cap_config_read=CAP_CONFIRM, pass_through=True)
+        tok = _access_key(cap_config_read=CAP_CONFIRM, pass_through=True)
         assert effective_cap(tok, "cap_config_read") == CAP_CONFIRM
 
 
@@ -132,17 +132,17 @@ class TestEffectiveCaps:
     def test_returns_all_caps(self):
         from custom_components.phoenix_mcp.const import CAPABILITY_NAMES
 
-        tok = _token()
+        tok = _access_key()
         caps = effective_caps(tok)
         assert set(caps.keys()) == set(CAPABILITY_NAMES)
 
     def test_default_token_all_deny(self):
-        tok = _token()
+        tok = _access_key()
         for value in effective_caps(tok).values():
             assert value == CAP_DENY
 
     def test_pass_through_flips_non_exempt_to_allow(self):
-        tok = _token(pass_through=True)
+        tok = _access_key(pass_through=True)
         caps = effective_caps(tok)
         for cap_name, value in caps.items():
             if cap_name in PASS_THROUGH_EXEMPT_CAPS:
@@ -173,7 +173,7 @@ class TestDeferredDiff:
             return {"kind": "yaml_diff"}
 
         result = await async_evaluate_capability(
-            "cap_config_read", _token(cap_config_read=CAP_ALLOW), MagicMock(), MagicMock(),
+            "cap_config_read", _access_key(cap_config_read=CAP_ALLOW), MagicMock(), MagicMock(),
             tool_name="t", args={}, request_id="r", diff=_builder,
         )
         assert result.is_allow
@@ -191,7 +191,7 @@ class TestDeferredDiff:
             return {"kind": "yaml_diff"}
 
         result = await async_evaluate_capability(
-            "cap_config_read", _token(cap_config_read=CAP_DENY), MagicMock(), MagicMock(),
+            "cap_config_read", _access_key(cap_config_read=CAP_DENY), MagicMock(), MagicMock(),
             tool_name="t", args={}, request_id="r", diff=_builder,
         )
         assert result.is_deny

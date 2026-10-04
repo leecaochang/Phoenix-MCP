@@ -22,10 +22,10 @@ from custom_components.phoenix_mcp.admin_view import (
     PhoenixAdminPermissionBulkSelectView,
     PhoenixAdminPermissionIntegrationOptionsView,
     PhoenixAdminSettingsView,
-    PhoenixAdminTokenAuditView,
-    PhoenixAdminTokenStatsView,
-    PhoenixAdminTokensView,
-    PhoenixAdminTokenView,
+    PhoenixAdminAccessKeyAuditView,
+    PhoenixAdminAccessKeyStatsView,
+    PhoenixAdminAccessKeysView,
+    PhoenixAdminAccessKeyView,
     PhoenixAdminVoiceAgentPipelineView,
     PhoenixAdminAiTaskPreferredView,
     PhoenixAdminWipeView,
@@ -42,24 +42,24 @@ from custom_components.phoenix_mcp.const import (
     DOMAIN,
     MAX_CONFIRM_INLINE_WAIT_SECONDS,
     MIN_CONFIRM_INLINE_WAIT_SECONDS,
-    TOKEN_PREFIX,
+    ACCESS_KEY_PREFIX,
 )
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
-from custom_components.phoenix_mcp.token_store import (
+from custom_components.phoenix_mcp.access_key_store import (
     GlobalSettings,
     PermissionNode,
-    TokenRecord,
-    TokenStore,
+    AccessKeyRecord,
+    AccessKeyStore,
 )
 
 
-def _make_active_token(name: str = "test-token", pass_through: bool = False) -> TokenRecord:
+def _make_active_token(name: str = "test-token", pass_through: bool = False) -> AccessKeyRecord:
     from homeassistant.util.dt import utcnow
 
-    raw = TOKEN_PREFIX + secrets.token_hex(32)
+    raw = ACCESS_KEY_PREFIX + secrets.token_hex(32)
     token_hash = hashlib.sha256(raw.encode()).hexdigest()
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name=name,
         token_hash=token_hash,
@@ -69,9 +69,9 @@ def _make_active_token(name: str = "test-token", pass_through: bool = False) -> 
     )
 
 
-def _make_data(tokens: list[TokenRecord] | None = None) -> PhoenixData:
-    store = MagicMock(spec=TokenStore)
-    store.list_tokens.return_value = tokens or []
+def _make_data(access_keys: list[AccessKeyRecord] | None = None) -> PhoenixData:
+    store = MagicMock(spec=AccessKeyStore)
+    store.list_access_keys.return_value = access_keys or []
     store.list_archived.return_value = []
     store.get_settings.return_value = GlobalSettings()
     store.get_entity_hints.return_value = {}
@@ -126,11 +126,11 @@ def _make_hass(data: PhoenixData) -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_unauthenticated_rejected_from_tokens_list():
-    token = _make_active_token()
-    data = _make_data([token])
+    access_key = _make_active_token()
+    data = _make_data([access_key])
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokensView()
+    view = PhoenixAdminAccessKeysView()
     view.hass = hass
 
     request = _make_admin_request(authenticated=False)
@@ -143,11 +143,11 @@ async def test_unauthenticated_rejected_from_tokens_list():
 
 @pytest.mark.asyncio
 async def test_non_admin_rejected_from_tokens_list():
-    token = _make_active_token()
-    data = _make_data([token])
+    access_key = _make_active_token()
+    data = _make_data([access_key])
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokensView()
+    view = PhoenixAdminAccessKeysView()
     view.hass = hass
 
     request = _make_admin_request(is_admin=False)
@@ -160,11 +160,11 @@ async def test_non_admin_rejected_from_tokens_list():
 
 @pytest.mark.asyncio
 async def test_admin_can_list_tokens():
-    token = _make_active_token()
-    data = _make_data([token])
+    access_key = _make_active_token()
+    data = _make_data([access_key])
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokensView()
+    view = PhoenixAdminAccessKeysView()
     view.hass = hass
 
     request = _make_admin_request()
@@ -173,7 +173,7 @@ async def test_admin_can_list_tokens():
     assert resp.status == 200
     body = json.loads(resp.text)
     assert len(body) == 1
-    assert body[0]["id"] == token.id
+    assert body[0]["id"] == access_key.id
     assert "token_hash" not in body[0]
     assert "token" not in body[0]
 
@@ -183,11 +183,11 @@ async def test_create_token_returns_raw_token_once():
     data = _make_data()
     hass = _make_hass(data)
 
-    token = _make_active_token()
+    access_key = _make_active_token()
     data.store.name_slug_exists.return_value = False
-    data.store.async_create_token = AsyncMock(return_value=(token, "phx_rawtoken123"))
+    data.store.async_create_access_key = AsyncMock(return_value=(access_key, "phx_rawtoken123"))
 
-    view = PhoenixAdminTokensView()
+    view = PhoenixAdminAccessKeysView()
     view.hass = hass
 
     body = json.dumps({"name": "my-token"}).encode()
@@ -197,7 +197,7 @@ async def test_create_token_returns_raw_token_once():
     assert resp.status == 201
     result = json.loads(resp.text)
     assert result["token"] == "phx_rawtoken123"
-    assert result["id"] == token.id
+    assert result["id"] == access_key.id
 
 
 @pytest.mark.asyncio
@@ -211,27 +211,27 @@ async def test_create_token_naive_expires_at_normalized_to_aware():
     data = _make_data()
     hass = _make_hass(data)
 
-    token = _make_active_token()
+    access_key = _make_active_token()
     data.store.name_slug_exists.return_value = False
-    data.store.async_create_token = AsyncMock(return_value=(token, "phx_rawtoken123"))
+    data.store.async_create_access_key = AsyncMock(return_value=(access_key, "phx_rawtoken123"))
 
-    view = PhoenixAdminTokensView()
+    view = PhoenixAdminAccessKeysView()
     view.hass = hass
 
     body = json.dumps({"name": "my-token", "expires_at": "2030-01-01T12:00:00"}).encode()
     resp = await view.post(_make_admin_request(body=body))
 
     assert resp.status == 201
-    stored = data.store.async_create_token.call_args.kwargs["expires_at"]
+    stored = data.store.async_create_access_key.call_args.kwargs["expires_at"]
     assert stored is not None
     assert stored.tzinfo is not None
 
     # An offset-aware value is normalized to UTC, preserving the instant.
-    data.store.async_create_token.reset_mock()
+    data.store.async_create_access_key.reset_mock()
     body = json.dumps({"name": "my-token", "expires_at": "2030-01-01T12:00:00+02:00"}).encode()
     resp = await view.post(_make_admin_request(body=body))
     assert resp.status == 201
-    stored = data.store.async_create_token.call_args.kwargs["expires_at"]
+    stored = data.store.async_create_access_key.call_args.kwargs["expires_at"]
     assert stored.isoformat() == "2030-01-01T10:00:00+00:00"
 
 
@@ -240,9 +240,9 @@ async def test_create_token_non_string_expires_at_rejected():
     data = _make_data()
     hass = _make_hass(data)
     data.store.name_slug_exists.return_value = False
-    data.store.async_create_token = AsyncMock()
+    data.store.async_create_access_key = AsyncMock()
 
-    view = PhoenixAdminTokensView()
+    view = PhoenixAdminAccessKeysView()
     view.hass = hass
 
     for garbage in (12345, ["2030-01-01T12:00:00Z"], {"at": "2030"}, None):
@@ -250,7 +250,7 @@ async def test_create_token_non_string_expires_at_rejected():
         resp = await view.post(_make_admin_request(body=body))
         assert resp.status == 400
         assert json.loads(resp.text)["error"] == "invalid_request"
-    data.store.async_create_token.assert_not_called()
+    data.store.async_create_access_key.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -258,7 +258,7 @@ async def test_create_token_invalid_name_rejected():
     data = _make_data()
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokensView()
+    view = PhoenixAdminAccessKeysView()
     view.hass = hass
 
     body = json.dumps({"name": "bad name!"}).encode()
@@ -276,7 +276,7 @@ async def test_create_token_slug_collision_rejected():
     hass = _make_hass(data)
     data.store.name_slug_exists.return_value = True
 
-    view = PhoenixAdminTokensView()
+    view = PhoenixAdminAccessKeysView()
     view.hass = hass
 
     body = json.dumps({"name": "my-token"}).encode()
@@ -292,7 +292,7 @@ async def test_create_pass_through_requires_confirmation():
     hass = _make_hass(data)
     data.store.name_slug_exists.return_value = False
 
-    view = PhoenixAdminTokensView()
+    view = PhoenixAdminAccessKeysView()
     view.hass = hass
 
     body = json.dumps({"name": "pt-token", "pass_through": True}).encode()
@@ -309,11 +309,11 @@ async def test_create_pass_through_with_confirmation_succeeds():
     data = _make_data()
     hass = _make_hass(data)
 
-    token = _make_active_token(pass_through=True)
+    access_key = _make_active_token(pass_through=True)
     data.store.name_slug_exists.return_value = False
-    data.store.async_create_token = AsyncMock(return_value=(token, "phx_rawtoken"))
+    data.store.async_create_access_key = AsyncMock(return_value=(access_key, "phx_rawtoken"))
 
-    view = PhoenixAdminTokensView()
+    view = PhoenixAdminAccessKeysView()
     view.hass = hass
 
     body = json.dumps({"name": "pt-token", "pass_through": True, "confirm_pass_through": True}).encode()
@@ -330,9 +330,9 @@ async def test_create_non_boolean_pass_through_rejected():
     data = _make_data()
     hass = _make_hass(data)
     data.store.name_slug_exists.return_value = False
-    data.store.async_create_token = AsyncMock()
+    data.store.async_create_access_key = AsyncMock()
 
-    view = PhoenixAdminTokensView()
+    view = PhoenixAdminAccessKeysView()
     view.hass = hass
 
     for body_dict in (
@@ -344,18 +344,18 @@ async def test_create_non_boolean_pass_through_rejected():
     ):
         resp = await view.post(_make_admin_request(body=json.dumps(body_dict).encode()))
         assert resp.status == 400, body_dict
-    data.store.async_create_token.assert_not_called()
+    data.store.async_create_access_key.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_patch_non_boolean_pass_through_rejected():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
-    data.store.async_patch_token = AsyncMock()
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.async_patch_access_key = AsyncMock()
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
     for body_dict in (
@@ -364,100 +364,100 @@ async def test_patch_non_boolean_pass_through_rejected():
         {"use_assist_exposure": "true"},
     ):
         request = _make_admin_request(body=json.dumps(body_dict).encode())
-        resp = await view.patch(request, token_id=token.id)
+        resp = await view.patch(request, token_id=access_key.id)
         assert resp.status == 400, body_dict
-    data.store.async_patch_token.assert_not_called()
+    data.store.async_patch_access_key.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_patch_token_rename_succeeds():
-    token = _make_active_token(name="old-name")
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
+    access_key = _make_active_token(name="old-name")
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.name_slug_exists.return_value = False
     renamed = _make_active_token(name="new-name")
-    renamed.id = token.id
-    data.store.async_patch_token = AsyncMock(return_value=renamed)
+    renamed.id = access_key.id
+    data.store.async_patch_access_key = AsyncMock(return_value=renamed)
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
     body = json.dumps({"name": "new-name"}).encode()
     request = _make_admin_request(body=body)
-    resp = await view.patch(request, token_id=token.id)
+    resp = await view.patch(request, token_id=access_key.id)
 
     assert resp.status == 200
-    data.store.async_patch_token.assert_awaited_once()
-    assert data.store.async_patch_token.call_args.kwargs.get("name") == "new-name"
+    data.store.async_patch_access_key.assert_awaited_once()
+    assert data.store.async_patch_access_key.call_args.kwargs.get("name") == "new-name"
 
 
 @pytest.mark.asyncio
 async def test_patch_token_rename_clash_rejected():
-    token = _make_active_token(name="old-name")
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
+    access_key = _make_active_token(name="old-name")
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.name_slug_exists.return_value = True  # another token already uses it
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
     body = json.dumps({"name": "taken-name"}).encode()
     request = _make_admin_request(body=body)
-    resp = await view.patch(request, token_id=token.id)
+    resp = await view.patch(request, token_id=access_key.id)
 
     assert resp.status == 400
 
 
 @pytest.mark.asyncio
 async def test_patch_token_rename_invalid_name_rejected():
-    token = _make_active_token(name="old-name")
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
+    access_key = _make_active_token(name="old-name")
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.name_slug_exists.return_value = False
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
-    body = json.dumps({"name": "no"}).encode()  # too short for TOKEN_NAME_REGEX
+    body = json.dumps({"name": "no"}).encode()  # too short for ACCESS_KEY_NAME_REGEX
     request = _make_admin_request(body=body)
-    resp = await view.patch(request, token_id=token.id)
+    resp = await view.patch(request, token_id=access_key.id)
 
     assert resp.status == 400
 
 
 @pytest.mark.asyncio
 async def test_patch_token_rejects_expires_at_field():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
     body = json.dumps({"expires_at": "2030-01-01T00:00:00Z"}).encode()
     request = _make_admin_request(body=body)
-    resp = await view.patch(request, token_id=token.id)
+    resp = await view.patch(request, token_id=access_key.id)
 
     assert resp.status == 400
 
 
 @pytest.mark.asyncio
 async def test_patch_token_pass_through_requires_confirm():
-    token = _make_active_token(pass_through=False)
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
+    access_key = _make_active_token(pass_through=False)
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
     body = json.dumps({"pass_through": True}).encode()
     request = _make_admin_request(body=body)
-    resp = await view.patch(request, token_id=token.id)
+    resp = await view.patch(request, token_id=access_key.id)
 
     assert resp.status == 400
     body_parsed = json.loads(resp.text)
@@ -466,106 +466,106 @@ async def test_patch_token_pass_through_requires_confirm():
 
 @pytest.mark.asyncio
 async def test_patch_token_pass_through_already_enabled_no_confirm_needed():
-    token = _make_active_token(pass_through=True)
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
-    data.store.async_patch_token = AsyncMock(return_value=token)
+    access_key = _make_active_token(pass_through=True)
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.async_patch_access_key = AsyncMock(return_value=access_key)
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
     body = json.dumps({"pass_through": True}).encode()
     request = _make_admin_request(body=body)
-    resp = await view.patch(request, token_id=token.id)
+    resp = await view.patch(request, token_id=access_key.id)
 
     assert resp.status == 200
     # Assert the actual patch payload, not just the status: re-affirming pass_through
     # on an already-enabled token must patch exactly {"pass_through": True} and must
     # NOT smuggle in a confirm_pass_through escape hatch or any other field.
-    data.store.async_patch_token.assert_awaited_once()
-    assert data.store.async_patch_token.await_args.args[0] == token.id
-    assert data.store.async_patch_token.await_args.kwargs == {"pass_through": True}
+    data.store.async_patch_access_key.assert_awaited_once()
+    assert data.store.async_patch_access_key.await_args.args[0] == access_key.id
+    assert data.store.async_patch_access_key.await_args.kwargs == {"pass_through": True}
 
 
 @pytest.mark.asyncio
 async def test_patch_token_announce_all_tools_accepted():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
-    data.store.async_patch_token = AsyncMock(return_value=token)
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.async_patch_access_key = AsyncMock(return_value=access_key)
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
     body = json.dumps({"announce_all_tools": True}).encode()
-    resp = await view.patch(_make_admin_request(body=body), token_id=token.id)
+    resp = await view.patch(_make_admin_request(body=body), token_id=access_key.id)
 
     assert resp.status == 200
-    assert data.store.async_patch_token.call_args.kwargs["announce_all_tools"] is True
+    assert data.store.async_patch_access_key.call_args.kwargs["announce_all_tools"] is True
 
 
 @pytest.mark.asyncio
 async def test_patch_token_announce_all_tools_rejects_non_bool():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
-    data.store.async_patch_token = AsyncMock(return_value=token)
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.async_patch_access_key = AsyncMock(return_value=access_key)
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
     body = json.dumps({"announce_all_tools": "yes"}).encode()
-    resp = await view.patch(_make_admin_request(body=body), token_id=token.id)
+    resp = await view.patch(_make_admin_request(body=body), token_id=access_key.id)
 
     assert resp.status == 400
 
 
 @pytest.mark.asyncio
 async def test_patch_token_inline_wait_accepted():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
-    data.store.async_patch_token = AsyncMock(return_value=token)
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.async_patch_access_key = AsyncMock(return_value=access_key)
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
     # In-range durations and 0 (disable, the unattended-agent mode) all pass.
     for good in (30, 60, 180, 0):
         body = json.dumps({"confirm_inline_wait_seconds": good}).encode()
-        resp = await view.patch(_make_admin_request(body=body), token_id=token.id)
+        resp = await view.patch(_make_admin_request(body=body), token_id=access_key.id)
         assert resp.status == 200, good
-        assert data.store.async_patch_token.call_args.kwargs["confirm_inline_wait_seconds"] == good
+        assert data.store.async_patch_access_key.call_args.kwargs["confirm_inline_wait_seconds"] == good
 
 
 @pytest.mark.asyncio
 async def test_patch_token_inline_wait_rejects_out_of_range():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
-    data.store.async_patch_token = AsyncMock(return_value=token)
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.async_patch_access_key = AsyncMock(return_value=access_key)
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
     # Below the floor (but nonzero), above the ceiling, non-int, and bool all fail.
     for bad in (29, 181, -1, "60", True):
         body = json.dumps({"confirm_inline_wait_seconds": bad}).encode()
-        resp = await view.patch(_make_admin_request(body=body), token_id=token.id)
+        resp = await view.patch(_make_admin_request(body=body), token_id=access_key.id)
         assert resp.status == 400, bad
 
 
 @pytest.mark.asyncio
 async def test_patch_uses_async_lock():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
-    data.store.async_patch_token = AsyncMock(return_value=token)
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.async_patch_access_key = AsyncMock(return_value=access_key)
     hass = _make_hass(data)
 
     lock_acquired = []
@@ -577,35 +577,35 @@ async def test_patch_uses_async_lock():
 
     data.store.async_lock.acquire = tracking_acquire
 
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
     body = json.dumps({"cap_restart": "allow"}).encode()
     request = _make_admin_request(body=body)
-    await view.patch(request, token_id=token.id)
+    await view.patch(request, token_id=access_key.id)
 
     assert len(lock_acquired) == 1
 
 
 @pytest.mark.asyncio
 async def test_delete_token_fires_revoked_event():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
-    data.store.async_archive_token = AsyncMock(return_value=MagicMock())
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.async_archive_access_key = AsyncMock(return_value=MagicMock())
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
     request = _make_admin_request()
-    resp = await view.delete(request, token_id=token.id)
+    resp = await view.delete(request, token_id=access_key.id)
 
     assert resp.status == 204
     hass.bus.async_fire.assert_called_once()
     event_type, payload = hass.bus.async_fire.call_args[0]
     assert event_type == "phoenix_mcp_token_revoked"
-    assert payload["token_id"] == token.id
+    assert payload["token_id"] == access_key.id
     assert payload["revoked_by"] == "admin-user-id"
 
 
@@ -616,8 +616,8 @@ async def test_delete_token_cancels_pending_approvals():
     and mid-execution approvals are untouched."""
     from homeassistant.util.dt import utcnow as _utcnow
 
-    token = _make_active_token()
-    data = _make_data([token])
+    access_key = _make_active_token()
+    data = _make_data([access_key])
     now_iso = _utcnow().isoformat()
 
     def _entry(appr_id: str, token_id: str) -> dict:
@@ -629,23 +629,23 @@ async def test_delete_token_cancels_pending_approvals():
         }
 
     pending = [
-        _entry("appr_mine", token.id),
+        _entry("appr_mine", access_key.id),
         _entry("appr_other", "other-token"),
-        _entry("appr_running", token.id),
+        _entry("appr_running", access_key.id),
     ]
     data.store.get_pending_approvals.return_value = pending
-    data.store.get_token_by_id = MagicMock(return_value=token)
-    data.store.async_archive_token = AsyncMock(return_value=MagicMock())
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.async_archive_access_key = AsyncMock(return_value=MagicMock())
     data.approvals_in_progress.add("appr_running")
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
     with patch(
         "custom_components.phoenix_mcp.approvals.dismiss_approval_notification"
     ) as dismiss:
-        resp = await view.delete(_make_admin_request(), token_id=token.id)
+        resp = await view.delete(_make_admin_request(), token_id=access_key.id)
 
     assert resp.status == 204
     by_id = {e["id"]: e for e in pending}
@@ -664,46 +664,46 @@ async def test_delete_token_cancels_pending_approvals():
 
 @pytest.mark.asyncio
 async def test_delete_token_destroys_rate_limiter_state():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
-    data.store.async_archive_token = AsyncMock(return_value=MagicMock())
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.async_archive_access_key = AsyncMock(return_value=MagicMock())
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
     request = _make_admin_request()
-    await view.delete(request, token_id=token.id)
+    await view.delete(request, token_id=access_key.id)
 
-    data.rate_limiter.destroy.assert_called_once_with(token.id)
+    data.rate_limiter.destroy.assert_called_once_with(access_key.id)
 
 
 @pytest.mark.asyncio
 async def test_delete_token_cleans_token_counters():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
-    data.store.async_archive_token = AsyncMock(return_value=MagicMock())
-    data.token_counters[token.id] = {"request_count": 10, "denied_count": 1, "rate_limit_hits": 0}
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.async_archive_access_key = AsyncMock(return_value=MagicMock())
+    data.access_key_counters[access_key.id] = {"request_count": 10, "denied_count": 1, "rate_limit_hits": 0}
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
     request = _make_admin_request()
-    await view.delete(request, token_id=token.id)
+    await view.delete(request, token_id=access_key.id)
 
-    assert token.id not in data.token_counters
+    assert access_key.id not in data.access_key_counters
 
 
 @pytest.mark.asyncio
 async def test_delete_nonexistent_token_returns_404():
     data = _make_data()
-    data.store.get_token_by_id = MagicMock(return_value=None)
+    data.store.get_access_key_by_id = MagicMock(return_value=None)
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
     request = _make_admin_request()
@@ -714,10 +714,10 @@ async def test_delete_nonexistent_token_returns_404():
 
 @pytest.mark.asyncio
 async def test_permission_domain_patch_valid_state():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
-    data.store.async_patch_permission_node = AsyncMock(return_value=token)
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.async_patch_permission_node = AsyncMock(return_value=access_key)
     hass = _make_hass(data)
 
     view = PhoenixAdminPermissionDomainView()
@@ -725,19 +725,19 @@ async def test_permission_domain_patch_valid_state():
 
     body = json.dumps({"state": "GREEN"}).encode()
     request = _make_admin_request(body=body)
-    resp = await view.patch(request, token_id=token.id, node_id="light")
+    resp = await view.patch(request, token_id=access_key.id, node_id="light")
 
     assert resp.status == 200
     data.store.async_patch_permission_node.assert_called_once_with(
-        token.id, "domains", "light", "GREEN", None
+        access_key.id, "domains", "light", "GREEN", None
     )
 
 
 @pytest.mark.asyncio
 async def test_permission_patch_invalid_state_rejected():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     hass = _make_hass(data)
 
     view = PhoenixAdminPermissionDomainView()
@@ -745,17 +745,17 @@ async def test_permission_patch_invalid_state_rejected():
 
     body = json.dumps({"state": "PURPLE"}).encode()
     request = _make_admin_request(body=body)
-    resp = await view.patch(request, token_id=token.id, node_id="light")
+    resp = await view.patch(request, token_id=access_key.id, node_id="light")
 
     assert resp.status == 400
 
 
 @pytest.mark.asyncio
 async def test_permission_patch_grey_removes_node():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
-    data.store.async_patch_permission_node = AsyncMock(return_value=token)
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.async_patch_permission_node = AsyncMock(return_value=access_key)
     hass = _make_hass(data)
 
     view = PhoenixAdminPermissionDomainView()
@@ -763,20 +763,20 @@ async def test_permission_patch_grey_removes_node():
 
     body = json.dumps({"state": "GREY"}).encode()
     request = _make_admin_request(body=body)
-    resp = await view.patch(request, token_id=token.id, node_id="light")
+    resp = await view.patch(request, token_id=access_key.id, node_id="light")
 
     assert resp.status == 200
     data.store.async_patch_permission_node.assert_called_once_with(
-        token.id, "domains", "light", "GREY", None
+        access_key.id, "domains", "light", "GREY", None
     )
 
 
 @pytest.mark.asyncio
 async def test_permission_patch_with_hint():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
-    data.store.async_patch_permission_node = AsyncMock(return_value=token)
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.async_patch_permission_node = AsyncMock(return_value=access_key)
     hass = _make_hass(data)
 
     view = PhoenixAdminPermissionDomainView()
@@ -784,10 +784,10 @@ async def test_permission_patch_with_hint():
 
     body = json.dumps({"state": "YELLOW", "hint": "Living room lights only"}).encode()
     request = _make_admin_request(body=body)
-    await view.patch(request, token_id=token.id, node_id="light")
+    await view.patch(request, token_id=access_key.id, node_id="light")
 
     data.store.async_patch_permission_node.assert_called_once_with(
-        token.id, "domains", "light", "YELLOW", "Living room lights only"
+        access_key.id, "domains", "light", "YELLOW", "Living room lights only"
     )
 
 
@@ -796,9 +796,9 @@ async def test_integration_permission_options_use_exact_entry_and_warn_shared_de
     from homeassistant.helpers import device_registry as dr, entity_registry as er
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id.return_value = token
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id.return_value = access_key
     hass.data[DOMAIN] = data
     first = MockConfigEntry(domain="test_integration", title="Kitchen", entry_id="entry-a")
     second = MockConfigEntry(domain="other_integration", title="Kitchen", entry_id="entry-b")
@@ -834,7 +834,7 @@ async def test_integration_permission_options_use_exact_entry_and_warn_shared_de
 
     view = PhoenixAdminPermissionIntegrationOptionsView()
     view.hass = hass
-    response = await view.get(_make_admin_request(), token_id=token.id)
+    response = await view.get(_make_admin_request(), token_id=access_key.id)
 
     payload = json.loads(response.text)
     option = next(item for item in payload["integrations"] if item["entry_id"] == first.entry_id)
@@ -853,14 +853,14 @@ async def test_integration_bulk_selection_is_one_atomic_write_and_preserves_chil
     from homeassistant.helpers import device_registry as dr, entity_registry as er
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-    token = _make_active_token()
-    token.permissions.entities["light.preserved_child"] = PermissionNode(state="RED")
-    data = _make_data([token])
-    data.store.get_token_by_id.return_value = token
+    access_key = _make_active_token()
+    access_key.permissions.entities["light.preserved_child"] = PermissionNode(state="RED")
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id.return_value = access_key
 
-    async def _save(_token_id, permissions):
-        token.permissions = permissions
-        return token
+    async def _save(_access_key_id, permissions):
+        access_key.permissions = permissions
+        return access_key
 
     data.store.async_set_permissions = AsyncMock(side_effect=_save)
     hass.data[DOMAIN] = data
@@ -888,13 +888,13 @@ async def test_integration_bulk_selection_is_one_atomic_write_and_preserves_chil
         "selector_id": entry.entry_id,
         "state": "GREEN",
     }).encode())
-    response = await view.post(request, token_id=token.id)
+    response = await view.post(request, token_id=access_key.id)
 
     assert response.status == 200
     data.store.async_set_permissions.assert_awaited_once()
-    assert token.permissions.devices[device.id].state == "GREEN"
-    assert token.permissions.entities[live.entity_id].state == "GREEN"
-    assert token.permissions.entities["light.preserved_child"].state == "RED"
+    assert access_key.permissions.devices[device.id].state == "GREEN"
+    assert access_key.permissions.entities[live.entity_id].state == "GREEN"
+    assert access_key.permissions.entities["light.preserved_child"].state == "RED"
     summary = json.loads(response.text)["summary"]
     assert summary["device_count"] == 1
     assert summary["entity_count"] == 1
@@ -1012,11 +1012,11 @@ async def test_settings_patch_serializes_persistence_with_live_reconciliation():
 
 @pytest.mark.asyncio
 async def test_token_revoke_before_settings_validation_rejects_dead_reference():
-    token = _make_active_token()
-    data = _make_data([token])
-    active = {token.id: token}
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    active = {access_key.id: access_key}
     current = GlobalSettings()
-    data.store.get_token_by_id.side_effect = active.get
+    data.store.get_access_key_by_id.side_effect = active.get
     data.store.get_settings.side_effect = lambda: current
     data.store.async_patch_settings = AsyncMock()
     archive_started = asyncio.Event()
@@ -1028,19 +1028,19 @@ async def test_token_revoke_before_settings_validation_rejects_dead_reference():
         await release_archive.wait()
         return archived
 
-    data.store.async_archive_token = AsyncMock(side_effect=archive)
+    data.store.async_archive_access_key = AsyncMock(side_effect=archive)
     hass = _make_hass(data)
-    token_view = PhoenixAdminTokenView()
+    token_view = PhoenixAdminAccessKeyView()
     token_view.hass = hass
     settings_view = PhoenixAdminSettingsView()
     settings_view.hass = hass
 
     revoke = asyncio.create_task(token_view.delete(
-        _make_admin_request(), token_id=token.id
+        _make_admin_request(), token_id=access_key.id
     ))
     await archive_started.wait()
     bind = asyncio.create_task(settings_view.patch(_make_admin_request(
-        body=json.dumps({"voice_agent_token_id": token.id}).encode()
+        body=json.dumps({"voice_agent_token_id": access_key.id}).encode()
     )))
     await asyncio.sleep(0)
     assert not bind.done()
@@ -1055,11 +1055,11 @@ async def test_token_revoke_before_settings_validation_rejects_dead_reference():
 
 @pytest.mark.asyncio
 async def test_settings_bind_before_token_revoke_finishes_cleared():
-    token = _make_active_token()
-    data = _make_data([token])
-    active = {token.id: token}
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    active = {access_key.id: access_key}
     current = GlobalSettings()
-    data.store.get_token_by_id.side_effect = active.get
+    data.store.get_access_key_by_id.side_effect = active.get
     data.store.get_settings.side_effect = lambda: current
     binding_persisted = asyncio.Event()
     release_binding = asyncio.Event()
@@ -1067,7 +1067,7 @@ async def test_settings_bind_before_token_revoke_finishes_cleared():
     async def patch_settings(**kwargs):
         nonlocal current
         current = GlobalSettings.from_dict({**current.to_dict(), **kwargs})
-        if kwargs.get("voice_agent_token_id") == token.id:
+        if kwargs.get("voice_agent_token_id") == access_key.id:
             binding_persisted.set()
             await release_binding.wait()
         return current
@@ -1076,19 +1076,19 @@ async def test_settings_bind_before_token_revoke_finishes_cleared():
         return active.pop(token_id, None)
 
     data.store.async_patch_settings = AsyncMock(side_effect=patch_settings)
-    data.store.async_archive_token = AsyncMock(side_effect=archive)
+    data.store.async_archive_access_key = AsyncMock(side_effect=archive)
     hass = _make_hass(data)
-    token_view = PhoenixAdminTokenView()
+    token_view = PhoenixAdminAccessKeyView()
     token_view.hass = hass
     settings_view = PhoenixAdminSettingsView()
     settings_view.hass = hass
 
     bind = asyncio.create_task(settings_view.patch(_make_admin_request(
-        body=json.dumps({"voice_agent_token_id": token.id}).encode()
+        body=json.dumps({"voice_agent_token_id": access_key.id}).encode()
     )))
     await binding_persisted.wait()
     revoke = asyncio.create_task(token_view.delete(
-        _make_admin_request(), token_id=token.id
+        _make_admin_request(), token_id=access_key.id
     ))
     await asyncio.sleep(0)
     assert not revoke.done()
@@ -1233,20 +1233,20 @@ async def test_settings_patch_rejects_unknown_fields_atomically():
 
 @pytest.mark.asyncio
 async def test_token_patch_rejects_unknown_fields_atomically():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
-    data.store.async_patch_token = AsyncMock(return_value=token)
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.store.async_patch_access_key = AsyncMock(return_value=access_key)
     hass = _make_hass(data)
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
     body = json.dumps({"cap_restart": "allow", "cap_restert": "allow"}).encode()
-    resp = await view.patch(_make_admin_request(body=body), token_id=token.id)
+    resp = await view.patch(_make_admin_request(body=body), token_id=access_key.id)
 
     assert resp.status == 400
     assert json.loads(resp.text)["message_params"] == {"fields": "cap_restert"}
-    data.store.async_patch_token.assert_not_awaited()
+    data.store.async_patch_access_key.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1426,18 +1426,18 @@ async def test_settings_patch_mesa_inject_non_bool_rejected():
 
 @pytest.mark.asyncio
 async def test_token_stats_returns_zero_counters_for_new_token():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokenStatsView()
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminTokenStatsView as V
+    view = PhoenixAdminAccessKeyStatsView()
+    from custom_components.phoenix_mcp.admin_view import PhoenixAdminAccessKeyStatsView as V
     view = V()
     view.hass = hass
 
     request = _make_admin_request()
-    resp = await view.get(request, token_id=token.id)
+    resp = await view.get(request, token_id=access_key.id)
 
     assert resp.status == 200
     body = json.loads(resp.text)
@@ -1448,18 +1448,18 @@ async def test_token_stats_returns_zero_counters_for_new_token():
 
 @pytest.mark.asyncio
 async def test_token_stats_reflects_live_counters():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
-    data.token_counters[token.id] = {"request_count": 42, "denied_count": 5, "rate_limit_hits": 2}
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.access_key_counters[access_key.id] = {"request_count": 42, "denied_count": 5, "rate_limit_hits": 2}
     hass = _make_hass(data)
 
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminTokenStatsView
-    view = PhoenixAdminTokenStatsView()
+    from custom_components.phoenix_mcp.admin_view import PhoenixAdminAccessKeyStatsView
+    view = PhoenixAdminAccessKeyStatsView()
     view.hass = hass
 
     request = _make_admin_request()
-    resp = await view.get(request, token_id=token.id)
+    resp = await view.get(request, token_id=access_key.id)
 
     body = json.loads(resp.text)
     assert body["request_count"] == 42
@@ -1468,20 +1468,20 @@ async def test_token_stats_reflects_live_counters():
 
 
 def _connection_view():
-    from custom_components.phoenix_mcp.admin_view import PhoenixAdminTokenConnectionView
-    return PhoenixAdminTokenConnectionView()
+    from custom_components.phoenix_mcp.admin_view import PhoenixAdminAccessKeyConnectionView
+    return PhoenixAdminAccessKeyConnectionView()
 
 
 @pytest.mark.asyncio
 async def test_token_connection_no_session_zero_counters():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     hass = _make_hass(data)
     view = _connection_view()
     view.hass = hass
 
-    resp = await view.get(_make_admin_request(), token_id=token.id)
+    resp = await view.get(_make_admin_request(), token_id=access_key.id)
     assert resp.status == 200
     body = json.loads(resp.text)
     assert body == {"last_used_at": None, "request_count": 0}
@@ -1490,15 +1490,15 @@ async def test_token_connection_no_session_zero_counters():
 @pytest.mark.asyncio
 async def test_token_connection_reports_request_count():
     # Streamable HTTP clients are stateless; request_count is the "connected" signal.
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
-    data.token_counters[token.id] = {"request_count": 3, "denied_count": 0, "rate_limit_hits": 0}
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
+    data.access_key_counters[access_key.id] = {"request_count": 3, "denied_count": 0, "rate_limit_hits": 0}
     hass = _make_hass(data)
     view = _connection_view()
     view.hass = hass
 
-    resp = await view.get(_make_admin_request(), token_id=token.id)
+    resp = await view.get(_make_admin_request(), token_id=access_key.id)
     body = json.loads(resp.text)
     assert body["request_count"] == 3
 
@@ -1506,23 +1506,23 @@ async def test_token_connection_reports_request_count():
 @pytest.mark.asyncio
 async def test_token_connection_reports_last_used_iso():
     from homeassistant.util.dt import utcnow
-    token = _make_active_token()
-    token.last_used_at = utcnow()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
+    access_key = _make_active_token()
+    access_key.last_used_at = utcnow()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     hass = _make_hass(data)
     view = _connection_view()
     view.hass = hass
 
-    resp = await view.get(_make_admin_request(), token_id=token.id)
+    resp = await view.get(_make_admin_request(), token_id=access_key.id)
     body = json.loads(resp.text)
-    assert body["last_used_at"] == token.last_used_at.isoformat()
+    assert body["last_used_at"] == access_key.last_used_at.isoformat()
 
 
 @pytest.mark.asyncio
 async def test_token_connection_404_for_unknown_token():
     data = _make_data([])
-    data.store.get_token_by_id = MagicMock(return_value=None)
+    data.store.get_access_key_by_id = MagicMock(return_value=None)
     hass = _make_hass(data)
     view = _connection_view()
     view.hass = hass
@@ -1533,33 +1533,33 @@ async def test_token_connection_404_for_unknown_token():
 
 @pytest.mark.asyncio
 async def test_token_connection_requires_admin():
-    token = _make_active_token()
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
+    access_key = _make_active_token()
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     hass = _make_hass(data)
     view = _connection_view()
     view.hass = hass
 
-    resp = await view.get(_make_admin_request(is_admin=False), token_id=token.id)
+    resp = await view.get(_make_admin_request(is_admin=False), token_id=access_key.id)
     assert resp.status == 403
 
 
 @pytest.mark.asyncio
 async def test_audit_log_query_paginates():
     data = _make_data()
-    token = _make_active_token()
-    data.store.get_token_by_id = MagicMock(return_value=token)
+    access_key = _make_active_token()
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     hass = _make_hass(data)
 
-    view = PhoenixAdminTokenAuditView()
+    view = PhoenixAdminAccessKeyAuditView()
     view.hass = hass
 
     request = _make_admin_request()
     request.query = {"limit": "50", "offset": "10"}
-    await view.get(request, token_id=token.id)
+    await view.get(request, token_id=access_key.id)
 
     data.audit.query.assert_called_once_with(
-        token_id=token.id,
+        token_id=access_key.id,
         outcome=None,
         client_ip=None,
         limit=50,
@@ -1750,13 +1750,13 @@ def test_all_admin_views_exported():
 
 def test_archived_views_before_token_view():
     from custom_components.phoenix_mcp.admin_view import (
-        PhoenixAdminArchivedTokensView,
-        PhoenixAdminArchivedTokenView,
-        PhoenixAdminTokenView,
+        PhoenixAdminArchivedAccessKeysView,
+        PhoenixAdminArchivedAccessKeyView,
+        PhoenixAdminAccessKeyView,
     )
-    archived_idx = ALL_ADMIN_VIEWS.index(PhoenixAdminArchivedTokensView)
-    archived_single_idx = ALL_ADMIN_VIEWS.index(PhoenixAdminArchivedTokenView)
-    token_idx = ALL_ADMIN_VIEWS.index(PhoenixAdminTokenView)
+    archived_idx = ALL_ADMIN_VIEWS.index(PhoenixAdminArchivedAccessKeysView)
+    archived_single_idx = ALL_ADMIN_VIEWS.index(PhoenixAdminArchivedAccessKeyView)
+    token_idx = ALL_ADMIN_VIEWS.index(PhoenixAdminAccessKeyView)
     assert archived_idx < token_idx
     assert archived_single_idx < token_idx
 
@@ -1885,9 +1885,9 @@ async def test_admin_handler_rejects_unauthenticated_and_non_admin(view_cls, met
 # --------------------------------------------------------------------------- #
 
 
-def _make_wipe_data(tokens: list[TokenRecord] | None = None) -> PhoenixData:
+def _make_wipe_data(access_keys: list[AccessKeyRecord] | None = None) -> PhoenixData:
     """PhoenixData with the async wipe collaborators stubbed so the core path runs."""
-    data = _make_data(tokens)
+    data = _make_data(access_keys)
     data.store.async_wipe = AsyncMock()
     data.audit.async_wipe = AsyncMock()
     data.versions = MagicMock()
@@ -2159,9 +2159,9 @@ async def test_wipe_mesa_without_runtime_clears_store_directly():
 # Assist bridge: binding via settings PATCH + teardown on revoke
 # ---------------------------------------------------------------------------
 
-def _settings_data(tokens):
+def _settings_data(access_keys):
     """A _make_data whose settings are a mutable GlobalSettings holder."""
-    data = _make_data(tokens)
+    data = _make_data(access_keys)
     holder = {"s": GlobalSettings()}
     data.store.get_settings.side_effect = lambda: holder["s"]
 
@@ -2171,8 +2171,8 @@ def _settings_data(tokens):
 
     data.store.async_patch_settings = AsyncMock(side_effect=_patch)
     data.store.async_seed_default_presets = AsyncMock(return_value=0)
-    data.store.get_token_by_id = MagicMock(
-        side_effect=lambda tid: next((t for t in tokens if t.id == tid), None)
+    data.store.get_access_key_by_id = MagicMock(
+        side_effect=lambda tid: next((t for t in access_keys if t.id == tid), None)
     )
     return data, holder
 
@@ -2207,15 +2207,15 @@ async def test_settings_get_includes_esphome_availability_flags():
 
 @pytest.mark.asyncio
 async def test_settings_patch_binds_active_token():
-    token = _make_active_token()
-    data, holder = _settings_data([token])
+    access_key = _make_active_token()
+    data, holder = _settings_data([access_key])
     view = PhoenixAdminSettingsView()
     view.hass = _make_hass(data)
-    body = json.dumps({"assist_bound_token_id": token.id}).encode()
+    body = json.dumps({"assist_bound_token_id": access_key.id}).encode()
     resp = await view.patch(_make_admin_request(body=body))
     assert resp.status == 200
-    assert holder["s"].assist_bound_token_id == token.id
-    assert json.loads(resp.text)["assist_bound_token_id"] == token.id
+    assert holder["s"].assist_bound_token_id == access_key.id
+    assert json.loads(resp.text)["assist_bound_token_id"] == access_key.id
 
 
 @pytest.mark.asyncio
@@ -2231,9 +2231,9 @@ async def test_settings_patch_rejects_unknown_token():
 
 @pytest.mark.asyncio
 async def test_settings_patch_null_unbinds():
-    token = _make_active_token()
-    data, holder = _settings_data([token])
-    holder["s"] = GlobalSettings(assist_bound_token_id=token.id)
+    access_key = _make_active_token()
+    data, holder = _settings_data([access_key])
+    holder["s"] = GlobalSettings(assist_bound_token_id=access_key.id)
     view = PhoenixAdminSettingsView()
     view.hass = _make_hass(data)
     body = json.dumps({"assist_bound_token_id": None}).encode()
@@ -2244,28 +2244,28 @@ async def test_settings_patch_null_unbinds():
 
 @pytest.mark.asyncio
 async def test_revoke_clears_assist_binding():
-    token = _make_active_token()
-    data, holder = _settings_data([token])
-    holder["s"] = GlobalSettings(assist_bound_token_id=token.id)
-    data.store.async_archive_token = AsyncMock(return_value=MagicMock())
-    view = PhoenixAdminTokenView()
+    access_key = _make_active_token()
+    data, holder = _settings_data([access_key])
+    holder["s"] = GlobalSettings(assist_bound_token_id=access_key.id)
+    data.store.async_archive_access_key = AsyncMock(return_value=MagicMock())
+    view = PhoenixAdminAccessKeyView()
     view.hass = _make_hass(data)
-    resp = await view.delete(_make_admin_request(), token_id=token.id)
+    resp = await view.delete(_make_admin_request(), token_id=access_key.id)
     assert resp.status == 204
     assert holder["s"].assist_bound_token_id is None
 
 
 @pytest.mark.asyncio
 async def test_revoke_clears_voice_agent_token_and_resyncs():
-    token = _make_active_token()
-    data, holder = _settings_data([token])
-    holder["s"] = GlobalSettings(voice_agent_enabled=True, voice_agent_token_id=token.id,
+    access_key = _make_active_token()
+    data, holder = _settings_data([access_key])
+    holder["s"] = GlobalSettings(voice_agent_enabled=True, voice_agent_token_id=access_key.id,
                                  voice_agent_provider_id="p", voice_agent_model="m")
-    data.store.async_archive_token = AsyncMock(return_value=MagicMock())
+    data.store.async_archive_access_key = AsyncMock(return_value=MagicMock())
     data.async_sync_voice_agent = MagicMock()
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = _make_hass(data)
-    resp = await view.delete(_make_admin_request(), token_id=token.id)
+    resp = await view.delete(_make_admin_request(), token_id=access_key.id)
     assert resp.status == 204
     assert holder["s"].voice_agent_token_id is None
     data.async_sync_voice_agent.assert_called_once()
@@ -2277,8 +2277,8 @@ async def test_revoke_clears_voice_agent_token_and_resyncs():
 
 @pytest.mark.asyncio
 async def test_settings_patch_voice_agent_config_resyncs():
-    token = _make_active_token()
-    data, holder = _settings_data([token])
+    access_key = _make_active_token()
+    data, holder = _settings_data([access_key])
     data.async_sync_voice_agent = MagicMock()
     view = PhoenixAdminSettingsView()
     view.hass = _make_hass(data)
@@ -2286,7 +2286,7 @@ async def test_settings_patch_voice_agent_config_resyncs():
     provider_store = MagicMock()
     provider_store.get.return_value = {"kind": "claude"}
     body = json.dumps({
-        "voice_agent_enabled": True, "voice_agent_token_id": token.id,
+        "voice_agent_enabled": True, "voice_agent_token_id": access_key.id,
         "voice_agent_provider_id": "i1", "voice_agent_model": "m",
     }).encode()
     with patch("custom_components.phoenix_mcp.agentcli._get_secret_store", AsyncMock(return_value=provider_store)):
@@ -2379,10 +2379,10 @@ async def test_voice_pipeline_delete_removes():
 
 @pytest.mark.asyncio
 async def test_voice_pipeline_create_serializes_with_disable_cleanup():
-    token = _make_active_token()
-    data, holder = _settings_data([token])
+    access_key = _make_active_token()
+    data, holder = _settings_data([access_key])
     holder["s"] = GlobalSettings(
-        voice_agent_enabled=True, voice_agent_token_id=token.id,
+        voice_agent_enabled=True, voice_agent_token_id=access_key.id,
         voice_agent_provider_id="p", voice_agent_model="m",
     )
     data.async_sync_voice_agent = MagicMock()
@@ -2449,10 +2449,10 @@ async def test_voice_pipeline_create_serializes_with_disable_cleanup():
     ids=["core", "providers"],
 )
 async def test_voice_pipeline_create_serializes_with_wipe_cleanup(wipe_flags):
-    token = _make_active_token()
-    data = _make_wipe_data([token])
+    access_key = _make_active_token()
+    data = _make_wipe_data([access_key])
     holder = {"s": GlobalSettings(
-        voice_agent_enabled=True, voice_agent_token_id=token.id,
+        voice_agent_enabled=True, voice_agent_token_id=access_key.id,
         voice_agent_provider_id="p", voice_agent_model="m",
     )}
     data.store.get_settings.side_effect = lambda: holder["s"]
@@ -2530,10 +2530,10 @@ async def test_voice_pipeline_create_serializes_with_wipe_cleanup(wipe_flags):
 
 @pytest.mark.asyncio
 async def test_concurrent_voice_pipeline_posts_create_once():
-    token = _make_active_token()
-    data, holder = _settings_data([token])
+    access_key = _make_active_token()
+    data, holder = _settings_data([access_key])
     holder["s"] = GlobalSettings(
-        voice_agent_enabled=True, voice_agent_token_id=token.id,
+        voice_agent_enabled=True, voice_agent_token_id=access_key.id,
         voice_agent_provider_id="p", voice_agent_model="m",
     )
     view = PhoenixAdminVoiceAgentPipelineView()
@@ -2568,10 +2568,10 @@ async def test_concurrent_voice_pipeline_posts_create_once():
 
 @pytest.mark.asyncio
 async def test_disabling_voice_agent_removes_tracked_pipeline():
-    token = _make_active_token()
-    data, holder = _settings_data([token])
+    access_key = _make_active_token()
+    data, holder = _settings_data([access_key])
     holder["s"] = GlobalSettings(
-        voice_agent_enabled=True, voice_agent_token_id=token.id,
+        voice_agent_enabled=True, voice_agent_token_id=access_key.id,
         voice_agent_provider_id="p", voice_agent_model="m", voice_agent_pipeline_id="pl1",
     )
     data.async_sync_voice_agent = MagicMock()
@@ -2600,14 +2600,14 @@ async def test_settings_get_includes_ai_task_supported():
 
 @pytest.mark.asyncio
 async def test_settings_patch_ai_task_config():
-    token = _make_active_token()
-    data, holder = _settings_data([token])
+    access_key = _make_active_token()
+    data, holder = _settings_data([access_key])
     view = PhoenixAdminSettingsView()
     view.hass = _make_hass(data)
     provider_store = MagicMock()
     provider_store.get.return_value = {"kind": "deepseek"}
     body = json.dumps({
-        "ai_task_enabled": True, "ai_task_token_id": token.id,
+        "ai_task_enabled": True, "ai_task_token_id": access_key.id,
         "ai_task_provider_id": "i1", "ai_task_model": "m",
     }).encode()
     with patch("custom_components.phoenix_mcp.agentcli._get_secret_store", AsyncMock(return_value=provider_store)):
@@ -2643,16 +2643,16 @@ async def test_settings_patch_ai_task_rejects_unknown_provider():
 
 @pytest.mark.asyncio
 async def test_revoke_clears_ai_task_token():
-    token = _make_active_token()
-    data, holder = _settings_data([token])
+    access_key = _make_active_token()
+    data, holder = _settings_data([access_key])
     holder["s"] = GlobalSettings(
-        ai_task_enabled=True, ai_task_token_id=token.id,
+        ai_task_enabled=True, ai_task_token_id=access_key.id,
         ai_task_provider_id="p", ai_task_model="m",
     )
-    data.store.async_archive_token = AsyncMock(return_value=MagicMock())
-    view = PhoenixAdminTokenView()
+    data.store.async_archive_access_key = AsyncMock(return_value=MagicMock())
+    view = PhoenixAdminAccessKeyView()
     view.hass = _make_hass(data)
-    resp = await view.delete(_make_admin_request(), token_id=token.id)
+    resp = await view.delete(_make_admin_request(), token_id=access_key.id)
     assert resp.status == 204
     assert holder["s"].ai_task_token_id is None
 
@@ -2874,16 +2874,16 @@ async def test_settings_patch_ai_task_sync_fires_on_config_and_kill_switch(setti
 # ---------------------------------------------------------------------------
 
 
-def _token_patch_data(token):
-    data = _make_data([token])
-    data.store.get_token_by_id = MagicMock(return_value=token)
+def _token_patch_data(access_key):
+    data = _make_data([access_key])
+    data.store.get_access_key_by_id = MagicMock(return_value=access_key)
     data.store.name_slug_exists.return_value = False
-    data.store.async_patch_token = AsyncMock(return_value=token)
+    data.store.async_patch_access_key = AsyncMock(return_value=access_key)
     return data
 
 
 async def _token_patch(data, token_id, body: dict):
-    view = PhoenixAdminTokenView()
+    view = PhoenixAdminAccessKeyView()
     view.hass = _make_hass(data)
     # require_admin's wrapper forwards extras as keyword-only.
     return await view.patch(_make_admin_request(body=json.dumps(body).encode()), token_id=token_id)
@@ -2914,22 +2914,22 @@ async def _token_patch(data, token_id, body: dict):
     ],
 )
 async def test_token_patch_rejects_invalid_values(payload, status, fragment):
-    token = _make_active_token(name="tok-a")
-    data = _token_patch_data(token)
-    resp = await _token_patch(data, token.id, payload)
+    access_key = _make_active_token(name="tok-a")
+    data = _token_patch_data(access_key)
+    resp = await _token_patch(data, access_key.id, payload)
     assert resp.status == status, payload
     assert fragment in json.loads(resp.text)["message"], payload
-    data.store.async_patch_token.assert_not_awaited()
+    data.store.async_patch_access_key.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_token_patch_unknown_token_is_404():
-    token = _make_active_token()
-    data = _token_patch_data(token)
-    data.store.get_token_by_id = MagicMock(return_value=None)
+    access_key = _make_active_token()
+    data = _token_patch_data(access_key)
+    data.store.get_access_key_by_id = MagicMock(return_value=None)
     resp = await _token_patch(data, "ghost", {"name": "whatever"})
     assert resp.status == 404
-    assert "Access Key not found" in json.loads(resp.text)["message"]
+    assert "Access key not found" in json.loads(resp.text)["message"]
 
 
 @pytest.mark.asyncio
@@ -2939,9 +2939,9 @@ async def test_token_patch_confirm_mode_refused_for_a_cap_that_cannot_confirm():
 
     non_confirmable = sorted(set(CAPABILITY_NAMES) - set(CONFIRM_AVAILABLE_CAPS))
     assert non_confirmable, "expected at least one non-confirmable capability"
-    token = _make_active_token()
-    data = _token_patch_data(token)
-    resp = await _token_patch(data, token.id, {non_confirmable[0]: "confirm"})
+    access_key = _make_active_token()
+    data = _token_patch_data(access_key)
+    resp = await _token_patch(data, access_key.id, {non_confirmable[0]: "confirm"})
     assert resp.status == 400
     assert "does not support 'confirm' mode" in json.loads(resp.text)["message"]
 
@@ -2949,23 +2949,23 @@ async def test_token_patch_confirm_mode_refused_for_a_cap_that_cannot_confirm():
 @pytest.mark.asyncio
 async def test_token_patch_use_assist_exposure_allowed_when_enabling_pass_through_together():
     """The check reads the RESULTING pass_through, not just the stored one."""
-    token = _make_active_token(pass_through=False)
-    data = _token_patch_data(token)
-    resp = await _token_patch(data, token.id, {
+    access_key = _make_active_token(pass_through=False)
+    data = _token_patch_data(access_key)
+    resp = await _token_patch(data, access_key.id, {
         "pass_through": True, "confirm_pass_through": True, "use_assist_exposure": True,
     })
     assert resp.status == 200
-    assert data.store.async_patch_token.call_args.kwargs["use_assist_exposure"] is True
+    assert data.store.async_patch_access_key.call_args.kwargs["use_assist_exposure"] is True
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("wait", [0, MIN_CONFIRM_INLINE_WAIT_SECONDS, MAX_CONFIRM_INLINE_WAIT_SECONDS])
 async def test_token_patch_accepts_valid_inline_wait(wait):
-    token = _make_active_token()
-    data = _token_patch_data(token)
-    resp = await _token_patch(data, token.id, {"confirm_inline_wait_seconds": wait})
+    access_key = _make_active_token()
+    data = _token_patch_data(access_key)
+    resp = await _token_patch(data, access_key.id, {"confirm_inline_wait_seconds": wait})
     assert resp.status == 200
-    assert data.store.async_patch_token.call_args.kwargs["confirm_inline_wait_seconds"] == wait
+    assert data.store.async_patch_access_key.call_args.kwargs["confirm_inline_wait_seconds"] == wait
 
 
 @pytest.mark.asyncio
@@ -2977,24 +2977,24 @@ async def test_token_patch_rename_sensor_rebuild_failure_never_fails_the_patch()
     whatever referred to them. The sensors are keyed on the token id and updated in
     place.
     """
-    token = _make_active_token(name="old-name")
-    data = _token_patch_data(token)
+    access_key = _make_active_token(name="old-name")
+    data = _token_patch_data(access_key)
     renamed = _make_active_token(name="new-name")
-    renamed.id = token.id
-    data.store.async_patch_token = AsyncMock(return_value=renamed)
-    data.async_on_token_archived = AsyncMock()
-    data.async_on_token_created = AsyncMock()
+    renamed.id = access_key.id
+    data.store.async_patch_access_key = AsyncMock(return_value=renamed)
+    data.async_on_access_key_archived = AsyncMock()
+    data.async_on_access_key_created = AsyncMock()
 
     with patch(
-        "custom_components.phoenix_mcp.sensor.async_rename_token_sensors",
+        "custom_components.phoenix_mcp.sensor.async_rename_access_key_sensors",
         AsyncMock(side_effect=RuntimeError("registry boom")),
     ) as rename:
-        resp = await _token_patch(data, token.id, {"name": "new-name"})
+        resp = await _token_patch(data, access_key.id, {"name": "new-name"})
 
     assert resp.status == 200
     rename.assert_awaited_once()
-    data.async_on_token_archived.assert_not_awaited()
-    data.async_on_token_created.assert_not_awaited()
+    data.async_on_access_key_archived.assert_not_awaited()
+    data.async_on_access_key_created.assert_not_awaited()
 
 
 @pytest.mark.parametrize("authenticated,admin,status", [(False, True, 401), (True, False, 403)])
@@ -3040,14 +3040,14 @@ async def test_command_preview_rejects_bad_shapes(body):
     assert response.status == 400
 
 
-async def test_command_preview_is_scoped_inert_and_does_not_record_voice_observation(hass, token_store):
-    token, _ = await token_store.async_create_token("preview", "admin")
-    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+async def test_command_preview_is_scoped_inert_and_does_not_record_voice_observation(hass, access_key_store):
+    access_key, _ = await access_key_store.async_create_access_key("preview", "admin")
+    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
     view = PhoenixAdminCommandPreviewView()
     view.hass = hass
     with patch("custom_components.phoenix_mcp.command_routing.async_recognize", AsyncMock(return_value=None)) as recognize:
-        response = await view.post(_make_admin_request(body=json.dumps({"token_id": token.id, "sentence": "hello"}).encode()))
+        response = await view.post(_make_admin_request(body=json.dumps({"token_id": access_key.id, "sentence": "hello"}).encode()))
     assert response.status == 200
     body = json.loads(response.text)
     assert body["executed"] is False
@@ -3055,7 +3055,7 @@ async def test_command_preview_is_scoped_inert_and_does_not_record_voice_observa
     assert body["decision_observations"]["hybrid"] == {"evaluations": 0, "reasons": {}}
     assert body["proposal"] is None
     recognize.assert_awaited_once()
-    assert token_store.get_pending_approvals() == []
+    assert access_key_store.get_pending_approvals() == []
     data.decision_shadow.observe_hybrid({"reason": "timeout"})
     summary = await view.get(_make_admin_request())
     assert json.loads(summary.text)["decision_shadow"]["hybrid"] == {
@@ -3065,9 +3065,9 @@ async def test_command_preview_is_scoped_inert_and_does_not_record_voice_observa
 
 @pytest.mark.parametrize("change", [None, "context_changed", "authority_changed"])
 @pytest.mark.parametrize("references", [False, True])
-async def test_command_preview_context_opt_in_and_stale_disclosure(hass, token_store, change, references):
-    token, _ = await token_store.async_create_token("preview_context", "admin")
-    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+async def test_command_preview_context_opt_in_and_stale_disclosure(hass, access_key_store, change, references):
+    access_key, _ = await access_key_store.async_create_access_key("preview_context", "admin")
+    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
     view = PhoenixAdminCommandPreviewView()
     view.hass = hass
@@ -3078,7 +3078,7 @@ async def test_command_preview_context_opt_in_and_stale_disclosure(hass, token_s
     async def context(*args):
         assert args[5] == history and args[6] == local
         if change == "authority_changed":
-            token.revoked = True
+            access_key.revoked = True
         return {"reason": change or "compatible", "decision": None, "executed": False}
 
     with (patch("custom_components.phoenix_mcp.command_routing.async_evaluate_command", AsyncMock(return_value=local)),
@@ -3086,7 +3086,7 @@ async def test_command_preview_context_opt_in_and_stale_disclosure(hass, token_s
                 "decision_context.async_preview_context"), side_effect=context) as review,
           patch("custom_components.phoenix_mcp.decision_shadow.async_preview_decision") as old_review):
         response = await view.post(_make_admin_request(body=json.dumps({
-            "token_id": token.id, "sentence": "turn on Desk lamp", "decision": True, "messages": history, "references": references,
+            "token_id": access_key.id, "sentence": "turn on Desk lamp", "decision": True, "messages": history, "references": references,
         }).encode()))
     assert response.status == 200
     review.assert_awaited_once()
@@ -3095,7 +3095,7 @@ async def test_command_preview_context_opt_in_and_stale_disclosure(hass, token_s
     assert "private-history" not in response.text and body["executed"] is False
     assert body["voice_observations"]["observations"] == 0
     assert body["decision_observations"]["hybrid"]["evaluations"] == 0
-    assert not token_store.get_pending_approvals()
+    assert not access_key_store.get_pending_approvals()
     if change:
         assert body["reason"] == change and body["proposal"] is None
     if change == "authority_changed":
@@ -3106,9 +3106,9 @@ async def test_command_preview_context_opt_in_and_stale_disclosure(hass, token_s
 
 @pytest.mark.parametrize("change", [None, "targets_changed", "authority_changed"])
 @pytest.mark.parametrize("numeric", [False, True])
-async def test_command_preview_batch_is_explicit_inert_and_discards_stale_local_result(hass, token_store, change, numeric):
-    token, _ = await token_store.async_create_token("preview_batch", "admin")
-    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+async def test_command_preview_batch_is_explicit_inert_and_discards_stale_local_result(hass, access_key_store, change, numeric):
+    access_key, _ = await access_key_store.async_create_access_key("preview_batch", "admin")
+    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
     view = PhoenixAdminCommandPreviewView(); view.hass = hass
     local = {"reason": "supported", "proposal": {"intent": "HassTurnOn", "entity_ids": ["light.test"]},
@@ -3116,14 +3116,14 @@ async def test_command_preview_batch_is_explicit_inert_and_discards_stale_local_
     async def batch(*args, numeric_preview=False):
         assert args[-1] == local
         assert numeric_preview is numeric
-        if change == "authority_changed": token.revoked = True
+        if change == "authority_changed": access_key.revoked = True
         return {"reason": change or "target_selected", "executed": False}
     with (patch("custom_components.phoenix_mcp.command_routing.async_evaluate_command", AsyncMock(return_value=local)),
           patch("custom_components.phoenix_mcp.decision_batch.async_preview_batch", side_effect=batch) as review,
           patch("custom_components.phoenix_mcp.decision_shadow.async_preview_decision") as old_review,
           patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp") as dispatch):
         response = await view.post(_make_admin_request(body=json.dumps({
-            "token_id": token.id, "sentence": "turn on Desk lamp", "decision": True, "targets": True, "batch": True,
+            "token_id": access_key.id, "sentence": "turn on Desk lamp", "decision": True, "targets": True, "batch": True,
             **({"numeric": True} if numeric else {}),
         }).encode()))
     assert response.status == 200
@@ -3160,20 +3160,20 @@ async def test_routing_settings_validation(patch_body, accepted):
 
 
 @pytest.mark.parametrize("targets", [False, True])
-async def test_command_preview_target_opt_in_and_authority_recheck(hass, token_store, targets):
-    token, _ = await token_store.async_create_token("preview_targets", "admin")
-    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+async def test_command_preview_target_opt_in_and_authority_recheck(hass, access_key_store, targets):
+    access_key, _ = await access_key_store.async_create_access_key("preview_targets", "admin")
+    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
     view = PhoenixAdminCommandPreviewView()
     view.hass = hass
     async def decision(*args, **kwargs):
         assert kwargs["targets"] is targets
-        token.revoked = True
+        access_key.revoked = True
         return {"reason": "observed", "target_selection": {"entity_id": "light.private"}}
     with (patch("custom_components.phoenix_mcp.command_routing.async_recognize", AsyncMock(return_value=None)),
           patch("custom_components.phoenix_mcp.decision_shadow.async_preview_decision", side_effect=decision) as compare):
         response = await view.post(_make_admin_request(body=json.dumps({
-            "token_id": token.id, "sentence": "light up my desk", "decision": True, "targets": targets,
+            "token_id": access_key.id, "sentence": "light up my desk", "decision": True, "targets": targets,
         }).encode()))
     compare.assert_awaited_once()
     body = json.loads(response.text)
@@ -3183,31 +3183,31 @@ async def test_command_preview_target_opt_in_and_authority_recheck(hass, token_s
 
 
 @pytest.mark.parametrize("language,ha_language", [("zh-Hans", "zh-CN"), ("es", "es"), ("fr", "fr")])
-async def test_command_preview_passes_explicit_language_without_plan_authority(hass, token_store, language, ha_language):
-    token, _ = await token_store.async_create_token("language_preview", "admin")
-    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+async def test_command_preview_passes_explicit_language_without_plan_authority(hass, access_key_store, language, ha_language):
+    access_key, _ = await access_key_store.async_create_access_key("language_preview", "admin")
+    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
     view = PhoenixAdminCommandPreviewView()
     view.hass = hass
     with (patch("custom_components.phoenix_mcp.command_routing.async_recognize", AsyncMock(return_value=None)) as recognize,
           patch("custom_components.phoenix_mcp.decision_shadow.async_preview_decision", AsyncMock(return_value={"reason": "observed"})) as decision):
         response = await view.post(_make_admin_request(body=json.dumps({
-            "token_id": token.id, "sentence": "打开台灯", "language": language, "decision": True, "targets": True,
+            "token_id": access_key.id, "sentence": "打开台灯", "language": language, "decision": True, "targets": True,
         }).encode()))
     assert response.status == 200
     recognize.assert_awaited_once_with(hass, "打开台灯", ha_language, strict=True)
     assert decision.call_args.args[4] == language
     assert decision.call_args.kwargs == {"targets": True, "ingress": "preview"}
     assert json.loads(response.text)["executed"] is False
-    assert token_store.get_pending_approvals() == []
+    assert access_key_store.get_pending_approvals() == []
 
 
-async def test_command_preview_accepts_complete_provider_history_only_with_opt_in(hass, token_store, provider_context_history):
-    token, _ = await token_store.async_create_token('rich_preview', 'admin')
-    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+async def test_command_preview_accepts_complete_provider_history_only_with_opt_in(hass, access_key_store, provider_context_history):
+    access_key, _ = await access_key_store.async_create_access_key('rich_preview', 'admin')
+    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
     view = PhoenixAdminCommandPreviewView(); view.hass = hass
-    body = {'token_id': token.id, 'sentence': 'turn on Desk lamp', 'messages': provider_context_history}
+    body = {'token_id': access_key.id, 'sentence': 'turn on Desk lamp', 'messages': provider_context_history}
     local = {'reason': 'supported', 'proposal': {'intent': 'HassTurnOn', 'entity_ids': ['light.test']},
              'executed': False, 'elapsed_ms': 1}
     with (patch('custom_components.phoenix_mcp.command_routing.async_evaluate_command', AsyncMock(return_value=local)),
@@ -3222,7 +3222,7 @@ async def test_command_preview_accepts_complete_provider_history_only_with_opt_i
         refused = await view.post(_make_admin_request(body=json.dumps({**body, 'decision': True,
             'messages': provider_context_history[:-1]}).encode()))
         assert refused.status == 400 and review.await_count == 1
-    assert not token_store.get_pending_approvals()
+    assert not access_key_store.get_pending_approvals()
 
 
 @pytest.mark.parametrize('method', ['get', 'delete'])

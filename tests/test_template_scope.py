@@ -24,12 +24,12 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool
 from custom_components.phoenix_mcp.template_recovery import restore_template, template_snapshot
 from custom_components.phoenix_mcp.template_scope import HelperScopeError, template_entities
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.tools import helper
 
 
 def agent(**caps):
-    return TokenRecord(
+    return AccessKeyRecord(
         id=uuid.uuid4().hex, name="scope-test", token_hash="x", created_at=utcnow(), created_by="test",
         permissions=PermissionTree(domains={"sensor": PermissionNode(state="GREEN"),
                                            "button": PermissionNode(state="GREEN")}),
@@ -120,11 +120,11 @@ def test_analysis_budgets_refuse_cleanly(expression):
 async def test_hidden_or_read_only_source_refused_before_approval(hass, permission, expression):
     assert await async_setup_component(hass, "homeassistant", {})
     hass.states.async_set("sensor.source", "314159", {"secret": "fixture"})
-    token = agent(cap_helper_write="confirm")
-    token.permissions.entities["sensor.source"] = PermissionNode(state=permission)
+    access_key = agent(cap_helper_write="confirm")
+    access_key.permissions.entities["sensor.source"] = PermissionNode(state=permission)
     data = runtime()
     data.approvals = MagicMock(async_create=AsyncMock())
-    result, outcome, _ = await _call_tool("create_helper", {"helper_type": "template", "flow_steps": steps(expression)}, token, hass, data)
+    result, outcome, _ = await _call_tool("create_helper", {"helper_type": "template", "flow_steps": steps(expression)}, access_key, hass, data)
     assert outcome == "denied", result
     assert "outside this access key's write scope" in result["content"][0]["text"]
     data.approvals.async_create.assert_not_awaited()
@@ -167,13 +167,13 @@ async def test_literal_authorized_source_reaches_real_creation(hass):
 ])
 async def test_edit_and_executor_refuse_before_mutation(hass, settings):
     entry = await create_entry(hass)
-    token = agent()
-    token.permissions.entities["sensor.source"] = PermissionNode(state="RED")
+    access_key = agent()
+    access_key.permissions.entities["sensor.source"] = PermissionNode(state="RED")
     original = dict(entry.options)
     data = runtime()
     for operation in (
-        lambda: _call_tool("set_helper_settings", {"entry_id": entry.entry_id, "settings": settings}, token, hass, data),
-        lambda: helper._execute_set_config_entry_options({"entry_id": entry.entry_id, "settings": settings}, token, hass, data),
+        lambda: _call_tool("set_helper_settings", {"entry_id": entry.entry_id, "settings": settings}, access_key, hass, data),
+        lambda: helper._execute_set_config_entry_options({"entry_id": entry.entry_id, "settings": settings}, access_key, hass, data),
     ):
         result, outcome, _ = await operation()
         assert outcome == "denied", result
@@ -184,13 +184,13 @@ async def test_edit_and_executor_refuse_before_mutation(hass, settings):
 async def test_partial_edit_checks_retained_reference_and_allows_removing_it(hass):
     hass.states.async_set("sensor.source", "7")
     entry = await create_entry(hass, "{{ states('sensor.source') }}")
-    token = agent()
-    token.permissions.entities["sensor.source"] = PermissionNode(state="RED")
+    access_key = agent()
+    access_key.permissions.entities["sensor.source"] = PermissionNode(state="RED")
     data = runtime()
-    result, outcome, _ = await _call_tool("set_helper_settings", {"entry_id": entry.entry_id, "settings": {_TEMPLATE_OPTIONS_SECTION: {"availability": "{{ true }}"}}}, token, hass, data)
+    result, outcome, _ = await _call_tool("set_helper_settings", {"entry_id": entry.entry_id, "settings": {_TEMPLATE_OPTIONS_SECTION: {"availability": "{{ true }}"}}}, access_key, hass, data)
     assert outcome == "denied", result
     assert data.config_recovery.records() == []
-    result, outcome, _ = await _call_tool("set_helper_settings", {"entry_id": entry.entry_id, "settings": {"state": "{{ 9 }}"}}, token, hass, data)
+    result, outcome, _ = await _call_tool("set_helper_settings", {"entry_id": entry.entry_id, "settings": {"state": "{{ 9 }}"}}, access_key, hass, data)
     assert outcome == "allowed", result
     assert entry.options["state"] == "{{ 9 }}"
 
@@ -198,7 +198,7 @@ async def test_partial_edit_checks_retained_reference_and_allows_removing_it(has
 async def test_settings_revalidate_source_after_form_wait(hass):
     hass.states.async_set("sensor.source", "7")
     entry = await create_entry(hass)
-    token = agent()
+    access_key = agent()
     original = helper._init_settings_flow
     calls = 0
 
@@ -207,13 +207,13 @@ async def test_settings_revalidate_source_after_form_wait(hass):
         form = await original(*args)
         calls += 1
         if calls == 2:  # executor's actual submission form, after safe preflight
-            token.permissions.entities["sensor.source"] = PermissionNode(state="RED")
+            access_key.permissions.entities["sensor.source"] = PermissionNode(state="RED")
         return form
 
     data = runtime()
     with patch.object(helper, "_init_settings_flow", side_effect=revoke_after_wait):
         result, outcome, _ = await helper._execute_set_config_entry_options(
-            {"entry_id": entry.entry_id, "settings": {"state": "{{ states('sensor.source') }}"}}, token, hass, data)
+            {"entry_id": entry.entry_id, "settings": {"state": "{{ states('sensor.source') }}"}}, access_key, hass, data)
     assert result.get("isError"), (result, outcome)
     assert outcome == "denied"
     assert data.config_recovery.records()[0]["phase"] == "not_applied"
@@ -228,17 +228,17 @@ async def test_restore_receipt_and_executor_enforce_expression_scope(hass, delet
     entry = await create_entry(hass)
     snapshot = template_snapshot(hass, entry)
     snapshot["options"]["state"] = expression
-    token = agent()
-    token.permissions.entities["sensor.source"] = PermissionNode(state="RED")
+    access_key = agent()
+    access_key.permissions.entities["sensor.source"] = PermissionNode(state="RED")
     data = runtime()
-    rid = await data.config_recovery.begin(f"config_entry:{entry.entry_id}", "test", token.id, snapshot)
+    rid = await data.config_recovery.begin(f"config_entry:{entry.entry_id}", "test", access_key.id, snapshot)
     await data.config_recovery.mark(rid, "verified")
     data.config_recovery.leave(rid)
     if deleted:
         await hass.config_entries.async_remove(entry.entry_id)
-    result, outcome, _ = await _call_tool("restore_configuration", {"recovery_id": rid, "side": "before"}, token, hass, data)
+    result, outcome, _ = await _call_tool("restore_configuration", {"recovery_id": rid, "side": "before"}, access_key, hass, data)
     assert outcome == "denied", result
-    result, outcome, _ = await restore_template(snapshot, token, hass, data)
+    result, outcome, _ = await restore_template(snapshot, access_key, hass, data)
     assert outcome == "denied", result
     assert len(data.config_recovery.records()) == 1
     if deleted:
@@ -272,9 +272,9 @@ async def test_capability_denial_precedes_expression_analysis(hass):
 
 async def test_pass_through_does_not_authorize_unknown_dependencies(hass):
     assert await async_setup_component(hass, "homeassistant", {})
-    token = agent()
-    token.pass_through = True
-    result, outcome, _ = await _call_tool("create_helper", {"helper_type": "template", "flow_steps": steps("{{ states | list }}")}, token, hass, runtime())
+    access_key = agent()
+    access_key.pass_through = True
+    result, outcome, _ = await _call_tool("create_helper", {"helper_type": "template", "flow_steps": steps("{{ states | list }}")}, access_key, hass, runtime())
     assert outcome == "denied", result
     assert not hass.config_entries.async_entries("template")
 
@@ -295,15 +295,15 @@ async def test_retained_actions_and_restore_actions_refuse(hass):
     assert result["type"] == FlowResultType.CREATE_ENTRY
     entry = result["result"]
     await hass.async_block_till_done()
-    token = agent()
+    access_key = agent()
     data = runtime()
-    result, outcome, _ = await _call_tool("set_helper_settings", {"entry_id": entry.entry_id, "settings": {_TEMPLATE_OPTIONS_SECTION: {"availability": "{{ true }}"}}}, token, hass, data)
+    result, outcome, _ = await _call_tool("set_helper_settings", {"entry_id": entry.entry_id, "settings": {_TEMPLATE_OPTIONS_SECTION: {"availability": "{{ true }}"}}}, access_key, hass, data)
     assert outcome == "denied", result
     snapshot = template_snapshot(hass, entry)
-    result, outcome, _ = await restore_template(snapshot, token, hass, data)
+    result, outcome, _ = await restore_template(snapshot, access_key, hass, data)
     assert outcome == "denied", result
     await hass.config_entries.async_remove(entry.entry_id)
-    result, outcome, _ = await restore_template(snapshot, token, hass, data)
+    result, outcome, _ = await restore_template(snapshot, access_key, hass, data)
     assert outcome == "denied", result
     assert not hass.config_entries.async_entries("template")
     assert data.config_recovery.records() == []

@@ -41,8 +41,8 @@ from .const import (
     SENSOR_WRITE_DEBOUNCE_SECONDS,
     SYSTEM_LOG_MAX_RESPONSE_BYTES,
     TARGET_SELECTOR_KEYS,
-    TOKEN_LENGTH,
-    TOKEN_PREFIX,
+    ACCESS_KEY_LENGTH,
+    ACCESS_KEY_PREFIX,
 )
 from .policy_engine import (
     Permission,
@@ -62,7 +62,7 @@ from .system_log_payload import (
     log_payload_budget,
     log_result_size,
 )
-from .token_store import token_name_slug
+from .access_key_store import access_key_name_slug
 
 if TYPE_CHECKING:
     import voluptuous as vol
@@ -74,28 +74,28 @@ if TYPE_CHECKING:
     from .audit import Outcome
     from .data import PhoenixData
     from .rate_limiter import RateLimitResult
-    from .token_store import TokenRecord
+    from .access_key_store import AccessKeyRecord
 
 _LOGGER = logging.getLogger(__name__)
 
 
-def build_permitted_states(token: TokenRecord, hass: HomeAssistant) -> dict:
+def build_permitted_states(access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """Return {entity_id: ScrubbedState} for the entities a token may read.
 
     resolve() is the single filter predicate, plus the shared assist_expose_check
     for pass_through tokens with use_assist_exposure. Every template handler must
     build its sandbox from this function so the filtering never diverges.
     """
-    expose = assist_expose_check(token, hass)
+    expose = assist_expose_check(access_key, hass)
     return {
         s.entity_id: ScrubbedState(s)
         for s in hass.states.async_all()
-        if resolve(s.entity_id, token, hass) in (Permission.READ, Permission.WRITE)
+        if resolve(s.entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
         and (expose is None or expose(s.entity_id))
     }
 
 
-def build_permitted_entity_ids(token: TokenRecord, hass: HomeAssistant) -> set:
+def build_permitted_entity_ids(access_key: AccessKeyRecord, hass: HomeAssistant) -> set:
     """Return the entity IDs accessible to a token, including registry-only entities.
 
     Unlike build_permitted_states, this unions live states with the entity registry
@@ -108,10 +108,10 @@ def build_permitted_entity_ids(token: TokenRecord, hass: HomeAssistant) -> set:
     candidate_ids: set[str] = {s.entity_id for s in hass.states.async_all()}
     candidate_ids.update(entry.entity_id for entry in registry.entities.values())
 
-    expose = assist_expose_check(token, hass)
+    expose = assist_expose_check(access_key, hass)
     return {
         eid for eid in candidate_ids
-        if resolve_registry_access(eid, token, hass) in (Permission.READ, Permission.WRITE)
+        if resolve_registry_access(eid, access_key, hass) in (Permission.READ, Permission.WRITE)
         and (expose is None or expose(eid))
     }
 
@@ -163,7 +163,7 @@ def get_client_ip(request: web.Request) -> str:
 
 def log_request(
     data: PhoenixData,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     *,
     request_id: str,
     method: str,
@@ -178,40 +178,40 @@ def log_request(
     # Attribute the request to the token's active settings preset, when one is
     # set. getattr-guarded so bare test doubles keep working.
     preset_name: str | None = None
-    active_preset_id = getattr(token, "active_preset_id", None)
+    active_preset_id = getattr(access_key, "active_preset_id", None)
     if active_preset_id:
         preset_name = next(
-            (p.name for p in getattr(token, "presets", []) if p.id == active_preset_id),
+            (p.name for p in getattr(access_key, "presets", []) if p.id == active_preset_id),
             None,
         )
     data.audit.record(
         request_id=request_id,
-        token_id=token.id,
-        token_name=token.name,
+        token_id=access_key.id,
+        token_name=access_key.name,
         method=method,
         resource=resource,
         outcome=outcome,
         client_ip=client_ip,
         settings=data.store.get_settings(),
-        pass_through=token.pass_through,
+        pass_through=access_key.pass_through,
         payload=payload,
         mesa_advisory=mesa_advisory,
         preset=preset_name,
         stale_tools_advisory=stale_tools_advisory,
     )
-    update_token_counter(data, token.id, outcome)
+    update_access_key_counter(data, access_key.id, outcome)
 
 
-def fire_rate_limit_events(hass: HomeAssistant, data: PhoenixData, token: TokenRecord) -> None:
+def fire_rate_limit_events(hass: HomeAssistant, data: PhoenixData, access_key: AccessKeyRecord) -> None:
     """Bound bus and notification notices to one per token per minute."""
     now_mono = time.monotonic()
-    last = data.rate_limit_notified.get(token.id)
+    last = data.rate_limit_notified.get(access_key.id)
     if last is not None and now_mono - last < 60.0:
         return
-    data.rate_limit_notified[token.id] = now_mono
+    data.rate_limit_notified[access_key.id] = now_mono
     hass.bus.async_fire("phoenix_mcp_rate_limited", {
-        "token_id": token.id,
-        "token_name": token.name,
+        "token_id": access_key.id,
+        "token_name": access_key.name,
         "timestamp": utcnow().isoformat(),
     })
     # Notification is throttled.
@@ -223,9 +223,9 @@ def fire_rate_limit_events(hass: HomeAssistant, data: PhoenixData, token: TokenR
                 "create",
                 {
                     "message": notification_text(
-                        hass, "rate_limit.message", token=token.name),
+                        hass, "rate_limit.message", access_key=access_key.name),
                     "title": notification_text(hass, "rate_limit.title"),
-                    "notification_id": f"phoenix_mcp_rate_limit_{token.id}",
+                    "notification_id": f"phoenix_mcp_rate_limit_{access_key.id}",
                 },
             )
         )
@@ -266,13 +266,13 @@ def parse_time_param(value: str) -> datetime:
     return dt
 
 
-async def async_get_authenticated_token(
+async def async_get_authenticated_access_key(
     hass: HomeAssistant,
     request: web.Request,
     data: PhoenixData,
     request_id: str,
     resource: str,
-) -> tuple[TokenRecord, RateLimitResult] | web.Response:
+) -> tuple[AccessKeyRecord, RateLimitResult] | web.Response:
     """Validate the Phoenix MCP bearer token and check rate limits.
 
     Returns (token, rl_result) on success, or an aiohttp Response on failure.
@@ -300,36 +300,36 @@ async def async_get_authenticated_token(
         return _401
 
     presented = auth_header[7:]
-    if not presented.startswith(TOKEN_PREFIX) or len(presented) != TOKEN_LENGTH:
+    if not presented.startswith(ACCESS_KEY_PREFIX) or len(presented) != ACCESS_KEY_LENGTH:
         return _401
 
     token_hash = hashlib.sha256(presented.encode()).hexdigest()
-    token = data.store.get_token_by_hash(token_hash)
+    access_key = data.store.get_access_key_by_hash(token_hash)
 
-    if token is None:
+    if access_key is None:
         return _401
 
-    if not token.is_valid():
-        if token.is_expired():
-            await async_archive_expired_token(hass, data, token)
+    if not access_key.is_valid():
+        if access_key.is_expired():
+            await async_archive_expired_access_key(hass, data, access_key)
         return _401
 
     # Update last_used before the rate limit check so last_access reflects every
     # attempted request, not just allowed ones. This keeps last_access consistent
     # with request_count, which also increments on rate-limited requests.
-    data.store.update_last_used(token.id, utcnow())
+    data.store.update_last_used(access_key.id, utcnow())
 
     rl_result = data.rate_limiter.check(
-        token.id,
-        token.rate_limit_requests,
-        token.rate_limit_burst,
+        access_key.id,
+        access_key.rate_limit_requests,
+        access_key.rate_limit_burst,
     )
 
     if not rl_result.allowed:
-        fire_rate_limit_events(hass, data, token)
+        fire_rate_limit_events(hass, data, access_key)
         log_request(
             data,
-            token,
+            access_key,
             request_id=request_id,
             method=request.method,
             resource=resource,
@@ -340,7 +340,7 @@ async def async_get_authenticated_token(
         resp.headers["Retry-After"] = str(rl_result.retry_after)
         return resp
 
-    return token, rl_result
+    return access_key, rl_result
 
 
 def cancel_expiry_timer(data: PhoenixData, token_id: str) -> None:
@@ -350,34 +350,34 @@ def cancel_expiry_timer(data: PhoenixData, token_id: str) -> None:
         cancel()
 
 
-def schedule_expiry_timer(hass: HomeAssistant, data: PhoenixData, token: TokenRecord) -> None:
+def schedule_expiry_timer(hass: HomeAssistant, data: PhoenixData, access_key: AccessKeyRecord) -> None:
     """Schedule a timer to archive a token at its expiry time.
 
     A token without an expiry is left untouched. Otherwise any earlier timer for
     it is cancelled first, and none is scheduled when it has already expired.
     """
-    if token.expires_at is None:
+    if access_key.expires_at is None:
         return
-    cancel_expiry_timer(data, token.id)
-    delay = (token.expires_at - utcnow()).total_seconds()
+    cancel_expiry_timer(data, access_key.id)
+    delay = (access_key.expires_at - utcnow()).total_seconds()
     if delay <= 0:
         return
 
     @callback
     def _on_expiry(_now=None) -> None:
-        data.expiry_timers.pop(token.id, None)
+        data.expiry_timers.pop(access_key.id, None)
         hass.async_create_background_task(
-            async_archive_expired_token(hass, data, token),
-            f"phoenix_mcp_expire_{token.id}",
+            async_archive_expired_access_key(hass, data, access_key),
+            f"phoenix_mcp_expire_{access_key.id}",
         )
 
-    data.expiry_timers[token.id] = async_call_later(hass, delay, _on_expiry)
+    data.expiry_timers[access_key.id] = async_call_later(hass, delay, _on_expiry)
 
 
-async def async_archive_expired_token(
+async def async_archive_expired_access_key(
     hass: HomeAssistant,
     data: PhoenixData,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
 ) -> None:
     """Move an expired token to the archive and perform full cleanup.
 
@@ -386,13 +386,13 @@ async def async_archive_expired_token(
     removes sensor entities.
     """
     from .approvals import (  # noqa: PLC0415 - avoid import cycle at module load
-        REASON_TOKEN_EXPIRED,
-        async_cancel_approvals_for_token,
+        REASON_ACCESS_KEY_EXPIRED,
+        async_cancel_approvals_for_access_key,
         dismiss_approval_notification,
         fire_approval_resolved_event,
     )
 
-    cancel_expiry_timer(data, token.id)
+    cancel_expiry_timer(data, access_key.id)
     # Expiry removes the same live token references as explicit revocation, so it
     # follows the same settings-lock then token-store-lock order.
     async with data.settings_update_lock:
@@ -401,7 +401,7 @@ async def async_archive_expired_token(
             # for the same token. Re-read under the mutation lock so only the first
             # expired transition archives it, and so PATCH/revoke cannot interleave
             # with the stored snapshot and dependent cleanup below.
-            current = data.store.get_token_by_id(token.id)
+            current = data.store.get_access_key_by_id(access_key.id)
             now = utcnow()
             if (
                 current is None
@@ -409,8 +409,8 @@ async def async_archive_expired_token(
                 or current.expires_at > now
             ):
                 return
-            slug = token_name_slug(current.name)
-            archived = await data.store.async_archive_token(
+            slug = access_key_name_slug(current.name)
+            archived = await data.store.async_archive_access_key(
                 current.id, revoked=False, revoked_at=now
             )
             if archived is None:
@@ -428,16 +428,16 @@ async def async_archive_expired_token(
                 _patch["ai_task_token_id"] = None
             if _patch:
                 await data.store.async_patch_settings(**_patch)
-            changed_approvals = await async_cancel_approvals_for_token(
-                data.store, current.id, REASON_TOKEN_EXPIRED,
+            changed_approvals = await async_cancel_approvals_for_access_key(
+                data.store, current.id, REASON_ACCESS_KEY_EXPIRED,
                 skip_ids=data.approvals_in_progress,
             )
     for approval in changed_approvals:
         dismiss_approval_notification(hass, approval.id)
         fire_approval_resolved_event(hass, approval)
     # Advisory leases the token still held; in-memory, so outside the store lock.
-    from .mesa import release_token_leases  # noqa: PLC0415
-    release_token_leases(data, current.id)
+    from .mesa import release_access_key_leases  # noqa: PLC0415
+    release_access_key_leases(data, current.id)
     if data.async_sync_voice_agent is not None:
         data.async_sync_voice_agent()
     if "voice_agent_token_id" in _patch:
@@ -450,16 +450,16 @@ async def async_archive_expired_token(
         data.async_sync_ai_task()
     data.rate_limiter.destroy(current.id)
     data.rate_limit_notified.pop(current.id, None)
-    data.token_counters.pop(current.id, None)
+    data.access_key_counters.pop(current.id, None)
     data.stale_tools_advised.pop(current.id, None)
     hass.bus.async_fire("phoenix_mcp_token_expired", {
         "token_id": current.id,
         "token_name": current.name,
         "timestamp": now.isoformat(),
     })
-    if data.async_on_token_archived:
+    if data.async_on_access_key_archived:
         try:
-            await data.async_on_token_archived(slug)
+            await data.async_on_access_key_archived(slug)
         except Exception:
             _LOGGER.warning(
                 "Sensor cleanup failed for expired access key %s", current.id, exc_info=True,
@@ -626,7 +626,7 @@ def safe_template_env() -> Any:
     return _SAFE_TEMPLATE_ENV
 
 
-def render_template_for_token(template_str: str, token: TokenRecord, hass: HomeAssistant) -> str:
+def render_template_for_access_key(template_str: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> str:
     """Render a Jinja2 template against the token's permitted entity state.
 
     Renders in safe_template_env() with permission-restricted replacements for the
@@ -634,7 +634,7 @@ def render_template_for_token(template_str: str, token: TokenRecord, hass: HomeA
     environment lacks. Raises (TemplateError, ValueError, jinja2 errors) on any
     failure; callers map exceptions to an invalid_request response.
     """
-    return render_template_snapshot(template_str, build_permitted_states(token, hass))
+    return render_template_snapshot(template_str, build_permitted_states(access_key, hass))
 
 
 def render_template_snapshot(template_str: str, permitted: dict) -> str:
@@ -729,7 +729,7 @@ def render_template_snapshot(template_str: str, permitted: dict) -> str:
 # read. The narrower set a CALLER may ask for is const.LOG_LEVELS; the two differ
 # deliberately.
 _LOG_LEVEL_RANK: dict[str, int] = {"DEBUG": 0, "INFO": 1, "WARNING": 2, "ERROR": 3, "CRITICAL": 3}
-_PHOENIX_TOKEN_SCRUB_RE = re.compile(r"phx_[0-9a-f]{64}", re.IGNORECASE)
+_PHOENIX_ACCESS_KEY_SCRUB_RE = re.compile(r"phx_[0-9a-f]{64}", re.IGNORECASE)
 # Home Assistant long-lived access tokens (and other JWTs) are three base64url
 # segments whose header always begins "eyJ". Redact so a leaked LLAT in a log
 # line is not handed back to a token holding cap_log_read.
@@ -745,7 +745,7 @@ _PHOENIX_LOGGER_PREFIXES = ("homeassistant.components.phoenix_mcp", "custom_comp
 
 def _scrub_log_text(text: str) -> str:
     """Redact Phoenix MCP tokens, JWTs/LLATs, and URL-embedded credentials from a log line."""
-    text = _PHOENIX_TOKEN_SCRUB_RE.sub("<phoenix-token>", text)
+    text = _PHOENIX_ACCESS_KEY_SCRUB_RE.sub("<phoenix-token>", text)
     text = _JWT_SCRUB_RE.sub("<token>", text)
     text = _URL_CRED_QUERY_RE.sub(r"\1=<redacted>", text)
     text = _URL_CRED_USERINFO_RE.sub("://<redacted>@", text)
@@ -1021,7 +1021,7 @@ _ENTITY_ID_TEXT_RE = re.compile(r"(?<![\w.])([a-z0-9_]+\.[a-z0-9_]+)(?!\w|\.\w)"
 
 def redact_inaccessible_entity_ids_in_text(
     text: str,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     *,
     sentinel: str = "<redacted-entity>",
@@ -1036,7 +1036,7 @@ def redact_inaccessible_entity_ids_in_text(
                     and hass.states.get(entity_id) is None
                     and er.async_get(hass).async_get(entity_id) is None):
                 return entity_id
-            permission = resolve(entity_id, token, hass)
+            permission = resolve(entity_id, access_key, hass)
         except Exception:
             return sentinel
         if permission in (Permission.READ, Permission.WRITE):
@@ -1114,9 +1114,9 @@ def _strict_diagnostic_text(text: str) -> str:
     return scrubbed
 
 
-def _strict_phoenix_log_text(text: str, token: TokenRecord, hass: HomeAssistant) -> str:
+def _strict_phoenix_log_text(text: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> str:
     """Apply the stronger Phoenix self-diagnostics text boundary."""
-    return redact_inaccessible_entity_ids_in_text(_strict_diagnostic_text(text), token, hass)
+    return redact_inaccessible_entity_ids_in_text(_strict_diagnostic_text(text), access_key, hass)
 
 
 def _log_filter_fingerprint(filters: dict[str, Any], phoenix_only: bool) -> str:
@@ -1228,7 +1228,7 @@ def collect_log_entries(
     cursor: str | None,
     *,
     phoenix_only: bool = False,
-    token: TokenRecord | None = None,
+    access_key: AccessKeyRecord | None = None,
     detail_ref: str | None = None,
     detail_field: str = "message",
     message_index: int = 0,
@@ -1336,9 +1336,9 @@ def collect_log_entries(
 
         scrub: Callable[[str], str] = _scrub_log_text
         if phoenix_only:
-            if token is None:
+            if access_key is None:
                 raise SystemLogDegradedError("Phoenix diagnostics access key context is unavailable")
-            scrub = lambda value: _strict_phoenix_log_text(value, token, hass)
+            scrub = lambda value: _strict_phoenix_log_text(value, access_key, hass)
         safe_messages = [scrub(message) for message in messages]
         exception = _log_exception(getattr(record, "exception", None))
         safe_exception = scrub(exception) if exception else None
@@ -1386,7 +1386,7 @@ def collect_log_entries(
         "recorded_levels": ["WARNING", "ERROR", "CRITICAL"],
     }
     def reference(key: tuple[float, str], entry: dict) -> str | None:
-        return log_detail_ref(entry, token, phoenix_only=phoenix_only, bucket_id=key[1]) if token else None
+        return log_detail_ref(entry, access_key, phoenix_only=phoenix_only, bucket_id=key[1]) if access_key else None
 
     if detail_ref:
         for key, entry in entries_with_keys:
@@ -1429,8 +1429,8 @@ def collect_log_entries(
 def flush_sensor_writes(data: PhoenixData, _now=None) -> None:
     """Write HA state for every token marked dirty since the last flush.
 
-    Runs at most once per debounce window (scheduled by update_token_counter).
-    Tokens revoked or archived in the window drop out: their token_id_sensors
+    Runs at most once per debounce window (scheduled by update_access_key_counter).
+    Tokens revoked or archived in the window drop out: their access_key_id_sensors
     entry is already gone.
 
     Must be @callback: async_write_ha_state() requires the event loop thread, and
@@ -1441,12 +1441,12 @@ def flush_sensor_writes(data: PhoenixData, _now=None) -> None:
     dirty = data.sensor_write_dirty
     data.sensor_write_dirty = set()
     for token_id in dirty:
-        for sensor in data.token_id_sensors.get(token_id, []):
+        for sensor in data.access_key_id_sensors.get(token_id, []):
             if sensor.hass is not None:
                 sensor.async_write_ha_state()
 
 
-def update_token_counter(data: PhoenixData, token_id: str, outcome: str) -> None:
+def update_access_key_counter(data: PhoenixData, token_id: str, outcome: str) -> None:
     """Increment the in-memory request/denied/rate-limit counters for a token.
 
     Counters are initialised on first use and read by sensor.py and, directly, by
@@ -1456,13 +1456,13 @@ def update_token_counter(data: PhoenixData, token_id: str, outcome: str) -> None
     request after a flush schedules one write SENSOR_WRITE_DEBOUNCE_SECONDS out;
     requests inside the window coalesce into it.
     """
-    if token_id not in data.token_counters:
-        data.token_counters[token_id] = {
+    if token_id not in data.access_key_counters:
+        data.access_key_counters[token_id] = {
             "request_count": 0,
             "denied_count": 0,
             "rate_limit_hits": 0,
         }
-    counters = data.token_counters[token_id]
+    counters = data.access_key_counters[token_id]
     counters["request_count"] += 1
     if outcome in ("denied", "not_found"):
         counters["denied_count"] += 1
@@ -1556,7 +1556,7 @@ def str_list_arg(value: object) -> list[str]:
 # enforcing a check, because it does not go through the approval queue.
 
 
-def effective_cap(token: TokenRecord, cap_name: str) -> str:
+def effective_cap(access_key: AccessKeyRecord, cap_name: str) -> str:
     """Return the cap mode after applying pass_through interaction rules.
 
     Exempt caps are unaffected by pass_through. For non-exempt caps under
@@ -1570,17 +1570,17 @@ def effective_cap(token: TokenRecord, cap_name: str) -> str:
     household = household_authority.get()
     if household is not None and not household.is_admin() and cap_name not in HOUSEHOLD_CAPABILITIES:
         return CAP_DENY
-    raw = getattr(token, cap_name, CAP_DENY)
+    raw = getattr(access_key, cap_name, CAP_DENY)
     if cap_name in PASS_THROUGH_EXEMPT_CAPS:
         return raw
-    if token.pass_through:
+    if access_key.pass_through:
         if raw == CAP_CONFIRM:
             return CAP_CONFIRM
         return CAP_ALLOW
     return raw
 
 
-def token_has_write_scope(token: TokenRecord) -> bool:
+def access_key_has_write_scope(access_key: AccessKeyRecord) -> bool:
     """True if the token can write to at least one entity.
 
     Decides whether tools/list announces the control tools (call_service, the
@@ -1589,9 +1589,9 @@ def token_has_write_scope(token: TokenRecord) -> bool:
     over-approximation (a GREEN under a RED ancestor still counts); the per-call
     permission check is the real gate.
     """
-    if token.pass_through:
+    if access_key.pass_through:
         return True
-    tree = token.permissions
+    tree = access_key.permissions
     for nodes in (tree.domains, tree.devices, tree.entities):
         for node in nodes.values():
             if node.state == "GREEN":
@@ -1599,9 +1599,9 @@ def token_has_write_scope(token: TokenRecord) -> bool:
     return False
 
 
-def effective_caps(token: TokenRecord) -> dict[str, str]:
+def effective_caps(access_key: AccessKeyRecord) -> dict[str, str]:
     """Return {cap name: effective mode} for every capability of a token."""
-    return {name: effective_cap(token, name) for name in CAPABILITY_NAMES}
+    return {name: effective_cap(access_key, name) for name in CAPABILITY_NAMES}
 
 
 @dataclass
@@ -1657,7 +1657,7 @@ async def _resolve_diff(diff: DiffSource) -> dict:
 
 async def async_evaluate_capability(
     cap_name: str,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     *,
@@ -1682,7 +1682,7 @@ async def async_evaluate_capability(
         fire_approval_requested_event,
     )
 
-    mode = effective_cap(token, cap_name)
+    mode = effective_cap(access_key, cap_name)
     if mode == CAP_ALLOW:
         return CapabilityResult(CAP_ALLOW)
     if mode == CAP_DENY:
@@ -1699,8 +1699,8 @@ async def async_evaluate_capability(
         check_request_authority()
         approval = await async_create_pending_approval(
             data.store,
-            token_id=token.id,
-            token_name=token.name,
+            token_id=access_key.id,
+            token_name=access_key.name,
             tool_name=tool_name,
             cap_name=cap_name,
             args=args,

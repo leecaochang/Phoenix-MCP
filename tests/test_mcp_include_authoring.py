@@ -29,7 +29,7 @@ from custom_components.phoenix_mcp.mcp_view import (
     async_restore_version,
 )
 from custom_components.phoenix_mcp.helpers import content_hash
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.tools.authoring import (
     _build_diff_create_script,
     _build_diff_delete_automation,
@@ -45,8 +45,8 @@ from custom_components.phoenix_mcp.version_store import VersionStore
 pytestmark = pytest.mark.usefixtures("immediate_authoring_observation")
 
 
-def _token(tree: PermissionTree | None = None, **caps) -> TokenRecord:
-    return TokenRecord(
+def _access_key(tree: PermissionTree | None = None, **caps) -> AccessKeyRecord:
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x", created_at=utcnow(),
         created_by="u", permissions=tree or PermissionTree(domains={}), **caps,
     )
@@ -95,7 +95,7 @@ class TestAutomationSplitLayout:
             {"id": "1734362394008", "friendly_name": "~test"},
         )
         diff = await _build_diff_delete_automation(
-            {"automation_id": "1734362394008"}, _token(), hass,
+            {"automation_id": "1734362394008"}, _access_key(), hass,
         )
         assert diff["target"] == {
             "type": "automation", "id": "1734362394008", "label": "~test",
@@ -107,11 +107,11 @@ class TestAutomationSplitLayout:
         write(env, "automations/two.yaml", "- id: bbb\n  alias: B  # inline note\n")
         other_before = (env / "automations/two.yaml").read_text(encoding="utf-8")
 
-        token = _token(cap_automation_write="allow")
+        access_key = _access_key(cap_automation_write="allow")
         _, outcome, _ = await _call_tool(
             "edit_automation",
             {"automation_id": "aaa", "config": dict(AUTOMATION_CFG, alias="A2"), "expected_hash": content_hash(yi.read_entry(str(env), "automation", "aaa"))},
-            token, hass, MagicMock(),
+            access_key, hass, MagicMock(),
         )
         assert outcome == "allowed"
         assert (env / "automations/two.yaml").read_text(encoding="utf-8") == other_before
@@ -122,9 +122,9 @@ class TestAutomationSplitLayout:
     async def test_create_routes_to_dir_flavor(self, hass, env):
         write(env, "configuration.yaml", "automation: !include_dir_merge_list automations\n")
         (env / "automations").mkdir()
-        token = _token(cap_automation_write="allow")
+        access_key = _access_key(cap_automation_write="allow")
         content, outcome, _ = await _call_tool(
-            "create_automation", {"config": AUTOMATION_CFG}, token, hass, MagicMock())
+            "create_automation", {"config": AUTOMATION_CFG}, access_key, hass, MagicMock())
         assert outcome == "allowed"
         aid = json.loads(_text(content))["id"]
         new_file = env / "automations" / f"{aid}.yaml"
@@ -139,9 +139,9 @@ class TestAutomationSplitLayout:
             - id: bbb
               alias: B
         """)
-        token = _token(cap_automation_write="allow")
+        access_key = _access_key(cap_automation_write="allow")
         _, outcome, _ = await _call_tool(
-            "delete_automation", {"automation_id": "aaa"}, token, hass, MagicMock())
+            "delete_automation", {"automation_id": "aaa"}, access_key, hass, MagicMock())
         assert outcome == "allowed"
         assert (env / "automations.yaml").read_text(encoding="utf-8") == textwrap.dedent("""\
             # bbb heading
@@ -152,9 +152,9 @@ class TestAutomationSplitLayout:
     async def test_create_refuses_when_unrouted(self, hass, env):
         """An unroutable create is refused rather than silently writing nothing."""
         write(env, "configuration.yaml", "default_config:\nfrontend:\n")
-        token = _token(cap_automation_write="allow")
+        access_key = _access_key(cap_automation_write="allow")
         content, outcome, _ = await _call_tool(
-            "create_automation", {"config": AUTOMATION_CFG}, token, hass, MagicMock())
+            "create_automation", {"config": AUTOMATION_CFG}, access_key, hass, MagicMock())
         assert outcome == "denied"
         assert _text(content) == yi.MSG_CREATE_NO_ROUTE.format(domain="automation")
         assert not (env / "automations.yaml").exists()
@@ -163,10 +163,10 @@ class TestAutomationSplitLayout:
         write(env, "configuration.yaml", "automation: !include_dir_merge_list automations\n")
         write(env, "automations/a.yaml", "- id: dup\n  alias: A\n")
         write(env, "automations/b.yaml", "- id: dup\n  alias: B\n")
-        token = _token(cap_automation_write="allow")
+        access_key = _access_key(cap_automation_write="allow")
         content, outcome, _ = await _call_tool(
             "edit_automation", {"automation_id": "dup", "config": AUTOMATION_CFG},
-            token, hass, MagicMock())
+            access_key, hass, MagicMock())
         assert outcome == "denied"
         assert "more than one included file" in _text(content)
 
@@ -175,9 +175,9 @@ class TestAutomationSplitLayout:
             automation a: !include_dir_merge_list one
             automation b: !include_dir_merge_list two
         """)
-        token = _token(cap_automation_write="allow")
+        access_key = _access_key(cap_automation_write="allow")
         content, outcome, _ = await _call_tool(
-            "create_automation", {"config": AUTOMATION_CFG}, token, hass, MagicMock())
+            "create_automation", {"config": AUTOMATION_CFG}, access_key, hass, MagicMock())
         assert outcome == "denied"
         assert _text(content) == yi.MSG_CREATE_MULTI.format(domain="automation")
 
@@ -189,7 +189,7 @@ class TestScriptSplitLayout:
                 "script_id": "approval_summary_smoke_test",
                 "config": {"alias": "Approval Summary Smoke Test", "sequence": []},
             },
-            _token(), hass,
+            _access_key(), hass,
         )
         assert diff["target"] == {
             "type": "script",
@@ -200,22 +200,22 @@ class TestScriptSplitLayout:
     async def test_create_edit_delete_dir_named(self, hass, env):
         write(env, "configuration.yaml", "script: !include_dir_named scripts\n")
         (env / "scripts").mkdir()
-        token = _token(cap_script_write="allow")
+        access_key = _access_key(cap_script_write="allow")
         cfg = {"alias": "S", "sequence": []}
 
         _, outcome, _ = await _call_tool(
-            "create_script", {"script_id": "hello", "config": cfg}, token, hass, MagicMock())
+            "create_script", {"script_id": "hello", "config": cfg}, access_key, hass, MagicMock())
         assert outcome == "allowed"
         assert (env / "scripts/hello.yaml").exists()
 
         _, outcome, _ = await _call_tool(
             "edit_script", {"script_id": "hello", "config": dict(cfg, alias="S2")},
-            token, hass, MagicMock())
+            access_key, hass, MagicMock())
         assert outcome == "allowed"
         assert "alias: S2" in (env / "scripts/hello.yaml").read_text(encoding="utf-8")
 
         _, outcome, _ = await _call_tool(
-            "delete_script", {"script_id": "hello"}, token, hass, MagicMock())
+            "delete_script", {"script_id": "hello"}, access_key, hass, MagicMock())
         assert outcome == "allowed"
         # dir_named: an empty leftover file would resurrect as {stem: {}}, so
         # delete removes the file itself.
@@ -224,10 +224,10 @@ class TestScriptSplitLayout:
     async def test_duplicate_create_graph_wide(self, hass, env):
         write(env, "configuration.yaml", "script: !include_dir_merge_named scripts\n")
         write(env, "scripts/pack.yaml", "hello:\n  sequence: []\n")
-        token = _token(cap_script_write="allow")
+        access_key = _access_key(cap_script_write="allow")
         content, outcome, _ = await _call_tool(
             "create_script", {"script_id": "hello", "config": {"sequence": []}},
-            token, hass, MagicMock())
+            access_key, hass, MagicMock())
         assert outcome == "invalid_request"
         assert "already exists" in _text(content)
 
@@ -243,12 +243,12 @@ class TestSceneSplitLayout:
         hass.states.async_set(e.entity_id, "on", {})
         return env
 
-    def _scene_token(self) -> TokenRecord:
+    def _scene_token(self) -> AccessKeyRecord:
         tree = PermissionTree(domains={
             "light": PermissionNode(state="GREEN"),
             "scene": PermissionNode(state="GREEN"),
         })
-        return _token(tree=tree, cap_scene_write="allow", cap_registry_read="allow")
+        return _access_key(tree=tree, cap_scene_write="allow", cap_registry_read="allow")
 
     async def test_edit_and_delete_in_merge_list_dir(self, hass, scene_env):
         env = scene_env
@@ -263,16 +263,16 @@ class TestSceneSplitLayout:
               entities:
                 light.kitchen: on
         """)
-        token = self._scene_token()
+        access_key = self._scene_token()
         cfg = {"name": "Movie v2", "entities": {"light.kitchen": "on"}}
         _, outcome, _ = await _call_tool(
-            "edit_scene", {"scene_id": "movie", "config": cfg}, token, hass, MagicMock())
+            "edit_scene", {"scene_id": "movie", "config": cfg}, access_key, hass, MagicMock())
         assert outcome == "allowed"
         text = (env / "scenes/pack.yaml").read_text(encoding="utf-8")
         assert "Movie v2" in text and "name: Other" in text
 
         _, outcome, _ = await _call_tool(
-            "delete_scene", {"scene_id": "movie"}, token, hass, MagicMock())
+            "delete_scene", {"scene_id": "movie"}, access_key, hass, MagicMock())
         assert outcome == "allowed"
         remaining = (env / "scenes/pack.yaml").read_text(encoding="utf-8")
         assert "movie" not in remaining and "name: Other" in remaining
@@ -281,9 +281,9 @@ class TestSceneSplitLayout:
         env = scene_env
         write(env, "configuration.yaml", "scene: !include_dir_merge_list scenes\n")
         (env / "scenes").mkdir()
-        token = self._scene_token()
+        access_key = self._scene_token()
         content, outcome, _ = await _call_tool(
-            "delete_scene", {"scene_id": "ghost"}, token, hass, MagicMock())
+            "delete_scene", {"scene_id": "ghost"}, access_key, hass, MagicMock())
         assert outcome == "denied"
         assert _text(content) == (
             "No scene found with id 'ghost', or it controls entities outside your write scope.")
@@ -299,33 +299,33 @@ class TestSceneSplitLayout:
         """)
         registry = er.async_get(hass)
         scene_entity = registry.async_get_or_create("scene", "homeassistant", "movie")
-        token = self._scene_token()
+        access_key = self._scene_token()
         _, outcome, _ = await _call_tool(
-            "delete_scene", {"scene_id": "movie"}, token, hass, MagicMock())
+            "delete_scene", {"scene_id": "movie"}, access_key, hass, MagicMock())
         assert outcome == "allowed"
         assert registry.async_get(scene_entity.entity_id) is None
 
 
 class TestLegacyFallbackParity:
     async def test_no_configuration_yaml_uses_legacy_path(self, hass, env):
-        token = _token(cap_automation_write="allow")
+        access_key = _access_key(cap_automation_write="allow")
         content, outcome, _ = await _call_tool(
-            "create_automation", {"config": AUTOMATION_CFG}, token, hass, MagicMock())
+            "create_automation", {"config": AUTOMATION_CFG}, access_key, hass, MagicMock())
         assert outcome == "allowed"
         aid = json.loads(_text(content))["id"]
         assert (env / "automations.yaml").exists()
 
         _, outcome, _ = await _call_tool(
             "edit_automation", {"automation_id": aid, "config": dict(AUTOMATION_CFG, alias="X"), "expected_hash": content_hash(yi.read_entry(str(env), "automation", aid))},
-            token, hass, MagicMock())
+            access_key, hass, MagicMock())
         assert outcome == "allowed"
 
     async def test_legacy_include_guard_still_fires(self, hass, env):
         """No configuration.yaml + !include text in automations.yaml = legacy refusal."""
         write(env, "automations.yaml", "- !include extra.yaml\n")
-        token = _token(cap_automation_write="allow")
+        access_key = _access_key(cap_automation_write="allow")
         content, outcome, _ = await _call_tool(
-            "create_automation", {"config": AUTOMATION_CFG}, token, hass, MagicMock())
+            "create_automation", {"config": AUTOMATION_CFG}, access_key, hass, MagicMock())
         assert outcome == "denied"
         assert _text(content) == (
             "automations.yaml uses !include directives. Phoenix MCP cannot safely edit it "
@@ -335,9 +335,9 @@ class TestLegacyFallbackParity:
         """Creating into HA's default bare '[]' automations.yaml yields a loadable file."""
         write(env, "configuration.yaml", "automation: !include automations.yaml\n")
         write(env, "automations.yaml", "[]\n")
-        token = _token(cap_automation_write="allow")
+        access_key = _access_key(cap_automation_write="allow")
         content, outcome, _ = await _call_tool(
-            "create_automation", {"config": AUTOMATION_CFG}, token, hass, MagicMock())
+            "create_automation", {"config": AUTOMATION_CFG}, access_key, hass, MagicMock())
         assert outcome == "allowed", _text(content)
         text = (env / "automations.yaml").read_text(encoding="utf-8")
         assert "[]" not in text
@@ -348,10 +348,10 @@ class TestLegacyFallbackParity:
     async def test_not_found_message_parity(self, hass, env):
         write(env, "configuration.yaml", "automation: !include automations.yaml\n")
         write(env, "automations.yaml", "- id: aaa\n  alias: A\n")
-        token = _token(cap_automation_write="allow")
+        access_key = _access_key(cap_automation_write="allow")
         content, outcome, _ = await _call_tool(
             "edit_automation", {"automation_id": "ghost", "config": AUTOMATION_CFG},
-            token, hass, MagicMock())
+            access_key, hass, MagicMock())
         assert outcome == "denied"
         assert _text(content) == "No automation found with id 'ghost'."
 
@@ -365,10 +365,10 @@ class TestTagHandling:
               password: !secret db_pass
         """)
         data, versions = _data()
-        token = _token(cap_automation_write="allow")
+        access_key = _access_key(cap_automation_write="allow")
         _, outcome, _ = await _call_tool(
             "edit_automation", {"automation_id": "aaa", "config": dict(AUTOMATION_CFG, alias="A2"), "expected_hash": content_hash(yi.read_entry(str(env), "automation", "aaa"))},
-            token, hass, data)
+            access_key, hass, data)
         assert outcome == "allowed"
         record = versions.list_for("automation", "aaa")[0]
         assert record.before == {"id": "aaa", "alias": "A", "password": "!secret db_pass"}
@@ -381,8 +381,8 @@ class TestTagHandling:
               password: !secret db_pass
         """)
         data, versions = _data()
-        token = _token(cap_automation_write="allow")
-        await _call_tool("delete_automation", {"automation_id": "aaa"}, token, hass, data)
+        access_key = _access_key(cap_automation_write="allow")
+        await _call_tool("delete_automation", {"automation_id": "aaa"}, access_key, hass, data)
         record = versions.list_for("automation", "aaa")[0]
         assert record.before["password"] == "!secret db_pass"
 
@@ -395,11 +395,11 @@ class TestTagHandling:
     async def test_tag_free_restore_round_trips(self, hass, env):
         write(env, "configuration.yaml", "automation: !include automations.yaml\n")
         data, versions = _data()
-        token = _token(cap_automation_write="allow")
+        access_key = _access_key(cap_automation_write="allow")
         content, _, _ = await _call_tool(
-            "create_automation", {"config": AUTOMATION_CFG}, token, hass, data)
+            "create_automation", {"config": AUTOMATION_CFG}, access_key, hass, data)
         aid = json.loads(_text(content))["id"]
-        await _call_tool("delete_automation", {"automation_id": aid}, token, hass, data)
+        await _call_tool("delete_automation", {"automation_id": aid}, access_key, hass, data)
 
         record = versions.list_for("automation", aid)[0]  # the delete, before=config
         _, outcome, _ = await async_restore_version(record, "admin-1", hass, data)
@@ -410,10 +410,10 @@ class TestTagHandling:
     async def test_edit_refuses_include_bearing_entry(self, hass, env):
         write(env, "configuration.yaml", "automation: !include automations.yaml\n")
         write(env, "automations.yaml", "- id: aaa\n  alias: A\n  action: !include actions.yaml\n")
-        token = _token(cap_automation_write="allow")
+        access_key = _access_key(cap_automation_write="allow")
         content, outcome, _ = await _call_tool(
             "edit_automation", {"automation_id": "aaa", "config": AUTOMATION_CFG, "expected_hash": content_hash(yi.read_entry(str(env), "automation", "aaa"))},
-            token, hass, MagicMock())
+            access_key, hass, MagicMock())
         assert outcome == "denied"
         assert _text(content) == yi.MSG_INCLUDE_REFUSAL.format(name="automations.yaml")
 
@@ -423,16 +423,16 @@ class TestApprovalReplay:
         """Approval replay runs _execute_X directly; it must behave identically."""
         write(env, "configuration.yaml", "automation: !include_dir_merge_list automations\n")
         write(env, "automations/one.yaml", "- id: aaa\n  alias: A\n")
-        token = _token(cap_automation_write="confirm")
+        access_key = _access_key(cap_automation_write="confirm")
         _, outcome, _ = await _execute_edit_automation(
             {"automation_id": "aaa", "config": dict(AUTOMATION_CFG, alias="Approved"), "expected_hash": content_hash(yi.read_entry(str(env), "automation", "aaa"))},
-            token, hass, MagicMock())
+            access_key, hass, MagicMock())
         assert outcome == "allowed"
         assert "alias: Approved" in (env / "automations/one.yaml").read_text(encoding="utf-8")
 
     async def test_stale_legacy_automation_delete_replay_is_refused(self, hass, env):
         write(env, "automations.yaml", "- id: aaa\n  alias: Reviewed\n")
-        token = _token(cap_automation_write="confirm")
+        access_key = _access_key(cap_automation_write="confirm")
         captured: dict = {}
         captured_diff: dict = {}
         reviewed = {"id": "aaa", "alias": "Reviewed"}
@@ -452,7 +452,7 @@ class TestApprovalReplay:
                     "automation_id": "aaa",
                     "_phoenix_delete_expected_hash": "0" * 64,
                 },
-                token, hass, MagicMock(),
+                access_key, hass, MagicMock(),
         )
         assert outcome == "pending_approval"
         assert captured["_phoenix_delete_expected_hash"] == content_hash(reviewed)
@@ -460,14 +460,14 @@ class TestApprovalReplay:
         assert "Replacement" not in captured_diff["before"]
 
         content, outcome, _ = await _execute_delete_automation(
-            captured, token, hass, MagicMock()
+            captured, access_key, hass, MagicMock()
         )
         assert outcome == "invalid_request"
         assert "expected_hash no longer matches" in _text(content)
         assert "Replacement" in (env / "automations.yaml").read_text(encoding="utf-8")
 
         content, outcome, _ = await _execute_delete_automation(
-            {"automation_id": "aaa"}, token, hass, MagicMock()
+            {"automation_id": "aaa"}, access_key, hass, MagicMock()
         )
         assert outcome == "invalid_request"
         assert "not bound to reviewed content" in _text(content)
@@ -493,10 +493,10 @@ class TestApprovalReplay:
             store=store, rate_limiter=MagicMock(), audit=MagicMock(),
             versions=VersionStore(), mesa=None,
         )
-        token = _token(cap_automation_write="confirm")
+        access_key = _access_key(cap_automation_write="confirm")
 
         _, outcome, _ = await _call_tool(
-            "delete_automation", {"automation_id": "aaa"}, token, hass, data
+            "delete_automation", {"automation_id": "aaa"}, access_key, hass, data
         )
         assert outcome == "pending_approval"
         approval = store.pending[0]
@@ -505,7 +505,7 @@ class TestApprovalReplay:
         )
 
         result = await async_execute_approved_tool(
-            "delete_automation", approval["args"], token, hass, data
+            "delete_automation", approval["args"], access_key, hass, data
         )
         assert result[1] == "allowed"
         assert yi.read_entry(str(env), "automation", "aaa") is None
@@ -513,7 +513,7 @@ class TestApprovalReplay:
     async def test_stale_split_script_delete_replay_is_refused(self, hass, env):
         write(env, "configuration.yaml", "script: !include_dir_named scripts\n")
         write(env, "scripts/hello.yaml", "alias: Reviewed\nsequence: []\n")
-        token = _token(cap_script_write="confirm")
+        access_key = _access_key(cap_script_write="confirm")
         captured: dict = {}
 
         async def capture_gate(*args, **kwargs):
@@ -525,13 +525,13 @@ class TestApprovalReplay:
             new=AsyncMock(side_effect=capture_gate),
         ):
             _, outcome, _ = await _tool_delete_script(
-                {"script_id": "hello"}, token, hass, MagicMock()
+                {"script_id": "hello"}, access_key, hass, MagicMock()
             )
         assert outcome == "pending_approval"
 
         write(env, "scripts/hello.yaml", "alias: Replacement\nsequence: []\n")
         content, outcome, _ = await _execute_delete_script(
-            captured, token, hass, MagicMock()
+            captured, access_key, hass, MagicMock()
         )
         assert outcome == "invalid_request"
         assert "expected_hash no longer matches" in _text(content)
@@ -552,7 +552,7 @@ class TestApprovalReplay:
               entities:
                 light.kitchen: off
         """)
-        token = _token(
+        access_key = _access_key(
             tree=PermissionTree(domains={
                 "light": PermissionNode(state="GREEN"),
                 "scene": PermissionNode(state="GREEN"),
@@ -570,7 +570,7 @@ class TestApprovalReplay:
             new=AsyncMock(side_effect=capture_gate),
         ):
             _, outcome, _ = await _tool_delete_scene(
-                {"scene_id": "movie"}, token, hass, MagicMock()
+                {"scene_id": "movie"}, access_key, hass, MagicMock()
             )
         assert outcome == "pending_approval"
 
@@ -581,7 +581,7 @@ class TestApprovalReplay:
                 light.kitchen: on
         """)
         content, outcome, _ = await _execute_delete_scene(
-            captured, token, hass, MagicMock()
+            captured, access_key, hass, MagicMock()
         )
         assert outcome == "invalid_request"
         assert "expected_hash no longer matches" in _text(content)

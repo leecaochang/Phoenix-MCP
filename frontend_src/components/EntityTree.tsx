@@ -169,19 +169,19 @@ interface HintInputProps {
 
 function HintInput({ tokenId, entityId, currentHint, globalHint, currentState, onSaved, onGlobalHintsChange }: HintInputProps) {
   const [open, setOpen] = useState(false);
-  const [allTokens, setAllTokens] = useState(true);
+  const [allAccessKeys, setAllAccessKeys] = useState(true);
   const [value, setValue] = useState("");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
   function openModal() {
-    setAllTokens(true);
+    setAllAccessKeys(true);
     setValue(globalHint ?? "");
     setOpen(true);
   }
 
   function switchScope(all: boolean) {
-    setAllTokens(all);
+    setAllAccessKeys(all);
     // Load the target scope's saved hint if it has one, but never wipe the box:
     // switching scope must not discard text the admin is in the middle of writing.
     const target = all ? globalHint : currentHint;
@@ -192,7 +192,7 @@ function HintInput({ tokenId, entityId, currentHint, globalHint, currentState, o
     setSaving(true);
     setSaveError(null);
     try {
-      if (allTokens) {
+      if (allAccessKeys) {
         const r = await api.setEntityHint(entityId, value.trim() || null);
         onGlobalHintsChange(r.entity_hints);
       } else {
@@ -234,21 +234,21 @@ function HintInput({ tokenId, entityId, currentHint, globalHint, currentState, o
         autoFocus
       />
       <div className="hint-scope">
-        <span className={allTokens ? "" : "hint-scope-active"}>{t("perms.hintThisToken")}</span>
+        <span className={allAccessKeys ? "" : "hint-scope-active"}>{t("perms.hintThisToken")}</span>
         <label className={`toggle-switch${saving ? " disabled" : ""}`}>
           <BusyInput
             type="checkbox"
             aria-label={t("perms.hintAllAria")}
-            checked={allTokens}
+            checked={allAccessKeys}
             busy={saving}
             onChange={(e) => switchScope(e.target.checked)}
           />
           <span className="toggle-switch-track" />
         </label>
-        <span className={allTokens ? "hint-scope-active" : ""}>{t("perms.hintAllTokens")}</span>
+        <span className={allAccessKeys ? "hint-scope-active" : ""}>{t("perms.hintAllTokens")}</span>
       </div>
       <p className="hint-scope-note">
-        {allTokens
+        {allAccessKeys
           ? t("perms.hintNoteGlobal")
           : t("perms.hintNoteLocal")}
       </p>

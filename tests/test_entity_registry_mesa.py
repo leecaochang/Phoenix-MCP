@@ -27,12 +27,12 @@ from custom_components.phoenix_mcp.mesa import (
     evaluate_registry_action,
 )
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
-from custom_components.phoenix_mcp.token_store import (
+from custom_components.phoenix_mcp.access_key_store import (
     GlobalSettings,
     PermissionNode,
     PermissionTree,
-    TokenRecord,
-    TokenStore,
+    AccessKeyRecord,
+    AccessKeyStore,
     snapshot_preset,
 )
 
@@ -52,8 +52,8 @@ def _profile(key: str, mode: str, reason: str = "Registry safety test") -> Seman
     )
 
 
-def _token(*, cap: str = "allow", state: str = "GREEN") -> TokenRecord:
-    return TokenRecord(
+def _access_key(*, cap: str = "allow", state: str = "GREEN") -> AccessKeyRecord:
+    return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="registry-test",
         token_hash="x",
@@ -69,11 +69,11 @@ def _body(content: dict) -> dict:
 
 
 async def _data(hass: HomeAssistant, mesa_mode: str) -> PhoenixData:
-    store = MagicMock(spec=TokenStore)
+    store = MagicMock(spec=AccessKeyStore)
     store.async_lock = asyncio.Lock()
     store.async_save = AsyncMock()
     store.get_settings.return_value = GlobalSettings(mesa_mode=mesa_mode)
-    store.list_tokens.return_value = []
+    store.list_access_keys.return_value = []
     store.get_entity_hints.return_value = {}
     store.get_pending_approvals.return_value = []
     runtime = await async_setup_mesa(hass, mesa_mode)
@@ -137,7 +137,7 @@ async def test_inherited_read_only_blocks_rename_and_delete_before_approval(
             ("delete_entity", {"entity_id": entity_id}),
         ):
             content, outcome, _resource = await _call_tool(
-                tool_name, args, _token(cap="confirm"), hass, data
+                tool_name, args, _access_key(cap="confirm"), hass, data
             )
             assert outcome == "denied"
             denial = _body(content)
@@ -158,7 +158,7 @@ async def test_read_only_always_blocks_but_advisory_prohibited_warns(
     _content, outcome, _ = await _call_tool(
         "set_entity",
         {"entity_id": entity_id, "changes": {"new_entity_id": "light.read_only_refused"}},
-        _token(),
+        _access_key(),
         hass,
         data,
     )
@@ -170,7 +170,7 @@ async def test_read_only_always_blocks_but_advisory_prohibited_warns(
     content, outcome, _ = await _call_tool(
         "set_entity",
         {"entity_id": entity_id, "changes": {"new_entity_id": "light.advisory_rename"}},
-        _token(),
+        _access_key(),
         hass,
         data,
     )
@@ -190,7 +190,7 @@ async def test_enforced_prohibited_blocks_registry_identity_actions(
         ("delete_entity", {"entity_id": entity_id}),
     ):
         _content, outcome, _ = await _call_tool(
-            tool_name, args, _token(), hass, data
+            tool_name, args, _access_key(), hass, data
         )
         assert outcome == "denied"
     assert er.async_get(hass).async_get(entity_id) is not None
@@ -234,7 +234,7 @@ async def test_enforced_confirm_uses_one_normal_registry_approval(
         ),
     ):
         _content, outcome, _ = await _call_tool(
-            tool_name, args_factory(entity_id), _token(), hass, data
+            tool_name, args_factory(entity_id), _access_key(), hass, data
         )
 
     assert outcome == "pending_approval"
@@ -267,7 +267,7 @@ async def test_capability_confirmation_already_satisfies_mesa_confirmation(
         _content, outcome, _ = await _call_tool(
             "set_entity",
             {"entity_id": entity_id, "changes": {"new_entity_id": "light.one_approval"}},
-            _token(cap="confirm"),
+            _access_key(cap="confirm"),
             hass,
             data,
         )
@@ -292,7 +292,7 @@ async def test_restrictive_parent_cannot_be_loosened_by_entity_profile(
     data.mesa.store.set(entity_id, _profile(entity_id, "autonomous"))
 
     decision = evaluate_registry_action(
-        data, _token(), entity_id, action="delete"
+        data, _access_key(), entity_id, action="delete"
     )
     assert decision.decision == "deny"
     assert decision.effective_rule["control_mode"] == "read_only"
@@ -304,9 +304,9 @@ async def test_permission_and_mesa_are_rechecked_for_approved_execution(
 ):
     entity_id, _device_id = registry_entity
     data = await _data(hass, "enforced")
-    token = _token()
+    access_key = _access_key()
     data.mesa.store.set_domain_profile("light", _profile("light", "confirm"))
-    initial = evaluate_registry_action(data, token, entity_id, action="rename")
+    initial = evaluate_registry_action(data, access_key, entity_id, action="rename")
     approved_args = {
         "entity_id": entity_id,
         "new_entity_id": "light.pending_rename",
@@ -317,7 +317,7 @@ async def test_permission_and_mesa_are_rechecked_for_approved_execution(
         "light", _profile("light", "read_only", "Policy tightened while pending")
     )
     _content, outcome, _ = await async_execute_approved_tool(
-        "set_entity", approved_args, token, hass, data
+        "set_entity", approved_args, access_key, hass, data
     )
     assert outcome == "denied"
     assert er.async_get(hass).async_get(entity_id) is not None
@@ -326,17 +326,17 @@ async def test_permission_and_mesa_are_rechecked_for_approved_execution(
         "light", _profile("light", "confirm", "Confirmation reason changed")
     )
     _content, outcome, _ = await async_execute_approved_tool(
-        "set_entity", approved_args, token, hass, data
+        "set_entity", approved_args, access_key, hass, data
     )
     assert outcome == "denied"
     assert er.async_get(hass).async_get(entity_id) is not None
 
     data.store.get_settings.return_value = GlobalSettings(mesa_mode="off")
-    token.permissions.domains["light"] = PermissionNode(state="RED")
+    access_key.permissions.domains["light"] = PermissionNode(state="RED")
     _content, outcome, _ = await async_execute_approved_tool(
         "set_entity",
         {"entity_id": entity_id, "new_entity_id": "light.permission_denied"},
-        token,
+        access_key,
         hass,
         data,
     )
@@ -349,10 +349,10 @@ async def test_rename_blockers_cover_identity_keyed_phoenix_configuration(
 ):
     entity_id, device_id = registry_entity
     data = await _data(hass, "enforced")
-    configured = _token()
+    configured = _access_key()
     configured.permissions.entities[entity_id] = PermissionNode(state="GREEN")
     configured.presets.append(snapshot_preset(configured, "Entity preset"))
-    data.store.list_tokens.return_value = [configured]
+    data.store.list_access_keys.return_value = [configured]
     data.store.get_entity_hints.return_value = {entity_id: {"hint": "Keep identity"}}
     data.store.get_pending_approvals.return_value = [
         {
@@ -381,7 +381,7 @@ async def test_rename_blockers_cover_identity_keyed_phoenix_configuration(
         content, outcome, _ = await _call_tool(
             "set_entity",
             {"entity_id": entity_id, "changes": {"new_entity_id": "light.blocked_by_config"}},
-            _token(cap="confirm"),
+            _access_key(cap="confirm"),
             hass,
             data,
         )
@@ -413,7 +413,7 @@ async def test_invalid_or_occupied_rename_is_rejected_before_approval(
         content, outcome, _ = await _call_tool(
             "set_entity",
             {"entity_id": entity_id, "changes": {"new_entity_id": new_entity_id}},
-            _token(cap="confirm"),
+            _access_key(cap="confirm"),
             hass,
             data,
         )

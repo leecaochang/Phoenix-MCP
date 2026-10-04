@@ -1,5 +1,5 @@
 {
-  "_comment": "Generated from TokenRecord.to_dict (pass_through=True). Drift guard shared by tests/test_frontend_contract.py and frontend_src/__tests__/contract.test.ts. Regenerate via the Python test when the serializer changes.",
+  "_comment": "Generated from AccessKeyRecord.to_dict (pass_through=True). Drift guard shared by tests/test_frontend_contract.py and frontend_src/__tests__/contract.test.ts. Regenerate via the Python test when the serializer changes.",
   "token_record_keys": [
     "active_preset_id",
     "announce_all_tools",

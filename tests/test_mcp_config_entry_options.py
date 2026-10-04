@@ -28,7 +28,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 import voluptuous as vol
 
 from custom_components.phoenix_mcp.mcp_view import _EXECUTOR_REGISTRY, _call_tool
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
 def options_schema(current: dict | None = None) -> vol.Schema:
     """The step schema, with suggested values seeded from the stored settings.
@@ -51,10 +51,10 @@ def options_schema(current: dict | None = None) -> vol.Schema:
     })
 
 
-def _token(**caps) -> TokenRecord:
+def _access_key(**caps) -> AccessKeyRecord:
     base = {"cap_helper_write": "allow"}
     base.update(caps)
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x", created_at=utcnow(), created_by="u",
         permissions=PermissionTree(domains={
             "sensor": PermissionNode(state="GREEN"),
@@ -69,12 +69,12 @@ def _json(content: dict) -> dict:
     return json.loads(content["content"][0]["text"])
 
 
-async def _call(name, args, token, hass, data=None):
+async def _call(name, args, access_key, hass, data=None):
     name = {
         "get_config_entry_options": "get_helper_settings",
         "set_config_entry_options": "set_helper_settings",
     }.get(name, name)
-    return await _call_tool(name, args, token, hass, data or MagicMock())
+    return await _call_tool(name, args, access_key, hass, data or MagicMock())
 
 
 @pytest.fixture
@@ -142,14 +142,14 @@ class TestRead:
     async def test_deny_without_cap(self, hass, helper_entry, as_helper):
         _, outcome, _ = await _call(
             "get_config_entry_options", {"entry_id": "helper1"},
-            _token(cap_helper_write="deny"), hass)
+            _access_key(cap_helper_write="deny"), hass)
         assert outcome == "denied"
 
     async def test_returns_options_and_the_schema_ha_itself_uses(self, hass, helper_entry, as_helper):
         init, configure, _ = _flow(hass)
         with init, configure:
             content, outcome, _ = await _call(
-                "get_config_entry_options", {"entry_id": "helper1"}, _token(), hass)
+                "get_config_entry_options", {"entry_id": "helper1"}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["settings"] == {"entity_id": "sensor.kitchen", "hysteresis": 0.0}
@@ -175,7 +175,7 @@ class TestRead:
         init, configure, _ = _flow(hass)
         with init, configure:
             content, _, _ = await _call(
-                "get_config_entry_options", {"entry_id": "helper1"}, _token(), hass)
+                "get_config_entry_options", {"entry_id": "helper1"}, _access_key(), hass)
         body = _json(content)
         assert "name" in body["settings"]           # stored...
         assert "name" not in body["editable_settings"]  # ...but the flow does not offer it
@@ -187,20 +187,20 @@ class TestRead:
         init, configure, _ = _flow(hass)
         with init, configure, patch.object(
             hass.config_entries.options, "async_abort") as abort:
-            await _call("get_config_entry_options", {"entry_id": "helper1"}, _token(), hass)
+            await _call("get_config_entry_options", {"entry_id": "helper1"}, _access_key(), hass)
         abort.assert_called_once_with("f1")
 
     async def test_an_integration_entry_is_refused(self, hass, as_helper):
         MockConfigEntry(domain="hue", entry_id="hub1", title="Hue").add_to_hass(hass)
         content, outcome, _ = await _call(
-            "get_config_entry_options", {"entry_id": "hub1"}, _token(), hass)
+            "get_config_entry_options", {"entry_id": "hub1"}, _access_key(), hass)
         assert outcome == "not_found"
         assert "HELPER entries only" in content["content"][0]["text"]
 
     async def test_a_missing_entry_answers_identically_to_an_integration(self, hass, as_helper):
         MockConfigEntry(domain="hue", entry_id="hub1", title="Hue").add_to_hass(hass)
-        hub, _o1, _ = await _call("get_config_entry_options", {"entry_id": "hub1"}, _token(), hass)
-        gone, _o2, _ = await _call("get_config_entry_options", {"entry_id": "nope"}, _token(), hass)
+        hub, _o1, _ = await _call("get_config_entry_options", {"entry_id": "hub1"}, _access_key(), hass)
+        gone, _o2, _ = await _call("get_config_entry_options", {"entry_id": "nope"}, _access_key(), hass)
         # Whether an entry_id names a real integration is not disclosed.
         assert hub["content"][0]["text"] == gone["content"][0]["text"]
 
@@ -216,7 +216,7 @@ class TestWrite:
             content, outcome, _ = await _call(
                 "set_config_entry_options",
                 {"entry_id": "helper1", "settings": {"entity_id": "sensor.other"}},
-                _token(), hass)
+                _access_key(), hass)
 
         assert outcome == "allowed"
         assert created["options"] == {
@@ -232,7 +232,7 @@ class TestWrite:
             content, outcome, _ = await _call(
                 "set_config_entry_options",
                 {"entry_id": "helper1", "settings": {"entity_id": "sensor.other", "hysteresis": 1.0}},
-                _token(), hass)
+                _access_key(), hass)
         assert outcome == "allowed"
         assert created["options"]["entity_id"] == "sensor.other"
         assert _json(content)["settings"]["entity_id"] == "sensor.other"
@@ -242,7 +242,7 @@ class TestWrite:
         content, outcome, _ = await _call(
             "set_config_entry_options",
             {"entry_id": "helper1", "settings": {"entity_id": "sensor.nonsense"}},
-            _token(cap_helper_write="deny"), hass)
+            _access_key(cap_helper_write="deny"), hass)
         assert outcome == "denied"
         assert "nonsense" not in content["content"][0]["text"]
 
@@ -252,7 +252,7 @@ class TestWrite:
         hass.states.async_set("lock.secret", "locked", {})
         content, outcome, _ = await _call(
             "set_config_entry_options",
-            {"entry_id": "helper1", "settings": {"entity_id": "lock.secret"}}, _token(), hass)
+            {"entry_id": "helper1", "settings": {"entity_id": "lock.secret"}}, _access_key(), hass)
         assert outcome == "denied"
         assert "lock.secret" in content["content"][0]["text"]
 
@@ -265,7 +265,7 @@ class TestWrite:
         content, outcome, _ = await _call(
             "set_config_entry_options",
             {"entry_id": "helper1", "settings": {"entity_id": "binary_sensor.readable"}},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "denied"
         assert "binary_sensor.readable" in content["content"][0]["text"]
 
@@ -276,7 +276,7 @@ class TestWrite:
         content, outcome, _ = await _call(
             "set_config_entry_options",
             {"entry_id": "helper1",
-             "settings": {"whatever_this_helper_calls_it": ["lock.secret"]}}, _token(), hass)
+             "settings": {"whatever_this_helper_calls_it": ["lock.secret"]}}, _access_key(), hass)
         assert outcome == "denied"
         assert "lock.secret" in content["content"][0]["text"]
 
@@ -286,7 +286,7 @@ class TestWrite:
         data.store.get_pending_approvals.return_value = []
         _, outcome, _ = await _call(
             "set_config_entry_options", {"entry_id": "helper1", "settings": {}},
-            _token(cap_helper_write="confirm"), hass, data)
+            _access_key(cap_helper_write="confirm"), hass, data)
         assert outcome == "invalid_request"
         data.store.set_pending_approvals.assert_not_called()
 
@@ -294,7 +294,7 @@ class TestWrite:
         _, outcome, _ = await _call(
             "set_config_entry_options",
             {"entry_id": "helper1", "settings": {"entity_id": "sensor.other"},
-             "expected_hash": "stale"}, _token(), hass)
+             "expected_hash": "stale"}, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_a_multi_step_flow_is_refused_and_says_why(self, hass, helper_entry, as_helper):
@@ -304,7 +304,7 @@ class TestWrite:
         with init, configure:
             content, outcome, _ = await _call(
                 "set_config_entry_options",
-                {"entry_id": "helper1", "settings": {"entity_id": "sensor.other"}}, _token(), hass)
+                {"entry_id": "helper1", "settings": {"entity_id": "sensor.other"}}, _access_key(), hass)
         assert outcome == "invalid_request"
         text = content["content"][0]["text"]
         assert "more than one" in text and "Nothing was changed" in text
@@ -315,7 +315,7 @@ class TestWrite:
         with init, configure:
             content, outcome, _ = await _call(
                 "set_config_entry_options",
-                {"entry_id": "helper1", "settings": {"entity_id": "sensor.other"}}, _token(), hass)
+                {"entry_id": "helper1", "settings": {"entity_id": "sensor.other"}}, _access_key(), hass)
         assert outcome == "invalid_request"
         assert "need_lower_upper" in content["content"][0]["text"]
 
@@ -325,7 +325,7 @@ class TestWrite:
             hass.config_entries.options, "async_abort") as abort:
             await _call("set_config_entry_options",
                         {"entry_id": "helper1", "settings": {"entity_id": "sensor.other"}},
-                        _token(), hass)
+                        _access_key(), hass)
         abort.assert_called_once_with("f1")
 
     async def test_the_executor_revalidates_at_apply_time(self, hass, helper_entry, as_helper):
@@ -338,7 +338,7 @@ class TestWrite:
         init, configure, created = _flow(hass)
         with init, configure:
             _c, outcome, _ = await _execute_set_config_entry_options(
-                args, _token(), hass, MagicMock())
+                args, _access_key(), hass, MagicMock())
         assert outcome == "denied"
         assert created == {}  # the flow was never driven
 
@@ -347,7 +347,7 @@ class TestWrite:
     ):
         captured = {}
 
-        async def _capture(data, token, **kwargs):
+        async def _capture(data, access_key, **kwargs):
             captured.update(kwargs)
 
         monkeypatch.setattr(
@@ -356,7 +356,7 @@ class TestWrite:
         with init, configure:
             await _call("set_config_entry_options",
                         {"entry_id": "helper1", "settings": {"entity_id": "sensor.other"}},
-                        _token(), hass)
+                        _access_key(), hass)
         assert captured["resource_type"] == "config_entry"
         assert captured["resource_id"] == "helper1"
         assert captured["before"]["entity_id"] == "sensor.kitchen"
@@ -438,7 +438,7 @@ class TestReconfigureMechanism:
         init, configure, _ = self._reconfigure_flow(hass)
         with init, configure:
             content, outcome, _ = await _call(
-                "get_config_entry_options", {"entry_id": "data1"}, _token(), hass)
+                "get_config_entry_options", {"entry_id": "data1"}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["mechanism"] == "reconfigure"
@@ -464,7 +464,7 @@ class TestReconfigureMechanism:
             content, outcome, _ = await _call(
                 "set_config_entry_options",
                 {"entry_id": "data1", "settings": {"entity": "sensor.other"}},
-                _token(), hass)
+                _access_key(), hass)
         assert outcome == "allowed"
         assert applied["settings"] == {"entity": "sensor.other"}
         assert _json(content)["settings"] == {"entities": ["sensor.other"]}
@@ -480,7 +480,7 @@ class TestReconfigureMechanism:
             content, outcome, _ = await _call(
                 "set_config_entry_options",
                 {"entry_id": "data1", "settings": {"entity": "sensor.other"}},
-                _token(), hass)
+                _access_key(), hass)
         assert outcome == "invalid_request"
         assert "already_configured" in content["content"][0]["text"]
         assert applied == {}
@@ -498,7 +498,7 @@ class TestReconfigureMechanism:
                 patch.object(hass.config_entries.options, "async_abort") as options_abort:
             await _call("set_config_entry_options",
                         {"entry_id": "data1", "settings": {"entity": "sensor.other"}},
-                        _token(), hass)
+                        _access_key(), hass)
         flow_abort.assert_called_once_with("rf1")
         options_abort.assert_not_called()
 
@@ -508,7 +508,7 @@ class TestReconfigureMechanism:
         hass.states.async_set("lock.secret", "locked", {})
         _c, outcome, _ = await _call(
             "set_config_entry_options",
-            {"entry_id": "data1", "settings": {"entity": "lock.secret"}}, _token(), hass)
+            {"entry_id": "data1", "settings": {"entity": "lock.secret"}}, _access_key(), hass)
         assert outcome == "denied"
 
     async def test_an_undescribable_schema_does_not_claim_there_are_no_fields(
@@ -525,7 +525,7 @@ class TestReconfigureMechanism:
         with patch.object(hass.config_entries.flow, "async_init", _init), \
                 patch.object(hass.config_entries.flow, "async_abort"):
             content, outcome, _ = await _call(
-                "get_config_entry_options", {"entry_id": "data1"}, _token(), hass)
+                "get_config_entry_options", {"entry_id": "data1"}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert "schema" not in body
@@ -545,7 +545,7 @@ class TestReconfigureMechanism:
         with patch.object(hass.config_entries.flow, "async_init", _init), \
                 patch.object(hass.config_entries.flow, "async_abort"):
             content, _, _ = await _call(
-                "get_config_entry_options", {"entry_id": "data1"}, _token(), hass)
+                "get_config_entry_options", {"entry_id": "data1"}, _access_key(), hass)
         body = _json(content)
         assert body["schema"] == []
         assert body["editable_settings"] == {}
@@ -554,7 +554,7 @@ class TestReconfigureMechanism:
     async def test_a_helper_with_neither_flow_says_so(self, hass, data_entry, as_data_helper):
         object.__setattr__(data_entry, "_supports_reconfigure", False)
         content, outcome, _ = await _call(
-            "get_config_entry_options", {"entry_id": "data1"}, _token(), hass)
+            "get_config_entry_options", {"entry_id": "data1"}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["mechanism"] is None

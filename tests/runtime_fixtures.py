@@ -2,14 +2,14 @@
 
 from unittest.mock import MagicMock
 
-from custom_components.phoenix_mcp.token_store import GlobalSettings, TokenStore
+from custom_components.phoenix_mcp.access_key_store import GlobalSettings, AccessKeyStore
 
 
 def mesa_off_store() -> MagicMock:
-    """TokenStore mock whose settings put MESA in off mode.
+    """AccessKeyStore mock whose settings put MESA in off mode.
 
     For tests that isolate non-MESA behavior.
     """
-    store = MagicMock(spec=TokenStore)
+    store = MagicMock(spec=AccessKeyStore)
     store.get_settings.return_value = GlobalSettings(mesa_mode="off")
     return store

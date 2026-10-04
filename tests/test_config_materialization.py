@@ -23,7 +23,7 @@ from tests.runtime_fixtures import mesa_off_store
 
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
 
 
@@ -59,8 +59,8 @@ def _data() -> PhoenixData:
     )
 
 
-def _token(tree: PermissionTree | None = None, **caps) -> TokenRecord:
-    return TokenRecord(
+def _access_key(tree: PermissionTree | None = None, **caps) -> AccessKeyRecord:
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x", created_at=utcnow(),
         created_by="u", permissions=tree or PermissionTree(domains={}), **caps,
     )
@@ -90,7 +90,7 @@ class TestCreateMaterialization:
                 "trigger": [{"platform": "state", "entity_id": "input_boolean.x"}],
                 "action": [{"service": "homeassistant.toggle", "entity_id": "input_boolean.x"}],
             }},
-            _token(cap_automation_write="allow"), hass, _data(),
+            _access_key(cap_automation_write="allow"), hass, _data(),
         )
         assert outcome == "allowed", _text(result)
 
@@ -108,7 +108,7 @@ class TestCreateMaterialization:
                 "alias": "Materialization Probe",
                 "sequence": [{"service": "homeassistant.toggle", "entity_id": "input_boolean.x"}],
             }},
-            _token(PermissionTree(domains={"script": PermissionNode(state="GREEN")}), cap_script_write="allow"), hass, _data(),
+            _access_key(PermissionTree(domains={"script": PermissionNode(state="GREEN")}), cap_script_write="allow"), hass, _data(),
         )
         assert outcome == "allowed", _text(result)
 
@@ -128,7 +128,7 @@ class TestCreateMaterialization:
                 "entities": {"input_boolean.x": "on"},
             }},
             # Scene writes additionally require WRITE on every member entity.
-            _token(
+            _access_key(
                 PermissionTree(domains={"input_boolean": PermissionNode(state="GREEN"), "scene": PermissionNode(state="GREEN")}),
                 cap_scene_write="allow",
             ), hass, _data(),
@@ -149,7 +149,7 @@ class TestCreateMaterialization:
         result, outcome, _res = await _call_tool(
             "create_helper",
             {"helper_type": "input_boolean", "config": {"name": "Materialization Probe"}},
-            _token(cap_helper_write="allow"), hass, _data(),
+            _access_key(cap_helper_write="allow"), hass, _data(),
         )
         assert outcome == "allowed", _text(result)
 
@@ -174,7 +174,7 @@ class TestCreateMaterialization:
                     "radius": 100,
                 },
             },
-            _token(
+            _access_key(
                 PermissionTree(domains={"zone": PermissionNode(state="GREEN")}),
                 cap_helper_write="allow",
             ),
@@ -206,7 +206,7 @@ class TestCreateMaterialization:
                     "description": "Disposable probe",
                 },
             },
-            _token(
+            _access_key(
                 PermissionTree(domains={"tag": PermissionNode(state="GREEN")}),
                 cap_helper_write="allow",
             ),
@@ -234,7 +234,7 @@ class TestCreateMaterialization:
         result, outcome, _res = await _call_tool(
             "create_helper",
             {"helper_type": "person", "config": {"name": "Materialization Person"}},
-            _token(
+            _access_key(
                 PermissionTree(domains={
                     "person": PermissionNode(state="GREEN"),
                     "device_tracker": PermissionNode(state="GREEN"),
@@ -258,7 +258,7 @@ class TestCreateMaterialization:
         """The same property for a rename, which an agent reads back to confirm an edit."""
         assert await async_setup_component(hass, "automation", {})
         await hass.async_block_till_done()
-        token = _token(cap_automation_write="allow")
+        access_key = _access_key(cap_automation_write="allow")
         data = _data()
 
         created = _json((await _call_tool(
@@ -268,11 +268,11 @@ class TestCreateMaterialization:
                 "trigger": [{"platform": "state", "entity_id": "input_boolean.x"}],
                 "action": [{"service": "homeassistant.toggle", "entity_id": "input_boolean.x"}],
             }},
-            token, hass, data,
+            access_key, hass, data,
         ))[0])
 
         current = _json((await _call_tool(
-            "get_automation", {"automation_id": created["id"]}, token, hass, data,
+            "get_automation", {"automation_id": created["id"]}, access_key, hass, data,
         ))[0])
         result, outcome, _res = await _call_tool(
             "edit_automation",
@@ -281,7 +281,7 @@ class TestCreateMaterialization:
                 "trigger": [{"platform": "state", "entity_id": "input_boolean.x"}],
                 "action": [{"service": "homeassistant.toggle", "entity_id": "input_boolean.x"}],
             }},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed", _text(result)
 
@@ -308,12 +308,12 @@ class TestNonEntityWriteVisibility:
         # to the very next listing. There is nothing to reset after a write.
         assert await async_setup_component(hass, "automation", {})
         await hass.async_block_till_done()
-        token = _token(cap_blueprint_write="allow", cap_automation_write="allow", cap_config_read="allow")
+        access_key = _access_key(cap_blueprint_write="allow", cap_automation_write="allow", cap_config_read="allow")
         data = _data()
 
         # List, create, list is the real agent sequence; the first read proves the
         # blueprint was absent beforehand.
-        before, outcome, _res = await _call_tool("list_blueprints", {"domain": "automation"}, token, hass, data)
+        before, outcome, _res = await _call_tool("list_blueprints", {"domain": "automation"}, access_key, hass, data)
         assert outcome == "allowed", _text(before)
         assert "phx_probe.yaml" not in [b.get("path") for b in _json(before)["blueprints"]]
 
@@ -336,11 +336,11 @@ class TestNonEntityWriteVisibility:
         result, outcome, _res = await _call_tool(
             "create_blueprint",
             {"domain": "automation", "path": "phx_probe.yaml", "content": source},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed", _text(result)
 
-        listed, outcome, _res = await _call_tool("list_blueprints", {"domain": "automation"}, token, hass, data)
+        listed, outcome, _res = await _call_tool("list_blueprints", {"domain": "automation"}, access_key, hass, data)
         assert outcome == "allowed"
         paths = [b.get("path") for b in _json(listed)["blueprints"]]
         assert "phx_probe.yaml" in paths, (
@@ -350,7 +350,7 @@ class TestNonEntityWriteVisibility:
     async def test_configuration_yaml_reads_back_what_was_just_written(self, hass: HomeAssistant):
         # set_yaml_config runs no reload (the reload family is a separate, gated
         # apply step), so this pins that the file read is not a stale cache.
-        token = _token(cap_yaml_edit="allow")
+        access_key = _access_key(cap_yaml_edit="allow")
         data = _data()
         # A superset of the seeded layout: set_yaml_config refuses a write that
         # drops a top-level key without declaring it.
@@ -361,11 +361,11 @@ class TestNonEntityWriteVisibility:
             "# phx probe marker\n"
         )
         result, outcome, _res = await _call_tool(
-            "set_yaml_config", {"content": content}, token, hass, data,
+            "set_yaml_config", {"content": content}, access_key, hass, data,
         )
         assert outcome == "allowed", _text(result)
 
-        read, outcome, _res = await _call_tool("get_yaml_config", {}, token, hass, data)
+        read, outcome, _res = await _call_tool("get_yaml_config", {}, access_key, hass, data)
         assert outcome == "allowed"
         assert "phx probe marker" in _json(read)["content"]
 
@@ -378,17 +378,17 @@ class TestNonEntityWriteVisibility:
         # also for the previous card surviving the read.
         assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
         await hass.async_block_till_done()
-        token = _token(cap_lovelace_write="allow")
+        access_key = _access_key(cap_lovelace_write="allow")
         data = _data()
 
         result, outcome, _res = await _call_tool(
             "set_dashboard_config",
             {"config": {"views": [{"title": "Probe", "cards": [{"type": "markdown", "content": "one"}]}]}},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed", _text(result)
 
-        read, outcome, _res = await _call_tool("get_dashboard_config", {}, token, hass, data)
+        read, outcome, _res = await _call_tool("get_dashboard_config", {}, access_key, hass, data)
         assert outcome == "allowed"
         cards = _json(read)["config"]["views"][0]["cards"]
         assert [c["content"] for c in cards] == ["one"], (
@@ -398,11 +398,11 @@ class TestNonEntityWriteVisibility:
         added, outcome, _res = await _call_tool(
             "add_dashboard_card",
             {"view_index": 0, "card": {"type": "markdown", "content": "two"}},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed", _text(added)
 
-        read, outcome, _res = await _call_tool("get_dashboard_config", {}, token, hass, data)
+        read, outcome, _res = await _call_tool("get_dashboard_config", {}, access_key, hass, data)
         assert outcome == "allowed"
         cards = _json(read)["config"]["views"][0]["cards"]
         assert [c["content"] for c in cards] == ["one", "two"], (
@@ -413,15 +413,15 @@ class TestNonEntityWriteVisibility:
         self, hass: HomeAssistant, isolated_config_dir,
     ):
         (isolated_config_dir / "www").mkdir()
-        token = _token(cap_filesystem="allow")
+        access_key = _access_key(cap_filesystem="allow")
         data = _data()
         result, outcome, _res = await _call_tool(
-            "write_file", {"path": "www/phx_probe.txt", "content": "probe marker"}, token, hass, data,
+            "write_file", {"path": "www/phx_probe.txt", "content": "probe marker"}, access_key, hass, data,
         )
         assert outcome == "allowed", _text(result)
 
         read, outcome, _res = await _call_tool(
-            "read_file", {"path": "www/phx_probe.txt"}, token, hass, data,
+            "read_file", {"path": "www/phx_probe.txt"}, access_key, hass, data,
         )
         assert outcome == "allowed"
         assert _json(read)["content"] == "probe marker"
@@ -436,7 +436,7 @@ async def test_delayed_real_scene_registration_and_metadata(hass, monkeypatch):
     assert await async_setup_component(hass, "scene", {})
     await hass.async_block_till_done()
     hass.states.async_set("input_boolean.x", "off")
-    token = _token(
+    access_key = _access_key(
         PermissionTree(domains={name: PermissionNode(state="GREEN") for name in ("scene", "input_boolean")}),
         cap_scene_write="allow", cap_registry_write="allow",
     )
@@ -454,7 +454,7 @@ async def test_delayed_real_scene_registration_and_metadata(hass, monkeypatch):
     monkeypatch.setattr(entity_registration, "AUTHORING_REGISTRATION_POLL_SECONDS", 0.001)
     task = asyncio.create_task(_call_tool(
         "create_scene", {"config": {"name": "Delayed Probe", "entities": {"input_boolean.x": "on"}}},
-        token, hass, data,
+        access_key, hass, data,
     ))
     try:
         await asyncio.wait_for(entered.wait(), 2)
@@ -468,9 +468,9 @@ async def test_delayed_real_scene_registration_and_metadata(hass, monkeypatch):
         assert body["registration"]["status"] == "observed"
         assert entity_id == "scene.delayed_probe"
         assert er.async_get(hass).async_get(entity_id).unique_id == body["scene_id"]
-        state, outcome, _ = await _call_tool("get_state", {"entity_id": entity_id, "projection": {"kind": "compact"}}, token, hass, data)
+        state, outcome, _ = await _call_tool("get_state", {"entity_id": entity_id, "projection": {"kind": "compact"}}, access_key, hass, data)
         assert outcome == "allowed", _text(state)
-        metadata, outcome, _ = await _call_tool("set_entity", {"entity_id": entity_id, "changes": {"name": "Metadata Probe"}}, token, hass, data)
+        metadata, outcome, _ = await _call_tool("set_entity", {"entity_id": entity_id, "changes": {"name": "Metadata Probe"}}, access_key, hass, data)
         assert outcome == "allowed", _text(metadata)
         assert er.async_get(hass).async_get(entity_id).name == "Metadata Probe"
     finally:

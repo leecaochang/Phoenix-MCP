@@ -11,7 +11,7 @@ from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.const import UNKNOWN_ARGUMENT_PROTECTED_FIELDS
 from custom_components.phoenix_mcp.mcp_view import _call_tool
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.tool_contracts import normalize_tool_args, unknown_argument_error
 from custom_components.phoenix_mcp.tool_defs import _ENTITY_TOOL_DEFS, _SYSTEM_TOOL_DEFS
 
@@ -42,8 +42,8 @@ CASES = [
 ]
 
 
-def token(**caps):
-    return TokenRecord(
+def access_key(**caps):
+    return AccessKeyRecord(
         id='test', name='test', token_hash='x', created_at=utcnow(), created_by='test',
         permissions=PermissionTree(domains={'light': PermissionNode(state='GREEN')}), **caps,
     )
@@ -79,7 +79,7 @@ async def test_fixed_capability_guard_precedes_io_and_approval(hass, name, args,
         patch('custom_components.phoenix_mcp.tools.config_files._gate', new_callable=AsyncMock) as file_gate,
         patch('custom_components.phoenix_mcp.mcp_view._gate', new_callable=AsyncMock) as registry_gate,
     ):
-        result, outcome, _ = await _call_tool(name, args, token(**{cap: mode}), hass, data)
+        result, outcome, _ = await _call_tool(name, args, access_key(**{cap: mode}), hass, data)
     text = result['content'][0]['text']
     assert outcome == ('denied' if mode == 'deny' else 'invalid_request')
     if mode == 'deny':
@@ -94,7 +94,7 @@ async def test_fixed_capability_guard_precedes_io_and_approval(hass, name, args,
 @pytest.mark.parametrize('name', ['patch_dashboard', 'patch_yaml_config', 'set_entity', 'set_device', 'set_integration', 'dry_run_service'])
 async def test_denied_capability_precedes_existing_normalization_errors(hass, name):
     cap = DEFINITIONS[name]['cap']
-    result, outcome, _ = await _call_tool(name, {}, token(**{cap: 'deny'}), hass, MagicMock())
+    result, outcome, _ = await _call_tool(name, {}, access_key(**{cap: 'deny'}), hass, MagicMock())
     assert outcome == 'denied'
     assert 'Forbidden' in result['content'][0]['text']
 
@@ -132,7 +132,7 @@ async def test_service_argument_errors_preserve_capability_priority(hass, domain
     with patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call:
         result, outcome, _ = await _call_tool('call_service', {
             'service': {'domain': domain, 'name': service}, 'tragets': [],
-        }, token(**{cap: mode}), hass, MagicMock())
+        }, access_key(**{cap: mode}), hass, MagicMock())
     assert outcome == ('denied' if mode == 'deny' else 'invalid_request')
     assert ('Valid parameters' in result['content'][0]['text']) == (mode != 'deny')
     call.assert_not_called()
@@ -145,7 +145,7 @@ async def test_service_typo_cannot_actuate_domain_fallback(hass):
     with patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call:
         result, outcome, _ = await _call_tool('call_service', {
             'service': {'domain': 'light', 'name': 'turn_on'}, 'target': [{'kind': 'entity', 'ids': ['light.one']}],
-        }, token(), hass, data)
+        }, access_key(), hass, data)
     assert outcome == 'invalid_request' and 'targets' in result['content'][0]['text']
     call.assert_not_called()
     assert not data.mock_calls
@@ -156,14 +156,14 @@ async def test_yaml_typo_leaves_default_file_unchanged(hass):
     path.write_text('default_config: {}\n')
     _, outcome, _ = await _call_tool('set_yaml_config', {
         'filename': 'other.yaml', 'content': 'changed: true',
-    }, token(cap_yaml_edit='allow'), hass, MagicMock())
+    }, access_key(cap_yaml_edit='allow'), hass, MagicMock())
     assert outcome == 'invalid_request'
     assert path.read_text() == 'default_config: {}\n'
 
 
 async def test_intentional_default_and_unrelated_extra_still_reach_read(hass):
     with patch('custom_components.phoenix_mcp.tools.lovelace.async_get_lovelace_config', new_callable=AsyncMock, return_value={'views': []}) as read:
-        _, outcome, _ = await _call_tool('get_dashboard_config', {'unrelated': True}, token(cap_lovelace_write='allow'), hass, MagicMock())
+        _, outcome, _ = await _call_tool('get_dashboard_config', {'unrelated': True}, access_key(cap_lovelace_write='allow'), hass, MagicMock())
     assert outcome == 'allowed'
     read.assert_awaited_once_with(hass, None)
 
@@ -186,7 +186,7 @@ async def test_service_omission_refuses_implicit_domain_fanout(hass, extra):
     data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
     _, outcome, _ = await _call_tool('call_service', {
         'service': {'domain': 'light', 'name': 'turn_on'}, **extra,
-    }, token(pass_through=True), hass, data)
+    }, access_key(pass_through=True), hass, data)
     assert outcome == 'invalid_request'
     assert calls == []
 
@@ -196,7 +196,7 @@ async def test_toggle_target_typo_still_honors_physical_denial(hass):
 
     entry = er.async_get(hass).async_get_or_create('cover', 'demo', 'one')
     hass.states.async_set(entry.entity_id, 'closed')
-    caller = token(cap_physical_control='deny')
+    caller = access_key(cap_physical_control='deny')
     caller.permissions.domains['cover'] = PermissionNode(state='GREEN')
     result, outcome, _ = await _call_tool('call_service', {
         'service': {'domain': 'homeassistant', 'name': 'toggle'},
@@ -220,7 +220,7 @@ async def test_approved_executor_accepts_normalized_patch_shape(hass):
     ):
         _, outcome, _ = await _EXECUTOR_REGISTRY['patch_dashboard']({
             'url_path': 'test', 'path': ['views'], 'op': 'set', 'value': [{'title': 'Changed'}],
-        }, token(cap_lovelace_write='allow'), hass, data)
+        }, access_key(cap_lovelace_write='allow'), hass, data)
     assert outcome == 'allowed'
     save.assert_awaited_once_with(hass, 'test', {'views': [{'title': 'Changed'}]})
 

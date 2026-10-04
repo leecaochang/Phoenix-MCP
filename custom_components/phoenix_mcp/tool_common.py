@@ -41,7 +41,7 @@ from .helpers import (
     async_evaluate_capability,
     version_summary_fields as _version_summary,
 )
-from .token_store import TokenRecord
+from .access_key_store import AccessKeyRecord
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -212,7 +212,7 @@ class _ProgressBus:
     ever emitted (the spec forbids unsolicited ones).
     """
 
-    token: str | int | None = None
+    access_key: str | int | None = None
     total: float | None = None
     status: str | None = None
     status_key: str | None = None
@@ -287,7 +287,7 @@ def _operator_accepted_result(tool_result: dict) -> dict:
 
 async def _gate(
     cap_name: str,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     *,
@@ -310,19 +310,19 @@ async def _gate(
     lovelace load, or an ESPHome add-on round trip whose result is discarded.
     """
     result = await async_evaluate_capability(
-        cap_name, token, hass, data,
+        cap_name, access_key, hass, data,
         tool_name=tool_name, args=args, request_id=request_id,
         client_ip=client_ip, diff=diff, target_entities=target_entities,
     )
     if result.is_deny:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
     if result.is_pending:
-        return await _pending_or_inline(hass, data, token, result.approval)
+        return await _pending_or_inline(hass, data, access_key, result.approval)
     return None
 
 
 async def _await_inline_confirm(
-    hass: HomeAssistant, data: PhoenixData, token: TokenRecord, approval: Any,
+    hass: HomeAssistant, data: PhoenixData, access_key: AccessKeyRecord, approval: Any,
 ) -> tuple[dict, str, str]:
     """Optionally hold the response open for a confirm gate to resolve inline.
 
@@ -342,7 +342,7 @@ async def _await_inline_confirm(
         get_approval,
     )
 
-    wait = min(token.confirm_inline_wait_seconds, MAX_CONFIRM_INLINE_WAIT_SECONDS)
+    wait = min(access_key.confirm_inline_wait_seconds, MAX_CONFIRM_INLINE_WAIT_SECONDS)
     approval_id = approval.id
     future: asyncio.Future = hass.loop.create_future()
 
@@ -388,7 +388,7 @@ async def _await_inline_confirm(
 async def _pending_or_inline(
     hass: HomeAssistant,
     data: PhoenixData,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     approval: Any,
 ) -> tuple[dict, str, str]:
     """Return a pending approval, held inline when the token is configured to wait.
@@ -409,12 +409,12 @@ async def _pending_or_inline(
     of write tools (changing the catalog fingerprint for every client) or ride in
     `params._meta`, which not every client can set.
     """
-    if token.confirm_inline_wait_seconds > 0 and not _token_has_other_pending(data, token, approval):
-        return await _await_inline_confirm(hass, data, token, approval)
+    if access_key.confirm_inline_wait_seconds > 0 and not _access_key_has_other_pending(data, access_key, approval):
+        return await _await_inline_confirm(hass, data, access_key, approval)
     return _tool_pending(approval), "pending_approval", _approval_resource(approval)
 
 
-def _token_has_other_pending(data: PhoenixData, token: TokenRecord, approval: Any) -> bool:
+def _access_key_has_other_pending(data: PhoenixData, access_key: AccessKeyRecord, approval: Any) -> bool:
     """True when this token has a pending approval OTHER than this one.
 
     The current approval is excluded because `async_evaluate_capability` has
@@ -425,9 +425,9 @@ def _token_has_other_pending(data: PhoenixData, token: TokenRecord, approval: An
     from .approvals import STATUS_PENDING, list_approvals  # noqa: PLC0415
 
     try:
-        pending = list_approvals(data.store, status=STATUS_PENDING, token_id=token.id)
+        pending = list_approvals(data.store, status=STATUS_PENDING, token_id=access_key.id)
     except Exception:  # noqa: BLE001 - advisory only; never fail a gate over this
-        _LOGGER.debug("Could not read pending approvals for %s", token.id, exc_info=True)
+        _LOGGER.debug("Could not read pending approvals for %s", access_key.id, exc_info=True)
         return False
     return any(entry.id != approval.id for entry in pending)
 
@@ -519,7 +519,7 @@ def _version_change_summary(
 
 async def _record_version(
     data: PhoenixData,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     *,
     resource_type: str,
     resource_id: str,
@@ -559,8 +559,8 @@ async def _record_version(
             before=before,
             after=after,
             alias=alias,
-            token_id=token.id,
-            token_name=token.name,
+            token_id=access_key.id,
+            token_name=access_key.name,
             approved_by_user_id=approved_by_user_id,
             **(summary or {}),
         )
@@ -794,7 +794,7 @@ _approved_exec_ctx: ContextVar[bool] = ContextVar("phoenix_mcp_approved_exec", d
 
 
 def _mesa_confirm_annotation(
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     groups: list[tuple[str, str, list[str]]],
 ) -> dict | None:
@@ -818,7 +818,7 @@ def _mesa_confirm_annotation(
             if not ents:
                 continue
             gated = mesa_confirm_preview(
-                data, token,
+                data, access_key,
                 domain=domain, service=service, service_data={}, entities=list(ents),
             )
             confirm.extend(gated)
@@ -847,7 +847,7 @@ def _resolve_area_id(entry: Any, device_registry: Any) -> str | None:
 async def _create_registry_mesa_approval(
     hass: HomeAssistant,
     data: PhoenixData,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     *,
     tool_name: str,
     args: dict[str, Any],
@@ -868,8 +868,8 @@ async def _create_registry_mesa_approval(
         check_request_authority()
         approval = await async_create_pending_approval(
             data.store,
-            token_id=token.id,
-            token_name=token.name,
+            token_id=access_key.id,
+            token_name=access_key.name,
             tool_name=tool_name,
             cap_name=cap_name,
             args=args,
@@ -879,4 +879,4 @@ async def _create_registry_mesa_approval(
         )
     create_approval_notification(hass, approval)
     fire_approval_requested_event(hass, approval)
-    return await _pending_or_inline(hass, data, token, approval)
+    return await _pending_or_inline(hass, data, access_key, approval)

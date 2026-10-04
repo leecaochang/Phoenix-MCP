@@ -11,11 +11,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.mcp_view import _call_tool
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
 
-def _token() -> TokenRecord:
-    return TokenRecord(
+def _access_key() -> AccessKeyRecord:
+    return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="t",
         token_hash="x",
@@ -30,7 +30,7 @@ def _json(content: dict) -> dict:
 
 
 async def _call(args: dict, hass):
-    return await _call_tool("get_statistics", args, _token(), hass, MagicMock())
+    return await _call_tool("get_statistics", args, _access_key(), hass, MagicMock())
 
 
 def _recorder(result: dict) -> tuple[MagicMock, AsyncMock]:

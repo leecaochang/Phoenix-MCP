@@ -20,7 +20,7 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.decision_provider import DecisionError, DecisionProvider
 from custom_components.phoenix_mcp.decision_shadow import async_preview_decision
 from custom_components.phoenix_mcp.decision_targets import capture_targets, CatalogLimitError
-from custom_components.phoenix_mcp.token_store import PermissionTree, PermissionNode
+from custom_components.phoenix_mcp.access_key_store import PermissionTree, PermissionNode
 
 
 def choice(selected, keys):
@@ -29,14 +29,14 @@ def choice(selected, keys):
 
 
 @pytest.fixture
-async def target_home(hass, token_store):
-    token, _ = await token_store.async_create_token("target_preview", "test")
-    token.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
-    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+async def target_home(hass, access_key_store):
+    access_key, _ = await access_key_store.async_create_access_key("target_preview", "test")
+    access_key.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
+    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
     store = agentcli.AgentCliStore(AsyncMock())
     account = await store.add("typesafe", {"api_key": "secret", "model": "jev-latest"})
-    await token_store.async_patch_settings(decision_provider_id=account)
+    await access_key_store.async_patch_settings(decision_provider_id=account)
     assert await async_setup_component(hass, "homeassistant", {})
     assert await async_setup_component(hass, "conversation", {})
     registry = er.async_get(hass)
@@ -46,15 +46,15 @@ async def target_home(hass, token_store):
     hass.states.async_set(entry.entity_id, "off", {"friendly_name": "Desk lamp",
                           "supported_color_modes": ["brightness"], "access_token": "private-state-secret"})
     with patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)):
-        yield data, token, store, account, entry.entity_id
+        yield data, access_key, store, account, entry.entity_id
     data.decision_shadow.cancel()
     if data.decision_shadow.task:
         await asyncio.gather(data.decision_shadow.task, return_exceptions=True)
 
 
 async def preview(hass, home, **kwargs):
-    data, token, *_ = home
-    return await async_preview_decision(hass, data, token, "Please light up my desk lamp", "en",
+    data, access_key, *_ = home
+    return await async_preview_decision(hass, data, access_key, "Please light up my desk lamp", "en",
                                         {"reason": "no_match", "proposal": None}, targets=True, **kwargs)
 
 
@@ -64,8 +64,8 @@ def mocks(category="light_on", selected="t0"):
 
 
 async def test_scoped_metadata_only_and_inert_preview(hass, target_home):
-    data, token, _, _, entity_id = target_home
-    snapshot = capture_targets(hass, token, "light_on")
+    data, access_key, _, _, entity_id = target_home
+    snapshot = capture_targets(hass, access_key, "light_on")
     assert snapshot.targets == {"t0": {"entity_id": entity_id, "name": "Desk lamp",
                                       "aliases": ["Desk lamp", "Task light"], "area": "Office"}}
     first, second = mocks()
@@ -81,17 +81,17 @@ async def test_scoped_metadata_only_and_inert_preview(hass, target_home):
 
 
 async def test_catalog_builds_device_graph_once_without_changing_fingerprints(hass, target_home):
-    _, token, *_ = target_home
+    _, access_key, *_ = target_home
     for index in range(3):
         entry = er.async_get(hass).async_get_or_create("light", "test", f"extra_{index}")
         hass.states.async_set(entry.entity_id, "off")
     with patch.object(device_semantics, "device_registry_snapshot_from_registry",
                       wraps=device_semantics.device_registry_snapshot_from_registry) as build:
-        snapshot = capture_targets(hass, token, "light_on")
+        snapshot = capture_targets(hass, access_key, "light_on")
     build.assert_called_once()
     assert len(snapshot.targets) == 4
     assert snapshot.fingerprints == {
-        item["entity_id"]: _target_fingerprint(hass, token, item["entity_id"], "HassTurnOn")
+        item["entity_id"]: _target_fingerprint(hass, access_key, item["entity_id"], "HassTurnOn")
         for item in snapshot.targets.values()
     }
 
@@ -99,19 +99,19 @@ async def test_catalog_builds_device_graph_once_without_changing_fingerprints(ha
 @pytest.mark.parametrize("restriction", ["hidden", "disabled", "unexposed", "denied", "unavailable", "group", "aggregate", "unregistered"])
 @pytest.mark.parametrize("compact", [False, True])
 async def test_ineligible_entity_identity_never_sent(hass, target_home, restriction, compact):
-    _, token, _, _, entity_id = target_home
+    _, access_key, _, _, entity_id = target_home
     registry = er.async_get(hass)
     if restriction == "hidden": registry.async_update_entity(entity_id, hidden_by=er.RegistryEntryHider.USER)
     if restriction == "disabled": registry.async_update_entity(entity_id, disabled_by=er.RegistryEntryDisabler.USER)
     if restriction == "unexposed": async_expose_entity(hass, "conversation", entity_id, False)
-    if restriction == "denied": token.permissions = PermissionTree()
+    if restriction == "denied": access_key.permissions = PermissionTree()
     if restriction == "unavailable": hass.states.async_set(entity_id, "unavailable")
     if restriction == "group":
         registry.async_remove(entity_id)
         registry.async_get_or_create("light", "group", "desk", suggested_object_id=entity_id.split(".")[1])
     if restriction == "aggregate": hass.states.async_set(entity_id, "off", {"entity_id": ["light.hidden"]})
     if restriction == "unregistered": registry.async_remove(entity_id)
-    assert not capture_targets(hass, token, "light_on", compact=compact).targets
+    assert not capture_targets(hass, access_key, "light_on", compact=compact).targets
     first, second = mocks()
     with first, second as select:
         result = await preview(hass, target_home)
@@ -121,19 +121,19 @@ async def test_ineligible_entity_identity_never_sent(hass, target_home, restrict
 
 
 async def test_read_scope_and_brightness_requirements(hass, target_home):
-    _, token, _, _, entity_id = target_home
-    token.permissions = PermissionTree(domains={"light": PermissionNode(state="YELLOW")})
-    assert capture_targets(hass, token, "state_query").targets
-    assert not capture_targets(hass, token, "light_on").targets
-    token.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
+    _, access_key, _, _, entity_id = target_home
+    access_key.permissions = PermissionTree(domains={"light": PermissionNode(state="YELLOW")})
+    assert capture_targets(hass, access_key, "state_query").targets
+    assert not capture_targets(hass, access_key, "light_on").targets
+    access_key.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
     hass.states.async_set(entity_id, "off", {"supported_color_modes": ["onoff"]})
-    assert not capture_targets(hass, token, "light_brightness").targets
+    assert not capture_targets(hass, access_key, "light_brightness").targets
 
 
 async def test_names_and_aliases_scrub_secrets_and_hidden_ids(hass, target_home):
-    _, token, _, _, entity_id = target_home
+    _, access_key, _, _, entity_id = target_home
     er.async_get(hass).async_update_entity(entity_id, aliases={"sensor.hidden", "api_key: private-key"})
-    snapshot = capture_targets(hass, token, "light_on")
+    snapshot = capture_targets(hass, access_key, "light_on")
     text = json.dumps(snapshot.targets)
     assert "sensor.hidden" not in text and "private-key" not in text and "private-state-secret" not in text
 
@@ -141,7 +141,7 @@ async def test_names_and_aliases_scrub_secrets_and_hidden_ids(hass, target_home)
 @pytest.mark.parametrize("case", ["count", "name", "aliases", "bytes"])
 @pytest.mark.parametrize("compact", [False, True])
 async def test_catalog_limits_refuse_instead_of_truncating(hass, target_home, case, compact):
-    _, token, _, _, entity_id = target_home
+    _, access_key, _, _, entity_id = target_home
     registry = er.async_get(hass)
     if case == "name": hass.states.async_set(entity_id, "off", {"friendly_name": "a" * 257})
     if case == "aliases": registry.async_update_entity(entity_id, aliases={f"alias{i}" for i in range(9)})
@@ -151,7 +151,7 @@ async def test_catalog_limits_refuse_instead_of_truncating(hass, target_home, ca
             registry.async_update_entity(entry.entity_id, aliases={str(i) * 200 for i in range(8)} if case == "bytes" else set())
             hass.states.async_set(entry.entity_id, "off")
     with pytest.raises(CatalogLimitError, match="too_many_targets" if case == "count" else "target_metadata_too_large") as caught:
-        capture_targets(hass, token, "light_on", compact=compact)
+        capture_targets(hass, access_key, "light_on", compact=compact)
     assert caught.value.details["category"] == "light_on"
     assert caught.value.details["bound"] == {"count": "target_count", "name": "text_length",
                                             "aliases": "alias_count", "bytes": "metadata_bytes"}[case]
@@ -161,7 +161,7 @@ async def test_catalog_limits_refuse_instead_of_truncating(hass, target_home, ca
 
 @pytest.mark.parametrize("change", ["name", "alias", "area", "scope", "availability", "new_candidate", "identity", "account", "settings", "revoked"])
 async def test_target_wait_revalidates_full_catalog_and_authority(hass, target_home, change):
-    data, token, store, account, entity_id = target_home
+    data, access_key, store, account, entity_id = target_home
     entered = asyncio.Event()
     release = asyncio.Event()
     async def select(*args):
@@ -176,7 +176,7 @@ async def test_target_wait_revalidates_full_catalog_and_authority(hass, target_h
         if change == "name": hass.states.async_set(entity_id, "off", {"friendly_name": "Changed"})
         if change == "alias": registry.async_update_entity(entity_id, aliases={"Changed"})
         if change == "area": ar.async_get(hass).async_update(registry.async_get(entity_id).area_id, name="Changed")
-        if change == "scope": token.permissions = PermissionTree()
+        if change == "scope": access_key.permissions = PermissionTree()
         if change == "availability": hass.states.async_set(entity_id, "unavailable")
         if change == "new_candidate":
             entry = registry.async_get_or_create("light", "test", "another")
@@ -186,7 +186,7 @@ async def test_target_wait_revalidates_full_catalog_and_authority(hass, target_h
             registry.async_get_or_create("light", "other", "replacement", suggested_object_id=entity_id.split(".")[1])
         if change == "account": await store.set_model(account, "different-model")
         if change == "settings": await data.store.async_patch_settings(decision_timeout_ms=1234)
-        if change == "revoked": token.revoked = True
+        if change == "revoked": access_key.revoked = True
         release.set()
         result = await task
     if change in ("account", "settings", "revoked"):
@@ -269,10 +269,10 @@ async def test_target_http_contract_and_generated_id_rejection(protocol, invalid
 
 
 async def test_plain_observation_never_enumerates_or_sends_targets(hass, target_home):
-    data, token, *_ = target_home
+    data, access_key, *_ = target_home
     first, second = mocks()
     with first, second as select, patch("custom_components.phoenix_mcp.decision_targets.capture_targets") as capture:
-        result = await data.decision_shadow.start(hass, data, token, "lamp on", "en", observe=True)
+        result = await data.decision_shadow.start(hass, data, access_key, "lamp on", "en", observe=True)
     # HA can start this task eagerly; its completion callback runs on the next tick.
     await asyncio.sleep(0)
     capture.assert_not_called()
@@ -283,10 +283,10 @@ async def test_plain_observation_never_enumerates_or_sends_targets(hass, target_
 
 @pytest.mark.parametrize("reason", ["supported", "sentence_trigger", "custom_sentence", "timeout", "unavailable"])
 async def test_local_match_or_unsafe_recognition_skips_both_calls(hass, target_home, reason):
-    data, token, *_ = target_home
+    data, access_key, *_ = target_home
     first, second = mocks()
     with first as classify, second as select:
-        result = await async_preview_decision(hass, data, token, "lamp on", "en", {
+        result = await async_preview_decision(hass, data, access_key, "lamp on", "en", {
             "reason": reason, "proposal": {"intent": "HassTurnOn"} if reason == "supported" else None,
         }, targets=True)
     classify.assert_not_called()
@@ -295,7 +295,7 @@ async def test_local_match_or_unsafe_recognition_skips_both_calls(hass, target_h
 
 
 async def test_cancellation_during_target_wait_releases_shared_slot(hass, target_home):
-    data, token, *_ = target_home
+    data, access_key, *_ = target_home
     entered, closed = asyncio.Event(), asyncio.Event()
     async def select(*args):
         entered.set()
@@ -307,7 +307,7 @@ async def test_cancellation_during_target_wait_releases_shared_slot(hass, target
     with first, patch.object(DecisionProvider, "select_target", select):
         task = asyncio.create_task(preview(hass, target_home))
         await entered.wait()
-        assert data.decision_shadow.start(hass, data, token, "other", "en") is None
+        assert data.decision_shadow.start(hass, data, access_key, "other", "en") is None
         data.decision_shadow.cancel()
         result = await task
     assert result["reason"] == "cancelled"
@@ -315,17 +315,17 @@ async def test_cancellation_during_target_wait_releases_shared_slot(hass, target
 
 
 async def test_default_computed_alias_uses_home_assistant_name_resolution(hass, target_home):
-    _, token, *_ = target_home
+    _, access_key, *_ = target_home
     registry = er.async_get(hass)
     entry = registry.async_get_or_create("light", "test", "default_alias", original_name="Reading lamp")
     assert entry.aliases == [er.COMPUTED_NAME]
     hass.states.async_set(entry.entity_id, "off", {"friendly_name": "State label"})
-    snapshot = capture_targets(hass, token, "light_on")
+    snapshot = capture_targets(hass, access_key, "light_on")
     target = next(item for item in snapshot.targets.values() if item["entity_id"] == entry.entity_id)
     assert target["name"] == "State label"
     assert target["aliases"] == ["Reading lamp"]
     registry.async_update_entity(entry.entity_id, name="Renamed lamp")
-    updated = capture_targets(hass, token, "light_on")
+    updated = capture_targets(hass, access_key, "light_on")
     target = next(item for item in updated.targets.values() if item["entity_id"] == entry.entity_id)
     assert target["aliases"] == ["Renamed lamp"]
     assert updated != snapshot
@@ -424,12 +424,12 @@ async def test_manual_brightness_preview_exposes_proposal_but_never_execution_pl
     ('Do not set the desk lamp to 37 percent', 37, {'status': 'match', 'source_value': 37}),
 ])
 async def test_sequential_value_evidence_is_diagnostic_only(hass, target_home, sentence, model_value, evidence):
-    data, token, *_ = target_home
+    data, access_key, *_ = target_home
     first, _ = mocks('light_brightness')
     answer = {**choice('t0', ['t0', 'none']), 'brightness_pct': model_value}
     with (first, patch.object(DecisionProvider, 'select_target', AsyncMock(return_value=answer)),
           patch('custom_components.phoenix_mcp.command_execution._capture_plan') as prepare):
-        result = await async_preview_decision(hass, data, token, sentence, 'en',
+        result = await async_preview_decision(hass, data, access_key, sentence, 'en',
                                               {'reason': 'no_match', 'proposal': None}, targets=True)
     assert result['target_selection']['value_check'] == evidence
     assert result['executed'] is False and '_plan' not in result
@@ -438,12 +438,12 @@ async def test_sequential_value_evidence_is_diagnostic_only(hass, target_home, s
 
 async def test_target_selector_cannot_prepare_numeric_plan_even_with_matching_value(hass, target_home):
     from custom_components.phoenix_mcp.command_routing import RoutingAuthority
-    data, token, store, account, _ = target_home
+    data, access_key, store, account, _ = target_home
     provider = DecisionProvider(store.resolve(account, purpose='decision'), 'systemone')
     with (patch.object(provider, 'select_target') as select,
           patch('custom_components.phoenix_mcp.command_execution._capture_plan') as prepare):
         result = await data.decision_shadow._select_target(
-            hass, RoutingAuthority.capture(data, token), provider, None, 'Set the lamp to 37 percent',
+            hass, RoutingAuthority.capture(data, access_key), provider, None, 'Set the lamp to 37 percent',
             choice('light_brightness', DECISION_ROUTE_CHOICES), 1000, prepare=True,
         )
     assert result['reason'] == 'numeric_unverified'
@@ -456,7 +456,7 @@ async def test_target_selector_cannot_prepare_numeric_plan_even_with_matching_va
     ("es", "es", "pon la lámpara al cincuenta por ciento"),
 ])
 async def test_multilingual_target_and_brightness_preview_keeps_language_and_no_plan(hass, target_home, language, wire_language, sentence):
-    data, token, _, _, entity_id = target_home
+    data, access_key, _, _, entity_id = target_home
     er.async_get(hass).async_update_entity(entity_id, aliases={'台灯', 'lámpara'})
     payloads = []
     async def request(session, method, path, timeout, payload):
@@ -467,7 +467,7 @@ async def test_multilingual_target_and_brightness_preview_keeps_language_and_no_
             for question, spec in payload["questions"].items()}}
     with (patch.object(DecisionProvider, "_request", AsyncMock(side_effect=request)),
           patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp") as dispatch):
-        result = await async_preview_decision(hass, data, token, sentence, language,
+        result = await async_preview_decision(hass, data, access_key, sentence, language,
                                               {"reason": "no_match", "proposal": None}, targets=True, ingress="preview")
     assert result["target_selection"]["proposal"] == {
         "intent": "HassLightSet", "entity_ids": [entity_id], "brightness_pct": 50}
@@ -489,8 +489,8 @@ async def test_multilingual_target_and_brightness_preview_keeps_language_and_no_
 async def test_jev_exact_percentage_preview_is_scoped_and_inert(hass, target_home, category, intent, field, domain, percent):
     from homeassistant.components.cover import CoverEntityFeature
     from homeassistant.components.media_player import MediaPlayerEntityFeature
-    data, token, *_ = target_home
-    token.permissions = PermissionTree(domains={domain: PermissionNode(state='GREEN')})
+    data, access_key, *_ = target_home
+    access_key.permissions = PermissionTree(domains={domain: PermissionNode(state='GREEN')})
     if domain == 'light':
         entity_id = target_home[-1]
     else:
@@ -510,7 +510,7 @@ async def test_jev_exact_percentage_preview_is_scoped_and_inert(hass, target_hom
             for question, spec in payload['questions'].items()}}
     with (patch.object(DecisionProvider, '_request', AsyncMock(side_effect=response)) as request,
           patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
-        result = await async_preview_decision(hass, data, token, f'Set {entity_id} to {percent} percent', 'en',
+        result = await async_preview_decision(hass, data, access_key, f'Set {entity_id} to {percent} percent', 'en',
                                               {'reason': 'no_match', 'proposal': None}, targets=True, ingress='preview')
     assert result['target_selection']['proposal'] == {'intent': intent, 'entity_ids': [entity_id], field: percent}
     assert result['target_selection']['value_check'] == {'status': 'match', 'source_value': percent}
@@ -543,8 +543,8 @@ async def test_jev_exact_percentage_rejects_unsound_values(damage):
 
 @pytest.mark.parametrize('category,domain', [('media_volume', 'media_player'), ('cover_position', 'cover')])
 async def test_numeric_preview_requires_actual_device_support(hass, target_home, category, domain):
-    _, token, *_ = target_home
-    token.permissions = PermissionTree(domains={domain: PermissionNode(state='GREEN')})
+    _, access_key, *_ = target_home
+    access_key.permissions = PermissionTree(domains={domain: PermissionNode(state='GREEN')})
     entry = er.async_get(hass).async_get_or_create(domain, 'test', 'unsupported')
     hass.states.async_set(entry.entity_id, 'on', {'supported_features': 0})
     async_expose_entity(hass, 'conversation', entry.entity_id, True)
@@ -557,13 +557,13 @@ async def test_numeric_preview_requires_actual_device_support(hass, target_home,
 
 @pytest.mark.parametrize('area_present', [False, True])
 async def test_compact_catalog_keeps_distinct_identity_text_and_full_fingerprints(hass, target_home, area_present):
-    _, token, _, _, entity_id = target_home
+    _, access_key, _, _, entity_id = target_home
     registry = er.async_get(hass)
     registry.async_update_entity(entity_id, aliases={er.COMPUTED_NAME, entity_id, 'Desk Lamp', '书桌灯', 'Task light'})
     if not area_present:
         registry.async_update_entity(entity_id, area_id=None)
-    raw = capture_targets(hass, token, 'light_brightness')
-    compact = capture_targets(hass, token, 'light_brightness', compact=True)
+    raw = capture_targets(hass, access_key, 'light_brightness')
+    compact = capture_targets(hass, access_key, 'light_brightness', compact=True)
     assert raw.fingerprints == compact.fingerprints
     assert set(raw.targets) == set(compact.targets) == {'t0'}
     assert compact.targets['t0'] == {
@@ -572,7 +572,7 @@ async def test_compact_catalog_keeps_distinct_identity_text_and_full_fingerprint
     }
     # Even a removed duplicate is retained in the authority fingerprint.
     registry.async_update_entity(entity_id, aliases={'Desk Lamp', '书桌灯', 'Task light'})
-    changed = capture_targets(hass, token, 'light_brightness', compact=True)
+    changed = capture_targets(hass, access_key, 'light_brightness', compact=True)
     assert changed.targets == compact.targets
     assert changed.digest() != compact.digest()
 
@@ -676,12 +676,12 @@ async def test_generic_grouped_targets_http_contract(protocol, case, socket_enab
 async def test_generic_grouped_catalog_bound_and_stale_competitor(hass, target_home):
     from custom_components.phoenix_mcp.const import DECISION_SEQUENTIAL_MAX_TARGETS
     from custom_components.phoenix_mcp.decision_targets import capture_sequential_targets
-    data, token, _, _, _ = target_home
+    data, access_key, _, _, _ = target_home
     registry = er.async_get(hass)
     for i in range(DECISION_SEQUENTIAL_MAX_TARGETS - 1):
         entry = registry.async_get_or_create("light", "test", f"extra_{i}")
         hass.states.async_set(entry.entity_id, "off")
-    snapshot = capture_sequential_targets(hass, token, "light_on")
+    snapshot = capture_sequential_targets(hass, access_key, "light_on")
     assert len(snapshot.targets) == DECISION_SEQUENTIAL_MAX_TARGETS
     async def select(_self, _session, _sentence, _category, targets, *_args):
         assert len(targets) == DECISION_SEQUENTIAL_MAX_TARGETS
@@ -695,7 +695,7 @@ async def test_generic_grouped_catalog_bound_and_stale_competitor(hass, target_h
     extra = registry.async_get_or_create("light", "test", "overflow")
     hass.states.async_set(extra.entity_id, "off")
     with pytest.raises(CatalogLimitError, match="too_many_targets"):
-        capture_sequential_targets(hass, token, "light_on")
+        capture_sequential_targets(hass, access_key, "light_on")
     assert not data.store.get_pending_approvals()
 
 

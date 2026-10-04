@@ -1,7 +1,7 @@
 import { BusyInput, BusySelect } from "./BusyButton";
 import { BusyButton } from "./BusyButton";
 import { useEffect, useState } from "react";
-import type { GlobalSettings, TokenRecord, AgentCliInstance, AiTaskPreferredStatus } from "../types";
+import type { GlobalSettings, AccessKeyRecord, AgentCliInstance, AiTaskPreferredStatus } from "../types";
 import { api } from "../api";
 import { Modal } from "./Modal";
 import { DocsHelpLink } from "./common";
@@ -22,7 +22,7 @@ export function AiTaskSettings({
   onChange: (key: keyof GlobalSettings, value: boolean | string) => void;
   saving: boolean;
 }) {
-  const [tokens, setTokens] = useState<TokenRecord[]>([]);
+  const [accessKeys, setAccessKeys] = useState<AccessKeyRecord[]>([]);
   const [instances, setInstances] = useState<AgentCliInstance[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [pref, setPref] = useState<AiTaskPreferredStatus | null>(null);
@@ -37,7 +37,7 @@ export function AiTaskSettings({
   const noProviders = instances.length === 0;
 
   useEffect(() => {
-    api.listTokens().then(setTokens).catch(() => setTokens([]));
+    api.listAccessKeys().then(setAccessKeys).catch(() => setAccessKeys([]));
     const loadProviders = () =>
       api.getAgentCliProviders().then((r) => setInstances(r.instances)).catch(() => setInstances([]));
     loadProviders();
@@ -136,7 +136,7 @@ export function AiTaskSettings({
           onChange={(e) => onChange("ai_task_token_id", e.target.value)}
         >
           <option value="">{t("settings.selectToken")}</option>
-          {tokens.map((tok) => (
+          {accessKeys.map((tok) => (
             <option key={tok.id} value={tok.id}>{tok.name}</option>
           ))}
         </BusySelect>

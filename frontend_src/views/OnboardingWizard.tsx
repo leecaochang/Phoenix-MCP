@@ -1,11 +1,11 @@
 import { BusySelect } from "../components/BusyButton";
 import { BusyButton } from "../components/BusyButton";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AgentCliInstance, AgentCliProviderType, CreateTokenBody, EntityTree as EntityTreeData, Persona, PermissionTree } from "../types";
+import type { AgentCliInstance, AgentCliProviderType, CreateAccessKeyBody, EntityTree as EntityTreeData, Persona, PermissionTree } from "../types";
 import { api, ApiError } from "../api";
 import { PersonaPicker } from "../components/PersonaPicker";
 import { EntityTree } from "../components/EntityTree";
-import { CopyButton } from "../components/TokenCreateModal";
+import { CopyButton } from "../components/AccessKeyCreateModal";
 import { ConnectInstructions } from "../components/ConnectInstructions";
 import { ProviderAddForm } from "../components/ProviderAddForm";
 import { PERSONA_CAP_DEFAULTS } from "../personas";
@@ -38,14 +38,14 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
   const [step, setStep] = useState(0);
   const [branch, setBranch] = useState<Branch | null>(null);
   const [persona, setPersona] = useState<Persona | null>("new_user");
-  const [name, setName] = useState("test_token");
+  const [name, setName] = useState(() => t("tokens.namePlaceholder"));
   const [ttlUnit, setTtlUnit] = useState<TtlUnit>("none");
   const [ttlValue, setTtlValue] = useState("24");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [rawToken, setRawToken] = useState<string | null>(null);
-  const [tokenId, setTokenId] = useState<string | null>(null);
+  const [rawAccessKey, setRawAccessKey] = useState<string | null>(null);
+  const [tokenId, setAccessKeyId] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<PermissionTree>({ domains: {}, devices: {}, entities: {} });
 
   const [entityTree, setEntityTree] = useState<EntityTreeData | null>(null);
@@ -102,24 +102,24 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
           const minutes = ttlUnit === "minutes" ? n : ttlUnit === "hours" ? n * 60 : ttlUnit === "days" ? n * 1440 : n * 10080;
           expiresAt = addMinutes(minutes);
         }
-        const body: CreateTokenBody = { name, expires_at: expiresAt, pass_through: false };
-        const resp = await api.createToken(body);
+        const body: CreateAccessKeyBody = { name, expires_at: expiresAt, pass_through: false };
+        const resp = await api.createAccessKey(body);
         const { token: raw, ...record } = resp;
         // Stash the irreversible bits BEFORE the persona patch so a patch
         // failure leaves a recoverable (retry-only-the-patch) state.
-        setRawToken(raw);
-        setTokenId(record.id);
+        setRawAccessKey(raw);
+        setAccessKeyId(record.id);
         setPermissions(record.permissions);
         // Creation changes the token list every host caches: the panel shell
         // gates its header "Agent Chat" button on a non-empty list and hands
         // the panel-hosted chat window its tokens prop, and the floating
         // window refetches on this event. Without it a token made here stays
         // invisible to both until a page reload.
-        window.dispatchEvent(new CustomEvent("phx-tokens-changed"));
-        await api.patchToken(record.id, patchBody);
+        window.dispatchEvent(new CustomEvent("phx-access-keys-changed"));
+        await api.patchAccessKey(record.id, patchBody);
       } else {
         // Token already created (back-navigation): re-apply persona only.
-        await api.patchToken(tokenId, patchBody);
+        await api.patchAccessKey(tokenId, patchBody);
       }
       setStep(2);
     } catch (e) {
@@ -134,7 +134,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
   const poll = useCallback(async () => {
     if (!tokenId) return;
     try {
-      const c = await api.getTokenConnection(tokenId);
+      const c = await api.getAccessKeyConnection(tokenId);
       if (c.request_count > 0) setConnected(true);
     } catch {
       // transient; keep polling
@@ -216,7 +216,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
             <div className="field">
               <label htmlFor="wiz-name">{t("wizard.nameLabel")}</label>
               <input id="wiz-name" className="input" value={name} disabled={!!tokenId}
-                maxLength={32} onChange={(e) => setName(e.target.value)} placeholder="test_token" />
+                maxLength={32} onChange={(e) => setName(e.target.value)} placeholder={t("tokens.namePlaceholder")} />
             </div>
             <div className="field">
               <label htmlFor="wiz-expiry-unit">{t("wizard.expiryLabel")}</label>
@@ -302,7 +302,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
         return (
           <>
             <h3 className="wizard-title">{t("wizard.connectAgentTitle")}</h3>
-            {rawToken && <ConnectInstructions token={rawToken} tokenName={name} />}
+            {rawAccessKey && <ConnectInstructions accessKey={rawAccessKey} accessKeyName={name} />}
             <div className="wizard-actions">
               <button className="btn btn-text" onClick={() => setStep(3)}>{t("wizard.back")}</button>
               <button className="btn btn-ghost" onClick={() => setStep(6)}>{t("wizard.connectLater")}</button>

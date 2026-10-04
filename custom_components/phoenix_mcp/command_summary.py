@@ -12,7 +12,7 @@ from .device_semantics import device_registry_snapshot
 from .helpers import voice_text, redact_secrets_in_text, redact_inaccessible_entity_ids_in_text
 
 
-def summary_catalog(hass: Any, token: Any, *, devices: Any = None,
+def summary_catalog(hass: Any, access_key: Any, *, devices: Any = None,
                     max_targets: int = DECISION_BATCH_MAX_TARGETS, max_bytes: int = DECISION_MAX_TARGET_BYTES) -> Any:
     """No state values leave Phoenix; unavailable members remain in the denominator."""
     from .command_execution import _target_fingerprint, _digest
@@ -22,7 +22,7 @@ def summary_catalog(hass: Any, token: Any, *, devices: Any = None,
     groups: dict[str, dict] = {}
     fingerprints = {}
     for state in sorted(hass.states.async_all(), key=lambda item: item.entity_id):
-        fingerprint = _target_fingerprint(hass, token, state.entity_id, 'PhoenixStateSummary', devices=devices)
+        fingerprint = _target_fingerprint(hass, access_key, state.entity_id, 'PhoenixStateSummary', devices=devices)
         if fingerprint is None:
             continue
         fingerprints[state.entity_id] = fingerprint
@@ -47,20 +47,20 @@ def summary_catalog(hass: Any, token: Any, *, devices: Any = None,
         raise CatalogLimitError('state_summary', 'target_count', len(targets), max_targets)
     if len(encoded.encode()) > max_bytes:
         raise CatalogLimitError('state_summary', 'metadata_bytes', len(encoded.encode()), max_bytes)
-    if redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(encoded) or '', token, hass) != encoded:
+    if redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(encoded) or '', access_key, hass) != encoded:
         from .decision_provider import DecisionError
         raise DecisionError('context_unavailable')
     return TargetSnapshot(targets, fingerprints)
 
 
-def summary_members(hass: Any, token: Any, scope: dict) -> list[str]:
+def summary_members(hass: Any, access_key: Any, scope: dict) -> list[str]:
     """Resolve an exact server-owned collection, never a generated selector."""
     from .command_execution import _target_fingerprint
     devices = device_registry_snapshot(hass)
     registry = er.async_get(hass)
     ids = []
     for state in hass.states.async_all(scope['domain']):
-        if _target_fingerprint(hass, token, state.entity_id, 'PhoenixStateSummary', devices=devices) is None:
+        if _target_fingerprint(hass, access_key, state.entity_id, 'PhoenixStateSummary', devices=devices) is None:
             continue
         entry = registry.async_get(state.entity_id)
         assert entry is not None
@@ -72,17 +72,17 @@ def summary_members(hass: Any, token: Any, scope: dict) -> list[str]:
     return sorted(ids)
 
 
-def summary_proposal(hass: Any, token: Any, descriptor: dict, mode: str) -> dict | None:
+def summary_proposal(hass: Any, access_key: Any, descriptor: dict, mode: str) -> dict | None:
     if mode not in ('total', 'breakdown', *descriptor['states']):
         return None
-    ids = summary_members(hass, token, descriptor['summary_scope'])
+    ids = summary_members(hass, access_key, descriptor['summary_scope'])
     if not ids:
         return None
     return {'intent': 'PhoenixStateSummary', 'entity_ids': ids,
             'summary_scope': descriptor['summary_scope'], 'summary_mode': mode}
 
 
-def summary_current(hass: Any, token: Any, proposal: dict) -> bool:
+def summary_current(hass: Any, access_key: Any, proposal: dict) -> bool:
     """Revalidate collection membership as well as individual entity identities."""
     if set(proposal) - {'voice_origin'} != {'intent', 'entity_ids', 'summary_scope', 'summary_mode'}:
         return False
@@ -93,10 +93,10 @@ def summary_current(hass: Any, token: Any, proposal: dict) -> bool:
         return False
     allowed = ('total', 'breakdown', *COMMAND_SUMMARY_STATES.get(scope['domain'], ()), *COMMAND_SUMMARY_UNKNOWN_STATES)
     return (proposal['summary_mode'] in allowed and bool(proposal['entity_ids'])
-            and summary_members(hass, token, scope) == proposal['entity_ids'])
+            and summary_members(hass, access_key, scope) == proposal['entity_ids'])
 
 
-def local_summary(hass: Any, token: Any, result: Any, slots: dict) -> dict | None:
+def local_summary(hass: Any, access_key: Any, result: Any, slots: dict) -> dict | None:
     """Use installed HassGetState count grammar, including its native state mapping."""
     if getattr(result, 'response', None) not in ('how_many',):
         return None
@@ -111,9 +111,9 @@ def local_summary(hass: Any, token: Any, result: Any, slots: dict) -> dict | Non
     for area in areas:
         scope = {'domain': slots['domain'], 'device_class': slots.get('device_class', ''),
                  'area_id': area.id if area else ''}
-        candidate = {'intent': 'PhoenixStateSummary', 'entity_ids': summary_members(hass, token, scope),
+        candidate = {'intent': 'PhoenixStateSummary', 'entity_ids': summary_members(hass, access_key, scope),
                      'summary_scope': scope, 'summary_mode': slots.get('state', 'total')}
-        if summary_current(hass, token, candidate):
+        if summary_current(hass, access_key, candidate):
             candidates.append(candidate)
     return candidates[0] if len(candidates) == 1 else None
 

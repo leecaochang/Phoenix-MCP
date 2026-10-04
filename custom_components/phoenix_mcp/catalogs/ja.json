@@ -598,7 +598,7 @@
       "nameDuplicateError": "この名前または同等のスラッグを持つアクセスキーはすでに存在します。",
       "nameFormatError": "名前は 3-32 文字で、英字、数字、_、- を使用してください。",
       "nameLabel": "名前（必須）",
-      "namePlaceholder": "my_token",
+      "namePlaceholder": "my_access_key",
       "nameRuleError": "3-32 文字で、英字、数字、ハイフン、アンダースコアを使用してください。",
       "off": "オフ",
       "on": "オン",
@@ -728,7 +728,7 @@
       "codexHeaderValueLabel": "ヘッダー値",
       "codexServerNameLabel": "サーバー名",
       "connectAgentTitle": "Phoenix MCP を AI エージェントに接続",
-      "connectIntro": "Phoenix MCP をエージェントの MCP サーバーとして追加します。Home Assistant のログインや OAuth ではなく、<code>Authorization: Bearer <token></code> で認証します。 信頼できないネットワークでは HTTPS を使用してください。Bearer アクセスキーをシェル履歴、共有ファイル、スクリーンショット、バージョン管理に含めないでください。漏えいしたアクセスキーはローテーションしてください。",
+      "connectIntro": "Phoenix MCP をエージェントの MCP サーバーとして追加します。Home Assistant のログインや OAuth ではなく、<code>Authorization: Bearer phx_...</code> で認証します。 信頼できないネットワークでは HTTPS を使用してください。Bearer アクセスキーをシェル履歴、共有ファイル、スクリーンショット、バージョン管理に含めないでください。漏えいしたアクセスキーはローテーションしてください。",
       "connectLater": "後で接続",
       "connectTitle": "最初の AI エージェントを接続",
       "connected": "接続しました。エージェントが Phoenix MCP に到達しました。",
@@ -2284,8 +2284,8 @@
     }
   },
   "notification": {
-    "approval.message": "アクセスキー「{token}」が承認をリクエストしました。\n\n[Phoenix MCP で確認]({url})",
-    "rate_limit.message": "Phoenix MCP: アクセスキー「{token}」がレート制限に達しました。",
+    "approval.message": "アクセスキー「{access_key}」が承認をリクエストしました。\n\n[Phoenix MCP で確認]({url})",
+    "rate_limit.message": "Phoenix MCP: アクセスキー「{access_key}」がレート制限に達しました。",
     "rate_limit.title": "Phoenix MCP アラート"
   },
   "voice": {

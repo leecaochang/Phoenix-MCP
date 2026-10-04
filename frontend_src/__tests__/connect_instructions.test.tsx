@@ -4,7 +4,7 @@ import { ConnectInstructions } from "../components/ConnectInstructions";
 
 describe("external client connection instructions", () => {
   it("opens Harness setup and keeps its configuration aligned with the editable URL", () => {
-    render(<ConnectInstructions token="phx_example" tokenName="Voice_Assist" />);
+    render(<ConnectInstructions accessKey="phx_example" accessKeyName="Voice_Assist" />);
     const tab = screen.getByRole("tab", { name: "DeepSeek Harness (experimental)" });
     fireEvent.click(tab);
     expect(tab).toHaveAttribute("aria-selected", "true");

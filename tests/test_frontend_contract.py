@@ -1,12 +1,12 @@
 """Frontend/backend contract drift guard for the admin token response.
 
-The frontend's TokenRecord type (frontend_src/types.ts) is hand-mirrored from the
-Python TokenRecord serializer, so they could drift silently. This test pins the
+The frontend's AccessKeyRecord type (frontend_src/types.ts) is hand-mirrored from the
+Python AccessKeyRecord serializer, so they could drift silently. This test pins the
 serialized key set against a shared committed fixture
 (tests/contract/token_record_keys.json); the matching frontend test asserts the
 TS type covers the same keys.
 
-If TokenRecord.to_dict gains or loses a field, this test fails. To resolve:
+If AccessKeyRecord.to_dict gains or loses a field, this test fails. To resolve:
   1. regenerate tests/contract/token_record_keys.json from the serializer, and
   2. update frontend_src/types.ts + contract.test.ts to match.
 """
@@ -18,15 +18,15 @@ import os
 import re
 from datetime import datetime, timezone
 
-from custom_components.phoenix_mcp.token_store import TokenRecord
+from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord
 
 _CONTRACT = os.path.join(os.path.dirname(__file__), "contract", "token_record_keys.json")
 
 
-def _sample_token() -> TokenRecord:
+def _sample_token() -> AccessKeyRecord:
     # pass_through=True emits the conditional use_assist_exposure field, giving
     # the full superset of serialized keys.
-    return TokenRecord(
+    return AccessKeyRecord(
         id="x", name="n", token_hash="h",
         created_at=datetime.now(timezone.utc), created_by="u", pass_through=True,
     )
@@ -37,7 +37,7 @@ def test_token_record_serializer_matches_contract_fixture():
     with open(_CONTRACT, encoding="utf-8") as f:
         expected = sorted(json.load(f)["token_record_keys"])
     assert live_keys == expected, (
-        "TokenRecord.to_dict shape drifted from the frontend contract fixture. "
+        "AccessKeyRecord.to_dict shape drifted from the frontend contract fixture. "
         "Regenerate tests/contract/token_record_keys.json and update "
         "frontend_src/types.ts + contract.test.ts."
     )

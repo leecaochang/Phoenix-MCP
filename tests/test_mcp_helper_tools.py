@@ -22,12 +22,12 @@ from tests.runtime_fixtures import mesa_off_store
 
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _EXECUTOR_REGISTRY, _call_tool
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
 from custom_components.phoenix_mcp.tools.helper import _build_diff_delete_helper
 
 
-def _token(**caps) -> TokenRecord:
+def _access_key(**caps) -> AccessKeyRecord:
     tree = caps.pop("permissions", PermissionTree(domains={
         "input_boolean": PermissionNode(state="GREEN"),
         "input_button": PermissionNode(state="GREEN"),
@@ -40,7 +40,7 @@ def _token(**caps) -> TokenRecord:
     }))
     base = {"cap_helper_write": "allow", "cap_registry_read": "allow"}
     base.update(caps)
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x",
         created_at=utcnow(), created_by="u", permissions=tree, **base,
     )
@@ -50,8 +50,8 @@ def _json(content: dict) -> dict:
     return json.loads(content["content"][0]["text"])
 
 
-async def _call(name, args, token, hass):
-    return await _call_tool(name, args, token, hass, PhoenixData(
+async def _call(name, args, access_key, hass):
+    return await _call_tool(name, args, access_key, hass, PhoenixData(
         store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(),
     ))
 
@@ -72,12 +72,12 @@ class TestCreateHelper:
     async def test_deny_without_cap(self, hass, helper_env, hass_admin_user):
         _, outcome, _ = await _call(
             "create_helper", {"helper_type": "input_boolean", "config": {"name": "X"}},
-            _token(cap_helper_write="deny"), hass)
+            _access_key(cap_helper_write="deny"), hass)
         assert outcome == "denied"
 
     async def test_create(self, hass, helper_env, hass_admin_user):
         content, outcome, _ = await _call(
-            "create_helper", {"helper_type": "input_boolean", "config": {"name": "Guest mode"}}, _token(), hass)
+            "create_helper", {"helper_type": "input_boolean", "config": {"name": "Guest mode"}}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["helper"]["name"] == "Guest mode"
@@ -95,25 +95,25 @@ class TestCreateHelper:
 
     async def test_bad_type(self, hass, helper_env, hass_admin_user):
         _, outcome, _ = await _call(
-            "create_helper", {"helper_type": "light", "config": {"name": "X"}}, _token(), hass)
+            "create_helper", {"helper_type": "light", "config": {"name": "X"}}, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_empty_config(self, hass, helper_env, hass_admin_user):
         _, outcome, _ = await _call(
-            "create_helper", {"helper_type": "input_boolean", "config": {}}, _token(), hass)
+            "create_helper", {"helper_type": "input_boolean", "config": {}}, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_empty_config_confirm_mode_rejected_before_pending(self, hass, helper_env, hass_admin_user):
         """An invalid helper config fails before any approval is created, even in confirm mode."""
         _, outcome, _ = await _call(
             "create_helper", {"helper_type": "input_boolean", "config": {}},
-            _token(cap_helper_write="confirm"), hass)
+            _access_key(cap_helper_write="confirm"), hass)
         assert outcome == "invalid_request"
 
     async def test_bad_type_confirm_mode_rejected_before_pending(self, hass, helper_env, hass_admin_user):
         _, outcome, _ = await _call(
             "create_helper", {"helper_type": "light", "config": {"name": "X"}},
-            _token(cap_helper_write="confirm"), hass)
+            _access_key(cap_helper_write="confirm"), hass)
         assert outcome == "invalid_request"
 
 
@@ -138,7 +138,7 @@ class TestConfigFlowHelperCreation:
         content, outcome, _ = await _call(
             "create_helper",
             {"helper_type": "mold_indicator", "flow_steps": []},
-            _token(), hass,
+            _access_key(), hass,
         )
         assert outcome == "allowed"
         first = _json(content)
@@ -166,7 +166,7 @@ class TestConfigFlowHelperCreation:
                     },
                 }],
             },
-            _token(), hass,
+            _access_key(), hass,
         )
         assert outcome == "allowed", content
         body = _json(content)
@@ -228,7 +228,7 @@ class TestConfigFlowHelperCreation:
             content, outcome, _ = await _call(
                 "create_helper",
                 {"helper_type": "history_stats", "flow_steps": steps},
-                _token(), hass,
+                _access_key(), hass,
             )
             assert outcome == "allowed"
             state_form = _json(content)["step"]
@@ -243,7 +243,7 @@ class TestConfigFlowHelperCreation:
             content, outcome, _ = await _call(
                 "create_helper",
                 {"helper_type": "history_stats", "flow_steps": steps},
-                _token(), hass,
+                _access_key(), hass,
             )
             assert outcome == "allowed"
             options_form = _json(content)["step"]
@@ -267,7 +267,7 @@ class TestConfigFlowHelperCreation:
             content, outcome, _ = await _call(
                 "create_helper",
                 {"helper_type": "history_stats", "flow_steps": steps},
-                _token(), hass,
+                _access_key(), hass,
             )
             assert outcome == "allowed", content
             body = _json(content)
@@ -300,7 +300,7 @@ class TestConfigFlowHelperCreation:
                     },
                 }],
             },
-            _token(
+            _access_key(
                 cap_helper_write="confirm",
                 permissions=PermissionTree(domains={}),
             ),
@@ -337,7 +337,7 @@ class TestConfigFlowHelperCreation:
                     },
                 }],
             },
-            _token(cap_helper_write="confirm"), hass, data,
+            _access_key(cap_helper_write="confirm"), hass, data,
         )
         assert outcome == "pending_approval", content
         assert {entry.entry_id for entry in hass.config_entries.async_entries("mold_indicator")} == before
@@ -369,7 +369,7 @@ class TestConfigFlowHelperCreation:
                     },
                 }],
             },
-            _token(), hass,
+            _access_key(), hass,
         )
         assert outcome == "invalid_request"
         assert "calibration_is_zero" in content["content"][0]["text"]
@@ -380,7 +380,7 @@ class TestConfigFlowHelperCreation:
         content, outcome, _ = await _call(
             "create_helper",
             {"helper_type": "otp", "flow_steps": []},
-            _token(), hass,
+            _access_key(), hass,
         )
         assert outcome == "invalid_request"
         assert "live confirmation code" in content["content"][0]["text"]
@@ -391,7 +391,7 @@ class TestEditDeleteHelper:
         created = _json((await _call(
             "create_helper",
             {"helper_type": "input_boolean", "config": {"name": "Approval helper"}},
-            _token(), hass,
+            _access_key(), hass,
         ))[0])
         await hass.async_block_till_done()
         diff = _build_diff_delete_helper(
@@ -399,17 +399,17 @@ class TestEditDeleteHelper:
                 "helper_type": "input_boolean",
                 "helper_id": created["helper"]["id"],
             },
-            _token(), hass,
+            _access_key(), hass,
         )
         assert diff["target"]["label"] == "Approval helper"
 
     async def test_edit(self, hass, helper_env, hass_admin_user):
         created = _json((await _call(
-            "create_helper", {"helper_type": "input_boolean", "config": {"name": "A"}}, _token(), hass))[0])
+            "create_helper", {"helper_type": "input_boolean", "config": {"name": "A"}}, _access_key(), hass))[0])
         hid = created["helper"]["id"]
         await hass.async_block_till_done()  # let the helper entity register
         content, outcome, _ = await _call(
-            "edit_helper", {"helper_type": "input_boolean", "helper_id": hid, "config": {"name": "B"}}, _token(), hass)
+            "edit_helper", {"helper_type": "input_boolean", "helper_id": hid, "config": {"name": "B"}}, _access_key(), hass)
         assert outcome == "allowed"
         assert _json(content)["helper"]["name"] == "B"
         await hass.async_block_till_done()
@@ -423,13 +423,13 @@ class TestEditDeleteHelper:
     async def test_delete(self, hass, helper_env, hass_admin_user):
         from homeassistant.helpers import entity_registry as er
         created = _json((await _call(
-            "create_helper", {"helper_type": "input_boolean", "config": {"name": "Temp"}}, _token(), hass))[0])
+            "create_helper", {"helper_type": "input_boolean", "config": {"name": "Temp"}}, _access_key(), hass))[0])
         hid = created["helper"]["id"]
         await hass.async_block_till_done()  # let the helper entity register
         entity_id = er.async_get(hass).async_get_entity_id("input_boolean", "input_boolean", hid)
         assert entity_id is not None
         _, outcome, _ = await _call(
-            "delete_helper", {"helper_type": "input_boolean", "helper_id": hid}, _token(), hass)
+            "delete_helper", {"helper_type": "input_boolean", "helper_id": hid}, _access_key(), hass)
         assert outcome == "allowed"
         await hass.async_block_till_done()
         # Registry integrity: the entry and its live state are both gone.
@@ -438,33 +438,33 @@ class TestEditDeleteHelper:
 
     async def test_edit_invalid_config_confirm_mode_rejected_before_pending(self, hass, helper_env, hass_admin_user):
         created = _json((await _call(
-            "create_helper", {"helper_type": "input_boolean", "config": {"name": "A"}}, _token(), hass))[0])
+            "create_helper", {"helper_type": "input_boolean", "config": {"name": "A"}}, _access_key(), hass))[0])
         hid = created["helper"]["id"]
         await hass.async_block_till_done()
         _, outcome, _ = await _call(
             "edit_helper", {"helper_type": "input_boolean", "helper_id": hid, "config": "not-a-dict"},
-            _token(cap_helper_write="confirm"), hass)
+            _access_key(cap_helper_write="confirm"), hass)
         assert outcome == "invalid_request"
 
     async def test_delete_unknown(self, hass, helper_env, hass_admin_user):
         _, outcome, _ = await _call(
-            "delete_helper", {"helper_type": "input_boolean", "helper_id": "does_not_exist"}, _token(), hass)
+            "delete_helper", {"helper_type": "input_boolean", "helper_id": "does_not_exist"}, _access_key(), hass)
         assert outcome == "not_found"
 
     async def test_edit_missing_not_found(self, hass, helper_env, hass_admin_user):
         # A non-existent helper is not_found regardless of scope (existence check).
         _, outcome, _ = await _call(
             "edit_helper", {"helper_type": "input_boolean", "helper_id": "does_not_exist", "config": {"name": "X"}},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "not_found"
 
     async def test_edit_cap_only_not_entity_scoped(self, hass, helper_env, hass_admin_user):
         # Helper authoring is cap-gated, not entity-scoped.
         created = _json((await _call(
-            "create_helper", {"helper_type": "input_boolean", "config": {"name": "Owned"}}, _token(), hass))[0])
+            "create_helper", {"helper_type": "input_boolean", "config": {"name": "Owned"}}, _access_key(), hass))[0])
         hid = created["helper"]["id"]
         await hass.async_block_till_done()
-        unscoped = TokenRecord(
+        unscoped = AccessKeyRecord(
             id=str(uuid.uuid4()), name="a", token_hash="x", created_at=utcnow(),
             created_by="u", permissions=PermissionTree(domains={}),
             cap_helper_write="allow", cap_registry_read="allow",
@@ -478,10 +478,10 @@ class TestEditDeleteHelper:
     async def test_delete_cap_only_not_entity_scoped(self, hass, helper_env, hass_admin_user):
         # Helper deletion is cap-gated, not entity-scoped.
         created = _json((await _call(
-            "create_helper", {"helper_type": "input_boolean", "config": {"name": "Owned"}}, _token(), hass))[0])
+            "create_helper", {"helper_type": "input_boolean", "config": {"name": "Owned"}}, _access_key(), hass))[0])
         hid = created["helper"]["id"]
         await hass.async_block_till_done()
-        unscoped = TokenRecord(
+        unscoped = AccessKeyRecord(
             id=str(uuid.uuid4()), name="a", token_hash="x", created_at=utcnow(),
             created_by="u", permissions=PermissionTree(domains={}),
             cap_helper_write="allow", cap_registry_read="allow",
@@ -509,23 +509,23 @@ class TestVersionCapture:
 
     async def test_create_edit_delete_record_history(self, hass, helper_env, hass_admin_user):
         data, versions = self._data()
-        token = _token()
+        access_key = _access_key()
 
         created = _json((await _call_tool(
             "create_helper", {"helper_type": "input_boolean", "config": {"name": "A"}},
-            token, hass, data))[0])
+            access_key, hass, data))[0])
         hid = created["helper"]["id"]
         await hass.async_block_till_done()
 
         await _call_tool(
             "edit_helper",
             {"helper_type": "input_boolean", "helper_id": hid, "config": {"name": "B"}},
-            token, hass, data)
+            access_key, hass, data)
         await hass.async_block_till_done()
 
         await _call_tool(
             "delete_helper", {"helper_type": "input_boolean", "helper_id": hid},
-            token, hass, data)
+            access_key, hass, data)
 
         history = versions.list_for("helper", f"input_boolean:{hid}")
         assert [v.action for v in history] == ["delete", "edit", "create"]  # newest first
@@ -533,7 +533,7 @@ class TestVersionCapture:
 
         assert create_rec.before is None
         assert create_rec.after == {"name": "A"}
-        assert create_rec.token_name == token.name
+        assert create_rec.token_name == access_key.name
         # edit_helper reads the prior config into `before`.
         assert edit_rec.before is not None and edit_rec.before.get("name") == "A"
         assert edit_rec.after == {"name": "B"}
@@ -545,15 +545,15 @@ class TestVersionCapture:
         from custom_components.phoenix_mcp.mcp_view import async_restore_version
 
         data, versions = self._data()
-        token = _token()
+        access_key = _access_key()
         created = _json((await _call_tool(
             "create_helper", {"helper_type": "input_boolean", "config": {"name": "A"}},
-            token, hass, data))[0])
+            access_key, hass, data))[0])
         hid = created["helper"]["id"]
         await hass.async_block_till_done()
         await _call_tool(
             "edit_helper", {"helper_type": "input_boolean", "helper_id": hid, "config": {"name": "B"}},
-            token, hass, data)
+            access_key, hass, data)
         await hass.async_block_till_done()
 
         rkey = f"input_boolean:{hid}"
@@ -569,15 +569,15 @@ class TestVersionCapture:
 
 class TestListHelpers:
     async def test_lists_accessible(self, hass, helper_env, hass_admin_user):
-        await _call("create_helper", {"helper_type": "input_boolean", "config": {"name": "Listed"}}, _token(), hass)
+        await _call("create_helper", {"helper_type": "input_boolean", "config": {"name": "Listed"}}, _access_key(), hass)
         await hass.async_block_till_done()
-        content, outcome, _ = await _call("list_helpers", {}, _token(), hass)
+        content, outcome, _ = await _call("list_helpers", {}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert any(h["helper_type"] == "input_boolean" and h["helper_id"] for h in body["helpers"])
 
     async def test_deny_without_cap(self, hass, helper_env, hass_admin_user):
-        _, outcome, _ = await _call("list_helpers", {}, _token(cap_registry_read="deny"), hass)
+        _, outcome, _ = await _call("list_helpers", {}, _access_key(cap_registry_read="deny"), hass)
         assert outcome == "denied"
 
 
@@ -594,7 +594,7 @@ class TestInputButtonLifecycle:
         data = PhoenixData(
             store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions,
         )
-        token = _token()
+        access_key = _access_key()
 
         created_result, outcome, _ = await _call_tool(
             "create_helper",
@@ -602,7 +602,7 @@ class TestInputButtonLifecycle:
                 "helper_type": "input_button",
                 "config": {"name": "Doorbell test", "icon": "mdi:gesture-tap-button"},
             },
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
         created = _json(created_result)["helper"]
@@ -615,7 +615,7 @@ class TestInputButtonLifecycle:
         assert hass.states.get(entity_id).attributes["icon"] == "mdi:gesture-tap-button"
 
         listed_result, outcome, _ = await _call_tool(
-            "list_helpers", {"helper_type": "input_button"}, token, hass, data,
+            "list_helpers", {"helper_type": "input_button"}, access_key, hass, data,
         )
         assert outcome == "allowed"
         assert _json(listed_result)["helpers"] == [{
@@ -632,7 +632,7 @@ class TestInputButtonLifecycle:
                 "helper_id": helper_id,
                 "config": {"name": "Doorbell renamed", "icon": "mdi:radiobox-marked"},
             },
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
         assert _json(edited_result)["helper"]["name"] == "Doorbell renamed"
@@ -643,7 +643,7 @@ class TestInputButtonLifecycle:
         _, outcome, _ = await _call_tool(
             "delete_helper",
             {"helper_type": "input_button", "helper_id": helper_id},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
         assert registry.async_get_entity_id("input_button", "input_button", helper_id) is None
@@ -675,7 +675,7 @@ class TestInputButtonLifecycle:
         _, outcome, _ = await _call_tool(
             "delete_helper",
             {"helper_type": "input_button", "helper_id": restored_id},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
 
@@ -704,7 +704,7 @@ class TestZoneLifecycle:
         from homeassistant.helpers import entity_registry as er
 
         await self._setup(hass)
-        token = _token(
+        access_key = _access_key(
             cap_helper_write="confirm",
             permissions=PermissionTree(domains={}),
         )
@@ -719,7 +719,7 @@ class TestZoneLifecycle:
                     "radius": 100,
                 },
             },
-            token, hass, MagicMock(),
+            access_key, hass, MagicMock(),
         )
         assert outcome == "denied"
         assert "entire zone domain" in result["content"][0]["text"]
@@ -738,7 +738,7 @@ class TestZoneLifecycle:
             store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(),
             versions=versions,
         )
-        token = _token(permissions=PermissionTree(
+        access_key = _access_key(permissions=PermissionTree(
             domains={"zone": PermissionNode(state="GREEN")},
             entities={"zone.blocked_new_zone": PermissionNode(state="RED")},
         ))
@@ -753,7 +753,7 @@ class TestZoneLifecycle:
                     "radius": 100,
                 },
             },
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "denied"
         assert "removed and nothing changed" in result["content"][0]["text"]
@@ -774,7 +774,7 @@ class TestZoneLifecycle:
             store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(),
             versions=versions,
         )
-        token = _token()
+        access_key = _access_key()
         initial = {
             "name": "Scoped test zone",
             "latitude": 13.7563,
@@ -790,7 +790,7 @@ class TestZoneLifecycle:
                 "helper_type": "zone",
                 "config": {**initial, "unexpected": True},
             },
-            _token(cap_helper_write="confirm"), hass, data,
+            _access_key(cap_helper_write="confirm"), hass, data,
         )
         assert outcome == "invalid_request"
         assert "Unknown zone configuration fields" in unknown_create["content"][0]["text"]
@@ -798,7 +798,7 @@ class TestZoneLifecycle:
         created_result, outcome, _ = await _call_tool(
             "create_helper",
             {"helper_type": "zone", "config": initial},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
         created = _json(created_result)["helper"]
@@ -813,7 +813,7 @@ class TestZoneLifecycle:
         assert state.attributes["longitude"] == initial["longitude"]
 
         listed_result, outcome, _ = await _call_tool(
-            "list_helpers", {"helper_type": "zone"}, token, hass, data,
+            "list_helpers", {"helper_type": "zone"}, access_key, hass, data,
         )
         assert outcome == "allowed"
         listed = _json(listed_result)["helpers"]
@@ -833,12 +833,12 @@ class TestZoneLifecycle:
                 "helper_id": helper_id,
                 "config": {"name": "Bad", "unexpected": True},
             },
-            _token(cap_helper_write="confirm"), hass, data,
+            _access_key(cap_helper_write="confirm"), hass, data,
         )
         assert outcome == "invalid_request"
         assert "Unknown zone configuration fields" in unknown_result["content"][0]["text"]
 
-        unscoped = _token(permissions=PermissionTree(domains={}))
+        unscoped = _access_key(permissions=PermissionTree(domains={}))
         _, outcome, _ = await _call_tool(
             "edit_helper",
             {
@@ -872,7 +872,7 @@ class TestZoneLifecycle:
                 "helper_id": helper_id,
                 "config": edited_config,
             },
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
         assert _json(edited_result)["helper"]["radius"] == 175.0
@@ -882,7 +882,7 @@ class TestZoneLifecycle:
         _, outcome, _ = await _call_tool(
             "delete_helper",
             {"helper_type": "zone", "helper_id": helper_id},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
         assert registry.async_get_entity_id("zone", "zone", helper_id) is None
@@ -906,7 +906,7 @@ class TestZoneLifecycle:
         _, outcome, _ = await _call_tool(
             "delete_helper",
             {"helper_type": "zone", "helper_id": restored_id},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
 
@@ -921,7 +921,7 @@ class TestZoneLifecycle:
             AsyncMock(side_effect=WsDispatchError("unavailable")),
         ):
             result, outcome, _ = await _call_tool(
-                "list_helpers", {"helper_type": "zone"}, _token(), hass,
+                "list_helpers", {"helper_type": "zone"}, _access_key(), hass,
                 PhoenixData(
                     store=mesa_off_store(), rate_limiter=MagicMock(),
                     audit=MagicMock(), versions=VersionStore(),
@@ -955,7 +955,7 @@ class TestZoneLifecycle:
             store=store, rate_limiter=MagicMock(), audit=MagicMock(),
             versions=VersionStore(),
         )
-        allow_token = _token()
+        allow_token = _access_key()
         created_result, outcome, _ = await _call_tool(
             "create_helper",
             {
@@ -972,7 +972,7 @@ class TestZoneLifecycle:
         assert outcome == "allowed"
         helper_id = _json(created_result)["helper"]["id"]
 
-        confirm_token = _token(cap_helper_write="confirm")
+        confirm_token = _access_key(cap_helper_write="confirm")
         pending_result, outcome, _ = await _call_tool(
             "edit_helper",
             {
@@ -1024,7 +1024,7 @@ class TestTagLifecycle:
         missing_id, outcome, _ = await _call_tool(
             "create_helper",
             {"helper_type": "tag", "config": {"name": "Missing id"}},
-            _token(cap_helper_write="confirm"), hass, data,
+            _access_key(cap_helper_write="confirm"), hass, data,
         )
         assert outcome == "invalid_request"
         assert "requires a non-empty string tag_id" in missing_id["content"][0]["text"]
@@ -1035,7 +1035,7 @@ class TestTagLifecycle:
                 "helper_type": "tag",
                 "config": {"tag_id": "forged", "last_scanned": "2026-08-22"},
             },
-            _token(cap_helper_write="confirm"), hass, data,
+            _access_key(cap_helper_write="confirm"), hass, data,
         )
         assert outcome == "invalid_request"
         assert "Unknown tag configuration fields" in forged_scan["content"][0]["text"]
@@ -1043,7 +1043,7 @@ class TestTagLifecycle:
         unscoped, outcome, _ = await _call_tool(
             "create_helper",
             {"helper_type": "tag", "config": {"tag_id": "unscoped-tag"}},
-            _token(
+            _access_key(
                 cap_helper_write="confirm",
                 permissions=PermissionTree(domains={}),
             ),
@@ -1063,7 +1063,7 @@ class TestTagLifecycle:
             store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(),
             versions=versions,
         )
-        token = _token(permissions=PermissionTree(
+        access_key = _access_key(permissions=PermissionTree(
             domains={"tag": PermissionNode(state="GREEN")},
             entities={"tag.blocked_new_tag": PermissionNode(state="RED")},
         ))
@@ -1076,7 +1076,7 @@ class TestTagLifecycle:
                     "name": "Blocked new tag",
                 },
             },
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "denied"
         assert "removed and nothing changed" in result["content"][0]["text"]
@@ -1110,13 +1110,13 @@ class TestTagLifecycle:
             store=store, rate_limiter=MagicMock(), audit=MagicMock(),
             versions=VersionStore(),
         )
-        token = _token(cap_helper_write="confirm")
+        access_key = _access_key(cap_helper_write="confirm")
         args = {
             "helper_type": "tag",
             "config": {"tag_id": "approval-race-tag", "name": "Reviewed name"},
         }
         _, outcome, _ = await _call_tool(
-            "create_helper", args, token, hass, data,
+            "create_helper", args, access_key, hass, data,
         )
         assert outcome == "pending_approval"
         approved_args = store.pending[0]["args"]
@@ -1126,7 +1126,7 @@ class TestTagLifecycle:
             {"tag_id": "approval-race-tag", "name": "External name"},
         )
         executed = await async_execute_approved_tool(
-            "create_helper", approved_args, token, hass, data,
+            "create_helper", approved_args, access_key, hass, data,
         )
         assert executed[1] == "invalid_request"
         assert "tag_id is unavailable" in executed[0]["content"][0]["text"]
@@ -1149,7 +1149,7 @@ class TestTagLifecycle:
             AsyncMock(side_effect=WsDispatchError("unavailable")),
         ):
             result, outcome, _ = await _call_tool(
-                "list_helpers", {"helper_type": "tag"}, _token(), hass,
+                "list_helpers", {"helper_type": "tag"}, _access_key(), hass,
                 PhoenixData(
                     store=mesa_off_store(), rate_limiter=MagicMock(),
                     audit=MagicMock(), versions=VersionStore(),
@@ -1170,7 +1170,7 @@ class TestTagLifecycle:
             store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(),
             versions=versions,
         )
-        token = _token()
+        access_key = _access_key()
         initial = {
             "tag_id": "phoenix-tag-lifecycle",
             "name": "Phoenix tag lifecycle",
@@ -1178,7 +1178,7 @@ class TestTagLifecycle:
         }
         created_result, outcome, _ = await _call_tool(
             "create_helper", {"helper_type": "tag", "config": initial},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
         created = _json(created_result)["helper"]
@@ -1195,13 +1195,13 @@ class TestTagLifecycle:
                 "helper_type": "tag", "helper_id": initial["tag_id"],
                 "config": {"device_id": "forged-scanner"},
             },
-            _token(cap_helper_write="confirm"), hass, data,
+            _access_key(cap_helper_write="confirm"), hass, data,
         )
         assert outcome == "invalid_request"
         assert "Unknown tag configuration fields" in unknown_edit["content"][0]["text"]
 
         listed_result, outcome, _ = await _call_tool(
-            "list_helpers", {"helper_type": "tag"}, token, hass, data,
+            "list_helpers", {"helper_type": "tag"}, access_key, hass, data,
         )
         assert outcome == "allowed"
         assert _json(listed_result)["helpers"] == [{
@@ -1217,13 +1217,13 @@ class TestTagLifecycle:
                 "helper_type": "tag",
                 "config": {"tag_id": initial["tag_id"], "name": "Hijacked"},
             },
-            _token(cap_helper_write="confirm"), hass, data,
+            _access_key(cap_helper_write="confirm"), hass, data,
         )
         assert outcome == "invalid_request"
         assert "tag_id is unavailable" in duplicate["content"][0]["text"]
         assert hass.states.get(entity_id).attributes["friendly_name"] == initial["name"]
 
-        unscoped = _token(permissions=PermissionTree(domains={}))
+        unscoped = _access_key(permissions=PermissionTree(domains={}))
         _, outcome, _ = await _call_tool(
             "edit_helper",
             {
@@ -1250,7 +1250,7 @@ class TestTagLifecycle:
                 "helper_type": "tag", "helper_id": initial["tag_id"],
                 "config": edited_config,
             },
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
         assert _json(edited_result)["helper"]["description"] == "Updated description"
@@ -1260,7 +1260,7 @@ class TestTagLifecycle:
         _, outcome, _ = await _call_tool(
             "delete_helper",
             {"helper_type": "tag", "helper_id": initial["tag_id"]},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
         assert registry.async_get_entity_id("tag", "tag", initial["tag_id"]) is None
@@ -1289,7 +1289,7 @@ class TestTagLifecycle:
         _, outcome, _ = await _call_tool(
             "delete_helper",
             {"helper_type": "tag", "helper_id": initial["tag_id"]},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
 
@@ -1322,7 +1322,7 @@ class TestTagLifecycle:
             store=store, rate_limiter=MagicMock(), audit=MagicMock(),
             versions=VersionStore(),
         )
-        allow_token = _token()
+        allow_token = _access_key()
         tag_id = "phoenix-tag-approval"
         _, outcome, _ = await _call_tool(
             "create_helper",
@@ -1334,7 +1334,7 @@ class TestTagLifecycle:
         )
         assert outcome == "allowed"
 
-        confirm_token = _token(cap_helper_write="confirm")
+        confirm_token = _access_key(cap_helper_write="confirm")
         _, outcome, _ = await _call_tool(
             "edit_helper",
             {
@@ -1423,7 +1423,7 @@ class TestPersonLifecycle:
                 {"helper_type": "person", "config": {
                     "name": "Private", forbidden: "secret",
                 }},
-                _token(cap_helper_write="confirm"), hass, data,
+                _access_key(cap_helper_write="confirm"), hass, data,
             )
             assert outcome == "invalid_request"
             assert "Unknown person configuration fields" in result["content"][0]["text"]
@@ -1433,7 +1433,7 @@ class TestPersonLifecycle:
                 "name": "Duplicate",
                 "device_trackers": ["device_tracker.phone", "device_tracker.phone"],
             }},
-            _token(cap_helper_write="confirm"), hass, data,
+            _access_key(cap_helper_write="confirm"), hass, data,
         )
         assert outcome == "invalid_request"
         assert "duplicate-free" in malformed["content"][0]["text"]
@@ -1443,7 +1443,7 @@ class TestPersonLifecycle:
                 "name": "Hidden tracker",
                 "device_trackers": ["device_tracker.phone"],
             }},
-            _token(cap_helper_write="confirm", permissions=PermissionTree(domains={
+            _access_key(cap_helper_write="confirm", permissions=PermissionTree(domains={
                 "person": PermissionNode(state="GREEN"),
                 "device_tracker": PermissionNode(state="RED"),
             })),
@@ -1465,7 +1465,7 @@ class TestPersonLifecycle:
             store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(),
             versions=versions,
         )
-        token = _token()
+        access_key = _access_key()
         linked_user = await hass.auth.async_create_user("Linked person user")
         raw = await async_ws_command(hass, "person/create", {
             "name": "Private person",
@@ -1478,7 +1478,7 @@ class TestPersonLifecycle:
         entity_id = registry.async_get_entity_id("person", "person", helper_id)
         assert entity_id is not None
         listed_result, outcome, _ = await _call_tool(
-            "list_helpers", {"helper_type": "person"}, token, hass, data,
+            "list_helpers", {"helper_type": "person"}, access_key, hass, data,
         )
         assert outcome == "allowed"
         listed = _json(listed_result)["helpers"]
@@ -1495,7 +1495,7 @@ class TestPersonLifecycle:
             "edit_helper",
             {"helper_type": "person", "helper_id": helper_id,
              "config": {"name": "Private person renamed"}},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
         edited = _json(edited_result)["helper"]
@@ -1506,7 +1506,7 @@ class TestPersonLifecycle:
         assert stored["user_id"] == linked_user.id
         assert stored["picture"] == "/local/private-person.png"
         assert stored["device_trackers"] == ["device_tracker.phone"]
-        hidden_token = _token(permissions=PermissionTree(domains={
+        hidden_token = _access_key(permissions=PermissionTree(domains={
             "person": PermissionNode(state="GREEN"),
             "device_tracker": PermissionNode(state="RED"),
         }))
@@ -1523,7 +1523,7 @@ class TestPersonLifecycle:
         assert linked_user.id not in json.dumps(denied)
         _, outcome, _ = await _call_tool(
             "delete_helper", {"helper_type": "person", "helper_id": helper_id},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
         assert registry.async_get_entity_id("person", "person", helper_id) is None
@@ -1544,7 +1544,7 @@ class TestPersonLifecycle:
         assert registry.async_get_entity_id("person", "person", helper_id) is not None
         _, outcome, _ = await _call_tool(
             "delete_helper", {"helper_type": "person", "helper_id": helper_id},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
 
@@ -1578,12 +1578,12 @@ class TestPersonLifecycle:
             store=store, rate_limiter=MagicMock(), audit=MagicMock(),
             versions=VersionStore(),
         )
-        token = _token(cap_helper_write="confirm")
+        access_key = _access_key(cap_helper_write="confirm")
         _, outcome, _ = await _call_tool(
             "edit_helper",
             {"helper_type": "person", "helper_id": raw["id"],
              "config": {"name": "Reviewed rename"}},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "pending_approval"
         approved_args = store.pending[0]["args"]
@@ -1592,7 +1592,7 @@ class TestPersonLifecycle:
             hass, "person/update", {"person_id": raw["id"], "user_id": second.id},
         )
         executed = await async_execute_approved_tool(
-            "edit_helper", approved_args, token, hass, data,
+            "edit_helper", approved_args, access_key, hass, data,
         )
         assert executed[1] == "invalid_request"
         text = executed[0]["content"][0]["text"]
@@ -1617,7 +1617,7 @@ class TestScheduleLifecycle:
         data = PhoenixData(
             store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions,
         )
-        token = _token()
+        access_key = _access_key()
         initial_config = {
             "name": "Weekly test",
             "icon": "mdi:calendar-clock",
@@ -1631,7 +1631,7 @@ class TestScheduleLifecycle:
         created_result, outcome, _ = await _call_tool(
             "create_helper",
             {"helper_type": "schedule", "config": initial_config},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
         created = _json(created_result)["helper"]
@@ -1646,7 +1646,7 @@ class TestScheduleLifecycle:
         assert hass.states.get(entity_id).attributes["icon"] == "mdi:calendar-clock"
 
         listed_result, outcome, _ = await _call_tool(
-            "list_helpers", {"helper_type": "schedule"}, token, hass, data,
+            "list_helpers", {"helper_type": "schedule"}, access_key, hass, data,
         )
         assert outcome == "allowed"
         assert _json(listed_result)["helpers"] == [{
@@ -1668,7 +1668,7 @@ class TestScheduleLifecycle:
                     ],
                 },
             },
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "invalid_request"
         assert invalid_result["isError"] is True
@@ -1692,7 +1692,7 @@ class TestScheduleLifecycle:
                 "helper_id": helper_id,
                 "config": edited_config,
             },
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
         edited = _json(edited_result)["helper"]
@@ -1704,7 +1704,7 @@ class TestScheduleLifecycle:
         _, outcome, _ = await _call_tool(
             "delete_helper",
             {"helper_type": "schedule", "helper_id": helper_id},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
         assert registry.async_get_entity_id("schedule", "schedule", helper_id) is None
@@ -1733,7 +1733,7 @@ class TestScheduleLifecycle:
         _, outcome, _ = await _call_tool(
             "delete_helper",
             {"helper_type": "schedule", "helper_id": restored_id},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
 
@@ -1742,13 +1742,13 @@ class TestScheduleLifecycle:
 async def test_template_menu_inspection_and_creation(hass, kind, state):
     """Inspecting the real HA menu/forms, or preflighting a create, creates nothing."""
     assert await async_setup_component(hass, "homeassistant", {})
-    token = _token(permissions=PermissionTree(domains={kind: PermissionNode(state="GREEN")}))
-    content, outcome, _ = await _call("create_helper", {"helper_type": "template", "flow_steps": []}, token, hass)
+    access_key = _access_key(permissions=PermissionTree(domains={kind: PermissionNode(state="GREEN")}))
+    content, outcome, _ = await _call("create_helper", {"helper_type": "template", "flow_steps": []}, access_key, hass)
     assert outcome == "allowed", content
     from custom_components.phoenix_mcp.const import TEMPLATE_RECOVERY_TYPES
     assert _json(content)["step"]["menu_options"] == sorted(TEMPLATE_RECOVERY_TYPES)
     steps = [{"step_id": "user", "data": {"next_step_id": kind}}]
-    content, outcome, _ = await _call("create_helper", {"helper_type": "template", "flow_steps": steps}, token, hass)
+    content, outcome, _ = await _call("create_helper", {"helper_type": "template", "flow_steps": steps}, access_key, hass)
     assert outcome == "allowed", content
     assert _json(content)["step"]["step_id"] == kind
     assert _json(content)["step"]["last_step"] is True
@@ -1756,9 +1756,9 @@ async def test_template_menu_inspection_and_creation(hass, kind, state):
     assert not hass.config_entries.flow.async_progress_by_handler("template")
     steps.append({"step_id": kind, "data": {"name": "Menu Probe", "state": state}})
     from custom_components.phoenix_mcp.tools.helper import _prepare_config_flow_helper
-    assert (await _prepare_config_flow_helper(hass, "template", steps, token))[0] == "ready"
+    assert (await _prepare_config_flow_helper(hass, "template", steps, access_key))[0] == "ready"
     assert not hass.config_entries.async_entries("template")
-    content, outcome, _ = await _call("create_helper", {"helper_type": "template", "flow_steps": steps}, token, hass)
+    content, outcome, _ = await _call("create_helper", {"helper_type": "template", "flow_steps": steps}, access_key, hass)
     assert outcome == "allowed", content
     body = _json(content)
     assert body["entity_ids"] == [f"{kind}.menu_probe"]
@@ -1777,7 +1777,7 @@ async def test_template_create_helper_covers_available_types(hass, kind):
     assert await async_setup_component(hass, "homeassistant", {})
     from homeassistant.components.template.config_flow import TEMPLATE_TYPES
     assert kind in {str(item) for item in TEMPLATE_TYPES}
-    token = _token(permissions=PermissionTree(domains={kind: PermissionNode(state="GREEN")}))
+    access_key = _access_key(permissions=PermissionTree(domains={kind: PermissionNode(state="GREEN")}))
     from homeassistant.config_entries import SOURCE_USER
     from homeassistant.helpers import entity_registry as er
     flow = hass.config_entries.flow
@@ -1829,7 +1829,7 @@ async def test_template_create_helper_covers_available_types(hass, kind):
         {"step_id": kind, "data": values},
     ]
     content, outcome, _ = await _call(
-        "create_helper", {"helper_type": "template", "flow_steps": steps}, token, hass,
+        "create_helper", {"helper_type": "template", "flow_steps": steps}, access_key, hass,
     )
     assert outcome == "allowed", content
     body = _json(content)
@@ -1845,7 +1845,7 @@ async def test_template_create_helper_covers_available_types(hass, kind):
     await hass.config_entries.async_remove(entry_id)
     runtime = PhoenixData(store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock())
     from custom_components.phoenix_mcp.template_recovery import restore_template
-    restored, restored_outcome, _ = await restore_template(snapshot, token, hass, runtime)
+    restored, restored_outcome, _ = await restore_template(snapshot, access_key, hass, runtime)
     assert restored_outcome == "allowed", (kind, restored)
     restored_body = _json(restored)
     restored_entry = hass.config_entries.async_get_entry(restored_body["entry_id"])
@@ -1862,7 +1862,7 @@ async def test_template_helper_list_edit_delete_and_agent_restore(hass):
     from custom_components.phoenix_mcp.template_recovery import template_snapshot
 
     assert await async_setup_component(hass, "homeassistant", {})
-    token = _token(
+    access_key = _access_key(
         cap_integration_write="allow",
         permissions=PermissionTree(domains={"sensor": PermissionNode(state="GREEN")}),
     )
@@ -1872,7 +1872,7 @@ async def test_template_helper_list_edit_delete_and_agent_restore(hass):
         {"step_id": "sensor", "data": {"name": "CRUD template", "state": "{{ 7 }}"}},
     ]
     result, outcome, _ = await _call_tool(
-        "create_helper", {"helper_type": "template", "flow_steps": steps}, token, hass, runtime,
+        "create_helper", {"helper_type": "template", "flow_steps": steps}, access_key, hass, runtime,
     )
     assert outcome == "allowed", result
     entry_id = _json(result)["config_entry"]["entry_id"]
@@ -1881,27 +1881,27 @@ async def test_template_helper_list_edit_delete_and_agent_restore(hass):
     template_snapshot(hass, entry)
     helper_id = er.async_entries_for_config_entry(er.async_get(hass), entry_id)[0].unique_id
 
-    result, outcome, _ = await _call_tool("list_helpers", {}, token, hass, runtime)
+    result, outcome, _ = await _call_tool("list_helpers", {}, access_key, hass, runtime)
     assert outcome == "allowed"
     assert any(row["helper_type"] == "sensor" and row["helper_id"] == helper_id for row in _json(result)["helpers"])
 
     result, outcome, _ = await _call_tool(
         "edit_helper", {"helper_type": "sensor", "helper_id": helper_id, "config": {"state": "{{ 8 }}"}},
-        token, hass, runtime,
+        access_key, hass, runtime,
     )
     assert outcome == "allowed", result
     assert hass.config_entries.async_get_entry(entry_id).options["state"] == "{{ 8 }}"
     deleted_snapshot = template_snapshot(hass, hass.config_entries.async_get_entry(entry_id))
 
     result, outcome, _ = await _call_tool(
-        "delete_helper", {"helper_type": "sensor", "helper_id": helper_id}, token, hass, runtime,
+        "delete_helper", {"helper_type": "sensor", "helper_id": helper_id}, access_key, hass, runtime,
     )
     assert outcome == "allowed", result
     recovery_id = json.loads(result["content"][0]["text"])["recovery_id"]
     assert hass.config_entries.async_get_entry(entry_id) is None
 
     receipt, outcome, _ = await _call_tool(
-        "restore_configuration", {"recovery_id": recovery_id, "side": "before"}, token, hass, runtime,
+        "restore_configuration", {"recovery_id": recovery_id, "side": "before"}, access_key, hass, runtime,
     )
     assert outcome == "allowed", receipt
     bound = json.loads(receipt["content"][0]["text"])
@@ -1910,7 +1910,7 @@ async def test_template_helper_list_edit_delete_and_agent_restore(hass):
             "recovery_id": recovery_id, "side": "before",
             "snapshot_digest": bound["snapshot_digest"],
             "target_fingerprint": bound["target_fingerprint"],
-        }, token, hass, runtime,
+        }, access_key, hass, runtime,
     )
     assert outcome == "allowed", result
     restored_id = json.loads(result["content"][0]["text"])["entry_id"]
@@ -1922,7 +1922,7 @@ async def test_template_helper_list_edit_delete_and_agent_restore(hass):
 async def test_template_menu_refuses_unqualified_or_malformed_choice(hass, values):
     content, outcome, _ = await _call("create_helper", {"helper_type": "template", "flow_steps": [
         {"step_id": "user", "data": values},
-    ]}, _token(), hass)
+    ]}, _access_key(), hass)
     assert outcome == "invalid_request", content
     assert not hass.config_entries.async_entries("template")
     assert not hass.config_entries.flow.async_progress_by_handler("template")
@@ -1952,7 +1952,7 @@ async def test_template_creation_rechecks_terminal_boundary(hass):
         helper, "_flow_step_body", side_effect=changed_body
     ):
         content, outcome, _ = await helper._execute_create_helper(
-            {"helper_type": "template", "flow_steps": steps}, _token(), hass,
+            {"helper_type": "template", "flow_steps": steps}, _access_key(), hass,
             PhoenixData(store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock()),
         )
     assert outcome == "invalid_request", content
@@ -1968,7 +1968,7 @@ async def test_template_creation_authority_loss_before_final_submit(hass):
     with patch("custom_components.phoenix_mcp.request_authority.check_request_authority",
                side_effect=[None, RuntimeError("Authority changed")]) as authority:
         content, outcome, _ = await helper._execute_create_helper(
-            {"helper_type": "template", "flow_steps": steps}, _token(), hass,
+            {"helper_type": "template", "flow_steps": steps}, _access_key(), hass,
             PhoenixData(store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock()),
         )
     assert outcome == "invalid_request", content

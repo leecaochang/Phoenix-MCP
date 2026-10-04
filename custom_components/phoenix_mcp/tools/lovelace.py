@@ -41,7 +41,7 @@ from ..helpers import (
     version_summary_fields as _version_summary,
 )
 from ..policy_engine import Permission, filter_service_response, is_sensitive_key, resolve_registry_access
-from ..token_store import TokenRecord
+from ..access_key_store import AccessKeyRecord
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
 from ..request_authority import check_request_authority
 from ..tool_common import (
@@ -94,7 +94,7 @@ async def _dashboard_registry_snapshot(hass: HomeAssistant, dashboard_id: str) -
 
 async def _recoverable_dashboard_registry_write(
     *, dashboard_id: str, before: dict, operation: str, command: str,
-    payload: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    payload: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
 ) -> tuple[dict, str, str]:
     """Persist, serialize, execute and read back a dashboard registry mutation."""
     recovery = data.config_recovery
@@ -104,7 +104,7 @@ async def _recoverable_dashboard_registry_write(
             expected_row = None if command.endswith("/delete") else {
                 **(before.get("dashboard") or {}), **{k: v for k, v in payload.items() if k != "dashboard_id"},
             }
-            rid = await recovery.begin(resource, operation, token.id, before, expected={
+            rid = await recovery.begin(resource, operation, access_key.id, before, expected={
                 **before, "exists": expected_row is not None, "dashboard": expected_row,
             })
             try:
@@ -156,7 +156,7 @@ async def _recoverable_dashboard_registry_write(
 
 async def _recoverable_dashboard_save(
     *, url_path: str | None, before: dict | None, after: dict,
-    token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     return_result: bool = False, recovery_id_out: dict[str, str] | None = None,
 ) -> tuple[dict, str, str] | None:
     """Persist and verify one dashboard-layout write under its resource lock."""
@@ -166,7 +166,7 @@ async def _recoverable_dashboard_save(
     try:
         before_snapshot = _dashboard_layout_snapshot(url_path, before)
         async with recovery.resource(resource):
-            rid = await recovery.begin(resource, "dashboard_layout_write", token.id, before_snapshot,
+            rid = await recovery.begin(resource, "dashboard_layout_write", access_key.id, before_snapshot,
                 expected=_dashboard_layout_snapshot(url_path, after))
             if recovery_id_out is not None:
                 recovery_id_out["recovery_id"] = rid
@@ -212,10 +212,10 @@ async def _recoverable_dashboard_save(
 
 
 async def _tool_list_dashboards(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: list Lovelace dashboards."""
-    if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "list_dashboards"
     try:
         result = await async_ws_command(hass, "lovelace/dashboards/list", {})
@@ -227,7 +227,7 @@ async def _tool_list_dashboards(
 _EXAMPLE_DOTTED_TEXT = re.compile(r"[a-z0-9_]+(?:\.[a-z0-9_]+)+")
 
 
-def _scope_card_example(config: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _scope_card_example(config: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """Keep example placeholders and prose while removing real inaccessible entities."""
     registry = er.async_get(hass)
     denied: dict[str, bool] = {}
@@ -239,7 +239,7 @@ def _scope_card_example(config: dict, token: TokenRecord, hass: HomeAssistant) -
             eid = ".".join(parts[index:index + 2])
             if eid not in denied:
                 known = hass.states.get(eid) is not None or registry.async_get(eid) is not None
-                denied[eid] = known and resolve_registry_access(eid, token, hass) not in (Permission.READ, Permission.WRITE)
+                denied[eid] = known and resolve_registry_access(eid, access_key, hass) not in (Permission.READ, Permission.WRITE)
             if denied[eid]:
                 hidden_parts.update((index, index + 1))
         return ".".join(REDACTION_SENTINEL if index in hidden_parts else part
@@ -262,7 +262,7 @@ def _scope_card_example(config: dict, token: TokenRecord, hass: HomeAssistant) -
     return scrub(config)
 
 
-def _card_row(entry: CardEntry, *, detailed: bool, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _card_row(entry: CardEntry, *, detailed: bool, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """Project one catalog entry. Lean by default, with the example only on request.
 
     The lean row carries what picking a card needs (type, what it is, whether it
@@ -287,12 +287,12 @@ def _card_row(entry: CardEntry, *, detailed: bool, token: TokenRecord, hass: Hom
     if detailed:
         row["has_visual_editor"] = entry.has_visual_editor
         if entry.stub_config is not None:
-            row["example_config"] = _scope_card_example(entry.stub_config, token, hass)
+            row["example_config"] = _scope_card_example(entry.stub_config, access_key, hass)
     return row
 
 
 async def _tool_list_dashboard_cards(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """MCP tool: list the custom dashboard cards installed on this instance.
 
@@ -302,7 +302,7 @@ async def _tool_list_dashboard_cards(
     never blocks on a browser.
     """
     tool = "list_dashboard_cards"
-    if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", tool
 
     catalog = data.card_catalog.catalog
@@ -337,10 +337,10 @@ async def _tool_list_dashboard_cards(
         return _tool_success(json.dumps({
             "harvested": True,
             "found": True,
-            "card": _card_row(entry, detailed=True, token=token, hass=hass),
+            "card": _card_row(entry, detailed=True, access_key=access_key, hass=hass),
         }, default=str)), "allowed", tool
 
-    rows = [_card_row(e, detailed=detailed, token=token, hass=hass) for e in catalog.entries]
+    rows = [_card_row(e, detailed=detailed, access_key=access_key, hass=hass) for e in catalog.entries]
     body: dict[str, Any] = {
         "harvested": True,
         "harvested_at": catalog.harvested_at,
@@ -403,26 +403,26 @@ def _card_warnings(payload: Any, data: PhoenixData) -> list[str]:
 
 
 async def _tool_create_dashboard(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: create a dashboard (Confirm-gated)."""
-    if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "create_dashboard"
     if error := nested_argument_error("create_dashboard", args):
         return _tool_error(error), "invalid_request", "create_dashboard"
     blocked = await _gate(
-        "cap_lovelace_write", token, hass, data,
+        "cap_lovelace_write", access_key, hass, data,
         tool_name="create_dashboard", args=args, request_id=request_id,
         client_ip=client_ip, diff=lambda: _build_diff_dashboard("Create", args, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_create_dashboard(args, token, hass, data)
+    return await _execute_create_dashboard(args, access_key, hass, data)
 
 
 async def _execute_create_dashboard(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     if error := nested_argument_error("create_dashboard", args):
         return _tool_error(error), "invalid_request", "create_dashboard"
@@ -440,16 +440,16 @@ async def _execute_create_dashboard(
         return _tool_error(f"Could not capture dashboard registry snapshot: {exc}"), "invalid_request", "create_dashboard"
     return await _recoverable_dashboard_registry_write(
         dashboard_id=url_path, before=before, operation="dashboard_registry_create",
-        command="lovelace/dashboards/create", payload=dict(config), token=token, hass=hass, data=data,
+        command="lovelace/dashboards/create", payload=dict(config), access_key=access_key, hass=hass, data=data,
     )
 
 
 async def _tool_edit_dashboard(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: edit a dashboard (Confirm-gated)."""
-    if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "edit_dashboard"
     error = unknown_argument_error("edit_dashboard", args)
     if error:
@@ -457,17 +457,17 @@ async def _tool_edit_dashboard(
     if error := nested_argument_error("edit_dashboard", args):
         return _tool_error(error), "invalid_request", "edit_dashboard"
     blocked = await _gate(
-        "cap_lovelace_write", token, hass, data,
+        "cap_lovelace_write", access_key, hass, data,
         tool_name="edit_dashboard", args=args, request_id=request_id,
         client_ip=client_ip, diff=lambda: _build_diff_dashboard("Edit", args, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_edit_dashboard(args, token, hass, data)
+    return await _execute_edit_dashboard(args, access_key, hass, data)
 
 
 async def _execute_edit_dashboard(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     if error := nested_argument_error("edit_dashboard", args):
         return _tool_error(error), "invalid_request", "edit_dashboard"
@@ -486,32 +486,32 @@ async def _execute_edit_dashboard(
     return await _recoverable_dashboard_registry_write(
         dashboard_id=dashboard_id, before=before, operation="dashboard_registry_edit",
         command="lovelace/dashboards/update", payload={"dashboard_id": dashboard_id, **config},
-        token=token, hass=hass, data=data,
+        access_key=access_key, hass=hass, data=data,
     )
 
 
 async def _tool_delete_dashboard(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: delete a dashboard (Confirm-gated)."""
-    if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_dashboard"
     error = unknown_argument_error("delete_dashboard", args)
     if error:
         return _tool_error(error), "invalid_request", "delete_dashboard"
     blocked = await _gate(
-        "cap_lovelace_write", token, hass, data,
+        "cap_lovelace_write", access_key, hass, data,
         tool_name="delete_dashboard", args=args, request_id=request_id,
         client_ip=client_ip, diff=lambda: _build_diff_dashboard("Delete", args, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_delete_dashboard(args, token, hass, data)
+    return await _execute_delete_dashboard(args, access_key, hass, data)
 
 
 async def _execute_delete_dashboard(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     dashboard_id = str(args.get("dashboard_id") or "").strip()
     if not dashboard_id:
@@ -525,7 +525,7 @@ async def _execute_delete_dashboard(
     return await _recoverable_dashboard_registry_write(
         dashboard_id=dashboard_id, before=before, operation="dashboard_registry_delete",
         command="lovelace/dashboards/delete", payload={"dashboard_id": dashboard_id},
-        token=token, hass=hass, data=data,
+        access_key=access_key, hass=hass, data=data,
     )
 
 
@@ -550,10 +550,10 @@ def _no_stored_config_message(url_path: str | None) -> str:
 
 
 async def _tool_get_dashboard_config(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read a dashboard's view/card layout, entity ids redacted to scope."""
-    if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_dashboard_config"
     error = unknown_argument_error("get_dashboard_config", args)
     if error:
@@ -565,7 +565,7 @@ async def _tool_get_dashboard_config(
         return _tool_error(f"Could not read dashboard: {exc}"), "invalid_request", "get_dashboard_config"
     if config is None:
         return _tool_error(_no_stored_config_message(url_path)), "not_found", f"dashboard:{url_path or 'lovelace'}"
-    redacted = filter_service_response(config, token, hass)
+    redacted = filter_service_response(config, access_key, hass)
     # content_hash is over the RAW (unredacted) config the executor re-reads, so
     # redaction of the returned config does not affect the optimistic-lock guard.
     return _tool_success(json.dumps({
@@ -573,7 +573,7 @@ async def _tool_get_dashboard_config(
     }, default=str)), "allowed", f"dashboard:{url_path or 'lovelace'}"
 
 
-async def _build_diff_set_dashboard_config(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+async def _build_diff_set_dashboard_config(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     config = dict_arg(args.get("config"))
     url_path = str(args.get("url_path") or "").strip() or None
     label = url_path or "(default dashboard)"
@@ -583,7 +583,7 @@ async def _build_diff_set_dashboard_config(args: dict, token: TokenRecord, hass:
         current = await async_get_lovelace_config(hass, url_path)
         if current is not None:
             # Redact out-of-scope entity ids the same way get_dashboard_config does.
-            before = _truncate(json.dumps(filter_service_response(current, token, hass), indent=2, default=str))
+            before = _truncate(json.dumps(filter_service_response(current, access_key, hass), indent=2, default=str))
     except Exception:  # noqa: BLE001 - diagnostic only; a new/auto dashboard has no before
         pass
     return {
@@ -624,11 +624,11 @@ def _dashboard_write_precheck(args: dict, tool_name: str) -> tuple[dict, str, st
 
 
 async def _tool_set_dashboard_config(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: replace a dashboard's view/card layout (Confirm-gated)."""
-    if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_dashboard_config"
     error = unknown_argument_error("set_dashboard_config", args)
     if error:
@@ -652,17 +652,17 @@ async def _tool_set_dashboard_config(
         if conflict is not None:
             return conflict
     blocked = await _gate(
-        "cap_lovelace_write", token, hass, data,
+        "cap_lovelace_write", access_key, hass, data,
         tool_name="set_dashboard_config", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_set_dashboard_config(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_set_dashboard_config(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_set_dashboard_config(args, token, hass, data)
+    return await _execute_set_dashboard_config(args, access_key, hass, data)
 
 
 async def _execute_set_dashboard_config(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     pre = _dashboard_write_precheck(args, "set_dashboard_config")
     if pre is not None:
@@ -687,12 +687,12 @@ async def _execute_set_dashboard_config(
         return conflict
     recovery_receipt: dict[str, str] = {}
     recovery_result = await _recoverable_dashboard_save(
-        url_path=url_path, before=before, after=config, token=token, hass=hass, data=data, recovery_id_out=recovery_receipt,
+        url_path=url_path, before=before, after=config, access_key=access_key, hass=hass, data=data, recovery_id_out=recovery_receipt,
     )
     if recovery_result is not None:
         return recovery_result
     await _record_version(
-        data, token, resource_type="dashboard", resource_id=resource_id,
+        data, access_key, resource_type="dashboard", resource_id=resource_id,
         action="edit" if before is not None else "create",
         before=before, after=config, alias=url_path or "(default)",
     )
@@ -836,7 +836,7 @@ _CARD_OP_VERSION_KEYS = {"add": "card.added", "edit": "card.edited", "delete": "
 
 
 async def _build_diff_dashboard_card(
-    args: dict, op: str, token: TokenRecord, hass: HomeAssistant
+    args: dict, op: str, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> dict:
     url_path = str(args.get("url_path") or "").strip() or None
     label = url_path or "(default dashboard)"
@@ -860,7 +860,7 @@ async def _build_diff_dashboard_card(
         # side of the live preview, and a large card (a multi-series chart) can
         # alone exceed 4000 chars, which would break that parse.
         before = _truncate(
-            json.dumps(filter_service_response(prior, token, hass), indent=2, default=str),
+            json.dumps(filter_service_response(prior, access_key, hass), indent=2, default=str),
             max_chars=MAX_DIFF_INLINE_BYTES,
         )
     card_type = (card or {}).get("type") if op != "delete" else (prior or {}).get("type") if isinstance(prior, dict) else None
@@ -892,7 +892,7 @@ async def _build_diff_dashboard_card(
 
 
 async def _tool_dashboard_card(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None, *, op: str, tool_name: str,
 ) -> tuple[dict, str, str]:
     """MCP tool: add, edit or delete one dashboard card (Confirm-gated).
@@ -901,7 +901,7 @@ async def _tool_dashboard_card(
     structurally doomed op never becomes a pending approval; the executor
     re-reads and re-validates at apply time.
     """
-    if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
     error = unknown_argument_error(tool_name, args)
     if error:
@@ -913,17 +913,17 @@ async def _tool_dashboard_card(
     if reason is not None:
         return _tool_error(reason), "invalid_request", tool_name
     blocked = await _gate(
-        "cap_lovelace_write", token, hass, data,
+        "cap_lovelace_write", access_key, hass, data,
         tool_name=tool_name, args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_dashboard_card(args, op, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_dashboard_card(args, op, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_dashboard_card(args, op, tool_name, token, hass, data)
+    return await _execute_dashboard_card(args, op, tool_name, access_key, hass, data)
 
 
 async def _execute_dashboard_card(
-    args: dict, op: str, tool_name: str, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, op: str, tool_name: str, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     current = await _dashboard_card_current(args, hass, tool_name)
     if isinstance(current, tuple):
@@ -935,7 +935,7 @@ async def _execute_dashboard_card(
     resource_id = url_path or "lovelace"
     recovery_receipt: dict[str, str] = {}
     recovery_result = await _recoverable_dashboard_save(
-        url_path=url_path, before=current, after=new_config, token=token, hass=hass, data=data, recovery_id_out=recovery_receipt,
+        url_path=url_path, before=current, after=new_config, access_key=access_key, hass=hass, data=data, recovery_id_out=recovery_receipt,
     )
     if recovery_result is not None:
         return recovery_result
@@ -951,7 +951,7 @@ async def _execute_dashboard_card(
     if op != "add":
         parts.append(_version_summary("loc.card", index=args.get("card_index"))["summary"])
     await _record_version(
-        data, token, resource_type="dashboard", resource_id=resource_id,
+        data, access_key, resource_type="dashboard", resource_id=resource_id,
         action="edit", before=current, after=new_config, alias=url_path or "(default)",
         summary=_version_summary(
             _CARD_OP_VERSION_KEYS[op], subject=subject, where=", ".join(str(x) for x in parts),
@@ -977,21 +977,21 @@ async def _execute_dashboard_card(
 
 
 async def _execute_add_dashboard_card(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    return await _execute_dashboard_card(args, "add", "add_dashboard_card", token, hass, data)
+    return await _execute_dashboard_card(args, "add", "add_dashboard_card", access_key, hass, data)
 
 
 async def _execute_edit_dashboard_card(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    return await _execute_dashboard_card(args, "edit", "edit_dashboard_card", token, hass, data)
+    return await _execute_dashboard_card(args, "edit", "edit_dashboard_card", access_key, hass, data)
 
 
 async def _execute_delete_dashboard_card(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    return await _execute_dashboard_card(args, "delete", "delete_dashboard_card", token, hass, data)
+    return await _execute_dashboard_card(args, "delete", "delete_dashboard_card", access_key, hass, data)
 
 
 _PATCH_OPS = ("set", "append", "remove")
@@ -1065,7 +1065,7 @@ def _apply_dashboard_patch(config: dict, args: dict) -> tuple[dict | None, Any, 
     return new_config, prior, None
 
 
-async def _build_diff_patch_dashboard(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+async def _build_diff_patch_dashboard(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     url_path = str_arg(args.get("url_path")).strip() or None
     label = url_path or "(default dashboard)"
     op = _patch_op_arg(args)
@@ -1077,7 +1077,7 @@ async def _build_diff_patch_dashboard(args: dict, token: TokenRecord, hass: Home
             _, prior, _ = _apply_dashboard_patch(current, args)
             if prior is not None:
                 before = _truncate(
-                    json.dumps(filter_service_response(prior, token, hass), indent=2, default=str),
+                    json.dumps(filter_service_response(prior, access_key, hass), indent=2, default=str),
                     max_chars=MAX_DIFF_INLINE_BYTES,
                 )
     except Exception:  # noqa: BLE001 - diagnostic only; the precheck already validated
@@ -1096,7 +1096,7 @@ async def _build_diff_patch_dashboard(args: dict, token: TokenRecord, hass: Home
 
 
 async def _tool_patch_dashboard(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: change ONE path-addressed value in a dashboard (Confirm-gated).
@@ -1114,7 +1114,7 @@ async def _tool_patch_dashboard(
     at apply time so a change during the approval window is caught.
     """
     tool = "patch_dashboard"
-    if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     args, error = normalize_tool_args(tool, args)
     if error:
@@ -1126,17 +1126,17 @@ async def _tool_patch_dashboard(
     if reason is not None:
         return _tool_error(reason), "invalid_request", tool
     blocked = await _gate(
-        "cap_lovelace_write", token, hass, data,
+        "cap_lovelace_write", access_key, hass, data,
         tool_name=tool, args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_patch_dashboard(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_patch_dashboard(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_patch_dashboard(args, token, hass, data)
+    return await _execute_patch_dashboard(args, access_key, hass, data)
 
 
 async def _execute_patch_dashboard(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     tool = "patch_dashboard"
     current = await _dashboard_card_current(args, hass, tool)
@@ -1149,14 +1149,14 @@ async def _execute_patch_dashboard(
     resource_id = url_path or "lovelace"
     recovery_receipt: dict[str, str] = {}
     recovery_result = await _recoverable_dashboard_save(
-        url_path=url_path, before=current, after=new_config, token=token, hass=hass, data=data, recovery_id_out=recovery_receipt,
+        url_path=url_path, before=current, after=new_config, access_key=access_key, hass=hass, data=data, recovery_id_out=recovery_receipt,
     )
     if recovery_result is not None:
         return recovery_result
     op = _patch_op_arg(args)
     path_label = _patch_path_label(args.get("path"))
     await _record_version(
-        data, token, resource_type="dashboard", resource_id=resource_id,
+        data, access_key, resource_type="dashboard", resource_id=resource_id,
         action="edit", before=current, after=new_config, alias=url_path or "(default)",
         summary=_version_summary(f"patch.{op}", subject=path_label),
     )

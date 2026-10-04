@@ -102,7 +102,7 @@ def assist_api_supported() -> bool:
 
 _UNBOUND_PROMPT = (
     "No Phoenix MCP access key is currently bound to Phoenix MCP. An administrator must bind "
-    "an access key in the Phoenix MCP panel (Access Keys, then Tool Announcement & Assist) before this "
+    "an access key in the Phoenix MCP panel (Access keys, then Tool Announcement & Assist) before this "
     "assistant can control anything. Until then you have no tools available."
 )
 
@@ -166,11 +166,11 @@ if _ASSIST_API_SUPPORTED:
             self.name = name
             self.description = description
             self.parameters = parameters
-            self._token_id = token_id
+            self._access_key_id = token_id
 
         async def async_call(self, hass, tool_input, llm_context) -> dict:
             """Run one tool call end-to-end through Phoenix MCP's scoped dispatch path."""
-            from .agentcli import _current_dispatch_token, _parse_pending, dispatch_tool_result  # noqa: PLC0415
+            from .agentcli import _current_dispatch_access_key, _parse_pending, dispatch_tool_result  # noqa: PLC0415
             from .audit import generate_request_id  # noqa: PLC0415
             from .mcp_view import _dispatch_mcp  # noqa: PLC0415
 
@@ -178,11 +178,11 @@ if _ASSIST_API_SUPPORTED:
                 data = hass.data[DOMAIN]
                 # Re-resolve the bound token per call: it may have been revoked,
                 # expired, narrowed, or the kill switch flipped since the conversation
-                # started. _current_dispatch_token also zeroes confirm_inline_wait so a
+                # started. _current_dispatch_access_key also zeroes confirm_inline_wait so a
                 # voice turn never blocks on an approval; the gate returns pending and
                 # the result is reported as queued below.
-                token = _current_dispatch_token(data, self._token_id)
-                if token is None:
+                access_key = _current_dispatch_access_key(data, self._access_key_id)
+                if access_key is None:
                     return {"error": "This Phoenix MCP access key is no longer available."}
 
                 request_id = generate_request_id()
@@ -190,7 +190,7 @@ if _ASSIST_API_SUPPORTED:
                     "tools/call",
                     tool_input.id,
                     {"name": self.name, "arguments": tool_input.tool_args or {}},
-                    token,
+                    access_key,
                     hass,
                     data,
                     ASSIST_CLIENT_IP,
@@ -202,7 +202,7 @@ if _ASSIST_API_SUPPORTED:
                     result,
                     outcome=outcome,
                     data=data,
-                    token_id=self._token_id,
+                    token_id=self._access_key_id,
                     tool_name=self.name,
                     request_id=request_id,
                 )
@@ -230,18 +230,18 @@ if _ASSIST_API_SUPPORTED:
             """Build the per-turn tool set + primer for the currently bound token."""
             data = self._data
             settings = data.store.get_settings()
-            token = None
+            access_key = None
             # Resolve the bound token FRESH every turn (never cache token state).
             # Unbound, missing, invalid, or Phoenix MCP disabled yields zero tools and
             # never raises (raising would fail the whole conversation turn).
             if data.ready and not data.shutting_down and not settings.kill_switch:
                 token_id = settings.assist_bound_token_id
                 if token_id:
-                    candidate = data.store.get_token_by_id(token_id)
+                    candidate = data.store.get_access_key_by_id(token_id)
                     if candidate is not None and candidate.is_valid():
-                        token = candidate
+                        access_key = candidate
 
-            if token is None:
+            if access_key is None:
                 return _llm.APIInstance(
                     api=self,
                     api_prompt=_UNAVAILABLE_PROMPT if settings.kill_switch or not data.ready or data.shutting_down else _UNBOUND_PROMPT,
@@ -260,7 +260,7 @@ if _ASSIST_API_SUPPORTED:
 
                 tools: list[Any] = []
                 public_schemas: dict[int, tuple[Any, dict[str, Any]]] = {}
-                for tool_def in build_mcp_tool_list(token, data):
+                for tool_def in build_mcp_tool_list(access_key, data):
                     name = tool_def.get("name")
                     try:
                         schema = deepcopy(tool_def.get("inputSchema") or {})
@@ -286,7 +286,7 @@ if _ASSIST_API_SUPPORTED:
                     # would fail far earlier at tools/list.
                     tools.append(
                         PhoenixAssistTool(
-                            str(name), tool_def.get("description"), parameters, token.id,
+                            str(name), tool_def.get("description"), parameters, access_key.id,
                         )
                     )
 
@@ -296,7 +296,7 @@ if _ASSIST_API_SUPPORTED:
                         return deepcopy(entry[1])
                     return _llm.selector_serializer(node)
 
-                api_prompt = _build_instructions(token, data, _base_url(self.hass)) + "\n\n" + _ASSIST_ADDENDUM
+                api_prompt = _build_instructions(access_key, data, _base_url(self.hass)) + "\n\n" + _ASSIST_ADDENDUM
                 return _llm.APIInstance(
                     api=self,
                     api_prompt=api_prompt,

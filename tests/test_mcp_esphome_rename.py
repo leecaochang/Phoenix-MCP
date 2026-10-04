@@ -38,10 +38,10 @@ def _json_body(content: dict) -> dict:
     return json.loads(content["content"][0]["text"])
 
 
-async def _run(args, token, hass, builder, data=None):
+async def _run(args, access_key, hass, builder, data=None):
     with patch(_DASHBOARD_PATCH, return_value=_dash()), patch(_COMMAND_PATCH, builder):
         return await _call_tool(
-            "rename_esphome_device", args, token, hass, data or MagicMock())
+            "rename_esphome_device", args, access_key, hass, data or MagicMock())
 
 
 class TestCapability:

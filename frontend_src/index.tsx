@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import type { TokenRecord, GlobalSettings, AgentCliInstance } from "./types";
+import type { AccessKeyRecord, GlobalSettings, AgentCliInstance } from "./types";
 import { AgentCliWindow, focusAgentCliPopup } from "./components/AgentCliWindow";
 import { subscribeApprovalEvents } from "./utils/approval_events";
 import {
@@ -10,8 +10,8 @@ import {
 } from "./utils/agentcli_state";
 import { AttentionPanel } from "./components/AttentionPanel";
 import { ErrorBoundary } from "./components/ErrorBoundary";
-import { TokenListView } from "./views/TokenList";
-import { TokenDetailView } from "./views/TokenDetail";
+import { AccessKeyListView } from "./views/AccessKeyList";
+import { AccessKeyDetailView } from "./views/AccessKeyDetail";
 import { ConversationsView } from "./views/ConversationsView";
 import { AuditView } from "./views/AuditView";
 import { SettingsView } from "./views/SettingsView";
@@ -109,10 +109,10 @@ function approvalDeepLink(): { approvalId: string | null } | null {
 function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageChange }: { hass: unknown; narrow: boolean; theme: Theme; onThemeChange: (t: Theme) => void; language: string; onLanguageChange: (lang: string) => void }) {
   const [tab, setTab] = useState<Tab>(readStoredTab);
   const [view, setView] = useState<View>(() => readStoredView(readStoredTab()));
-  const [tokens, setTokens] = useState<TokenRecord[]>([]);
+  const [accessKeys, setAccessKeys] = useState<AccessKeyRecord[]>([]);
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
-  const [loadingTokens, setLoadingTokens] = useState(true);
-  const [tokensError, setTokensError] = useState<string | null>(null);
+  const [loadingAccessKeys, setLoadingAccessKeys] = useState(true);
+  const [accessKeysError, setAccessKeysError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [pendingCount, setPendingCount] = useState<number>(0);
   // Bumped on each HA approval event so the Approvals list can refresh instantly.
@@ -240,14 +240,14 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
     // A token created or revoked elsewhere (wizard, Token Detail) must reach
     // the panel fallback window's own tokens prop independent of navigation,
     // matching the floating window.
-    const onTokensChanged = () => { void refreshTokens(); };
+    const onAccessKeysChanged = () => { void refreshAccessKeys(); };
     window.addEventListener("phx-open-agentcli", onOpen);
     window.addEventListener("phx-agentcli-providers-changed", refresh);
-    window.addEventListener("phx-tokens-changed", onTokensChanged);
+    window.addEventListener("phx-access-keys-changed", onAccessKeysChanged);
     return () => {
       window.removeEventListener("phx-open-agentcli", onOpen);
       window.removeEventListener("phx-agentcli-providers-changed", refresh);
-      window.removeEventListener("phx-tokens-changed", onTokensChanged);
+      window.removeEventListener("phx-access-keys-changed", onAccessKeysChanged);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -361,23 +361,23 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
     }
   }, [hass, narrow]);
 
-  const refreshTokens = useCallback(async () => {
-    setLoadingTokens(true);
-    setTokensError(null);
+  const refreshAccessKeys = useCallback(async () => {
+    setLoadingAccessKeys(true);
+    setAccessKeysError(null);
     try {
-      const data = await api.listTokens();
-      setTokens(data);
+      const data = await api.listAccessKeys();
+      setAccessKeys(data);
     } catch (e: unknown) {
-      setTokensError(e instanceof Error ? e.message : t("shell.loadTokensFailed"));
+      setAccessKeysError(e instanceof Error ? e.message : t("shell.loadTokensFailed"));
     } finally {
-      setLoadingTokens(false);
+      setLoadingAccessKeys(false);
     }
   }, []);
 
   useEffect(() => {
-    refreshTokens();
+    refreshAccessKeys();
     api.getSettings().then(setSettings).catch(() => null);
-  }, [refreshTokens]);
+  }, [refreshAccessKeys]);
 
   const refreshPendingCount = useCallback(async () => {
     try {
@@ -442,17 +442,17 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
 
   const goBack = useCallback(() => {
     setView({ name: "list" });
-    refreshTokens();
-  }, [refreshTokens]);
+    refreshAccessKeys();
+  }, [refreshAccessKeys]);
 
   // Jump to the Settings tab (used by the "Use Agent Chat"/"Setup Agent Chat"
   // options in the create/connect flows). Refresh tokens first so a token just
   // made in the wizard is listed when the user returns to the Tokens tab.
   const goToSettings = useCallback(() => {
-    refreshTokens();
+    refreshAccessKeys();
     setView({ name: "list" });
     setTab("settings");
-  }, [refreshTokens]);
+  }, [refreshAccessKeys]);
 
   const onTabClick = useCallback((t: Tab) => {
     // A new approval arrived while History was open: jump to Pending so it's
@@ -467,8 +467,8 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
     }
     setTab(t);
     setView({ name: "list" });
-    if (t === "tokens") refreshTokens();
-  }, [refreshTokens, approvalsTab, pendingCount]);
+    if (t === "tokens") refreshAccessKeys();
+  }, [refreshAccessKeys, approvalsTab, pendingCount]);
 
   const TABS: Tab[] = ["tokens", "approvals", "changes", "mesa", "audit", "conversations", "settings"];
 
@@ -560,7 +560,7 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
               <span className="phx-killswitch-text-full">{t("shell.killSwitchFull")}</span>
               <span className="phx-killswitch-text-short">{t("shell.killSwitchShort")}</span>
             </span>
-          ) : tokens.length > 0 ? (
+          ) : accessKeys.length > 0 ? (
             <button className="btn btn-outline btn-sm btn-header-action" onClick={() => openAgentCli()}>
               {t("shell.agentChat")}
             </button>
@@ -579,11 +579,11 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
         <h2 className="sr-only">{t(TAB_LABEL_KEYS[tab])}</h2>
         <ErrorBoundary key={`${tab}:${view.name}:${view.name === "detail" ? view.tokenId : ""}`} >
         {tab === "tokens" && view.name === "list" && (
-          <TokenListView
-            tokens={tokens}
-            loading={loadingTokens}
-            error={tokensError}
-            onRefresh={refreshTokens}
+          <AccessKeyListView
+            accessKeys={accessKeys}
+            loading={loadingAccessKeys}
+            error={accessKeysError}
+            onRefresh={refreshAccessKeys}
             onOpenDetail={openDetail}
             onLaunchWizard={openWizard}
             showCreate={showCreate}
@@ -596,10 +596,10 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
           <OnboardingWizard onCancel={goBack} onFinish={openDetail} />
         )}
         {tab === "tokens" && view.name === "detail" && (
-          <TokenDetailView
+          <AccessKeyDetailView
             tokenId={view.tokenId}
             onBack={goBack}
-            onRefresh={refreshTokens}
+            onRefresh={refreshAccessKeys}
             presetsEnabled={settings?.token_presets_enabled ?? false}
             esphome={
               settings
@@ -623,7 +623,7 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
           />
         )}
         {tab === "mesa" && <MesaView />}
-        {tab === "audit" && <AuditView tokens={tokens} />}
+        {tab === "audit" && <AuditView accessKeys={accessKeys} />}
         {tab === "conversations" && <ConversationsView />}
         {tab === "changes" && <ChangesView hass={hass} />}
         {tab === "settings" && (
@@ -647,10 +647,10 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
         && !(settings.agentcli_global && globalChatReady) && (
         <ErrorBoundary key={agentCliKey}><AgentCliWindow
           key={agentCliKey}
-          tokens={tokens}
+          accessKeys={accessKeys}
           instances={agentCliInstances}
           scrollbackLines={settings.agentcli_scrollback_lines}
-          initialTokenId={tokens[0]?.id ?? ""}
+          initialAccessKeyId={accessKeys[0]?.id ?? ""}
           onClose={closeAgentCli}
           hass={hass}
         /></ErrorBoundary>

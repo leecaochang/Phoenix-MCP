@@ -62,14 +62,14 @@ def compact_log_text(text: str, budget: int, *, traceback: bool = False) -> tupl
     }
 
 
-def log_detail_ref(entry: dict, token: Any, *, phoenix_only: bool, bucket_id: str) -> str:
+def log_detail_ref(entry: dict, access_key: Any, *, phoenix_only: bool, bucket_id: str) -> str:
     """Bind a reference to this token, namespace and complete scrubbed bucket.
 
     An HMAC keyed by the token's hash, so a reference is not usable by another
     token or after the bucket content changes.
     """
     payload = json.dumps([phoenix_only, bucket_id, entry], sort_keys=True).encode("utf-8")
-    return hmac.new(token.token_hash.encode(), payload, hashlib.sha256).hexdigest()
+    return hmac.new(access_key.token_hash.encode(), payload, hashlib.sha256).hexdigest()
 
 
 def compact_log_entry(entry: dict, detail_ref: str | None, *, text_divisor: int = 1) -> dict:

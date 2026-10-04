@@ -75,14 +75,14 @@ def _stream_patch(stream: _FakeStream):
 def _make_request(
     body: dict | list,
     accept: str,
-    raw_token: str,
+    raw_access_key: str,
     extra_headers: dict[str, str] | None = None,
 ) -> MagicMock:
     payload = json.dumps(body).encode()
     req = MagicMock()
     req.method = "POST"
     req.remote = "127.0.0.1"
-    headers = {"Authorization": f"Bearer {raw_token}", "Accept": accept}
+    headers = {"Authorization": f"Bearer {raw_access_key}", "Accept": accept}
     headers.update(extra_headers or {})
     req.headers = MagicMock()
     req.headers.get = MagicMock(side_effect=lambda k, default="": headers.get(k, default))
@@ -104,11 +104,11 @@ def _view(hass) -> PhoenixMcpView:
 
 
 def _env():
-    token, raw = _make_token(cap_config_read="allow")
-    data = _make_data(token)
+    access_key, raw = _make_token(cap_config_read="allow")
+    data = _make_data(access_key)
     hass = _make_hass(data)
     hass.loop = asyncio.get_running_loop()
-    return token, raw, data, hass
+    return access_key, raw, data, hass
 
 
 _PING = {"jsonrpc": "2.0", "id": 1, "method": "ping"}
@@ -116,13 +116,13 @@ _PING = {"jsonrpc": "2.0", "id": 1, "method": "ping"}
 
 class TestAcceptNegotiation:
     async def test_json_only_client_is_unchanged(self):
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         resp = await _view(hass).post(_make_request(_PING, "application/json", raw))
         assert resp.content_type == "application/json"
         assert json.loads(resp.text)["id"] == 1
 
     async def test_sse_client_gets_one_message_event(self):
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         stream = _FakeStream()
         with _stream_patch(stream):
             await _view(hass).post(
@@ -134,7 +134,7 @@ class TestAcceptNegotiation:
             json.dumps((await _dispatch_plain(hass, raw))))]
 
     async def test_sse_payload_is_identical_to_the_json_payload(self):
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         plain = await _view(hass).post(_make_request(_PING, "application/json", raw))
         stream = _FakeStream()
         with _stream_patch(stream):
@@ -142,7 +142,7 @@ class TestAcceptNegotiation:
         assert stream.messages() == [json.loads(plain.text)]
 
     async def test_request_id_and_rate_limit_headers_ride_the_stream(self):
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         stream = _FakeStream()
         with _stream_patch(stream):
             await _view(hass).post(_make_request(_PING, "text/event-stream", raw))
@@ -151,14 +151,14 @@ class TestAcceptNegotiation:
         assert "X-RateLimit-Remaining" in stream.headers
 
     async def test_notification_stays_a_bare_202_even_with_sse_accept(self):
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         resp = await _view(hass).post(_make_request(
             {"jsonrpc": "2.0", "method": "notifications/initialized"},
             "text/event-stream", raw))
         assert resp.status == 202
 
     async def test_parse_error_stays_plain_json(self):
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         req = _make_request({}, "text/event-stream", raw)
         chunks = [b"{not json", b""]
         req.content.read = AsyncMock(side_effect=lambda *_a: chunks.pop(0) if chunks else b"")
@@ -168,7 +168,7 @@ class TestAcceptNegotiation:
         assert json.loads(resp.text)["error"]["code"] == -32700
 
     async def test_invalid_envelope_stays_plain_json(self):
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         resp = await _view(hass).post(_make_request(
             {"jsonrpc": "2.0", "id": 1, "method": 7}, "text/event-stream", raw))
         assert resp.content_type == "application/json"
@@ -187,7 +187,7 @@ class TestBatchOverSse:
     ]
 
     async def test_batch_returns_one_frame_with_every_entry(self):
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         stream = _FakeStream()
         with _stream_patch(stream):
             await _view(hass).post(_make_request(self._BATCH, "text/event-stream", raw))
@@ -195,7 +195,7 @@ class TestBatchOverSse:
         assert [item["id"] for item in payload] == [1, 2]
 
     async def test_batch_matches_the_json_path(self):
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         plain = await _view(hass).post(_make_request(self._BATCH, "application/json", raw))
         stream = _FakeStream()
         with _stream_patch(stream):
@@ -203,14 +203,14 @@ class TestBatchOverSse:
         assert stream.messages() == [json.loads(plain.text)]
 
     async def test_all_notification_batch_stays_202(self):
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         resp = await _view(hass).post(_make_request(
             [{"jsonrpc": "2.0", "method": "notifications/initialized"}],
             "text/event-stream", raw))
         assert resp.status == 202
 
     async def test_per_item_errors_survive_the_framing(self):
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         stream = _FakeStream()
         with _stream_patch(stream):
             await _view(hass).post(_make_request(
@@ -238,10 +238,10 @@ class TestBatchExpectsResponse:
         ],
     )
     async def test_agrees_with_the_dispatcher(self, items, expected):
-        token, _raw, data, hass = _env()
+        access_key, _raw, data, hass = _env()
         assert _batch_expects_response(items) is expected
         actual = await mcp_view._dispatch_streamable_batch(
-            items, token, hass, data, "127.0.0.1", base_url="http://h")
+            items, access_key, hass, data, "127.0.0.1", base_url="http://h")
         assert bool(actual) is expected
 
 
@@ -283,7 +283,7 @@ class TestKeepaliveAndProgress:
 
     async def test_keepalive_comments_when_no_progress_token(self, monkeypatch):
         monkeypatch.setattr(mcp_view, "MCP_SSE_KEEPALIVE_SECONDS", 0.01)
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         stream = _FakeStream()
         with _stream_patch(stream), self._slow_call(hass):
             await _view(hass).post(_make_request(self._tool_call(), "text/event-stream", raw))
@@ -293,7 +293,7 @@ class TestKeepaliveAndProgress:
 
     async def test_progress_notifications_when_token_supplied(self, monkeypatch):
         monkeypatch.setattr(mcp_view, "MCP_SSE_KEEPALIVE_SECONDS", 0.01)
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         stream = _FakeStream()
         with _stream_patch(stream), self._slow_call(hass):
             await _view(hass).post(_make_request(
@@ -313,7 +313,7 @@ class TestKeepaliveAndProgress:
         assert stream.messages()[-1]["id"] == 9
 
     async def test_json_client_with_a_progress_token_gets_no_frames(self):
-        _token, raw, _data, hass = _env()
+        _access_key, raw, _data, hass = _env()
         with self._slow_call(hass, seconds=0.0):
             resp = await _view(hass).post(_make_request(
                 self._tool_call({"progressToken": "p1"}), "application/json", raw))
@@ -323,7 +323,7 @@ class TestKeepaliveAndProgress:
     async def test_modern_dispatch_is_cancelled_after_client_disconnect(self, monkeypatch):
         """A modern-protocol dispatch is cancelled when its per-request stream drops."""
         monkeypatch.setattr(mcp_view, "MCP_SSE_KEEPALIVE_SECONDS", 0.01)
-        _token, raw, data, hass = _env()
+        _access_key, raw, data, hass = _env()
         data.enforce_mcp_lifecycle = True
         started = asyncio.Event()
         cancelled = asyncio.Event()
@@ -356,7 +356,7 @@ class TestKeepaliveAndProgress:
     async def test_legacy_dispatch_continues_after_client_disconnect(self, monkeypatch):
         """A legacy-protocol dispatch keeps running after a client disconnect."""
         monkeypatch.setattr(mcp_view, "MCP_SSE_KEEPALIVE_SECONDS", 0.01)
-        _token, raw, data, hass = _env()
+        _access_key, raw, data, hass = _env()
         data.enforce_mcp_lifecycle = True
         init = {
             "jsonrpc": "2.0",
@@ -392,7 +392,7 @@ class TestKeepaliveAndProgress:
 
     async def test_handler_cancellation_propagates_to_modern_dispatch(self):
         """HA cancels the outer aiohttp handler directly on connection loss."""
-        _token, _raw, _data, hass = _env()
+        _access_key, _raw, _data, hass = _env()
         started = asyncio.Event()
         cancelled = asyncio.Event()
 
@@ -419,7 +419,7 @@ class TestKeepaliveAndProgress:
 
     async def test_handler_cancellation_leaves_legacy_dispatch_running(self):
         """Outer cancellation does not cancel a legacy-protocol dispatch."""
-        _token, _raw, _data, hass = _env()
+        _access_key, _raw, _data, hass = _env()
         started = asyncio.Event()
         finished = asyncio.Event()
 

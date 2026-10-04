@@ -32,7 +32,7 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp.const import REDACTION_SENTINEL
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
 from custom_components.phoenix_mcp.ws_dispatch import ALLOWED_WS_COMMANDS, WsDispatchError
 
@@ -49,9 +49,9 @@ def _data() -> PhoenixData:
     )
 
 
-def _token(**caps) -> TokenRecord:
+def _access_key(**caps) -> AccessKeyRecord:
     caps.setdefault("cap_config_read", "allow")
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x", created_at=utcnow(),
         created_by="u",
         permissions=PermissionTree(domains={"sensor": PermissionNode(state="GREEN")}),
@@ -82,8 +82,8 @@ PREFS = {
 }
 
 
-async def _call(hass: HomeAssistant, token: TokenRecord) -> tuple[dict, str, str]:
-    return await _call_tool("get_energy_config", {}, token, hass, _data(), "req-1", None)
+async def _call(hass: HomeAssistant, access_key: AccessKeyRecord) -> tuple[dict, str, str]:
+    return await _call_tool("get_energy_config", {}, access_key, hass, _data(), "req-1", None)
 
 
 async def test_returns_sources_devices_and_referenced_entities(hass: HomeAssistant) -> None:
@@ -95,7 +95,7 @@ async def test_returns_sources_devices_and_referenced_entities(hass: HomeAssista
         hass.states.async_set(entity_id, "1.0")
 
     with patch(_WS, AsyncMock(return_value=PREFS)):
-        content, outcome, resource = await _call(hass, _token())
+        content, outcome, resource = await _call(hass, _access_key())
 
     assert outcome == "allowed"
     assert resource == "get_energy_config"
@@ -114,7 +114,7 @@ async def test_returns_sources_devices_and_referenced_entities(hass: HomeAssista
 async def test_water_key_absent_upstream_is_still_emitted(hass: HomeAssistant) -> None:
     """device_consumption_water is NotRequired in HA; the response always has it."""
     with patch(_WS, AsyncMock(return_value=PREFS)):
-        content, _, _ = await _call(hass, _token())
+        content, _, _ = await _call(hass, _access_key())
 
     assert _json(content)["device_consumption_water"] == []
 
@@ -139,7 +139,7 @@ async def test_no_energy_configuration_is_not_an_error(
     about to remove an integration needs to know.
     """
     with patch(_WS, AsyncMock(side_effect=WsDispatchError(message))):
-        content, outcome, _ = await _call(hass, _token())
+        content, outcome, _ = await _call(hass, _access_key())
 
     assert outcome == "allowed"
     body = _json(content)
@@ -172,7 +172,7 @@ async def test_out_of_scope_entities_are_redacted_and_not_rolled_up(hass: HomeAs
     }
 
     with patch(_WS, AsyncMock(return_value=prefs)):
-        content, outcome, _ = await _call(hass, _token())
+        content, outcome, _ = await _call(hass, _access_key())
 
     assert outcome == "allowed"
     body = _json(content)
@@ -192,7 +192,7 @@ async def test_external_statistic_is_not_reported_as_an_entity(hass: HomeAssista
         "device_consumption": [],
     }
     with patch(_WS, AsyncMock(return_value=prefs)):
-        content, _, _ = await _call(hass, _token())
+        content, _, _ = await _call(hass, _access_key())
 
     body = _json(content)
     assert body["energy_sources"][0]["stat_energy_from"] == "my_integration:gas_total"
@@ -206,7 +206,7 @@ async def test_dispatch_failure_is_invalid_request_not_denied(hass: HomeAssistan
     see what the permission rules actually stopped.
     """
     with patch(_WS, AsyncMock(side_effect=WsDispatchError("timed out"))):
-        content, outcome, _ = await _call(hass, _token())
+        content, outcome, _ = await _call(hass, _access_key())
 
     assert outcome == "invalid_request"
     assert content.get("isError") is True
@@ -217,7 +217,7 @@ async def test_unexpected_shape_degrades_instead_of_returning_a_bare_value(
 ) -> None:
     """A non-mapping result must not reach the caller as the response body."""
     with patch(_WS, AsyncMock(return_value=["not", "a", "mapping"])):
-        content, outcome, _ = await _call(hass, _token())
+        content, outcome, _ = await _call(hass, _access_key())
 
     assert outcome == "allowed"
     body = _json(content)
@@ -229,7 +229,7 @@ async def test_denied_capability_is_forbidden_and_echoes_nothing(hass: HomeAssis
     """A denied token gets the uniform message and no detail about the instance."""
     called = AsyncMock(return_value=PREFS)
     with patch(_WS, called):
-        content, outcome, _ = await _call(hass, _token(cap_config_read="deny"))
+        content, outcome, _ = await _call(hass, _access_key(cap_config_read="deny"))
 
     assert outcome == "denied"
     assert _text(content) == "Forbidden."
@@ -277,7 +277,7 @@ def _writer(prefs: dict):
     return AsyncMock(side_effect=dispatch), saved
 
 
-async def _edit(hass: HomeAssistant, token: TokenRecord, **args) -> tuple[dict, str, str]:
+async def _edit(hass: HomeAssistant, access_key: AccessKeyRecord, **args) -> tuple[dict, str, str]:
     op = args.pop("op")
     if "source_type" in args:
         target = {"kind": "source", "source_type": args.pop("source_type")}
@@ -287,7 +287,7 @@ async def _edit(hass: HomeAssistant, token: TokenRecord, **args) -> tuple[dict, 
         target = {"kind": "statistic", "id": args.pop("statistic")}
     return await _call_tool(
         "edit_energy_config", {"operation": op, "target": target, "changes": args},
-        token, hass, _data(), "req-1", None,
+        access_key, hass, _data(), "req-1", None,
     )
 
 
@@ -318,7 +318,7 @@ async def test_replace_statistic_repoints_and_leaves_everything_else_alone(
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         content, outcome, resource = await _edit(
-            hass, _token(cap_energy_write="allow"),
+            hass, _access_key(cap_energy_write="allow"),
             op="replace_statistic",
             statistic="sensor.washer_energy",
             new_statistic="sensor.new_washer_energy",
@@ -347,7 +347,7 @@ async def test_replace_statistic_addressed_by_device_name(hass: HomeAssistant) -
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"),
+            hass, _access_key(cap_energy_write="allow"),
             op="replace_statistic", device_name="Treadmill",
             new_statistic="sensor.treadmill_energy",
         )
@@ -372,7 +372,7 @@ async def test_replace_statistic_hits_every_occurrence(hass: HomeAssistant) -> N
     ws, saved = _writer(prefs)
     with patch(_WS, ws):
         _, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="replace_statistic",
+            hass, _access_key(cap_energy_write="allow"), op="replace_statistic",
             statistic="sensor.solar_production", new_statistic="sensor.new_solar",
         )
 
@@ -387,7 +387,7 @@ async def test_add_and_remove_device(hass: HomeAssistant) -> None:
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"),
+            hass, _access_key(cap_energy_write="allow"),
             op="add_device", statistic="sensor.dryer_energy", name="Dryer",
         )
     assert outcome == "allowed"
@@ -397,7 +397,7 @@ async def test_add_and_remove_device(hass: HomeAssistant) -> None:
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         _, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="remove_device", device_name="Treadmill",
+            hass, _access_key(cap_energy_write="allow"), op="remove_device", device_name="Treadmill",
         )
     assert outcome == "allowed"
     assert [e["name"] for e in saved[0]["device_consumption"]] == ["Washing Machine"]
@@ -408,7 +408,7 @@ async def test_add_device_refuses_a_duplicate(hass: HomeAssistant) -> None:
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="add_device", statistic="sensor.washer_energy",
+            hass, _access_key(cap_energy_write="allow"), op="add_device", statistic="sensor.washer_energy",
         )
     assert outcome == "invalid_request"
     assert "already tracked" in _text(content)
@@ -421,7 +421,7 @@ async def test_set_source_updates_an_existing_source(hass: HomeAssistant) -> Non
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         _, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="set_source",
+            hass, _access_key(cap_energy_write="allow"), op="set_source",
             source_type="grid", stat_energy_to="sensor.grid_export",
         )
     assert outcome == "allowed"
@@ -436,7 +436,7 @@ async def test_set_source_creates_a_missing_source(hass: HomeAssistant) -> None:
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         _, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="set_source", source_type="battery",
+            hass, _access_key(cap_energy_write="allow"), op="set_source", source_type="battery",
             stat_energy_from="sensor.batt_out", stat_energy_to="sensor.batt_in",
         )
     assert outcome == "allowed"
@@ -455,7 +455,7 @@ async def test_set_source_creation_refuses_without_the_required_fields(hass: Hom
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="set_source",
+            hass, _access_key(cap_energy_write="allow"), op="set_source",
             source_type="battery", stat_energy_from="sensor.batt_out",
         )
     assert outcome == "invalid_request"
@@ -469,7 +469,7 @@ async def test_set_source_refuses_a_field_the_type_does_not_accept(hass: HomeAss
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="set_source",
+            hass, _access_key(cap_energy_write="allow"), op="set_source",
             source_type="solar", stat_energy_to="sensor.x",
         )
     assert outcome == "invalid_request"
@@ -490,7 +490,7 @@ async def test_written_statistic_must_resolve_but_addressed_one_need_not(
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         _, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="replace_statistic",
+            hass, _access_key(cap_energy_write="allow"), op="replace_statistic",
             statistic="sensor.dead_meter", new_statistic="sensor.treadmill_energy",
         )
     assert outcome == "allowed"
@@ -498,7 +498,7 @@ async def test_written_statistic_must_resolve_but_addressed_one_need_not(
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="replace_statistic",
+            hass, _access_key(cap_energy_write="allow"), op="replace_statistic",
             statistic="sensor.washer_energy", new_statistic="sensor.never_existed",
         )
     assert outcome == "invalid_request"
@@ -512,7 +512,7 @@ async def test_external_statistic_is_accepted_as_a_written_value(hass: HomeAssis
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         _, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="replace_statistic",
+            hass, _access_key(cap_energy_write="allow"), op="replace_statistic",
             statistic="sensor.washer_energy", new_statistic="my_integration:washer",
         )
     assert outcome == "allowed"
@@ -524,7 +524,7 @@ async def test_sentinel_in_an_argument_is_refused(hass: HomeAssistant) -> None:
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="replace_statistic",
+            hass, _access_key(cap_energy_write="allow"), op="replace_statistic",
             statistic=REDACTION_SENTINEL, new_statistic="sensor.washer_energy",
         )
     assert outcome == "invalid_request"
@@ -537,7 +537,7 @@ async def test_a_no_op_change_is_refused_rather_than_written(hass: HomeAssistant
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="replace_statistic",
+            hass, _access_key(cap_energy_write="allow"), op="replace_statistic",
             statistic="sensor.washer_energy", new_statistic="sensor.washer_energy",
         )
     assert outcome == "invalid_request"
@@ -548,7 +548,7 @@ async def test_unknown_address_is_refused(hass: HomeAssistant) -> None:
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="remove_device", device_name="Nothing Like This",
+            hass, _access_key(cap_energy_write="allow"), op="remove_device", device_name="Nothing Like This",
         )
     assert outcome == "invalid_request"
     assert "get_energy_config" in _text(content)
@@ -560,7 +560,7 @@ async def test_denied_capability_forbids_and_never_dispatches(hass: HomeAssistan
     ws, saved = _writer(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
-            hass, _token(), op="replace_statistic",
+            hass, _access_key(), op="replace_statistic",
             statistic="sensor.washer_energy", new_statistic="sensor.anything",
         )
     assert outcome == "denied"
@@ -574,7 +574,7 @@ async def test_energy_restore_uses_owned_snapshot_and_verifies_readback(hass: Ho
         _energy_recovery_snapshot, restore_energy_configuration,
     )
 
-    token = _token(cap_energy_write="allow")
+    access_key = _access_key(cap_energy_write="allow")
     desired = {**PREFS, "device_consumption_water": []}
     for entity_id in (
         "sensor.grid_import", "sensor.grid_export", "sensor.solar_production",
@@ -595,7 +595,7 @@ async def test_energy_restore_uses_owned_snapshot_and_verifies_readback(hass: Ho
     snapshot = _energy_recovery_snapshot(desired)
     with patch(_WS, AsyncMock(side_effect=dispatch)):
         content, outcome, resource = await restore_energy_configuration(
-            snapshot, token, hass, runtime,
+            snapshot, access_key, hass, runtime,
         )
 
     body = _json(content)
@@ -613,7 +613,7 @@ async def test_agent_restore_receipt_accepts_energy_owned_record(hass: HomeAssis
     """The MCP receipt selects the Energy adapter and remains owner scoped."""
     from custom_components.phoenix_mcp.tools.energy import _energy_recovery_snapshot
 
-    token = _token(cap_energy_write="allow")
+    access_key = _access_key(cap_energy_write="allow")
     prefs = json.loads(json.dumps(PREFS))
     for entity_id in (
         "sensor.grid_import", "sensor.grid_export", "sensor.solar_production",
@@ -623,7 +623,7 @@ async def test_agent_restore_receipt_accepts_energy_owned_record(hass: HomeAssis
     snapshot = _energy_recovery_snapshot(prefs)
     runtime = _data()
     rid = await runtime.config_recovery.begin(
-        "energy:preferences", "edit_energy_config", token.id, snapshot,
+        "energy:preferences", "edit_energy_config", access_key.id, snapshot,
     )
     await runtime.config_recovery.mark(rid, "verified")
     runtime.config_recovery.leave(rid)
@@ -632,7 +632,7 @@ async def test_agent_restore_receipt_accepts_energy_owned_record(hass: HomeAssis
     with patch(_WS, AsyncMock(return_value=current)):
         content, outcome, _ = await _call_tool(
             "restore_configuration", {"recovery_id": rid, "side": "before"},
-            token, hass, runtime, "req-restore", None,
+            access_key, hass, runtime, "req-restore", None,
         )
 
     body = _json(content)
@@ -726,7 +726,7 @@ async def test_health_check_labels_each_issue_with_the_entry_it_is_about(
     }
     ws, _ = _bus(LIVE, validate=report)
     with patch(_WS, ws):
-        content, outcome, _ = await _call(hass, _token())
+        content, outcome, _ = await _call(hass, _access_key())
 
     assert outcome == "allowed"
     issues = _json(content)["issues"]
@@ -758,7 +758,7 @@ async def test_health_check_normalises_sets_and_tuples_before_redacting(
     }
     ws, _ = _bus(LIVE, validate=report)
     with patch(_WS, ws):
-        content, outcome, _ = await _call(hass, _token())
+        content, outcome, _ = await _call(hass, _access_key())
 
     assert outcome == "allowed"
     affected = _json(content)["issues"][0]["affected_entities"]
@@ -774,7 +774,7 @@ async def test_health_check_reports_null_when_it_could_not_run(hass: HomeAssista
     """
     ws, _ = _bus(LIVE, validate=None)  # energy/validate raises
     with patch(_WS, ws):
-        content, outcome, _ = await _call(hass, _token())
+        content, outcome, _ = await _call(hass, _access_key())
 
     assert outcome == "allowed"
     assert _json(content)["issues"] is None
@@ -784,7 +784,7 @@ async def test_rename_device(hass: HomeAssistant) -> None:
     ws, saved = _bus(LIVE)
     with patch(_WS, ws):
         _, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"),
+            hass, _access_key(cap_energy_write="allow"),
             op="rename_device", device_name="Washing Machine", name="Washer",
         )
     assert outcome == "allowed"
@@ -799,7 +799,7 @@ async def test_rename_device_to_the_same_name_is_refused(hass: HomeAssistant) ->
     ws, saved = _bus(LIVE)
     with patch(_WS, ws):
         _, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"),
+            hass, _access_key(cap_energy_write="allow"),
             op="rename_device", device_name="Treadmill", name="Treadmill",
         )
     assert outcome == "invalid_request"
@@ -810,7 +810,7 @@ async def test_remove_source(hass: HomeAssistant) -> None:
     ws, saved = _bus(LIVE)
     with patch(_WS, ws):
         _, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="remove_source", source_type="solar",
+            hass, _access_key(cap_energy_write="allow"), op="remove_source", source_type="solar",
         )
     assert outcome == "allowed"
     assert [s["type"] for s in saved[0]["energy_sources"]] == ["grid"]
@@ -833,7 +833,7 @@ async def test_remove_source_refuses_when_the_type_is_ambiguous(hass: HomeAssist
     ws, saved = _bus(prefs)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="remove_source", source_type="grid",
+            hass, _access_key(cap_energy_write="allow"), op="remove_source", source_type="grid",
         )
     assert outcome == "invalid_request"
     assert "ambiguous" in _text(content)
@@ -844,7 +844,7 @@ async def test_remove_source_that_does_not_exist_is_refused(hass: HomeAssistant)
     ws, saved = _bus(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="remove_source", source_type="water",
+            hass, _access_key(cap_energy_write="allow"), op="remove_source", source_type="water",
         )
     assert outcome == "invalid_request"
     assert "no water source" in _text(content)
@@ -857,7 +857,7 @@ async def test_tariff_from_sensor_fields(hass: HomeAssistant) -> None:
     ws, saved = _bus(LIVE)
     with patch(_WS, ws):
         _, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="set_source", source_type="grid",
+            hass, _access_key(cap_energy_write="allow"), op="set_source", source_type="grid",
             entity_energy_price="sensor.tariff_now",
         )
     assert outcome == "allowed"
@@ -873,7 +873,7 @@ async def test_an_explicit_null_clears_a_field(hass: HomeAssistant) -> None:
     ws, saved = _bus(LIVE)
     with patch(_WS, ws):
         _, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="set_source",
+            hass, _access_key(cap_energy_write="allow"), op="set_source",
             source_type="grid", number_energy_price=None,
         )
     assert outcome == "allowed"
@@ -887,7 +887,7 @@ async def test_cost_statistic_is_scope_checked_like_any_other_written_statistic(
     ws, saved = _bus(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="set_source",
+            hass, _access_key(cap_energy_write="allow"), op="set_source",
             source_type="grid", stat_cost="switch.not_mine",
         )
     assert outcome == "invalid_request"
@@ -901,7 +901,7 @@ async def test_price_fields_are_refused_on_a_type_that_has_none(hass: HomeAssist
     ws, saved = _bus(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="set_source",
+            hass, _access_key(cap_energy_write="allow"), op="set_source",
             source_type="battery", entity_energy_price="sensor.tariff_now",
         )
     assert outcome == "invalid_request"
@@ -913,7 +913,7 @@ async def test_solar_forecast_read(hass: HomeAssistant) -> None:
     ws, _ = _bus(LIVE, forecast={"entry_abc": {"wh_hours": {"2026-08-03T12:00:00+00:00": 400}}})
     with patch(_WS, ws):
         content, outcome, resource = await _call_tool(
-            "get_solar_forecast", {}, _token(), hass, _data(), "req-1", None,
+            "get_solar_forecast", {}, _access_key(), hass, _data(), "req-1", None,
         )
     assert outcome == "allowed"
     assert resource == "get_solar_forecast"
@@ -929,7 +929,7 @@ async def test_solar_forecast_without_a_forecast_integration_is_empty_not_an_err
     ws, _ = _bus(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _call_tool(
-            "get_solar_forecast", {}, _token(), hass, _data(), "req-1", None,
+            "get_solar_forecast", {}, _access_key(), hass, _data(), "req-1", None,
         )
     assert outcome == "allowed"
     body = _json(content)
@@ -941,7 +941,7 @@ async def test_solar_forecast_denied_capability(hass: HomeAssistant) -> None:
     ws, _ = _bus(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _call_tool(
-            "get_solar_forecast", {}, _token(cap_config_read="deny"), hass, _data(), "req-1", None,
+            "get_solar_forecast", {}, _access_key(cap_config_read="deny"), hass, _data(), "req-1", None,
         )
     assert outcome == "denied"
     assert _text(content) == "Forbidden."
@@ -966,7 +966,7 @@ async def test_both_price_shapes_at_once_is_refused_before_the_gate(
     ws, saved = _bus(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="set_source", source_type="grid",
+            hass, _access_key(cap_energy_write="allow"), op="set_source", source_type="grid",
             number_energy_price_export=1.5, entity_energy_price_export="sensor.tariff_now",
         )
     assert outcome == "invalid_request"
@@ -989,7 +989,7 @@ async def test_a_price_added_to_an_existing_number_price_is_refused(
     ws, saved = _bus(prefs)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="set_source", source_type="grid",
+            hass, _access_key(cap_energy_write="allow"), op="set_source", source_type="grid",
             entity_energy_price="sensor.tariff_now",
         )
     assert outcome == "invalid_request"
@@ -1007,7 +1007,7 @@ async def test_clearing_the_other_price_first_makes_the_write_land(
     ws, saved = _bus(prefs)
     with patch(_WS, ws):
         _, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="set_source", source_type="grid",
+            hass, _access_key(cap_energy_write="allow"), op="set_source", source_type="grid",
             entity_energy_price="sensor.tariff_now", number_energy_price=None,
         )
     assert outcome == "allowed"
@@ -1025,7 +1025,7 @@ async def test_price_on_an_external_statistic_is_refused(hass: HomeAssistant) ->
     ws, saved = _bus(prefs)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="set_source",
+            hass, _access_key(cap_energy_write="allow"), op="set_source",
             source_type="gas", number_energy_price=2.0,
         )
     assert outcome == "invalid_request"
@@ -1052,7 +1052,7 @@ async def test_a_cost_stat_makes_the_external_statistic_rule_stand_down(
     ws, saved = _bus(prefs)
     with patch(_WS, ws):
         _, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="set_source",
+            hass, _access_key(cap_energy_write="allow"), op="set_source",
             source_type="gas", number_energy_price=2.0,
         )
     assert outcome == "allowed"
@@ -1064,7 +1064,7 @@ async def test_clearing_every_grid_meter_is_refused(hass: HomeAssistant) -> None
     ws, saved = _bus(LIVE)
     with patch(_WS, ws):
         content, outcome, _ = await _edit(
-            hass, _token(cap_energy_write="allow"), op="set_source", source_type="grid",
+            hass, _access_key(cap_energy_write="allow"), op="set_source", source_type="grid",
             stat_energy_from=None, stat_energy_to=None,
         )
     assert outcome == "invalid_request"
@@ -1086,7 +1086,7 @@ async def test_every_write_records_a_restorable_version(hass: HomeAssistant) -> 
         _, outcome, _ = await _call_tool(
             "edit_energy_config",
                 {"operation": "add_device", "target": {"kind": "statistic", "id": "sensor.dryer_energy"}, "changes": {"name": "Dryer"}},
-            _token(cap_energy_write="allow"), hass, data, "req-1", None,
+            _access_key(cap_energy_write="allow"), hass, data, "req-1", None,
         )
     assert outcome == "allowed"
     records = data.versions.list_for("energy", "preferences")
@@ -1113,7 +1113,7 @@ async def test_the_approval_diff_carries_structured_preview_rows(hass: HomeAssis
     with patch(_WS, _bus(LIVE)[0]):
         diff = await _build_diff_edit_energy_config(
             {"op": "rename_device", "device_name": "Washing Machine", "name": "Washer"},
-            _token(cap_energy_write="allow"), hass,
+            _access_key(cap_energy_write="allow"), hass,
         )
 
     energy = diff["preview"]["energy"]
@@ -1143,5 +1143,5 @@ async def test_preview_rows_are_scoped_like_every_other_read(hass: HomeAssistant
         "energy_sources": [{"type": "battery", "stat_energy_from": "switch.secret_meter"}],
         "device_consumption": [],
     }
-    rows = _preview_rows(prefs, _token(), hass)
+    rows = _preview_rows(prefs, _access_key(), hass)
     assert rows["sources"][0]["meters"] == [["stat_energy_from", REDACTION_SENTINEL]]

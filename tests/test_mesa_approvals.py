@@ -24,16 +24,16 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mesa import async_apply_mesa_to_call, async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
-from custom_components.phoenix_mcp.token_store import (
+from custom_components.phoenix_mcp.access_key_store import (
     GlobalSettings,
     PermissionTree,
-    TokenRecord,
-    TokenStore,
+    AccessKeyRecord,
+    AccessKeyStore,
 )
 
 
-def _token() -> TokenRecord:
-    return TokenRecord(
+def _access_key() -> AccessKeyRecord:
+    return AccessKeyRecord(
         id="tok",
         name="t",
         token_hash="x",
@@ -45,7 +45,7 @@ def _token() -> TokenRecord:
 
 
 def _make_store(mesa_mode: str) -> MagicMock:
-    store = MagicMock(spec=TokenStore)
+    store = MagicMock(spec=AccessKeyStore)
     store._pending = []
     store.async_save = AsyncMock()
     store.async_lock = asyncio.Lock()
@@ -81,7 +81,7 @@ def _set_profile(data, entity_id, control_mode):
 
 async def _apply(hass, data, entities, **kw):
     return await async_apply_mesa_to_call(
-        hass, data, _token(),
+        hass, data, _access_key(),
         domain="light", service="turn_on", service_data={},
         entities=entities, request_id="rid", client_ip=None, session_id="rid", **kw,
     )
@@ -108,13 +108,13 @@ async def test_registry_id_cannot_bypass_entity_profile(hass, mode, profile, app
     hass.states.async_set(entry.entity_id, "off")
     _set_profile(data, entry.entity_id, profile)
     calls = async_mock_service(hass, "light", "turn_on")
-    token = _token()
-    token.pass_through = True
+    access_key = _access_key()
+    access_key.pass_through = True
     args = {"domain": "light", "service": "turn_on", "entity_id": entry.id}
     if approved:
-        _, outcome, _ = await async_execute_approved_tool("call_service", args, token, hass, data)
+        _, outcome, _ = await async_execute_approved_tool("call_service", args, access_key, hass, data)
     else:
-        _, outcome, _ = await _execute_call_service(args, token, hass, data)
+        _, outcome, _ = await _execute_call_service(args, access_key, hass, data)
     assert outcome == "denied"
     assert not calls
     assert not data.store._pending
@@ -130,10 +130,10 @@ async def test_registry_id_dispatches_one_canonical_authorized_target(hass):
     hass.states.async_set(entry.entity_id, "off")
     _set_profile(data, entry.entity_id, "autonomous")
     calls = async_mock_service(hass, "light", "turn_on")
-    token = _token()
-    token.pass_through = True
+    access_key = _access_key()
+    access_key.pass_through = True
     _, outcome, _ = await _execute_call_service(
-        {"domain": "light", "service": "turn_on", "entity_id": [entry.id, entry.entity_id]}, token, hass, data,
+        {"domain": "light", "service": "turn_on", "entity_id": [entry.id, entry.entity_id]}, access_key, hass, data,
     )
     assert outcome == "allowed"
     assert len(calls) == 1
@@ -235,13 +235,13 @@ async def test_admin_approval_satisfies_mesa_confirm_in_one_step(hass: HomeAssis
     er.async_get(hass).async_get_or_create("light", "test", "uniq-gate", suggested_object_id="gate")
     hass.states.async_set("light.gate", "off")
     calls = async_mock_service(hass, "light", "turn_on")
-    token = _token()
-    token.pass_through = True  # scope trivially satisfied; MESA applies regardless
+    access_key = _access_key()
+    access_key.pass_through = True  # scope trivially satisfied; MESA applies regardless
     args = {"domain": "light", "service": "turn_on", "entity_id": "light.gate"}
 
     # A live (non-approved) call still hits the MESA confirm gate.
     with patch("homeassistant.components.persistent_notification.async_create"):
-        _result, outcome, _resource = await _execute_call_service(args, token, hass, data)
+        _result, outcome, _resource = await _execute_call_service(args, access_key, hass, data)
     assert outcome == "pending_approval"
     assert not calls
     pending_before = len(data.store._pending)
@@ -249,7 +249,7 @@ async def test_admin_approval_satisfies_mesa_confirm_in_one_step(hass: HomeAssis
     # The admin-approved re-execution completes in one step: the service fires
     # and no follow-on MESA approval is created.
     _result, outcome, _resource = await async_execute_approved_tool(
-        "call_service", data.store._pending[-1]["args"], token, hass, data,
+        "call_service", data.store._pending[-1]["args"], access_key, hass, data,
     )
     assert outcome == "allowed"
     assert len(calls) == 1
@@ -257,7 +257,7 @@ async def test_admin_approval_satisfies_mesa_confirm_in_one_step(hass: HomeAssis
 
     # The confirm-approved context must not leak past the approved execution.
     with patch("homeassistant.components.persistent_notification.async_create"):
-        _result, outcome, _resource = await _execute_call_service(args, token, hass, data)
+        _result, outcome, _resource = await _execute_call_service(args, access_key, hass, data)
     assert outcome == "pending_approval"
     assert len(calls) == 1
 
@@ -281,11 +281,11 @@ async def test_gate_diff_marks_mesa_confirm_involvement(hass: HomeAssistant):
     _set_profile(data, "lock.front", "confirm")
     er.async_get(hass).async_get_or_create("lock", "test", "uniq-front", suggested_object_id="front")
     hass.states.async_set("lock.front", "locked", {"friendly_name": "Front Door Lock"})
-    token = _token()
-    token.pass_through = True
+    access_key = _access_key()
+    access_key.pass_through = True
 
     diff = _build_diff_call_service(
-        {"domain": "lock", "service": "unlock", "entity_id": "lock.front"}, token, hass,
+        {"domain": "lock", "service": "unlock", "entity_id": "lock.front"}, access_key, hass,
     )
     assert diff["summary"].endswith("(includes MESA confirmation)")
     assert diff["preview"]["mesa"]["confirm_entities"] == ["lock.front"]
@@ -293,7 +293,7 @@ async def test_gate_diff_marks_mesa_confirm_involvement(hass: HomeAssistant):
 
     # The native HassTurnOn/Off physical diff gets the same marker, evaluated
     # per the actuating domain service (lock.lock for turn_on).
-    diff = _build_diff_hass_turn("turn_on", ["lock.front"], {}, token, hass)
+    diff = _build_diff_hass_turn("turn_on", ["lock.front"], {}, access_key, hass)
     assert diff["summary"].endswith("(includes MESA confirmation)")
     assert diff["preview"]["mesa"]["confirm_entities"] == ["lock.front"]
 
@@ -311,11 +311,11 @@ async def test_gate_diff_unmarked_when_mesa_not_involved(hass: HomeAssistant):
     _set_profile(data, "lock.front", "confirm")
     er.async_get(hass).async_get_or_create("lock", "test", "uniq-front", suggested_object_id="front")
     hass.states.async_set("lock.front", "locked")
-    token = _token()
-    token.pass_through = True
+    access_key = _access_key()
+    access_key.pass_through = True
 
     diff = _build_diff_call_service(
-        {"domain": "lock", "service": "unlock", "entity_id": "lock.front"}, token, hass,
+        {"domain": "lock", "service": "unlock", "entity_id": "lock.front"}, access_key, hass,
     )
     assert "(includes MESA confirmation)" not in diff["summary"]
     assert "mesa" not in diff["preview"]
@@ -334,12 +334,12 @@ async def test_approved_execution_still_rejects_prohibited(hass: HomeAssistant):
     er.async_get(hass).async_get_or_create("light", "test", "uniq-bad", suggested_object_id="bad")
     hass.states.async_set("light.bad", "off")
     calls = async_mock_service(hass, "light", "turn_on")
-    token = _token()
-    token.pass_through = True
+    access_key = _access_key()
+    access_key.pass_through = True
     args = {"domain": "light", "service": "turn_on", "entity_id": "light.bad"}
 
     _result, outcome, _resource = await async_execute_approved_tool(
-        "call_service", args, token, hass, data,
+        "call_service", args, access_key, hass, data,
     )
     assert outcome == "denied"
     assert not calls

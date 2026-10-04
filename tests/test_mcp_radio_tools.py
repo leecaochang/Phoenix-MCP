@@ -32,7 +32,7 @@ from tests.runtime_fixtures import mesa_off_store
 
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool, _tool_gate_map, async_execute_approved_tool
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
 Z2M_BULB_IEEE = "0x00158d0001112222"
 Z2M_LOCK_IEEE = "0x00158d0009998888"
@@ -472,31 +472,31 @@ def _data() -> PhoenixData:
     return PhoenixData(store=mesa_off_store(), rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
 
 
-def _token(tree: PermissionTree | None = None, **caps) -> TokenRecord:
-    return TokenRecord(
+def _access_key(tree: PermissionTree | None = None, **caps) -> AccessKeyRecord:
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x", created_at=utcnow(),
         created_by="u", permissions=tree or PermissionTree(domains={}), **caps,
     )
 
 
-def _light_token(**caps) -> TokenRecord:
+def _light_token(**caps) -> AccessKeyRecord:
     tree = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
-    return _token(tree=tree, **caps)
+    return _access_key(tree=tree, **caps)
 
 
-def _read_only_light_token(**caps) -> TokenRecord:
+def _read_only_light_token(**caps) -> AccessKeyRecord:
     tree = PermissionTree(domains={"light": PermissionNode(state="YELLOW")})
-    return _token(tree=tree, **caps)
+    return _access_key(tree=tree, **caps)
 
 
-def _z2m_pair_token(*, lock_state: str = "GREEN", **caps) -> TokenRecord:
+def _z2m_pair_token(*, lock_state: str = "GREEN", **caps) -> AccessKeyRecord:
     tree = PermissionTree(
         domains={
             "light": PermissionNode(state="GREEN"),
             "lock": PermissionNode(state=lock_state),
         }
     )
-    return _token(tree=tree, **caps)
+    return _access_key(tree=tree, **caps)
 
 
 def _body(result: tuple) -> dict:
@@ -630,12 +630,12 @@ class TestScanZigbeeTopology:
 
     async def test_denied_capability_is_not_an_oracle(self, hass, radio_env, broker):
         hass.config.components.add("mqtt")
-        for token in (
+        for access_key in (
             _light_token(cap_diagnostics="deny", cap_radio_write="allow"),
             _light_token(cap_diagnostics="allow", cap_radio_write="deny"),
         ):
             result = await _call_tool(
-                "scan_zigbee_topology", {"backend": "z2m"}, token, hass, _data()
+                "scan_zigbee_topology", {"backend": "z2m"}, access_key, hass, _data()
             )
             assert result[1] == "denied"
             assert broker.published == []
@@ -645,11 +645,11 @@ class TestScanZigbeeTopology:
     ):
         hass.config.components.add("mqtt")
         data, store = _appr_data()
-        token = _light_token(cap_diagnostics="allow", cap_radio_write="confirm")
+        access_key = _light_token(cap_diagnostics="allow", cap_radio_write="confirm")
         result = await _call_tool(
             "scan_zigbee_topology",
             {"backend": "z2m"},
-            token,
+            access_key,
             hass,
             data,
             "rid-topology",
@@ -673,9 +673,9 @@ class TestScanZigbeeTopology:
             "status": "ok",
             "data": {"type": "raw", "routes": False, "value": self._raw_map()},
         }
-        token = _light_token(cap_diagnostics="allow", cap_radio_write="allow")
+        access_key = _light_token(cap_diagnostics="allow", cap_radio_write="allow")
         result = await _call_tool(
-            "scan_zigbee_topology", {"backend": "z2m"}, token, hass, _data()
+            "scan_zigbee_topology", {"backend": "z2m"}, access_key, hass, _data()
         )
         assert result[1] == "allowed"
         body = _body(result)
@@ -810,9 +810,9 @@ class TestGetRadioDevice:
         assert res[1] == "denied"
 
     async def test_ghost_and_out_of_scope_identical(self, hass, radio_env, broker):
-        token = _light_token(cap_diagnostics="allow")
-        ghost = await _call_tool("get_radio_device", {"device_id": "does_not_exist"}, token, hass, _data())
-        hidden = await _call_tool("get_radio_device", {"device_id": radio_env["z2m_lock"]}, token, hass, _data())
+        access_key = _light_token(cap_diagnostics="allow")
+        ghost = await _call_tool("get_radio_device", {"device_id": "does_not_exist"}, access_key, hass, _data())
+        hidden = await _call_tool("get_radio_device", {"device_id": radio_env["z2m_lock"]}, access_key, hass, _data())
         assert ghost[1] == "not_found" and hidden[1] == "not_found"
         assert json.dumps(ghost[0]) == json.dumps(hidden[0])
 
@@ -1159,10 +1159,10 @@ class TestGetRadioDevice:
         monkeypatch.setattr(
             radio, "async_ws_command", AsyncMock(return_value=self._zha_device_payload(radio_env))
         )
-        token = _token(cap_diagnostics="allow")
-        token.pass_through = True
+        access_key = _access_key(cap_diagnostics="allow")
+        access_key.pass_through = True
         res = await _call_tool(
-            "get_radio_device", {"device_id": radio_env["zha_bulb"]}, token, hass, _data(),
+            "get_radio_device", {"device_id": radio_env["zha_bulb"]}, access_key, hass, _data(),
         )
         body = _body(res)
         assert body["neighbors"][1]["ieee"] == "00:99:99:99:99:99:99:99"
@@ -1170,10 +1170,10 @@ class TestGetRadioDevice:
 
 class TestPermitZigbeeJoin:
     async def test_cap_deny_not_an_oracle(self, hass, radio_env, broker):
-        token = _light_token(cap_radio_write="deny")
+        access_key = _light_token(cap_radio_write="deny")
         bodies = set()
         for args in ({}, {"device_id": "ghost"}, {"device_id": radio_env["z2m_lock"]}):
-            res = await _call_tool("permit_zigbee_join", args, token, hass, _data())
+            res = await _call_tool("permit_zigbee_join", args, access_key, hass, _data())
             assert res[1] == "denied"
             bodies.add(json.dumps(res[0]))
         assert len(bodies) == 1
@@ -1181,9 +1181,9 @@ class TestPermitZigbeeJoin:
     async def test_bad_duration_rejected_before_gating(self, hass, radio_env, broker):
         hass.config.components.add("mqtt")
         data, store = _appr_data()
-        token = _light_token(cap_radio_write="confirm")
+        access_key = _light_token(cap_radio_write="confirm")
         for duration in (300, -1, "abc", True):
-            res = await _call_tool("permit_zigbee_join", {"duration": duration}, token, hass, data)
+            res = await _call_tool("permit_zigbee_join", {"duration": duration}, access_key, hass, data)
             assert res[1] == "invalid_request"
         assert store._p == []
 
@@ -1263,9 +1263,9 @@ class TestPermitZigbeeJoin:
     async def test_confirm_creates_real_approval_then_executes(self, hass, radio_env, broker):
         hass.config.components.add("mqtt")
         data, store = _appr_data()
-        token = _light_token(cap_radio_write="confirm")
+        access_key = _light_token(cap_radio_write="confirm")
         res = await _call_tool(
-            "permit_zigbee_join", {"duration": 30}, token, hass, data, "rid-1", "1.2.3.4",
+            "permit_zigbee_join", {"duration": 30}, access_key, hass, data, "rid-1", "1.2.3.4",
         )
         assert res[1] == "pending_approval"
         assert broker.published == []
@@ -1278,7 +1278,7 @@ class TestPermitZigbeeJoin:
         assert "Open the Zigbee network" in diff["summary"]
         assert diff["preview"]["duration"] == 30
 
-        out = await async_execute_approved_tool("permit_zigbee_join", appr["args"], token, hass, data)
+        out = await async_execute_approved_tool("permit_zigbee_join", appr["args"], access_key, hass, data)
         assert out[1] == "allowed"
         assert broker.published[-1][0] == "zigbee2mqtt/bridge/request/permit_join"
 
@@ -1294,10 +1294,10 @@ class TestReconfigureZigbeeDevice:
         assert "write access" in _text(res)
 
     async def test_ghost_and_out_of_scope_identical(self, hass, radio_env, broker):
-        token = _light_token(cap_radio_write="allow")
-        ghost = await _call_tool("reconfigure_zigbee_device", {"device_id": "ghost"}, token, hass, _data())
+        access_key = _light_token(cap_radio_write="allow")
+        ghost = await _call_tool("reconfigure_zigbee_device", {"device_id": "ghost"}, access_key, hass, _data())
         hidden = await _call_tool(
-            "reconfigure_zigbee_device", {"device_id": radio_env["z2m_lock"]}, token, hass, _data()
+            "reconfigure_zigbee_device", {"device_id": radio_env["z2m_lock"]}, access_key, hass, _data()
         )
         assert ghost[1] == "not_found" and hidden[1] == "not_found"
         assert json.dumps(ghost[0]) == json.dumps(hidden[0])
@@ -1346,11 +1346,11 @@ class TestReconfigureZigbeeDevice:
 
 
 class TestSetZigbeeDeviceOptions:
-    async def _current(self, hass, radio_env, token) -> dict:
+    async def _current(self, hass, radio_env, access_key) -> dict:
         result = await _call_tool(
             "get_radio_device",
             {"device_id": radio_env["z2m_bulb"]},
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -1358,13 +1358,13 @@ class TestSetZigbeeDeviceOptions:
         return _body(result)["options"]
 
     async def test_cap_deny_not_an_oracle(self, hass, radio_env, broker):
-        token = _light_token(cap_radio_write="deny")
+        access_key = _light_token(cap_radio_write="deny")
         bodies = set()
         for device_id in ("ghost", radio_env["z2m_lock"], radio_env["z2m_bulb"]):
             result = await _call_tool(
                 "set_zigbee_device_options",
                 {"device_id": device_id, "options": {"mode": "slow"}, "expected_hash": "0" * 64},
-                token,
+                access_key,
                 hass,
                 _data(),
             )
@@ -1420,8 +1420,8 @@ class TestSetZigbeeDeviceOptions:
     ):
         hass.config.components.add("mqtt")
         data, store = _appr_data()
-        token = _light_token(cap_radio_write="confirm", cap_diagnostics="allow")
-        current = await self._current(hass, radio_env, token)
+        access_key = _light_token(cap_radio_write="confirm", cap_diagnostics="allow")
+        current = await self._current(hass, radio_env, access_key)
         result = await _call_tool(
             "set_zigbee_device_options",
             {
@@ -1429,7 +1429,7 @@ class TestSetZigbeeDeviceOptions:
                 "options": options,
                 "expected_hash": current["content_hash"],
             },
-            token,
+            access_key,
             hass,
             data,
         )
@@ -1441,9 +1441,9 @@ class TestSetZigbeeDeviceOptions:
         self, hass, radio_env, broker
     ):
         hass.config.components.add("mqtt")
-        token = _light_token(cap_radio_write="allow", cap_diagnostics="allow")
+        access_key = _light_token(cap_radio_write="allow", cap_diagnostics="allow")
         data = _data()
-        current = await self._current(hass, radio_env, token)
+        current = await self._current(hass, radio_env, access_key)
         result = await _call_tool(
             "set_zigbee_device_options",
             {
@@ -1451,7 +1451,7 @@ class TestSetZigbeeDeviceOptions:
                 "options": {"calibration": 1.5},
                 "expected_hash": current["content_hash"],
             },
-            token,
+            access_key,
             hass,
             data,
         )
@@ -1477,8 +1477,8 @@ class TestSetZigbeeDeviceOptions:
         self, hass, radio_env, broker, monkeypatch
     ):
         hass.config.components.add("mqtt")
-        token = _light_token(cap_radio_write="allow", cap_diagnostics="allow")
-        current = await self._current(hass, radio_env, token)
+        access_key = _light_token(cap_radio_write="allow", cap_diagnostics="allow")
+        current = await self._current(hass, radio_env, access_key)
 
         def _apply_without_response(req):
             info = json.loads(broker.retained["zigbee2mqtt/bridge/info"])
@@ -1496,7 +1496,7 @@ class TestSetZigbeeDeviceOptions:
                 "options": {"mode": "slow"},
                 "expected_hash": current["content_hash"],
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -1511,8 +1511,8 @@ class TestSetZigbeeDeviceOptions:
         self, hass, radio_env, broker, monkeypatch
     ):
         hass.config.components.add("mqtt")
-        token = _light_token(cap_radio_write="allow", cap_diagnostics="allow")
-        current = await self._current(hass, radio_env, token)
+        access_key = _light_token(cap_radio_write="allow", cap_diagnostics="allow")
+        current = await self._current(hass, radio_env, access_key)
         broker.responders.pop("device/options")
         monkeypatch.setattr(radio_tools, "PROXY_TIMEOUT_SECONDS", 0.01)
         monkeypatch.setattr(
@@ -1527,7 +1527,7 @@ class TestSetZigbeeDeviceOptions:
                 "options": {"mode": "slow"},
                 "expected_hash": current["content_hash"],
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -1538,8 +1538,8 @@ class TestSetZigbeeDeviceOptions:
         self, hass, radio_env, broker
     ):
         hass.config.components.add("mqtt")
-        token = _light_token(cap_radio_write="allow", cap_diagnostics="allow")
-        current = await self._current(hass, radio_env, token)
+        access_key = _light_token(cap_radio_write="allow", cap_diagnostics="allow")
+        current = await self._current(hass, radio_env, access_key)
         result = await _call_tool(
             "set_zigbee_device_options",
             {
@@ -1547,7 +1547,7 @@ class TestSetZigbeeDeviceOptions:
                 "options": {"mode": "slow"},
                 "expected_hash": current["content_hash"],
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -1560,15 +1560,15 @@ class TestSetZigbeeDeviceOptions:
     async def test_confirm_diff_then_approve_executes(self, hass, radio_env, broker):
         hass.config.components.add("mqtt")
         data, store = _appr_data()
-        token = _light_token(cap_radio_write="confirm", cap_diagnostics="allow")
-        current = await self._current(hass, radio_env, token)
+        access_key = _light_token(cap_radio_write="confirm", cap_diagnostics="allow")
+        current = await self._current(hass, radio_env, access_key)
         args = {
             "device_id": radio_env["z2m_bulb"],
             "options": {"calibration": 1.5, "mode": "slow"},
             "expected_hash": current["content_hash"],
         }
         result = await _call_tool(
-            "set_zigbee_device_options", args, token, hass, data, "rid-options", "1.2.3.4"
+            "set_zigbee_device_options", args, access_key, hass, data, "rid-options", "1.2.3.4"
         )
         assert result[1] == "pending_approval"
         assert broker.published == []
@@ -1578,7 +1578,7 @@ class TestSetZigbeeDeviceOptions:
         assert approval["diff"]["preview"]["changed_keys"] == ["calibration", "mode"]
         assert current["content_hash"] == approval["diff"]["preview"]["content_hash"]
         output = await async_execute_approved_tool(
-            "set_zigbee_device_options", approval["args"], token, hass, data
+            "set_zigbee_device_options", approval["args"], access_key, hass, data
         )
         assert output[1] == "allowed"
         assert broker.published[-1][0] == "zigbee2mqtt/bridge/request/device/options"
@@ -1588,8 +1588,8 @@ class TestSetZigbeeDeviceOptions:
     ):
         hass.config.components.add("mqtt")
         data, store = _appr_data()
-        token = _light_token(cap_radio_write="confirm", cap_diagnostics="allow")
-        current = await self._current(hass, radio_env, token)
+        access_key = _light_token(cap_radio_write="confirm", cap_diagnostics="allow")
+        current = await self._current(hass, radio_env, access_key)
         await _call_tool(
             "set_zigbee_device_options",
             {
@@ -1597,7 +1597,7 @@ class TestSetZigbeeDeviceOptions:
                 "options": {"mode": "slow"},
                 "expected_hash": current["content_hash"],
             },
-            token,
+            access_key,
             hass,
             data,
         )
@@ -1605,7 +1605,7 @@ class TestSetZigbeeDeviceOptions:
         info["config"]["devices"][Z2M_BULB_IEEE]["calibration"] = 1.0
         broker.retained["zigbee2mqtt/bridge/info"] = json.dumps(info)
         output = await async_execute_approved_tool(
-            "set_zigbee_device_options", store._p[0]["args"], token, hass, data
+            "set_zigbee_device_options", store._p[0]["args"], access_key, hass, data
         )
         assert output[1] == "invalid_request"
         assert "changed after they were read" in _text(output)
@@ -1613,8 +1613,8 @@ class TestSetZigbeeDeviceOptions:
 
     async def test_unconfirmed_response_is_fail_closed(self, hass, radio_env, broker):
         hass.config.components.add("mqtt")
-        token = _light_token(cap_radio_write="allow", cap_diagnostics="allow")
-        current = await self._current(hass, radio_env, token)
+        access_key = _light_token(cap_radio_write="allow", cap_diagnostics="allow")
+        current = await self._current(hass, radio_env, access_key)
         broker.responders["device/options"] = lambda req: {
             "status": "ok",
             "data": {"id": req["id"], "from": current["values"], "to": current["values"]},
@@ -1626,7 +1626,7 @@ class TestSetZigbeeDeviceOptions:
                 "options": {"mode": "slow"},
                 "expected_hash": current["content_hash"],
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -1635,8 +1635,8 @@ class TestSetZigbeeDeviceOptions:
 
     async def test_response_type_confusion_is_fail_closed(self, hass, radio_env, broker):
         hass.config.components.add("mqtt")
-        token = _light_token(cap_radio_write="allow", cap_diagnostics="allow")
-        current = await self._current(hass, radio_env, token)
+        access_key = _light_token(cap_radio_write="allow", cap_diagnostics="allow")
+        current = await self._current(hass, radio_env, access_key)
         unsafe = {**current["values"], "temperature_precision": True}
         broker.responders["device/options"] = lambda req: {
             "status": "ok",
@@ -1649,7 +1649,7 @@ class TestSetZigbeeDeviceOptions:
                 "options": {"temperature_precision": 1},
                 "expected_hash": current["content_hash"],
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -1658,11 +1658,11 @@ class TestSetZigbeeDeviceOptions:
 
 
 class TestSetZigbeeDeviceProperty:
-    async def _current(self, hass, radio_env, token, property_name="led_mode") -> dict:
+    async def _current(self, hass, radio_env, access_key, property_name="led_mode") -> dict:
         result = await _call_tool(
             "get_radio_device",
             {"device_id": radio_env["z2m_bulb"], "property": property_name},
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -1697,12 +1697,12 @@ class TestSetZigbeeDeviceProperty:
     async def test_allow_changes_and_exactly_confirms_property(
         self, hass, radio_env, broker
     ):
-        token = _light_token(
+        access_key = _light_token(
             cap_diagnostics="allow",
             cap_radio_write="allow",
             cap_physical_control="allow",
         )
-        current = await self._current(hass, radio_env, token)
+        current = await self._current(hass, radio_env, access_key)
         data = _data()
         result = await _call_tool(
             "set_zigbee_device_property",
@@ -1712,7 +1712,7 @@ class TestSetZigbeeDeviceProperty:
                 "value": "on",
                 "expected_hash": current["content_hash"],
             },
-            token,
+            access_key,
             hass,
             data,
         )
@@ -1733,12 +1733,12 @@ class TestSetZigbeeDeviceProperty:
     async def test_read_only_expose_cannot_be_written(
         self, hass, radio_env, broker
     ):
-        token = _light_token(
+        access_key = _light_token(
             cap_diagnostics="allow",
             cap_radio_write="allow",
             cap_physical_control="allow",
         )
-        current = await self._current(hass, radio_env, token, "temperature")
+        current = await self._current(hass, radio_env, access_key, "temperature")
         broker.published.clear()
         result = await _call_tool(
             "set_zigbee_device_property",
@@ -1748,7 +1748,7 @@ class TestSetZigbeeDeviceProperty:
                 "value": 22,
                 "expected_hash": current["content_hash"],
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -1757,7 +1757,7 @@ class TestSetZigbeeDeviceProperty:
         assert broker.published == []
 
     async def test_stale_hash_never_writes(self, hass, radio_env, broker):
-        token = _light_token(
+        access_key = _light_token(
             cap_radio_write="allow", cap_physical_control="allow"
         )
         result = await _call_tool(
@@ -1768,7 +1768,7 @@ class TestSetZigbeeDeviceProperty:
                 "value": "on",
                 "expected_hash": "0" * 64,
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -1780,12 +1780,12 @@ class TestSetZigbeeDeviceProperty:
         self, hass, radio_env, broker
     ):
         data, store = _appr_data()
-        token = _light_token(
+        access_key = _light_token(
             cap_diagnostics="allow",
             cap_radio_write="confirm",
             cap_physical_control="allow",
         )
-        current = await self._current(hass, radio_env, token)
+        current = await self._current(hass, radio_env, access_key)
         broker.published.clear()
         args = {
             "device_id": radio_env["z2m_bulb"],
@@ -1796,7 +1796,7 @@ class TestSetZigbeeDeviceProperty:
         result = await _call_tool(
             "set_zigbee_device_property",
             args,
-            token,
+            access_key,
             hass,
             data,
             "rid-property",
@@ -1808,7 +1808,7 @@ class TestSetZigbeeDeviceProperty:
         assert approval["tool_name"] == "set_zigbee_device_property"
         assert approval["diff"]["preview"]["property"] == "led_mode"
         output = await async_execute_approved_tool(
-            "set_zigbee_device_property", approval["args"], token, hass, data
+            "set_zigbee_device_property", approval["args"], access_key, hass, data
         )
         assert output[1] == "allowed"
         assert broker.published[-1][0].endswith("/set")
@@ -1817,12 +1817,12 @@ class TestSetZigbeeDeviceProperty:
         self, hass, radio_env, broker
     ):
         data, store = _appr_data()
-        token = _light_token(
+        access_key = _light_token(
             cap_diagnostics="allow",
             cap_radio_write="confirm",
             cap_physical_control="allow",
         )
-        current = await self._current(hass, radio_env, token)
+        current = await self._current(hass, radio_env, access_key)
         await _call_tool(
             "set_zigbee_device_property",
             {
@@ -1831,25 +1831,25 @@ class TestSetZigbeeDeviceProperty:
                 "value": "on",
                 "expected_hash": current["content_hash"],
             },
-            token,
+            access_key,
             hass,
             data,
         )
-        token.cap_physical_control = "deny"
+        access_key.cap_physical_control = "deny"
         broker.published.clear()
         output = await async_execute_approved_tool(
-            "set_zigbee_device_property", store._p[0]["args"], token, hass, data
+            "set_zigbee_device_property", store._p[0]["args"], access_key, hass, data
         )
         assert output[1] == "denied"
         assert broker.published == []
 
 
 class TestSetZigbeeBinding:
-    async def _configuration(self, hass, device_id, token) -> dict:
+    async def _configuration(self, hass, device_id, access_key) -> dict:
         result = await _call_tool(
             "get_radio_device",
             {"device_id": device_id},
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -1858,12 +1858,12 @@ class TestSetZigbeeBinding:
         assert configuration["status"] == "available"
         return configuration
 
-    async def _args(self, hass, radio_env, token, operation="bind") -> dict:
+    async def _args(self, hass, radio_env, access_key, operation="bind") -> dict:
         source = await self._configuration(
-            hass, radio_env["z2m_bulb"], token
+            hass, radio_env["z2m_bulb"], access_key
         )
         target = await self._configuration(
-            hass, radio_env["z2m_lock"], token
+            hass, radio_env["z2m_lock"], access_key
         )
         return {
             "operation": operation,
@@ -1883,7 +1883,7 @@ class TestSetZigbeeBinding:
     async def test_either_capability_deny_is_not_an_oracle(
         self, hass, radio_env, broker, radio_cap, physical_cap
     ):
-        token = _z2m_pair_token(
+        access_key = _z2m_pair_token(
             cap_radio_write=radio_cap,
             cap_physical_control=physical_cap,
         )
@@ -1900,7 +1900,7 @@ class TestSetZigbeeBinding:
                     "source_device_id": source,
                     "target_device_id": target,
                 },
-                token,
+                access_key,
                 hass,
                 _data(),
             )
@@ -1912,7 +1912,7 @@ class TestSetZigbeeBinding:
     async def test_both_devices_require_write_scope(
         self, hass, radio_env, broker
     ):
-        token = _z2m_pair_token(
+        access_key = _z2m_pair_token(
             lock_state="YELLOW",
             cap_radio_write="allow",
             cap_physical_control="allow",
@@ -1924,7 +1924,7 @@ class TestSetZigbeeBinding:
                 "source_device_id": radio_env["z2m_bulb"],
                 "target_device_id": radio_env["z2m_lock"],
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -1944,7 +1944,7 @@ class TestSetZigbeeBinding:
         registry.async_update_device(
             radio_env["z2m_lock"], via_device_id=other_bridge.id
         )
-        token = _z2m_pair_token(
+        access_key = _z2m_pair_token(
             cap_radio_write="allow",
             cap_physical_control="allow",
         )
@@ -1955,7 +1955,7 @@ class TestSetZigbeeBinding:
                 "source_device_id": radio_env["z2m_bulb"],
                 "target_device_id": radio_env["z2m_lock"],
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -1966,15 +1966,15 @@ class TestSetZigbeeBinding:
     async def test_z2m_bind_and_unbind_exact_relationship(
         self, hass, radio_env, broker
     ):
-        token = _z2m_pair_token(
+        access_key = _z2m_pair_token(
             cap_diagnostics="allow",
             cap_radio_write="allow",
             cap_physical_control="allow",
         )
         data = _data()
-        bind_args = await self._args(hass, radio_env, token)
+        bind_args = await self._args(hass, radio_env, access_key)
         result = await _call_tool(
-            "set_zigbee_binding", bind_args, token, hass, data
+            "set_zigbee_binding", bind_args, access_key, hass, data
         )
         assert result[1] == "allowed"
         body = _body(result)
@@ -1988,9 +1988,9 @@ class TestSetZigbeeBinding:
         assert request["clusters"] == ["genOnOff"]
         assert request["skip_disable_reporting"] is True
 
-        unbind_args = await self._args(hass, radio_env, token, "unbind")
+        unbind_args = await self._args(hass, radio_env, access_key, "unbind")
         unbound = await _call_tool(
-            "set_zigbee_binding", unbind_args, token, hass, data
+            "set_zigbee_binding", unbind_args, access_key, hass, data
         )
         assert unbound[1] == "allowed"
         assert _body(unbound)["confirmation"] == "retained_binding_state"
@@ -2007,17 +2007,17 @@ class TestSetZigbeeBinding:
     async def test_incompatible_cluster_and_stale_hash_never_publish(
         self, hass, radio_env, broker
     ):
-        token = _z2m_pair_token(
+        access_key = _z2m_pair_token(
             cap_diagnostics="allow",
             cap_radio_write="allow",
             cap_physical_control="allow",
         )
-        args = await self._args(hass, radio_env, token)
+        args = await self._args(hass, radio_env, access_key)
         broker.published.clear()
         incompatible = await _call_tool(
             "set_zigbee_binding",
             {**args, "clusters": ["genLevelCtrl"]},
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -2026,7 +2026,7 @@ class TestSetZigbeeBinding:
         stale = await _call_tool(
             "set_zigbee_binding",
             {**args, "expected_target_hash": "0" * 64},
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -2037,18 +2037,18 @@ class TestSetZigbeeBinding:
     async def test_malformed_cluster_response_fails_closed(
         self, hass, radio_env, broker
     ):
-        token = _z2m_pair_token(
+        access_key = _z2m_pair_token(
             cap_diagnostics="allow",
             cap_radio_write="allow",
             cap_physical_control="allow",
         )
-        args = await self._args(hass, radio_env, token)
+        args = await self._args(hass, radio_env, access_key)
         broker.responders["device/bind"] = lambda req: {
             "status": "ok",
             "data": {"clusters": [{"name": "genOnOff"}], "failed": []},
         }
         result = await _call_tool(
-            "set_zigbee_binding", args, token, hass, _data()
+            "set_zigbee_binding", args, access_key, hass, _data()
         )
         assert result[1] == "invalid_request"
         assert "did not confirm every requested cluster" in _text(result)
@@ -2057,17 +2057,17 @@ class TestSetZigbeeBinding:
         self, hass, radio_env, broker
     ):
         data, store = _appr_data()
-        token = _z2m_pair_token(
+        access_key = _z2m_pair_token(
             cap_diagnostics="allow",
             cap_radio_write="confirm",
             cap_physical_control="confirm",
         )
-        args = await self._args(hass, radio_env, token)
+        args = await self._args(hass, radio_env, access_key)
         broker.published.clear()
         result = await _call_tool(
             "set_zigbee_binding",
             args,
-            token,
+            access_key,
             hass,
             data,
             "rid-binding",
@@ -2077,9 +2077,9 @@ class TestSetZigbeeBinding:
         assert len(store._p) == 1
         assert store._p[0]["tool_name"] == "set_zigbee_binding"
         assert broker.published == []
-        token.cap_physical_control = "deny"
+        access_key.cap_physical_control = "deny"
         output = await async_execute_approved_tool(
-            "set_zigbee_binding", store._p[0]["args"], token, hass, data
+            "set_zigbee_binding", store._p[0]["args"], access_key, hass, data
         )
         assert output[1] == "denied"
         assert broker.published == []
@@ -2089,7 +2089,7 @@ class TestSetZigbeeBinding:
     ):
         dispatch = AsyncMock(return_value=None)
         monkeypatch.setattr(radio, "async_ws_command", dispatch)
-        token = _light_token(
+        access_key = _light_token(
             cap_radio_write="allow", cap_physical_control="allow"
         )
         args = {
@@ -2098,7 +2098,7 @@ class TestSetZigbeeBinding:
             "target_device_id": radio_env["zha_target"],
         }
         result = await _call_tool(
-            "set_zigbee_binding", args, token, hass, _data()
+            "set_zigbee_binding", args, access_key, hass, _data()
         )
         assert result[1] == "allowed"
         dispatch.assert_awaited_once_with(
@@ -2111,7 +2111,7 @@ class TestSetZigbeeBinding:
         rejected = await _call_tool(
             "set_zigbee_binding",
             {**args, "clusters": ["genOnOff"]},
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -2122,7 +2122,7 @@ class TestSetZigbeeBinding:
         self_binding = await _call_tool(
             "set_zigbee_binding",
             {**args, "target_device_id": radio_env["zha_bulb"]},
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -2131,19 +2131,19 @@ class TestSetZigbeeBinding:
 
 
 class TestConfigureZigbeeReporting:
-    async def _current(self, hass, radio_env, token) -> dict:
+    async def _current(self, hass, radio_env, access_key) -> dict:
         result = await _call_tool(
             "get_radio_device",
             {"device_id": radio_env["z2m_bulb"]},
-            token,
+            access_key,
             hass,
             _data(),
         )
         assert result[1] == "allowed"
         return _body(result)["radio_configuration"]
 
-    async def _args(self, hass, radio_env, token) -> dict:
-        current = await self._current(hass, radio_env, token)
+    async def _args(self, hass, radio_env, access_key) -> dict:
+        current = await self._current(hass, radio_env, access_key)
         return {
             "device_id": radio_env["z2m_bulb"],
             "endpoint": 1,
@@ -2156,7 +2156,7 @@ class TestConfigureZigbeeReporting:
         }
 
     async def test_cap_deny_not_an_oracle(self, hass, radio_env, broker):
-        token = _light_token(cap_radio_write="deny")
+        access_key = _light_token(cap_radio_write="deny")
         bodies = set()
         for device_id in ("ghost", radio_env["z2m_bulb"]):
             result = await _call_tool(
@@ -2170,7 +2170,7 @@ class TestConfigureZigbeeReporting:
                     "maximum_report_interval": 60,
                     "expected_hash": "0" * 64,
                 },
-                token,
+                access_key,
                 hass,
                 _data(),
             )
@@ -2182,13 +2182,13 @@ class TestConfigureZigbeeReporting:
     async def test_configures_and_exactly_confirms_reporting(
         self, hass, radio_env, broker
     ):
-        token = _light_token(
+        access_key = _light_token(
             cap_diagnostics="allow", cap_radio_write="allow"
         )
-        args = await self._args(hass, radio_env, token)
+        args = await self._args(hass, radio_env, access_key)
         data = _data()
         result = await _call_tool(
-            "configure_zigbee_reporting", args, token, hass, data
+            "configure_zigbee_reporting", args, access_key, hass, data
         )
         assert result[1] == "allowed"
         body = _body(result)
@@ -2219,15 +2219,15 @@ class TestConfigureZigbeeReporting:
     async def test_invalid_endpoint_cluster_or_interval_never_publish(
         self, hass, radio_env, broker, change
     ):
-        token = _light_token(
+        access_key = _light_token(
             cap_diagnostics="allow", cap_radio_write="allow"
         )
-        args = await self._args(hass, radio_env, token)
+        args = await self._args(hass, radio_env, access_key)
         broker.published.clear()
         result = await _call_tool(
             "configure_zigbee_reporting",
             {**args, **change},
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -2237,15 +2237,15 @@ class TestConfigureZigbeeReporting:
     async def test_zha_and_stale_hash_fail_before_publish(
         self, hass, radio_env, broker
     ):
-        token = _light_token(
+        access_key = _light_token(
             cap_diagnostics="allow", cap_radio_write="allow"
         )
-        args = await self._args(hass, radio_env, token)
+        args = await self._args(hass, radio_env, access_key)
         broker.published.clear()
         stale = await _call_tool(
             "configure_zigbee_reporting",
             {**args, "expected_hash": "0" * 64},
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -2253,7 +2253,7 @@ class TestConfigureZigbeeReporting:
         zha = await _call_tool(
             "configure_zigbee_reporting",
             {**args, "device_id": radio_env["zha_bulb"]},
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -2264,17 +2264,17 @@ class TestConfigureZigbeeReporting:
     async def test_mismatched_response_fails_closed(
         self, hass, radio_env, broker
     ):
-        token = _light_token(
+        access_key = _light_token(
             cap_diagnostics="allow", cap_radio_write="allow"
         )
-        args = await self._args(hass, radio_env, token)
+        args = await self._args(hass, radio_env, access_key)
         broker.published.clear()
         broker.responders["device/reporting/configure"] = lambda req: {
             "status": "ok",
             "data": {**req, "maximum_report_interval": 61},
         }
         result = await _call_tool(
-            "configure_zigbee_reporting", args, token, hass, _data()
+            "configure_zigbee_reporting", args, access_key, hass, _data()
         )
         assert result[1] == "invalid_request"
         assert "mismatched reporting confirmation" in _text(result)
@@ -2282,10 +2282,10 @@ class TestConfigureZigbeeReporting:
 
 class TestRemoveZigbeeDevice:
     async def test_cap_deny_not_an_oracle(self, hass, radio_env, broker):
-        token = _light_token(cap_radio_write="deny")
+        access_key = _light_token(cap_radio_write="deny")
         bodies = set()
         for device_id in ("ghost", radio_env["z2m_lock"], radio_env["z2m_bulb"]):
-            res = await _call_tool("remove_zigbee_device", {"device_id": device_id}, token, hass, _data())
+            res = await _call_tool("remove_zigbee_device", {"device_id": device_id}, access_key, hass, _data())
             assert res[1] == "denied"
             bodies.add(json.dumps(res[0]))
         assert len(bodies) == 1
@@ -2329,10 +2329,10 @@ class TestRemoveZigbeeDevice:
     async def test_confirm_diff_then_approve_executes(self, hass, radio_env, broker):
         hass.config.components.add("mqtt")
         data, store = _appr_data()
-        token = _light_token(cap_radio_write="confirm")
+        access_key = _light_token(cap_radio_write="confirm")
         res = await _call_tool(
             "remove_zigbee_device", {"device_id": radio_env["z2m_bulb"]},
-            token, hass, data, "rid-2", "1.2.3.4",
+            access_key, hass, data, "rid-2", "1.2.3.4",
         )
         assert res[1] == "pending_approval"
         assert broker.published == []
@@ -2343,29 +2343,29 @@ class TestRemoveZigbeeDevice:
         assert radio_env["z2m_bulb_eid"] in diff["preview"]["entities"]
         assert "re-paired" in diff["preview"]["warning"]
 
-        out = await async_execute_approved_tool("remove_zigbee_device", appr["args"], token, hass, data)
+        out = await async_execute_approved_tool("remove_zigbee_device", appr["args"], access_key, hass, data)
         assert out[1] == "allowed"
         assert broker.published[-1][0] == "zigbee2mqtt/bridge/request/device/remove"
 
     async def test_executor_revalidates_after_device_gone(self, hass, radio_env, broker):
         hass.config.components.add("mqtt")
         data, store = _appr_data()
-        token = _light_token(cap_radio_write="confirm")
+        access_key = _light_token(cap_radio_write="confirm")
         await _call_tool(
             "remove_zigbee_device", {"device_id": radio_env["z2m_bulb"]},
-            token, hass, data, "rid-3", "1.2.3.4",
+            access_key, hass, data, "rid-3", "1.2.3.4",
         )
         appr = store._p[0]
         dr.async_get(hass).async_remove_device(radio_env["z2m_bulb"])
-        out = await async_execute_approved_tool("remove_zigbee_device", appr["args"], token, hass, data)
+        out = await async_execute_approved_tool("remove_zigbee_device", appr["args"], access_key, hass, data)
         assert out[1] == "not_found"
         assert broker.published == []
 
 
 class TestZigbeeGroups:
-    async def _z2m_group(self, hass, radio_env, token):
+    async def _z2m_group(self, hass, radio_env, access_key):
         hass.config.components.add("mqtt")
-        result = await _call_tool("get_zigbee_groups", {}, token, hass, _data())
+        result = await _call_tool("get_zigbee_groups", {}, access_key, hass, _data())
         assert result[1] == "allowed"
         groups = _body(result)["groups"]
         return next(group for group in groups if group["name"] == Z2M_GROUP_NAME)
@@ -2403,7 +2403,7 @@ class TestZigbeeGroups:
         self, hass, radio_env, broker
     ):
         hass.config.components.add("mqtt")
-        token = _z2m_pair_token(
+        access_key = _z2m_pair_token(
             cap_radio_write="allow", cap_physical_control="allow"
         )
         result = await _call_tool(
@@ -2412,7 +2412,7 @@ class TestZigbeeGroups:
                 "name": "New Safe Group",
                 "members": [{"device_id": radio_env["z2m_lock"], "endpoint": 1}],
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -2463,12 +2463,12 @@ class TestZigbeeGroups:
     async def test_membership_add_and_remove_preserves_reporting(
         self, hass, radio_env, broker
     ):
-        token = _z2m_pair_token(
+        access_key = _z2m_pair_token(
             cap_diagnostics="allow",
             cap_radio_write="allow",
             cap_physical_control="allow",
         )
-        group = await self._z2m_group(hass, radio_env, token)
+        group = await self._z2m_group(hass, radio_env, access_key)
         add = await _call_tool(
             "set_zigbee_group_members",
             {
@@ -2477,7 +2477,7 @@ class TestZigbeeGroups:
                 "members": [{"device_id": radio_env["z2m_lock"], "endpoint": 1}],
                 "expected_hash": group["content_hash"],
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -2491,7 +2491,7 @@ class TestZigbeeGroups:
                 "members": [{"device_id": radio_env["z2m_lock"], "endpoint": 1}],
                 "expected_hash": add_hash,
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -2504,12 +2504,12 @@ class TestZigbeeGroups:
     async def test_membership_cannot_remove_last_anchor(
         self, hass, radio_env, broker
     ):
-        token = _light_token(
+        access_key = _light_token(
             cap_diagnostics="allow",
             cap_radio_write="allow",
             cap_physical_control="allow",
         )
-        group = await self._z2m_group(hass, radio_env, token)
+        group = await self._z2m_group(hass, radio_env, access_key)
         broker.published.clear()
         result = await _call_tool(
             "set_zigbee_group_members",
@@ -2521,7 +2521,7 @@ class TestZigbeeGroups:
                 ],
                 "expected_hash": group["content_hash"],
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -2532,12 +2532,12 @@ class TestZigbeeGroups:
     async def test_backend_error_does_not_echo_radio_identifiers(
         self, hass, radio_env, broker
     ):
-        token = _light_token(
+        access_key = _light_token(
             cap_diagnostics="allow",
             cap_radio_write="allow",
             cap_physical_control="allow",
         )
-        group = await self._z2m_group(hass, radio_env, token)
+        group = await self._z2m_group(hass, radio_env, access_key)
         broker.published.clear()
         broker.responders["group/remove"] = lambda _req: {
             "status": "error",
@@ -2549,7 +2549,7 @@ class TestZigbeeGroups:
                 "group_entity_id": radio_env["z2m_group_eid"],
                 "expected_hash": group["content_hash"],
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -2583,12 +2583,12 @@ class TestZigbeeGroups:
     async def test_stale_hash_and_hidden_member_removal_fail_before_publish(
         self, hass, radio_env, broker
     ):
-        token = _light_token(
+        access_key = _light_token(
             cap_diagnostics="allow",
             cap_radio_write="allow",
             cap_physical_control="allow",
         )
-        await self._z2m_group(hass, radio_env, token)
+        await self._z2m_group(hass, radio_env, access_key)
         broker.published.clear()
         stale = await _call_tool(
             "remove_zigbee_group",
@@ -2596,7 +2596,7 @@ class TestZigbeeGroups:
                 "group_entity_id": radio_env["z2m_group_eid"],
                 "expected_hash": "0" * 64,
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -2607,26 +2607,26 @@ class TestZigbeeGroups:
             {"ieee_address": Z2M_LOCK_IEEE, "endpoint": 1}
         )
         broker.retained["zigbee2mqtt/bridge/groups"] = json.dumps(groups)
-        hidden = await self._z2m_group(hass, radio_env, token)
+        hidden = await self._z2m_group(hass, radio_env, access_key)
         denied = await _call_tool(
             "remove_zigbee_group",
             {
                 "group_entity_id": radio_env["z2m_group_eid"],
                 "expected_hash": hidden["content_hash"],
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
         assert denied[1] == "denied" and broker.published == []
 
     async def test_remove_never_forces_z2m(self, hass, radio_env, broker):
-        token = _light_token(
+        access_key = _light_token(
             cap_diagnostics="allow",
             cap_radio_write="allow",
             cap_physical_control="allow",
         )
-        group = await self._z2m_group(hass, radio_env, token)
+        group = await self._z2m_group(hass, radio_env, access_key)
         broker.published.clear()
         result = await _call_tool(
             "remove_zigbee_group",
@@ -2634,7 +2634,7 @@ class TestZigbeeGroups:
                 "group_entity_id": radio_env["z2m_group_eid"],
                 "expected_hash": group["content_hash"],
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -2645,12 +2645,12 @@ class TestZigbeeGroups:
     async def test_confirmation_redacts_radio_ids_and_revalidates_hash(
         self, hass, radio_env, broker
     ):
-        token = _z2m_pair_token(
+        access_key = _z2m_pair_token(
             cap_diagnostics="allow",
             cap_radio_write="confirm",
             cap_physical_control="allow",
         )
-        group = await self._z2m_group(hass, radio_env, token)
+        group = await self._z2m_group(hass, radio_env, access_key)
         broker.published.clear()
         data, store = _appr_data()
         result = await _call_tool(
@@ -2661,7 +2661,7 @@ class TestZigbeeGroups:
                 "members": [{"device_id": radio_env["z2m_lock"], "endpoint": 1}],
                 "expected_hash": group["content_hash"],
             },
-            token,
+            access_key,
             hass,
             data,
         )
@@ -2679,7 +2679,7 @@ class TestZigbeeGroups:
         groups[0]["scenes"].append({"id": 9, "name": "Concurrent change"})
         broker.retained["zigbee2mqtt/bridge/groups"] = json.dumps(groups)
         executed = await async_execute_approved_tool(
-            "set_zigbee_group_members", approval["args"], token, hass, data
+            "set_zigbee_group_members", approval["args"], access_key, hass, data
         )
         assert executed[1] == "invalid_request"
         assert broker.published == []
@@ -2753,12 +2753,12 @@ class TestZigbeeGroups:
             raise AssertionError(command)
 
         monkeypatch.setattr(radio, "async_ws_command", _ws)
-        token = _light_token(
+        access_key = _light_token(
             cap_diagnostics="allow",
             cap_radio_write="allow",
             cap_physical_control="allow",
         )
-        read = await _call_tool("get_zigbee_groups", {}, token, hass, _data())
+        read = await _call_tool("get_zigbee_groups", {}, access_key, hass, _data())
         zha_group = next(
             group for group in _body(read)["groups"] if group["backend"] == "zha"
         )
@@ -2773,7 +2773,7 @@ class TestZigbeeGroups:
                     {"device_id": radio_env["zha_target"], "endpoint": 1}
                 ],
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -2791,7 +2791,7 @@ class TestZigbeeGroups:
                 "members": [{"device_id": radio_env["zha_target"], "endpoint": 1}],
                 "expected_hash": zha_group["content_hash"],
             },
-            token,
+            access_key,
             hass,
             _data(),
         )
@@ -2803,7 +2803,7 @@ class TestZigbeeGroups:
                 "group_entity_id": group_entity.entity_id,
                 "expected_hash": _body(changed)["content_hash"],
             },
-            token,
+            access_key,
             hass,
             _data(),
         )

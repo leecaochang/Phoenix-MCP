@@ -48,7 +48,7 @@ from .audit import generate_request_id
 from .const import AGENTCLI_CLIENT_IP, AI_TASK_CLIENT_IP, ASSIST_CLIENT_IP, PHOENIX_VERSION, BLOCKED_DOMAINS, VOICE_AGENT_CLIENT_IP, HOME_COMPANION_CLIENT_IP, CAP_ALLOW, CAP_CONFIRM, CAP_DENY, CAPABILITY_NAMES, DOMAIN, DOMAIN_IMPORTANT_ATTRIBUTES, DUAL_GATE_SERVICES, LEAN_ALWAYS_ATTRS, HIGH_RISK_DOMAINS, MCP_AUTHORITY_CHANGED_ERROR, MCP_DISCOVER_TTL_MS, MCP_LEGACY_PROTOCOL_VERSION_PREFERRED, MCP_LEGACY_PROTOCOL_VERSIONS, MCP_PROTOCOL_VERSIONS, MCP_SSE_KEEPALIVE_SECONDS, MAX_APPROVAL_RESULT_CHARS, MAX_BATCH_APPROVALS, MAX_BATCH_ITEMS, LOG_LEVELS, LOG_LEVEL_ERROR_MESSAGE, MAX_LOG_ENTRIES, MAX_LOGBOOK_HOME_DAYS, MAX_LOGBOOK_NARROWED_DAYS, MAX_LOGBOOK_RESOURCE_IDS, MAX_SEARCH_QUERY_LEN, MAX_SUBSCRIPTION_SECONDS, MAX_ENTITY_ALIASES, MAX_ENTITY_ALIAS_LENGTH, MAX_TOOL_NAME_LENGTH, MESA_APPROVED_EXECUTOR, MESA_MODE_OFF, NO_TARGET_SERVICES, PROXY_TIMEOUT_SECONDS
 from .data import PhoenixData
 from .tools.esphome import _tool_search_esphome_yaml, _tool_list_esphome_jobs, _tool_list_esphome_devices
-from .template_render import TemplateRenderError, async_render_template_for_token
+from .template_render import TemplateRenderError, async_render_template_for_access_key
 from .request_authority import (AuthorityChangedError, PolicyChangedError, RequestAuthority, check_request_authority, policy_version, request_authority)
 from .household_authority import household_service_kwargs, household_tool_access
 from .request_authority import DispatchProgress, dispatch_progress, mark_dispatch_started
@@ -67,7 +67,7 @@ from .mesa import (
 from .ws_dispatch import WsDispatchError, async_ws_command
 from .agent_recovery import tool_is_read_only
 from .mesa_tools import MESA_TOOL_NAMES, async_call_mesa_tool, mesa_tool_defs
-from .helpers import build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_token as _async_get_authenticated_token, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, token_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
+from .helpers import build_error_response as _error, build_permitted_states as _build_permitted_states, build_safe_config, collect_log_entries as _collect_log_entries, content_hash, diff_summary_fields as _summary, effective_cap, effective_caps, fire_rate_limit_events as _fire_rate_limit_events, async_get_authenticated_access_key as _async_get_authenticated_access_key, get_client_ip as _get_client_ip, log_internal_failure, log_request as _log, parse_time_param as _parse_time_param, redact_diagnostics, redact_structure, sanitize_service_data as _sanitize_service_data, service_not_found_hint as _service_not_found_hint, str_arg, SystemLogDegradedError, SystemLogUnavailableError, access_key_has_write_scope, validation_error_message as _validation_error_message, version_summary_fields as _version_summary
 from .recorder_queries import (
     MAX_SIGNIFICANT_STATES_RANGE,
     STATISTIC_PERIOD_LIMITS,
@@ -233,9 +233,9 @@ from .tool_defs import (
 )
 from .audit import Outcome
 from .tool_common import _CAP_FORBIDDEN_MESSAGE, _resolve_area_id, _ProgressBus, _approved_exec_ctx, _approval_resource, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _operator_accepted_result, _pending_or_inline, _progress_ctx, _record_version, _restore_ctx, _set_progress_status, _tool_error, _tool_success
-from .policy_engine import (EntityCreationNotPermitted, Permission, assist_expose_check, call_needs_physical_gate, config_entry_registry_context, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_token, filter_service_response, get_effective_hint, resolve, resolve_config_entry_registry_access, resolve_config_entry_registry_write, resolve_device_registry_access, resolve_device_registry_write, resolve_esphome_user_service, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes, scrub_state_dict as _scrub_state_dict)
+from .policy_engine import (EntityCreationNotPermitted, Permission, assist_expose_check, call_needs_physical_gate, config_entry_registry_context, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, get_effective_hint, resolve, resolve_config_entry_registry_access, resolve_config_entry_registry_write, resolve_device_registry_access, resolve_device_registry_write, resolve_esphome_user_service, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes, scrub_state_dict as _scrub_state_dict)
 from .rate_limiter import RateLimitResult
-from .token_store import TokenRecord
+from .access_key_store import AccessKeyRecord
 from . import yaml_includes
 from .logger_control import (
     IntegrationOverride,
@@ -347,7 +347,7 @@ def _tool_caps(tool_def: dict) -> tuple[str, ...]:
 
 
 def _tool_is_announced(
-    tool_def: dict, token: TokenRecord, has_write: bool, hass: HomeAssistant
+    tool_def: dict, access_key: AccessKeyRecord, has_write: bool, hass: HomeAssistant
 ) -> bool:
     """Whether a tool should appear in tools/list for this token.
 
@@ -363,9 +363,9 @@ def _tool_is_announced(
     """
     caps = _tool_required_caps(tool_def)
     any_caps = _tool_any_caps(tool_def)
-    if any(effective_cap(token, cap) == CAP_DENY for cap in caps):
+    if any(effective_cap(access_key, cap) == CAP_DENY for cap in caps):
         return False
-    if any_caps and all(effective_cap(token, cap) == CAP_DENY for cap in any_caps):
+    if any_caps and all(effective_cap(access_key, cap) == CAP_DENY for cap in any_caps):
         return False
     internal_name = _NATIVE_TOOL_PUBLIC_TO_INTERNAL.get(
         tool_def["name"], tool_def["name"]
@@ -376,7 +376,7 @@ def _tool_is_announced(
 
 
 def _tool_gate_map(
-    token: TokenRecord, data: PhoenixData, hass: HomeAssistant
+    access_key: AccessKeyRecord, data: PhoenixData, hass: HomeAssistant
 ) -> dict[str, Any]:
     """Classify every tool for this token at the tool level (no entity oracle).
 
@@ -399,11 +399,11 @@ def _tool_gate_map(
     hit a physical/dual gate or MESA confirm. Mirrors _tool_is_announced.
     """
     from .home_companion import is_companion
-    if is_companion(token):
+    if is_companion(access_key):
         from .agentcli import build_mcp_tool_list
-        return {"usable": [tool["name"] for tool in build_mcp_tool_list(token, data)],
+        return {"usable": [tool["name"] for tool in build_mcp_tool_list(access_key, data)],
                 "needs_approval": [], "unavailable": []}
-    has_write = token_has_write_scope(token)
+    has_write = access_key_has_write_scope(access_key)
     mesa_defs = mesa_tool_defs() if data.mesa is not None else []
     usable: list[str] = []
     needs_approval: list[str] = []
@@ -420,8 +420,8 @@ def _tool_gate_map(
             unavailable.append(name)
             reasons[name] = _requires_unavailable_reason(tool_def)
         elif caps or any_caps:
-            modes = [effective_cap(token, cap) for cap in caps]
-            any_modes = [effective_cap(token, cap) for cap in any_caps]
+            modes = [effective_cap(access_key, cap) for cap in caps]
+            any_modes = [effective_cap(access_key, cap) for cap in any_caps]
             if CAP_DENY in modes or (any_modes and all(mode == CAP_DENY for mode in any_modes)):
                 unavailable.append(name)
             elif (
@@ -497,7 +497,7 @@ _MCP_CACHEABLE_METHODS = frozenset({
 })
 _MCP_LEGACY_SESSION_TTL_SECONDS = 3600.0
 _MCP_LEGACY_SESSION_LIMIT = 256
-_MCP_LEGACY_SESSION_TOKEN_LIMIT = 8
+_MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT = 8
 
 
 def _protocol_error_response(
@@ -520,7 +520,7 @@ def _protocol_error_response(
 
 def _audit_mcp_transport(
     data: PhoenixData,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     request_id: str,
     client_ip: str,
     *,
@@ -532,7 +532,7 @@ def _audit_mcp_transport(
     method = body.get("method") if isinstance(body, dict) else None
     _log(
         data,
-        token,
+        access_key,
         request_id=request_id,
         method=method if isinstance(method, str) and method else "POST",
         resource=resource,
@@ -837,7 +837,7 @@ def _project_state(scrubbed: dict, fields: Any, detailed: bool) -> dict:
 
 
 async def _tool_get_state(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     args, error = normalize_tool_args("get_state", args)
     if error:
@@ -846,7 +846,7 @@ async def _tool_get_state(
     if not entity_id:
         return _tool_error("Missing required argument: entity_id"), "denied", "get_state"
 
-    perm = resolve(entity_id, token, hass)
+    perm = resolve(entity_id, access_key, hass)
     if perm == Permission.NOT_FOUND:
         return _tool_error("Entity not found."), "not_found", entity_id
     if perm in (Permission.NO_ACCESS, Permission.DENY):
@@ -862,14 +862,14 @@ async def _tool_get_state(
 
 
 async def _tool_get_states(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: return all entities accessible to the token."""
     args, error = normalize_tool_args("get_states", args)
     if error:
         return _tool_error(error), "invalid_request", "get_states"
     states = hass.states.async_all()
-    filtered = filter_entities_for_token(states, token, hass)
+    filtered = filter_entities_for_access_key(states, access_key, hass)
     fields = args.get("fields")
     detailed = bool(args.get("detailed"))
     projected = [_project_state(d, fields, detailed) for d in filtered]
@@ -877,14 +877,14 @@ async def _tool_get_states(
 
 
 async def _tool_get_history(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: fetch one bounded page of state history."""
     entity_id = str_arg(args.get("entity_id"))
     if not entity_id:
         return _tool_error("Missing required argument: entity_id"), "denied", "get_history"
 
-    perm = resolve(entity_id, token, hass)
+    perm = resolve(entity_id, access_key, hass)
     if perm == Permission.NOT_FOUND:
         return _tool_error("Entity not found."), "not_found", entity_id
     if perm in (Permission.NO_ACCESS, Permission.DENY):
@@ -990,14 +990,14 @@ async def _tool_get_history(
 
 
 async def _tool_get_statistics(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: fetch one aligned and bounded page of Recorder statistics."""
     entity_id = str_arg(args.get("entity_id"))
     if not entity_id:
         return _tool_error("Missing required argument: entity_id"), "denied", "get_statistics"
 
-    perm = resolve(entity_id, token, hass)
+    perm = resolve(entity_id, access_key, hass)
     if perm == Permission.NOT_FOUND:
         return _tool_error("Entity not found."), "not_found", entity_id
     if perm in (Permission.NO_ACCESS, Permission.DENY):
@@ -1102,7 +1102,7 @@ async def _tool_get_statistics(
 
 
 async def _tool_get_calendar_events(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """Read full integration events including UID and occurrence identity."""
     from .tools.calendar import _calendar_entity, _calendar_events, _safe_calendar_data, _calendar_window
@@ -1110,7 +1110,7 @@ async def _tool_get_calendar_events(
     if error:
         return _tool_error(error), "invalid_request", "get_calendar_events"
     try:
-        entity = _calendar_entity(args.get("entity_id"), token, hass)
+        entity = _calendar_entity(args.get("entity_id"), access_key, hass)
         # Normalize via the shared parser so relative times ("24h") work.
         for key in ("start_time", "end_time"):
             if key in args:
@@ -1119,16 +1119,16 @@ async def _tool_get_calendar_events(
                 args[key] = dt_util.as_local(_parse_time_param(args[key])).isoformat()
         start, end = _calendar_window(args, defaults=True)
         events = await _calendar_events(entity, hass, start, end)
-        _calendar_entity(args.get("entity_id"), token, hass)
+        _calendar_entity(args.get("entity_id"), access_key, hass)
         body = {"calendar_id": args["entity_id"], "events": [
             {**event, "content_hash": content_hash(event)} for event in events]}
-        return _tool_success(json.dumps(_safe_calendar_data(body, token, hass))), "allowed", args["entity_id"]
+        return _tool_success(json.dumps(_safe_calendar_data(body, access_key, hass))), "allowed", args["entity_id"]
     except AuthorityChangedError:
         raise
     except PermissionError:
         return _tool_error("Calendar not found."), "denied", "get_calendar_events"
     except ValueError as exc:
-        return _tool_error(_safe_calendar_data(str(exc), token, hass)), "invalid_request", "get_calendar_events"
+        return _tool_error(_safe_calendar_data(str(exc), access_key, hass)), "invalid_request", "get_calendar_events"
     except Exception:
         _LOGGER.exception("Calendar read failed")
         return _tool_error("Failed to read calendar events."), "invalid_request", "get_calendar_events"
@@ -1136,7 +1136,7 @@ async def _tool_get_calendar_events(
 
 async def _tool_call_service(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
@@ -1159,12 +1159,12 @@ async def _tool_call_service(
         elif call_needs_physical_gate(
             domain=domain, service=service,
             entity_id=args.get("entity_id"), device_id=args.get("device_id"),
-            area_id=args.get("area_id"), token=token, hass=hass,
+            area_id=args.get("area_id"), access_key=access_key, hass=hass,
         ):
             cap = "cap_physical_control"
         elif service_key in NO_TARGET_SERVICES:
             cap = "cap_yaml_edit"
-        if cap is not None and effective_cap(token, cap) == CAP_DENY:
+        if cap is not None and effective_cap(access_key, cap) == CAP_DENY:
             return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "call_service"
         return _tool_error(error), "invalid_request", "call_service"
     # Coerced before anything gates on them: service_key and the physical-gate
@@ -1181,7 +1181,7 @@ async def _tool_call_service(
         return _tool_error("Forbidden."), "denied", "call_service"
 
     if domain == "calendar" and service != "get_events":
-        if effective_cap(token, "cap_calendar_write") == CAP_DENY:
+        if effective_cap(access_key, "cap_calendar_write") == CAP_DENY:
             return _tool_error("Forbidden."), "denied", "call_service"
         return _tool_error("Use the dedicated calendar event authoring tools for calendar writes."), "invalid_request", "call_service"
 
@@ -1202,66 +1202,66 @@ async def _tool_call_service(
     if (service_key not in DUAL_GATE_SERVICES | NO_TARGET_SERVICES
             and domain != _ESPHOME_DOMAIN
             and not any((args.get("entity_id"), args.get("device_id"), args.get("area_id")))):
-        if (call_needs_physical_gate(domain=domain, service=service, token=token, hass=hass)
-                and effective_cap(token, "cap_physical_control") == CAP_DENY):
+        if (call_needs_physical_gate(domain=domain, service=service, access_key=access_key, hass=hass)
+                and effective_cap(access_key, "cap_physical_control") == CAP_DENY):
             return _tool_error("Forbidden."), "denied", "call_service"
         return (
             _tool_error("An explicit entity_id, device_id, or area_id target is required for an entity service. Targetless services outside the supported allowlist are unavailable through call_service."),
             "invalid_request", "call_service",
         )
 
-    bound_args = bind_service_plan(args, hass, data, token)
+    bound_args = bind_service_plan(args, hass, data, access_key)
     if bound_args is None:
         return _tool_error("Command targets or configuration changed."), "denied", "call_service"
     args = bound_args
 
     if service_key in DUAL_GATE_SERVICES:
         blocked = await _gate(
-            "cap_restart", token, hass, data,
+            "cap_restart", access_key, hass, data,
             tool_name="call_service", args=args, request_id=request_id,
-            client_ip=client_ip, diff=lambda: _build_diff_call_service(args, token, hass),
+            client_ip=client_ip, diff=lambda: _build_diff_call_service(args, access_key, hass),
         )
         if blocked is not None:
             return blocked
     elif call_needs_physical_gate(
         domain=domain, service=service,
         entity_id=args.get("entity_id"), device_id=args.get("device_id"),
-        area_id=args.get("area_id"), token=token, hass=hass,
+        area_id=args.get("area_id"), access_key=access_key, hass=hass,
     ):
-        if effective_cap(token, "cap_physical_control") != CAP_DENY:
+        if effective_cap(access_key, "cap_physical_control") != CAP_DENY:
             try:
                 targets, _ = resolve_service_targets(
                     entity_id=args.get("entity_id"), device_id=args.get("device_id"),
-                    area_id=args.get("area_id"), service_domain=domain, token=token, hass=hass,
+                    area_id=args.get("area_id"), service_domain=domain, access_key=access_key, hass=hass,
                 )
             except EntityCreationNotPermitted:
                 targets = []
             if not targets:
                 return _tool_error("Forbidden."), "denied", "call_service"
         blocked = await _gate(
-            "cap_physical_control", token, hass, data,
+            "cap_physical_control", access_key, hass, data,
             tool_name="call_service", args=args, request_id=request_id,
-            client_ip=client_ip, diff=lambda: _build_diff_call_service(args, token, hass),
-            target_entities=targets if effective_cap(token, "cap_physical_control") != CAP_DENY else None,
+            client_ip=client_ip, diff=lambda: _build_diff_call_service(args, access_key, hass),
+            target_entities=targets if effective_cap(access_key, "cap_physical_control") != CAP_DENY else None,
         )
         if blocked is not None:
             return blocked
     elif service_key in NO_TARGET_SERVICES:
         blocked = await _gate(
-            "cap_yaml_edit", token, hass, data,
+            "cap_yaml_edit", access_key, hass, data,
             tool_name="call_service", args=args, request_id=request_id,
-            client_ip=client_ip, diff=lambda: _build_diff_call_service(args, token, hass),
+            client_ip=client_ip, diff=lambda: _build_diff_call_service(args, access_key, hass),
         )
         if blocked is not None:
             return blocked
     return await _execute_call_service(
-        args, token, hass, data, request_id=request_id, client_ip=client_ip,
+        args, access_key, hass, data, request_id=request_id, client_ip=client_ip,
     )
 
 
 async def _dispatch_no_target_tool_call(
     hass: HomeAssistant,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     *,
     domain: str,
     service: str,
@@ -1286,7 +1286,7 @@ async def _dispatch_no_target_tool_call(
     if domain in HIGH_RISK_DOMAINS:
         _LOGGER.info(
             "High-risk service call %s/%s by access key %s",
-            domain, service, token.name,
+            domain, service, access_key.name,
         )
     try:
         async with asyncio.timeout(PROXY_TIMEOUT_SECONDS):
@@ -1321,7 +1321,7 @@ async def _dispatch_no_target_tool_call(
 
 async def _execute_call_service(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     *,
@@ -1338,7 +1338,7 @@ async def _execute_call_service(
         return _tool_error("Missing required arguments: domain and service"), "denied", "call_service"
 
     if domain == "calendar" and service != "get_events":
-        if effective_cap(token, "cap_calendar_write") == CAP_DENY:
+        if effective_cap(access_key, "cap_calendar_write") == CAP_DENY:
             return _tool_error("Forbidden."), "denied", "call_service"
         return _tool_error("Use the dedicated calendar event authoring tools for calendar writes."), "invalid_request", "call_service"
 
@@ -1352,14 +1352,14 @@ async def _execute_call_service(
     elif call_needs_physical_gate(
         domain=domain, service=service,
         entity_id=args.get("entity_id"), device_id=args.get("device_id"),
-        area_id=args.get("area_id"), token=token, hass=hass,
+        area_id=args.get("area_id"), access_key=access_key, hass=hass,
     ):
         required_cap = "cap_physical_control"
     elif service_key in NO_TARGET_SERVICES:
         required_cap = "cap_yaml_edit"
     else:
         required_cap = None
-    if required_cap is not None and effective_cap(token, required_cap) == CAP_DENY:
+    if required_cap is not None and effective_cap(access_key, required_cap) == CAP_DENY:
         return _tool_error("Forbidden."), "denied", resource
 
     # Re-run at the executor choke point. Confirm stores caller arguments and a
@@ -1385,7 +1385,7 @@ async def _execute_call_service(
     from .const import COMMAND_ROUTING_PLAN_KEY
 
     local_plan = COMMAND_ROUTING_PLAN_KEY in args
-    if not service_plan_is_current(args, hass, data, token):
+    if not service_plan_is_current(args, hass, data, access_key):
         return _tool_error("Command targets or configuration changed."), "denied", resource
 
     # DUAL_GATE_SERVICES have no entities in hass.states; routing them through
@@ -1393,7 +1393,7 @@ async def _execute_call_service(
     # The cap_restart gate above is the only permission check required.
     if service_key in DUAL_GATE_SERVICES:
         return await _dispatch_no_target_tool_call(
-            hass, token, domain=domain, service=service, service_data=service_data,
+            hass, access_key, domain=domain, service=service, service_data=service_data,
             resource=resource, timeout_noun="Service",
             surface_validation_errors=False,
         )
@@ -1409,7 +1409,7 @@ async def _execute_call_service(
         # already granted) and the message describes the caller's own reloadable
         # config, not hidden state.
         return await _dispatch_no_target_tool_call(
-            hass, token, domain=domain, service=service, service_data=service_data,
+            hass, access_key, domain=domain, service=service, service_data=service_data,
             resource=resource, timeout_noun="Service",
             surface_validation_errors=True,
         )
@@ -1428,12 +1428,12 @@ async def _execute_call_service(
     if domain == _ESPHOME_DOMAIN:
         esphome_entry = resolve_esphome_user_service(hass, service)
         if esphome_entry is not None:
-            if not esphome_entry_writable(hass, esphome_entry, token):
+            if not esphome_entry_writable(hass, esphome_entry, access_key):
                 return _tool_error("Forbidden."), "denied", resource
             # A device-defined schema makes a wrong argument NAME the likeliest
             # failure, and the caller can fix it, so validation errors surface.
             return await _dispatch_no_target_tool_call(
-                hass, token, domain=domain, service=service, service_data=service_data,
+                hass, access_key, domain=domain, service=service, service_data=service_data,
                 resource=resource, timeout_noun="Action",
                 surface_validation_errors=True,
             )
@@ -1451,7 +1451,7 @@ async def _execute_call_service(
             device_id=device_id,
             area_id=area_id,
             service_domain=domain,
-            token=token,
+            access_key=access_key,
             hass=hass,
         )
     except EntityCreationNotPermitted:
@@ -1460,7 +1460,7 @@ async def _execute_call_service(
     if not permitted_entities or not service_target_binding_valid(domain, service, permitted_entities, hass):
         return _tool_error("Forbidden."), "denied", resource
 
-    if not service_plan_is_current(args, hass, data, token, permitted_entities):
+    if not service_plan_is_current(args, hass, data, access_key, permitted_entities):
         return _tool_error("Command targets or configuration changed."), "denied", resource
 
     if not targets_current(args, permitted_entities, hass):
@@ -1477,7 +1477,7 @@ async def _execute_call_service(
     if local_plan:
         local_constraints["approval_args"] = args
     mesa_outcome = await async_apply_mesa_to_call(
-        hass, data, token,
+        hass, data, access_key,
         domain=domain, service=service, service_data=service_data,
         entities=permitted_entities,
         request_id=request_id, client_ip=client_ip, session_id=request_id,
@@ -1485,18 +1485,18 @@ async def _execute_call_service(
         **local_constraints,
     )
     if mesa_outcome.blocked:
-        fire_mesa_blocked_event(hass, token, mesa_outcome.blocked)
+        fire_mesa_blocked_event(hass, access_key, mesa_outcome.blocked)
     if mesa_outcome.decision == "pending":
         # Same holding behaviour as a capability confirm (tool_common._gate):
         # one definition, so the two kinds of gate cannot answer differently.
-        return await _pending_or_inline(hass, data, token, mesa_outcome.approval)
+        return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
         return _tool_error("Forbidden."), "denied", resource
     check_request_authority()
     permitted_entities = mesa_outcome.entities
     if not service_target_binding_valid(domain, service, permitted_entities, hass):
         return _tool_error("Forbidden."), "denied", resource
-    if not service_plan_is_current(args, hass, data, token, permitted_entities):
+    if not service_plan_is_current(args, hass, data, access_key, permitted_entities):
         return _tool_error("Command targets or configuration changed."), "denied", resource
 
     if not targets_current(args, permitted_entities, hass):
@@ -1505,14 +1505,14 @@ async def _execute_call_service(
     if domain in HIGH_RISK_DOMAINS:
         _LOGGER.info(
             "High-risk service call %s/%s by access key %s",
-            domain, service, token.name,
+            domain, service, access_key.name,
         )
 
     call_data = dict(service_data)
     call_data["entity_id"] = permitted_entities
 
     use_return_response = False
-    if effective_cap(token, "cap_service_response") != CAP_DENY:
+    if effective_cap(access_key, "cap_service_response") != CAP_DENY:
         try:
             from homeassistant.core import SupportsResponse as _SR
             handler = hass.services.async_services().get(domain, {}).get(service)
@@ -1590,11 +1590,11 @@ async def _execute_call_service(
         from .command_verification import async_verify_command_state
 
         body["state_verification"] = await async_verify_command_state(
-            hass, data, token, args[COMMAND_ROUTING_PLAN_KEY],
+            hass, data, access_key, args[COMMAND_ROUTING_PLAN_KEY],
         )
         check_request_authority()
-        token = RequestAuthority(hass, data, token.id, token.token_hash).current_token()
-    filtered_response = filter_service_response(svc_response, token, hass) if svc_response is not None else None
+        access_key = RequestAuthority(hass, data, access_key.id, access_key.token_hash).current_access_key()
+    filtered_response = filter_service_response(svc_response, access_key, hass) if svc_response is not None else None
     if filtered_response is not None:
         body["service_response"] = filtered_response
     if mesa_outcome.warnings:
@@ -1605,7 +1605,7 @@ async def _execute_call_service(
 
 
 async def _execute_call_service_mesa_approved(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Re-run a MESA-gated service call after admin approval.
 
@@ -1615,14 +1615,14 @@ async def _execute_call_service_mesa_approved(
     are treated as satisfied, so an entity that became prohibited or read_only
     since the request is still rejected.
     """
-    return await _execute_call_service(args, token, hass, data, mesa_approved=True)
+    return await _execute_call_service(args, access_key, hass, data, mesa_approved=True)
 
 
 async def _tool_get_config(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: return HA config (requires cap_config_read)."""
-    if effective_cap(token, "cap_config_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_config_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_config"
     from .config_recovery import runtime_identity
     body = {**build_safe_config(hass), "runtime_identity": runtime_identity(hass)}
@@ -1637,7 +1637,7 @@ _LOG_LOGGER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*
 
 async def _tool_log_query(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     *,
     tool_name: str,
@@ -1647,9 +1647,9 @@ async def _tool_log_query(
     check_request_authority()
     authority = request_authority.get()
     if authority is not None:
-        token = authority.current_token()
-    if effective_cap(token, "cap_log_read") == CAP_DENY or (
-        phoenix_only and effective_cap(token, "cap_diagnostics") == CAP_DENY
+        access_key = authority.current_access_key()
+    if effective_cap(access_key, "cap_log_read") == CAP_DENY or (
+        phoenix_only and effective_cap(access_key, "cap_diagnostics") == CAP_DENY
     ):
         return _tool_error("Forbidden."), "denied", tool_name
 
@@ -1747,7 +1747,7 @@ async def _tool_log_query(
             limit,
             cursor,
             phoenix_only=phoenix_only,
-            token=token,
+            access_key=access_key,
             detail_ref=detail_ref,
             detail_field=detail_field,
             message_index=message_index,
@@ -1782,40 +1782,40 @@ async def _tool_log_query(
         return _tool_error(str(exc)), "invalid_request", tool_name
     check_request_authority()
     if authority is not None:
-        token = authority.current_token()
-    if effective_cap(token, "cap_log_read") == CAP_DENY or (
-        phoenix_only and effective_cap(token, "cap_diagnostics") == CAP_DENY
+        access_key = authority.current_access_key()
+    if effective_cap(access_key, "cap_log_read") == CAP_DENY or (
+        phoenix_only and effective_cap(access_key, "cap_diagnostics") == CAP_DENY
     ):
         return _tool_error("Forbidden."), "denied", tool_name
     return _tool_success(json.dumps(page.as_dict(), default=str)), "allowed", tool_name
 
 
 async def _tool_get_logs(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read the system ring or protected fault-dump blocks."""
-    if effective_cap(token, "cap_log_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_log_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_logs"
     source = args.get("source", "system_log")
     if source == "fault_log":
         from .fault_log import async_fault_log_query
-        return await async_fault_log_query(args, token, hass)
+        return await async_fault_log_query(args, access_key, hass)
     if source != "system_log":
         return _tool_error("source must be system_log or fault_log."), "invalid_request", "get_logs"
     if "order" in args:
         return _tool_error("order is supported only for fault_log."), "invalid_request", "get_logs"
     return await _tool_log_query(
-        args, token, hass, tool_name="get_logs", phoenix_only=False
+        args, access_key, hass, tool_name="get_logs", phoenix_only=False
     )
 
 
 async def _tool_get_phoenix_diagnostics(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read aggressively scrubbed Phoenix warning/error diagnostics."""
     return await _tool_log_query(
         args,
-        token,
+        access_key,
         hass,
         tool_name="get_phoenix_diagnostics",
         phoenix_only=True,
@@ -1851,7 +1851,7 @@ def _logbook_time(value: Any, default: datetime) -> datetime:
 
 def _logbook_entry_visible(
     entry: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     entity_permissions: dict[str, Permission],
     device_permissions: dict[str, Permission],
@@ -1863,7 +1863,7 @@ def _logbook_entry_visible(
             return False
         permission = entity_permissions.get(entity_id)
         if permission is None:
-            permission = entity_permissions[entity_id] = resolve(entity_id, token, hass)
+            permission = entity_permissions[entity_id] = resolve(entity_id, access_key, hass)
         return permission in (Permission.READ, Permission.WRITE)
 
     device_id = entry.get("device_id")
@@ -1872,19 +1872,19 @@ def _logbook_entry_visible(
     permission = device_permissions.get(device_id)
     if permission is None:
         permission = device_permissions[device_id] = resolve_device_registry_access(
-            device_id, token, hass
+            device_id, access_key, hass
         )
     return permission in (Permission.READ, Permission.WRITE)
 
 
 async def _tool_get_logbook(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read the human-readable logbook (requires cap_log_read)."""
     args, error = normalize_tool_args("get_logbook", args)
     if error:
         return _tool_error(error), "invalid_request", "get_logbook"
-    if effective_cap(token, "cap_log_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_log_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_logbook"
 
     entity_ids, entity_error = _logbook_string_list(args, "entity_ids")
@@ -1952,10 +1952,10 @@ async def _tool_get_logbook(
         ), "invalid_request", "get_logbook"
 
     requested_permissions: list[Permission] = [
-        resolve(entity_id, token, hass) for entity_id in entity_ids
+        resolve(entity_id, access_key, hass) for entity_id in entity_ids
     ]
     requested_permissions.extend(
-        resolve_device_registry_access(device_id, token, hass)
+        resolve_device_registry_access(device_id, access_key, hass)
         for device_id in device_ids
     )
     if any(
@@ -1997,10 +1997,10 @@ async def _tool_get_logbook(
         for entry in result
         if isinstance(entry, dict)
         and _logbook_entry_visible(
-            entry, token, hass, entity_permissions, device_permissions
+            entry, access_key, hass, entity_permissions, device_permissions
         )
     ]
-    scoped = filter_service_response(scoped, token, hass)
+    scoped = filter_service_response(scoped, access_key, hass)
     if not isinstance(scoped, list) or any(
         not isinstance(entry, dict)
         or not isinstance(entry.get("when"), (int, float))
@@ -2048,13 +2048,13 @@ _LOGGER_CONTROL_FINGERPRINT = "_phoenix_logger_control_fingerprint"
 _INTEGRATION_DOMAIN_RE = re.compile(r"^[a-z0-9_]+$")
 
 
-def _visible_logger_domains(token: TokenRecord, hass: HomeAssistant) -> set[str]:
+def _visible_logger_domains(access_key: AccessKeyRecord, hass: HomeAssistant) -> set[str]:
     """Integration domains visible through one config entry or registry entity."""
     domains = {
         entry.domain
         for entry in hass.config_entries.async_entries()
         if entry.domain != DOMAIN
-        and resolve_config_entry_registry_access(entry.entry_id, token, hass)
+        and resolve_config_entry_registry_access(entry.entry_id, access_key, hass)
         in (Permission.READ, Permission.WRITE)
     }
     registry = er.async_get(hass)
@@ -2063,7 +2063,7 @@ def _visible_logger_domains(token: TokenRecord, hass: HomeAssistant) -> set[str]
         if (
             isinstance(platform, str)
             and platform != DOMAIN
-            and resolve_registry_access(entry.entity_id, token, hass)
+            and resolve_registry_access(entry.entity_id, access_key, hass)
             in (Permission.READ, Permission.WRITE)
         ):
             domains.add(platform)
@@ -2099,10 +2099,10 @@ def _aggregate_log_level(levels: dict[str, str]) -> str:
 
 
 async def _tool_list_integration_log_levels(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """List scoped integration-aware logger levels."""
-    if effective_cap(token, "cap_log_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_log_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "list_integration_log_levels"
     manager = data.logger_control
     if manager is None:
@@ -2118,7 +2118,7 @@ async def _tool_list_integration_log_levels(
     )
     rows: list[dict[str, Any]] = []
     warnings: list[str] = []
-    for domain in sorted(_visible_logger_domains(token, hass)):
+    for domain in sorted(_visible_logger_domains(access_key, hass)):
         try:
             loggers = await manager.adapter.declared_loggers(domain)
             levels = manager.adapter.effective_levels(loggers)
@@ -2221,13 +2221,13 @@ def _build_diff_set_integration_log_level(
 
 
 async def _validated_log_control_context(
-    args: dict[str, Any], token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict[str, Any], access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[str, str, str, int | None, set[str], IntegrationOverride | None, str] | tuple[dict, str, str]:
     parsed = _log_control_args(args)
     if isinstance(parsed, str):
         return _tool_error(parsed), "invalid_request", "set_integration_log_level"
     domain, level, persistence, duration = parsed
-    visible = domain in _visible_logger_domains(token, hass)
+    visible = domain in _visible_logger_domains(access_key, hass)
     if not visible or domain == DOMAIN:
         return _tool_error("Integration not found."), "not_found", domain
     try:
@@ -2247,17 +2247,17 @@ async def _validated_log_control_context(
 
 
 async def _tool_set_integration_log_level(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """Gate a scoped process-wide integration logger change without MESA."""
     # Capability ordering is intentional: argument errors must not become an
     # oracle for tokens lacking either explicit capability.
-    if effective_cap(token, "cap_log_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_log_read") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_integration_log_level"
-    if effective_cap(token, "cap_log_control") == CAP_DENY:
+    if effective_cap(access_key, "cap_log_control") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_integration_log_level"
-    context = await _validated_log_control_context(args, token, hass, data)
+    context = await _validated_log_control_context(args, access_key, hass, data)
     if len(context) == 3 and isinstance(context[0], dict):
         return context
     domain, level, persistence, duration, loggers, before, fingerprint = context
@@ -2271,7 +2271,7 @@ async def _tool_set_integration_log_level(
     execute_args = dict(args)
     execute_args[_LOGGER_CONTROL_FINGERPRINT] = fingerprint
     blocked = await _gate(
-        "cap_log_control", token, hass, data,
+        "cap_log_control", access_key, hass, data,
         tool_name="set_integration_log_level",
         args=execute_args,
         request_id=request_id,
@@ -2282,17 +2282,17 @@ async def _tool_set_integration_log_level(
     )
     if blocked is not None:
         return blocked
-    return await _execute_set_integration_log_level(execute_args, token, hass, data)
+    return await _execute_set_integration_log_level(execute_args, access_key, hass, data)
 
 
 async def _execute_set_integration_log_level(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    if effective_cap(token, "cap_log_read") == CAP_DENY or effective_cap(
-        token, "cap_log_control"
+    if effective_cap(access_key, "cap_log_read") == CAP_DENY or effective_cap(
+        access_key, "cap_log_control"
     ) == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_integration_log_level"
-    context = await _validated_log_control_context(args, token, hass, data)
+    context = await _validated_log_control_context(args, access_key, hass, data)
     if len(context) == 3 and isinstance(context[0], dict):
         return context
     domain, level, persistence, duration, loggers, before, fingerprint = context
@@ -2313,7 +2313,7 @@ async def _execute_set_integration_log_level(
             desired=after,
             prior=before,
             loggers=loggers,
-            owner_token_id=token.id,
+            owner_token_id=access_key.id,
             duration_minutes=duration,
         )
         effective = manager.adapter.effective_levels(loggers)
@@ -2688,7 +2688,7 @@ def _entity_identity_references(
 ) -> list[dict[str, Any]]:
     """Active Phoenix configuration whose identity would not follow a rename."""
     references: list[dict[str, Any]] = []
-    for record in data.store.list_tokens():
+    for record in data.store.list_access_keys():
         if not record.is_valid():
             continue
         if entity_id in record.permissions.entities:
@@ -2784,7 +2784,7 @@ def _registry_mesa_error(
 
 def _registry_mesa_decision(
     data: PhoenixData,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     entity_id: str,
     *,
     action: str,
@@ -2795,7 +2795,7 @@ def _registry_mesa_decision(
     try:
         return evaluate_registry_action(
             data,
-            token,
+            access_key,
             entity_id,
             action=action,
             service_data=service_data,
@@ -2823,7 +2823,7 @@ def _mesa_preview(decision: RegistryMesaDecision) -> dict[str, Any]:
 
 def _registry_write_precheck(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     tool_name: str,
     data: PhoenixData | None = None,
@@ -2836,7 +2836,7 @@ def _registry_write_precheck(
     entity_id = str(args.get("entity_id") or "").strip()
     if not entity_id:
         return _tool_error("entity_id is required."), "invalid_request", tool_name
-    permission = resolve_registry_access(entity_id, token, hass)
+    permission = resolve_registry_access(entity_id, access_key, hass)
     perm_error = _registry_write_perm_error(permission, entity_id)
     if perm_error is not None:
         return perm_error
@@ -2847,7 +2847,7 @@ def _registry_write_precheck(
         if args_error is not None:
             return args_error
         if args.get("enabled") is False and resolve_registry_access(
-            entity_id, token, hass, force_registry_only=True
+            entity_id, access_key, hass, force_registry_only=True
         ) != Permission.WRITE:
             return (
                 _tool_error(
@@ -2907,7 +2907,7 @@ def _device_public_meta(device: Any) -> dict[str, Any]:
 def _device_write_perm_error(
     permission: Permission,
     device_id: str,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
 ) -> tuple[dict, str, str] | None:
     """Require explicit whole-device WRITE without hiding an already-visible row."""
@@ -2915,7 +2915,7 @@ def _device_write_perm_error(
         return None
     if permission == Permission.NOT_FOUND:
         return _tool_error("Device not found."), "not_found", device_id
-    readable = resolve_device_registry_access(device_id, token, hass) in (
+    readable = resolve_device_registry_access(device_id, access_key, hass) in (
         Permission.READ,
         Permission.WRITE,
     )
@@ -3036,7 +3036,7 @@ def _set_device_args_error(
 
 def _device_child_write_error(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     device: Any,
     *,
@@ -3052,7 +3052,7 @@ def _device_child_write_error(
         entity_id
         for entity_id in device_registry_entity_ids(hass, device.id)
         if resolve_registry_access(
-            entity_id, token, hass, force_registry_only=True
+            entity_id, access_key, hass, force_registry_only=True
         )
         != Permission.WRITE
     ]
@@ -3105,7 +3105,7 @@ def _device_mesa_service_data(args: dict) -> dict[str, Any]:
 
 def _device_mesa_decision(
     data: PhoenixData,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     device: Any,
     *,
@@ -3164,7 +3164,7 @@ def _device_mesa_decision(
             for entity_id in entity_ids:
                 decision = evaluate_registry_action(
                     data,
-                    token,
+                    access_key,
                     entity_id,
                     action=action,
                     registry_domain="device_registry",
@@ -3277,16 +3277,16 @@ def _device_mesa_context_changed_error(
 
 def _set_device_precheck(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
 ) -> tuple[dict, str, str] | None:
     device_id = str(args.get("device_id") or "").strip()
     if not device_id:
         return _tool_error("device_id is required."), "invalid_request", "set_device"
     perm_error = _device_write_perm_error(
-        resolve_device_registry_write(device_id, token, hass),
+        resolve_device_registry_write(device_id, access_key, hass),
         device_id,
-        token,
+        access_key,
         hass,
     )
     if perm_error is not None:
@@ -3298,13 +3298,13 @@ def _set_device_precheck(
     if device is None:
         return _tool_error("Device not found."), "not_found", device_id
     return _device_child_write_error(
-        args, token, hass, device, restoring=False
+        args, access_key, hass, device, restoring=False
     )
 
 
 async def _build_diff_set_device(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     mesa_decision: _DeviceMesaDecision | None = None,
 ) -> dict[str, Any]:
@@ -3378,19 +3378,19 @@ async def _build_diff_set_device(
 
 async def _tool_set_device(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: edit user-controlled device registry metadata."""
-    if effective_cap(token, "cap_registry_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_registry_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_device"
     args, error = normalize_tool_args("set_device", args)
     if error:
         return _tool_error(error), "invalid_request", "set_device"
-    pre = _set_device_precheck(args, token, hass)
+    pre = _set_device_precheck(args, access_key, hass)
     if pre is not None:
         return pre
     device_id = str(args.get("device_id") or "").strip()
@@ -3403,7 +3403,7 @@ async def _tool_set_device(
     if actions:
         resolved = _device_mesa_decision(
             data,
-            token,
+            access_key,
             hass,
             device,
             actions=actions,
@@ -3415,7 +3415,7 @@ async def _tool_set_device(
         mesa_decision = resolved
         if mesa_decision.decision == "deny":
             if mesa_decision.blocked:
-                fire_mesa_blocked_event(hass, token, mesa_decision.blocked)
+                fire_mesa_blocked_event(hass, access_key, mesa_decision.blocked)
             return _device_mesa_error(device, mesa_decision)
         # The normal capability gate may create the approval even when MESA's
         # own verdict is allow. Pin the complete membership/profile context in
@@ -3425,11 +3425,11 @@ async def _tool_set_device(
             mesa_decision.profile_fingerprint
         )
     diff_builder = lambda: _build_diff_set_device(  # noqa: E731
-        args, token, hass, mesa_decision
+        args, access_key, hass, mesa_decision
     )
     blocked = await _gate(
         "cap_registry_write",
-        token,
+        access_key,
         hass,
         data,
         tool_name="set_device",
@@ -3444,14 +3444,14 @@ async def _tool_set_device(
         return await _create_registry_mesa_approval(
             hass,
             data,
-            token,
+            access_key,
             tool_name="set_device",
             args=approval_args,
             diff=await diff_builder(),
             request_id=request_id,
             client_ip=client_ip,
         )
-    return await _execute_set_device(args, token, hass, data)
+    return await _execute_set_device(args, access_key, hass, data)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -3469,14 +3469,14 @@ class _RegistryCommit:
 
 async def _finish_registry_commit(
     commit: _RegistryCommit | tuple[dict, str, str],
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     data: PhoenixData,
 ) -> tuple[dict, str, str]:
     """Persist already captured history without reopening the mutation boundary."""
     if isinstance(commit, tuple):
         return commit
     await _record_version(
-        data, token, resource_type=commit.resource_type,
+        data, access_key, resource_type=commit.resource_type,
         resource_id=commit.resource_id, action=commit.action,
         before=commit.before, after=commit.after, alias=commit.alias,
     )
@@ -3485,31 +3485,31 @@ async def _finish_registry_commit(
 
 
 async def _execute_set_device(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Commit registry state before awaiting history persistence."""
     return await _finish_registry_commit(
-        _commit_set_device(args, token, hass, data), token, data
+        _commit_set_device(args, access_key, hass, data), access_key, data
     )
 
 
 def _commit_set_device(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
 ) -> _RegistryCommit | tuple[dict, str, str]:
     """Validate, mutate, and capture one device result without yielding."""
     check_request_authority()
-    if effective_cap(token, "cap_registry_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_registry_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_device"
     device_id = str(args.get("device_id") or "").strip()
     if not device_id:
         return _tool_error("device_id is required."), "invalid_request", "set_device"
     perm_error = _device_write_perm_error(
-        resolve_device_registry_write(device_id, token, hass),
+        resolve_device_registry_write(device_id, access_key, hass),
         device_id,
-        token,
+        access_key,
         hass,
     )
     if perm_error is not None:
@@ -3525,7 +3525,7 @@ def _commit_set_device(
     if args_error is not None:
         return args_error
     child_error = _device_child_write_error(
-        args, token, hass, device, restoring=restoring
+        args, access_key, hass, device, restoring=restoring
     )
     if child_error is not None:
         return child_error
@@ -3535,7 +3535,7 @@ def _commit_set_device(
     if actions:
         resolved = _device_mesa_decision(
             data,
-            token,
+            access_key,
             hass,
             device,
             actions=actions,
@@ -3561,7 +3561,7 @@ def _commit_set_device(
             mesa_decision.decision == "confirm" and not mesa_confirmed
         ):
             if mesa_decision.blocked:
-                fire_mesa_blocked_event(hass, token, mesa_decision.blocked)
+                fire_mesa_blocked_event(hass, access_key, mesa_decision.blocked)
             return _device_mesa_error(device, mesa_decision)
 
     updates: dict[str, Any] = {}
@@ -3707,7 +3707,7 @@ def _device_permission_references(
 ) -> list[dict[str, Any]]:
     """Active-token and preset permission nodes keyed to one device."""
     references: list[dict[str, Any]] = []
-    for record in data.store.list_tokens():
+    for record in data.store.list_access_keys():
         if not record.is_valid():
             continue
         if device_id in record.permissions.devices:
@@ -3754,22 +3754,22 @@ def _device_removal_context_fingerprint(
 
 async def _resolve_device_removal_context(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
 ) -> _DeviceRemovalContext | tuple[dict, str, str]:
     """Load support, then resolve fresh state for the same selected owner."""
-    context = _device_removal_context(args, token, hass)
+    context = _device_removal_context(args, access_key, hass)
     if isinstance(context, tuple):
         return context
     owner_id: str = context.config_entry.entry_id
     hook = await _async_device_removal_hook(hass, context.config_entry)
     check_request_authority()
-    if effective_cap(token, "cap_integration_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_integration_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "remove_device"
     if hass.config_entries.async_get_entry(owner_id) is not context.config_entry:
         return _tool_error("The owning config entry changed. Review the removal again."), "denied", context.device.id
     fresh = _device_removal_context(
-        {**args, "config_entry_id": owner_id}, token, hass, hook
+        {**args, "config_entry_id": owner_id}, access_key, hass, hook
     )
     if isinstance(fresh, tuple):
         return fresh
@@ -3783,7 +3783,7 @@ async def _resolve_device_removal_context(
 
 def _device_removal_context(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     hook: Any = None,
 ) -> _DeviceRemovalContext | tuple[dict, str, str]:
@@ -3793,9 +3793,9 @@ def _device_removal_context(
     if not device_id:
         return _tool_error("device_id is required."), "invalid_request", "remove_device"
     perm_error = _device_write_perm_error(
-        resolve_device_registry_write(device_id, token, hass),
+        resolve_device_registry_write(device_id, access_key, hass),
         device_id,
-        token,
+        access_key,
         hass,
     )
     if perm_error is not None:
@@ -3910,7 +3910,7 @@ def _device_removal_context_changed_error(
 
 async def _build_diff_remove_device(
     context: _DeviceRemovalContext,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     mesa_decision: _DeviceMesaDecision,
@@ -3928,7 +3928,7 @@ async def _build_diff_remove_device(
     visible_children = [
         child_id
         for child_id in context.child_device_ids
-        if resolve_device_registry_access(child_id, token, hass)
+        if resolve_device_registry_access(child_id, access_key, hass)
         in (Permission.READ, Permission.WRITE)
     ]
     stored_device_profile = (
@@ -3975,25 +3975,25 @@ async def _build_diff_remove_device(
 
 async def _tool_remove_device(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: remove one integration's ownership through its HA hook."""
-    if effective_cap(token, "cap_integration_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_integration_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "remove_device"
     error = unknown_argument_error("remove_device", args)
     if error:
         return _tool_error(error), "invalid_request", "remove_device"
-    resolved = await _resolve_device_removal_context(args, token, hass)
+    resolved = await _resolve_device_removal_context(args, access_key, hass)
     if isinstance(resolved, tuple):
         return resolved
     context = resolved
     mesa = _device_mesa_decision(
         data,
-        token,
+        access_key,
         hass,
         context.device,
         actions=["remove"],
@@ -4009,7 +4009,7 @@ async def _tool_remove_device(
         return mesa
     if mesa.decision == "deny":
         if mesa.blocked:
-            fire_mesa_blocked_event(hass, token, mesa.blocked)
+            fire_mesa_blocked_event(hass, access_key, mesa.blocked)
         return _device_removal_mesa_error(context, mesa)
 
     approval_args = {
@@ -4020,11 +4020,11 @@ async def _tool_remove_device(
         _REMOVE_DEVICE_MESA_FINGERPRINT: mesa.profile_fingerprint,
     }
     diff_builder = lambda: _build_diff_remove_device(  # noqa: E731
-        context, token, hass, data, mesa
+        context, access_key, hass, data, mesa
     )
     blocked = await _gate(
         "cap_integration_write",
-        token,
+        access_key,
         hass,
         data,
         tool_name="remove_device",
@@ -4039,14 +4039,14 @@ async def _tool_remove_device(
         return await _create_registry_mesa_approval(
             hass,
             data,
-            token,
+            access_key,
             tool_name="remove_device",
             args=approval_args,
             diff=await diff_builder(),
             request_id=request_id,
             client_ip=client_ip,
         )
-    return await _execute_remove_device(approval_args, token, hass, data)
+    return await _execute_remove_device(approval_args, access_key, hass, data)
 
 
 def _device_removal_cleanup_error(device_id: str) -> tuple[dict, str, str]:
@@ -4064,20 +4064,20 @@ def _device_removal_cleanup_error(device_id: str) -> tuple[dict, str, str]:
 
 async def _execute_remove_device(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
 ) -> tuple[dict, str, str]:
     """Revalidate and invoke an integration-aware device removal."""
-    if effective_cap(token, "cap_integration_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_integration_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "remove_device"
-    resolved = await _resolve_device_removal_context(args, token, hass)
+    resolved = await _resolve_device_removal_context(args, access_key, hass)
     if isinstance(resolved, tuple):
         return resolved
     context = resolved
     mesa = _device_mesa_decision(
         data,
-        token,
+        access_key,
         hass,
         context.device,
         actions=["remove"],
@@ -4104,7 +4104,7 @@ async def _execute_remove_device(
         mesa.decision == "confirm" and not mesa_confirmed
     ):
         if mesa.blocked:
-            fire_mesa_blocked_event(hass, token, mesa.blocked)
+            fire_mesa_blocked_event(hass, access_key, mesa.blocked)
         return _device_removal_mesa_error(context, mesa)
 
     device_id = context.device.id
@@ -4142,10 +4142,10 @@ async def _execute_remove_device(
     if current is not None and selected_owner in device_config_entry_ids(current):
         fresh = _device_removal_context(
             {"device_id": device_id, "config_entry_id": selected_owner},
-            token, hass, context.hook,
+            access_key, hass, context.hook,
         )
         changed = (
-            effective_cap(token, "cap_integration_write") == CAP_DENY
+            effective_cap(access_key, "cap_integration_write") == CAP_DENY
             or isinstance(fresh, tuple)
         )
         if isinstance(fresh, _DeviceRemovalContext):
@@ -4154,7 +4154,7 @@ async def _execute_remove_device(
                 or fresh.fingerprint != context.fingerprint
             )
             current_mesa = _device_mesa_decision(
-                data, token, hass, fresh.device, actions=["remove"],
+                data, access_key, hass, fresh.device, actions=["remove"],
                 service_data={}, session_id="remove_device_cleanup",
                 entity_ids=fresh.affected_entity_ids,
             )
@@ -4222,7 +4222,7 @@ async def _execute_remove_device(
     }
     await _record_version(
         data,
-        token,
+        access_key,
         resource_type="device",
         resource_id=device_id,
         action="delete",
@@ -4246,7 +4246,7 @@ async def _execute_remove_device(
 
 async def _build_diff_set_entity(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     mesa_decision: RegistryMesaDecision | None = None,
 ) -> dict:
@@ -4352,7 +4352,7 @@ async def _build_diff_set_entity(
 
 async def _build_diff_delete_entity(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     mesa_decision: RegistryMesaDecision | None = None,
 ) -> dict:
@@ -4385,20 +4385,20 @@ async def _build_diff_delete_entity(
 
 
 async def _tool_set_entity(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: edit an entity's registry metadata (Confirm-eligible)."""
     # Capability gate first: a denied token gets a uniform Forbidden with no entity
     # work, so the tool can never be a scope/existence oracle when the cap is off.
-    if effective_cap(token, "cap_registry_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_registry_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_entity"
     args, error = normalize_tool_args("set_entity", args)
     if error:
         return _tool_error(error), "invalid_request", "set_entity"
     # Then validate entity scope and registry references before gating so a doomed
     # request cannot create a pending approval. The executor re-validates at apply time.
-    pre = _registry_write_precheck(args, token, hass, "set_entity", data)
+    pre = _registry_write_precheck(args, access_key, hass, "set_entity", data)
     if pre is not None:
         return pre
     mesa_decision: RegistryMesaDecision | None = None
@@ -4411,7 +4411,7 @@ async def _tool_set_entity(
             approval_args["entity_id"] = entity_id
         resolved = _registry_mesa_decision(
             data,
-            token,
+            access_key,
             entity_id,
             action="rename",
             service_data={"new_entity_id": args["new_entity_id"]},
@@ -4423,7 +4423,7 @@ async def _tool_set_entity(
         if mesa_decision.decision == "deny":
             fire_mesa_blocked_event(
                 hass,
-                token,
+                access_key,
                 [(entity_id, mesa_decision.rule, mesa_decision.reason)],
             )
             return _registry_mesa_error(entity_id, "rename", mesa_decision)
@@ -4432,10 +4432,10 @@ async def _tool_set_entity(
                 mesa_decision.profile_fingerprint
             )
     diff_builder = lambda: _build_diff_set_entity(  # noqa: E731
-        args, token, hass, mesa_decision
+        args, access_key, hass, mesa_decision
     )
     blocked = await _gate(
-        "cap_registry_write", token, hass, data,
+        "cap_registry_write", access_key, hass, data,
         tool_name="set_entity", args=approval_args, request_id=request_id,
         client_ip=client_ip, diff=diff_builder,
     )
@@ -4445,31 +4445,31 @@ async def _tool_set_entity(
         return await _create_registry_mesa_approval(
             hass,
             data,
-            token,
+            access_key,
             tool_name="set_entity",
             args=approval_args,
             diff=await diff_builder(),
             request_id=request_id,
             client_ip=client_ip,
         )
-    return await _execute_set_entity(args, token, hass, data)
+    return await _execute_set_entity(args, access_key, hass, data)
 
 
 async def _execute_set_entity(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Commit registry state before awaiting history persistence."""
     return await _finish_registry_commit(
-        _commit_set_entity(args, token, hass, data), token, data
+        _commit_set_entity(args, access_key, hass, data), access_key, data
     )
 
 
 def _commit_set_entity(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> _RegistryCommit | tuple[dict, str, str]:
     """Validate, mutate, and capture one entity result without yielding."""
     check_request_authority()
-    if effective_cap(token, "cap_registry_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_registry_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_entity"
     entity_id = str(args.get("entity_id") or "").strip()
     registry_entry = er.async_get(hass).async_get(entity_id)
@@ -4478,7 +4478,7 @@ def _commit_set_entity(
     if not entity_id:
         return _tool_error("entity_id is required."), "invalid_request", "set_entity"
     err = _registry_write_perm_error(
-        resolve_registry_access(entity_id, token, hass), entity_id
+        resolve_registry_access(entity_id, access_key, hass), entity_id
     )
     if err is not None:
         return err
@@ -4500,7 +4500,7 @@ def _commit_set_entity(
             return blocker_error
         resolved = _registry_mesa_decision(
             data,
-            token,
+            access_key,
             entry.entity_id,
             action="rename",
             service_data={"new_entity_id": new_entity_id},
@@ -4520,7 +4520,7 @@ def _commit_set_entity(
         ):
             fire_mesa_blocked_event(
                 hass,
-                token,
+                access_key,
                 [(entry.entity_id, mesa_decision.rule, mesa_decision.reason)],
             )
             return _registry_mesa_error(
@@ -4530,7 +4530,7 @@ def _commit_set_entity(
         restoring and args.get("disabled_by") is not None
     )
     if will_disable and resolve_registry_access(
-        entity_id, token, hass, force_registry_only=True
+        entity_id, access_key, hass, force_registry_only=True
     ) != Permission.WRITE:
         return (
             _tool_error(
@@ -4688,24 +4688,24 @@ def _commit_set_entity(
 
 
 async def _tool_delete_entity(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: delete an entity's registry entry (Confirm-eligible)."""
     # Capability gate first: a denied token gets a uniform Forbidden with no entity
     # work, so the tool can never be a scope/existence oracle when the cap is off.
-    if effective_cap(token, "cap_registry_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_registry_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_entity"
     error = unknown_argument_error("delete_entity", args)
     if error:
         return _tool_error(error), "invalid_request", "delete_entity"
-    pre = _registry_write_precheck(args, token, hass, "delete_entity", data)
+    pre = _registry_write_precheck(args, access_key, hass, "delete_entity", data)
     if pre is not None:
         return pre
     entity_id = str(args.get("entity_id") or "").strip()
     resolved = _registry_mesa_decision(
         data,
-        token,
+        access_key,
         entity_id,
         action="delete",
         session_id=request_id or "delete_entity",
@@ -4716,7 +4716,7 @@ async def _tool_delete_entity(
     if mesa_decision.decision == "deny":
         fire_mesa_blocked_event(
             hass,
-            token,
+            access_key,
             [(entity_id, mesa_decision.rule, mesa_decision.reason)],
         )
         return _registry_mesa_error(entity_id, "delete", mesa_decision)
@@ -4726,10 +4726,10 @@ async def _tool_delete_entity(
             mesa_decision.profile_fingerprint
         )
     diff_builder = lambda: _build_diff_delete_entity(  # noqa: E731
-        args, token, hass, mesa_decision
+        args, access_key, hass, mesa_decision
     )
     blocked = await _gate(
-        "cap_registry_write", token, hass, data,
+        "cap_registry_write", access_key, hass, data,
         tool_name="delete_entity", args=approval_args, request_id=request_id,
         client_ip=client_ip, diff=diff_builder,
     )
@@ -4739,37 +4739,37 @@ async def _tool_delete_entity(
         return await _create_registry_mesa_approval(
             hass,
             data,
-            token,
+            access_key,
             tool_name="delete_entity",
             args=approval_args,
             diff=await diff_builder(),
             request_id=request_id,
             client_ip=client_ip,
         )
-    return await _execute_delete_entity(args, token, hass, data)
+    return await _execute_delete_entity(args, access_key, hass, data)
 
 
 async def _execute_delete_entity(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Commit registry state before awaiting history persistence."""
     return await _finish_registry_commit(
-        _commit_delete_entity(args, token, hass, data), token, data
+        _commit_delete_entity(args, access_key, hass, data), access_key, data
     )
 
 
 def _commit_delete_entity(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> _RegistryCommit | tuple[dict, str, str]:
     """Validate, mutate, and capture one entity result without yielding."""
     check_request_authority()
-    if effective_cap(token, "cap_registry_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_registry_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_entity"
     entity_id = str(args.get("entity_id") or "").strip()
     if not entity_id:
         return _tool_error("entity_id is required."), "invalid_request", "delete_entity"
     err = _registry_write_perm_error(
-        resolve_registry_access(entity_id, token, hass), entity_id
+        resolve_registry_access(entity_id, access_key, hass), entity_id
     )
     if err is not None:
         return err
@@ -4779,7 +4779,7 @@ def _commit_delete_entity(
         return _tool_error("Entity has no registry entry to delete."), "invalid_request", entity_id
     resolved = _registry_mesa_decision(
         data,
-        token,
+        access_key,
         entry.entity_id,
         action="delete",
         session_id="delete_entity_execute",
@@ -4798,7 +4798,7 @@ def _commit_delete_entity(
     ):
         fire_mesa_blocked_event(
             hass,
-            token,
+            access_key,
             [(entry.entity_id, mesa_decision.rule, mesa_decision.reason)],
         )
         return _registry_mesa_error(entry.entity_id, "delete", mesa_decision)
@@ -4821,10 +4821,10 @@ def _commit_delete_entity(
 
 
 async def _tool_render_template(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """MCP tool: render a Jinja2 template against permitted entity state."""
-    if effective_cap(token, "cap_template_render") == CAP_DENY:
+    if effective_cap(access_key, "cap_template_render") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "render_template"
 
     template_str = args.get("template", "")
@@ -4832,7 +4832,7 @@ async def _tool_render_template(
         return _tool_error("Missing required argument: template"), "invalid_request", "render_template"
 
     try:
-        rendered = await async_render_template_for_token(template_str, token, hass, data)
+        rendered = await async_render_template_for_access_key(template_str, access_key, hass, data)
     except AuthorityChangedError:
         raise
     except TemplateRenderError as exc:
@@ -4845,7 +4845,7 @@ async def _tool_render_template(
 
 async def _tool_restart_ha(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
@@ -4853,29 +4853,29 @@ async def _tool_restart_ha(
 ) -> tuple[dict, str, str]:
     """MCP tool: restart HA (gated by cap_restart, supports Confirm)."""
     blocked = await _gate(
-        "cap_restart", token, hass, data,
+        "cap_restart", access_key, hass, data,
         tool_name="restart_ha", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_restart_ha(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_restart_ha(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_restart_ha(args, token, hass, data)
+    return await _execute_restart_ha(args, access_key, hass, data)
 
 
 async def _execute_restart_ha(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Journal restart once; a response cannot prove process replacement."""
     from .config_recovery import ConfigurationRecoveryError, runtime_identity
 
-    if effective_cap(token, "cap_restart") == CAP_DENY:
+    if effective_cap(access_key, "cap_restart") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "restart_ha"
     recovery = data.config_recovery
     rid = None
     try:
         async with recovery.resource("homeassistant:restart"):
             identity = runtime_identity(hass)
-            rid = await recovery.begin("homeassistant:restart", "restart_ha", token.id,
+            rid = await recovery.begin("homeassistant:restart", "restart_ha", access_key.id,
                                        {"snapshot_type": "restart_receipt", "runtime_identity": identity})
             await recovery.mark(rid, "dispatching")
             check_request_authority()
@@ -4901,7 +4901,7 @@ async def _execute_restart_ha(
 
 
 async def _tool_get_approval_status(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """MCP tool: poll one of the token's own approvals, or list its pending ones.
 
@@ -4911,11 +4911,11 @@ async def _tool_get_approval_status(
     """
     from .approvals import STATUS_PENDING, get_approval, list_approvals  # noqa: PLC0415
 
-    await data.agent_recovery.reconcile(data.store, token.id)
+    await data.agent_recovery.reconcile(data.store, access_key.id)
     approval_id = args.get("approval_id")
     if approval_id is None:
         # No id: enumerate this token's own pending approvals (own data only).
-        pending = list_approvals(data.store, status=STATUS_PENDING, token_id=token.id)
+        pending = list_approvals(data.store, status=STATUS_PENDING, token_id=access_key.id)
         items = [
             {
                 "approval_id": a.id,
@@ -4927,13 +4927,13 @@ async def _tool_get_approval_status(
             for a in pending
         ]
         body = {"count": len(items), "pending_approvals": items}
-        body["agent_recovery"] = data.agent_recovery.records(token.id)
+        body["agent_recovery"] = data.agent_recovery.records(access_key.id)
         return _tool_success(json.dumps(body, default=str)), "allowed", "get_approval_status"
 
     if not isinstance(approval_id, str) or not approval_id:
         return _tool_error("Missing approval_id."), "invalid_request", "get_approval_status"
     record = get_approval(data.store, approval_id)
-    if record is None or record.token_id != token.id:
+    if record is None or record.token_id != access_key.id:
         return _tool_error("Approval not found."), "not_found", "get_approval_status"
     payload = {
         "approval_id": record.id,
@@ -5028,7 +5028,7 @@ def _approval_result_digest(record: Any) -> dict:
 
 
 async def _wait_for_many_approvals(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Block until every named approval resolves, or the timeout expires.
 
@@ -5063,7 +5063,7 @@ async def _wait_for_many_approvals(
         record = get_approval(data.store, approval_id)
         # Unknown and belonging-to-another-token answer identically, so a refusal
         # is not an existence oracle for another token's queue.
-        if record is None or record.token_id != token.id:
+        if record is None or record.token_id != access_key.id:
             return _tool_error("Approval not found."), "not_found", "wait_for_approval"
         records[approval_id] = record
 
@@ -5122,7 +5122,7 @@ async def _wait_for_many_approvals(
 
 
 async def _tool_wait_for_approval(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """MCP tool: block until the token's own approval(s) resolve, or until timeout.
 
@@ -5142,7 +5142,7 @@ async def _tool_wait_for_approval(
     if error:
         return _tool_error(error), "invalid_request", "wait_for_approval"
     if "approval_ids" in args:
-        return await _wait_for_many_approvals(args, token, hass, data)
+        return await _wait_for_many_approvals(args, access_key, hass, data)
     return _tool_error("approval_ids is required."), "invalid_request", "wait_for_approval"
 
 
@@ -5188,7 +5188,7 @@ def _register_tool(name: str, handler: Any, /, **bound: Any) -> None:
     _TOOL_HANDLERS[name] = (handler, wanted, bound)
 
 
-def _restore_token(user_id: str) -> TokenRecord:
+def _restore_access_key(user_id: str) -> AccessKeyRecord:
     """Synthetic pass-through token for re-applying a config under admin authority.
 
     pass_through makes policy_engine.resolve() return WRITE for every entity, so the
@@ -5199,7 +5199,7 @@ def _restore_token(user_id: str) -> TokenRecord:
     inside the executor, which would refuse an admin restore on the defaults.
     It is never persisted and never authenticates a request.
     """
-    return TokenRecord(
+    return AccessKeyRecord(
         id=f"__restore__:{user_id}",
         name="(admin restore)",
         token_hash="",
@@ -5235,16 +5235,16 @@ async def async_restore_configuration(
     recovery_id: str, side: str, admin_user_id: str, hass: HomeAssistant, data: PhoenixData,
 ) -> tuple[dict, str, str]:
     """Restore a recovery snapshot following an authenticated administrator review."""
-    token = _restore_token(admin_user_id)
+    access_key = _restore_access_key(admin_user_id)
     ctx = _restore_ctx.set({"user_id": admin_user_id})
     try:
         args = {"recovery_id": recovery_id, "side": side}
-        receipt = await _tool_restore_configuration(args, token, hass, data)
+        receipt = await _tool_restore_configuration(args, access_key, hass, data)
         if receipt[1] != "allowed" or receipt[0].get("isError"):
             return receipt
         body = json.loads(receipt[0]["content"][0]["text"])
         args.update({key: body[key] for key in ("snapshot_digest", "target_fingerprint")})
-        return await _execute_restore_configuration(args, token, hass, data)
+        return await _execute_restore_configuration(args, access_key, hass, data)
     finally:
         _restore_ctx.reset(ctx)
 
@@ -5275,7 +5275,7 @@ async def async_restore_version(
             "This version contains YAML tags such as !secret or !include and "
             "cannot be restored automatically. Re-create it manually."
         ), "invalid_request", "async_restore_version"
-    token = _restore_token(admin_user_id)
+    access_key = _restore_access_key(admin_user_id)
     from .config_recovery import ConfigurationRecoveryError
     try:
         exists = await _resource_exists(hass, resource_type, resource_id)
@@ -5294,18 +5294,18 @@ async def async_restore_version(
                 return await _execute_edit_automation({
                     "automation_id": resource_id, "config": target,
                     "expected_hash": content_hash(current),
-                }, token, hass, data)
+                }, access_key, hass, data)
             # Recreate in place under the original id so the rollback lands on the
             # same timeline and a second restore just edits it.
-            return await _execute_create_automation({"config": target, "automation_id": resource_id}, token, hass, data)
+            return await _execute_create_automation({"config": target, "automation_id": resource_id}, access_key, hass, data)
         if resource_type == "script":
             if exists:
-                return await _execute_edit_script({"script_id": resource_id, "config": target}, token, hass, data)
-            return await _execute_create_script({"script_id": resource_id, "config": target}, token, hass, data)
+                return await _execute_edit_script({"script_id": resource_id, "config": target}, access_key, hass, data)
+            return await _execute_create_script({"script_id": resource_id, "config": target}, access_key, hass, data)
         if resource_type == "scene":
             if exists:
-                return await _execute_edit_scene({"scene_id": resource_id, "config": target}, token, hass, data)
-            return await _execute_create_scene({"config": target, "scene_id": resource_id}, token, hass, data)
+                return await _execute_edit_scene({"scene_id": resource_id, "config": target}, access_key, hass, data)
+            return await _execute_create_scene({"config": target, "scene_id": resource_id}, access_key, hass, data)
         if resource_type == "helper":
             ht, _, hid = resource_id.partition(":")
             if ht == "tag":
@@ -5334,10 +5334,10 @@ async def async_restore_version(
                 }
             recovery_source.set({"snapshot_type": "storage_helper", "helper_type": ht, "helper_id": hid, "config": target})
             if exists:
-                return await _execute_edit_helper({"helper_type": ht, "helper_id": hid, "config": target}, token, hass, data)
+                return await _execute_edit_helper({"helper_type": ht, "helper_id": hid, "config": target}, access_key, hass, data)
             from .tools.helper import _helper_create_mesa_entity, _enforce_helper_mesa_context
             create_args = {"helper_type": ht, "config": target, _HELPER_RESTORE_ID: hid}
-            mesa_precheck = _enforce_helper_mesa_context(create_args, token, hass, data,
+            mesa_precheck = _enforce_helper_mesa_context(create_args, access_key, hass, data,
                 [_helper_create_mesa_entity(ht, create_args, hass)], action="create",
                 service_data={"helper_type": ht, "config": target, "flow_steps": None},
                 session_id="create_helper_execute")
@@ -5346,14 +5346,14 @@ async def async_restore_version(
             rid = None
             try:
                 async with data.config_recovery.resource(f"helper:{resource_id}"):
-                    rid = await data.config_recovery.begin(f"helper:{resource_id}", "restore_helper", token.id, None,
+                    rid = await data.config_recovery.begin(f"helper:{resource_id}", "restore_helper", access_key.id, None,
                         source={"snapshot_type": "storage_helper", "helper_type": ht, "helper_id": hid, "config": target})
                     await data.config_recovery.mark(rid, "dispatching")
                     if await _resource_exists(hass, "helper", resource_id):
                         await data.config_recovery.mark(rid, "not_applied")
                         return _tool_error("Helper identity became occupied before restoration."), "invalid_request", "async_restore_version"
                     restored = await _execute_create_helper(
-                        {"helper_type": ht, "config": target, _HELPER_RESTORE_ID: hid}, token, hass, data,
+                        {"helper_type": ht, "config": target, _HELPER_RESTORE_ID: hid}, access_key, hass, data,
                     )
                     if restored[0].get("isError"):
                         await data.config_recovery.mark(rid, "unknown")
@@ -5378,12 +5378,12 @@ async def async_restore_version(
             # (resource_id "lovelace" is the default dashboard, url_path None).
             return await _execute_set_dashboard_config(
                 {"url_path": None if resource_id == "lovelace" else resource_id, "config": target},
-                token, hass, data,
+                access_key, hass, data,
             )
         if resource_type == "config_entry":
             if target.get("snapshot_type") == "template_helper":
                 from .template_recovery import restore_template
-                return await restore_template(target, token, hass, data)
+                return await restore_template(target, access_key, hass, data)
             if target.get("restorable") is False:
                 return _tool_error(
                     "This integration version is a non-restorable audit record and cannot be restored. Phoenix "
@@ -5401,21 +5401,21 @@ async def async_restore_version(
                     if key in target
                 }
                 return await _execute_set_integration(
-                    {"entry_id": resource_id, **fields}, token, hass, data
+                    {"entry_id": resource_id, **fields}, access_key, hass, data
                 )
             # Re-runs the helper's own options flow with the snapshot, so HA
             # validates the restored settings exactly as it validated the write.
             # No expected_hash: a restore deliberately overwrites whatever is
             # there now, which is the whole point of choosing a snapshot.
             return await _execute_set_config_entry_options(
-                {"entry_id": resource_id, "settings": target}, token, hass, data,
+                {"entry_id": resource_id, "settings": target}, access_key, hass, data,
             )
         if resource_type == "energy":
             # Energy is restore-only and deliberately WHOLESALE: the snapshot IS
             # the operator's chosen state, so reproducing it is the operation. The
             # addressed-write rule edit_energy_config enforces does not apply here
             # (a YAML restore is likewise exempt from the dropped-key check).
-            return await async_restore_energy_prefs(target, token, hass, data)
+            return await async_restore_energy_prefs(target, access_key, hass, data)
         if resource_type in ("yaml_config", "file", "esphome_yaml", "blueprint"):
             restorable = target.get("content")
             if not isinstance(restorable, str):
@@ -5433,15 +5433,15 @@ async def async_restore_version(
                 )
                 bp_args = {"domain": bp_domain, "path": bp_rel, "content": restorable}
                 if bp_exists:
-                    return await _execute_edit_blueprint(bp_args, token, hass, data)
-                return await _execute_create_blueprint(bp_args, token, hass, data)
+                    return await _execute_edit_blueprint(bp_args, access_key, hass, data)
+                return await _execute_create_blueprint(bp_args, access_key, hass, data)
             if resource_type == "yaml_config":
                 # resource_id is the config-relative path. Older records, written
                 # before set_yaml_config took a file argument, all carry
                 # "configuration.yaml", which resolves the same way, so they
                 # restore unchanged.
                 return await _execute_set_yaml_config(
-                    {"file": resource_id, "content": restorable}, token, hass, data)
+                    {"file": resource_id, "content": restorable}, access_key, hass, data)
             if resource_type == "esphome_yaml":
                 # Snapshots hold the RAW file, so a restore reproduces it exactly.
                 # It routes through the executor, whose splice is a no-op on raw
@@ -5452,10 +5452,10 @@ async def async_restore_version(
                 # a frozen value, so without the waiver every restore of a file
                 # with an inline credential would fail. See splice_esphome_text.
                 return await _execute_set_esphome_yaml(
-                    {"file": resource_id, "content": restorable}, token, hass, data)
-            return await _execute_write_file({"path": resource_id, "content": restorable}, token, hass, data)
+                    {"file": resource_id, "content": restorable}, access_key, hass, data)
+            return await _execute_write_file({"path": resource_id, "content": restorable}, access_key, hass, data)
         if resource_type in {"area", "floor"}:
-            return await restore_location_version(resource_type, resource_id, target, token, hass, data)
+            return await restore_location_version(resource_type, resource_id, target, access_key, hass, data)
         if resource_type == "entity":
             # Re-apply the registry metadata. Restoring a deleted entry's snapshot
             # lands here too and fails cleanly in set_entity, because a deleted
@@ -5499,7 +5499,7 @@ async def async_restore_version(
             if not fields:
                 return _tool_error("This version has no entity metadata to restore."), "invalid_request", "async_restore_version"
             return await _execute_set_entity(
-                {"entity_id": current_entity_id, **fields}, token, hass, data
+                {"entity_id": current_entity_id, **fields}, access_key, hass, data
             )
         if resource_type == "device":
             if target.get("restorable") is False:
@@ -5516,7 +5516,7 @@ async def async_restore_version(
                     "This version has no device metadata to restore."
                 ), "invalid_request", "async_restore_version"
             return await _execute_set_device(
-                {"device_id": resource_id, **fields}, token, hass, data
+                {"device_id": resource_id, **fields}, access_key, hass, data
             )
         return _tool_error(f"Cannot restore resource type '{resource_type}'."), "invalid_request", "async_restore_version"
     finally:
@@ -5539,7 +5539,7 @@ class ExecutorNotRegistered(LookupError):
 async def async_execute_approved_tool(
     tool_name: str,
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
 ) -> tuple[dict, str, str]:
@@ -5567,12 +5567,12 @@ async def async_execute_approved_tool(
     # executor runs under confirm-approved semantics (see _approved_exec_ctx).
     ctx = _approved_exec_ctx.set(True)
     try:
-        return await fn(args, token, hass, data)
+        return await fn(args, access_key, hass, data)
     finally:
         _approved_exec_ctx.reset(ctx)
 
 
-def _build_diff_restart_ha(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _build_diff_restart_ha(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     return {
         "kind": "system_action",
         **_summary("restart_ha"),
@@ -5589,23 +5589,23 @@ def _build_diff_restart_ha(args: dict, token: TokenRecord, hass: HomeAssistant) 
 
 
 async def _tool_get_capability_summary(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """MCP tool: the token introspecting its own caps/persona/limits. No cap required."""
-    caps = effective_caps(token)
+    caps = effective_caps(access_key)
     body = {
-        "access_key_name": token.name,
-        "persona": token.persona,
-        "pass_through": token.pass_through,
-        "write_scope": token_has_write_scope(token),
+        "access_key_name": access_key.name,
+        "persona": access_key.persona,
+        "pass_through": access_key.pass_through,
+        "write_scope": access_key_has_write_scope(access_key),
         "capabilities": caps,
         "allowed": sorted(c for c, m in caps.items() if m == CAP_ALLOW),
         "confirm_gated": sorted(c for c, m in caps.items() if m == CAP_CONFIRM),
         "denied": sorted(c for c, m in caps.items() if m == CAP_DENY),
-        "tools": _tool_gate_map(token, data, hass),
+        "tools": _tool_gate_map(access_key, data, hass),
         "rate_limit": (
-            {"requests_per_min": token.rate_limit_requests, "burst_per_sec": token.rate_limit_burst}
-            if token.rate_limit_requests > 0 else "none"
+            {"requests_per_min": access_key.rate_limit_requests, "burst_per_sec": access_key.rate_limit_burst}
+            if access_key.rate_limit_requests > 0 else "none"
         ),
     }
     return _tool_success(json.dumps(body, default=str)), "allowed", "get_capability_summary"
@@ -5625,16 +5625,16 @@ def _clamp_timeout(value: Any) -> int:
 
 
 async def _tool_watch_entity(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: block until an accessible entity changes state, or until timeout."""
-    if effective_cap(token, "cap_config_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_config_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "watch_entity"
 
     entity_id = str_arg(args.get("entity_id"))
     if not entity_id:
         return _tool_error("Missing required argument: entity_id"), "invalid_request", "watch_entity"
-    if resolve(entity_id, token, hass) not in (Permission.READ, Permission.WRITE):
+    if resolve(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
         return _tool_error("Entity not found."), "not_found", entity_id
 
     timeout = _clamp_timeout(args.get("timeout", MAX_SUBSCRIPTION_SECONDS))
@@ -6012,14 +6012,14 @@ def _config_entry_metadata_snapshot(entry: Any) -> dict[str, Any]:
 
 def _config_entry_write_error(
     entry_id: str,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     *,
     force_registry_only: bool = False,
 ) -> tuple[dict, str, str] | None:
     """Require WRITE on all entities and devices the entry owns, else not found."""
     permission = resolve_config_entry_registry_write(
-        entry_id, token, hass, force_registry_only=force_registry_only
+        entry_id, access_key, hass, force_registry_only=force_registry_only
     )
     if permission == Permission.WRITE:
         return None
@@ -6028,7 +6028,7 @@ def _config_entry_write_error(
 
 def _config_entry_action_decision(
     data: PhoenixData,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     entry: Any,
     *,
@@ -6064,7 +6064,7 @@ def _config_entry_action_decision(
                 for entity_id in entity_ids:
                     decision = evaluate_registry_action(
                         data,
-                        token,
+                        access_key,
                         entity_id,
                         action=action,
                         registry_domain="config_entry",
@@ -6183,7 +6183,7 @@ async def _integration_gate(
     *,
     tool_name: str,
     args: dict[str, Any],
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     entry: Any,
@@ -6198,7 +6198,7 @@ async def _integration_gate(
     """Merge capability and MESA confirmation into one pending approval."""
     resolved = _config_entry_action_decision(
         data,
-        token,
+        access_key,
         hass,
         entry,
         actions=actions,
@@ -6209,7 +6209,7 @@ async def _integration_gate(
         return resolved
     if resolved.decision == "deny":
         if resolved.blocked:
-            fire_mesa_blocked_event(hass, token, resolved.blocked)
+            fire_mesa_blocked_event(hass, access_key, resolved.blocked)
         return _config_entry_mesa_error(entry.entry_id, resolved)
     approval_args = dict(args)
     approval_args[_CONFIG_ENTRY_CONTEXT_FINGERPRINT] = resolved.fingerprint
@@ -6217,7 +6217,7 @@ async def _integration_gate(
         approval_args.update(approval_bindings)
     blocked = await _gate(
         cap_name,
-        token,
+        access_key,
         hass,
         data,
         tool_name=tool_name,
@@ -6232,7 +6232,7 @@ async def _integration_gate(
         return await _create_registry_mesa_approval(
             hass,
             data,
-            token,
+            access_key,
             tool_name=tool_name,
             args=approval_args,
             diff=await diff(resolved),
@@ -6244,31 +6244,31 @@ async def _integration_gate(
 
 
 async def _tool_list_integrations(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: list only config entries visible through owned resources."""
     if (
-        effective_cap(token, "cap_integration_write") == CAP_DENY
-        and effective_cap(token, "cap_integration_reconfigure") == CAP_DENY
+        effective_cap(access_key, "cap_integration_write") == CAP_DENY
+        and effective_cap(access_key, "cap_integration_reconfigure") == CAP_DENY
     ):
         return _tool_error("Forbidden."), "denied", "list_integrations"
     integrations: list[dict[str, Any]] = []
     for entry in hass.config_entries.async_entries():
-        access = resolve_config_entry_registry_access(entry.entry_id, token, hass)
+        access = resolve_config_entry_registry_access(entry.entry_id, access_key, hass)
         if access not in (Permission.READ, Permission.WRITE):
             continue
         context = config_entry_registry_context(entry.entry_id, hass)
         if context is None:
             continue
-        expose = assist_expose_check(token, hass)
+        expose = assist_expose_check(access_key, hass)
         accessible_entities = sum(
             (expose is None or expose(entity_id)) and
-            resolve_registry_access(entity_id, token, hass)
+            resolve_registry_access(entity_id, access_key, hass)
             in (Permission.READ, Permission.WRITE)
             for entity_id in context.entity_ids
         )
         accessible_devices = sum(
-            resolve_device_registry_access(device_id, token, hass)
+            resolve_device_registry_access(device_id, access_key, hass)
             in (Permission.READ, Permission.WRITE)
             for device_id in context.device_ids
         )
@@ -6377,7 +6377,7 @@ def _reconfigure_version_snapshot(
 
 async def _build_diff_reconfigure_integration(
     args: dict[str, Any],
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     mesa_decision: _ConfigEntryActionDecision | None = None,
 ) -> dict[str, Any]:
@@ -6430,14 +6430,14 @@ async def _build_diff_reconfigure_integration(
 
 async def _tool_reconfigure_integration(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """Review agent values, then run only HA's official reconfigure flow."""
-    if effective_cap(token, "cap_integration_reconfigure") == CAP_DENY:
+    if effective_cap(access_key, "cap_integration_reconfigure") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "reconfigure_integration"
     value_error = _reconfigure_args_error(args)
     if value_error is not None:
@@ -6446,7 +6446,7 @@ async def _tool_reconfigure_integration(
     entry = hass.config_entries.async_get_entry(entry_id)
     if entry is None or entry.domain == DOMAIN:
         return _tool_error("Integration not found."), "not_found", entry_id
-    perm_error = _config_entry_write_error(entry_id, token, hass)
+    perm_error = _config_entry_write_error(entry_id, access_key, hass)
     if perm_error is not None:
         return perm_error
     identity = _config_entry_private_identity(entry, hass)
@@ -6467,7 +6467,7 @@ async def _tool_reconfigure_integration(
     blocked = await _integration_gate(
         tool_name="reconfigure_integration",
         args=args,
-        token=token,
+        access_key=access_key,
         hass=hass,
         data=data,
         entry=entry,
@@ -6476,7 +6476,7 @@ async def _tool_reconfigure_integration(
         request_id=request_id,
         client_ip=client_ip,
         diff=lambda decision: _build_diff_reconfigure_integration(
-            args, token, hass, decision
+            args, access_key, hass, decision
         ),
         cap_name="cap_integration_reconfigure",
         approval_bindings={
@@ -6486,12 +6486,12 @@ async def _tool_reconfigure_integration(
     )
     if blocked is not None:
         return blocked
-    return await _execute_reconfigure_integration(args, token, hass, data)
+    return await _execute_reconfigure_integration(args, access_key, hass, data)
 
 
 async def _execute_reconfigure_integration(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
 ) -> tuple[dict, str, str]:
@@ -6503,7 +6503,7 @@ async def _execute_reconfigure_integration(
     entry = hass.config_entries.async_get_entry(entry_id)
     if entry is None or entry.domain == DOMAIN:
         return _tool_error("Integration not found."), "not_found", entry_id
-    perm_error = _config_entry_write_error(entry_id, token, hass)
+    perm_error = _config_entry_write_error(entry_id, access_key, hass)
     if perm_error is not None:
         return perm_error
     identity = _config_entry_private_identity(entry, hass)
@@ -6514,7 +6514,7 @@ async def _execute_reconfigure_integration(
 
     resolved = _config_entry_action_decision(
         data,
-        token,
+        access_key,
         hass,
         entry,
         actions=["config_entry.reconfigure"],
@@ -6535,7 +6535,7 @@ async def _execute_reconfigure_integration(
         return _config_entry_context_changed_error(entry_id, resolved)
     if resolved.decision == "deny" or (resolved.decision == "confirm" and not approved):
         if resolved.blocked:
-            fire_mesa_blocked_event(hass, token, resolved.blocked)
+            fire_mesa_blocked_event(hass, access_key, resolved.blocked)
         return _config_entry_mesa_error(entry_id, resolved)
 
     flow_result = await async_run_reconfigure_flow(
@@ -6579,7 +6579,7 @@ async def _execute_reconfigure_integration(
         current = hass.config_entries.async_get_entry(entry_id) or entry
         await _record_version(
             data,
-            token,
+            access_key,
             resource_type="config_entry",
             resource_id=entry_id,
             action="edit",
@@ -6603,11 +6603,11 @@ async def _execute_reconfigure_integration(
 
 
 async def _tool_set_integration_enabled(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: enable or disable an integration (needs WRITE on all it owns)."""
-    if effective_cap(token, "cap_integration_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_integration_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_integration_enabled"
     entry_id = str(args.get("entry_id") or "").strip()
     enabled = args.get("enabled")
@@ -6619,7 +6619,7 @@ async def _tool_set_integration_enabled(
     if entry is None or entry.domain == DOMAIN:
         return _tool_error("Integration not found."), "not_found", entry_id
     perm_error = _config_entry_write_error(
-        entry_id, token, hass, force_registry_only=not enabled
+        entry_id, access_key, hass, force_registry_only=not enabled
     )
     if perm_error is not None:
         return perm_error
@@ -6641,7 +6641,7 @@ async def _tool_set_integration_enabled(
     blocked = await _integration_gate(
         tool_name="set_integration_enabled",
         args=args,
-        token=token,
+        access_key=access_key,
         hass=hass,
         data=data,
         entry=entry,
@@ -6650,16 +6650,16 @@ async def _tool_set_integration_enabled(
         request_id=request_id,
         client_ip=client_ip,
         diff=lambda decision: _build_diff_set_integration_enabled(
-            args, token, hass, decision
+            args, access_key, hass, decision
         ),
     )
     if blocked is not None:
         return blocked
-    return await _execute_set_integration_enabled(args, token, hass, data)
+    return await _execute_set_integration_enabled(args, access_key, hass, data)
 
 
 async def _execute_set_integration_enabled(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     entry_id = str(args.get("entry_id") or "").strip()
     enabled = args.get("enabled")
@@ -6672,7 +6672,7 @@ async def _execute_set_integration_enabled(
     if entry is None or entry.domain == DOMAIN:
         return _tool_error("Integration not found."), "not_found", entry_id
     perm_error = _config_entry_write_error(
-        entry_id, token, hass, force_registry_only=not enabled
+        entry_id, access_key, hass, force_registry_only=not enabled
     )
     if perm_error is not None:
         return perm_error
@@ -6694,7 +6694,7 @@ async def _execute_set_integration_enabled(
     action = "enable" if enabled else "disable"
     resolved = _config_entry_action_decision(
         data,
-        token,
+        access_key,
         hass,
         entry,
         actions=[action],
@@ -6715,7 +6715,7 @@ async def _execute_set_integration_enabled(
         resolved.decision == "confirm" and not approved_same
     ):
         if resolved.blocked:
-            fire_mesa_blocked_event(hass, token, resolved.blocked)
+            fire_mesa_blocked_event(hass, access_key, resolved.blocked)
         return _config_entry_mesa_error(entry_id, resolved)
     before = _config_entry_metadata_snapshot(entry)
     try:
@@ -6733,7 +6733,7 @@ async def _execute_set_integration_enabled(
     if changed:
         await _record_version(
             data,
-            token,
+            access_key,
             resource_type="config_entry",
             resource_id=entry_id,
             action="edit",
@@ -6786,13 +6786,13 @@ def _set_integration_changes(entry: Any, args: dict[str, Any]) -> dict[str, Any]
 
 async def _tool_set_integration(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
-    if effective_cap(token, "cap_integration_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_integration_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_integration"
     args, error = normalize_tool_args("set_integration", args)
     if error:
@@ -6806,7 +6806,7 @@ async def _tool_set_integration(
     entry = hass.config_entries.async_get_entry(entry_id)
     if entry is None or entry.domain == DOMAIN:
         return _tool_error("Integration not found."), "not_found", entry_id
-    perm_error = _config_entry_write_error(entry_id, token, hass)
+    perm_error = _config_entry_write_error(entry_id, access_key, hass)
     if perm_error is not None:
         return perm_error
     changes = _set_integration_changes(entry, args)
@@ -6819,7 +6819,7 @@ async def _tool_set_integration(
     blocked = await _integration_gate(
         tool_name="set_integration",
         args=args,
-        token=token,
+        access_key=access_key,
         hass=hass,
         data=data,
         entry=entry,
@@ -6827,16 +6827,16 @@ async def _tool_set_integration(
         service_data={key: value for key, value in changes.items() if key == "title"},
         request_id=request_id,
         client_ip=client_ip,
-        diff=lambda decision: _build_diff_set_integration(args, token, hass, decision),
+        diff=lambda decision: _build_diff_set_integration(args, access_key, hass, decision),
     )
     if blocked is not None:
         return blocked
-    return await _execute_set_integration(args, token, hass, data)
+    return await _execute_set_integration(args, access_key, hass, data)
 
 
 async def _execute_set_integration(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
 ) -> tuple[dict, str, str]:
@@ -6844,7 +6844,7 @@ async def _execute_set_integration(
     entry = hass.config_entries.async_get_entry(entry_id)
     if entry is None or entry.domain == DOMAIN:
         return _tool_error("Integration not found."), "not_found", entry_id
-    perm_error = _config_entry_write_error(entry_id, token, hass)
+    perm_error = _config_entry_write_error(entry_id, access_key, hass)
     if perm_error is not None:
         return perm_error
     restoring = _restore_ctx.get() is not None
@@ -6873,7 +6873,7 @@ async def _execute_set_integration(
         actions.append("enable" if changes["disabled_by"] is None else "disable")
     resolved = _config_entry_action_decision(
         data,
-        token,
+        access_key,
         hass,
         entry,
         actions=actions,
@@ -6930,7 +6930,7 @@ async def _execute_set_integration(
     after = _config_entry_metadata_snapshot(updated)
     await _record_version(
         data,
-        token,
+        access_key,
         resource_type="config_entry",
         resource_id=entry_id,
         action="edit",
@@ -6959,13 +6959,13 @@ async def _execute_set_integration(
 
 async def _tool_reload_integration(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
-    if effective_cap(token, "cap_integration_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_integration_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "reload_integration"
     entry_id = str(args.get("entry_id") or "").strip()
     if not entry_id:
@@ -6973,7 +6973,7 @@ async def _tool_reload_integration(
     entry = hass.config_entries.async_get_entry(entry_id)
     if entry is None or entry.domain == DOMAIN:
         return _tool_error("Integration not found."), "not_found", entry_id
-    perm_error = _config_entry_write_error(entry_id, token, hass)
+    perm_error = _config_entry_write_error(entry_id, access_key, hass)
     if perm_error is not None:
         return perm_error
     support_error = await _reload_integration_support_error(entry, hass)
@@ -6982,7 +6982,7 @@ async def _tool_reload_integration(
     blocked = await _integration_gate(
         tool_name="reload_integration",
         args=args,
-        token=token,
+        access_key=access_key,
         hass=hass,
         data=data,
         entry=entry,
@@ -6990,11 +6990,11 @@ async def _tool_reload_integration(
         service_data={},
         request_id=request_id,
         client_ip=client_ip,
-        diff=lambda decision: _build_diff_reload_integration(args, token, hass, decision),
+        diff=lambda decision: _build_diff_reload_integration(args, access_key, hass, decision),
     )
     if blocked is not None:
         return blocked
-    return await _execute_reload_integration(args, token, hass, data)
+    return await _execute_reload_integration(args, access_key, hass, data)
 
 
 async def _reload_integration_support_error(entry: Any, hass: HomeAssistant) -> str | None:
@@ -7014,7 +7014,7 @@ async def _reload_integration_support_error(entry: Any, hass: HomeAssistant) -> 
 
 async def _execute_reload_integration(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
 ) -> tuple[dict, str, str]:
@@ -7022,7 +7022,7 @@ async def _execute_reload_integration(
     entry = hass.config_entries.async_get_entry(entry_id)
     if entry is None or entry.domain == DOMAIN:
         return _tool_error("Integration not found."), "not_found", entry_id
-    perm_error = _config_entry_write_error(entry_id, token, hass)
+    perm_error = _config_entry_write_error(entry_id, access_key, hass)
     if perm_error is not None:
         return perm_error
     support_error = await _reload_integration_support_error(entry, hass)
@@ -7030,7 +7030,7 @@ async def _execute_reload_integration(
         return _tool_error(support_error), "denied", entry_id
     resolved = _config_entry_action_decision(
         data,
-        token,
+        access_key,
         hass,
         entry,
         actions=["reload"],
@@ -7081,7 +7081,7 @@ def _config_entry_permission_references(
     device_references: list[dict[str, Any]] = []
     entity_set = set(entity_ids)
     device_set = set(device_ids)
-    for record in data.store.list_tokens():
+    for record in data.store.list_access_keys():
         if not record.is_valid():
             continue
         for entity_id in sorted(entity_set.intersection(record.permissions.entities)):
@@ -7179,7 +7179,7 @@ def _stored_profile_document(profile: Any | None) -> dict[str, Any] | None:
 
 async def _build_diff_remove_integration(
     args: dict[str, Any],
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     mesa_decision: _ConfigEntryActionDecision | None = None,
@@ -7343,14 +7343,14 @@ def _config_entry_removal_observation(
 
 async def _tool_remove_integration(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """Remove one config entry only through Home Assistant's manager."""
-    if effective_cap(token, "cap_integration_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_integration_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "remove_integration"
     entry_id = str(args.get("entry_id") or "").strip()
     if not entry_id:
@@ -7358,13 +7358,13 @@ async def _tool_remove_integration(
     entry = hass.config_entries.async_get_entry(entry_id)
     if entry is None or entry.domain == DOMAIN:
         return _tool_error("Integration not found."), "not_found", entry_id
-    perm_error = _config_entry_write_error(entry_id, token, hass)
+    perm_error = _config_entry_write_error(entry_id, access_key, hass)
     if perm_error is not None:
         return perm_error
     blocked = await _integration_gate(
         tool_name="remove_integration",
         args={"entry_id": entry_id},
-        token=token,
+        access_key=access_key,
         hass=hass,
         data=data,
         entry=entry,
@@ -7373,16 +7373,16 @@ async def _tool_remove_integration(
         request_id=request_id,
         client_ip=client_ip,
         diff=lambda decision: _build_diff_remove_integration(
-            args, token, hass, data, decision
+            args, access_key, hass, data, decision
         ),
     )
     if blocked is not None:
         return blocked
-    return await _execute_remove_integration(args, token, hass, data)
+    return await _execute_remove_integration(args, access_key, hass, data)
 
 
 async def _execute_remove_integration(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Use the same protected lifecycle for Template removal on the generic path."""
     from .config_recovery import ConfigurationRecoveryError
@@ -7390,13 +7390,13 @@ async def _execute_remove_integration(
 
     entry = hass.config_entries.async_get_entry(str(args.get("entry_id") or ""))
     if entry is None or entry.domain != "template":
-        return await _apply_remove_integration(args, token, hass, data)
-    if effective_cap(token, "cap_integration_write") == CAP_DENY:
+        return await _apply_remove_integration(args, access_key, hass, data)
+    if effective_cap(access_key, "cap_integration_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "remove_integration"
-    perm_error = _config_entry_write_error(entry.entry_id, token, hass)
+    perm_error = _config_entry_write_error(entry.entry_id, access_key, hass)
     if perm_error is not None:
         return perm_error
-    resolved = _config_entry_action_decision(data, token, hass, entry, actions=["remove"],
+    resolved = _config_entry_action_decision(data, access_key, hass, entry, actions=["remove"],
         service_data={}, session_id="remove_integration_execute")
     if isinstance(resolved, tuple):
         return resolved
@@ -7405,8 +7405,8 @@ async def _execute_remove_integration(
         return _config_entry_mesa_error(entry.entry_id, resolved)
     rid = None
     try:
-        async with protect_template(hass, data, token, entry, "remove_integration") as rid:
-            result = await _apply_remove_integration(args, token, hass, data)
+        async with protect_template(hass, data, access_key, entry, "remove_integration") as rid:
+            result = await _apply_remove_integration(args, access_key, hass, data)
             removed = hass.config_entries.async_get_entry(entry.entry_id) is None
             remaining = er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id)
             await data.config_recovery.mark(rid, "verified" if removed and not remaining else "partial" if removed else "unknown", entry_removed=removed, remaining_entities=len(remaining))
@@ -7423,18 +7423,18 @@ async def _execute_remove_integration(
 
 async def _apply_remove_integration(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
 ) -> tuple[dict, str, str]:
     """Revalidate, remove through HA, then report the observed cleanup."""
-    if effective_cap(token, "cap_integration_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_integration_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "remove_integration"
     entry_id = str(args.get("entry_id") or "").strip()
     entry = hass.config_entries.async_get_entry(entry_id)
     if entry is None or entry.domain == DOMAIN:
         return _tool_error("Integration not found."), "not_found", entry_id
-    perm_error = _config_entry_write_error(entry_id, token, hass)
+    perm_error = _config_entry_write_error(entry_id, access_key, hass)
     if perm_error is not None:
         return perm_error
     context = config_entry_registry_context(entry_id, hass)
@@ -7442,7 +7442,7 @@ async def _apply_remove_integration(
         return _tool_error("Integration not found."), "not_found", entry_id
     resolved = _config_entry_action_decision(
         data,
-        token,
+        access_key,
         hass,
         entry,
         actions=["remove"],
@@ -7463,7 +7463,7 @@ async def _apply_remove_integration(
         resolved.decision == "confirm" and not approved_same
     ):
         if resolved.blocked:
-            fire_mesa_blocked_event(hass, token, resolved.blocked)
+            fire_mesa_blocked_event(hass, access_key, resolved.blocked)
         return _config_entry_mesa_error(entry_id, resolved)
 
     before_entity_ids = sorted(context.entity_ids)
@@ -7498,7 +7498,7 @@ async def _apply_remove_integration(
     if observed["entry_removed"]:
         await _record_version(
             data,
-            token,
+            access_key,
             resource_type="config_entry",
             resource_id=entry_id,
             action="delete",
@@ -7576,10 +7576,10 @@ def _backup_to_summary(b: Any) -> dict:
 
 
 async def _tool_list_backups(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: list existing backups (compact, newest first) and available agents."""
-    if effective_cap(token, "cap_backup") == CAP_DENY:
+    if effective_cap(access_key, "cap_backup") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "list_backups"
     try:
         result = await async_ws_command(hass, "backup/info", {})
@@ -7616,22 +7616,22 @@ async def _tool_list_backups(
 
 
 async def _tool_create_backup(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: create a backup (Confirm-gated)."""
     blocked = await _gate(
-        "cap_backup", token, hass, data,
+        "cap_backup", access_key, hass, data,
         tool_name="create_backup", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_create_backup(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_create_backup(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_create_backup(args, token, hass, data)
+    return await _execute_create_backup(args, access_key, hass, data)
 
 
 async def _execute_create_backup(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     agent_ids = args.get("agent_ids")
     if not isinstance(agent_ids, list) or not agent_ids:
@@ -7663,7 +7663,7 @@ async def _execute_create_backup(
 
 async def _tool_mesa(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
@@ -7674,14 +7674,14 @@ async def _tool_mesa(
     """Adapter for the mesa_* tools, whose entry point takes the name first."""
     from .mesa_audit import request_context
 
-    with request_context(token, request_id, client_ip):
-        return await async_call_mesa_tool(mesa_tool_name, args, token, hass, data, request_id)
+    with request_context(access_key, request_id, client_ip):
+        return await async_call_mesa_tool(mesa_tool_name, args, access_key, hass, data, request_id)
 
 
 async def _call_tool(
     tool_name: str,
     arguments: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
@@ -7708,13 +7708,13 @@ async def _call_tool(
     if APPROVAL_TARGETS_KEY in arguments:
         return _tool_error("Approval target bindings are server-owned."), "invalid_request", tool_name
     from .home_companion import is_companion, authorize_call, run_request, record_outcome
-    if is_companion(token):
-        refusal = authorize_call(token, tool_name, arguments)
+    if is_companion(access_key):
+        refusal = authorize_call(access_key, tool_name, arguments)
         if refusal:
-            record_outcome(token, tool_name, "denied", arguments=arguments)
+            record_outcome(access_key, tool_name, "denied", arguments=arguments)
             return _tool_error(refusal), "denied", tool_name
         if tool_name == "home_request":
-            return await run_request(arguments, token, hass, data)
+            return await run_request(arguments, access_key, hass, data)
     elif tool_name == "home_request":
         return _tool_error("This tool requires the Home Companion persona."), "denied", tool_name
     internal_name = _NATIVE_TOOL_PUBLIC_TO_INTERNAL.get(tool_name, tool_name)
@@ -7731,7 +7731,7 @@ async def _call_tool(
     progress_context = dispatch_progress.set(progress)
     try:
         result = await handler(
-            arguments, token, hass, **{k: context[k] for k in wanted}, **bound
+            arguments, access_key, hass, **{k: context[k] for k in wanted}, **bound
         )
     except AuthorityChangedError as exc:
         exc.not_dispatched = progress.tracked and not progress.started
@@ -7753,16 +7753,16 @@ async def _call_tool(
 
                 saved = get_approval(data.store, result[2].rsplit(":", 1)[-1])
                 exc.not_dispatched = exc.not_dispatched and (
-                    saved is not None and saved.token_id == token.id and saved.request_id == request_id
+                    saved is not None and saved.token_id == access_key.id and saved.request_id == request_id
                     and saved.status in {"pending", "rejected", "cancelled", "expired"}
                     and not saved.execution_started_at
                 )
-                if (saved is not None and saved.token_id == token.id
+                if (saved is not None and saved.token_id == access_key.id
                         and saved.request_id == request_id and saved.status == STATUS_APPROVED
                         and isinstance(saved.result, dict) and saved.result.get("outcome") == "allowed"):
                     exc.receipt = ("allowed", result[2])
         raise
-    record_outcome(token, tool_name, result[1], result[0], arguments, hass)
+    record_outcome(access_key, tool_name, result[1], result[0], arguments, hass)
     return result
 
 
@@ -7795,41 +7795,41 @@ async def _get_ha_assist_api(hass: HomeAssistant) -> Any:
     return await _ha_llm.async_get_api(hass, _ha_llm.LLM_API_ASSIST, llm_context)
 
 
-def _build_server_info(token: TokenRecord, hass: HomeAssistant, base_url: str) -> dict:
+def _build_server_info(access_key: AccessKeyRecord, hass: HomeAssistant, base_url: str) -> dict:
     """Build the phx://server-info resource payload for the MCP resources/read endpoint."""
     states = hass.states.async_all()
-    if token.pass_through:
+    if access_key.pass_through:
         # Use build_permitted_states to get the same set the token actually sees,
         # including the Phoenix-platform entity filter (sensor.phoenix_mcp_* telemetry sensors).
-        count = len(_build_permitted_states(token, hass))
+        count = len(_build_permitted_states(access_key, hass))
     else:
-        filtered = filter_entities_for_token(states, token, hass)
+        filtered = filter_entities_for_access_key(states, access_key, hass)
         count = len(filtered)
 
     return {
         "name": "Phoenix MCP Scoped Proxy",
         "version": PHOENIX_VERSION,
-        "access_key_name": token.name,
+        "access_key_name": access_key.name,
         "permitted_entity_count": count,
-        "capability_flags": effective_caps(token),
-        "persona": token.persona,
+        "capability_flags": effective_caps(access_key),
+        "persona": access_key.persona,
         "native_ha_mcp_endpoint": f"{base_url}/api/mcp",
         "phoenix_mcp_context_endpoint": f"{base_url}/api/phoenix-mcp/context",
     }
 
 
-def _build_context_plain(token: TokenRecord, hass: HomeAssistant) -> str:
+def _build_context_plain(access_key: AccessKeyRecord, hass: HomeAssistant) -> str:
     """Build the plain-text context document listing accessible entities and capabilities."""
     from .home_companion import is_companion
-    if is_companion(token):
+    if is_companion(access_key):
         return "Use home_request for scoped household requests; installation context is unavailable."
 
     lines: list[str] = []
 
-    if token.pass_through:
+    if access_key.pass_through:
         # Use build_permitted_states for an accurate count that respects Phoenix-platform
         # entity filtering and use_assist_exposure (same set the token actually sees).
-        count = len(_build_permitted_states(token, hass))
+        count = len(_build_permitted_states(access_key, hass))
         lines.append("This access key operates in pass-through mode.")
         lines.append(
             f"It has unrestricted access to all {count} accessible Home Assistant entities and services."
@@ -7841,11 +7841,11 @@ def _build_context_plain(token: TokenRecord, hass: HomeAssistant) -> str:
         entity_hints = hass.data[DOMAIN].store.get_entity_hints()
         accessible: list[tuple[str, str, str | None]] = []
         for state in states:
-            perm = resolve(state.entity_id, token, hass)
+            perm = resolve(state.entity_id, access_key, hass)
             if perm == Permission.WRITE:
-                accessible.append((state.entity_id, "READ/WRITE", get_effective_hint(token, state.entity_id, hass, entity_hints)))
+                accessible.append((state.entity_id, "READ/WRITE", get_effective_hint(access_key, state.entity_id, hass, entity_hints)))
             elif perm == Permission.READ:
-                accessible.append((state.entity_id, "READ", get_effective_hint(token, state.entity_id, hass, entity_hints)))
+                accessible.append((state.entity_id, "READ", get_effective_hint(access_key, state.entity_id, hass, entity_hints)))
 
         accessible.sort(key=lambda x: x[0])
         lines.append("You have access to the following Home Assistant entities:")
@@ -7862,7 +7862,7 @@ def _build_context_plain(token: TokenRecord, hass: HomeAssistant) -> str:
         )
 
     lines.append("")
-    caps = effective_caps(token)
+    caps = effective_caps(access_key)
     lines.append("Capabilities (deny / allow / confirm; confirm requires admin approval per request):")
     label_map = (
         ("cap_config_read", "Config read"),
@@ -7878,9 +7878,9 @@ def _build_context_plain(token: TokenRecord, hass: HomeAssistant) -> str:
     for cap_key, label in label_map:
         lines.append(f"- {label}: {caps.get(cap_key, 'deny')}")
     lines.append("")
-    if token.rate_limit_requests > 0:
+    if access_key.rate_limit_requests > 0:
         lines.append(
-            f"Rate limit: {token.rate_limit_requests} requests/min, burst {token.rate_limit_burst}/sec"
+            f"Rate limit: {access_key.rate_limit_requests} requests/min, burst {access_key.rate_limit_burst}/sec"
         )
     else:
         lines.append("Rate limit: none")
@@ -7888,21 +7888,21 @@ def _build_context_plain(token: TokenRecord, hass: HomeAssistant) -> str:
     return "\n".join(lines)
 
 
-def _build_context_json(token: TokenRecord, hass: HomeAssistant) -> dict:
+def _build_context_json(access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """Build the structured JSON context document for the ?format=json context endpoint."""
     from .home_companion import is_companion
-    if is_companion(token):
-        return {"access_key_name": token.name, "persona": token.persona, "entities": [],
-                "capability_flags": effective_caps(token), "message": "Use home_request for scoped household requests."}
+    if is_companion(access_key):
+        return {"access_key_name": access_key.name, "persona": access_key.persona, "entities": [],
+                "capability_flags": effective_caps(access_key), "message": "Use home_request for scoped household requests."}
     registry = er.async_get(hass)
     dev_registry = dr.async_get(hass)
 
     entities: list[dict] = []
     states = hass.states.async_all()
 
-    if token.pass_through:
+    if access_key.pass_through:
         _expose_check = None
-        if token.use_assist_exposure:
+        if access_key.use_assist_exposure:
             from homeassistant.components.homeassistant.exposed_entities import (  # noqa: PLC0415
                 async_should_expose as _should_expose,
             )
@@ -7927,14 +7927,14 @@ def _build_context_json(token: TokenRecord, hass: HomeAssistant) -> dict:
     else:
         entity_hints = hass.data[DOMAIN].store.get_entity_hints()
         for state in states:
-            perm = resolve(state.entity_id, token, hass)
+            perm = resolve(state.entity_id, access_key, hass)
             if perm not in (Permission.READ, Permission.WRITE):
                 continue
             entry = registry.async_get(state.entity_id)
             area_id = _resolve_area_id(entry, dev_registry)
             perm_str = "READ/WRITE" if perm == Permission.WRITE else "READ"
             e: dict = {"entity_id": state.entity_id, "permission": perm_str, "area_id": area_id}
-            hint = get_effective_hint(token, state.entity_id, hass, entity_hints)
+            hint = get_effective_hint(access_key, state.entity_id, hass, entity_hints)
             if hint:
                 e["hint"] = hint
             entities.append(e)
@@ -7942,19 +7942,19 @@ def _build_context_json(token: TokenRecord, hass: HomeAssistant) -> dict:
     entities.sort(key=lambda e: e["entity_id"])
 
     return {
-        "access_key_name": token.name,
-        "pass_through": token.pass_through,
-        "persona": token.persona,
+        "access_key_name": access_key.name,
+        "pass_through": access_key.pass_through,
+        "persona": access_key.persona,
         "entities": entities,
-        "capability_flags": effective_caps(token),
+        "capability_flags": effective_caps(access_key),
         "rate_limit": {
-            "requests_per_minute": token.rate_limit_requests,
-            "burst_per_second": token.rate_limit_burst,
+            "requests_per_minute": access_key.rate_limit_requests,
+            "burst_per_second": access_key.rate_limit_burst,
         },
     }
 
 
-def _build_instructions(token: TokenRecord, data: PhoenixData, base_url: str) -> str:
+def _build_instructions(access_key: AccessKeyRecord, data: PhoenixData, base_url: str) -> str:
     """Token-aware MCP `instructions` primer, sent at every session start.
 
     Short: the etiquette that prevents the common failure modes (treating
@@ -7963,12 +7963,12 @@ def _build_instructions(token: TokenRecord, data: PhoenixData, base_url: str) ->
     /api/phoenix-mcp/skill.
     """
     from .home_companion import is_companion
-    if is_companion(token):
+    if is_companion(access_key):
         return ("This access key uses Phoenix Home Companion. Only home_request is exposed. "
                 "Send a complete home request with all restrictions. Each request is independent. "
                 "Read the structured status and tool_outcomes; pending approval is not execution. "
                 "Do not automatically retry an unknown action outcome.")
-    caps = effective_caps(token)
+    caps = effective_caps(access_key)
     confirm_gated = sorted(c for c, m in caps.items() if m == CAP_CONFIRM)
     lines = [
         "Phoenix MCP is a scoped Home Assistant gateway. This access key sees only operator-granted "
@@ -8024,7 +8024,7 @@ def _build_instructions(token: TokenRecord, data: PhoenixData, base_url: str) ->
 
 
 def _maybe_append_stale_advisory(
-    tool_result: dict, token: TokenRecord, data: PhoenixData, client_ip: str
+    tool_result: dict, access_key: AccessKeyRecord, data: PhoenixData, client_ip: str
 ) -> bool:
     """Append the one-time stale-tools/catalog notices to a result, in place.
 
@@ -8047,17 +8047,17 @@ def _maybe_append_stale_advisory(
         AGENTCLI_CLIENT_IP, ASSIST_CLIENT_IP, VOICE_AGENT_CLIENT_IP, AI_TASK_CLIENT_IP, HOME_COMPANION_CLIENT_IP)
     notices: list[str] = []
     if not internal:
-        if token.settings_version > token.tools_list_version:
+        if access_key.settings_version > access_key.tools_list_version:
             notices.append(_STALE_TOOLS_ADVISORY)
         if (
-            token.tools_catalog_fingerprint
-            and token.tools_catalog_fingerprint != _TOOL_CATALOG_FINGERPRINT
+            access_key.tools_catalog_fingerprint
+            and access_key.tools_catalog_fingerprint != _TOOL_CATALOG_FINGERPRINT
         ):
             notices.append(_STALE_CATALOG_ADVISORY)
-    epoch = f"{token.settings_version}:{token.tools_catalog_fingerprint}"
-    if not notices or data.stale_tools_advised.get(token.id) == epoch:
+    epoch = f"{access_key.settings_version}:{access_key.tools_catalog_fingerprint}"
+    if not notices or data.stale_tools_advised.get(access_key.id) == epoch:
         return False
-    data.stale_tools_advised[token.id] = epoch
+    data.stale_tools_advised[access_key.id] = epoch
     content = tool_result.get("content")
     if isinstance(content, list):
         content.extend({"type": "text", "text": n} for n in notices)
@@ -8067,7 +8067,7 @@ def _maybe_append_stale_advisory(
 async def _dispatch_tools_call(
     params: dict,
     msg_id: Any,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str,
@@ -8086,20 +8086,20 @@ async def _dispatch_tools_call(
     raw_name = params.get("name")
     tool_name = raw_name[:MAX_TOOL_NAME_LENGTH] if isinstance(raw_name, str) else ""
     if tool_name != "home_request" and _NATIVE_TOOL_PUBLIC_TO_INTERNAL.get(tool_name, tool_name) not in _TOOL_HANDLERS:
-        _log(data, token, request_id=request_id, method="tools/call", resource="unknown_tool",
+        _log(data, access_key, request_id=request_id, method="tools/call", resource="unknown_tool",
              outcome="invalid_request", client_ip=client_ip)
         return _jsonrpc_error(msg_id, -32602, "Unknown tool."), "tools/call", "unknown_tool", "invalid_request"
     arguments = params.get("arguments") or {}
     _mesa_advisory_ctx.set(False)
     try:
         tool_result, outcome, resource = await _call_tool(
-            tool_name, arguments, token, hass, data,
+            tool_name, arguments, access_key, hass, data,
             request_id=request_id, client_ip=client_ip,
         )
     except AuthorityChangedError as exc:
         if exc.receipt is not None:
             receipt_outcome, receipt_resource = exc.receipt
-            _log(data, token, request_id=request_id, method=tool_name,
+            _log(data, access_key, request_id=request_id, method=tool_name,
                  resource=receipt_resource, outcome=receipt_outcome, client_ip=client_ip,
                  payload={"name": tool_name, "arguments": arguments, "result_withheld": True})
         raise
@@ -8112,14 +8112,14 @@ async def _dispatch_tools_call(
         # to the client, return something self-correctable.
         _LOGGER.exception(
             "Unhandled exception in tool %s for access key %s rid=%s",
-            tool_name, token.name, request_id,
+            tool_name, access_key.name, request_id,
         )
         tool_result = _tool_error("Internal error processing this tool call.")
         outcome = "invalid_request"
         resource = tool_name
 
-    stale = _maybe_append_stale_advisory(tool_result, token, data, client_ip)
-    _log(data, token, request_id=request_id, method=tool_name or "tools/call",
+    stale = _maybe_append_stale_advisory(tool_result, access_key, data, client_ip)
+    _log(data, access_key, request_id=request_id, method=tool_name or "tools/call",
          resource=resource, outcome=outcome, client_ip=client_ip,
          payload={"name": tool_name, "arguments": arguments},
          mesa_advisory=_mesa_advisory_ctx.get(),
@@ -8167,7 +8167,7 @@ async def _dispatch_mcp(
     method: str,
     msg_id: Any,
     params: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     client_ip: str,
@@ -8183,34 +8183,34 @@ async def _dispatch_mcp(
     authority = request_authority.get()
     admitted_context = None
     if authority is None:
-        authority = RequestAuthority(hass, data, token.id, token.token_hash)
+        authority = RequestAuthority(hass, data, access_key.id, access_key.token_hash)
         admitted_context = request_authority.set(authority)
     context = None
     write_entered = False
     dispatch_entered = False
     result = None
     try:
-        current = authority.current_token()
+        current = authority.current_access_key()
         # Internal surfaces deliberately disable inline approval waiting. Refresh
         # all authorization fields while preserving only that execution setting.
-        token = (
+        access_key = (
             dataclasses.replace(current, confirm_inline_wait_seconds=0)
-            if token.confirm_inline_wait_seconds == 0
+            if access_key.confirm_inline_wait_seconds == 0
             and current.confirm_inline_wait_seconds != 0
             else current
         )
-        context = policy_version.set(token.settings_version)
+        context = policy_version.set(access_key.settings_version)
         if method == "tools/call" and isinstance(params.get("name"), str) and not tool_is_read_only(params["name"]):
-            await data.agent_recovery.reconcile(data.store, token.id)
-            if data.agent_recovery.blocks(token.id, request_id):
-                _log(data, token, request_id=request_id, method=params["name"], resource=params["name"],
+            await data.agent_recovery.reconcile(data.store, access_key.id)
+            if data.agent_recovery.blocks(access_key.id, request_id):
+                _log(data, access_key, request_id=request_id, method=params["name"], resource=params["name"],
                      outcome="denied", client_ip=client_ip)
                 recovery_error = _tool_error("This new request was not executed because an earlier agent action has an unresolved outcome. Check the earlier action in Home Assistant and resolve it in Phoenix MCP > Needs attention before trying again. Direct read-only tools remain available where this access key exposes them; delegated requests are blocked.")
                 return _jsonrpc_result(msg_id, recovery_error), method, params["name"], "denied"
         check_request_authority()
         write_entered = method == "tools/call" and isinstance(params.get("name"), str) and not tool_is_read_only(params["name"])
         dispatch_entered = True
-        result = await _dispatch_mcp_authorized(method, msg_id, params, token, hass, data, client_ip, base_url, request_id)
+        result = await _dispatch_mcp_authorized(method, msg_id, params, access_key, hass, data, client_ip, base_url, request_id)
         check_request_authority()
         return result
     except AuthorityChangedError as exc:
@@ -8218,32 +8218,32 @@ async def _dispatch_mcp(
             completed = (result is not None and result[3] == "allowed") or (exc.receipt is not None and exc.receipt[0] == "allowed")
             name = params["name"]
             if exc.not_dispatched and not completed:
-                _log(data, token, request_id=request_id, method="authority/changed", resource=name,
+                _log(data, access_key, request_id=request_id, method="authority/changed", resource=name,
                      outcome="denied", client_ip=client_ip)
                 return _jsonrpc_result(msg_id, _tool_error("Request authority changed before dispatch. No action was executed.")), method, name, "denied"
-            _log(data, token, request_id=request_id, method="authority/changed", resource=name,
+            _log(data, access_key, request_id=request_id, method="authority/changed", resource=name,
                  outcome="invalid_request", client_ip=client_ip)
             if completed:
                 receipt = _tool_success("Action dispatch completed, but authority changed before its response could be delivered. Response details were withheld. Do not repeat the action; verify its outcome in Home Assistant.")
                 return _jsonrpc_result(msg_id, receipt), method, name, "allowed"
             record_event(data, "notice", {"reason": "execution_unknown"}, outcome="unknown")
             try:
-                await data.agent_recovery.retain_unknown(token.id, name, request_id)
+                await data.agent_recovery.retain_unknown(access_key.id, name, request_id)
             except Exception as recovery_error:
                 log_internal_failure(_LOGGER, "retain_unknown", recovery_error)
             return _jsonrpc_error(msg_id, -32000, "Authority changed during dispatch. The action may already have executed. Do not repeat it. Check Home Assistant and review the action in Phoenix MCP > Needs attention before submitting another write."), method, name, "invalid_request"
-        _log(data, token, request_id=request_id, method=method, resource="/api/phoenix-mcp",
+        _log(data, access_key, request_id=request_id, method=method, resource="/api/phoenix-mcp",
              outcome="denied", client_ip=client_ip)
         if isinstance(exc, PolicyChangedError) and method == "tools/call":
             refusal = _tool_error("Permissions changed while this tool was running. Its result was withheld. The conversation can continue using current permissions." if dispatch_entered else "Permissions changed before dispatch. No action was executed. The conversation can continue using current permissions.")
-            _maybe_append_stale_advisory(refusal, token, data, client_ip)
+            _maybe_append_stale_advisory(refusal, access_key, data, client_ip)
             return _jsonrpc_result(msg_id, refusal), method, "/api/phoenix-mcp", "denied"
         return _jsonrpc_error(msg_id, -32000, "Request authority changed. Check earlier actions before resubmitting with current permissions."), method, "/api/phoenix-mcp", "denied"
     except Exception as exc:
         log_internal_failure(_LOGGER, "mcp_dispatch", exc)
         if write_entered:
             record_event(data, "notice", {"reason": "execution_unknown"}, outcome="unknown")
-        _log(data, token, request_id=request_id, method=method, resource="/api/phoenix-mcp",
+        _log(data, access_key, request_id=request_id, method=method, resource="/api/phoenix-mcp",
              outcome="invalid_request", client_ip=client_ip)
         return _jsonrpc_error(msg_id, -32603, "Internal error."), method, "/api/phoenix-mcp", "invalid_request"
     finally:
@@ -8254,7 +8254,7 @@ async def _dispatch_mcp(
 
 
 async def _dispatch_mcp_authorized(
-    method: str, msg_id: Any, params: dict, token: TokenRecord,
+    method: str, msg_id: Any, params: dict, access_key: AccessKeyRecord,
     hass: HomeAssistant, data: PhoenixData, client_ip: str,
     base_url: str, request_id: str,
 ) -> tuple[dict | None, str, str, str]:
@@ -8269,7 +8269,7 @@ async def _dispatch_mcp_authorized(
             "resultType": "complete",
             "supportedVersions": list(MCP_PROTOCOL_VERSIONS),
             "capabilities": _SERVER_CAPABILITIES,
-            "instructions": _build_instructions(token, data, base_url),
+            "instructions": _build_instructions(access_key, data, base_url),
             "ttlMs": MCP_DISCOVER_TTL_MS,
             # NEVER "public". The instructions name THIS token's confirm-gated
             # capabilities, so a shared intermediary caching one token's answer
@@ -8281,7 +8281,7 @@ async def _dispatch_mcp_authorized(
                 },
             },
         })
-        _log(data, token, request_id=request_id, method="server/discover",
+        _log(data, access_key, request_id=request_id, method="server/discover",
              resource="/api/phoenix-mcp", outcome="allowed", client_ip=client_ip)
         return resp, "server/discover", "/api/phoenix-mcp", "allowed"
 
@@ -8300,28 +8300,28 @@ async def _dispatch_mcp_authorized(
             "protocolVersion": version,
             "capabilities": _SERVER_CAPABILITIES,
             "serverInfo": {"name": "Phoenix MCP", "version": PHOENIX_VERSION},
-            "instructions": _build_instructions(token, data, base_url),
+            "instructions": _build_instructions(access_key, data, base_url),
         })
-        _log(data, token, request_id=request_id, method="initialize",
+        _log(data, access_key, request_id=request_id, method="initialize",
              resource="/api/phoenix-mcp", outcome="allowed", client_ip=client_ip)
         return resp, "initialize", "/api/phoenix-mcp", "allowed"
 
     if method in ("notifications/initialized", "initialized"):
-        _log(data, token, request_id=request_id, method=method,
+        _log(data, access_key, request_id=request_id, method=method,
              resource="/api/phoenix-mcp", outcome="allowed", client_ip=client_ip)
         return None, method, "/api/phoenix-mcp", "allowed"
 
     if method == "ping":
         resp = _jsonrpc_result(msg_id, {})
-        _log(data, token, request_id=request_id, method="ping",
+        _log(data, access_key, request_id=request_id, method="ping",
              resource="/api/phoenix-mcp", outcome="allowed", client_ip=client_ip)
         return resp, "ping", "/api/phoenix-mcp", "allowed"
 
     from .home_companion import is_companion
-    if is_companion(token) and method in {"resources/list", "resources/templates/list", "prompts/list"}:
+    if is_companion(access_key) and method in {"resources/list", "resources/templates/list", "prompts/list"}:
         key = {"resources/list": "resources", "resources/templates/list": "resourceTemplates", "prompts/list": "prompts"}[method]
         return _jsonrpc_result(msg_id, {key: []}), method, "/api/phoenix-mcp", "allowed"
-    if is_companion(token) and method in {"resources/read", "prompts/get"}:
+    if is_companion(access_key) and method in {"resources/read", "prompts/get"}:
         return _jsonrpc_error(msg_id, -32602, "Unavailable for this persona."), method, "/api/phoenix-mcp", "denied"
     if method == "tools/list":
         # Announce only the tools this token can use, unless announce_all_tools
@@ -8330,30 +8330,30 @@ async def _dispatch_mcp_authorized(
         # Builder) gate on it being present; reads are always announced.
         # announce_all_tools overrides all of it, including "requires": it is a
         # debugging affordance, and the call path still refuses.
-        announce_all = getattr(token, "announce_all_tools", False)
-        has_write = token_has_write_scope(token)
+        announce_all = getattr(access_key, "announce_all_tools", False)
+        has_write = access_key_has_write_scope(access_key)
         mesa_defs = mesa_tool_defs() if data.mesa is not None else []
         tools = []
         for tool_def in list(_ENTITY_TOOL_DEFS) + list(_NATIVE_TOOL_DEFS) + list(_SYSTEM_TOOL_DEFS) + mesa_defs:
-            if household_tool_access(tool_def["name"]) and (announce_all or _tool_is_announced(tool_def, token, has_write, hass)):
+            if household_tool_access(tool_def["name"]) and (announce_all or _tool_is_announced(tool_def, access_key, has_write, hass)):
                 tools.append({k: v for k, v in tool_def.items() if k not in ("cap", "caps", "caps_any", "requires")})
-        if is_companion(token):
+        if is_companion(access_key):
             from .home_companion import wrapper_tool
             tools = [wrapper_tool()]
         resp = _jsonrpc_result(msg_id, {"tools": tools})
         # After this response the client's tool list is current: echo the settings
         # version (in memory; persisted by the periodic flush, like last_used_at)
         # and clear the advised marker so a later change advises again.
-        token.tools_list_version = token.settings_version
-        token.tools_catalog_fingerprint = _TOOL_CATALOG_FINGERPRINT
-        data.stale_tools_advised.pop(token.id, None)
-        _log(data, token, request_id=request_id, method="tools/list",
+        access_key.tools_list_version = access_key.settings_version
+        access_key.tools_catalog_fingerprint = _TOOL_CATALOG_FINGERPRINT
+        data.stale_tools_advised.pop(access_key.id, None)
+        _log(data, access_key, request_id=request_id, method="tools/list",
              resource="/api/phoenix-mcp", outcome="allowed", client_ip=client_ip)
         return resp, "tools/list", "/api/phoenix-mcp", "allowed"
 
     if method == "tools/call":
         return await _dispatch_tools_call(
-            params, msg_id, token, hass, data, request_id, client_ip,
+            params, msg_id, access_key, hass, data, request_id, client_ip,
         )
 
     if method == "resources/list":
@@ -8372,7 +8372,7 @@ async def _dispatch_mcp_authorized(
                 },
             ]
         })
-        _log(data, token, request_id=request_id, method="resources/list",
+        _log(data, access_key, request_id=request_id, method="resources/list",
              resource="/api/phoenix-mcp", outcome="allowed", client_ip=client_ip)
         return resp, "resources/list", "/api/phoenix-mcp", "allowed"
 
@@ -8382,14 +8382,14 @@ async def _dispatch_mcp_authorized(
         # whenever a server advertises resource support; an empty catalog is the
         # protocol answer, not Method not found.
         resp = _jsonrpc_result(msg_id, {"resourceTemplates": []})
-        _log(data, token, request_id=request_id, method="resources/templates/list",
+        _log(data, access_key, request_id=request_id, method="resources/templates/list",
              resource="/api/phoenix-mcp", outcome="allowed", client_ip=client_ip)
         return resp, "resources/templates/list", "/api/phoenix-mcp", "allowed"
 
     if method == "resources/read":
         uri = params.get("uri", "")
         if uri == "homeassistant://assist/context-snapshot":
-            context_text = _build_live_context(token, hass)
+            context_text = _build_live_context(access_key, hass)
             resp = _jsonrpc_result(msg_id, {
                 "contents": [{
                     "uri": "homeassistant://assist/context-snapshot",
@@ -8397,16 +8397,16 @@ async def _dispatch_mcp_authorized(
                     "text": context_text,
                 }]
             })
-            _log(data, token, request_id=request_id, method="resources/read",
+            _log(data, access_key, request_id=request_id, method="resources/read",
                  resource="homeassistant://assist/context-snapshot", outcome="allowed", client_ip=client_ip)
             return resp, "resources/read", "homeassistant://assist/context-snapshot", "allowed"
         if uri != "phx://server-info":
             if msg_id is not None:
-                _log(data, token, request_id=request_id, method="resources/read",
+                _log(data, access_key, request_id=request_id, method="resources/read",
                      resource=uri or "/api/phoenix-mcp", outcome="denied", client_ip=client_ip)
                 return _jsonrpc_error(msg_id, -32002, "Unknown resource URI."), "resources/read", uri, "invalid_request"
             return None, "resources/read", uri, "denied"
-        server_info = _build_server_info(token, hass, base_url)
+        server_info = _build_server_info(access_key, hass, base_url)
         resp = _jsonrpc_result(msg_id, {
             "contents": [{
                 "uri": "phx://server-info",
@@ -8414,12 +8414,12 @@ async def _dispatch_mcp_authorized(
                 "text": json.dumps(server_info, default=str),
             }]
         })
-        _log(data, token, request_id=request_id, method="resources/read",
+        _log(data, access_key, request_id=request_id, method="resources/read",
              resource="phx://server-info", outcome="allowed", client_ip=client_ip)
         return resp, "resources/read", "phx://server-info", "allowed"
 
     if method == "prompts/list":
-        if token.pass_through:
+        if access_key.pass_through:
             try:
                 api_inst = await _get_ha_assist_api(hass)
                 prompt_name = f"Default prompt for Home Assistant {api_inst.api.name}"
@@ -8438,18 +8438,18 @@ async def _dispatch_mcp_authorized(
                 "description": "Describes the Home Assistant entities and capabilities accessible to this access key",
             }]
         resp = _jsonrpc_result(msg_id, {"prompts": prompts})
-        _log(data, token, request_id=request_id, method="prompts/list",
+        _log(data, access_key, request_id=request_id, method="prompts/list",
              resource="/api/phoenix-mcp", outcome="allowed", client_ip=client_ip)
         return resp, "prompts/list", "/api/phoenix-mcp", "allowed"
 
     if method == "prompts/get":
         name = params.get("name", "")
-        if token.pass_through:
+        if access_key.pass_through:
             try:
                 api_inst = await _get_ha_assist_api(hass)
                 expected_name = f"Default prompt for Home Assistant {api_inst.api.name}"
                 if name != expected_name:
-                    _log(data, token, request_id=request_id, method="prompts/get",
+                    _log(data, access_key, request_id=request_id, method="prompts/get",
                          resource="/api/phoenix-mcp", outcome="denied", client_ip=client_ip)
                     return _jsonrpc_error(msg_id, -32602, "Unknown prompt."), "prompts/get", "/api/phoenix-mcp", "denied"
                 resp = _jsonrpc_result(msg_id, {
@@ -8463,25 +8463,25 @@ async def _dispatch_mcp_authorized(
                 # invisible. The audit outcome stays denied because that is what
                 # the caller was told; the traceback is for the operator.
                 _LOGGER.exception("prompts/get: the HA Assist API lookup failed")
-                _log(data, token, request_id=request_id, method="prompts/get",
+                _log(data, access_key, request_id=request_id, method="prompts/get",
                      resource="/api/phoenix-mcp", outcome="denied", client_ip=client_ip)
                 return _jsonrpc_error(msg_id, -32603, "Prompt unavailable."), "prompts/get", "/api/phoenix-mcp", "denied"
         else:
             if name != "Phoenix MCP access context":
-                _log(data, token, request_id=request_id, method="prompts/get",
+                _log(data, access_key, request_id=request_id, method="prompts/get",
                      resource="/api/phoenix-mcp", outcome="denied", client_ip=client_ip)
                 return _jsonrpc_error(msg_id, -32602, "Unknown prompt."), "prompts/get", "/api/phoenix-mcp", "denied"
-            prompt_text = _UNTRUSTED_DATA_BOUNDARY + "\n\n" + _build_context_plain(token, hass)
+            prompt_text = _UNTRUSTED_DATA_BOUNDARY + "\n\n" + _build_context_plain(access_key, hass)
             resp = _jsonrpc_result(msg_id, {
                 "description": "Describes the Home Assistant entities and capabilities accessible to this access key",
                 "messages": [{"role": "user", "content": {"type": "text", "text": prompt_text}}],
             })
-        _log(data, token, request_id=request_id, method="prompts/get",
+        _log(data, access_key, request_id=request_id, method="prompts/get",
              resource="/api/phoenix-mcp", outcome="allowed", client_ip=client_ip)
         return resp, "prompts/get", "/api/phoenix-mcp", "allowed"
 
     if msg_id is not None:
-        _log(data, token, request_id=request_id, method=method or "unknown",
+        _log(data, access_key, request_id=request_id, method=method or "unknown",
              resource="/api/phoenix-mcp", outcome="not_implemented", client_ip=client_ip)
         return _jsonrpc_error(msg_id, -32601, "Method not found."), method or "unknown", "/api/phoenix-mcp", "not_implemented"
 
@@ -8490,7 +8490,7 @@ async def _dispatch_mcp_authorized(
 
 async def _handle_streamable_batch(
     items: list,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     rl_result: RateLimitResult,
     hass: HomeAssistant,
     data: PhoenixData,
@@ -8506,7 +8506,7 @@ async def _handle_streamable_batch(
     """
     if not items:
         _audit_mcp_transport(
-            data, token, request_id, client_ip, body=items, resource="mcp:batch"
+            data, access_key, request_id, client_ip, body=items, resource="mcp:batch"
         )
         return web.Response(
             status=200,
@@ -8524,7 +8524,7 @@ async def _handle_streamable_batch(
     # writes; order is preserved and one item's failure stays isolated.
     if len(items) > MAX_BATCH_ITEMS:
         _audit_mcp_transport(
-            data, token, request_id, client_ip, body=items, resource="mcp:batch"
+            data, access_key, request_id, client_ip, body=items, resource="mcp:batch"
         )
         return web.Response(
             status=400,
@@ -8534,7 +8534,7 @@ async def _handle_streamable_batch(
         )
 
     responses = await _dispatch_streamable_batch(
-        items, token, hass, data, client_ip, base_url=base_url,
+        items, access_key, hass, data, client_ip, base_url=base_url,
         request_id=request_id,
     )
 
@@ -8547,7 +8547,7 @@ async def _handle_streamable_batch(
         text=json.dumps(responses, default=str),
         headers={"X-Phoenix-Request-ID": request_id},
     )
-    resp.headers.update(_rate_limit_headers(token, rl_result))
+    resp.headers.update(_rate_limit_headers(access_key, rl_result))
     return resp
 
 
@@ -8574,7 +8574,7 @@ def _batch_expects_response(items: list) -> bool:
 
 async def _dispatch_streamable_batch(
     items: list,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     client_ip: str,
@@ -8589,14 +8589,14 @@ async def _dispatch_streamable_batch(
     interleave writes; order is preserved and one item's failure stays isolated.
     """
     bus = _progress_ctx.get()
-    batch_policy_version = token.settings_version
+    batch_policy_version = access_key.settings_version
 
     write_receipts: dict[int, str] = {}
 
     async def _dispatch_one(item: Any) -> dict | None:
         if not isinstance(item, dict) or item.get("jsonrpc") != "2.0":
             _audit_mcp_transport(
-                data, token, request_id or generate_request_id(), client_ip,
+                data, access_key, request_id or generate_request_id(), client_ip,
                 body=item, resource="mcp:batch",
             )
             msg_id = _sanitize_jsonrpc_id(item.get("id")) if isinstance(item, dict) else None
@@ -8606,13 +8606,13 @@ async def _dispatch_streamable_batch(
         is_notification = "id" not in item
         if kind == "accepted":
             _audit_mcp_transport(
-                data, token, request_id or generate_request_id(), client_ip,
+                data, access_key, request_id or generate_request_id(), client_ip,
                 body=item, outcome="allowed", resource="mcp:response",
             )
             return None  # response/notification object: no reply entry
         if kind in ("error", "unsupported"):
             _audit_mcp_transport(
-                data, token, request_id or generate_request_id(), client_ip,
+                data, access_key, request_id or generate_request_id(), client_ip,
                 body=item, resource="mcp:batch",
             )
             # A structurally valid but undispatchable item (positional params) with
@@ -8623,29 +8623,29 @@ async def _dispatch_streamable_batch(
             return _jsonrpc_error(msg_id, *payload)
         method, params = payload
         if is_notification and method in _MCP_METHODS and method not in {"notifications/initialized", "initialized"}:
-            _audit_mcp_transport(data, token, request_id or generate_request_id(), client_ip,
+            _audit_mcp_transport(data, access_key, request_id or generate_request_id(), client_ip,
                                  body=item, resource="mcp:notification")
             return None
 
         if data.enforce_mcp_lifecycle and method not in _MCP_LEGACY_METHODS:
             _audit_mcp_transport(
-                data, token, request_id or generate_request_id(), client_ip,
+                data, access_key, request_id or generate_request_id(), client_ip,
                 body=item, outcome="not_implemented", resource="mcp:batch",
             )
             return None if is_notification else _jsonrpc_error(msg_id, -32601, "Method not found.")
         if bus is not None:
             # Progress is per-request in MCP, and each batch item carries its own
             # token; items run one at a time, so one field is enough.
-            bus.token = _progress_token(method, params)
+            bus.access_key = _progress_token(method, params)
         try:
             response_msg, _, _, outcome = await _dispatch_mcp(
-                method, msg_id, params, token, hass, data, client_ip,
+                method, msg_id, params, access_key, hass, data, client_ip,
                 base_url=base_url,
                 request_id=request_id,
             )
         finally:
             if bus is not None:
-                bus.token = None
+                bus.access_key = None
                 bus.status = None
         if (not is_notification and response_msg is not None and method == "tools/call"
                 and isinstance(params.get("name"), str) and not tool_is_read_only(params["name"])):
@@ -8667,12 +8667,12 @@ async def _dispatch_streamable_batch(
     authority = request_authority.get()
     if authority is not None:
         try:
-            current = authority.current_token()
+            current = authority.current_access_key()
             if not current.accepts_policy_version(batch_policy_version):
                 raise AuthorityChangedError("Permissions changed.")
         except AuthorityChangedError:
             _audit_mcp_transport(
-                data, token, request_id or generate_request_id(), client_ip,
+                data, access_key, request_id or generate_request_id(), client_ip,
                 outcome="invalid_request", resource="mcp:batch",
             )
             withheld = []
@@ -8695,7 +8695,7 @@ async def _dispatch_mcp_result(
     method: str,
     msg_id: Any,
     params: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     client_ip: str,
@@ -8705,7 +8705,7 @@ async def _dispatch_mcp_result(
 ) -> dict | None:
     """_dispatch_mcp reduced to just the response message, for the SSE writer."""
     response_msg, _method, _resource, _outcome = await _dispatch_mcp(
-        method, msg_id, params, token, hass, data, client_ip,
+        method, msg_id, params, access_key, hass, data, client_ip,
         base_url=base_url,
         request_id=request_id,
     )
@@ -8716,7 +8716,7 @@ async def _dispatch_modern_mcp_result(
     method: str,
     msg_id: Any,
     params: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     client_ip: str,
@@ -8726,18 +8726,18 @@ async def _dispatch_modern_mcp_result(
 ) -> dict | None:
     """Dispatch and apply the 2026-07-28 wire shape for an SSE response."""
     response_msg = await _dispatch_mcp_result(
-        method, msg_id, params, token, hass, data, client_ip,
+        method, msg_id, params, access_key, hass, data, client_ip,
         base_url=base_url, request_id=request_id,
     )
     return _modernize_response(response_msg, method)
 
 
-def _rate_limit_headers(token: TokenRecord, rl_result: Any) -> dict[str, str]:
+def _rate_limit_headers(access_key: AccessKeyRecord, rl_result: Any) -> dict[str, str]:
     """The X-RateLimit-* trio, or nothing when rate limiting is off for this token."""
-    if token.rate_limit_requests <= 0:
+    if access_key.rate_limit_requests <= 0:
         return {}
     return {
-        "X-RateLimit-Limit": str(token.rate_limit_requests),
+        "X-RateLimit-Limit": str(access_key.rate_limit_requests),
         "X-RateLimit-Remaining": str(rl_result.remaining),
         "X-RateLimit-Reset": str(rl_result.reset),
     }
@@ -8776,7 +8776,7 @@ def _progress_notification(bus: _ProgressBus, elapsed: float) -> dict:
     value increase with every notification for a given token.
     """
     params: dict[str, Any] = {
-        "progressToken": bus.token,
+        "progressToken": bus.access_key,
         "progress": round(elapsed, 1),
     }
     if bus.total is not None:
@@ -8836,7 +8836,7 @@ async def _mcp_sse_response(
             elapsed = time.monotonic() - started
             frame = (
                 _sse_frame(_progress_notification(bus, elapsed))
-                if bus.token is not None
+                if bus.access_key is not None
                 else b": keepalive\n\n"
             )
             try:
@@ -8977,15 +8977,15 @@ def _validate_legacy_initialize(params: dict) -> tuple[int, str] | None:
     return None
 
 
-def _open_legacy_session(data: PhoenixData, token: TokenRecord) -> str | None:
+def _open_legacy_session(data: PhoenixData, access_key: AccessKeyRecord) -> str | None:
     """Allocate within both quotas without evicting another active session."""
     _prune_legacy_sessions(data)
-    owned = sum(state.get("token_id") == token.id for state in data.mcp_sessions.values())
-    if owned >= _MCP_LEGACY_SESSION_TOKEN_LIMIT or len(data.mcp_sessions) >= _MCP_LEGACY_SESSION_LIMIT:
+    owned = sum(state.get("token_id") == access_key.id for state in data.mcp_sessions.values())
+    if owned >= _MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT or len(data.mcp_sessions) >= _MCP_LEGACY_SESSION_LIMIT:
         return None
     session_id = secrets.token_urlsafe(32)
     data.mcp_sessions[session_id] = {
-        "token_id": token.id,
+        "token_id": access_key.id,
         "initialized": False,
         "last_seen": time.monotonic(),
         "protocol_version": MCP_LEGACY_PROTOCOL_VERSION_PREFERRED,
@@ -8994,12 +8994,12 @@ def _open_legacy_session(data: PhoenixData, token: TokenRecord) -> str | None:
 
 
 def _legacy_session(
-    data: PhoenixData, request: web.Request, token: TokenRecord
+    data: PhoenixData, request: web.Request, access_key: AccessKeyRecord
 ) -> dict | None:
     _prune_legacy_sessions(data)
     session_id = request.headers.get("Mcp-Session-Id")
     state = data.mcp_sessions.get(session_id) if isinstance(session_id, str) else None
-    if state is None or state.get("token_id") != token.id:
+    if state is None or state.get("token_id") != access_key.id:
         return None
     state["last_seen"] = time.monotonic()
     return state
@@ -9068,16 +9068,16 @@ class PhoenixMcpView(PhoenixView):
         if rejected is not None:
             return rejected
 
-        result = await _async_get_authenticated_token(
+        result = await _async_get_authenticated_access_key(
             hass, request, data, request_id, "/api/phoenix-mcp"
         )
         if isinstance(result, web.Response):
             return result
-        token, _rl_result = result
-        authority = RequestAuthority(hass, data, token.id, token.token_hash)
+        access_key, _rl_result = result
+        authority = RequestAuthority(hass, data, access_key.id, access_key.token_hash)
         request_authority.set(authority)
         try:
-            token = authority.current_token()
+            access_key = authority.current_access_key()
         except AuthorityChangedError:
             unavailable = (
                 not data.ready
@@ -9096,7 +9096,7 @@ class PhoenixMcpView(PhoenixView):
         if not session_id:
             _log(
                 data,
-                token,
+                access_key,
                 request_id=request_id,
                 method="DELETE",
                 resource="mcp:session",
@@ -9112,10 +9112,10 @@ class PhoenixMcpView(PhoenixView):
 
         _prune_legacy_sessions(data)
         session = data.mcp_sessions.get(session_id)
-        if session is None or session.get("token_id") != token.id:
+        if session is None or session.get("token_id") != access_key.id:
             _log(
                 data,
-                token,
+                access_key,
                 request_id=request_id,
                 method="DELETE",
                 resource="mcp:session",
@@ -9127,7 +9127,7 @@ class PhoenixMcpView(PhoenixView):
         data.mcp_sessions.pop(session_id, None)
         _log(
             data,
-            token,
+            access_key,
             request_id=request_id,
             method="DELETE",
             resource="mcp:session",
@@ -9151,13 +9151,13 @@ class PhoenixMcpView(PhoenixView):
         if rejected is not None:
             return rejected
 
-        result = await _async_get_authenticated_token(
+        result = await _async_get_authenticated_access_key(
             hass, request, data, request_id, "/api/phoenix-mcp"
         )
         if isinstance(result, web.Response):
             return result
-        token, rl_result = result
-        authority = RequestAuthority(hass, data, token.id, token.token_hash)
+        access_key, rl_result = result
+        authority = RequestAuthority(hass, data, access_key.id, access_key.token_hash)
         request_authority.set(authority)
 
         def audited_transport_response(
@@ -9168,7 +9168,7 @@ class PhoenixMcpView(PhoenixView):
             resource: str = "/api/phoenix-mcp",
         ) -> web.Response:
             _audit_mcp_transport(
-                data, token, request_id, client_ip,
+                data, access_key, request_id, client_ip,
                 body=body, outcome=outcome, resource=resource,
             )
             return response
@@ -9205,7 +9205,7 @@ class PhoenixMcpView(PhoenixView):
                 _error("invalid_request", "Failed to read request body.", 400, request_id)
             )
         try:
-            token = authority.current_token()
+            access_key = authority.current_access_key()
         except AuthorityChangedError:
             unavailable = not data.ready or data.shutting_down or data.store.get_settings().kill_switch or hass.data.get(DOMAIN) is not data
             return _error(
@@ -9243,7 +9243,7 @@ class PhoenixMcpView(PhoenixView):
         # byte-identical behavior.
         wants_sse = "text/event-stream" in request.headers.get("Accept", "")
         base_url = str(request.url.origin())
-        rl_headers = _rate_limit_headers(token, rl_result)
+        rl_headers = _rate_limit_headers(access_key, rl_result)
 
         if isinstance(parsed, list):
             if data.enforce_mcp_lifecycle:
@@ -9278,7 +9278,7 @@ class PhoenixMcpView(PhoenixView):
                         "Invalid Request: initialize must not be sent in a batch.",
                         request_id,
                     ), body=parsed, resource="mcp:batch")
-                session = _legacy_session(data, request, token)
+                session = _legacy_session(data, request, access_key)
                 if session is None:
                     session_outcome: Outcome = (
                         "not_found"
@@ -9301,9 +9301,9 @@ class PhoenixMcpView(PhoenixView):
                     return audited_transport_response(_protocol_error_response(
                         None, -32000, "Legacy MCP initialization is not complete.", request_id
                     ), body=parsed, resource="mcp:batch")
-            if len(parsed) > MAX_BATCH_ITEMS or (token.rate_limit_requests > 0 and (
-                    (token.rate_limit_burst > 0 and len(parsed) > token.rate_limit_burst)
-                    or len(parsed) > token.rate_limit_requests)):
+            if len(parsed) > MAX_BATCH_ITEMS or (access_key.rate_limit_requests > 0 and (
+                    (access_key.rate_limit_burst > 0 and len(parsed) > access_key.rate_limit_burst)
+                    or len(parsed) > access_key.rate_limit_requests)):
                 return audited_transport_response(_protocol_error_response(None, -32600,
                     "Batch exceeds the configured request capacity; split it into smaller requests.", request_id),
                     body=parsed, resource="mcp:batch")
@@ -9317,13 +9317,13 @@ class PhoenixMcpView(PhoenixView):
             # throttled. Nothing has been dispatched yet, so there is no
             # half-applied batch to worry about.
             batch_rl = data.rate_limiter.charge_batch(
-                token.id, token.rate_limit_requests, token.rate_limit_burst,
+                access_key.id, access_key.rate_limit_requests, access_key.rate_limit_burst,
                 min(len(parsed), MAX_BATCH_ITEMS) - 1,
             )
             if not batch_rl.allowed:
-                _fire_rate_limit_events(hass, data, token)
+                _fire_rate_limit_events(hass, data, access_key)
                 _log(
-                    data, token, request_id=request_id, method="POST",
+                    data, access_key, request_id=request_id, method="POST",
                     resource="mcp:batch", outcome="rate_limited", client_ip=client_ip,
                 )
                 resp = _error("rate_limited", "Rate limit exceeded.", 429, request_id)
@@ -9335,19 +9335,19 @@ class PhoenixMcpView(PhoenixView):
             # no longer has. This covers the SSE framing; the JSON path takes
             # batch_rl directly.
             if batch_rl.rate_limiting_enabled:
-                rl_headers = _rate_limit_headers(token, batch_rl)
+                rl_headers = _rate_limit_headers(access_key, batch_rl)
             if wants_sse and _batch_expects_response(parsed) and 0 < len(parsed) <= MAX_BATCH_ITEMS:
                 bus = _ProgressBus()
                 _progress_ctx.set(bus)
                 return cast(web.Response, await _mcp_sse_response(
                     request, hass, request_id, rl_headers, bus,
                     _dispatch_streamable_batch(
-                        parsed, token, hass, data, client_ip, base_url=base_url,
+                        parsed, access_key, hass, data, client_ip, base_url=base_url,
                         request_id=request_id,
                     ),
                     cancel_on_disconnect=False,
                 ))
-            batch_dispatch = _handle_streamable_batch(parsed, token, batch_rl, hass, data, request_id, client_ip, base_url=base_url)
+            batch_dispatch = _handle_streamable_batch(parsed, access_key, batch_rl, hass, data, request_id, client_ip, base_url=base_url)
             if data.enforce_mcp_lifecycle:
                 batch_task = asyncio.create_task(batch_dispatch)
                 batch_task.add_done_callback(_log_dispatch_task_error)
@@ -9439,7 +9439,7 @@ class PhoenixMcpView(PhoenixView):
                         return audited_transport_response(_protocol_error_response(
                             msg_id, *invalid_initialize, request_id
                         ), body=body)
-                    legacy_session_id = _open_legacy_session(data, token)
+                    legacy_session_id = _open_legacy_session(data, access_key)
                     if legacy_session_id is None:
                         response = _protocol_error_response(
                             msg_id, -32000, "Legacy MCP session capacity reached. Close unused sessions or retry after they expire.", request_id,
@@ -9448,7 +9448,7 @@ class PhoenixMcpView(PhoenixView):
                         response.headers["Retry-After"] = str(math.ceil(_MCP_LEGACY_SESSION_TTL_SECONDS))
                         return audited_transport_response(response, body=body)
                 else:
-                    session = _legacy_session(data, request, token)
+                    session = _legacy_session(data, request, access_key)
                     if session is None:
                         message_session_outcome: Outcome = (
                             "not_found"
@@ -9482,7 +9482,7 @@ class PhoenixMcpView(PhoenixView):
             if method in _MCP_METHODS:
                 _log(
                     data,
-                    token,
+                    access_key,
                     request_id=request_id,
                     method=method,
                     resource="/api/phoenix-mcp",
@@ -9492,7 +9492,7 @@ class PhoenixMcpView(PhoenixView):
                 response_msg = _jsonrpc_error(msg_id, -32601, "Method not found.")
             else:
                 response_msg, _m, _r, _o = await _dispatch_mcp(
-                    method, msg_id, params, token, hass, data, client_ip,
+                    method, msg_id, params, access_key, hass, data, client_ip,
                     base_url=base_url,
                     request_id=request_id,
                 )
@@ -9511,17 +9511,17 @@ class PhoenixMcpView(PhoenixView):
             rl_headers = {**rl_headers, "Mcp-Session-Id": legacy_session_id}
 
         if wants_sse and not is_notification:
-            bus = _ProgressBus(token=_progress_token(method, params))
+            bus = _ProgressBus(access_key=_progress_token(method, params))
             _progress_ctx.set(bus)
             dispatch = (
                 _dispatch_modern_mcp_result(
-                    method, msg_id, params, token, hass, data, client_ip,
+                    method, msg_id, params, access_key, hass, data, client_ip,
                     base_url=base_url,
                     request_id=request_id,
                 )
                 if modern
                 else _dispatch_mcp_result(
-                    method, msg_id, params, token, hass, data, client_ip,
+                    method, msg_id, params, access_key, hass, data, client_ip,
                     base_url=base_url,
                     request_id=request_id,
                 )
@@ -9533,7 +9533,7 @@ class PhoenixMcpView(PhoenixView):
                 msg_id=msg_id,
             ))
 
-        inline_dispatch = _dispatch_mcp(method, msg_id, params, token, hass, data, client_ip,
+        inline_dispatch = _dispatch_mcp(method, msg_id, params, access_key, hass, data, client_ip,
                                  base_url=base_url, request_id=request_id)
         if not modern:
             task = asyncio.create_task(inline_dispatch)
@@ -9577,19 +9577,19 @@ class PhoenixMcpContextView(PhoenixView):
             )
         client_ip = _get_client_ip(request)
 
-        result = await _async_get_authenticated_token(
+        result = await _async_get_authenticated_access_key(
             hass, request, data, request_id, "/api/phoenix-mcp/context"
         )
         if isinstance(result, web.Response):
             return result
-        token, _rl = result
+        access_key, _rl = result
 
-        _log(data, token, request_id=request_id, method="GET", resource="/api/phoenix-mcp/context",
+        _log(data, access_key, request_id=request_id, method="GET", resource="/api/phoenix-mcp/context",
              outcome="allowed", client_ip=client_ip)
 
         fmt = request.query.get("format", "")
         if fmt == "json":
-            body = _build_context_json(token, hass)
+            body = _build_context_json(access_key, hass)
             return web.Response(
                 status=200,
                 content_type="application/json",
@@ -9597,7 +9597,7 @@ class PhoenixMcpContextView(PhoenixView):
                 headers={"X-Phoenix-Request-ID": request_id},
             )
 
-        text = _build_context_plain(token, hass)
+        text = _build_context_plain(access_key, hass)
         return web.Response(
             status=200,
             content_type="text/plain",
@@ -9620,7 +9620,7 @@ ALL_MCP_VIEWS: list[type[PhoenixView]] = [
 
 
 
-def _build_diff_call_service(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _build_diff_call_service(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """Diff for call_service. Resolves entity targets read-only and lists service params."""
     domain = args.get("domain", "")
     service = args.get("service", "")
@@ -9650,11 +9650,11 @@ def _build_diff_call_service(args: dict, token: TokenRecord, hass: HomeAssistant
         resolved, _count = resolve_service_targets(
             entity_id=args.get("entity_id"), device_id=args.get("device_id"),
             area_id=args.get("area_id"), service_domain=domain,
-            token=token, hass=hass,
+            access_key=access_key, hass=hass,
         )
     except EntityCreationNotPermitted:
         resolved = []
-    mesa_note = _mesa_confirm_annotation(token, hass, [(domain, service, resolved)])
+    mesa_note = _mesa_confirm_annotation(access_key, hass, [(domain, service, resolved)])
     if mesa_note:
         preview["mesa"] = mesa_note
     return {
@@ -9668,7 +9668,7 @@ def _build_diff_call_service(args: dict, token: TokenRecord, hass: HomeAssistant
 
 async def _build_diff_set_integration_enabled(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     mesa_decision: _ConfigEntryActionDecision | None = None,
 ) -> dict:
@@ -9697,7 +9697,7 @@ async def _build_diff_set_integration_enabled(
 
 async def _build_diff_set_integration(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     mesa_decision: _ConfigEntryActionDecision | None = None,
 ) -> dict[str, Any]:
@@ -9729,7 +9729,7 @@ async def _build_diff_set_integration(
 
 async def _build_diff_reload_integration(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     mesa_decision: _ConfigEntryActionDecision | None = None,
 ) -> dict[str, Any]:
@@ -9755,7 +9755,7 @@ async def _build_diff_reload_integration(
     }
 
 
-def _build_diff_create_backup(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _build_diff_create_backup(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     name = args.get("name") if isinstance(args.get("name"), str) else None
     agent_ids = args.get("agent_ids") if isinstance(args.get("agent_ids"), list) else None
     return {

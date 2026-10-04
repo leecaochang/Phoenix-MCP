@@ -12,14 +12,14 @@ from custom_components.phoenix_mcp.const import DOMAIN, HOME_COMPANION_TOOLS
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.personas import get_persona_caps, detect_persona
 from custom_components.phoenix_mcp.policy_engine import resolve, Permission
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
 
 @pytest.fixture
-async def companion(hass, token_store):
-    token, _ = await token_store.async_create_token('companion', 'test')
-    await token_store.async_patch_token(token.id, persona='home_companion', **get_persona_caps('home_companion'))
-    token.permissions = PermissionTree(entities={
+async def companion(hass, access_key_store):
+    access_key, _ = await access_key_store.async_create_access_key('companion', 'test')
+    await access_key_store.async_patch_access_key(access_key.id, persona='home_companion', **get_persona_caps('home_companion'))
+    access_key.permissions = PermissionTree(entities={
         'light.selected': PermissionNode('GREEN'), 'fan.selected': PermissionNode('GREEN'),
         'sensor.temperature': PermissionNode('YELLOW'),
     })
@@ -32,21 +32,21 @@ async def companion(hass, token_store):
         ('sensor.location','home', {'device_class':'enum'}),
     ]:
         hass.states.async_set(entity,state,attrs)
-    data = PhoenixData(store=token_store,rate_limiter=MagicMock(),audit=MagicMock(),hass=hass)
+    data = PhoenixData(store=access_key_store,rate_limiter=MagicMock(),audit=MagicMock(),hass=hass)
     hass.data[DOMAIN] = data
-    await token_store.async_patch_settings(mesa_mode='off')
+    await access_key_store.async_patch_settings(mesa_mode='off')
     store = agentcli.AgentCliStore(AsyncMock())
     account = await store.add('chatgpt',{'api_key':'synthetic-key','model':'test-model'})
     hass.data['_phoenix_agentcli_store'] = store
-    await token_store.async_patch_settings(voice_agent_provider_id=account,voice_agent_model='test-model')
-    yield data, token, store, account
+    await access_key_store.async_patch_settings(voice_agent_provider_id=account,voice_agent_model='test-model')
+    yield data, access_key, store, account
     if data.sensor_flush_cancel:
         data.sensor_flush_cancel()
 
 
 async def rpc(hass, companion, name='home_request', args=None, method='tools/call'):
-    data, token, _, _ = companion
-    return await mcp_view._dispatch_mcp(method,'id',{'name':name,'arguments':args or {'request':'Read the temperature.'}},token,hass,data,'test','http://test')
+    data, access_key, _, _ = companion
+    return await mcp_view._dispatch_mcp(method,'id',{'name':name,'arguments':args or {'request':'Read the temperature.'}},access_key,hass,data,'test','http://test')
 
 
 def payload(response):
@@ -79,11 +79,11 @@ def scripted(monkeypatch, rounds, *, before=None, transcripts=None):
 
 
 async def test_persona_is_persisted_and_never_inferred(companion):
-    data,token,_,_=companion
-    await data.store.async_patch_token(token.id,cap_log_read='allow',announce_all_tools=True,pass_through=True)
-    assert token.persona == 'home_companion'
-    assert not token.pass_through and not token.announce_all_tools
-    assert TokenRecord.from_dict(token.to_storage_dict()).persona == 'home_companion'
+    data,access_key,_,_=companion
+    await data.store.async_patch_access_key(access_key.id,cap_log_read='allow',announce_all_tools=True,pass_through=True)
+    assert access_key.persona == 'home_companion'
+    assert not access_key.pass_through and not access_key.announce_all_tools
+    assert AccessKeyRecord.from_dict(access_key.to_storage_dict()).persona == 'home_companion'
     assert detect_persona(get_persona_caps('home_companion')) != 'home_companion'
 
 
@@ -113,23 +113,23 @@ async def test_guessed_external_calls_never_dispatch(hass,companion,name):
 
 
 async def test_scope_honors_inherited_grants_and_excludes_sensitive_classes(hass,companion):
-    _,token,_,_=companion
-    token.permissions.domains = {d:PermissionNode('GREEN') for d in ('light','sensor','lock')}
-    token.permissions.entities['lock.door'] = PermissionNode('GREEN')
-    token.permissions.entities['sensor.location'] = PermissionNode('GREEN')
-    assert resolve('light.selected',token,hass) == Permission.WRITE
-    assert resolve('light.other',token,hass) == Permission.WRITE
-    assert resolve('sensor.temperature',token,hass) == Permission.READ
+    _,access_key,_,_=companion
+    access_key.permissions.domains = {d:PermissionNode('GREEN') for d in ('light','sensor','lock')}
+    access_key.permissions.entities['lock.door'] = PermissionNode('GREEN')
+    access_key.permissions.entities['sensor.location'] = PermissionNode('GREEN')
+    assert resolve('light.selected',access_key,hass) == Permission.WRITE
+    assert resolve('light.other',access_key,hass) == Permission.WRITE
+    assert resolve('sensor.temperature',access_key,hass) == Permission.READ
     for entity in ('lock.door','sensor.location'):
-        assert resolve(entity,token,hass) == Permission.NO_ACCESS
-    token.permissions.domains['light'] = PermissionNode('RED')
-    assert resolve('light.selected',token,hass) == Permission.DENY
+        assert resolve(entity,access_key,hass) == Permission.NO_ACCESS
+    access_key.permissions.domains['light'] = PermissionNode('RED')
+    assert resolve('light.selected',access_key,hass) == Permission.DENY
 
 
 @pytest.mark.parametrize('grant', ['YELLOW', 'GREEN'])
 async def test_domain_grants_discover_lights_and_gate_native_writes(hass,companion,monkeypatch,grant):
-    _, token, _, _ = companion
-    token.permissions = PermissionTree(
+    _, access_key, _, _ = companion
+    access_key.permissions = PermissionTree(
         domains={'light':PermissionNode(grant)},
         entities={'light.other':PermissionNode('RED')},
     )
@@ -245,12 +245,12 @@ async def test_internal_hallucinations_and_recursion_refused(hass,companion,monk
 
 @pytest.mark.parametrize('change',['scope','revoke','settings','account'])
 async def test_drift_during_provider_wait_stops_before_write(hass,companion,monkeypatch,change):
-    data,token,store,account=companion
+    data,access_key,store,account=companion
     async def mutate(_):
         if change=='scope':
-            await data.store.async_set_permissions(token.id,PermissionTree())
+            await data.store.async_set_permissions(access_key.id,PermissionTree())
         elif change=='revoke':
-            await data.store.async_archive_token(token.id,revoked=True)
+            await data.store.async_archive_access_key(access_key.id,revoked=True)
         elif change=='settings':
             await data.store.async_patch_settings(kill_switch=True)
         else:
@@ -289,7 +289,7 @@ async def test_invalid_input_sends_no_provider_request(hass,companion,monkeypatc
 async def test_mesa_gate_remains_effective_and_approval_ends_batch(hass,companion,monkeypatch,mode):
     from custom_components.phoenix_mcp.mesa import async_setup_mesa
     from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
-    data,token,_,_=companion
+    data,access_key,_,_=companion
     await data.store.async_patch_settings(mesa_mode='enforced')
     data.mesa = await async_setup_mesa(hass,'enforced')
     data.mesa.store.set('light.selected',SemanticProfile.from_dict('light.selected',
@@ -312,8 +312,8 @@ async def test_mesa_gate_remains_effective_and_approval_ends_batch(hass,companio
 
 
 async def test_uncertain_prior_write_blocks_new_provider_turn(hass,companion,monkeypatch):
-    data,token,_,_=companion
-    await data.agent_recovery.begin(token.id,'light__HassLightSet','old')
+    data,access_key,_,_=companion
+    await data.agent_recovery.begin(access_key.id,'light__HassLightSet','old')
     data.agent_recovery.interrupted('old')
     catalogs=scripted(monkeypatch,[])
     result=await rpc(hass,companion)
@@ -462,7 +462,7 @@ async def test_provider_error_after_reads_preserves_only_real_write_uncertainty(
 
 @pytest.mark.parametrize('surface',['voice','chat','ai_text','ai_structured'])
 async def test_owned_ingresses_delegate_original_request_once_without_report_reinterpretation(hass,companion,monkeypatch,surface):
-    data,token,_,_=companion
+    data,access_key,_,_=companion
     catalogs=scripted(monkeypatch,[
         [('get_state',{'entity_id':'sensor.temperature','projection':{'kind':'full'}})],
         json.dumps({'status':'completed','message':'Invented success: lights changed.'}),
@@ -470,17 +470,17 @@ async def test_owned_ingresses_delegate_original_request_once_without_report_rei
     provider=agentcli.build_provider(None)
     request="Read the temperature in Alex's office. Do not change devices."
     if surface=='voice':
-        answer=await agentcli.async_run_voice_turn(hass,data,token,provider,None,'http://test',request)
+        answer=await agentcli.async_run_voice_turn(hass,data,access_key,provider,None,'http://test',request)
     elif surface=='chat':
         events=[]
         async def emit(name,value):events.append((name,value))
-        messages=await agentcli.async_run_agent_turn(hass=hass,data=data,token=token,provider=provider,
+        messages=await agentcli.async_run_agent_turn(hass=hass,data=data,access_key=access_key,provider=provider,
             session=None,messages=[{'role':'user','content':request}],options={},client_ip='test',base_url='',
             emit=emit,cancel=asyncio.Event())
         answer=messages[-1]['content']
         assert sum(name=='assistant_delta' for name,_ in events)==1
     else:
-        answer=await agentcli.async_run_ai_task(hass,data,token,provider,None,'',request,
+        answer=await agentcli.async_run_ai_task(hass,data,access_key,provider,None,'',request,
             structure_json={'type':'object','properties':{'temperature':{'type':'number'}}} if surface=='ai_structured' else None)
     if surface=='ai_structured':
         assert json.loads(answer)=={'temperature':23}
@@ -503,7 +503,7 @@ async def test_code_readback_confirms_receipt_even_when_final_model_json_is_bad(
 
 
 async def test_chat_cancellation_stops_inner_planner(hass,companion,monkeypatch):
-    data,token,_,_=companion
+    data,access_key,_,_=companion
     cancel=asyncio.Event()
     entered=asyncio.Event()
     async def wait(_):
@@ -512,7 +512,7 @@ async def test_chat_cancellation_stops_inner_planner(hass,companion,monkeypatch)
     catalogs=scripted(monkeypatch,[],before=wait)
     events=[]
     async def emit(name,value):events.append((name,value))
-    task=asyncio.create_task(agentcli.async_run_agent_turn(hass=hass,data=data,token=token,
+    task=asyncio.create_task(agentcli.async_run_agent_turn(hass=hass,data=data,access_key=access_key,
         provider=agentcli.build_provider(None),session=None,messages=[{'role':'user','content':'Read temperature'}],
         options={},client_ip='test',base_url='',emit=emit,cancel=cancel))
     await entered.wait()
@@ -525,8 +525,8 @@ async def test_chat_cancellation_stops_inner_planner(hass,companion,monkeypatch)
 @pytest.mark.parametrize('surface',['voice','chat'])
 async def test_companion_uses_wrapper_under_auto_routing_without_announcing_guessed_tools(hass,companion,monkeypatch,surface):
     from custom_components.phoenix_mcp.voice_agent import async_voice_answer
-    data,token,_,_=companion
-    await data.store.async_patch_settings(voice_agent_enabled=True,voice_agent_token_id=token.id,
+    data,access_key,_,_=companion
+    await data.store.async_patch_settings(voice_agent_enabled=True,voice_agent_token_id=access_key.id,
         voice_agent_routing_mode='auto',agentcli_routing_mode='auto')
     monkeypatch.setattr('custom_components.phoenix_mcp.command_routing.async_evaluate_command',
                         AsyncMock(side_effect=AssertionError('Wrapper persona must not use direct dispatch')))
@@ -540,7 +540,7 @@ async def test_companion_uses_wrapper_under_auto_routing_without_announcing_gues
     else:
         events=[]
         async def emit(name,value):events.append((name,value))
-        messages=await agentcli.async_run_agent_turn(hass=hass,data=data,token=token,provider=agentcli.build_provider(None),
+        messages=await agentcli.async_run_agent_turn(hass=hass,data=data,access_key=access_key,provider=agentcli.build_provider(None),
             session=None,messages=[{'role':'user','content':'Read temperature.'}],options={},client_ip='test',base_url='',
             emit=emit,cancel=asyncio.Event(),routing_language='en')
         assert '23' in messages[-1]['content']
@@ -548,11 +548,11 @@ async def test_companion_uses_wrapper_under_auto_routing_without_announcing_gues
 
 
 async def test_house_count_uses_scoped_total_without_enumerating_states(hass, companion, monkeypatch):
-    _, token, _, _ = companion
-    token.permissions.domains['light'] = PermissionNode('YELLOW')
+    _, access_key, _, _ = companion
+    access_key.permissions.domains['light'] = PermissionNode('YELLOW')
     for i in range(150):
         hass.states.async_set(f'light.count_{i}', 'off')
-    token.permissions.entities['light.other'] = PermissionNode('RED')
+    access_key.permissions.entities['light.other'] = PermissionNode('RED')
     transcripts = []
     scripted(monkeypatch, [
         [('search_entities', {'domain':'light', 'limit':1})],
@@ -581,8 +581,8 @@ async def test_count_source_must_reference_received_evidence(hass, companion, mo
 
 async def test_voice_report_uses_current_style_and_detail(hass, companion, monkeypatch):
     from custom_components.phoenix_mcp.voice_agent import async_voice_answer
-    data, token, _, account = companion
-    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=token.id,
+    data, access_key, _, account = companion
+    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=access_key.id,
         voice_agent_provider_id=account, voice_agent_routing_mode='off')
     async def turn_on(call):
         hass.states.async_set('light.selected','on', {'friendly_name':'Selected lamp'})
@@ -602,30 +602,30 @@ async def test_voice_report_uses_current_style_and_detail(hass, companion, monke
 
 
 def test_internal_companion_does_not_receive_external_catalog_reconnect_advice(companion):
-    data, token, _, _ = companion
-    assert token.settings_version > token.tools_list_version
+    data, access_key, _, _ = companion
+    assert access_key.settings_version > access_key.tools_list_version
     response = {'content':[{'type':'text','text':'Area not found.'}]}
-    assert not mcp_view._maybe_append_stale_advisory(response,token,data,'home_companion')
+    assert not mcp_view._maybe_append_stale_advisory(response,access_key,data,'home_companion')
     assert response['content']==[{'type':'text','text':'Area not found.'}]
-    assert mcp_view._maybe_append_stale_advisory(response,token,data,'external-client')
+    assert mcp_view._maybe_append_stale_advisory(response,access_key,data,'external-client')
     assert any('reconnect' in row['text'] for row in response['content'])
 
 
 async def test_chat_lookup_failure_is_displayed_once_and_does_not_create_repairs(hass, companion, monkeypatch):
-    data, token, _, _ = companion
+    data, access_key, _, _ = companion
     scripted(monkeypatch, [{'type': agentcli.EV_ERROR, 'code': 'network', 'retryable': True}])
     events = []
     async def emit(name, value):
         events.append((name, value))
     await agentcli.async_run_agent_turn(
-        hass=hass, data=data, token=token, provider=agentcli.build_provider(None), session=None,
+        hass=hass, data=data, access_key=access_key, provider=agentcli.build_provider(None), session=None,
         messages=[{'role': 'user', 'content': 'turn on steve lights in the the office doorway'}],
         options={}, client_ip='test', base_url='', emit=emit, cancel=asyncio.Event())
     errors = [value for name, value in events if name == 'error']
     assert len(errors) == 1 and errors[0]['code'] == 'provider_error'
     assert 'No device command was attempted' in errors[0]['message']
     assert not any(name == 'assistant_delta' for name, _ in events)
-    assert data.agent_recovery.records(token.id) == []
+    assert data.agent_recovery.records(access_key.id) == []
 
 
 async def test_actual_dispatch_failure_retains_repairs_without_replaying(hass, companion, monkeypatch):
@@ -677,7 +677,7 @@ async def test_repeated_malformed_planner_does_not_loop(hass, companion, monkeyp
     ('fan__HassFanSetSpeed', {'name': 'fan.selected', 'percentage': 'fast'}),
 ])
 async def test_invalid_native_proposal_is_corrected_before_claiming_any_write(hass, companion, monkeypatch, invalid):
-    data, token, _, _ = companion
+    data, access_key, _, _ = companion
     calls, transcripts = [], []
     async def turn_on(call):
         calls.append(call.data)
@@ -697,7 +697,7 @@ async def test_invalid_native_proposal_is_corrected_before_claiming_any_write(ha
     errors = transcripts[1][-1]['content']
     assert len(errors) == 2 and all(row['is_error'] for row in errors)
     assert all('None of the tools in this batch ran' in json.dumps(row['content']) for row in errors)
-    assert data.agent_recovery.records(token.id) == []
+    assert data.agent_recovery.records(access_key.id) == []
 
 
 async def test_repeated_invalid_native_proposals_never_claim_or_attempt_a_write(hass, companion, monkeypatch):
@@ -736,13 +736,13 @@ async def test_invalid_proposal_after_received_control_keeps_receipt_without_rep
 ])
 async def test_context_only_request_cannot_actuate_even_an_already_off_device(hass, companion, monkeypatch, language, utterance):
     catalogs = scripted(monkeypatch, [[('intent__HassTurnOff', {'domain': ['light']})]])
-    data, token, _, _ = companion
+    data, access_key, _, _ = companion
     with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
         report = payload(await rpc(hass, companion, args={'request': utterance, 'language': language}))
     assert len(catalogs) == 1
     assert report['status'] == 'clarification_needed' and report['execution'] == 'not_attempted'
     service.assert_not_awaited()
-    assert not data.store.get_pending_approvals() and not data.agent_recovery.records(token.id)
+    assert not data.store.get_pending_approvals() and not data.agent_recovery.records(access_key.id)
 
 
 @pytest.mark.parametrize('domain,noun', [
@@ -752,17 +752,17 @@ async def test_context_only_request_cannot_actuate_even_an_already_off_device(ha
     ('input_boolean', 'input boolean'),
 ])
 async def test_household_device_nouns_cannot_supply_missing_context(hass, companion, monkeypatch, domain, noun):
-    data, token, _, _ = companion
+    data, access_key, _, _ = companion
     eid = domain + '.household'
     hass.states.async_set(eid, 'off', {'friendly_name': 'Household ' + noun})
-    token.permissions.entities[eid] = PermissionNode('GREEN')
-    token.cap_physical_control = 'allow'
+    access_key.permissions.entities[eid] = PermissionNode('GREEN')
+    access_key.cap_physical_control = 'allow'
     scripted(monkeypatch, [[('intent__HassTurnOff', {'name': eid})]])
     with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
         report = payload(await rpc(hass, companion, args={'request': 'Turn that ' + noun + ' off.'}))
     assert report['status'] == 'clarification_needed' and report['execution'] == 'not_attempted'
     service.assert_not_awaited()
-    assert not data.store.get_pending_approvals() and not data.agent_recovery.records(token.id)
+    assert not data.store.get_pending_approvals() and not data.agent_recovery.records(access_key.id)
 
 
 @pytest.mark.parametrize('utterance,expected', [
@@ -770,15 +770,15 @@ async def test_household_device_nouns_cannot_supply_missing_context(hass, compan
     ('Open those covers.', True),
 ])
 async def test_plural_household_targets_do_not_invent_context_or_a_single_selection(hass, companion, utterance, expected):
-    _, token, _, _ = companion
-    token.cap_physical_control = 'allow'
+    _, access_key, _, _ = companion
+    access_key.cap_physical_control = 'allow'
     for part in ('left', 'right'):
         eid = 'cover.office_' + part
         hass.states.async_set(eid, 'closed', {'friendly_name': 'Office cover ' + part})
-        token.permissions.entities[eid] = PermissionNode('GREEN')
-    context = home._turn.set(home.CompanionTurn(token.id, request=utterance))
+        access_key.permissions.entities[eid] = PermissionNode('GREEN')
+    context = home._turn.set(home.CompanionTurn(access_key.id, request=utterance))
     try:
-        assert home.ambiguous_control(token, hass, 'intent__HassSetPosition') is expected
+        assert home.ambiguous_control(access_key, hass, 'intent__HassSetPosition') is expected
     finally:
         home._turn.reset(context)
 
@@ -826,14 +826,14 @@ async def test_malformed_planning_after_control_never_requests_correction(hass, 
 async def test_tied_natural_target_evidence_cannot_be_replaced_with_one_candidate(hass, companion, monkeypatch, utterance, expected):
     from homeassistant.helpers import area_registry as ar
     from homeassistant.helpers import entity_registry as er
-    data, token, _, _ = companion
+    data, access_key, _, _ = companion
     area = ar.async_get(hass).async_create('Steve Office')
     targets = []
     for part in ('doorway', 'desk'):
         entry = er.async_get(hass).async_get_or_create('light', 'test', part, suggested_object_id='steve_office_lights_'+part)
         er.async_get(hass).async_update_entity(entry.entity_id, area_id=area.id)
         hass.states.async_set(entry.entity_id, 'off', {'friendly_name': 'Steve Office Lights '+part.title()})
-        token.permissions.entities[entry.entity_id] = PermissionNode('GREEN')
+        access_key.permissions.entities[entry.entity_id] = PermissionNode('GREEN')
         targets.append(entry.entity_id)
     calls = []
     async def turn_on(call):
@@ -857,7 +857,7 @@ async def test_tied_natural_target_evidence_cannot_be_replaced_with_one_candidat
     if expected == 'clarification_needed':
         assert report['execution'] == 'not_attempted' and 'complete request' in report['message']
         assert not data.store.get_pending_approvals()
-    assert not data.agent_recovery.records(token.id)
+    assert not data.agent_recovery.records(access_key.id)
 
 
 async def test_room_targets_follow_registry_area_even_when_names_suggest_other_rooms(hass, companion, monkeypatch):
@@ -935,7 +935,7 @@ async def test_count_report_correction_cannot_dispatch_or_repeat(hass, companion
 async def test_companion_never_creates_or_calls_decision_review(hass, companion, monkeypatch, discovery, mode):
     from custom_components.phoenix_mcp.decision_provider import DecisionProvider
 
-    data, token, store, _ = companion
+    data, access_key, store, _ = companion
     account = await store.add('typesafe', {'api_key': 'decision-test-key', 'model': 'jev-latest'})
     await data.store.async_patch_settings(decision_provider_id=account, voice_agent_tool_routing_mode=mode)
     applied = []
@@ -958,37 +958,37 @@ async def test_companion_never_creates_or_calls_decision_review(hass, companion,
     assert result['status'] == 'completed'
     assert len(applied) == 1 and applied[0]['entity_id'] == ['light.selected']
     assert applied[0]['brightness_pct'] == 40
-    assert not data.store.get_pending_approvals() and not data.agent_recovery.blocks(token.id)
+    assert not data.store.get_pending_approvals() and not data.agent_recovery.blocks(access_key.id)
     choose.assert_not_awaited()
     assert data.decision_shadow.summary().get('tool_routing', {}) == {}
 
 
 @pytest.mark.parametrize('domain', ['switch', 'climate', 'cover', 'valve', 'media_player', 'vacuum', 'timer'])
 async def test_household_domains_follow_read_write_and_red_scope(hass, companion, domain):
-    _, token, _, _ = companion
+    _, access_key, _, _ = companion
     eid = domain + '.household'
     hass.states.async_set(eid, 'off')
-    token.permissions.domains[domain] = PermissionNode('YELLOW')
-    assert resolve(eid, token, hass) == Permission.READ
-    token.permissions.domains[domain] = PermissionNode('GREEN')
-    assert resolve(eid, token, hass) == Permission.WRITE
-    token.permissions.entities[eid] = PermissionNode('GREEN')
-    token.permissions.domains[domain] = PermissionNode('RED')
-    assert resolve(eid, token, hass) == Permission.DENY
+    access_key.permissions.domains[domain] = PermissionNode('YELLOW')
+    assert resolve(eid, access_key, hass) == Permission.READ
+    access_key.permissions.domains[domain] = PermissionNode('GREEN')
+    assert resolve(eid, access_key, hass) == Permission.WRITE
+    access_key.permissions.entities[eid] = PermissionNode('GREEN')
+    access_key.permissions.domains[domain] = PermissionNode('RED')
+    assert resolve(eid, access_key, hass) == Permission.DENY
 
 
 @pytest.mark.parametrize('cap', ['cap_registry_read', 'cap_search'])
 def test_household_catalog_is_capability_filtered_but_cannot_add_authoring(companion, cap):
-    data, token, _, _ = companion
-    context = home._turn.set(home.CompanionTurn(token.id))
+    data, access_key, _, _ = companion
+    context = home._turn.set(home.CompanionTurn(access_key.id))
     try:
-        enabled = {tool['name'] for tool in agentcli.build_agent_tool_list(token, data, 'voice')}
-        setattr(token, cap, 'deny')
-        narrowed = {tool['name'] for tool in agentcli.build_agent_tool_list(token, data, 'voice')}
+        enabled = {tool['name'] for tool in agentcli.build_agent_tool_list(access_key, data, 'voice')}
+        setattr(access_key, cap, 'deny')
+        narrowed = {tool['name'] for tool in agentcli.build_agent_tool_list(access_key, data, 'voice')}
         assert narrowed < enabled
         assert enabled == HOME_COMPANION_TOOLS
-        token.cap_filesystem = token.cap_automation_write = token.cap_restart = 'allow'
-        assert {tool['name'] for tool in agentcli.build_agent_tool_list(token, data, 'voice')} == narrowed
+        access_key.cap_filesystem = access_key.cap_automation_write = access_key.cap_restart = 'allow'
+        assert {tool['name'] for tool in agentcli.build_agent_tool_list(access_key, data, 'voice')} == narrowed
     finally:
         home._turn.reset(context)
 
@@ -1006,10 +1006,10 @@ HOUSEHOLD_ACTIONS = [
 @pytest.mark.parametrize('narration_fails', [False, True])
 async def test_household_receipts_readback_and_provider_failure_do_not_replay(hass, companion, monkeypatch,
         domain, tool, args, service_domain, service_name, final_state, attrs, narration_fails):
-    data, token, _, _ = companion
-    await data.store.async_patch_token(token.id, cap_physical_control='allow')
+    data, access_key, _, _ = companion
+    await data.store.async_patch_access_key(access_key.id, cap_physical_control='allow')
     eid = domain + '.household'
-    token.permissions.entities[eid] = PermissionNode('GREEN')
+    access_key.permissions.entities[eid] = PermissionNode('GREEN')
     hass.states.async_set(eid, 'off', {'friendly_name': 'Household device', **attrs})
     applied = []
 
@@ -1025,14 +1025,14 @@ async def test_household_receipts_readback_and_provider_failure_do_not_replay(ha
     assert report['execution'] == 'accepted' and report['retry_policy'] == 'no_replay'
     assert report['verification'] == ('not_verified' if domain == 'vacuum' else 'confirmed')
     assert 'physically' not in report['message']
-    assert not data.agent_recovery.blocks(token.id)
+    assert not data.agent_recovery.blocks(access_key.id)
 
 
 @pytest.mark.parametrize('mode,expected', [('allow', 'completed'), ('confirm', 'pending_approval'), ('deny', 'refused')])
 async def test_companion_cover_capability_gate_is_preserved(hass, companion, monkeypatch, mode, expected):
-    data, token, _, _ = companion
-    await data.store.async_patch_token(token.id, cap_physical_control=mode)
-    token.permissions.entities['cover.household'] = PermissionNode('GREEN')
+    data, access_key, _, _ = companion
+    await data.store.async_patch_access_key(access_key.id, cap_physical_control=mode)
+    access_key.permissions.entities['cover.household'] = PermissionNode('GREEN')
     hass.states.async_set('cover.household', 'closed', {'friendly_name': 'Household cover', 'current_position': 0})
     args = {'name': 'cover.household', 'position': 40}
     scripted(monkeypatch, [[('intent__HassSetPosition', args)], json.dumps({'status': 'completed', 'message': 'Done.'})])
@@ -1041,7 +1041,7 @@ async def test_companion_cover_capability_gate_is_preserved(hass, companion, mon
     assert report['status'] == expected
     assert service.await_count == (mode == 'allow')
     assert bool(data.store.get_pending_approvals()) == (mode == 'confirm')
-    assert not data.agent_recovery.blocks(token.id)
+    assert not data.agent_recovery.blocks(access_key.id)
 
 
 @pytest.mark.parametrize('tool,args', [
@@ -1056,13 +1056,13 @@ async def test_companion_cover_capability_gate_is_preserved(hass, companion, mon
     ('intent__HassStopMoving', {'domain': ['valve']}),
 ])
 async def test_invalid_household_proposals_are_withheld_before_write_journaling(hass, companion, monkeypatch, tool, args):
-    data, token, _, _ = companion
+    data, access_key, _, _ = companion
     scripted(monkeypatch, [[(tool, args)], [(tool, args)]])
     with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
         report = payload(await rpc(hass, companion))
     assert report['execution'] == 'not_attempted'
     service.assert_not_awaited()
-    assert not data.store.get_pending_approvals() and not data.agent_recovery.records(token.id)
+    assert not data.store.get_pending_approvals() and not data.agent_recovery.records(access_key.id)
 
 
 @pytest.mark.parametrize('utterance,proposed,extra,expected', [
@@ -1073,26 +1073,26 @@ async def test_invalid_household_proposals_are_withheld_before_write_journaling(
     ('turn on steve office doowway light', 'doorway', 'dootway', True),
 ])
 async def test_single_typo_corroborates_only_unique_explicit_target(hass, companion, utterance, proposed, extra, expected):
-    _, token, _, _ = companion
+    _, access_key, _, _ = companion
     for part in ['doorway', 'desk'] + ([extra] if extra else []):
         eid = 'light.steve_office_' + part
         hass.states.async_set(eid, 'off', {'friendly_name': 'Steve Office Lights ' + part.title()})
-        token.permissions.entities[eid] = PermissionNode('GREEN')
-    context = home._turn.set(home.CompanionTurn(token.id, request=utterance))
+        access_key.permissions.entities[eid] = PermissionNode('GREEN')
+    context = home._turn.set(home.CompanionTurn(access_key.id, request=utterance))
     try:
-        assert home.ambiguous_control(token, hass, 'intent__HassTurnOn', {'name': 'light.steve_office_' + proposed}) is expected
+        assert home.ambiguous_control(access_key, hass, 'intent__HassTurnOn', {'name': 'light.steve_office_' + proposed}) is expected
     finally:
         home._turn.reset(context)
 
 
 async def test_ambiguity_guard_records_withheld_proposal_and_selected_provider(hass, companion, monkeypatch):
     from custom_components.phoenix_mcp.conversation_log import recorder
-    data, token, _, _ = companion
+    data, access_key, _, _ = companion
     await data.store.async_patch_settings(conversation_log_enabled=True)
     for part in ('doorway', 'desk'):
         eid = 'light.office_' + part
         hass.states.async_set(eid, 'off', {'friendly_name': 'Office light ' + part})
-        token.permissions.entities[eid] = PermissionNode('GREEN')
+        access_key.permissions.entities[eid] = PermissionNode('GREEN')
     scripted(monkeypatch, [[('intent__HassTurnOn', {'name': 'light.office_doorway'})]])
     with patch.object(ServiceRegistry, 'async_call', AsyncMock()) as service:
         report = payload(await rpc(hass, companion, args={'request': 'Turn on the office light'}))

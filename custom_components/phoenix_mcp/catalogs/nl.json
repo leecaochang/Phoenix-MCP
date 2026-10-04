@@ -1,7 +1,7 @@
 {
   "notification": {
-    "approval.message": "Toegangssleutel '{token}' heeft goedkeuring aangevraagd.\n\n[Bekijken in Phoenix MCP]({url})",
-    "rate_limit.message": "Phoenix MCP: toegangssleutel '{token}' heeft zijn snelheidslimiet bereikt.",
+    "approval.message": "Toegangssleutel '{access_key}' heeft goedkeuring aangevraagd.\n\n[Bekijken in Phoenix MCP]({url})",
+    "rate_limit.message": "Phoenix MCP: toegangssleutel '{access_key}' heeft zijn snelheidslimiet bereikt.",
     "rate_limit.title": "Phoenix MCP-melding"
   },
   "voice": {
@@ -1082,7 +1082,7 @@
       "codexHeaderValueLabel": "Headerwaarde",
       "codexServerNameLabel": "Servernaam",
       "connectAgentTitle": "Phoenix MCP verbinden met je AI-agent",
-      "connectIntro": "Voeg Phoenix MCP toe als MCP-server in je agent. Het verifieert met <code>Authorization: Bearer <token></code>, niet met Home Assistant-login of OAuth. Gebruik HTTPS op onvertrouwde netwerken. Houd bearer-toegangssleutels buiten shellgeschiedenis, gedeelde bestanden, schermafbeeldingen en versiebeheer. Roteer een toegangssleutel als deze is uitgelekt.",
+      "connectIntro": "Voeg Phoenix MCP toe als MCP-server in je agent. Het verifieert met <code>Authorization: Bearer phx_...</code>, niet met Home Assistant-login of OAuth. Gebruik HTTPS op onvertrouwde netwerken. Houd bearer-toegangssleutels buiten shellgeschiedenis, gedeelde bestanden, schermafbeeldingen en versiebeheer. Roteer een toegangssleutel als deze is uitgelekt.",
       "connectLater": "Later verbinden",
       "connectTitle": "Verbind je eerste AI-agent",
       "connected": "Verbonden! Je agent heeft Phoenix MCP bereikt.",
@@ -1248,7 +1248,7 @@
       "nameDuplicateError": "Er bestaat al een toegangssleutel met deze naam (of een equivalente slug).",
       "nameFormatError": "Naam moet 3-32 tekens bevatten: letters, cijfers, _ of -.",
       "nameLabel": "Naam (vereist)",
-      "namePlaceholder": "my_token",
+      "namePlaceholder": "my_access_key",
       "nameRuleError": "3-32 tekens: letters, cijfers, koppeltekens of underscores.",
       "off": "uit",
       "on": "aan",

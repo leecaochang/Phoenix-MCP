@@ -1710,7 +1710,7 @@
       "nameDuplicateError": "Esiste già una chiave di accesso con questo nome (o uno slug equivalente).",
       "nameFormatError": "Il nome deve contenere da 3 a 32 caratteri: lettere, cifre, _ o -.",
       "nameLabel": "Nome (obbligatorio)",
-      "namePlaceholder": "my_token",
+      "namePlaceholder": "my_access_key",
       "nameRuleError": "Da 3 a 32 caratteri: lettere, numeri, trattini o trattini bassi.",
       "off": "disattivato",
       "on": "attivato",
@@ -1973,7 +1973,7 @@
       "codexHeaderValueLabel": "Valore di intestazione",
       "codexServerNameLabel": "Nome del server",
       "connectAgentTitle": "Connetti Phoenix MCP al tuo agente AI",
-      "connectIntro": "Aggiungi Phoenix MCP come server MCP nel tuo agente. Si autentica con <code>Authorization: Bearer <token></code>, non con l'accesso a Home Assistant o OAuth. Usa HTTPS sulle reti non attendibili. Non includere chiave di accesso bearer nella cronologia della shell, nei file condivisi, nelle schermate o nel controllo di versione. Ruota una chiave di accesso se divulgato.",
+      "connectIntro": "Aggiungi Phoenix MCP come server MCP nel tuo agente. Si autentica con <code>Authorization: Bearer phx_...</code>, non con l'accesso a Home Assistant o OAuth. Usa HTTPS sulle reti non attendibili. Non includere chiave di accesso bearer nella cronologia della shell, nei file condivisi, nelle schermate o nel controllo di versione. Ruota una chiave di accesso se divulgato.",
       "connectLater": "Connetti più tardi",
       "connectTitle": "Connetti il tuo primo agente AI",
       "connected": "Connesso! Il tuo agente ha raggiunto Phoenix MCP.",
@@ -2284,8 +2284,8 @@
     }
   },
   "notification": {
-    "approval.message": "La chiave di accesso '{token}' ha richiesto un'approvazione.\n\n[Rivedi in Phoenix MCP]({url})",
-    "rate_limit.message": "Phoenix MCP: la chiave di accesso '{token}' ha raggiunto il suo limite di frequenza.",
+    "approval.message": "La chiave di accesso '{access_key}' ha richiesto un'approvazione.\n\n[Rivedi in Phoenix MCP]({url})",
+    "rate_limit.message": "Phoenix MCP: la chiave di accesso '{access_key}' ha raggiunto il suo limite di frequenza.",
     "rate_limit.title": "Avviso di Phoenix MCP"
   },
   "voice": {

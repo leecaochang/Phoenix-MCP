@@ -16,7 +16,7 @@ from custom_components.phoenix_mcp.mesa import (
     refresh_orphans,
 )
 from custom_components.phoenix_mcp.mesa_core import ControlMode, MetadataOrigin, SemanticProfile
-from custom_components.phoenix_mcp.token_store import GlobalSettings
+from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 
 
 def _profile(entity_id: str, control_mode: str = "autonomous", **boundaries) -> SemanticProfile:

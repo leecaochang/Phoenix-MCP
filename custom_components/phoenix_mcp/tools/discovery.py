@@ -61,9 +61,9 @@ from ..helpers import effective_cap, parse_time_param as _parse_time_param, reda
 from .esphome import _ESPHOME_DOMAIN, _esphome_action_signature, _esphome_actions_for_entity, esphome_availability
 from ..tool_common import _resolve_area_id, _tool_error, _tool_success
 from ..ws_dispatch import WsDispatchError, async_get_lovelace_config, async_ws_command
-from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_token, filter_service_response, physical_gate_applies, resolve, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
+from ..policy_engine import _ENTITY_ID_RE, EntityCreationNotPermitted, Permission, assist_expose_check, device_config_entry_ids, device_registry_entity_ids, esphome_entry_writable, filter_entities_for_access_key, filter_service_response, physical_gate_applies, resolve, resolve_config_entry_registry_access, resolve_device_registry_access, resolve_esphome_user_service, resolve_registry_access, resolve_service_targets, service_target_binding_valid, scrub_sensitive_attributes
 from ..request_authority import check_request_authority
-from ..token_store import TokenRecord
+from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes
 
 _LOGGER = logging.getLogger(__name__)
@@ -288,17 +288,17 @@ def _dangling_report(value: str, holders: list[dict]) -> dict:
     return {"entity_id": value, "referenced_by": out}
 
 
-def _consumer_visible(consumer: dict, token: TokenRecord, hass: HomeAssistant, index: ConsumerIdentityIndex | None = None) -> bool:
+def _consumer_visible(consumer: dict, access_key: AccessKeyRecord, hass: HomeAssistant, index: ConsumerIdentityIndex | None = None) -> bool:
     """A reference never grants visibility of the consumer's identity."""
     kind, identity = consumer.get("kind"), str(consumer.get("id", ""))
     if kind == "dashboard":
-        return effective_cap(token, "cap_lovelace_write") != CAP_DENY
+        return effective_cap(access_key, "cap_lovelace_write") != CAP_DENY
     if kind == "config_entry":
-        return resolve_config_entry_registry_access(identity, token, hass) in (Permission.READ, Permission.WRITE)
+        return resolve_config_entry_registry_access(identity, access_key, hass) in (Permission.READ, Permission.WRITE)
     if kind not in _GRAPH_CONSUMER_KINDS:
         return False
     index = index or ConsumerIdentityIndex(hass)
-    return index.visible(kind, identity, token, hass, consumer.get("entity_id"))
+    return index.visible(kind, identity, access_key, hass, consumer.get("entity_id"))
 
 
 def _consumer(kind: str, cid: str, name: Any) -> dict:
@@ -622,7 +622,7 @@ def _scan_relationships(
 
 
 def _forward_references_details(
-    hass: HomeAssistant, token: TokenRecord, entity_id: str,
+    hass: HomeAssistant, access_key: AccessKeyRecord, entity_id: str,
 ) -> tuple[list[str], list[dict]]:
     """Entities referenced by entity_id when it is an automation or script.
 
@@ -655,23 +655,23 @@ def _forward_references_details(
         if isinstance(cfg, dict):
             _collect_entity_id_values(cfg, found)
     return (
-        sorted(e for e in found if resolve(e, token, hass) in (Permission.READ, Permission.WRITE)),
+        sorted(e for e in found if resolve(e, access_key, hass) in (Permission.READ, Permission.WRITE)),
         not_searched,
     )
 
 
-def _forward_references(hass: HomeAssistant, token: TokenRecord, entity_id: str) -> list[str]:
+def _forward_references(hass: HomeAssistant, access_key: AccessKeyRecord, entity_id: str) -> list[str]:
     """Forward references only, without the not-searched gaps."""
-    return _forward_references_details(hass, token, entity_id)[0]
+    return _forward_references_details(hass, access_key, entity_id)[0]
 
 
-def _accessible_entity_ids(token: TokenRecord, hass: HomeAssistant) -> set[str]:
+def _accessible_entity_ids(access_key: AccessKeyRecord, hass: HomeAssistant) -> set[str]:
     """Return the set of entity IDs the token can read.
 
     Uses the same scoping/scrubbing path as get_states so registry views never
     reveal entities, areas, or devices outside the token's permission tree.
     """
-    accessible = filter_entities_for_token(hass.states.async_all(), token, hass)
+    accessible = filter_entities_for_access_key(hass.states.async_all(), access_key, hass)
     return {e["entity_id"] for e in accessible}
 
 
@@ -738,7 +738,7 @@ def _recognized_entity_value(result: Any, name: str) -> Any:
 
 
 def _recognized_targets(
-    result: Any, token: TokenRecord, hass: HomeAssistant
+    result: Any, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> list[dict[str, Any]]:
     """Resolve one recognition against the intersection of Assist and token scope.
 
@@ -763,7 +763,7 @@ def _recognized_targets(
     if not (name or area or floor or domains or device_classes or state_names):
         return []
 
-    accessible_ids = _accessible_entity_ids(token, hass)
+    accessible_ids = _accessible_entity_ids(access_key, hass)
     accessible_states = [
         state for state in hass.states.async_all()
         if state.entity_id in accessible_ids
@@ -793,11 +793,11 @@ def _recognized_targets(
 
 
 async def _tool_recognize_intent(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """Recognize one sentence without invoking an intent handler."""
     if all(
-        effective_cap(token, cap) == CAP_DENY
+        effective_cap(access_key, cap) == CAP_DENY
         for cap in ("cap_search", "cap_config_read")
     ):
         return _tool_error("Forbidden."), "denied", "recognize_intent"
@@ -839,7 +839,7 @@ async def _tool_recognize_intent(
             "not_implemented", "recognize_intent",
         )
 
-    targets = _recognized_targets(result, token, hass) if result is not None else []
+    targets = _recognized_targets(result, access_key, hass) if result is not None else []
     has_selector = result is not None and any(
         _recognized_entity_value(result, key) is not None
         for key in ("name", "area", "floor", "domain", "device_class", "state")
@@ -862,22 +862,22 @@ async def _tool_recognize_intent(
 
 
 async def _tool_list_areas(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: list areas containing at least one accessible entity."""
-    if effective_cap(token, "cap_registry_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_registry_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "list_areas"
 
     registry = er.async_get(hass)
     dev_reg = dr.async_get(hass)
     area_reg = ar.async_get(hass)
     counts: dict[str, int] = {}
-    for eid in _accessible_entity_ids(token, hass):
+    for eid in _accessible_entity_ids(access_key, hass):
         area_id = _resolve_area_id(registry.async_get(eid), dev_reg)
         if area_id:
             counts[area_id] = counts.get(area_id, 0) + 1
 
-    if token.pass_through and household_admin_access() and assist_expose_check(token, hass) is None:
+    if access_key.pass_through and household_admin_access() and assist_expose_check(access_key, hass) is None:
         for listed_area in area_reg.areas.values():
             counts.setdefault(listed_area.id, 0)
     areas: list[dict] = []
@@ -899,10 +899,10 @@ async def _tool_list_areas(
 
 
 async def _tool_list_floors(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: list floors containing at least one accessible entity."""
-    if effective_cap(token, "cap_registry_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_registry_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "list_floors"
 
     registry = er.async_get(hass)
@@ -911,7 +911,7 @@ async def _tool_list_floors(
     floor_reg = fr.async_get(hass)
     floor_entity_counts: dict[str, int] = {}
     floor_area_ids: dict[str, set[str]] = {}
-    for eid in _accessible_entity_ids(token, hass):
+    for eid in _accessible_entity_ids(access_key, hass):
         area_id = _resolve_area_id(registry.async_get(eid), dev_reg)
         if not area_id:
             continue
@@ -921,7 +921,7 @@ async def _tool_list_floors(
         floor_entity_counts[area.floor_id] = floor_entity_counts.get(area.floor_id, 0) + 1
         floor_area_ids.setdefault(area.floor_id, set()).add(area_id)
 
-    if token.pass_through and household_admin_access() and assist_expose_check(token, hass) is None:
+    if access_key.pass_through and household_admin_access() and assist_expose_check(access_key, hass) is None:
         for listed_floor in floor_reg.floors.values():
             floor_entity_counts.setdefault(listed_floor.floor_id, 0)
             floor_area_ids.setdefault(listed_floor.floor_id, set()).update(
@@ -946,13 +946,13 @@ async def _tool_list_floors(
 
 
 async def _tool_list_zones(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: list accessible zone.* entities."""
-    if effective_cap(token, "cap_registry_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_registry_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "list_zones"
 
-    accessible = filter_entities_for_token(hass.states.async_all(), token, hass)
+    accessible = filter_entities_for_access_key(hass.states.async_all(), access_key, hass)
     zones: list[dict] = []
     for e in accessible:
         if not e["entity_id"].startswith("zone."):
@@ -970,10 +970,10 @@ async def _tool_list_zones(
 
 
 async def _tool_list_devices(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: list accessible device-registry entries."""
-    if effective_cap(token, "cap_registry_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_registry_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "list_devices"
 
     registry_state = str(args.get("registry_state") or "enabled").strip().lower()
@@ -992,23 +992,23 @@ async def _tool_list_devices(
         if registry_state == "disabled" and device.disabled_by is None:
             continue
         if resolve_device_registry_access(
-            device.id, token, hass, snapshot=device_snapshot
+            device.id, access_key, hass, snapshot=device_snapshot
         ) not in (Permission.READ, Permission.WRITE):
             continue
-        devices.append(_device_list_projection(device, token, hass, device_snapshot))
+        devices.append(_device_list_projection(device, access_key, hass, device_snapshot))
     devices.sort(key=lambda d: ((d["name"] or d["device_id"]).lower()))
     return _tool_success(json.dumps({"count": len(devices), "devices": devices}, default=str)), "allowed", "list_devices"
 
 
 async def _tool_get_device(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: return one device plus its accessible entities.
 
     Returns not_found for both a nonexistent device and a device with no
     accessible entities, so there is no existence oracle across the device set.
     """
-    if effective_cap(token, "cap_registry_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_registry_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_device"
 
     device_id = str_arg(args.get("device_id"))
@@ -1018,22 +1018,22 @@ async def _tool_get_device(
     device_snapshot = device_registry_snapshot(hass)
     device = device_snapshot.get(device_id)
     permission = resolve_device_registry_access(
-        device_id, token, hass, snapshot=device_snapshot
+        device_id, access_key, hass, snapshot=device_snapshot
     )
     if device is None or permission not in (Permission.READ, Permission.WRITE):
         return _tool_error("Device not found."), "not_found", device_id
 
-    body = _device_list_projection(device, token, hass, device_snapshot)
+    body = _device_list_projection(device, access_key, hass, device_snapshot)
     body.update({
         "model_id": device_entry_value(device, "model_id"),
         "sw_version": device_entry_value(device, "sw_version"),
         "hw_version": device_entry_value(device, "hw_version"),
-        "entities": _accessible_device_entity_ids(device.id, token, hass),
+        "entities": _accessible_device_entity_ids(device.id, access_key, hass),
         "child_device_ids": [
             child_id
             for child_id in device_snapshot.child_ids(device.id)
             if resolve_device_registry_access(
-                child_id, token, hass, snapshot=device_snapshot
+                child_id, access_key, hass, snapshot=device_snapshot
             )
             in (Permission.READ, Permission.WRITE)
         ],
@@ -1043,17 +1043,17 @@ async def _tool_get_device(
 
 
 def _accessible_device_entity_ids(
-    device_id: str, token: TokenRecord, hass: HomeAssistant
+    device_id: str, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> list[str]:
     """Registry entities on a device that this token may read."""
-    expose = assist_expose_check(token, hass)
+    expose = assist_expose_check(access_key, hass)
     device = dr.async_get(hass).async_get(device_id)
     force_registry_only = device is not None and device.disabled_by is not None
     return [
         entity_id
         for entity_id in device_registry_entity_ids(hass, device_id)
         if resolve_registry_access(
-            entity_id, token, hass, force_registry_only=force_registry_only
+            entity_id, access_key, hass, force_registry_only=force_registry_only
         )
         in (Permission.READ, Permission.WRITE)
         and (expose is None or expose(entity_id))
@@ -1062,7 +1062,7 @@ def _accessible_device_entity_ids(
 
 def _device_list_projection(
     device: Any,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     snapshot: DeviceRegistrySnapshot | None = None,
 ) -> dict[str, Any]:
@@ -1074,7 +1074,7 @@ def _device_list_projection(
     )
     relation_parent_id = parent_device_id or via_device_id
     if relation_parent_id is not None and resolve_device_registry_access(
-        relation_parent_id, token, hass, snapshot=snapshot
+        relation_parent_id, access_key, hass, snapshot=snapshot
     ) not in (Permission.READ, Permission.WRITE):
         via_device_id = None
         parent_device_id = None
@@ -1089,7 +1089,7 @@ def _device_list_projection(
         "disabled_by": _registry_value(device.disabled_by),
         "labels": sorted(device.labels),
         "accessible_entity_count": len(
-            _accessible_device_entity_ids(device.id, token, hass)
+            _accessible_device_entity_ids(device.id, access_key, hass)
         ),
         "owner_count": len(device_config_entry_ids(device)),
         "via_device_id": via_device_id,
@@ -1131,22 +1131,22 @@ def _rank_search_matches(matches: list[dict], query: str) -> list[dict]:
     IDF-weighted score so the most relevant rows lead and survive truncation.
     Rarer query terms weigh more; exact and prefix/word-start matches get a bonus.
     """
-    tokens = [t for t in query.split() if t]
-    if not tokens:
+    access_keys = [t for t in query.split() if t]
+    if not access_keys:
         return matches
     docs = [f"{m['entity_id']} {(m.get('friendly_name') or '')}".lower() for m in matches]
     n = len(docs) or 1
-    df = {t: sum(1 for d in docs if t in d) for t in set(tokens)}
-    full = " ".join(tokens)
+    df = {t: sum(1 for d in docs if t in d) for t in set(access_keys)}
+    full = " ".join(access_keys)
     scored: list[tuple[float, str, dict]] = []
     for m, doc in zip(matches, docs):
-        if any(t not in doc for t in tokens):
+        if any(t not in doc for t in access_keys):
             continue
         eid = m["entity_id"].lower()
         obj = eid.split(".")[-1]
         fname = (m.get("friendly_name") or "").lower()
         score = 0.0
-        for t in tokens:
+        for t in access_keys:
             score += math.log(1 + n / (1 + df.get(t, 0)))
             if t == eid or t == fname:
                 score += 5.0
@@ -1307,7 +1307,7 @@ def _search_candidate_ids(
 
 
 def _annotate_search_rows(
-    rows: list[dict], registry: Any, data: PhoenixData, token: TokenRecord
+    rows: list[dict], registry: Any, data: PhoenixData, access_key: AccessKeyRecord
 ) -> None:
     """Add MESA control_mode and entity_category to the returned rows, in place.
 
@@ -1318,7 +1318,7 @@ def _annotate_search_rows(
     settings = data.store.get_settings()
     if data.mesa is not None and settings.mesa_mode != MESA_MODE_OFF:
         for row in rows:
-            mode = entity_control_mode(data.mesa, token, row["entity_id"])
+            mode = entity_control_mode(data.mesa, access_key, row["entity_id"])
             if mode is not None and mode != "autonomous":
                 row["control_mode"] = mode
 
@@ -1332,7 +1332,7 @@ def _annotate_search_rows(
 
 
 def _search_membership(
-    entity_id: str, token: TokenRecord, hass: HomeAssistant,
+    entity_id: str, access_key: AccessKeyRecord, hass: HomeAssistant,
     expose: Any, budget: list[int],
 ) -> dict[str, Any]:
     """Project bounded direct membership as advisory, potentially incomplete IDs."""
@@ -1355,7 +1355,7 @@ def _search_membership(
             "is_group": True,
             "member_entity_ids": [
                 member for member in members
-                if resolve_registry_access(member, token, hass) in (Permission.READ, Permission.WRITE)
+                if resolve_registry_access(member, access_key, hass) in (Permission.READ, Permission.WRITE)
                 and (expose is None or expose(member))
             ],
         }
@@ -1363,10 +1363,10 @@ def _search_membership(
 
 
 async def _tool_search_entities(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """MCP tool: filter the token's accessible entities by name/domain/area/etc."""
-    if effective_cap(token, "cap_search") == CAP_DENY:
+    if effective_cap(access_key, "cap_search") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "search_entities"
 
     include_membership = args.get("include_membership", False)
@@ -1384,10 +1384,10 @@ async def _tool_search_entities(
     area_reg = ar.async_get(hass)
     now = utcnow()
 
-    expose = assist_expose_check(token, hass)
+    expose = assist_expose_check(access_key, hass)
     matches: list[dict] = []
     for eid in _search_candidate_ids(f.registry_state, hass, registry):
-        perm = resolve_registry_access(eid, token, hass)
+        perm = resolve_registry_access(eid, access_key, hass)
         if perm not in (Permission.READ, Permission.WRITE):
             continue
         if expose is not None and not expose(eid):
@@ -1459,18 +1459,18 @@ async def _tool_search_entities(
 
     # Fuzzy ranking yields; recheck authority and parent visibility before disclosure.
     check_request_authority()
-    expose = assist_expose_check(token, hass)
+    expose = assist_expose_check(access_key, hass)
     matches = [row for row in matches
-               if resolve_registry_access(row["entity_id"], token, hass) in (Permission.READ, Permission.WRITE)
+               if resolve_registry_access(row["entity_id"], access_key, hass) in (Permission.READ, Permission.WRITE)
                and (expose is None or expose(row["entity_id"]))]
     truncated = len(matches) > f.limit
     results = matches[:f.limit]
 
-    _annotate_search_rows(results, registry, data, token)
+    _annotate_search_rows(results, registry, data, access_key)
     if include_membership:
         budget = [MAX_SEARCH_MEMBER_CHECKS]
         for row in results:
-            row.update(_search_membership(row["entity_id"], token, hass, expose, budget))
+            row.update(_search_membership(row["entity_id"], access_key, hass, expose, budget))
 
     body = {"count": len(results), "total": len(matches), "truncated": truncated, "entities": results}
     if fuzzy_fallback:
@@ -1481,16 +1481,16 @@ async def _tool_search_entities(
 
 
 async def _tool_get_overview(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """MCP tool: compact home summary scoped to the token."""
-    if effective_cap(token, "cap_search") == CAP_DENY:
+    if effective_cap(access_key, "cap_search") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_overview"
 
     registry = er.async_get(hass)
     dev_reg = dr.async_get(hass)
     area_reg = ar.async_get(hass)
-    accessible = filter_entities_for_token(hass.states.async_all(), token, hass)
+    accessible = filter_entities_for_access_key(hass.states.async_all(), access_key, hass)
     by_domain: dict[str, int] = {}
     by_area: dict[str, int] = {}
     unavailable = 0
@@ -1516,20 +1516,20 @@ async def _tool_get_overview(
     if data.mesa is not None:
         mesa_mode = data.store.get_settings().mesa_mode
         body["mesa_mode"] = mesa_mode
-        if mesa_mode != MESA_MODE_OFF and effective_cap(token, MESA_TOOLS_CAP) != CAP_DENY:
-            body["mesa_restrictions"] = authored_restrictions(data.mesa, token, hass)
+        if mesa_mode != MESA_MODE_OFF and effective_cap(access_key, MESA_TOOLS_CAP) != CAP_DENY:
+            body["mesa_restrictions"] = authored_restrictions(data.mesa, access_key, hass)
     return _tool_success(json.dumps(body, default=str)), "allowed", "get_overview"
 
 
 async def _tool_describe_area(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: describe one area and its accessible entities.
 
     Returns not_found for both a nonexistent area and an area with no accessible
     entities, so there is no existence oracle across the area set.
     """
-    if effective_cap(token, "cap_search") == CAP_DENY:
+    if effective_cap(access_key, "cap_search") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "describe_area"
 
     area_query = str(args.get("area") or args.get("area_id") or "").strip()
@@ -1543,7 +1543,7 @@ async def _tool_describe_area(
     entities_by_domain: dict[str, list[dict]] = {}
     count = 0
     if target is not None:
-        for e in filter_entities_for_token(hass.states.async_all(), token, hass):
+        for e in filter_entities_for_access_key(hass.states.async_all(), access_key, hass):
             eid = e["entity_id"]
             if _resolve_area_id(registry.async_get(eid), dev_reg) != target.id:
                 continue
@@ -1574,7 +1574,7 @@ async def _tool_describe_area(
 
 
 async def _tool_find_available_actions(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """MCP tool: which services in an entity's domain this token can currently invoke.
 
@@ -1582,23 +1582,23 @@ async def _tool_find_available_actions(
     MESA still enforces per-entity nature at call time; the entity's control_mode
     is surfaced as an advisory hint when MESA is active.
     """
-    if effective_cap(token, "cap_search") == CAP_DENY:
+    if effective_cap(access_key, "cap_search") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "find_available_actions"
 
     entity_id = str_arg(args.get("entity_id"))
     if not entity_id:
         return _tool_error("Missing required argument: entity_id"), "invalid_request", "find_available_actions"
 
-    perm = resolve(entity_id, token, hass)
+    perm = resolve(entity_id, access_key, hass)
     if perm not in (Permission.READ, Permission.WRITE):
         # Nonexistent and inaccessible give the same response, so no existence oracle.
         return _tool_error("Entity not found."), "not_found", entity_id
 
     domain = entity_id.split(".")[0]
-    writable = token.pass_through or perm == Permission.WRITE
-    physical_ok = effective_cap(token, "cap_physical_control") != CAP_DENY
-    restart_ok = effective_cap(token, "cap_restart") != CAP_DENY
-    yaml_edit_ok = effective_cap(token, "cap_yaml_edit") != CAP_DENY
+    writable = access_key.pass_through or perm == Permission.WRITE
+    physical_ok = effective_cap(access_key, "cap_physical_control") != CAP_DENY
+    restart_ok = effective_cap(access_key, "cap_restart") != CAP_DENY
+    yaml_edit_ok = effective_cap(access_key, "cap_yaml_edit") != CAP_DENY
 
     actions: list[dict] = []
     for svc in sorted(hass.services.async_services().get(domain, {}).keys()):
@@ -1632,7 +1632,7 @@ async def _tool_find_available_actions(
     # An ESPHome device's user-defined actions live in the esphome domain, not the
     # entity's own, so the loop above cannot surface them. They are authorized by
     # the device's write scope, matching _execute_call_service.
-    actions.extend(_esphome_actions_for_entity(hass, token, entity_id, writable))
+    actions.extend(_esphome_actions_for_entity(hass, access_key, entity_id, writable))
 
     body: dict = {
         "entity_id": entity_id,
@@ -1652,7 +1652,7 @@ async def _tool_find_available_actions(
 
     settings = data.store.get_settings()
     if data.mesa is not None and settings.mesa_mode != MESA_MODE_OFF:
-        control_mode = entity_control_mode(data.mesa, token, entity_id)
+        control_mode = entity_control_mode(data.mesa, access_key, entity_id)
         if control_mode is not None:
             body["mesa_control_mode"] = control_mode
             body["mesa_note"] = (
@@ -1664,10 +1664,10 @@ async def _tool_find_available_actions(
 
 
 async def _tool_get_system_health(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: HA version + per-integration system health info."""
-    if effective_cap(token, "cap_diagnostics") == CAP_DENY:
+    if effective_cap(access_key, "cap_diagnostics") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_system_health"
 
     from homeassistant.const import __version__ as ha_version  # noqa: PLC0415
@@ -1694,31 +1694,31 @@ _REPAIR_SEVERITIES = frozenset({"critical", "error", "warning"})
 _MAX_REPAIR_ISSUES = 50
 
 
-def _repair_ref(token: TokenRecord, domain: str, issue_id: str) -> str:
+def _repair_ref(access_key: AccessKeyRecord, domain: str, issue_id: str) -> str:
     """Return a stable per-token reference without disclosing HA's raw issue id."""
     digest = hmac.new(
-        token.token_hash.encode(),
+        access_key.token_hash.encode(),
         f"{domain}\0{issue_id}".encode(),
         hashlib.sha256,
     ).hexdigest()[:20]
     return f"repair_{digest}"
 
 
-def _safe_repair_text(value: Any, token: TokenRecord, hass: HomeAssistant) -> Any:
+def _safe_repair_text(value: Any, access_key: AccessKeyRecord, hass: HomeAssistant) -> Any:
     """Scrub diagnostic text and any entity IDs embedded within it."""
     scrubbed = _redact_diagnostics(value)
     if not isinstance(scrubbed, str):
         return scrubbed
     return redact_inaccessible_entity_ids_in_text(
-        scrubbed, token, hass, sentinel="<redacted>"
+        scrubbed, access_key, hass, sentinel="<redacted>"
     )
 
 
 async def _tool_get_repairs(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: bounded, privacy-scrubbed Home Assistant repair issues."""
-    if effective_cap(token, "cap_diagnostics") == CAP_DENY:
+    if effective_cap(access_key, "cap_diagnostics") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_repairs"
 
     domain = args.get("domain")
@@ -1777,24 +1777,24 @@ async def _tool_get_repairs(
     projected: list[dict[str, Any]] = []
     for issue in matches[:limit]:
         placeholders = filter_service_response(
-            _redact_diagnostics(issue.translation_placeholders or {}), token, hass
+            _redact_diagnostics(issue.translation_placeholders or {}), access_key, hass
         )
         placeholders = {
-            key: _safe_repair_text(value, token, hass)
+            key: _safe_repair_text(value, access_key, hass)
             for key, value in placeholders.items()
         }
         projected.append({
-            "repair_ref": _repair_ref(token, issue.domain, issue.issue_id),
-            "domain": _safe_repair_text(issue.domain, token, hass),
-            "issue_domain": _safe_repair_text(issue.issue_domain, token, hass),
+            "repair_ref": _repair_ref(access_key, issue.domain, issue.issue_id),
+            "domain": _safe_repair_text(issue.domain, access_key, hass),
+            "issue_domain": _safe_repair_text(issue.issue_domain, access_key, hass),
             "severity": str(issue.severity) if issue.severity is not None else None,
             "created": issue.created.isoformat(),
             "ignored": issue.dismissed_version is not None,
             "is_fixable": issue.is_fixable,
             "breaks_in_ha_version": _safe_repair_text(
-                issue.breaks_in_ha_version, token, hass
+                issue.breaks_in_ha_version, access_key, hass
             ),
-            "translation_key": _safe_repair_text(issue.translation_key, token, hass),
+            "translation_key": _safe_repair_text(issue.translation_key, access_key, hass),
             "translation_placeholders": placeholders,
             "has_learn_more": bool(issue.learn_more_url),
         })
@@ -1861,10 +1861,10 @@ def _requires_unavailable_reason(tool_def: dict) -> str:
 
 
 async def _tool_check_config(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: validate HA config files and return errors/warnings."""
-    if effective_cap(token, "cap_diagnostics") == CAP_DENY:
+    if effective_cap(access_key, "cap_diagnostics") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "check_ha_config"
 
     from homeassistant.helpers import check_config  # noqa: PLC0415
@@ -1904,7 +1904,7 @@ class _Scope:
 
 
 def _relationship_scope(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> _Scope | tuple[dict, str, str]:
     """Resolve exactly one selector to the accessible entity ids it names.
 
@@ -1947,7 +1947,7 @@ def _relationship_scope(
 
     scope = {
         eid for eid in candidates
-        if resolve(eid, token, hass) in (Permission.READ, Permission.WRITE)
+        if resolve(eid, access_key, hass) in (Permission.READ, Permission.WRITE)
     }
     if not scope:
         # Byte-identical for "does not exist" and "not in your tree"; the
@@ -2070,7 +2070,7 @@ async def _registry_relationships_preview(
 
 
 async def _tool_get_relationships(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: what consumes the entities a selector names.
 
@@ -2085,10 +2085,10 @@ async def _tool_get_relationships(
     args, error = normalize_tool_args("get_relationships", args)
     if error:
         return _tool_error(error), "invalid_request", "get_relationships"
-    if effective_cap(token, "cap_search") == CAP_DENY:
+    if effective_cap(access_key, "cap_search") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_relationships"
 
-    resolved = _relationship_scope(args, token, hass)
+    resolved = _relationship_scope(args, access_key, hass)
     if isinstance(resolved, tuple):
         return resolved
     selector, value, scope = resolved.selector, resolved.value, resolved.entity_ids
@@ -2101,13 +2101,13 @@ async def _tool_get_relationships(
         searched.append("person")
     dashboards: list[tuple[str, str | None, Any]] = []
     entries: list[dict] = []
-    if effective_cap(token, "cap_lovelace_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_lovelace_write") == CAP_DENY:
         not_searched.append({"kind": "dashboard", "reason": "requires cap_lovelace_write"})
     else:
         dashboards, skipped = await _relationship_dashboards(hass)
         not_searched.extend(skipped)
         searched.append("dashboard")
-    if effective_cap(token, "cap_integration_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_integration_write") == CAP_DENY:
         not_searched.append({"kind": "config_entry", "reason": "requires cap_integration_write"})
     else:
         entries = _relationship_config_entries(hass)
@@ -2122,9 +2122,9 @@ async def _tool_get_relationships(
     # A YAML branch this cannot read is the same class of gap as a capability it
     # does not hold, so it lands in the same field.
     not_searched.extend([*unreadable, IDENTITY_COVERAGE])
-    consumers = [c for c in consumers if _consumer_visible(c, token, hass, identity_index)]
+    consumers = [c for c in consumers if _consumer_visible(c, access_key, hass, identity_index)]
     refs = {eid: visible for eid, holders in refs.items()
-            if (visible := [h for h in identity_index.bind(holders) if _consumer_visible(h, token, hass, identity_index)])}
+            if (visible := [h for h in identity_index.bind(holders) if _consumer_visible(h, access_key, hass, identity_index)])}
     # Missing targets are evidence from readable consumer configuration only.
     # Hidden holders cannot reveal their identities or unrelated broken references.
     registry = er.async_get(hass)
@@ -2147,7 +2147,7 @@ async def _tool_get_relationships(
     if selector == "entity_id":
         # Only meaningful for a single automation or script: what IT references.
         references, references_not_searched = await hass.async_add_executor_job(
-            _forward_references_details, hass, token, value,
+            _forward_references_details, hass, access_key, value,
         )
         body["references"] = references
         if references_not_searched:
@@ -2156,10 +2156,10 @@ async def _tool_get_relationships(
 
 
 async def _tool_describe_entity(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """MCP tool: comprehensive summary of one accessible entity."""
-    if effective_cap(token, "cap_search") == CAP_DENY:
+    if effective_cap(access_key, "cap_search") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "describe_entity"
 
     entity_id = str_arg(args.get("entity_id"))
@@ -2171,7 +2171,7 @@ async def _tool_describe_entity(
     if entry is not None:
         entity_id = entry.entity_id
 
-    perm = resolve_registry_access(entity_id, token, hass)
+    perm = resolve_registry_access(entity_id, access_key, hass)
     if perm not in (Permission.READ, Permission.WRITE):
         return _tool_error("Entity not found."), "not_found", entity_id
     state = hass.states.get(entity_id)
@@ -2185,7 +2185,7 @@ async def _tool_describe_entity(
         _references_for_entity_details, hass, entity_id,
     )
     identity_index = ConsumerIdentityIndex(hass)
-    referenced_by = [c for c in identity_index.bind(referenced_by) if _consumer_visible(c, token, hass, identity_index)]
+    referenced_by = [c for c in identity_index.bind(referenced_by) if _consumer_visible(c, access_key, hass, identity_index)]
     referenced_by_not_searched.append(IDENTITY_COVERAGE)
     body: dict = {
         "entity_id": entity_id,
@@ -2193,7 +2193,7 @@ async def _tool_describe_entity(
         "state": scrubbed.get("state"),
         "attributes": scrubbed.get("attributes"),
         "area": _area_name_for_entity(entity_id, registry, dr.async_get(hass), ar.async_get(hass)),
-        "writable": token.pass_through or perm == Permission.WRITE,
+        "writable": access_key.pass_through or perm == Permission.WRITE,
         "domain_services": sorted(hass.services.async_services().get(domain, {}).keys()),
         "referenced_by": referenced_by,
         # This field covers automations, scripts and scenes only; get_relationships
@@ -2229,7 +2229,7 @@ async def _tool_describe_entity(
 
     settings = data.store.get_settings()
     if data.mesa is not None and settings.mesa_mode != MESA_MODE_OFF:
-        control_mode = entity_control_mode(data.mesa, token, entity_id)
+        control_mode = entity_control_mode(data.mesa, access_key, entity_id)
         if control_mode is not None:
             body["mesa_control_mode"] = control_mode
             body["mesa_note"] = (
@@ -2240,7 +2240,7 @@ async def _tool_describe_entity(
 
 
 async def _tool_get_audit_summary(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """MCP tool: the token's own recent audit entries. No cap required; own data only."""
     try:
@@ -2250,7 +2250,7 @@ async def _tool_get_audit_summary(
     limit = max(1, min(limit, 200))
 
     outcome = args.get("outcome")
-    entries = data.audit.query(token_id=token.id, outcome=outcome, limit=limit)
+    entries = data.audit.query(token_id=access_key.id, outcome=outcome, limit=limit)
     if entries is None:
         return _tool_error("Invalid outcome filter."), "invalid_request", "get_audit_summary"
 
@@ -2266,7 +2266,7 @@ async def _tool_get_audit_summary(
         if e.mesa_advisory:
             item["mesa_advisory"] = True
         items.append(item)
-    body = {"access_key_name": token.name, "count": len(items), "entries": items}
+    body = {"access_key_name": access_key.name, "count": len(items), "entries": items}
     return _tool_success(json.dumps(body, default=str)), "allowed", "get_audit_summary"
 
 
@@ -2323,10 +2323,10 @@ def _whatif_trigger(trig: dict, entity_id: str, current_state: str | None, hypot
 
 
 async def _tool_whatif(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: which automations would fire if an entity changed to a hypothetical state."""
-    if effective_cap(token, "cap_search") == CAP_DENY:
+    if effective_cap(access_key, "cap_search") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "whatif"
 
     entity_id = str_arg(args.get("entity_id"))
@@ -2334,7 +2334,7 @@ async def _tool_whatif(
     if not entity_id or hypothetical is None:
         return _tool_error("Missing required arguments: entity_id and hypothetical_state"), "invalid_request", "whatif"
     hypothetical = str(hypothetical)
-    if resolve(entity_id, token, hass) not in (Permission.READ, Permission.WRITE):
+    if resolve(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
         return _tool_error("Entity not found."), "not_found", entity_id
 
     current = hass.states.get(entity_id)
@@ -2354,7 +2354,7 @@ async def _tool_whatif(
         consumer = {"kind": "automation", "id": str(cfg.get("id", "")),
                     **({"_identity_config": cfg} if not cfg.get("id") else {})}
         identity_index.bind([consumer])
-        if not _consumer_visible(consumer, token, hass, identity_index):
+        if not _consumer_visible(consumer, access_key, hass, identity_index):
             continue
         triggers = cfg.get("trigger") or cfg.get("triggers") or []
         if isinstance(triggers, dict):
@@ -2429,13 +2429,13 @@ async def _history_states_at(hass: HomeAssistant, at: Any, entity_ids: list[str]
 
 
 async def _tool_compare_state(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: compare accessible entity states between two times."""
     args, error = normalize_tool_args("compare_states", args)
     if error:
         return _tool_error(error), "invalid_request", "compare_states"
-    if effective_cap(token, "cap_search") == CAP_DENY:
+    if effective_cap(access_key, "cap_search") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "compare_states"
 
     ids = str_list_arg(args.get("entity_id"))
@@ -2443,7 +2443,7 @@ async def _tool_compare_state(
         return _tool_error("Missing required argument: entity_id"), "invalid_request", "compare_states"
     if len(ids) > 100:
         return _tool_error("entity_id accepts at most 100 entities."), "invalid_request", "compare_states"
-    accessible = [e for e in ids if resolve(e, token, hass) in (Permission.READ, Permission.WRITE)]
+    accessible = [e for e in ids if resolve(e, access_key, hass) in (Permission.READ, Permission.WRITE)]
     if not args.get("t1"):
         return _tool_error("Missing required argument: t1"), "invalid_request", "compare_states"
     try:
@@ -2577,10 +2577,10 @@ def _publishes_nothing(state: dict) -> bool:
 
 
 async def _tool_compare_entities(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: what differs between two accessible entities' current shapes."""
-    if effective_cap(token, "cap_search") == CAP_DENY:
+    if effective_cap(access_key, "cap_search") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "compare_entities"
 
     entity_id = str_arg(args.get("entity_id"))
@@ -2595,7 +2595,7 @@ async def _tool_compare_entities(
         # Both sides answer with the same body whether the entity is absent or
         # merely out of scope, and the resource names the tool rather than the
         # id, so a refusal is not an existence oracle.
-        if resolve(eid, token, hass) not in (Permission.READ, Permission.WRITE):
+        if resolve(eid, access_key, hass) not in (Permission.READ, Permission.WRITE):
             return _tool_error("Entity not found."), "not_found", "compare_entities"
         state = hass.states.get(eid)
         if state is None:
@@ -2651,10 +2651,10 @@ async def _tool_compare_entities(
 
 
 async def _tool_recent_activity(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: which accessible entities changed in the last N minutes."""
-    if effective_cap(token, "cap_search") == CAP_DENY:
+    if effective_cap(access_key, "cap_search") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "recent_activity"
 
     try:
@@ -2670,7 +2670,7 @@ async def _tool_recent_activity(
 
     end = utcnow()
     start = end - timedelta(minutes=minutes)
-    accessible_ids = list(_accessible_entity_ids(token, hass))
+    accessible_ids = list(_accessible_entity_ids(access_key, hass))
     changes: list[dict] = []
     if accessible_ids:
         try:
@@ -2709,10 +2709,10 @@ def _cap_outcome(mode: str) -> str:
 
 
 async def _tool_dry_run_service(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """MCP tool: preview a service call (resolved targets + MESA verdict) without executing."""
-    if effective_cap(token, "cap_search") == CAP_DENY:
+    if effective_cap(access_key, "cap_search") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "dry_run_service"
     args, error = normalize_tool_args("dry_run_service", args)
     if error:
@@ -2739,7 +2739,7 @@ async def _tool_dry_run_service(
     service_key = f"{domain}/{service}"
 
     if service_key in DUAL_GATE_SERVICES:
-        system_predicted = _cap_outcome(effective_cap(token, "cap_restart"))
+        system_predicted = _cap_outcome(effective_cap(access_key, "cap_restart"))
         body = {
             "domain": domain, "service": service, "system_service": True,
             "resolved_entities": [],
@@ -2749,7 +2749,7 @@ async def _tool_dry_run_service(
         return _tool_success(json.dumps(body, default=str)), "allowed", "dry_run_service"
 
     if service_key in NO_TARGET_SERVICES:
-        no_target_predicted = _cap_outcome(effective_cap(token, "cap_yaml_edit"))
+        no_target_predicted = _cap_outcome(effective_cap(access_key, "cap_yaml_edit"))
         body = {
             "domain": domain, "service": service, "system_service": True,
             "resolved_entities": [],
@@ -2765,7 +2765,7 @@ async def _tool_dry_run_service(
     if domain == _ESPHOME_DOMAIN:
         esphome_entry = resolve_esphome_user_service(hass, service)
         if esphome_entry is not None:
-            allowed = esphome_entry_writable(hass, esphome_entry, token)
+            allowed = esphome_entry_writable(hass, esphome_entry, access_key)
             signature = _esphome_action_signature(esphome_entry, service)
             declared = {a["name"] for a in signature}
             body = {
@@ -2787,7 +2787,7 @@ async def _tool_dry_run_service(
             )
         permitted, requested = resolve_service_targets(
             entity_id=args.get("entity_id"), device_id=args.get("device_id"),
-            area_id=args.get("area_id"), service_domain=domain, token=token, hass=hass,
+            area_id=args.get("area_id"), service_domain=domain, access_key=access_key, hass=hass,
         )
     except EntityCreationNotPermitted:
         permitted, requested = [], 0
@@ -2803,8 +2803,8 @@ async def _tool_dry_run_service(
     # preview cannot drift from the call it predicts.
     physical_gate = physical_gate_applies(domain, service, permitted)
     predicted: str
-    if physical_gate and effective_cap(token, "cap_physical_control") != CAP_ALLOW:
-        predicted = _cap_outcome(effective_cap(token, "cap_physical_control"))
+    if physical_gate and effective_cap(access_key, "cap_physical_control") != CAP_ALLOW:
+        predicted = _cap_outcome(effective_cap(access_key, "cap_physical_control"))
     elif not permitted:
         predicted = "denied"
     else:
@@ -2814,7 +2814,7 @@ async def _tool_dry_run_service(
     settings = data.store.get_settings()
     if data.mesa is not None and settings.mesa_mode != MESA_MODE_OFF and permitted:
         verdict = evaluate_service_entities(
-            data.mesa, settings.mesa_mode, token, permitted,
+            data.mesa, settings.mesa_mode, access_key, permitted,
             domain=domain, service=service, service_data=service_data, session_id="dry_run",
         )
         mesa = {
@@ -2845,10 +2845,10 @@ async def _tool_dry_run_service(
 
 
 async def _tool_validate_config(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: validate an automation or script config without saving it."""
-    if effective_cap(token, "cap_diagnostics") == CAP_DENY:
+    if effective_cap(access_key, "cap_diagnostics") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "validate_automation_or_script"
 
     cfg_type = args.get("type")
@@ -2884,7 +2884,7 @@ async def _tool_validate_config(
     # exists is reported as the accessible flag and collapses for everything else.
     refs = []
     for eid in sorted(referenced):
-        accessible = resolve(eid, token, hass) in (Permission.READ, Permission.WRITE)
+        accessible = resolve(eid, access_key, hass) in (Permission.READ, Permission.WRITE)
         refs.append({"entity_id": eid, "exists": accessible, "accessible": accessible})
     body = {"type": cfg_type, "valid": valid, "errors": errors, "referenced_entities": refs}
     return _tool_success(json.dumps(body, default=str)), "allowed", "validate_automation_or_script"

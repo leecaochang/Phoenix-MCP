@@ -41,15 +41,15 @@ def response():
 
 
 @pytest.fixture
-async def decision_home(hass, token_store):
-    token, _ = await token_store.async_create_token('decision_test','test')
-    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+async def decision_home(hass, access_key_store):
+    access_key, _ = await access_key_store.async_create_access_key('decision_test','test')
+    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
     store = agentcli.AgentCliStore(AsyncMock())
     account = await store.add('typesafe', {'api_key':'test-secret','model':'jev-latest'})
-    await token_store.async_patch_settings(decision_provider_id=account)
+    await access_key_store.async_patch_settings(decision_provider_id=account)
     with patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)):
-        yield data, token, store, account
+        yield data, access_key, store, account
     data.decision_shadow.cancel()
     if data.decision_shadow.task:
         await asyncio.gather(data.decision_shadow.task, return_exceptions=True)
@@ -135,7 +135,7 @@ def test_malformed_answers_have_no_decision(change, typesafe):
 
 
 async def test_decision_accounts_are_secret_free_and_cannot_resolve_for_conversation(decision_home):
-    data, token, store, account=decision_home
+    data, access_key, store, account=decision_home
     assert store.resolve(account) is None
     cfg=store.resolve(account,purpose='decision')
     assert cfg.kind=='typesafe'
@@ -147,13 +147,13 @@ async def test_decision_accounts_are_secret_free_and_cannot_resolve_for_conversa
 
 @pytest.mark.parametrize('field',['voice_agent_provider_id','ai_task_provider_id'])
 async def test_backend_rejects_decision_account_surface_binding(hass,decision_home,field):
-    data,token,store,account=decision_home
+    data,access_key,store,account=decision_home
     _,error=await _validated_settings_patch({field:account},data,hass,'rid')
     assert error is not None and error.status==400
 
 
 async def test_only_decision_accounts_can_be_selected(hass,decision_home):
-    data,token,store,account=decision_home
+    data,access_key,store,account=decision_home
     chat=await store.add('deepseek',{'api_key':'chat','model':'m'})
     _,error=await _validated_settings_patch({'decision_provider_id':chat},data,hass,'rid')
     assert error is not None and error.status==400
@@ -171,10 +171,10 @@ async def test_decision_budget_is_separate_and_strict(hass,decision_home,budget)
 
 
 async def test_manual_observation_cannot_execute_or_create_approval(hass,decision_home):
-    data,token,*_=decision_home
+    data,access_key,*_=decision_home
     with (patch.object(DecisionProvider,'classify',AsyncMock(return_value=parse_choice(response(),DECISION_ROUTE_CHOICES))) as classify,
           patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
-        result=await async_preview_decision(hass,data,token,'Switch the lamp on','en',{'reason':'no_match','proposal':None})
+        result=await async_preview_decision(hass,data,access_key,'Switch the lamp on','en',{'reason':'no_match','proposal':None})
     assert result['reason']=='observed' and result['executed'] is False
     classify.assert_awaited_once();dispatch.assert_not_called()
     assert data.store.get_pending_approvals()==[]
@@ -185,23 +185,23 @@ async def test_manual_observation_cannot_execute_or_create_approval(hass,decisio
 @pytest.mark.parametrize('reason,proposal',[('supported',{'intent':'HassTurnOn'}),('sentence_trigger',None),
                                            ('timeout',None),('busy',None),('authority_changed',None)])
 async def test_local_matches_and_unsafe_recognition_failures_skip_remote(hass,decision_home,reason,proposal):
-    data,token,*_=decision_home
+    data,access_key,*_=decision_home
     with patch.object(DecisionProvider,'classify',AsyncMock()) as classify:
-        result=await async_preview_decision(hass,data,token,'command','en',{'reason':reason,'proposal':proposal})
+        result=await async_preview_decision(hass,data,access_key,'command','en',{'reason':reason,'proposal':proposal})
     assert result['decision'] is None
     classify.assert_not_called()
 
 
 @pytest.mark.parametrize('change',['token','settings','account_model','account_deleted','runtime'])
 async def test_changes_during_network_wait_discard_decision(hass,decision_home,change):
-    data,token,store,account=decision_home
+    data,access_key,store,account=decision_home
     entered=asyncio.Event();release=asyncio.Event()
     async def classify(*args):
         entered.set();await release.wait();return parse_choice(response(),DECISION_ROUTE_CHOICES)
     with patch.object(DecisionProvider,'classify',classify):
-        task=data.decision_shadow.start(hass,data,token,'command','en',observe=True)
+        task=data.decision_shadow.start(hass,data,access_key,'command','en',observe=True)
         await entered.wait()
-        if change=='token':token.revoked=True
+        if change=='token':access_key.revoked=True
         if change=='settings':await data.store.async_patch_settings(decision_timeout_ms=1234)
         if change=='account_model':await store.set_model(account,'changed')
         if change=='account_deleted':await store.delete(account)
@@ -212,16 +212,16 @@ async def test_changes_during_network_wait_discard_decision(hass,decision_home,c
 
 
 async def test_single_flight_cancellation_releases_slot_without_retaining_text(hass,decision_home):
-    data,token,*_=decision_home
+    data,access_key,*_=decision_home
     entered=asyncio.Event();closed=asyncio.Event()
     async def classify(*args):
         entered.set()
         try:await asyncio.Event().wait()
         finally:closed.set()
     with patch.object(DecisionProvider,'classify',classify):
-        task=data.decision_shadow.start(hass,data,token,'private utterance','en',observe=True)
+        task=data.decision_shadow.start(hass,data,access_key,'private utterance','en',observe=True)
         await entered.wait()
-        assert data.decision_shadow.start(hass,data,token,'second','en') is None
+        assert data.decision_shadow.start(hass,data,access_key,'second','en') is None
         data.decision_shadow.cancel()
         with pytest.raises(asyncio.CancelledError):await task
     await closed.wait()
@@ -231,9 +231,9 @@ async def test_single_flight_cancellation_releases_slot_without_retaining_text(h
 
 @pytest.mark.parametrize("language", ["fr", "zh-Hans", "es"])
 async def test_non_english_never_sends(hass,decision_home,language):
-    data,token,*_=decision_home
+    data,access_key,*_=decision_home
     with patch.object(DecisionProvider,'classify',AsyncMock()) as classify:
-        result=await data.decision_shadow.start(hass,data,token,'allume',language)
+        result=await data.decision_shadow.start(hass,data,access_key,'allume',language)
     assert result['reason']=='unsupported_language'
     classify.assert_not_called()
 
@@ -257,9 +257,9 @@ async def test_real_http_timeout_is_bounded_and_not_retried(socket_enabled):
 @pytest.mark.parametrize('local_reason,expected', [('supported',0),('no_match',1),('timeout',0),('sentence_trigger',0)])
 async def test_voice_shadow_never_waits_for_decision_or_replaces_provider(hass,decision_home,local_reason,expected):
     from custom_components.phoenix_mcp import voice_agent
-    data,token,store,account=decision_home
+    data,access_key,store,account=decision_home
     chat=await store.add('deepseek',{'api_key':'chat','model':'model'})
-    await data.store.async_patch_settings(voice_agent_enabled=True,voice_agent_token_id=token.id,
+    await data.store.async_patch_settings(voice_agent_enabled=True,voice_agent_token_id=access_key.id,
         voice_agent_provider_id=chat,voice_agent_model='model',voice_agent_routing_mode='local_shadow',
         decision_shadow_enabled=True)
     entered=asyncio.Event();release=asyncio.Event()
@@ -289,10 +289,10 @@ async def test_voice_shadow_never_waits_for_decision_or_replaces_provider(hass,d
 
 @pytest.mark.parametrize('language,expected', [('zh-Hans', 'zh-CN'), ('es', 'es')])
 async def test_multilingual_decision_preview_sends_language_without_execution(hass, decision_home, language, expected):
-    data, token, *_ = decision_home
+    data, access_key, *_ = decision_home
     with (patch.object(DecisionProvider, '_request', AsyncMock(return_value=response())) as request,
           patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
-        result = await async_preview_decision(hass, data, token, '打开台灯', language,
+        result = await async_preview_decision(hass, data, access_key, '打开台灯', language,
                                               {'reason': 'no_match', 'proposal': None}, ingress='preview')
     assert result['reason'] == 'observed' and result['executed'] is False
     assert '_plan' not in result
@@ -305,10 +305,10 @@ async def test_multilingual_decision_preview_sends_language_without_execution(ha
 
 
 async def test_preview_ingress_cannot_prepare_plan_even_with_hybrid_enabled(hass, decision_home):
-    data, token, *_ = decision_home
+    data, access_key, *_ = decision_home
     await data.store.async_patch_settings(agentcli_routing_mode='hybrid')
     with patch.object(DecisionProvider, '_request', AsyncMock()) as request:
-        result = await async_preview_decision(hass, data, token, '打开台灯', 'zh-Hans',
+        result = await async_preview_decision(hass, data, access_key, '打开台灯', 'zh-Hans',
                                               {'reason': 'no_match', 'proposal': None},
                                               targets=True, prepare=True, ingress='preview')
     assert result['reason'] == 'not_enabled' and '_plan' not in result
@@ -606,7 +606,7 @@ async def test_capacity_code_does_not_override_status_or_other_adapters(kind, pr
 
 
 async def test_capacity_refusal_reaches_preview_and_fixed_hybrid_counters(hass, decision_home, socket_enabled):
-    data, token, store, _ = decision_home
+    data, access_key, store, _ = decision_home
     calls = 0
     async def handler(request):
         nonlocal calls
@@ -618,7 +618,7 @@ async def test_capacity_refusal_reaches_preview_and_fixed_hybrid_counters(hass, 
         cfg = agentcli.ProviderConfig('typesafe', 'jev-latest', str(server.make_url('')).rstrip('/'), 'test-secret')
         with (patch.object(store, 'resolve', return_value=cfg),
               patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
-            result = await async_preview_decision(hass, data, token, 'command', 'en', {'reason': 'no_match', 'proposal': None})
+            result = await async_preview_decision(hass, data, access_key, 'command', 'en', {'reason': 'no_match', 'proposal': None})
     assert calls == 1
     assert result['reason'] == 'provider_context_limit'
     assert result['decision'] is None and result['executed'] is False and '_plan' not in result
@@ -697,7 +697,7 @@ async def test_unsupported_accounts_cannot_enter_any_provider_surface(hass, deci
 @pytest.mark.parametrize('status', [200, 500])
 async def test_decision_request_records_identity_and_outcome_without_request_envelope(status, socket_enabled):
     from custom_components.phoenix_mcp import conversation_log as history
-    from custom_components.phoenix_mcp.token_store import GlobalSettings
+    from custom_components.phoenix_mcp.access_key_store import GlobalSettings
     log = history.ConversationLog()
     log.configure(GlobalSettings(conversation_log_enabled=True))
     handle = log.begin('agentcli', prompt='Safe visible prompt')

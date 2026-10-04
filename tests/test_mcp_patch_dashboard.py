@@ -27,15 +27,15 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.helpers import content_hash
 from custom_components.phoenix_mcp.mcp_view import _call_tool
 from custom_components.phoenix_mcp.tool_common import resolve_json_path, redaction_sentinel_path
-from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
 from custom_components.phoenix_mcp.ws_dispatch import async_get_lovelace_config, async_save_lovelace_config
 
 
-def _token(**caps) -> TokenRecord:
+def _access_key(**caps) -> AccessKeyRecord:
     base = {"cap_lovelace_write": "allow"}
     base.update(caps)
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x", created_at=utcnow(),
         created_by="u", permissions=PermissionTree(domains={}), **base,
     )
@@ -55,7 +55,7 @@ def _text(content: dict) -> str:
     return content["content"][0]["text"]
 
 
-async def _call(args, token=None, hass=None, data=None):
+async def _call(args, access_key=None, hass=None, data=None):
     args = dict(args)
     target = {"path": args.pop("path")}
     if "url_path" in args:
@@ -66,7 +66,7 @@ async def _call(args, token=None, hass=None, data=None):
     args["target"] = target
     args["change"] = change
     return await _call_tool(
-        "patch_dashboard", args, token, hass, data if data is not None else MagicMock())
+        "patch_dashboard", args, access_key, hass, data if data is not None else MagicMock())
 
 
 # A layout with a view-level badge (no card op can reach it) whose visibility
@@ -158,7 +158,7 @@ class TestPatchDashboard:
         await _seed(h)
         content, outcome, _ = await _call(
             {"path": ["views", 0, "badges", 0, "entity"], "value": "sensor.new"},
-            _token(cap_lovelace_write="deny"), h)
+            _access_key(cap_lovelace_write="deny"), h)
         assert outcome == "denied"
         assert "sensor.new" not in _text(content)
 
@@ -169,7 +169,7 @@ class TestPatchDashboard:
         data, versions = _data()
         content, outcome, _ = await _call(
             {"path": ["views", 0, "badges", 0, "entity"], "value": "sensor.new_remaining"},
-            _token(), h, data)
+            _access_key(), h, data)
         assert outcome == "allowed"
         stored = await async_get_lovelace_config(h, None)
         assert stored["views"][0]["badges"][0]["entity"] == "sensor.new_remaining"
@@ -197,7 +197,7 @@ class TestPatchDashboard:
             {"path": ["views", 0, "badges", 0],
              "value": {"type": "entity", "entity": "sensor.ok",
                        "visibility": [{"condition": "state", "entity": REDACTION_SENTINEL}]}},
-            _token(), h, _data()[0])
+            _access_key(), h, _data()[0])
         assert outcome == "invalid_request"
         message = _text(content)
         assert REDACTION_SENTINEL in message
@@ -210,7 +210,7 @@ class TestPatchDashboard:
         _content, outcome, _ = await _call(
             {"path": ["views", 0, "badges"], "op": "append",
              "value": {"type": "entity", "entity": "sensor.second"}},
-            _token(), h, _data()[0])
+            _access_key(), h, _data()[0])
         assert outcome == "allowed"
         badges = (await async_get_lovelace_config(h, None))["views"][0]["badges"]
         assert len(badges) == 2 and badges[1]["entity"] == "sensor.second"
@@ -220,14 +220,14 @@ class TestPatchDashboard:
         await _seed(h)
         content, outcome, _ = await _call(
             {"path": ["views", 0, "title"], "op": "append", "value": "x"},
-            _token(), h, _data()[0])
+            _access_key(), h, _data()[0])
         assert outcome == "invalid_request" and "list" in _text(content)
 
     async def test_remove_drops_the_leaf(self, hass, lovelace_env):
         h, _l = lovelace_env
         await _seed(h)
         _content, outcome, _ = await _call(
-            {"path": ["views", 0, "badges", 0], "op": "remove"}, _token(), h, _data()[0])
+            {"path": ["views", 0, "badges", 0], "op": "remove"}, _access_key(), h, _data()[0])
         assert outcome == "allowed"
         assert (await async_get_lovelace_config(h, None))["views"][0]["badges"] == []
 
@@ -235,7 +235,7 @@ class TestPatchDashboard:
         h, _l = lovelace_env
         await _seed(h)
         _c, outcome, _ = await _call(
-            {"path": ["views", 0, "title"], "op": "remove"}, _token(), h, _data()[0])
+            {"path": ["views", 0, "title"], "op": "remove"}, _access_key(), h, _data()[0])
         assert outcome == "allowed"
         assert "title" not in (await async_get_lovelace_config(h, None))["views"][0]
 
@@ -243,7 +243,7 @@ class TestPatchDashboard:
         h, _l = lovelace_env
         await _seed(h)
         content, outcome, _ = await _call(
-            {"path": ["views", 0, "title"]}, _token(), h, _data()[0])
+            {"path": ["views", 0, "title"]}, _access_key(), h, _data()[0])
         assert outcome == "invalid_request" and "value is required" in _text(content)
 
     async def test_setting_null_is_not_the_same_as_omitting_value(self, hass, lovelace_env):
@@ -251,7 +251,7 @@ class TestPatchDashboard:
         h, _l = lovelace_env
         await _seed(h)
         _c, outcome, _ = await _call(
-            {"path": ["views", 0, "title"], "value": None}, _token(), h, _data()[0])
+            {"path": ["views", 0, "title"], "value": None}, _access_key(), h, _data()[0])
         assert outcome == "allowed"
         assert (await async_get_lovelace_config(h, None))["views"][0]["title"] is None
 
@@ -260,7 +260,7 @@ class TestPatchDashboard:
         await _seed(h)
         before = await async_get_lovelace_config(h, None)
         content, outcome, _ = await _call(
-            {"path": ["views", 0, "sections", 3, "cards"], "value": []}, _token(), h, _data()[0])
+            {"path": ["views", 0, "sections", 3, "cards"], "value": []}, _access_key(), h, _data()[0])
         assert outcome == "invalid_request" and "does not exist" in _text(content)
         assert await async_get_lovelace_config(h, None) == before
 
@@ -269,7 +269,7 @@ class TestPatchDashboard:
         await _seed(h)
         _c, outcome, _ = await _call(
             {"path": ["views", 0, "title"], "value": "New", "expected_hash": "0" * 64},
-            _token(), h, _data()[0])
+            _access_key(), h, _data()[0])
         assert outcome == "invalid_request"
         assert (await async_get_lovelace_config(h, None))["views"][0]["title"] == "Home"
 
@@ -280,26 +280,26 @@ class TestPatchDashboard:
         _c, outcome, _ = await _call(
             {"path": ["views", 0, "title"], "value": "New",
              "expected_hash": content_hash(current)},
-            _token(), h, _data()[0])
+            _access_key(), h, _data()[0])
         assert outcome == "allowed"
 
     async def test_chained_hash_lets_a_second_patch_skip_the_re_read(self, hass, lovelace_env):
         h, _l = lovelace_env
         await _seed(h)
         content, _o, _r = await _call(
-            {"path": ["views", 0, "title"], "value": "One"}, _token(), h, _data()[0])
+            {"path": ["views", 0, "title"], "value": "One"}, _access_key(), h, _data()[0])
         chained = _json(content)["content_hash"]
         _c, outcome, _ = await _call(
             {"path": ["views", 0, "badges", 0, "name"], "value": "Two",
              "expected_hash": chained},
-            _token(), h, _data()[0])
+            _access_key(), h, _data()[0])
         assert outcome == "allowed"
 
     async def test_auto_generated_dashboard_is_refused(self, hass, lovelace_env):
         """No stored config to patch; steer to set_dashboard_config instead."""
         h, _l = lovelace_env
         _c, outcome, _ = await _call(
-            {"path": ["views", 0, "title"], "value": "x"}, _token(), h, _data()[0])
+            {"path": ["views", 0, "title"], "value": "x"}, _access_key(), h, _data()[0])
         assert outcome == "invalid_request"
 
     async def test_wrong_shaped_op_is_refused_without_writing(self, hass, lovelace_env):
@@ -308,6 +308,6 @@ class TestPatchDashboard:
         await _seed(h)
         _c, outcome, _ = await _call(
             {"path": ["views", 0, "title"], "op": ["remove"], "value": "Kept"},
-            _token(), h, _data()[0])
+            _access_key(), h, _data()[0])
         assert outcome == "invalid_request"
         assert await async_get_lovelace_config(h, None) == LAYOUT

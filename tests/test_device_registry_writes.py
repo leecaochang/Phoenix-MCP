@@ -29,12 +29,12 @@ from custom_components.phoenix_mcp.mcp_view import (
 )
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
-from custom_components.phoenix_mcp.token_store import (
+from custom_components.phoenix_mcp.access_key_store import (
     GlobalSettings,
     PermissionNode,
     PermissionTree,
-    TokenRecord,
-    TokenStore,
+    AccessKeyRecord,
+    AccessKeyStore,
 )
 
 
@@ -57,14 +57,14 @@ def _profile(key: str, mode: str, reason: str = "Device safety test") -> Semanti
     )
 
 
-def _token(
+def _access_key(
     device_id: str,
     *,
     cap: str = "allow",
     device_state: str = "GREEN",
     entities: dict[str, PermissionNode] | None = None,
-) -> TokenRecord:
-    return TokenRecord(
+) -> AccessKeyRecord:
+    return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="device-write-test",
         token_hash="x",
@@ -80,11 +80,11 @@ def _token(
 
 
 async def _data(hass: HomeAssistant, mesa_mode: str = "off") -> PhoenixData:
-    store = MagicMock(spec=TokenStore)
+    store = MagicMock(spec=AccessKeyStore)
     store.async_lock = asyncio.Lock()
     store.async_save = AsyncMock()
     store.get_settings.return_value = GlobalSettings(mesa_mode=mesa_mode)
-    store.list_tokens.return_value = []
+    store.list_access_keys.return_value = []
     store.get_entity_hints.return_value = {}
     store.get_pending_approvals.return_value = []
     data = PhoenixData(
@@ -134,7 +134,7 @@ async def test_whole_device_write_requires_explicit_device_green(
     hass: HomeAssistant, device_env
 ):
     device_id = device_env["device_id"]
-    inherited = TokenRecord(
+    inherited = AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="inherited-only",
         token_hash="x",
@@ -172,7 +172,7 @@ async def test_child_device_update_uses_child_registry_api(
             "name": "Renamed child",
             "area_id": device_env["area_id"],
         },
-        _token(child.id),
+        _access_key(child.id),
         hass,
         data,
     )
@@ -188,7 +188,7 @@ async def test_nullable_fields_labels_and_version_restore(
     hass: HomeAssistant, device_env
 ):
     device_id = device_env["device_id"]
-    token = _token(device_id)
+    access_key = _access_key(device_id)
     data = await _data(hass)
     label = lr.async_get(hass).async_create("Device registry test")
 
@@ -202,7 +202,7 @@ async def test_nullable_fields_labels_and_version_restore(
                 "add_labels": [label.label_id],
             },
         },
-        token,
+        access_key,
         hass,
         data,
     )
@@ -227,7 +227,7 @@ async def test_nullable_fields_labels_and_version_restore(
                 "remove_labels": [label.label_id],
             },
         },
-        token,
+        access_key,
         hass,
         data,
     )
@@ -258,7 +258,7 @@ async def test_unknown_label_is_rejected_before_approval(
         content, outcome, _ = await _call_tool(
             "set_device",
             {"device_id": device_env["device_id"], "changes": {"add_labels": ["missing"]}},
-            _token(device_env["device_id"], cap="confirm"),
+            _access_key(device_env["device_id"], cap="confirm"),
             hass,
             data,
         )
@@ -277,7 +277,7 @@ async def test_label_reference_is_revalidated_at_execution(
     args = {"device_id": device_id, "add_labels": [label.label_id]}
     label_registry.async_delete(label.label_id)
     content, outcome, _ = await _execute_set_device(
-        args, _token(device_id), hass, data
+        args, _access_key(device_id), hass, data
     )
     assert outcome == "invalid_request"
     assert "Unknown label" in content["content"][0]["text"]
@@ -295,7 +295,7 @@ async def test_only_user_disabled_state_can_be_toggled(
     content, outcome, _ = await _call_tool(
         "set_device",
         {"device_id": device_id, "changes": {"enabled": True}},
-        _token(device_id),
+        _access_key(device_id),
         hass,
         data,
     )
@@ -320,7 +320,7 @@ async def test_enable_refuses_disabled_owner(hass: HomeAssistant):
     content, outcome, _ = await _call_tool(
         "set_device",
         {"device_id": device.id, "changes": {"enabled": True}},
-        _token(device.id),
+        _access_key(device.id),
         hass,
         data,
     )
@@ -333,7 +333,7 @@ async def test_child_restriction_blocks_name_area_and_enabled_but_not_labels(
 ):
     device_id = device_env["device_id"]
     blocked_entity = device_env["entities"][0]
-    token = _token(
+    access_key = _access_key(
         device_id,
         entities={blocked_entity: PermissionNode(state="YELLOW")},
     )
@@ -345,7 +345,7 @@ async def test_child_restriction_blocks_name_area_and_enabled_but_not_labels(
         {"enabled": False},
     ):
         content, outcome, _ = await _call_tool(
-            "set_device", {"device_id": device_id, "changes": update}, token, hass, data
+            "set_device", {"device_id": device_id, "changes": update}, access_key, hass, data
         )
         assert outcome == "denied"
         assert blocked_entity in _body(content)["blocked_entities"]
@@ -353,7 +353,7 @@ async def test_child_restriction_blocks_name_area_and_enabled_but_not_labels(
     _content, outcome, _ = await _call_tool(
         "set_device",
         {"device_id": device_id, "changes": {"add_labels": [label.label_id]}},
-        token,
+        access_key,
         hass,
         data,
     )
@@ -371,7 +371,7 @@ async def test_disable_preview_includes_membership_and_relationships(
     ):
         diff = await _build_diff_set_device(
             {"device_id": device_env["device_id"], "enabled": False},
-            _token(device_env["device_id"]),
+            _access_key(device_env["device_id"]),
             hass,
         )
     assert diff["preview"]["affected_entities"] == sorted(device_env["entities"])
@@ -399,7 +399,7 @@ async def test_device_mesa_modes_apply_to_name_and_disable(
         content, outcome, _ = await _call_tool(
             "set_device",
             {"device_id": device_id, "changes": update},
-            _token(device_id),
+            _access_key(device_id),
             hass,
             data,
         )
@@ -410,7 +410,7 @@ async def test_device_mesa_modes_apply_to_name_and_disable(
                 await _call_tool(
                     "set_device",
                     {"device_id": device_id, "changes": {"enabled": True}},
-                    _token(device_id),
+                    _access_key(device_id),
                     hass,
                     data,
                 )
@@ -434,7 +434,7 @@ async def test_area_and_labels_have_no_mesa_gate(
                 "add_labels": [label.label_id],
             },
         },
-        _token(device_id),
+        _access_key(device_id),
         hass,
         data,
     )
@@ -455,7 +455,7 @@ async def test_restrictive_device_profile_cannot_be_loosened_by_entity_profile(
     content, outcome, _ = await _call_tool(
         "set_device",
         {"device_id": device_id, "changes": {"name": "Still blocked"}},
-        _token(device_id),
+        _access_key(device_id),
         hass,
         data,
     )
@@ -485,7 +485,7 @@ async def test_enforced_confirm_joins_normal_approval_and_covers_membership(
         _content, outcome, _ = await _call_tool(
             "set_device",
             {"device_id": device_id, "changes": {"name": "Confirmed device"}},
-            _token(device_id, cap="confirm"),
+            _access_key(device_id, cap="confirm"),
             hass,
             data,
         )
@@ -505,7 +505,7 @@ async def test_capability_approval_pins_membership_even_when_mesa_is_off(
         _content, outcome, _ = await _call_tool(
             "set_device",
             {"device_id": device_id, "changes": {"name": "Pinned membership"}},
-            _token(device_id, cap="confirm"),
+            _access_key(device_id, cap="confirm"),
             hass,
             data,
         )
@@ -524,7 +524,7 @@ async def test_capability_approval_pins_membership_even_when_mesa_is_off(
     )
     hass.states.async_set(joined.entity_id, "off")
     _content, outcome, _ = await async_execute_approved_tool(
-        "set_device", approved_args, _token(device_id), hass, data
+        "set_device", approved_args, _access_key(device_id), hass, data
     )
     assert outcome == "denied"
     assert dr.async_get(hass).async_get(device_id).name_by_user is None
@@ -546,13 +546,13 @@ async def test_membership_and_mesa_changes_are_rechecked_for_approved_execution(
         _content, outcome, _ = await _call_tool(
             "set_device",
             {"device_id": device_id, "changes": {"name": "Pending name"}},
-            _token(device_id),
+            _access_key(device_id),
             hass,
             data,
         )
     assert outcome == "pending_approval"
     approved_args = create.await_args.kwargs["args"]
-    token = _token(device_id)
+    access_key = _access_key(device_id)
 
     owner = device_env["owner"]
     new_entity = er.async_get(hass).async_get_or_create(
@@ -565,7 +565,7 @@ async def test_membership_and_mesa_changes_are_rechecked_for_approved_execution(
     )
     hass.states.async_set(new_entity.entity_id, "off")
     _content, outcome, _ = await async_execute_approved_tool(
-        "set_device", approved_args, token, hass, data
+        "set_device", approved_args, access_key, hass, data
     )
     assert outcome == "denied"
     assert dr.async_get(hass).async_get(device_id).name_by_user is None
@@ -575,7 +575,7 @@ async def test_membership_and_mesa_changes_are_rechecked_for_approved_execution(
         device_id, _profile(device_id, "read_only", "Tightened while pending")
     )
     _content, outcome, _ = await async_execute_approved_tool(
-        "set_device", approved_args, token, hass, data
+        "set_device", approved_args, access_key, hass, data
     )
     assert outcome == "denied"
     assert dr.async_get(hass).async_get(device_id).name_by_user is None
@@ -586,10 +586,10 @@ async def test_permission_change_is_rechecked_for_approved_execution(
 ):
     device_id = device_env["device_id"]
     data = await _data(hass)
-    token = _token(device_id)
-    token.permissions.devices[device_id] = PermissionNode(state="RED")
+    access_key = _access_key(device_id)
+    access_key.permissions.devices[device_id] = PermissionNode(state="RED")
     _content, outcome, _ = await async_execute_approved_tool(
-        "set_device", {"device_id": device_id, "name": "Denied"}, token, hass, data
+        "set_device", {"device_id": device_id, "name": "Denied"}, access_key, hass, data
     )
     assert outcome == "denied"
     assert dr.async_get(hass).async_get(device_id).name_by_user is None
@@ -605,10 +605,10 @@ async def test_entityless_device_fails_closed_only_for_mesa_actions(
         identifiers={("test_integration", "entityless-device")},
     )
     data = await _data(hass, "enforced")
-    token = _token(device.id)
+    access_key = _access_key(device.id)
     for update in ({"name": "Blocked"}, {"enabled": False}):
         content, outcome, _ = await _call_tool(
-            "set_device", {"device_id": device.id, "changes": update}, token, hass, data
+            "set_device", {"device_id": device.id, "changes": update}, access_key, hass, data
         )
         assert outcome == "denied"
         assert "unresolved_device_context" in content["content"][0]["text"]
@@ -617,7 +617,7 @@ async def test_entityless_device_fails_closed_only_for_mesa_actions(
     _content, outcome, _ = await _call_tool(
         "set_device",
         {"device_id": device.id, "changes": {"add_labels": [label.label_id]}},
-        token,
+        access_key,
         hass,
         data,
     )

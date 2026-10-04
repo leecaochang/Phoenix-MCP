@@ -1,6 +1,6 @@
 import { BusyButton } from "../components/BusyButton";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import type { AuditEntry, TokenRecord, Outcome } from "../types";
+import type { AuditEntry, AccessKeyRecord, Outcome } from "../types";
 import { api } from "../api";
 import { AuditTable } from "../components/AuditTable";
 import { RefreshIcon } from "../index";
@@ -9,7 +9,7 @@ import { auditSourceFilterValue } from "../utils/audit_source";
 import { useLatestRequest } from "../utils/latest_request";
 
 interface Props {
-  tokens: TokenRecord[];
+  accessKeys: AccessKeyRecord[];
 }
 
 type TimeWindow = "" | "5m" | "1h" | "24h" | "1w";
@@ -23,13 +23,13 @@ const TIME_WINDOW_MS: Record<Exclude<TimeWindow, "">, number> = {
 
 const PAGE_SIZE = 100;
 
-export function AuditView({ tokens }: Props) {
+export function AuditView({ accessKeys }: Props) {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [outcomeFilter, setOutcomeFilter] = useState<Outcome | "">("");
-  const [tokenFilter, setTokenFilter] = useState("");
+  const [accessKeyFilter, setAccessKeyFilter] = useState("");
   const [timeWindow, setTimeWindow] = useState<TimeWindow>("");
   const [methodFilter, setMethodFilter] = useState("");
   const [resourceFilter, setResourceFilter] = useState("");
@@ -51,19 +51,19 @@ export function AuditView({ tokens }: Props) {
 
   // Current id to name map so renamed tokens show their current name on existing
   // audit rows (falls back to the row's stored name for archived/admin entries).
-  const tokenNames = useMemo(
-    () => Object.fromEntries(tokens.map((t) => [t.id, t.name])),
-    [tokens],
+  const accessKeyNames = useMemo(
+    () => Object.fromEntries(accessKeys.map((t) => [t.id, t.name])),
+    [accessKeys],
   );
 
   const filterParams = useMemo(() => ({
     outcome: outcomeFilter || undefined,
-    token_id: tokenFilter || undefined,
+    token_id: accessKeyFilter || undefined,
     since: timeWindow ? new Date(Date.now() - TIME_WINDOW_MS[timeWindow]).toISOString() : undefined,
     method: debouncedMethod || undefined,
     resource: debouncedResource || undefined,
     ip: debouncedIp ? auditSourceFilterValue(debouncedIp) : undefined,
-  }), [outcomeFilter, tokenFilter, timeWindow, debouncedMethod, debouncedResource, debouncedIp]);
+  }), [outcomeFilter, accessKeyFilter, timeWindow, debouncedMethod, debouncedResource, debouncedIp]);
 
   const beginLoad = useLatestRequest();
 
@@ -110,11 +110,11 @@ export function AuditView({ tokens }: Props) {
           <select
             aria-label={t("audit.filterTokenAria")}
             className="input input-auto"
-            value={tokenFilter}
-            onChange={(e) => setTokenFilter(e.target.value)}
+            value={accessKeyFilter}
+            onChange={(e) => setAccessKeyFilter(e.target.value)}
           >
             <option value="">{t("audit.allTokens")}</option>
-            {tokens.map((t) => (
+            {accessKeys.map((t) => (
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
           </select>
@@ -169,7 +169,7 @@ export function AuditView({ tokens }: Props) {
         <AuditTable
           entries={entries}
           loading={loading}
-          tokenNames={tokenNames}
+          accessKeyNames={accessKeyNames}
         />
         {hasMore && (
           <div className="approval-history-more">

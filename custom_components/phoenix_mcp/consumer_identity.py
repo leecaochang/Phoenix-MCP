@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
 from .policy_engine import Permission, resolve_registry_access
-from .token_store import TokenRecord
+from .access_key_store import AccessKeyRecord
 
 
 IDENTITY_COVERAGE = {
@@ -86,13 +86,13 @@ class ConsumerIdentityIndex:
                     row["entity_id"] = f"{row['kind']}.{row['id']}"
         return rows
 
-    def visible(self, kind: str, identity: str, token: TokenRecord, hass: HomeAssistant, entity_id: str | None = None) -> bool:
+    def visible(self, kind: str, identity: str, access_key: AccessKeyRecord, hass: HomeAssistant, entity_id: str | None = None) -> bool:
         key = (kind, identity, entity_id)
         if key not in self._visible:
             candidates = ({entity_id} if entity_id else
                 self._registry.get((kind, identity), {f"{kind}.{identity}"}) if identity else set())
             self._visible[key] = any(
-                resolve_registry_access(eid, token, hass) in (Permission.READ, Permission.WRITE)
+                resolve_registry_access(eid, access_key, hass) in (Permission.READ, Permission.WRITE)
                 for eid in candidates
             )
         return self._visible[key]

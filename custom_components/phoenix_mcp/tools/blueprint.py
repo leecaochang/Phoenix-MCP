@@ -38,7 +38,7 @@ from ..helpers import diff_summary_fields as _summary, effective_cap
 from ..helpers import content_hash, redact_secrets_in_text
 from ..config_recovery import ConfigurationRecoveryError, safe_snapshot
 from ..request_authority import check_request_authority
-from ..token_store import TokenRecord
+from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
     _CAP_FORBIDDEN_MESSAGE,
     _gate,
@@ -70,10 +70,10 @@ async def _domain_blueprints(hass: HomeAssistant, domain: str) -> dict:
 
 
 async def _tool_list_blueprints(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: list automation/script blueprints and their inputs (cap_config_read)."""
-    if effective_cap(token, "cap_config_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_config_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "list_blueprints"
     domain_arg = str(args.get("domain") or "").strip().lower()
     domains = [domain_arg] if domain_arg in ("automation", "script") else ["automation", "script"]
@@ -212,10 +212,10 @@ def _blueprint_meta(domain: str, path: str, bp: Any) -> dict:
 
 
 async def _tool_get_blueprint(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read one blueprint's raw YAML source (cap_config_read)."""
-    if effective_cap(token, "cap_config_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_config_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_blueprint"
     domain = str(args.get("domain") or "").strip().lower()
     if domain not in ("automation", "script"):
@@ -281,13 +281,13 @@ async def _blueprint_write_precheck(
     return None, target, rel
 
 
-def _blueprint_denied(token: TokenRecord, args: dict, tool_name: str) -> tuple[dict, str, str] | None:
+def _blueprint_denied(access_key: AccessKeyRecord, args: dict, tool_name: str) -> tuple[dict, str, str] | None:
     """Uniform Forbidden when either key of the blueprint dual gate denies."""
-    if effective_cap(token, "cap_blueprint_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_blueprint_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
     domain = str(args.get("domain") or "").strip().lower()
     domain_cap = _BLUEPRINT_DOMAIN_CAPS.get(domain)
-    if domain_cap is not None and effective_cap(token, domain_cap) == CAP_DENY:
+    if domain_cap is not None and effective_cap(access_key, domain_cap) == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
     return None
 
@@ -384,11 +384,11 @@ async def _build_diff_blueprint(
 
 
 async def _tool_create_blueprint(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: create a new blueprint (Confirm-gated)."""
-    denied = _blueprint_denied(token, args, "create_blueprint")
+    denied = _blueprint_denied(access_key, args, "create_blueprint")
     if denied is not None:
         return denied
     pre, target, rel = await _blueprint_write_precheck(
@@ -399,21 +399,21 @@ async def _tool_create_blueprint(
     if pre is not None:
         return pre
     blocked = await _gate(
-        "cap_blueprint_write", token, hass, data,
+        "cap_blueprint_write", access_key, hass, data,
         tool_name="create_blueprint", args=args, request_id=request_id,
         client_ip=client_ip, diff=lambda: _build_diff_blueprint(args, hass, "create"),
     )
     if blocked is not None:
         return blocked
-    return await _execute_create_blueprint(args, token, hass, data)
+    return await _execute_create_blueprint(args, access_key, hass, data)
 
 
 async def _tool_edit_blueprint(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: replace an existing blueprint's source (Confirm-gated)."""
-    denied = _blueprint_denied(token, args, "edit_blueprint")
+    denied = _blueprint_denied(access_key, args, "edit_blueprint")
     if denied is not None:
         return denied
     pre, target, rel = await _blueprint_write_precheck(
@@ -426,21 +426,21 @@ async def _tool_edit_blueprint(
     if pre is not None:
         return pre
     blocked = await _gate(
-        "cap_blueprint_write", token, hass, data,
+        "cap_blueprint_write", access_key, hass, data,
         tool_name="edit_blueprint", args=args, request_id=request_id,
         client_ip=client_ip, diff=lambda: _build_diff_blueprint(args, hass, "edit"),
     )
     if blocked is not None:
         return blocked
-    return await _execute_edit_blueprint(args, token, hass, data)
+    return await _execute_edit_blueprint(args, access_key, hass, data)
 
 
 async def _tool_delete_blueprint(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: delete a blueprint (Confirm-gated)."""
-    denied = _blueprint_denied(token, args, "delete_blueprint")
+    denied = _blueprint_denied(access_key, args, "delete_blueprint")
     if denied is not None:
         return denied
     pre, target, rel = await _blueprint_write_precheck(
@@ -453,21 +453,21 @@ async def _tool_delete_blueprint(
     if pre is not None:
         return pre
     blocked = await _gate(
-        "cap_blueprint_write", token, hass, data,
+        "cap_blueprint_write", access_key, hass, data,
         tool_name="delete_blueprint", args=args, request_id=request_id,
         client_ip=client_ip, diff=lambda: _build_diff_blueprint(args, hass, "delete"),
     )
     if blocked is not None:
         return blocked
-    return await _execute_delete_blueprint(args, token, hass, data)
+    return await _execute_delete_blueprint(args, access_key, hass, data)
 
 
 async def _save_blueprint(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     *, tool_name: str, allow_override: bool,
 ) -> tuple[dict, str, str]:
     """Shared apply path for create/edit: HA's blueprint/save does the real work."""
-    denied = _blueprint_denied(token, args, tool_name)
+    denied = _blueprint_denied(access_key, args, tool_name)
     if denied is not None:
         return denied
     pre, target, rel = await _blueprint_write_precheck(
@@ -490,7 +490,7 @@ async def _save_blueprint(
     try:
         before_snapshot = _blueprint_recovery_snapshot(domain, rel, before)
         async with recovery.resource(resource):
-            rid = await recovery.begin(resource, tool_name, token.id, before_snapshot,
+            rid = await recovery.begin(resource, tool_name, access_key.id, before_snapshot,
                 expected=_blueprint_recovery_snapshot(domain, rel, expected_source))
             try:
                 await recovery.mark(rid, "dispatching")
@@ -523,7 +523,7 @@ async def _save_blueprint(
         _LOGGER.exception("blueprint recovery transaction failed for %s", resource)
         return _tool_error("Blueprint save outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", tool_name
     await _record_version(
-        data, token, resource_type="blueprint", resource_id=f"{domain}/{rel}",
+        data, access_key, resource_type="blueprint", resource_id=f"{domain}/{rel}",
         action="edit" if before is not None else "create",
         before=_version_content_payload(before) if before is not None else None,
         after=_version_content_payload(observed),
@@ -546,23 +546,23 @@ async def _save_blueprint(
 
 
 async def _execute_create_blueprint(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     return await _save_blueprint(
-        args, token, hass, data, tool_name="create_blueprint", allow_override=False)
+        args, access_key, hass, data, tool_name="create_blueprint", allow_override=False)
 
 
 async def _execute_edit_blueprint(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     return await _save_blueprint(
-        args, token, hass, data, tool_name="edit_blueprint", allow_override=True)
+        args, access_key, hass, data, tool_name="edit_blueprint", allow_override=True)
 
 
 async def _execute_delete_blueprint(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    denied = _blueprint_denied(token, args, "delete_blueprint")
+    denied = _blueprint_denied(access_key, args, "delete_blueprint")
     if denied is not None:
         return denied
     pre, target, rel = await _blueprint_write_precheck(
@@ -578,7 +578,7 @@ async def _execute_delete_blueprint(
     try:
         before_snapshot = _blueprint_recovery_snapshot(domain, rel, before)
         async with recovery.resource(resource):
-            rid = await recovery.begin(resource, "delete_blueprint", token.id, before_snapshot,
+            rid = await recovery.begin(resource, "delete_blueprint", access_key.id, before_snapshot,
                 expected=_blueprint_recovery_snapshot(domain, rel, None))
             try:
                 await recovery.mark(rid, "dispatching")
@@ -607,7 +607,7 @@ async def _execute_delete_blueprint(
         _LOGGER.exception("blueprint deletion recovery failed for %s", resource)
         return _tool_error("Blueprint delete outcome is uncertain; inspect configuration recovery before retrying."), "invalid_request", "delete_blueprint"
     await _record_version(
-        data, token, resource_type="blueprint", resource_id=f"{domain}/{rel}",
+        data, access_key, resource_type="blueprint", resource_id=f"{domain}/{rel}",
         action="delete", before=_version_content_payload(before), after=None, alias=rel,
     )
     return _tool_success(json.dumps({

@@ -26,11 +26,11 @@ from custom_components.phoenix_mcp.mesa_tools import (
     async_call_mesa_tool,
     mesa_tool_defs,
 )
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
 
-def _token(*, cap_config_read="allow", pass_through=False, domains=None) -> TokenRecord:
-    return TokenRecord(
+def _access_key(*, cap_config_read="allow", pass_through=False, domains=None) -> AccessKeyRecord:
+    return AccessKeyRecord(
         id="tok",
         name="scoped",
         token_hash="x",
@@ -71,8 +71,8 @@ def env(hass: HomeAssistant):
     return hass
 
 
-async def _call(tool, args, token, hass, data):
-    result, outcome, resource = await async_call_mesa_tool(tool, args, token, hass, data, "sess")
+async def _call(tool, args, access_key, hass, data):
+    result, outcome, resource = await async_call_mesa_tool(tool, args, access_key, hass, data, "sess")
     text = result["content"][0]["text"]
     return json.loads(text), outcome, result.get("isError", False)
 
@@ -80,8 +80,8 @@ async def _call(tool, args, token, hass, data):
 @pytest.mark.asyncio
 async def test_query_returns_only_in_scope_entities(env):
     data = await _data_with_profiles(env)
-    token = _token(domains={"light": "GREEN"})  # lights only; switch is out of scope
-    payload, outcome, _ = await _call("mesa_query_profiles", {}, token, env, data)
+    access_key = _access_key(domains={"light": "GREEN"})  # lights only; switch is out of scope
+    payload, outcome, _ = await _call("mesa_query_profiles", {}, access_key, env, data)
     ids = [r["entity_id"] for r in payload["results"]]
     assert ids == ["light.a"]
     assert payload["total_matched"] == 1  # count is scope-relative, no oracle
@@ -95,11 +95,11 @@ async def test_get_out_of_scope_is_identical_to_nonexistent(env):
     from custom_components.phoenix_mcp.mesa_tools import _not_found_envelope
 
     data = await _data_with_profiles(env)
-    token = _token(domains={"light": "GREEN"})
+    access_key = _access_key(domains={"light": "GREEN"})
 
-    out_of_scope, _, _ = await _call("mesa_get_profile", {"entity_id": "switch.b"}, token, env, data)
+    out_of_scope, _, _ = await _call("mesa_get_profile", {"entity_id": "switch.b"}, access_key, env, data)
     # An in-scope but unprofiled entity hits mesa-core's own not_found path.
-    in_scope_missing, _, _ = await _call("mesa_get_profile", {"entity_id": "light.unprofiled"}, token, env, data)
+    in_scope_missing, _, _ = await _call("mesa_get_profile", {"entity_id": "light.unprofiled"}, access_key, env, data)
 
     assert out_of_scope == _not_found_envelope("switch.b")
     assert in_scope_missing == _not_found_envelope("light.unprofiled")
@@ -108,8 +108,8 @@ async def test_get_out_of_scope_is_identical_to_nonexistent(env):
 @pytest.mark.asyncio
 async def test_explain_out_of_scope_is_not_found(env):
     data = await _data_with_profiles(env)
-    token = _token(domains={"light": "GREEN"})
-    payload, outcome, _ = await _call("mesa_explain_profile", {"entity_id": "switch.b"}, token, env, data)
+    access_key = _access_key(domains={"light": "GREEN"})
+    payload, outcome, _ = await _call("mesa_explain_profile", {"entity_id": "switch.b"}, access_key, env, data)
     assert payload["error"] == "not_found"
     assert outcome == "not_found"
 
@@ -117,8 +117,8 @@ async def test_explain_out_of_scope_is_not_found(env):
 @pytest.mark.asyncio
 async def test_get_in_scope_returns_profile(env):
     data = await _data_with_profiles(env)
-    token = _token(domains={"light": "GREEN"})
-    payload, outcome, is_error = await _call("mesa_get_profile", {"entity_id": "light.a"}, token, env, data)
+    access_key = _access_key(domains={"light": "GREEN"})
+    payload, outcome, is_error = await _call("mesa_get_profile", {"entity_id": "light.a"}, access_key, env, data)
     assert outcome == "allowed"
     assert is_error is False
     assert payload["entity_id"] == "light.a"
@@ -127,9 +127,9 @@ async def test_get_in_scope_returns_profile(env):
 @pytest.mark.asyncio
 async def test_cap_deny_forbids(env):
     data = await _data_with_profiles(env)
-    token = _token(cap_config_read="deny", domains={"light": "GREEN"})
+    access_key = _access_key(cap_config_read="deny", domains={"light": "GREEN"})
     result, outcome, resource = await async_call_mesa_tool(
-        "mesa_query_profiles", {}, token, env, data, "sess"
+        "mesa_query_profiles", {}, access_key, env, data, "sess"
     )
     assert outcome == "denied"
     assert result["isError"] is True
@@ -138,8 +138,8 @@ async def test_cap_deny_forbids(env):
 @pytest.mark.asyncio
 async def test_pass_through_sees_all_non_phoenix(env):
     data = await _data_with_profiles(env)
-    token = _token(pass_through=True)
-    payload, _, _ = await _call("mesa_query_profiles", {}, token, env, data)
+    access_key = _access_key(pass_through=True)
+    payload, _, _ = await _call("mesa_query_profiles", {}, access_key, env, data)
     ids = sorted(r["entity_id"] for r in payload["results"])
     assert ids == ["light.a", "switch.b"]
 
@@ -147,8 +147,8 @@ async def test_pass_through_sees_all_non_phoenix(env):
 @pytest.mark.asyncio
 async def test_caller_context_reports_token_identity(env):
     data = await _data_with_profiles(env)
-    token = _token(domains={"light": "GREEN"})
-    payload, _, _ = await _call("mesa_get_caller_context", {}, token, env, data)
+    access_key = _access_key(domains={"light": "GREEN"})
+    payload, _, _ = await _call("mesa_get_caller_context", {}, access_key, env, data)
     assert payload["caller_id"] == "tok"
     assert payload["roles"] == ["read_only"]
 
@@ -193,9 +193,9 @@ async def test_authored_restrictions_lists_only_authored_restrictive(hass: HomeA
     for eid in ("lock.gun_safe", "switch.sump_pump", "light.dimmer", "fan.patio"):
         hass.states.async_set(eid, "on", {})
     runtime = await _runtime_with_modes(hass)
-    token = _token(domains={"lock": "GREEN", "switch": "GREEN", "light": "GREEN", "fan": "GREEN"})
+    access_key = _access_key(domains={"lock": "GREEN", "switch": "GREEN", "light": "GREEN", "fan": "GREEN"})
 
-    summary = authored_restrictions(runtime, token, hass)
+    summary = authored_restrictions(runtime, access_key, hass)
 
     # Counts cover every authored profile; the list is only the hard restrictions.
     assert summary["authored_profile_count"] == 4
@@ -212,9 +212,9 @@ async def test_authored_restrictions_is_scope_relative(hass: HomeAssistant):
     for eid in ("lock.gun_safe", "switch.sump_pump"):
         hass.states.async_set(eid, "on", {})
     runtime = await _runtime_with_modes(hass)
-    token = _token(domains={"lock": "GREEN"})  # switch.sump_pump out of scope
+    access_key = _access_key(domains={"lock": "GREEN"})  # switch.sump_pump out of scope
 
-    summary = authored_restrictions(runtime, token, hass)
+    summary = authored_restrictions(runtime, access_key, hass)
 
     assert {e["entity_id"] for e in summary["restricted_entities"]} == {"lock.gun_safe"}
     assert "read_only" not in summary["by_control_mode"]  # hidden entity not even counted
@@ -224,9 +224,9 @@ async def test_authored_restrictions_is_scope_relative(hass: HomeAssistant):
 async def test_authored_restrictions_empty_without_authored_profiles(hass: HomeAssistant):
     hass.states.async_set("light.a", "on", {})
     runtime = await async_setup_mesa(hass, "enforced")  # no entity profiles authored
-    token = _token(domains={"light": "GREEN"})
+    access_key = _access_key(domains={"light": "GREEN"})
 
-    summary = authored_restrictions(runtime, token, hass)
+    summary = authored_restrictions(runtime, access_key, hass)
 
     # Baseline-derived modes are never counted; only authored profiles appear.
     assert summary["authored_profile_count"] == 0
@@ -296,11 +296,11 @@ async def test_get_profile_includes_semantic_moments(env, monkeypatch):
         trigger_schemas={"light.turned_on": {"target": {"entity": {"domain": "light"}}}},
     )
     data = await _data_with_profiles(env)
-    token = _token(domains={"light": "GREEN"})
+    access_key = _access_key(domains={"light": "GREEN"})
     payload, outcome, is_error = await _call(
         "mesa_get_profile",
         {"entity_id": "light.a", "include_semantic_moments": True},
-        token, env, data,
+        access_key, env, data,
     )
     assert outcome == "allowed" and not is_error
     assert payload["semantic_moments"] == [
@@ -337,11 +337,11 @@ async def test_get_profile_semantic_moments_schema_lookup_failure_keeps_ids(env,
         monkeypatch, trigger_error=RuntimeError("HA refactored the schema cache"),
     )
     data = await _data_with_profiles(env)
-    token = _token(domains={"light": "GREEN"})
+    access_key = _access_key(domains={"light": "GREEN"})
     payload, outcome, is_error = await _call(
         "mesa_get_profile",
         {"entity_id": "light.a", "include_semantic_moments": True},
-        token, env, data,
+        access_key, env, data,
     )
     assert outcome == "allowed" and not is_error
     assert payload["semantic_moments"] == [{"id": "light.turned_on", "kind": "trigger"}]
@@ -359,9 +359,9 @@ async def test_get_profile_semantic_moments_flag_off_no_lookup(env, monkeypatch)
         _boom,
     )
     data = await _data_with_profiles(env)
-    token = _token(domains={"light": "GREEN"})
+    access_key = _access_key(domains={"light": "GREEN"})
     payload, _, _ = await _call(
-        "mesa_get_profile", {"entity_id": "light.a"}, token, env, data,
+        "mesa_get_profile", {"entity_id": "light.a"}, access_key, env, data,
     )
     assert "semantic_moments" not in payload
 
@@ -470,11 +470,11 @@ async def test_get_profile_semantic_moments_degrades_on_ha_failure(env, monkeypa
         _boom,
     )
     data = await _data_with_profiles(env)
-    token = _token(domains={"light": "GREEN"})
+    access_key = _access_key(domains={"light": "GREEN"})
     payload, outcome, is_error = await _call(
         "mesa_get_profile",
         {"entity_id": "light.a", "include_semantic_moments": True},
-        token, env, data,
+        access_key, env, data,
     )
     assert outcome == "allowed" and not is_error
     assert "semantic_moments" not in payload
@@ -508,12 +508,12 @@ async def test_get_profile_semantic_moments_skips_lookup_when_out_of_scope(env, 
     from custom_components.phoenix_mcp.mesa_tools import _not_found_envelope
 
     data = await _data_with_profiles(env)
-    token = _token(domains={"light": "GREEN"})  # switch.b is out of scope
+    access_key = _access_key(domains={"light": "GREEN"})  # switch.b is out of scope
 
     payload, outcome, _ = await _call(
         "mesa_get_profile",
         {"entity_id": "switch.b", "include_semantic_moments": True},
-        token, env, data,
+        access_key, env, data,
     )
     assert outcome == "not_found"
     assert payload == _not_found_envelope("switch.b")
@@ -545,11 +545,11 @@ async def test_get_profile_semantic_moments_empty_result_is_present_not_omitted(
     # on real HA trigger/condition platforms being loaded.
     _patch_semantic_schema_lookups(monkeypatch)
     data = await _data_with_profiles(env)
-    token = _token(domains={"light": "GREEN"})
+    access_key = _access_key(domains={"light": "GREEN"})
     payload, outcome, is_error = await _call(
         "mesa_get_profile",
         {"entity_id": "light.a", "include_semantic_moments": True},
-        token, env, data,
+        access_key, env, data,
     )
     assert outcome == "allowed" and not is_error
     assert payload["semantic_moments"] == []
@@ -571,19 +571,19 @@ async def test_lease_request_release_round_trip_across_calls(env):
     env.bus.async_listen("phoenix_mcp_mesa_lease_expired", lambda e: events.append(e.data))
 
     data = await _data_with_profiles(env)
-    token = _token(domains={"light": "GREEN"})
+    access_key = _access_key(domains={"light": "GREEN"})
 
     granted, outcome, is_error = await _call(
         "mesa_request_lease",
         {"entities": ["light.a"], "duration_seconds": 10},
-        token, env, data,
+        access_key, env, data,
     )
     assert outcome == "allowed" and not is_error
     assert granted["granted"] is True
     assert granted["entities_granted"] == ["light.a"]
 
     released, outcome, is_error = await _call(
-        "mesa_release_lease", {"lease_id": granted["lease_id"]}, token, env, data,
+        "mesa_release_lease", {"lease_id": granted["lease_id"]}, access_key, env, data,
     )
     assert outcome == "allowed" and not is_error
     assert released["released"] is True
@@ -598,12 +598,12 @@ async def test_lease_request_release_round_trip_across_calls(env):
 async def test_lease_request_scope_filters_silently(env):
     """Out-of-scope entities are dropped before mesa-core ever sees them."""
     data = await _data_with_profiles(env)
-    token = _token(domains={"light": "GREEN"})  # switch.b is out of scope
+    access_key = _access_key(domains={"light": "GREEN"})  # switch.b is out of scope
 
     granted, outcome, is_error = await _call(
         "mesa_request_lease",
         {"entities": ["light.a", "switch.b", "light.ghost"], "duration_seconds": 5},
-        token, env, data,
+        access_key, env, data,
     )
     assert outcome == "allowed" and not is_error
     # Only the in-scope WRITE entity was leased; the dropped ids appear in
@@ -616,12 +616,12 @@ async def test_lease_request_scope_filters_silently(env):
 @pytest.mark.asyncio
 async def test_lease_request_all_out_of_scope_is_generic_forbidden(env):
     data = await _data_with_profiles(env)
-    token = _token(domains={"light": "YELLOW"})  # READ only: no lease
+    access_key = _access_key(domains={"light": "YELLOW"})  # READ only: no lease
 
     result, outcome, resource = await async_call_mesa_tool(
         "mesa_request_lease",
         {"entities": ["light.a", "switch.b"], "duration_seconds": 5},
-        token, env, data, "sess",
+        access_key, env, data, "sess",
     )
     assert outcome == "denied"
     assert result["isError"] is True
@@ -632,8 +632,8 @@ async def test_lease_request_all_out_of_scope_is_generic_forbidden(env):
 async def test_lease_cross_token_isolation(env):
     """Another token can neither release nor see a holder's lease."""
     data = await _data_with_profiles(env)
-    holder = _token(domains={"light": "GREEN"})
-    other = _token(domains={"light": "GREEN"})
+    holder = _access_key(domains={"light": "GREEN"})
+    other = _access_key(domains={"light": "GREEN"})
     other.id = "tok-other"
 
     granted, _, _ = await _call(
@@ -682,11 +682,11 @@ async def test_component_type_is_derived_from_the_entity_domain(env):
         )
     data = PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(),
                        mesa=runtime)
-    token = _token(pass_through=True)
+    access_key = _access_key(pass_through=True)
 
     seen = {}
     for eid in ("automation.morning", "input_boolean.guest", "person.sam", "light.a"):
-        payload, _, _ = await _call("mesa_get_profile", {"entity_id": eid}, token, env, data)
+        payload, _, _ = await _call("mesa_get_profile", {"entity_id": eid}, access_key, env, data)
         seen[eid] = payload["component_type"]
 
     assert seen == {
@@ -792,7 +792,7 @@ async def test_device_layer_applies_through_the_scoped_store(env):
         "light", "demo", "uid_scoped", suggested_object_id="scoped"
     )
     runtime = await async_setup_mesa(env, "advisory")
-    scoped = ScopedProfileStore(runtime.store, _token(domains={"light": "GREEN"}), env)
+    scoped = ScopedProfileStore(runtime.store, _access_key(domains={"light": "GREEN"}), env)
 
     # Both halves of the pairing are present.
     assert scoped.get_entity_device is runtime.store.get_entity_device
@@ -908,9 +908,9 @@ async def test_an_invalidated_profile_reports_stale_rather_than_current(env):
     )
     data = PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(),
                        mesa=runtime)
-    token = _token(pass_through=True)
+    access_key = _access_key(pass_through=True)
 
-    payload, _, _ = await _call("mesa_get_profile", {"entity_id": "light.a"}, token, env, data)
+    payload, _, _ = await _call("mesa_get_profile", {"entity_id": "light.a"}, access_key, env, data)
 
     assert payload["staleness_status"] == "stale"
     assert any("light.long_gone" in w for w in payload.get("warnings", [])), payload
@@ -928,12 +928,12 @@ async def test_revoking_a_token_releases_the_leases_it_held(env):
     This only shortens the window in which another token is told an entity is
     busy on behalf of a token that no longer exists.
     """
-    from custom_components.phoenix_mcp.mesa import release_token_leases
+    from custom_components.phoenix_mcp.mesa import release_access_key_leases
 
     runtime = await async_setup_mesa(env, "advisory")
     data = PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(),
                        mesa=runtime)
-    holder = _token(domains={"light": "GREEN"})
+    holder = _access_key(domains={"light": "GREEN"})
 
     granted, _, _ = await _call(
         "mesa_request_lease",
@@ -942,10 +942,10 @@ async def test_revoking_a_token_releases_the_leases_it_held(env):
     )
     assert granted["granted"] is True
 
-    assert release_token_leases(data, holder.id) == 1
+    assert release_access_key_leases(data, holder.id) == 1
 
     # Another token can now take the entity the revoked one was holding.
-    other = _token(domains={"light": "GREEN"})
+    other = _access_key(domains={"light": "GREEN"})
     other.id = "tok-other"
     retaken, _, _ = await _call(
         "mesa_request_lease",
@@ -958,7 +958,7 @@ async def test_revoking_a_token_releases_the_leases_it_held(env):
 @pytest.mark.asyncio
 async def test_releasing_leases_is_safe_when_mesa_is_not_loaded(env):
     """Revocation must finish even with no MESA runtime to clean up."""
-    from custom_components.phoenix_mcp.mesa import release_token_leases
+    from custom_components.phoenix_mcp.mesa import release_access_key_leases
 
     data = PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), mesa=None)
-    assert release_token_leases(data, "tok") == 0
+    assert release_access_key_leases(data, "tok") == 0

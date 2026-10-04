@@ -22,7 +22,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool
 from custom_components.phoenix_mcp.tools.authoring import _read_automations_yaml
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
 
 pytestmark = pytest.mark.usefixtures("immediate_authoring_observation")
@@ -50,8 +50,8 @@ def _data() -> PhoenixData:
     )
 
 
-def _token(tree: PermissionTree | None = None, **caps) -> TokenRecord:
-    return TokenRecord(
+def _access_key(tree: PermissionTree | None = None, **caps) -> AccessKeyRecord:
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x", created_at=utcnow(),
         created_by="u", permissions=tree or PermissionTree(domains={}), **caps,
     )
@@ -91,11 +91,11 @@ def automation_env(hass: HomeAssistant):
 class TestGetAutomation:
     async def test_round_trip_returns_full_config_and_hash(self, hass, automation_env):
         data = _data()
-        token = _token(cap_automation_write="allow")
-        created = _json((await _call_tool("create_automation", {"config": _cfg()}, token, hass, data))[0])
+        access_key = _access_key(cap_automation_write="allow")
+        created = _json((await _call_tool("create_automation", {"config": _cfg()}, access_key, hass, data))[0])
         aid = created["id"]
 
-        result, outcome, _res = await _call_tool("get_automation", {"automation_id": aid}, token, hass, data)
+        result, outcome, _res = await _call_tool("get_automation", {"automation_id": aid}, access_key, hass, data)
         assert outcome == "allowed"
         body = _json(result)
         assert body["automation_id"] == aid
@@ -112,17 +112,17 @@ class TestGetAutomation:
 
     async def test_missing_automation_is_not_found(self, hass, automation_env):
         data = _data()
-        token = _token(cap_automation_write="allow")
+        access_key = _access_key(cap_automation_write="allow")
         result, outcome, _res = await _call_tool(
-            "get_automation", {"automation_id": "nope"}, token, hass, data)
+            "get_automation", {"automation_id": "nope"}, access_key, hass, data)
         assert outcome == "not_found"
         assert result.get("isError") is True
 
     async def test_denied_cap_is_forbidden(self, hass, automation_env):
         data = _data()
-        token = _token(cap_automation_write="deny")
+        access_key = _access_key(cap_automation_write="deny")
         result, outcome, _res = await _call_tool(
-            "get_automation", {"automation_id": "x"}, token, hass, data)
+            "get_automation", {"automation_id": "x"}, access_key, hass, data)
         assert outcome == "denied"
         assert result.get("isError") is True
 
@@ -130,10 +130,10 @@ class TestGetAutomation:
         # A read is never approval-gated; Confirm on the write cap must not
         # block reading (mirrors get_dashboard_config under cap_lovelace_write).
         data = _data()
-        writer = _token(cap_automation_write="allow")
+        writer = _access_key(cap_automation_write="allow")
         created = _json((await _call_tool("create_automation", {"config": _cfg()}, writer, hass, data))[0])
 
-        reader = _token(cap_automation_write="confirm")
+        reader = _access_key(cap_automation_write="confirm")
         result, outcome, _res = await _call_tool(
             "get_automation", {"automation_id": created["id"]}, reader, hass, data)
         assert outcome == "allowed"
@@ -155,8 +155,8 @@ class TestGetAutomation:
             encoding="utf-8",
         )
         data = _data()
-        token = _token(cap_automation_write="allow")
-        result, outcome, _res = await _call_tool("get_automation", {"automation_id": "sec1"}, token, hass, data)
+        access_key = _access_key(cap_automation_write="allow")
+        result, outcome, _res = await _call_tool("get_automation", {"automation_id": "sec1"}, access_key, hass, data)
         assert outcome == "allowed"
         body = _json(result)
         assert body["config"]["action"][0]["data"]["message"] == "!secret my_message"
@@ -165,17 +165,17 @@ class TestGetAutomation:
 class TestAutomationCas:
     async def test_matching_hash_allows_edit_stale_hash_refuses(self, hass, automation_env):
         data = _data()
-        token = _token(cap_automation_write="allow")
-        created = _json((await _call_tool("create_automation", {"config": _cfg()}, token, hass, data))[0])
+        access_key = _access_key(cap_automation_write="allow")
+        created = _json((await _call_tool("create_automation", {"config": _cfg()}, access_key, hass, data))[0])
         aid = created["id"]
-        read = _json((await _call_tool("get_automation", {"automation_id": aid}, token, hass, data))[0])
+        read = _json((await _call_tool("get_automation", {"automation_id": aid}, access_key, hass, data))[0])
         good_hash = read["content_hash"]
 
         # The hash from the read is accepted.
         _r, outcome, _res = await _call_tool(
             "edit_automation",
             {"automation_id": aid, "config": _cfg(alias="Renamed"), "expected_hash": good_hash},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
 
@@ -184,7 +184,7 @@ class TestAutomationCas:
         result, outcome, _res = await _call_tool(
             "edit_automation",
             {"automation_id": aid, "config": _cfg(alias="Clobbered"), "expected_hash": good_hash},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "invalid_request"
         assert "changed since you last read it" in _text(result)
@@ -195,12 +195,12 @@ class TestAutomationCas:
     async def test_same_alias_edit_without_hash(self, hass, automation_env):
         # Same-alias edits retain optional hashes.
         data = _data()
-        token = _token(cap_automation_write="allow")
-        created = _json((await _call_tool("create_automation", {"config": _cfg()}, token, hass, data))[0])
+        access_key = _access_key(cap_automation_write="allow")
+        created = _json((await _call_tool("create_automation", {"config": _cfg()}, access_key, hass, data))[0])
         _r, outcome, _res = await _call_tool(
             "edit_automation",
             {"automation_id": created["id"], "config": _cfg(description="Updated description")},
-            token, hass, data,
+            access_key, hass, data,
         )
         assert outcome == "allowed"
 
@@ -229,11 +229,11 @@ class TestApprovalDiffCompleteness:
         assert len(json.dumps(big_cfg, indent=2)) > 4000
 
         data = _data()
-        token = _token(cap_automation_write="allow")
-        created = _json((await _call_tool("create_automation", {"config": big_cfg}, token, hass, data))[0])
+        access_key = _access_key(cap_automation_write="allow")
+        created = _json((await _call_tool("create_automation", {"config": big_cfg}, access_key, hass, data))[0])
 
         diff = await _build_diff_edit_automation(
-            {"automation_id": created["id"], "config": big_cfg}, token, hass)
+            {"automation_id": created["id"], "config": big_cfg}, access_key, hass)
         assert "more characters)" not in diff["after"]
         assert "more characters)" not in diff["before"]
         # Whole JSON on both sides: the last step survives, not just the first.
@@ -278,16 +278,16 @@ class TestApprovalDiffCompleteness:
         store = _ApprStore()
         data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(),
                        versions=VersionStore(), mesa=None)
-        token = _token(cap_automation_write="allow")
-        created = _json((await _call_tool("create_automation", {"config": big_cfg}, token, hass, data))[0])
+        access_key = _access_key(cap_automation_write="allow")
+        created = _json((await _call_tool("create_automation", {"config": big_cfg}, access_key, hass, data))[0])
         aid = created["id"]
 
         # Gate an edit carrying a LARGE config so a real pending approval is
         # created with content that a display cap would have clipped.
-        read = _json((await _call_tool("get_automation", {"automation_id": aid}, token, hass, data))[0])
+        read = _json((await _call_tool("get_automation", {"automation_id": aid}, access_key, hass, data))[0])
         edit_cfg = dict(big_cfg, alias="Replaced")
-        confirm_token = _token(cap_automation_write="confirm")
-        confirm_token.id = token.id
+        confirm_token = _access_key(cap_automation_write="confirm")
+        confirm_token.id = access_key.id
         _r, outcome, _res = await _call_tool(
             "edit_automation", {"automation_id": aid, "config": edit_cfg, "expected_hash": read["content_hash"]},
             confirm_token, hass, data,
@@ -309,7 +309,7 @@ class TestApprovalDiffCompleteness:
         assert "step 59 of a long automation body" not in clipped
 
         # Approving executes from args, so the complete automation is written.
-        out = await async_execute_approved_tool("edit_automation", appr["args"], token, hass, data)
+        out = await async_execute_approved_tool("edit_automation", appr["args"], access_key, hass, data)
         assert out[1] == "allowed"
         items = _read_automations_yaml(str(hass.config.config_dir) + "/automations.yaml")
         written = next(a for a in items if a.get("id") == aid)
@@ -321,12 +321,12 @@ class TestApprovalDiffCompleteness:
 class TestListTools:
     async def test_list_automations_reports_id_for_reading(self, hass):
         data = _data()
-        token = _token(
+        access_key = _access_key(
             PermissionTree(domains={"automation": PermissionNode(state="GREEN")}),
             cap_registry_read="allow",
         )
         hass.states.async_set("automation.porch", "on", {"friendly_name": "Porch", "id": "auto-1"})
-        result, outcome, _res = await _call_tool("list_automations", {}, token, hass, data)
+        result, outcome, _res = await _call_tool("list_automations", {}, access_key, hass, data)
         assert outcome == "allowed"
         body = _json(result)
         assert body["count"] == 1
@@ -337,46 +337,46 @@ class TestListTools:
 
     async def test_renamed_script_list_preserves_editable_storage_id(self, hass):
         hass.services.async_register("script", "reload", lambda call: None)
-        token = _token(
+        access_key = _access_key(
             PermissionTree(domains={"script": PermissionNode(state="GREEN")}),
             cap_registry_read="allow", cap_script_write="allow",
         )
         data = _data()
-        await _call_tool("create_script", {"script_id": "stored", "config": {"sequence": []}}, token, hass, data)
+        await _call_tool("create_script", {"script_id": "stored", "config": {"sequence": []}}, access_key, hass, data)
         entry = er.async_get(hass).async_get_or_create("script", "script", "stored", suggested_object_id="stored")
         entry = er.async_get(hass).async_update_entity(entry.entity_id, new_entity_id="script.renamed")
         hass.states.async_set(entry.entity_id, "off")
-        row = _json((await _call_tool("list_scripts", {}, token, hass, data))[0])["scripts"][0]
+        row = _json((await _call_tool("list_scripts", {}, access_key, hass, data))[0])["scripts"][0]
         assert row["entity_id"] == "script.renamed" and row["script_id"] == "stored"
-        result, outcome, _ = await _call_tool("get_script", {"script_id": row["script_id"]}, token, hass, data)
+        result, outcome, _ = await _call_tool("get_script", {"script_id": row["script_id"]}, access_key, hass, data)
         assert outcome == "allowed"
         assert _json(result)["config"]["sequence"] == []
 
     async def test_list_scripts_derives_id_from_object_id(self, hass):
         data = _data()
-        token = _token(
+        access_key = _access_key(
             PermissionTree(domains={"script": PermissionNode(state="GREEN")}),
             cap_registry_read="allow",
         )
         hass.states.async_set("script.morning", "off", {"friendly_name": "Morning"})
-        body = _json((await _call_tool("list_scripts", {}, token, hass, data))[0])
+        body = _json((await _call_tool("list_scripts", {}, access_key, hass, data))[0])
         assert body["scripts"][0]["script_id"] == "morning"
 
     async def test_lists_are_scoped_to_the_token(self, hass):
         data = _data()
-        token = _token(
+        access_key = _access_key(
             PermissionTree(entities={"automation.visible": PermissionNode(state="GREEN")}),
             cap_registry_read="allow",
         )
         hass.states.async_set("automation.visible", "on", {"id": "a1"})
         hass.states.async_set("automation.hidden", "on", {"id": "a2"})
-        body = _json((await _call_tool("list_automations", {}, token, hass, data))[0])
+        body = _json((await _call_tool("list_automations", {}, access_key, hass, data))[0])
         assert [a["entity_id"] for a in body["automations"]] == ["automation.visible"]
 
     async def test_list_denied_without_registry_read(self, hass):
         data = _data()
-        token = _token(cap_registry_read="deny")
-        _r, outcome, _res = await _call_tool("list_automations", {}, token, hass, data)
+        access_key = _access_key(cap_registry_read="deny")
+        _r, outcome, _res = await _call_tool("list_automations", {}, access_key, hass, data)
         assert outcome == "denied"
 
 
@@ -384,11 +384,11 @@ class TestGetScript:
     async def test_round_trip(self, hass):
         hass.services.async_register("script", "reload", lambda call: None)
         data = _data()
-        token = _token(cap_script_write="allow")
+        access_key = _access_key(cap_script_write="allow")
         cfg = {"alias": "Morning", "sequence": [{"delay": {"seconds": 1}}]}
-        await _call_tool("create_script", {"script_id": "morning", "config": cfg}, token, hass, data)
+        await _call_tool("create_script", {"script_id": "morning", "config": cfg}, access_key, hass, data)
 
-        result, outcome, _res = await _call_tool("get_script", {"script_id": "morning"}, token, hass, data)
+        result, outcome, _res = await _call_tool("get_script", {"script_id": "morning"}, access_key, hass, data)
         assert outcome == "allowed"
         body = _json(result)
         assert body["script_id"] == "morning"
@@ -398,8 +398,8 @@ class TestGetScript:
 
     async def test_missing_script_is_not_found(self, hass):
         data = _data()
-        token = _token(cap_script_write="allow")
-        _r, outcome, _res = await _call_tool("get_script", {"script_id": "ghost"}, token, hass, data)
+        access_key = _access_key(cap_script_write="allow")
+        _r, outcome, _res = await _call_tool("get_script", {"script_id": "ghost"}, access_key, hass, data)
         assert outcome == "not_found"
 
 
@@ -420,7 +420,7 @@ class TestGetScene:
 
     async def test_round_trip(self, hass, scene_env):
         data = _data()
-        token = _token(
+        access_key = _access_key(
             PermissionTree(domains={"light": PermissionNode(state="GREEN"),
                                     "scene": PermissionNode(state="GREEN")}),
             cap_scene_write="allow",
@@ -428,10 +428,10 @@ class TestGetScene:
         created = _json((await _call_tool(
             "create_scene",
             {"config": {"name": "Movie", "entities": {"light.lamp": "on"}}},
-            token, hass, data))[0])
+            access_key, hass, data))[0])
         scene_id = created["scene_id"]
 
-        result, outcome, _res = await _call_tool("get_scene", {"scene_id": scene_id}, token, hass, data)
+        result, outcome, _res = await _call_tool("get_scene", {"scene_id": scene_id}, access_key, hass, data)
         assert outcome == "allowed"
         body = _json(result)
         assert body["config"]["name"] == "Movie"
@@ -442,7 +442,7 @@ class TestGetScene:
         # The scene id must not be an existence oracle: a scene controlling an
         # out-of-scope entity gets the same refusal as one that does not exist.
         data = _data()
-        writer = _token(
+        writer = _access_key(
             PermissionTree(domains={"light": PermissionNode(state="GREEN"),
                                     "scene": PermissionNode(state="GREEN")}),
             cap_scene_write="allow",
@@ -453,7 +453,7 @@ class TestGetScene:
             writer, hass, data))[0])
         scene_id = created["scene_id"]
 
-        narrow = _token(
+        narrow = _access_key(
             PermissionTree(entities={"light.lamp": PermissionNode(state="GREEN")}),
             cap_scene_write="allow",
         )

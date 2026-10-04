@@ -22,14 +22,14 @@ import pytest
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.const import DOMAIN
-from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.tools.native import _tool_intent_action
 
 NATIVE = "custom_components.phoenix_mcp.tools.native"
 
 
-def _token() -> TokenRecord:
-    return TokenRecord(
+def _access_key() -> AccessKeyRecord:
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x", created_at=utcnow(),
         created_by="u", permissions=PermissionTree(),
     )
@@ -64,7 +64,7 @@ async def _run(hass, outcome=None, entities=("light.kitchen",)):
         if outcome is not None else patch(f"{NATIVE}.async_apply_mesa_to_call", AsyncMock())
     with ctx:
         return await _tool_intent_action(
-            "HassTurnOn", "homeassistant", "turn_on", {}, list(entities), hass, _token(), {})
+            "HassTurnOn", "homeassistant", "turn_on", {}, list(entities), hass, _access_key(), {})
 
 
 class TestMesaDecisionRouting:
@@ -162,7 +162,7 @@ class TestMesaDecisionRouting:
             ctx.get.return_value = True
             await _tool_intent_action(
                 "HassTurnOn", "homeassistant", "turn_on", {}, ["light.kitchen"],
-                hass, _token(), {})
+                hass, _access_key(), {})
 
         assert gate.await_args.kwargs["confirm_approved"] is True
 
@@ -178,7 +178,7 @@ class TestMesaRuntimeAbsent:
 
         content, outcome, _ = await _tool_intent_action(
             "HassTurnOn", "homeassistant", "turn_on", {}, ["light.kitchen"],
-            hass, _token(), {})
+            hass, _access_key(), {})
 
         assert outcome == "denied"
         assert content["isError"]
@@ -190,7 +190,7 @@ class TestMesaRuntimeAbsent:
 
         _content, outcome, _ = await _tool_intent_action(
             "HassTurnOn", "homeassistant", "turn_on", {}, ["light.kitchen"],
-            hass, _token(), {})
+            hass, _access_key(), {})
 
         assert outcome == "denied"
         hass.services.async_call.assert_not_awaited()
@@ -204,7 +204,7 @@ class TestMesaRuntimeAbsent:
 
         content, outcome, _ = await _tool_intent_action(
             "HassTurnOn", "homeassistant", "turn_on", {}, ["light.kitchen"],
-            hass, _token(), {},
+            hass, _access_key(), {},
         )
 
         assert outcome == "denied"
@@ -222,7 +222,7 @@ class TestMesaRuntimeAbsent:
 
         _content, outcome, _ = await _tool_intent_action(
             "HassTurnOn", "homeassistant", "turn_on", {}, ["light.kitchen"],
-            hass, _token(), {},
+            hass, _access_key(), {},
         )
 
         assert outcome == "allowed"
@@ -237,7 +237,7 @@ class TestServiceCallFailures:
         hass.services.async_call = AsyncMock(side_effect=exc)
         return await _tool_intent_action(
             "HassTurnOn", "homeassistant", "turn_on", {}, ["light.kitchen"],
-            hass, _token(), {})
+            hass, _access_key(), {})
 
     async def test_timeout_reports_partial_success_not_an_error(self):
         """A slow service is dispatched, not failed."""
@@ -295,7 +295,7 @@ async def test_empty_entity_list_never_reaches_mesa_or_ha():
 
     with patch(f"{NATIVE}.async_apply_mesa_to_call", AsyncMock()) as gate:
         content, outcome, _ = await _tool_intent_action(
-            "HassTurnOn", "homeassistant", "turn_on", {}, [], hass, _token(), {})
+            "HassTurnOn", "homeassistant", "turn_on", {}, [], hass, _access_key(), {})
 
     assert outcome == "denied"
     assert content["content"][0]["text"] == "No accessible entities matched your request."
@@ -311,7 +311,7 @@ async def test_target_context_leads_the_success_list(selector, expected_type):
     with patch(f"{NATIVE}._area_id_from_name", return_value="area_1"):
         content, _outcome, _ = await _tool_intent_action(
             "HassTurnOn", "homeassistant", "turn_on", {}, ["light.kitchen"],
-            hass, _token(), {selector: "Kitchen"})
+            hass, _access_key(), {selector: "Kitchen"})
 
     body = json.loads(content["content"][0]["text"])
     assert body["data"]["success"][0]["type"] == expected_type

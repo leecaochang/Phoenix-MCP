@@ -20,7 +20,7 @@ from custom_components.phoenix_mcp.const import (
 )
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
-from custom_components.phoenix_mcp.token_store import TokenStore
+from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
 
 
 def _dump(label="Aborted"):
@@ -36,20 +36,20 @@ def _dump(label="Aborted"):
 
 @pytest_asyncio.fixture
 async def context(hass, tmp_path):
-    store = TokenStore(hass, AsyncMock())
-    token, _ = await store.async_create_token("crash-test", "admin", rate_limit_requests=0)
-    token.cap_log_read = "allow"
-    token.cap_diagnostics = "allow"
+    store = AccessKeyStore(hass, AsyncMock())
+    access_key, _ = await store.async_create_access_key("crash-test", "admin", rate_limit_requests=0)
+    access_key.cap_log_read = "allow"
+    access_key.cap_diagnostics = "allow"
     data = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
     hass.data[DOMAIN] = data
-    return hass, token, data, tmp_path / FAULT_LOG_FILENAME
+    return hass, access_key, data, tmp_path / FAULT_LOG_FILENAME
 
 
 async def _call(context, **arguments):
-    hass, token, data, _ = context
+    hass, access_key, data, _ = context
     response, _, _, outcome = await mcp_view._dispatch_mcp(
         "tools/call", 1, {"name": "get_logs", "arguments": {"source": "fault_log", **arguments}},
-        token, hass, data, "127.0.0.1", "http://localhost",
+        access_key, hass, data, "127.0.0.1", "http://localhost",
     )
     if "error" in response:
         return response["error"], outcome, True
@@ -115,14 +115,14 @@ faulthandler.dump_traceback(file=sys.stdout, all_threads=True)
 
 async def test_scrub_before_search_and_paths(context):
     _, _, _, path = context
-    raw_token = "phx_" + "a" * 64
-    path.write_text(_dump() + f"password: secret-value\n{raw_token}\nsensor.hidden\nhttp://user:pass@192.168.1.10/?token=abc\n/Users/private/config/secrets.yaml\n")
+    raw_access_key = "phx_" + "a" * 64
+    path.write_text(_dump() + f"password: secret-value\n{raw_access_key}\nsensor.hidden\nhttp://user:pass@192.168.1.10/?token=abc\n/Users/private/config/secrets.yaml\n")
     body, _, _ = await _call(context)
     text = body["entries"][0]["text"]
-    for private in (raw_token, "secret-value", "sensor.hidden", "192.168.1.10", "user:pass", "/Users/", "/config/", "0x00000000"):
+    for private in (raw_access_key, "secret-value", "sensor.hidden", "192.168.1.10", "user:pass", "/Users/", "/config/", "0x00000000"):
         assert private not in text
     assert 'File "custom_components/demo/worker.py", line 42 in run' in text
-    for private in (raw_token, "secret-value", "/Users/", "sensor.hidden"):
+    for private in (raw_access_key, "secret-value", "/Users/", "sensor.hidden"):
         searched, _, _ = await _call(context, search=private)
         assert searched["count"] == 0
     searched, _, _ = await _call(context, search="<phoenix-token>")
@@ -167,41 +167,41 @@ async def test_invalid_arguments_do_not_read_files(context, args, monkeypatch):
 
 @pytest.mark.parametrize("cap", ["cap_log_read", "cap_diagnostics"])
 async def test_deny_precedes_validation_and_io(context, cap, monkeypatch):
-    _, token, _, _ = context
-    setattr(token, cap, "deny")
+    _, access_key, _, _ = context
+    setattr(access_key, cap, "deny")
     monkeypatch.setattr(fault_log, "read_fault_snapshot", lambda *a: pytest.fail("denied read"))
     body, outcome, error = await _call(context, limit=[])
     assert body == "Forbidden." and outcome == "denied" and error
 
 
 async def test_pass_through_still_requires_exempt_log_grant(context):
-    _, token, _, _ = context
-    token.pass_through = True
-    token.cap_log_read = "deny"
+    _, access_key, _, _ = context
+    access_key.pass_through = True
+    access_key.cap_log_read = "deny"
     body, outcome, _ = await _call(context)
     assert body == "Forbidden." and outcome == "denied"
 
 
 @pytest.mark.parametrize("change", ["revoke", "rotate", "kill", "unload", "permissions", "capability"])
 async def test_authority_changes_during_io_block_disclosure(context, change, monkeypatch):
-    hass, token, data, path = context
+    hass, access_key, data, path = context
     path.write_text(_dump("must-not-disclose"))
     original = hass.async_add_executor_job
 
     async def changed_read(function, *args):
         value = await original(function, *args)
         if change == "revoke":
-            token.revoked = True
+            access_key.revoked = True
         elif change == "rotate":
-            await data.store.async_rotate_token(token.id)
+            await data.store.async_rotate_access_key(access_key.id)
         elif change == "kill":
             data.store.get_settings().kill_switch = True
         elif change == "unload":
             data.shutting_down = True
         elif change == "permissions":
-            token.settings_version += 1
+            access_key.settings_version += 1
         else:
-            token.cap_diagnostics = "deny"
+            access_key.cap_diagnostics = "deny"
         return value
 
     monkeypatch.setattr(hass, "async_add_executor_job", changed_read)
@@ -254,18 +254,18 @@ async def test_byte_budget_pages_without_splitting(context):
 
 
 async def test_cursor_bound_to_snapshot_filters_and_token(context):
-    _, token, _, path = context
+    _, access_key, _, path = context
     path.write_text(_dump("old") + _dump("new"))
     body, _, _ = await _call(context, limit=1)
     cursor = body["next_cursor"]
     for args in ({"order": "oldest_first"}, {"search": "old"}, {"cursor": cursor[:-1] + "X"}):
         _, outcome, error = await _call(context, **{"cursor": cursor, **args})
         assert outcome == "invalid_request" and error
-    old_hash = token.token_hash
-    token.token_hash = "b" * 64
+    old_hash = access_key.token_hash
+    access_key.token_hash = "b" * 64
     _, outcome, error = await _call(context, cursor=cursor)
     assert outcome == "invalid_request" and error
-    token.token_hash = old_hash
+    access_key.token_hash = old_hash
     path.write_text(path.read_text() + _dump("newest"))
     _, outcome, error = await _call(context, cursor=cursor)
     assert outcome == "invalid_request" and error

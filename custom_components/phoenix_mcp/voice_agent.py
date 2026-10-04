@@ -143,7 +143,7 @@ async def _async_voice_answer(
     (helpers.voice_text), not the server's; language=None falls back to English.
     """
     from .agentcli import (  # noqa: PLC0415
-        _current_dispatch_token,
+        _current_dispatch_access_key,
         _get_secret_store,
         build_provider,
         async_run_voice_turn,
@@ -163,24 +163,24 @@ async def _async_voice_answer(
     # Re-resolve the token every turn (never cache it). This also zeroes the
     # inline-confirm wait, so a confirm gate returns pending immediately and the
     # loop reports it queued instead of blocking the turn.
-    token = _current_dispatch_token(data, settings.voice_agent_token_id)
-    if token is None:
+    access_key = _current_dispatch_access_key(data, settings.voice_agent_token_id)
+    if access_key is None:
         return voice_text(language, "token_unavailable")
 
     from .command_routing import RoutingAuthority, async_evaluate_command, effective_routing_mode
 
     routing_mode = effective_routing_mode(settings)
-    authority = RoutingAuthority.capture(data, token) if routing_mode in ("local_shadow", "local", "hybrid") else None
+    authority = RoutingAuthority.capture(data, access_key) if routing_mode in ("local_shadow", "local", "hybrid") else None
     store = await _get_secret_store(hass)
     cfg = store.resolve(settings.voice_agent_provider_id, settings.voice_agent_model or None)
     if cfg is None or not cfg.model:
         return voice_text(language, "not_configured")
 
     from .conversation_log import record_identity
-    record_identity(token=token, config=cfg)
+    record_identity(access_key=access_key, config=cfg)
 
     from .home_companion import is_companion
-    if authority is not None and not is_companion(token):
+    if authority is not None and not is_companion(access_key):
         if authority.current(hass) is None:
             return voice_text(language, "token_unavailable")
         from .voice_context import capture_voice_origin
@@ -192,10 +192,10 @@ async def _async_voice_answer(
         binding = clarification_binding(hass, authority, language, origin)
         pending = data.command_routing.clarifications.consume(conversation, binding) if can_clarify else None
         if pending is not None:
-            selected, reply = await async_clarification_reply(hass, data, token, pending, user_text,
+            selected, reply = await async_clarification_reply(hass, data, access_key, pending, user_text,
                 language if isinstance(language, str) else 'en', ingress='voice', voice_origin=origin)
-            token = authority.current(hass)
-            if token is None:
+            access_key = authority.current(hass)
+            if access_key is None:
                 return voice_text(language, 'token_unavailable')
             if reply is not None:
                 if not pending.get('_expired') and is_clarification_cancel(user_text):
@@ -205,14 +205,14 @@ async def _async_voice_answer(
                 return reply
             if selected is not None:
                 from .command_execution import async_execute_local_command
-                answer = await async_execute_local_command(hass, data, token, selected, authority,
+                answer = await async_execute_local_command(hass, data, access_key, selected, authority,
                     _base_url(hass), include_review_links, language=language)
                 return answer if answer is not None else voice_text(language, 'local_clarification_expired')
         if can_clarify:
             context['clarify'] = True
-        observation = await async_evaluate_command(hass, data, token, user_text, language or "en", **context)
-        token = authority.current(hass)
-        if token is None or observation['reason'] == 'authority_changed':
+        observation = await async_evaluate_command(hass, data, access_key, user_text, language or "en", **context)
+        access_key = authority.current(hass)
+        if access_key is None or observation['reason'] == 'authority_changed':
             return voice_text(language, "token_unavailable")
         if can_clarify and observation.get('_clarification') is not None:
             pending = observation['_clarification']
@@ -220,19 +220,19 @@ async def _async_voice_answer(
             return clarification_prompt(language, pending)
         data.command_routing.observe(observation)
         # Preserve the ordinary voice loop, including its zero inline wait.
-        token = _current_dispatch_token(data, token.id)
-        if token is None:
+        access_key = _current_dispatch_access_key(data, access_key.id)
+        if access_key is None:
             return voice_text(language, "token_unavailable")
         if (settings.voice_agent_routing_mode in ("local", "local_shadow") and settings.decision_shadow_enabled and settings.decision_provider_id
                 and observation["reason"] in ("no_match", "unsupported", "no_target")):
             # Single-flight background observation: it cannot delay or influence
             # the provider turn.
-            data.decision_shadow.start(hass, data, token, user_text, language or "en", observe=True)
+            data.decision_shadow.start(hass, data, access_key, user_text, language or "en", observe=True)
         if routing_mode in ("local", "hybrid") and observation["proposal"]:
             from .command_execution import async_execute_local_command
 
             answer = await async_execute_local_command(
-                hass, data, token, observation["proposal"], authority, _base_url(hass), include_review_links, language=language,
+                hass, data, access_key, observation["proposal"], authority, _base_url(hass), include_review_links, language=language,
             )
             if answer is not None:
                 return answer
@@ -242,22 +242,22 @@ async def _async_voice_answer(
             from .decision_shadow import async_preview_decision
             from .command_execution import async_execute_command_plan
 
-            decision = await async_preview_decision(hass, data, token, user_text, language or "en",
+            decision = await async_preview_decision(hass, data, access_key, user_text, language or "en",
                                                     observation, targets=True, prepare=True)
-            token = authority.current(hass)
-            data.decision_shadow.observe_hybrid(decision, authority_changed=token is None)
-            if token is None or decision["reason"] in ("authority_changed", "cancelled"):
+            access_key = authority.current(hass)
+            data.decision_shadow.observe_hybrid(decision, authority_changed=access_key is None)
+            if access_key is None or decision["reason"] in ("authority_changed", "cancelled"):
                 return voice_text(language, "token_unavailable")
             if decision.get("_plan") is not None:
                 return await async_execute_command_plan(
-                    hass, data, token, decision["_plan"], authority, _base_url(hass), include_review_links, language=language,
+                    hass, data, access_key, decision["_plan"], authority, _base_url(hass), include_review_links, language=language,
                 )
 
     provider = build_provider(cfg)
     session = async_get_clientsession(hass)
     try:
         return await async_run_voice_turn(
-            hass, data, token, provider, session, _base_url(hass), user_text,
+            hass, data, access_key, provider, session, _base_url(hass), user_text,
             include_review_links=include_review_links,
             max_iterations=data.store.get_settings().agentcli_max_iterations,
             language=language,

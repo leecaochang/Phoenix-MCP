@@ -32,7 +32,7 @@ from .mesa_core import CallerContext, EnforcementResult, MesaAuditEvent, emit_au
 
 if TYPE_CHECKING:
     from .data import PhoenixData
-    from .token_store import TokenRecord
+    from .access_key_store import AccessKeyRecord
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -73,21 +73,21 @@ _context: ContextVar[MesaAuditContext | None] = ContextVar("phoenix_mesa_audit",
 
 @contextlib.contextmanager
 def request_context(
-    token: TokenRecord, request_id: str, client_ip: str | None
+    access_key: AccessKeyRecord, request_id: str, client_ip: str | None
 ) -> Iterator[None]:
     """Attribute any mesa-core event raised in this block to one request."""
     # Resolved once here rather than per event: a call can raise one event per
     # targeted entity, and the preset lookup is a scan of the token's presets.
     preset: str | None = None
-    active = getattr(token, "active_preset_id", None)
+    active = getattr(access_key, "active_preset_id", None)
     if active:
-        preset = next((p.name for p in getattr(token, "presets", []) if p.id == active), None)
+        preset = next((p.name for p in getattr(access_key, "presets", []) if p.id == active), None)
     reset = _context.set(MesaAuditContext(
-        token_id=token.id,
-        token_name=token.name,
+        token_id=access_key.id,
+        token_name=access_key.name,
         request_id=request_id,
         client_ip=client_ip or "",
-        pass_through=bool(getattr(token, "pass_through", False)),
+        pass_through=bool(getattr(access_key, "pass_through", False)),
         preset=preset,
     ))
     try:

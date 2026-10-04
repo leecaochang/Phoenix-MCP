@@ -10,7 +10,7 @@ import logging
 from homeassistant.helpers import entity_registry as er
 
 from .config_recovery import ConfigurationRecoveryError, recovery_resolution, runtime_identity, safe_snapshot
-from .const import (CONFIG_RECOVERY_APPROVAL_CAP, CONFIG_RECOVERY_APPROVAL_TOKEN,
+from .const import (CONFIG_RECOVERY_APPROVAL_CAP, CONFIG_RECOVERY_APPROVAL_ACCESS_KEY,
                     CONFIG_RECOVERY_UNRESOLVED, CONFIG_RECOVERY_OBSERVATION_TIMEOUT,
                     CONFIG_RECOVERY_SWEEP_BATCH, DOMAIN)
 from .helpers import content_hash
@@ -122,21 +122,21 @@ def _matches(record: dict, observed: dict) -> bool:
 
 def is_recovery_approval(approval, data) -> bool:
     """Only system-created records with a durable back-reference get admin authority."""
-    if approval.token_id != CONFIG_RECOVERY_APPROVAL_TOKEN or approval.cap_name != CONFIG_RECOVERY_APPROVAL_CAP:
+    if approval.token_id != CONFIG_RECOVERY_APPROVAL_ACCESS_KEY or approval.cap_name != CONFIG_RECOVERY_APPROVAL_CAP:
         return False
     record = data.config_recovery.get(approval.args.get("recovery_id"))
     return record is not None and record.get("approval_id") == approval.id
 
 
 async def _restore_receipt(hass, data, record: dict, side: str) -> tuple[dict, dict]:
-    from .mcp_view import _restore_token
+    from .mcp_view import _restore_access_key
     from .tools.recovery import _tool_restore_configuration
     from .tool_common import _restore_ctx
     ctx = _restore_ctx.set({"user_id": "recovery_preview"})
     resolving = recovery_resolution.set(record["id"])
     try:
         args = {"recovery_id": record["id"], "side": side}
-        result, outcome, _ = await _tool_restore_configuration(args, _restore_token("recovery_preview"), hass, data)
+        result, outcome, _ = await _tool_restore_configuration(args, _restore_access_key("recovery_preview"), hass, data)
         if outcome != "allowed" or result.get("isError"):
             raise ConfigurationRecoveryError("This snapshot cannot currently be restored.")
         receipt = json.loads(result["content"][0]["text"])
@@ -177,7 +177,7 @@ async def _queue_recovery(hass, data, record: dict, observed: dict | None) -> No
         if current is None or current["phase"] not in CONFIG_RECOVERY_UNRESOLVED or not data.config_recovery.inactive(record["id"]):
             return
         existing = next((a for a in data.store.get_pending_approvals()
-                         if a.get("token_id") == CONFIG_RECOVERY_APPROVAL_TOKEN
+                         if a.get("token_id") == CONFIG_RECOVERY_APPROVAL_ACCESS_KEY
                          and a.get("status") == "pending" and a.get("args", {}).get("recovery_id") == record["id"]), None)
         if existing is not None:
             if existing["id"] in data.approvals_in_progress or existing.get("execution_started_at"):
@@ -191,7 +191,7 @@ async def _queue_recovery(hass, data, record: dict, observed: dict | None) -> No
         else:
             try:
                 approval = await async_create_pending_approval(data.store,
-                    token_id=CONFIG_RECOVERY_APPROVAL_TOKEN, token_name="Phoenix MCP",
+                    token_id=CONFIG_RECOVERY_APPROVAL_ACCESS_KEY, token_name="Phoenix MCP",
                     tool_name="restore_configuration", cap_name=CONFIG_RECOVERY_APPROVAL_CAP,
                     args=args, diff=diff, request_id=record["id"])
                 newly_created = True
@@ -289,7 +289,7 @@ async def acknowledge_recovery(approval, user_id: str, hass, data, *, rejected: 
 
 async def execute_recovery_approval(approval, user, hass, data) -> tuple[dict, str, str]:
     """Apply only the system-created, reviewed restore, under current HA admin authority."""
-    from .mcp_view import _restore_token
+    from .mcp_view import _restore_access_key
     from .request_authority import execution_guard, check_request_authority
     from .tool_common import _restore_ctx, _approved_exec_ctx, _tool_success, _tool_error
     from .tools.recovery import _execute_restore_configuration
@@ -315,7 +315,7 @@ async def execute_recovery_approval(approval, user, hass, data) -> tuple[dict, s
             return _tool_success("Current configuration acknowledged. No action was replayed."), "allowed", record["resource"]
         if content_hash(await observe_configuration(hass, record)) != approval.args["_observed_hash"]:
             raise ConfigurationRecoveryError("The configuration changed after review; review a fresh request.")
-        restored = await _execute_restore_configuration(approval.args, _restore_token(user.id), hass, data)
+        restored = await _execute_restore_configuration(approval.args, _restore_access_key(user.id), hass, data)
         check_request_authority()
         if restored[0].get("isError"):
             return restored

@@ -230,7 +230,7 @@ def test_notification_text_falls_back_to_english() -> None:
 
     assert notification_text(_Hass(), "rate_limit.title") == "Phoenix MCP Alert"
     assert "hit its rate limit" in notification_text(
-        _Hass(), "rate_limit.message", token="daily"
+        _Hass(), "rate_limit.message", access_key="daily"
     )
 
 

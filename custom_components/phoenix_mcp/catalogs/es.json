@@ -541,7 +541,7 @@
       "codexHeaderValueLabel": "Valor de cabecera",
       "codexServerNameLabel": "Nombre del servidor",
       "connectAgentTitle": "Conectar Phoenix MCP a su agente de IA",
-      "connectIntro": "Añada Phoenix MCP como servidor MCP en su agente. Se autentica con <code>Authorization: Bearer <token></code>, no con el inicio de sesión de Home Assistant ni con OAuth. Use HTTPS en redes no confiables. No guarde claves de acceso bearer en el historial del terminal, archivos compartidos, capturas ni el control de versiones. Rote una clave de acceso si se divulga.",
+      "connectIntro": "Añada Phoenix MCP como servidor MCP en su agente. Se autentica con <code>Authorization: Bearer phx_...</code>, no con el inicio de sesión de Home Assistant ni con OAuth. Use HTTPS en redes no confiables. No guarde claves de acceso bearer en el historial del terminal, archivos compartidos, capturas ni el control de versiones. Rote una clave de acceso si se divulga.",
       "connectLater": "Conectar más tarde",
       "connectTitle": "Conecte su primer agente de IA",
       "connected": "¡Conectado! Su agente se ha conectado a Phoenix MCP.",
@@ -1079,7 +1079,7 @@
       "nameDuplicateError": "Ya existe una clave de acceso con este nombre (o con un slug equivalente).",
       "nameFormatError": "El nombre debe tener entre 3 y 32 caracteres: letras, dígitos, _ o -.",
       "nameLabel": "Nombre (obligatorio)",
-      "namePlaceholder": "my_token",
+      "namePlaceholder": "my_access_key",
       "nameRuleError": "3-32 caracteres: letras, números, guiones o guiones bajos.",
       "off": "desactivado",
       "on": "activado",
@@ -2284,8 +2284,8 @@
     }
   },
   "notification": {
-    "approval.message": "La clave de acceso '{token}' solicitó una aprobación.\n\n[Revisar en Phoenix MCP]({url})",
-    "rate_limit.message": "Phoenix MCP: la clave de acceso '{token}' ha alcanzado su límite de velocidad.",
+    "approval.message": "La clave de acceso '{access_key}' solicitó una aprobación.\n\n[Revisar en Phoenix MCP]({url})",
+    "rate_limit.message": "Phoenix MCP: la clave de acceso '{access_key}' ha alcanzado su límite de velocidad.",
     "rate_limit.title": "Alerta de Phoenix MCP"
   },
   "voice": {

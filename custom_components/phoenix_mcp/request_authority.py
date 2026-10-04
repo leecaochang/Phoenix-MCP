@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from .data import PhoenixData
     from .audit import Outcome
-    from .token_store import TokenRecord
+    from .access_key_store import AccessKeyRecord
 
 
 class AuthorityChangedError(PermissionError):
@@ -52,15 +52,15 @@ class RequestAuthority:
     token_id: str
     token_hash: str
 
-    def current_token(self) -> TokenRecord:
+    def current_access_key(self) -> AccessKeyRecord:
         data = self.data
         if (self.hass.data.get(DOMAIN) is not data or not data.ready
                 or data.shutting_down or data.store.get_settings().kill_switch):
             raise AuthorityChangedError("Service unavailable.")
-        token = data.store.get_token_by_hash(self.token_hash)
-        if token is None or token.id != self.token_id or not token.is_valid():
+        access_key = data.store.get_access_key_by_hash(self.token_hash)
+        if access_key is None or access_key.id != self.token_id or not access_key.is_valid():
             raise AuthorityChangedError("Unauthorized.")
-        return token
+        return access_key
 
 
 request_authority: ContextVar[RequestAuthority | None] = ContextVar("phoenix_request_authority", default=None)
@@ -89,7 +89,7 @@ def check_request_authority() -> None:
     authority = request_authority.get()
     if authority is None:
         return
-    token = authority.current_token()
+    access_key = authority.current_access_key()
     version = policy_version.get()
-    if version is not None and not token.accepts_policy_version(version):
+    if version is not None and not access_key.accepts_policy_version(version):
         raise PolicyChangedError("Permissions changed. Retry with current permissions.")

@@ -21,7 +21,7 @@ from custom_components.phoenix_mcp.decision_provider import DecisionProvider
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
 
 
 @pytest.fixture(params=[
@@ -32,15 +32,15 @@ from custom_components.phoenix_mcp.token_store import PermissionNode, Permission
     ("cover", "Desk blind", "HassSetPosition", "position_pct", "set_cover_position", "position",
      {"supported_features": CoverEntityFeature.SET_POSITION, "device_class": "blind"}, "set the desk blind to {value} percent"),
 ])
-async def numeric_home(hass, token_store, request, immediate_command_observation):
+async def numeric_home(hass, access_key_store, request, immediate_command_observation):
     domain, name, intent, field, service, service_field, attributes, sentence = request.param
-    token, _ = await token_store.async_create_token("numeric", "test", rate_limit_requests=0)
-    token.permissions = PermissionTree(domains={domain: PermissionNode(state="GREEN")})
-    token.cap_physical_control = "allow"
-    data = PhoenixData(store=token_store, rate_limiter=RateLimiter(), audit=AuditLog())
+    access_key, _ = await access_key_store.async_create_access_key("numeric", "test", rate_limit_requests=0)
+    access_key.permissions = PermissionTree(domains={domain: PermissionNode(state="GREEN")})
+    access_key.cap_physical_control = "allow"
+    data = PhoenixData(store=access_key_store, rate_limiter=RateLimiter(), audit=AuditLog())
     hass.data[DOMAIN] = data
-    await token_store.async_patch_settings(
-        voice_agent_enabled=True, voice_agent_token_id=token.id, voice_agent_provider_id="p",
+    await access_key_store.async_patch_settings(
+        voice_agent_enabled=True, voice_agent_token_id=access_key.id, voice_agent_provider_id="p",
         voice_agent_model="model", voice_agent_routing_mode="auto", agentcli_routing_mode="auto", mesa_mode="off")
     area = ar.async_get(hass).async_create("Office")
     registry = er.async_get(hass)
@@ -49,7 +49,7 @@ async def numeric_home(hass, token_store, request, immediate_command_observation
     hass.states.async_set(entry.entity_id, "on" if domain != "cover" else "open", {"friendly_name": name, **attributes})
     assert await async_setup_component(hass, "homeassistant", {})
     assert await async_setup_component(hass, "conversation", {})
-    return SimpleNamespace(data=data, token=token, entity_id=entry.entity_id, domain=domain, name=name,
+    return SimpleNamespace(data=data, access_key=access_key, entity_id=entry.entity_id, domain=domain, name=name,
                            intent=intent, field=field, service=service, service_field=service_field,
                            sentence=sentence, area=area.id)
 
@@ -75,7 +75,7 @@ async def run_numeric(hass, home, sentence, ingress="voice", history=()):
             result = await voice_agent.async_voice_answer(hass, home.data, sentence, language="en")
         else:
             result = await agentcli.async_run_agent_turn(
-                hass=hass, data=home.data, token=home.token, provider=provider, session=None,
+                hass=hass, data=home.data, access_key=home.access_key, provider=provider, session=None,
                 messages=[*history, {"role": "user", "content": sentence}], options={}, client_ip="agentcli",
                 base_url="http://test", emit=emit, cancel=asyncio.Event(), routing_language="en")
     decision.assert_not_called()
@@ -100,7 +100,7 @@ async def test_exact_values_reach_existing_service_without_either_model(hass, nu
         assert result[0] == {"role": "user", "content": home.sentence.format(value=value)}
         assert result[-1] == {"role": "assistant", "content":
                              "Command sent. Home Assistant has not yet confirmed the requested state."}
-    assert not home.data.agent_recovery.records(home.token.id)
+    assert not home.data.agent_recovery.records(home.access_key.id)
 
 
 async def test_numeric_chat_sequence_preserves_values_history_and_fresh_capabilities(hass, numeric_home):
@@ -171,21 +171,21 @@ async def test_ineligible_numeric_target_never_becomes_a_local_action(hass, nume
         from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
         async_expose_entity(hass, "conversation", home.entity_id, False)
     elif change == "scope":
-        home.token.permissions = PermissionTree()
+        home.access_key.permissions = PermissionTree()
     else:
         entry = er.async_get(hass).async_get_or_create(home.domain, "test", "duplicate", original_name=home.name)
         hass.states.async_set(entry.entity_id, state.state, attrs)
-    result = await async_evaluate_command(hass, home.data, home.token, home.sentence.format(value=37))
+    result = await async_evaluate_command(hass, home.data, home.access_key, home.sentence.format(value=37))
     assert result["proposal"] is None, result
 
 
 @pytest.mark.parametrize("other_domain", ["remote", "valve"])
 async def test_numeric_matching_uses_ha_intent_domains(hass, numeric_home, other_domain):
     home = numeric_home
-    home.token.permissions.domains[other_domain] = PermissionNode(state="GREEN")
+    home.access_key.permissions.domains[other_domain] = PermissionNode(state="GREEN")
     other = er.async_get(hass).async_get_or_create(other_domain, "test", "duplicate", original_name=home.name)
     hass.states.async_set(other.entity_id, "open", {"friendly_name": home.name})
-    result = await async_evaluate_command(hass, home.data, home.token, home.sentence.format(value=37))
+    result = await async_evaluate_command(hass, home.data, home.access_key, home.sentence.format(value=37))
     if home.domain == "cover" and other_domain == "valve":
         assert result["proposal"] is None, result
         assert result["reason"] == "no_target"
@@ -201,7 +201,7 @@ async def test_complete_sentence_required_for_numeric_routing(hass, numeric_home
                 "deferred": sentence + " in ten minutes", "multiple": sentence + " and turn on the desk lamp",
                 "fractional": home.sentence.format(value="37.5"),
                 "relative": sentence.replace("set", "increase", 1).replace(" to ", " by ")}[variant]
-    result = await async_evaluate_command(hass, home.data, home.token, sentence)
+    result = await async_evaluate_command(hass, home.data, home.access_key, sentence)
     assert result["proposal"] is None, result
 
 
@@ -209,14 +209,14 @@ async def test_explicit_area_requires_every_resolved_target_to_support_operation
     home = numeric_home
     sentence = {"light": "set the office brightness to 37 percent", "media_player": "set the office volume to 37 percent",
                 "cover": "set the blinds in the office to 37 percent"}[home.domain]
-    result = await async_evaluate_command(hass, home.data, home.token, sentence)
+    result = await async_evaluate_command(hass, home.data, home.access_key, sentence)
     assert result["proposal"] == {"intent": home.intent, "entity_ids": [home.entity_id], home.field: 37}, result
     registry = er.async_get(hass)
     other = registry.async_get_or_create(home.domain, "test", "other")
     registry.async_update_entity(other.entity_id, area_id=home.area)
     attrs = {"device_class": "blind"} if home.domain == "cover" else {}
     hass.states.async_set(other.entity_id, "on", attrs)
-    result = await async_evaluate_command(hass, home.data, home.token, sentence)
+    result = await async_evaluate_command(hass, home.data, home.access_key, sentence)
     assert result["proposal"] is None, result
 
 
@@ -261,13 +261,13 @@ async def test_approval_rechecks_exact_numeric_operation(hass, numeric_home, cha
     elif change == "domain":
         args["domain"] = "valve"
     elif change == "scope":
-        home.token.permissions = PermissionTree()
+        home.access_key.permissions = PermissionTree()
     elif change == "exposure":
         from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
         async_expose_entity(hass, "conversation", home.entity_id, False)
     with (patch.object(mcp_view, "unsupported_secondary_targets", AsyncMock(return_value=[])),
           patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], args, home.token, hass, home.data)
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record["tool_name"], args, home.access_key, hass, home.data)
     if change == "none":
         assert outcome == "allowed"
         call.assert_awaited_once_with(home.domain, home.service, {"entity_id": [home.entity_id],
@@ -289,7 +289,7 @@ async def test_numeric_values_from_installed_multilingual_templates(hass, numeri
                  "cover": "pon la persiana al 37 por ciento"} if language == "es" else
                 {"light": "把台灯的亮度设置为百分之三十七", "media_player": "把音箱的音量设置为百分之三十七",
                  "cover": "把窗帘的开合度设置为百分之三十七"})[home.domain]
-    result = await async_evaluate_command(hass, home.data, home.token, sentence, language)
+    result = await async_evaluate_command(hass, home.data, home.access_key, sentence, language)
     assert result["proposal"] == {"intent": home.intent, "entity_ids": [home.entity_id], home.field: 37}, result
 
 
@@ -321,14 +321,14 @@ async def test_literal_id_does_not_bypass_local_target_or_sentence_guards(hass, 
     if barrier == 'unexposed':
         from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
         async_expose_entity(hass, 'conversation', home.entity_id, False)
-    if barrier == 'scope': home.token.permissions = PermissionTree()
+    if barrier == 'scope': home.access_key.permissions = PermissionTree()
     if barrier == 'unavailable': hass.states.async_set(home.entity_id, 'unavailable')
     if barrier == 'features': hass.states.async_set(home.entity_id, 'on', {'friendly_name': home.name})
     recognize = command_routing.async_recognize
     if barrier == 'trigger': recognize = AsyncMock(side_effect=SentenceTriggerMatch)
     with (patch.object(command_routing, 'async_recognize', recognize),
           patch.object(mcp_view, '_dispatch_mcp') as dispatch):
-        result = await async_evaluate_command(hass, home.data, home.token, sentence, 'en')
+        result = await async_evaluate_command(hass, home.data, home.access_key, sentence, 'en')
     assert result['proposal'] is None
     dispatch.assert_not_called()
 
@@ -345,7 +345,7 @@ async def test_literal_numeric_rechecks_after_worker_wait(hass, numeric_home, ch
         nonlocal calls
         calls += 1
         if calls == 2:
-            if change == 'token': home.token.revoked = True
+            if change == 'token': home.access_key.revoked = True
             if change == 'exposure':
                 from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
                 async_expose_entity(hass, 'conversation', home.entity_id, False)
@@ -353,7 +353,7 @@ async def test_literal_numeric_rechecks_after_worker_wait(hass, numeric_home, ch
             if change == 'custom': return SimpleNamespace(intent_metadata={'hass_custom_sentence': True})
         return await recognize(*args, **kwargs)
     with patch.object(command_routing, 'async_recognize', after_worker):
-        result = await async_evaluate_command(hass, home.data, home.token, sentence)
+        result = await async_evaluate_command(hass, home.data, home.access_key, sentence)
     assert calls == 2
     assert result['proposal'] is None
 
@@ -374,12 +374,12 @@ async def test_numeric_worker_timeout_keeps_shared_capacity_until_thread_finishe
         return original(*args)
     with patch.object(command_routing, 'recognize_numeric_ids', blocked):
         try:
-            task = asyncio.create_task(async_evaluate_command(hass, home.data, home.token, sentence))
+            task = asyncio.create_task(async_evaluate_command(hass, home.data, home.access_key, sentence))
             await asyncio.wait_for(entered.wait(), 2)
             assert (await task)['reason'] == 'timeout'
             pending = home.data.command_routing.task
             assert pending is not None and not pending.done()
-            assert (await async_evaluate_command(hass, home.data, home.token, sentence))['reason'] == 'busy'
+            assert (await async_evaluate_command(hass, home.data, home.access_key, sentence))['reason'] == 'busy'
         finally:
             release.set()
             if home.data.command_routing.task:

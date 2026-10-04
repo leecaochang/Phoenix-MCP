@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, screen, waitFor } from "@testing-library/react";
 
-const listTokens = vi.fn();
+const listAccessKeys = vi.fn();
 const getAgentCliProviders = vi.fn();
 const getAgentCliModels = vi.fn();
 const createVoiceAgentPipeline = vi.fn();
@@ -9,7 +9,7 @@ const deleteVoiceAgentPipeline = vi.fn();
 
 vi.mock("../api", () => ({
   api: {
-    listTokens: (...a: unknown[]) => listTokens(...a),
+    listAccessKeys: (...a: unknown[]) => listAccessKeys(...a),
     getAgentCliProviders: (...a: unknown[]) => getAgentCliProviders(...a),
     getAgentCliModels: (...a: unknown[]) => getAgentCliModels(...a),
     createVoiceAgentPipeline: (...a: unknown[]) => createVoiceAgentPipeline(...a),
@@ -47,7 +47,7 @@ function renderCard(s: GlobalSettings, onChange = vi.fn()) {
 describe("VoiceAgentSettings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listTokens.mockResolvedValue([{ id: "tok-1", name: "voice-token" }]);
+    listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "voice-token" }]);
     getAgentCliProviders.mockResolvedValue({ instances: [{ id: "i1", kind: "claude", name: "Claude", model: "claude-opus-4-8" }] });
     getAgentCliModels.mockResolvedValue({ models: ["claude-opus-4-8", "claude-sonnet-5"] });
     createVoiceAgentPipeline.mockResolvedValue({ pipeline_id: "pl1", name: "Phoenix MCP", preferred: true });
@@ -59,7 +59,7 @@ describe("VoiceAgentSettings", () => {
     expect(screen.getByText("Voice Agent")).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Enable Phoenix MCP voice agent"));
     expect(onChange).toHaveBeenCalledWith("voice_agent_enabled", true);
-    await waitFor(() => expect(listTokens).toHaveBeenCalled());
+    await waitFor(() => expect(listAccessKeys).toHaveBeenCalled());
   });
 
   it("populates tokens and writes the token selection", async () => {
@@ -164,7 +164,7 @@ describe("VoiceAgentSettings", () => {
   });
 
   it("does not expose internal decision review for any token", async () => {
-    listTokens.mockResolvedValue([{ id: "tok-1", name: "Home token", persona: "home_companion" },
+    listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "Home token", persona: "home_companion" },
       { id: "tok-2", name: "Ordinary token", persona: "voice_assistant" }]);
     const { rerender } = render(<VoiceAgentSettings settings={settings({ voice_agent_token_id: "tok-1", voice_agent_tool_routing_mode: "observe" })} onChange={vi.fn()} saving={false} />);
     await screen.findByRole("option", { name: "Home token" });

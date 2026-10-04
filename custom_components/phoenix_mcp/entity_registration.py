@@ -11,11 +11,11 @@ from homeassistant.helpers import entity_registry as er
 from .const import AUTHORING_REGISTRATION_POLL_SECONDS, AUTHORING_REGISTRATION_TIMEOUT_SECONDS
 from .policy_engine import Permission, assist_expose_check, resolve_registry_access
 from .request_authority import check_request_authority
-from .token_store import TokenRecord
+from .access_key_store import AccessKeyRecord
 
 
 async def async_observe_registration(
-    hass: HomeAssistant, token: TokenRecord, domain: Literal["scene", "script"], storage_id: str,
+    hass: HomeAssistant, access_key: AccessKeyRecord, domain: Literal["scene", "script"], storage_id: str,
 ) -> dict[str, Any]:
     """Observe identity and state, without promising config freshness or availability.
 
@@ -33,10 +33,10 @@ async def async_observe_registration(
             "status": "timed_out", "entity_id": None, "state_present": None,
         }
         entity_id = registry.async_get_entity_id(domain, platform, storage_id)
-        expose = assist_expose_check(token, hass)
+        expose = assist_expose_check(access_key, hass)
         if (
             entity_id is not None
-            and resolve_registry_access(entity_id, token, hass) in (Permission.READ, Permission.WRITE)
+            and resolve_registry_access(entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
             and (expose is None or expose(entity_id))
         ):
             entry = registry.async_get(entity_id)

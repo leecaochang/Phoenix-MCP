@@ -20,24 +20,24 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.decision_batch import async_preview_batch, capture_batch_targets
 from custom_components.phoenix_mcp.decision_provider import DecisionProvider, DecisionError
 from custom_components.phoenix_mcp.decision_targets import capture_targets, catalog_state
-from custom_components.phoenix_mcp.token_store import PermissionTree, PermissionNode
+from custom_components.phoenix_mcp.access_key_store import PermissionTree, PermissionNode
 
 
 @pytest.fixture
-async def batch_home(hass, token_store):
-    token, _ = await token_store.async_create_token('batch', 'test')
-    token.permissions = PermissionTree(domains={'light': PermissionNode(state='GREEN')})
-    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+async def batch_home(hass, access_key_store):
+    access_key, _ = await access_key_store.async_create_access_key('batch', 'test')
+    access_key.permissions = PermissionTree(domains={'light': PermissionNode(state='GREEN')})
+    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
     store = agentcli.AgentCliStore(AsyncMock())
     account = await store.add('typesafe', {'api_key': 'test-secret', 'model': 'jev-latest'})
     hass.data['_phoenix_agentcli_store'] = store
-    await token_store.async_patch_settings(decision_provider_id=account)
+    await access_key_store.async_patch_settings(decision_provider_id=account)
     assert await async_setup_component(hass, 'homeassistant', {})
     assert await async_setup_component(hass, 'conversation', {})
     entry = er.async_get(hass).async_get_or_create('light', 'test', 'desk', original_name='Desk lamp')
     hass.states.async_set(entry.entity_id, 'off', {'friendly_name': 'Desk lamp', 'private': 'private-state'})
-    yield data, token, store, account, entry.entity_id
+    yield data, access_key, store, account, entry.entity_id
     data.decision_shadow.cancel()
     if data.decision_shadow.task:
         await asyncio.gather(data.decision_shadow.task, return_exceptions=True)
@@ -64,8 +64,8 @@ def wire_response(payload, category='light_on', target='t0'):
 
 
 async def preview(hass, home, local=None, *, numeric_preview=False):
-    data, token, *_ = home
-    return await async_preview_batch(hass, data, token, 'Switch on the desk lamp', 'en',
+    data, access_key, *_ = home
+    return await async_preview_batch(hass, data, access_key, 'Switch on the desk lamp', 'en',
                                       local or {'reason': 'no_match', 'proposal': None}, numeric_preview=numeric_preview)
 
 
@@ -124,9 +124,9 @@ async def test_joint_preview_compares_local_match_without_execution(hass, batch_
 @pytest.mark.parametrize('case', ['denied', 'unexposed', 'unavailable', 'oversized', 'trigger', 'timeout'])
 @pytest.mark.parametrize('numeric', [False, True])
 async def test_no_request_when_catalog_or_local_recognition_is_ineligible(hass, batch_home, case, numeric):
-    _, token, _, _, entity_id = batch_home
+    _, access_key, _, _, entity_id = batch_home
     local = None
-    if case == 'denied': token.permissions = PermissionTree()
+    if case == 'denied': access_key.permissions = PermissionTree()
     if case == 'unexposed': async_expose_entity(hass, 'conversation', entity_id, False)
     if case == 'unavailable':
         hass.states.async_set(entity_id, 'unavailable')
@@ -146,8 +146,8 @@ async def test_no_request_when_catalog_or_local_recognition_is_ineligible(hass, 
 
 
 async def test_category_must_match_target_authority_even_with_high_probability(hass, batch_home):
-    _, token, *_ = batch_home
-    token.permissions = PermissionTree(domains={'light': PermissionNode(state='YELLOW')})
+    _, access_key, *_ = batch_home
+    access_key.permissions = PermissionTree(domains={'light': PermissionNode(state='YELLOW')})
     async def response(*args):
         assert 'light_on' not in args[4]['questions']['route']['criteria']
         return wire_response(args[4])
@@ -159,9 +159,9 @@ async def test_category_must_match_target_authority_even_with_high_probability(h
 
 @pytest.mark.parametrize('change', ['scope', 'competing_entity', 'unexposed', 'account', 'settings'])
 async def test_wait_rechecks_full_catalog_and_authority(hass, batch_home, change):
-    data, token, store, account, entity_id = batch_home
+    data, access_key, store, account, entity_id = batch_home
     async def response(*args):
-        if change == 'scope': token.permissions = PermissionTree()
+        if change == 'scope': access_key.permissions = PermissionTree()
         if change == 'competing_entity':
             entry = er.async_get(hass).async_get_or_create('light', 'test', 'other', original_name='Desk lamp')
             hass.states.async_set(entry.entity_id, 'off')
@@ -175,14 +175,14 @@ async def test_wait_rechecks_full_catalog_and_authority(hass, batch_home, change
 
 
 async def test_batch_shares_one_graph_without_changing_complete_category_catalogs(hass, batch_home):
-    _, token, *_ = batch_home
+    _, access_key, *_ = batch_home
     for index in range(3):
         entry = er.async_get(hass).async_get_or_create('light', 'test', f'extra_{index}')
         hass.states.async_set(entry.entity_id, 'off')
-    expected = {category: capture_targets(hass, token, category) for category in DECISION_EXECUTION_CATEGORIES}
+    expected = {category: capture_targets(hass, access_key, category) for category in DECISION_EXECUTION_CATEGORIES}
     with patch.object(device_semantics, 'device_registry_snapshot_from_registry',
                       wraps=device_semantics.device_registry_snapshot_from_registry) as build:
-        targets, snapshots = capture_batch_targets(hass, token)
+        targets, snapshots = capture_batch_targets(hass, access_key)
     build.assert_called_once()
     assert len(targets) == 4 and snapshots == expected
 
@@ -240,20 +240,20 @@ async def test_batch_cancellation_releases_only_owned_slot(hass, batch_home, num
 
 @pytest.mark.parametrize('text', ['password: private-password', 'test-secret', 'switch.hidden'])
 async def test_sensitive_utterance_not_shared(hass, batch_home, text):
-    data, token, *_ = batch_home
+    data, access_key, *_ = batch_home
     with patch.object(DecisionProvider, '_request') as request:
-        result = await async_preview_batch(hass, data, token, text, 'en', {'reason': 'no_match'})
+        result = await async_preview_batch(hass, data, access_key, text, 'en', {'reason': 'no_match'})
     request.assert_not_called()
     assert result['reason'] == 'context_unavailable'
 
 
 async def test_union_catalog_retains_read_only_entities_without_write_eligibility(hass, batch_home):
-    _, token, *_ = batch_home
-    token.permissions.domains['sensor'] = PermissionNode(state='YELLOW')
+    _, access_key, *_ = batch_home
+    access_key.permissions.domains['sensor'] = PermissionNode(state='YELLOW')
     entry = er.async_get(hass).async_get_or_create('sensor', 'test', 'temperature')
     hass.states.async_set(entry.entity_id, '20')
     async_expose_entity(hass, 'conversation', entry.entity_id, True)
-    targets, _ = capture_batch_targets(hass, token)
+    targets, _ = capture_batch_targets(hass, access_key)
     assert len(targets) == 2
     assert targets['t1']['eligible_categories'] == ['state_query']
 
@@ -262,8 +262,8 @@ async def test_union_catalog_retains_read_only_entities_without_write_eligibilit
 async def percentage_home(hass, batch_home):
     from homeassistant.components.cover import CoverEntityFeature
     from homeassistant.components.media_player import MediaPlayerEntityFeature
-    _, token, _, _, light = batch_home
-    token.permissions.domains.update({domain: PermissionNode(state='GREEN') for domain in ('media_player', 'cover')})
+    _, access_key, _, _, light = batch_home
+    access_key.permissions.domains.update({domain: PermissionNode(state='GREEN') for domain in ('media_player', 'cover')})
     hass.states.async_set(light, 'off', {'supported_color_modes': ['brightness']})
     entities = {'light_brightness': light}
     for category, domain, feature in (
@@ -289,8 +289,8 @@ def percentage_response(payload, category, entity_id, percentage):
 
 
 async def percentage_preview(hass, home, entity_id=None):
-    data, token, *_ = home
-    return await async_preview_batch(hass, data, token, f'Set {entity_id or home[-1]} to thirty-seven percent', 'en',
+    data, access_key, *_ = home
+    return await async_preview_batch(hass, data, access_key, f'Set {entity_id or home[-1]} to thirty-seven percent', 'en',
                                       {'reason': 'no_match', 'proposal': None}, numeric_preview=True)
 
 
@@ -357,10 +357,10 @@ async def test_joint_percentage_requires_complete_consistent_high_probability_an
 async def test_joint_percentage_discards_changed_catalog_or_authority(hass, percentage_home, change):
     from homeassistant.components.cover import CoverEntityFeature
     home, entities = percentage_home
-    data, token, store, account, _ = home
+    data, access_key, store, account, _ = home
     async def response(*args):
         entity_id = entities['media_volume']
-        if change == 'scope': token.permissions.domains['media_player'].state = 'YELLOW'
+        if change == 'scope': access_key.permissions.domains['media_player'].state = 'YELLOW'
         if change == 'feature': hass.states.async_set(entity_id, 'idle', {'supported_features': 0})
         if change == 'unexposed': async_expose_entity(hass, 'conversation', entity_id, False)
         if change == 'competing_entity':
@@ -386,13 +386,13 @@ async def test_unqualified_endpoint_cannot_receive_extended_numeric_choices(kind
 
 @pytest.mark.parametrize('change', [False, True])
 async def test_extended_preview_keeps_all_competitors_above_common_limit(hass, batch_home, change):
-    _, token, _, _, original = batch_home
+    _, access_key, _, _, original = batch_home
     hass.states.async_set(original, 'off', {'supported_color_modes': ['brightness']})
     for index in range(DECISION_MAX_TARGETS):
         entry = er.async_get(hass).async_get_or_create('light', 'test', f'extra{index}')
         hass.states.async_set(entry.entity_id, 'off', {'supported_color_modes': ['brightness']})
     with pytest.raises(DecisionError, match='too_many_targets'):
-        capture_batch_targets(hass, token)
+        capture_batch_targets(hass, access_key)
     async def response(*args):
         payload = args[4]
         assert len(wire_targets(payload)) == DECISION_MAX_TARGETS + 1
@@ -425,7 +425,7 @@ async def test_extended_preview_preserves_metadata_byte_budget(hass, batch_home)
 @pytest.mark.parametrize('change', [False, True])
 async def test_larger_union_budget_is_preview_only_and_rechecks_competitors(hass, batch_home, change):
     from custom_components.phoenix_mcp.decision_targets import CatalogLimitError
-    _, token, _, _, original = batch_home
+    _, access_key, _, _, original = batch_home
     registry = er.async_get(hass)
     hass.states.async_set(original, 'off', {'supported_color_modes': ['brightness']})
     expected = {original}
@@ -436,10 +436,10 @@ async def test_larger_union_budget_is_preview_only_and_rechecks_competitors(hass
         })
         expected.add(entry.entity_id)
     with pytest.raises(CatalogLimitError) as caught:
-        capture_batch_targets(hass, token)
+        capture_batch_targets(hass, access_key)
     assert caught.value.details['category'] == 'combined'
     assert caught.value.details['limit'] == DECISION_MAX_TARGET_BYTES
-    targets, snapshots = capture_batch_targets(hass, token, numeric_preview=True)
+    targets, snapshots = capture_batch_targets(hass, access_key, numeric_preview=True)
     size = len(json.dumps(targets, ensure_ascii=False).encode())
     assert DECISION_MAX_TARGET_BYTES < size <= DECISION_BATCH_MAX_TARGET_BYTES
     assert all(len(json.dumps(snapshot.targets, ensure_ascii=False).encode()) <= DECISION_MAX_TARGET_BYTES
@@ -462,7 +462,7 @@ async def test_larger_union_budget_is_preview_only_and_rechecks_competitors(hass
 
 
 async def test_packing_admits_full_union_previously_over_byte_budget(hass, batch_home):
-    _, token, _, _, original = batch_home
+    _, access_key, _, _, original = batch_home
     hass.states.async_set(original, 'off', {'supported_color_modes': ['brightness']})
     for index in range(DECISION_BATCH_MAX_TARGETS - 1):
         entry = er.async_get(hass).async_get_or_create('light', 'test', f'l{index}',
@@ -470,9 +470,9 @@ async def test_packing_admits_full_union_previously_over_byte_budget(hass, batch
         hass.states.async_set(entry.entity_id, 'off', {'friendly_name': 'Lamp', 'supported_color_modes': ['brightness']})
     # The full logical catalog exceeds the wire budget; lossless packing keeps every target.
     for category in ('light_on', 'light_off', 'light_brightness', 'state_query'):
-        snapshot = capture_targets(hass, token, category, max_targets=DECISION_BATCH_MAX_TARGETS, compact=True)
+        snapshot = capture_targets(hass, access_key, category, max_targets=DECISION_BATCH_MAX_TARGETS, compact=True)
         assert len(snapshot.targets) == DECISION_BATCH_MAX_TARGETS
-    targets, _ = capture_batch_targets(hass, token, numeric_preview=True)
+    targets, _ = capture_batch_targets(hass, access_key, numeric_preview=True)
     assert len(json.dumps(targets, ensure_ascii=False).encode()) > DECISION_BATCH_MAX_TARGET_BYTES
     assert len(json.dumps(catalog_state(targets), ensure_ascii=False).encode()) <= DECISION_BATCH_MAX_TARGET_BYTES
     async def response(*args):
@@ -490,7 +490,7 @@ async def test_packing_admits_full_union_previously_over_byte_budget(hass, batch
 
 async def test_compact_batch_fits_duplicate_heavy_catalog_without_dropping_candidates(hass, batch_home):
     from custom_components.phoenix_mcp.decision_targets import CatalogLimitError
-    _, token, _, _, original = batch_home
+    _, access_key, _, _, original = batch_home
     expected_entities = {original}
     registry = er.async_get(hass)
     for index in range(60):
@@ -500,9 +500,9 @@ async def test_compact_batch_fits_duplicate_heavy_catalog_without_dropping_candi
         hass.states.async_set(entry.entity_id, 'off', {'friendly_name': name, 'supported_color_modes': ['brightness']})
         expected_entities.add(entry.entity_id)
     with pytest.raises(CatalogLimitError) as caught:
-        capture_targets(hass, token, 'state_query', max_targets=DECISION_BATCH_MAX_TARGETS)
+        capture_targets(hass, access_key, 'state_query', max_targets=DECISION_BATCH_MAX_TARGETS)
     assert caught.value.details['bound'] == 'metadata_bytes'
-    targets, _ = capture_batch_targets(hass, token, numeric_preview=True)
+    targets, _ = capture_batch_targets(hass, access_key, numeric_preview=True)
     assert {item['entity_id'] for item in targets.values()} == expected_entities
     assert all('state_query' in item['eligible_categories'] for item in targets.values())
 
@@ -527,11 +527,11 @@ async def test_numeric_preview_reports_independent_value_evidence_without_execut
 @pytest.mark.parametrize('change', ['scope', 'account'])
 async def test_value_worker_wait_rechecks_authority_before_disclosure(hass, percentage_home, change):
     home, entities = percentage_home
-    _, token, store, account, _ = home
+    _, access_key, store, account, _ = home
     async def response(*args):
         return percentage_response(args[4], 'light_brightness', entities['light_brightness'], '37')
     async def worker(*args):
-        if change == 'scope': token.permissions = PermissionTree()
+        if change == 'scope': access_key.permissions = PermissionTree()
         else: await store.set_model(account, 'changed')
         return 37
     with (patch.object(DecisionProvider, '_request', side_effect=response),
@@ -555,8 +555,8 @@ async def test_preview_limit_diagnostic_contains_only_scoped_counts(hass, batch_
             hass.states.async_set(entry.entity_id, 'off')
     with patch.object(DecisionProvider, '_request') as request:
         if temporal:
-            data, token, *_ = batch_home
-            result = await async_preview_batch(hass, data, token, 'Start Missing timer for 00:05:00', 'en',
+            data, access_key, *_ = batch_home
+            result = await async_preview_batch(hass, data, access_key, 'Start Missing timer for 00:05:00', 'en',
                                                {'reason': 'no_match', 'proposal': None})
         else:
             result = await percentage_preview(hass, batch_home)
@@ -572,8 +572,8 @@ async def test_preview_limit_diagnostic_contains_only_scoped_counts(hass, batch_
 @pytest.mark.parametrize('qualified', [False, True])
 @pytest.mark.parametrize('count', [49, 50, 254, 255])
 async def test_categorical_catalog_bounds_follow_qualified_account(hass, batch_home, qualified, count):
-    data, token, store, account, _ = batch_home
-    token.permissions = PermissionTree(domains={'sensor': PermissionNode(state='YELLOW')})
+    data, access_key, store, account, _ = batch_home
+    access_key.permissions = PermissionTree(domains={'sensor': PermissionNode(state='YELLOW')})
     if not qualified:
         await store.set_model(account, 'unreviewed-model')
     expected = set()
@@ -625,8 +625,8 @@ async def test_preview_reports_only_validation_label_and_never_executes(hass, ba
 
 async def test_large_operation_snapshot_uses_packed_budget_without_hiding_targets(hass, batch_home):
     from custom_components.phoenix_mcp.decision_targets import CatalogLimitError
-    _, token, *_ = batch_home
-    token.permissions = PermissionTree(domains={'sensor': PermissionNode(state='YELLOW')})
+    _, access_key, *_ = batch_home
+    access_key.permissions = PermissionTree(domains={'sensor': PermissionNode(state='YELLOW')})
     registry = er.async_get(hass)
     expected = set()
     for index in range(100):
@@ -635,8 +635,8 @@ async def test_large_operation_snapshot_uses_packed_budget_without_hiding_target
         async_expose_entity(hass, 'conversation', entry.entity_id, True)
         expected.add(entry.entity_id)
     with pytest.raises(CatalogLimitError):
-        capture_targets(hass, token, 'state_query', max_targets=DECISION_BATCH_MAX_TARGETS)
-    targets, snapshots = capture_batch_targets(hass, token, extended=True)
+        capture_targets(hass, access_key, 'state_query', max_targets=DECISION_BATCH_MAX_TARGETS)
+    targets, snapshots = capture_batch_targets(hass, access_key, extended=True)
     state_targets = snapshots['state_query'].targets
     assert len(json.dumps(state_targets, ensure_ascii=False).encode()) > DECISION_MAX_TARGET_BYTES
     assert len(json.dumps(catalog_state(state_targets), ensure_ascii=False).encode()) <= DECISION_MAX_TARGET_BYTES
@@ -653,13 +653,13 @@ async def test_large_operation_snapshot_uses_packed_budget_without_hiding_target
 
 async def test_summary_scopes_do_not_compete_with_full_entity_catalog_budget(hass,batch_home):
     from custom_components.phoenix_mcp.command_summary import summary_wire
-    _,token,*_=batch_home
-    initial=capture_batch_targets(hass,token,extended=True)
+    _,access_key,*_=batch_home
+    initial=capture_batch_targets(hass,access_key,extended=True)
     entity_bytes=len(json.dumps(catalog_state(initial[0]),ensure_ascii=False).encode())
     summary_bytes=len(json.dumps(summary_wire(initial[1]['state_summary'].targets),ensure_ascii=False).encode())
     assert summary_bytes>0
     with patch('custom_components.phoenix_mcp.decision_batch.DECISION_GROUPED_TARGET_BYTES',entity_bytes):
-        targets,catalogs=capture_batch_targets(hass,token,extended=True)
+        targets,catalogs=capture_batch_targets(hass,access_key,extended=True)
     assert targets==initial[0]
     assert catalogs['state_summary']==initial[1]['state_summary']
 
@@ -718,14 +718,14 @@ async def test_joint_option_descriptions_include_exact_values_without_dropping_c
 async def test_real_catalog_guard_runs_between_kind_and_target_requests(hass, batch_home, change):
     from custom_components.phoenix_mcp.command_routing import RoutingAuthority
     from custom_components.phoenix_mcp.decision_batch import async_prepare_batch
-    data, token, store, account, entity_id = batch_home
+    data, access_key, store, account, entity_id = batch_home
     provider = DecisionProvider(store.resolve(account, purpose='decision'), 'systemone')
-    authority = RoutingAuthority.capture(data, token)
+    authority = RoutingAuthority.capture(data, access_key)
     async def response(*args):
         payload = args[4]
         if 'catalog' not in payload['questions']:
             return wire_response(payload, 'state_query')
-        if change == 'scope': token.permissions = PermissionTree()
+        if change == 'scope': access_key.permissions = PermissionTree()
         if change == 'alias': er.async_get(hass).async_update_entity(entity_id, aliases={'changed'})
         if change == 'account': await store.set_model(account, 'different')
         if change == 'settings': await data.store.async_patch_settings(decision_timeout_ms=1234)
@@ -746,14 +746,14 @@ async def test_real_catalog_guard_runs_between_kind_and_target_requests(hass, ba
 async def test_grouped_catalog_prepares_plan_only_while_all_competitors_remain_current(hass, batch_home, change):
     from custom_components.phoenix_mcp.command_routing import RoutingAuthority
     from custom_components.phoenix_mcp.decision_batch import async_prepare_batch, batch_catalog_digest
-    data, token, store, account, original = batch_home
+    data, access_key, store, account, original = batch_home
     registry = er.async_get(hass)
     for index in range(254):
         entry = registry.async_get_or_create('light', 'test', f'grouped_{index}', original_name=f'Lamp {index}')
         hass.states.async_set(entry.entity_id, 'off')
-    authority = RoutingAuthority.capture(data, token)
+    authority = RoutingAuthority.capture(data, access_key)
     provider = DecisionProvider(store.resolve(account, purpose='decision'), 'systemone')
-    snapshot = capture_batch_targets(hass, token, extended=True)
+    snapshot = capture_batch_targets(hass, access_key, extended=True)
     assert len(snapshot[0]) == 255
     winner = list(snapshot[0])[-1]
     async def response(*args):
@@ -768,7 +768,7 @@ async def test_grouped_catalog_prepares_plan_only_while_all_competitors_remain_c
             competitor = next(item['entity_id'] for key, item in snapshot[0].items() if key != winner)
             registry.async_update_entity(competitor, aliases={'New competing alias'})
         if change == 'authority':
-            token.permissions = PermissionTree()
+            access_key.permissions = PermissionTree()
         return result
     with patch.object(provider, '_request', side_effect=response) as request:
         if change:
@@ -787,9 +787,9 @@ async def test_low_confidence_scope_component_cannot_prepare_execution(hass, bat
     from custom_components.phoenix_mcp.command_routing import RoutingAuthority
     from custom_components.phoenix_mcp.const import DECISION_SUMMARY_COMPONENTS
     from custom_components.phoenix_mcp.decision_batch import async_prepare_batch
-    data, token, store, account, _ = batch_home
+    data, access_key, store, account, _ = batch_home
     provider = DecisionProvider(store.resolve(account, purpose='decision'), 'systemone')
-    snapshot = capture_batch_targets(hass, token, extended=True)
+    snapshot = capture_batch_targets(hass, access_key, extended=True)
     scope_key = next(iter(snapshot[1]['state_summary'].targets))
     def answer(choice, probability=1):
         return {'choice': choice, 'model': 'jev-1.13.0', 'confidence': 1,
@@ -802,7 +802,7 @@ async def test_low_confidence_scope_component_cannot_prepare_execution(hass, bat
               'summary_scope': scope, 'summary': answer('on')})),
           patch('custom_components.phoenix_mcp.decision_batch._capture_plan') as prepare):
         _, result = await async_prepare_batch(
-            hass, RoutingAuthority.capture(data, token), provider, None,
+            hass, RoutingAuthority.capture(data, access_key), provider, None,
             'Count all the lights that are currently on', 'en', 'chat')
     assert result['reason'] == 'low_probability' and '_plan' not in result
     prepare.assert_not_called()
@@ -819,8 +819,8 @@ async def test_joint_admission_requires_confident_unused_answers(
         hass, batch_home, ingress, operation, question, probability):
     from custom_components.phoenix_mcp.command_routing import RoutingAuthority
     from custom_components.phoenix_mcp.decision_batch import async_prepare_batch
-    data, token, store, account, lamp = batch_home
-    token.permissions = PermissionTree(domains={
+    data, access_key, store, account, lamp = batch_home
+    access_key.permissions = PermissionTree(domains={
         domain: PermissionNode(state='GREEN') for domain in ('light', 'input_select')})
     mode = er.async_get(hass).async_get_or_create('input_select', 'test', 'mode', original_name='Audit mode')
     hass.states.async_set(mode.entity_id, 'Mode 1', {'friendly_name': 'Audit mode', 'options': ['Mode 1', 'Mode 2']})
@@ -851,11 +851,11 @@ async def test_joint_admission_requires_confident_unused_answers(
         return body
     with patch.object(DecisionProvider, '_request', AsyncMock(side_effect=respond)) as request:
         if ingress == 'preview':
-            result = await async_preview_batch(hass, data, token, sentence, 'en',
+            result = await async_preview_batch(hass, data, access_key, sentence, 'en',
                 {'reason': 'no_match', 'proposal': None}, numeric_preview=True)
         else:
             provider = DecisionProvider(store.resolve(account, purpose='decision'), 'systemone')
-            _, result = await async_prepare_batch(hass, RoutingAuthority.capture(data, token),
+            _, result = await async_prepare_batch(hass, RoutingAuthority.capture(data, access_key),
                                                    provider, None, sentence, 'en', 'voice')
     request.assert_awaited_once()
     assert result['reason'] == ('target_selected' if probability >= 0.90 else 'low_probability'), result
@@ -870,7 +870,7 @@ async def test_joint_admission_requires_confident_unused_answers(
 @pytest.mark.parametrize('numeric_preview', [False, True])
 @pytest.mark.parametrize('missing', [False, True])
 async def test_color_preview_requires_the_selected_literal_identity(hass, batch_home, numeric_preview, missing):
-    data, token, _, _, entity_id = batch_home
+    data, access_key, _, _, entity_id = batch_home
     hass.services.async_register('light', 'turn_on', AsyncMock())
     hass.states.async_set(entity_id, 'off', {'friendly_name': 'Audit Lamp', 'supported_color_modes': ['rgb']})
     async def respond(*args):
@@ -882,7 +882,7 @@ async def test_color_preview_requires_the_selected_literal_identity(hass, batch_
             key: float(key == color) for key in payload['questions']['color']['criteria']})
         return body
     with patch.object(DecisionProvider, '_request', AsyncMock(side_effect=respond)) as remote:
-        result = await async_preview_batch(hass, data, token,
+        result = await async_preview_batch(hass, data, access_key,
             'Set Audit Missing Lamp to blue.' if missing else 'Set Audit Lamp to blue.', 'en',
             {'reason': 'no_match', 'proposal': None}, numeric_preview=numeric_preview)
     remote.assert_awaited_once()
@@ -893,8 +893,8 @@ async def test_color_preview_requires_the_selected_literal_identity(hass, batch_
 
 async def test_temporal_catalog_pools_repeated_attributes_without_losing_competitors(hass, batch_home):
     from custom_components.phoenix_mcp.decision_batch import batch_catalog_digest
-    _, token, *_ = batch_home
-    token.permissions = PermissionTree(domains={domain: PermissionNode(state='GREEN') for domain in ('light', 'timer')})
+    _, access_key, *_ = batch_home
+    access_key.permissions = PermissionTree(domains={domain: PermissionNode(state='GREEN') for domain in ('light', 'timer')})
     registry = er.async_get(hass)
     for index in range(95):
         entry = registry.async_get_or_create('light', 'test', f'fixture_{index}')
@@ -905,7 +905,7 @@ async def test_temporal_catalog_pools_repeated_attributes_without_losing_competi
     timer = registry.async_get_or_create('timer', 'test', 'duration_fixture')
     hass.states.async_set(timer.entity_id, 'idle', {'friendly_name': 'Duration fixture'})
     async_expose_entity(hass, 'conversation', timer.entity_id, True)
-    snapshot = capture_batch_targets(hass, token, extended=True, temporal=True)
+    snapshot = capture_batch_targets(hass, access_key, extended=True, temporal=True)
     targets, catalogs = snapshot
     attributes = catalogs['attribute_read'].targets
     # Packing also fits the per-operation DECISION_MAX_TARGET_BYTES budget without dropping metadata.
@@ -938,7 +938,7 @@ async def test_temporal_catalog_pools_repeated_attributes_without_losing_competi
     before = batch_catalog_digest(snapshot)
     state = hass.states.get(entry.entity_id)
     hass.states.async_set(entry.entity_id, state.state, {**state.attributes, 'effect_list': ['none', 'rainbow']})
-    assert batch_catalog_digest(capture_batch_targets(hass, token, extended=True, temporal=True)) != before
+    assert batch_catalog_digest(capture_batch_targets(hass, access_key, extended=True, temporal=True)) != before
 
 
 @pytest.mark.parametrize('case', ['selected', 'declined', 'conflict', 'uncertain', 'missing', 'unqualified', 'overflow'])

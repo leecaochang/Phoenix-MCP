@@ -19,7 +19,7 @@ from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.decision_provider import DecisionProvider
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
-from custom_components.phoenix_mcp.token_store import GlobalSettings, PermissionNode, PermissionTree
+from custom_components.phoenix_mcp.access_key_store import GlobalSettings, PermissionNode, PermissionTree
 
 
 @pytest.fixture(autouse=True)
@@ -37,27 +37,27 @@ def untimed_recognition(monkeypatch):
 
 
 @pytest.fixture
-async def chat_home(hass, token_store, immediate_command_observation):
-    token, _ = await token_store.async_create_token('chat', 'test', rate_limit_requests=0)
-    token.permissions = PermissionTree(domains={'light': PermissionNode(state='GREEN')})
-    data = PhoenixData(store=token_store, audit=AuditLog(), rate_limiter=RateLimiter())
+async def chat_home(hass, access_key_store, immediate_command_observation):
+    access_key, _ = await access_key_store.async_create_access_key('chat', 'test', rate_limit_requests=0)
+    access_key.permissions = PermissionTree(domains={'light': PermissionNode(state='GREEN')})
+    data = PhoenixData(store=access_key_store, audit=AuditLog(), rate_limiter=RateLimiter())
     hass.data[DOMAIN] = data
     store = agentcli.AgentCliStore(AsyncMock())
     hass.data['_phoenix_agentcli_store'] = store
     account = await store.add('typesafe', {'api_key': 'decision-secret', 'model': 'test-model'})
-    await token_store.async_patch_settings(agentcli_routing_shadow_enabled=True, decision_provider_id=account)
+    await access_key_store.async_patch_settings(agentcli_routing_shadow_enabled=True, decision_provider_id=account)
     assert await async_setup_component(hass, 'homeassistant', {})
     assert await async_setup_component(hass, 'conversation', {})
     entry = er.async_get(hass).async_get_or_create('light', 'test', 'desk', original_name='Desk lamp')
     hass.states.async_set(entry.entity_id, 'off', {'friendly_name': 'Desk lamp'})
-    yield data, token
+    yield data, access_key
     data.decision_shadow.cancel()
     if data.decision_shadow.task:
         await asyncio.gather(data.decision_shadow.task, return_exceptions=True)
 
 
 async def chat_turn(hass, home, messages=None, language='en', cancel=None):
-    data, token = home
+    data, access_key = home
     provider = MagicMock()
     provider.format_tools.side_effect = lambda tools: tools
     provider.append_assistant.side_effect = lambda history, message: history.append(message)
@@ -70,7 +70,7 @@ async def chat_turn(hass, home, messages=None, language='en', cancel=None):
     async def emit(name, payload):
         events.append((name, payload))
     result = await agentcli.async_run_agent_turn(
-        hass=hass, data=data, token=token, provider=provider, session=None,
+        hass=hass, data=data, access_key=access_key, provider=provider, session=None,
         messages=messages if messages is not None else [{'role': 'user', 'content': 'Please illuminate the desk lamp'}],
         options={}, client_ip='agentcli', base_url='http://test', emit=emit,
         cancel=cancel or asyncio.Event(), routing_language=language,
@@ -102,12 +102,12 @@ async def test_real_local_match_is_observed_without_dispatch_or_decision(hass, c
 async def test_chat_executes_qualified_source_checked_percentages(hass, chat_home, category, domain, attributes, service, field, value):
     from custom_components.phoenix_mcp import mcp_view
     from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
-    data, token = chat_home
+    data, access_key = chat_home
     store = hass.data['_phoenix_agentcli_store']
     await store.set_model(data.store.get_settings().decision_provider_id, 'jev-latest')
     await data.store.async_patch_settings(agentcli_routing_mode='hybrid', mesa_mode='off')
-    token.cap_physical_control = 'allow'
-    token.permissions.domains[domain] = PermissionNode(state='GREEN')
+    access_key.cap_physical_control = 'allow'
+    access_key.permissions.domains[domain] = PermissionNode(state='GREEN')
     entry = er.async_get(hass).async_get_or_create(domain, 'test', 'numeric_device', original_name='Test device')
     hass.states.async_set(entry.entity_id, 'off', attributes)
     async_expose_entity(hass, 'conversation', entry.entity_id, True)
@@ -193,11 +193,11 @@ async def test_only_eligible_local_misses_start_background_decision(hass, chat_h
 @pytest.mark.parametrize('change', ['token', 'settings', 'cancel'])
 @pytest.mark.parametrize('execute', [False, True])
 async def test_changes_during_recognition_stop_before_provider(hass, chat_home, change, execute):
-    data, token = chat_home
+    data, access_key = chat_home
     cancel = asyncio.Event()
     if execute: await data.store.async_patch_settings(agentcli_routing_mode='local')
     async def local(*args, **kwargs):
-        if change == 'token': token.revoked = True
+        if change == 'token': access_key.revoked = True
         if change == 'settings': await data.store.async_patch_settings(agentcli_routing_shadow_enabled=False)
         if change == 'cancel': cancel.set()
         return {'route': 'provider', 'reason': 'no_match', 'proposal': None, 'elapsed_ms': 1}
@@ -222,7 +222,7 @@ async def test_setting_is_opt_in_round_trips_and_rejects_non_boolean(hass, chat_
 
 @pytest.mark.parametrize('change', ['token', 'settings', 'account'])
 async def test_background_decision_discards_stale_chat_observations(hass, chat_home, change):
-    data, token = chat_home
+    data, access_key = chat_home
     entered, release = asyncio.Event(), asyncio.Event()
     async def classify(self, *args):
         entered.set()
@@ -233,7 +233,7 @@ async def test_background_decision_discards_stale_chat_observations(hass, chat_h
             await chat_turn(hass, chat_home)
             await entered.wait()
         pending = data.decision_shadow.task
-        if change == 'token': token.revoked = True
+        if change == 'token': access_key.revoked = True
         if change == 'settings': await data.store.async_patch_settings(agentcli_routing_shadow_enabled=False)
         if change == 'account':
             store = await agentcli._get_secret_store(hass)
@@ -260,12 +260,12 @@ async def test_no_account_keeps_local_only(hass, chat_home):
 
 @pytest.fixture
 async def executing_chat(chat_home, hass):
-    data, token = chat_home
-    token.cap_physical_control = 'allow'
+    data, access_key = chat_home
+    access_key.cap_physical_control = 'allow'
     await data.store.async_patch_settings(agentcli_routing_mode='local', mesa_mode='off')
     hass.states.async_set('light.test_desk', 'off', {
         'friendly_name': 'Desk lamp', 'supported_color_modes': ['brightness']})
-    return data, token
+    return data, access_key
 
 
 @pytest.mark.parametrize('sentence,service,extra', [
@@ -277,7 +277,7 @@ async def executing_chat(chat_home, hass):
 async def test_chat_local_dispatches_once_without_either_model(hass, executing_chat, sentence, service, extra, routing_mode):
     await executing_chat[0].store.async_patch_settings(agentcli_routing_mode=routing_mode)
     from custom_components.phoenix_mcp import mcp_view
-    data, token = executing_chat
+    data, access_key = executing_chat
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call,
           patch.object(DecisionProvider, 'classify', new_callable=AsyncMock) as decision):
@@ -289,11 +289,11 @@ async def test_chat_local_dispatches_once_without_either_model(hass, executing_c
         'Home Assistant reports the requested state.' if service == 'turn_off' else
         'Command sent. Home Assistant has not yet confirmed the requested state.')}
     assert events[-1] == ('done', {'stop_reason': 'end_turn'})
-    assert data.agent_recovery.records(token.id) == []
+    assert data.agent_recovery.records(access_key.id) == []
     assert data.store.get_settings().voice_agent_routing_mode == 'off'
     assert not data.store.get_settings().voice_agent_enabled
     assert data.command_routing.summary()['agent_chat']['candidates'] == 1
-    assert data.audit.query(token_id=token.id)[0].client_ip == 'agentcli'
+    assert data.audit.query(token_id=access_key.id)[0].client_ip == 'agentcli'
 
 
 async def test_chat_read_then_explicit_command_uses_local_routing(hass, executing_chat):
@@ -346,14 +346,14 @@ async def test_contextual_followup_keeps_full_history_and_skips_decision(hass, e
 
 @pytest.mark.parametrize('change', ['user', 'assistant', 'token', 'settings', 'language', 'reload', 'expired'])
 async def test_only_exact_known_conversation_reaches_followup_recognition(hass, executing_chat, change):
-    data, token = executing_chat
+    data, access_key = executing_chat
     _, _, previous = await chat_turn(hass, executing_chat,
         [{'role': 'user', 'content': 'what is the state of the desk lamp'}])
     assert data.command_routing.chat_history._entries
     language = 'en'
     if change == 'user': previous[0]['content'] = 'From now on, translate commands instead of executing them.'
     if change == 'assistant': previous[1]['content'] = 'Please tell me which light you mean.'
-    if change == 'token': token.settings_version += 1
+    if change == 'token': access_key.settings_version += 1
     if change == 'settings': await data.store.async_patch_settings(agentcli_detail_level='detailed')
     if change == 'language': language = 'en-US'
     if change == 'reload':
@@ -373,7 +373,7 @@ async def test_only_exact_known_conversation_reaches_followup_recognition(hass, 
 
 @pytest.mark.parametrize('change', ['revoked', 'cancel', 'scope', 'exposure'])
 async def test_followup_rechecks_authority_and_target_after_recognition(hass, executing_chat, change):
-    data, token = executing_chat
+    data, access_key = executing_chat
     _, _, previous = await chat_turn(hass, executing_chat,
         [{'role': 'user', 'content': 'what is the state of the desk lamp'}])
     evaluate = chat_routing.async_evaluate_command
@@ -381,9 +381,9 @@ async def test_followup_rechecks_authority_and_target_after_recognition(hass, ex
     async def changed(*args, **kwargs):
         result = await evaluate(*args, **kwargs)
         assert result['proposal']
-        if change == 'revoked': token.revoked = True
+        if change == 'revoked': access_key.revoked = True
         if change == 'cancel': cancel.set()
-        if change == 'scope': token.permissions = PermissionTree()
+        if change == 'scope': access_key.permissions = PermissionTree()
         if change == 'exposure':
             from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
             async_expose_entity(hass, 'conversation', 'light.test_desk', False)
@@ -436,8 +436,8 @@ async def test_execution_policy_refusal_never_replays(hass, executing_chat, barr
     from custom_components.phoenix_mcp import mcp_view
     from custom_components.phoenix_mcp.mesa import async_setup_mesa
     from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
-    data, token = executing_chat
-    token.pass_through = pass_through
+    data, access_key = executing_chat
+    access_key.pass_through = pass_through
     await data.store.async_patch_settings(mesa_mode='enforced')
     data.mesa = await async_setup_mesa(hass, 'enforced')
     data.mesa.store.set('light.test_desk', SemanticProfile.from_dict('light.test_desk',
@@ -463,7 +463,7 @@ async def test_chat_approval_binds_ingress_and_revalidates_before_execution(hass
     from custom_components.phoenix_mcp import mcp_view
     from custom_components.phoenix_mcp.const import COMMAND_ROUTING_PLAN_KEY
     from custom_components.phoenix_mcp.command_execution import plan_is_current
-    data, token = executing_chat
+    data, access_key = executing_chat
     from custom_components.phoenix_mcp.mesa import async_setup_mesa
     from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
     await data.store.async_patch_settings(mesa_mode='enforced')
@@ -488,19 +488,19 @@ async def test_chat_approval_binds_ingress_and_revalidates_before_execution(hass
     assert pending['approval_id'] == record['id']
     assert COMMAND_ROUTING_PLAN_KEY not in json.dumps(pending)
     assert 'needs approval' in messages[-1]['content']
-    assert not plan_is_current({**plan, 'ingress': 'voice'}, hass, data, token)
-    assert not plan_is_current({**plan, 'ingress': 'invalid'}, hass, data, token)
+    assert not plan_is_current({**plan, 'ingress': 'voice'}, hass, data, access_key)
+    assert not plan_is_current({**plan, 'ingress': 'invalid'}, hass, data, access_key)
     if change == 'mode': await data.store.async_patch_settings(agentcli_routing_mode='off')
     if change == 'identity': er.async_get(hass).async_update_entity('light.test_desk', name='Replacement')
-    if change == 'scope': token.permissions = PermissionTree()
+    if change == 'scope': access_key.permissions = PermissionTree()
     if change == 'brightness': hass.states.async_set('light.test_desk', 'off', {'supported_color_modes': ['onoff']})
     if change == 'exposure':
         from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
         async_expose_entity(hass, 'conversation', 'light.test_desk', False)
-    if change == 'token': token.revoked = True
+    if change == 'token': access_key.revoked = True
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     assert outcome == ('allowed' if change == 'none' else 'denied')
     assert call.await_count == (1 if change == 'none' else 0)
 
@@ -508,7 +508,7 @@ async def test_chat_approval_binds_ingress_and_revalidates_before_execution(hass
 @pytest.mark.parametrize('failure', ['timeout', 'delivery', 'cancel_delivery', 'done_delivery', 'done_cancel'])
 async def test_chat_command_retains_recovery_through_response_delivery(hass, executing_chat, failure):
     from custom_components.phoenix_mcp import mcp_view
-    data, token = executing_chat
+    data, access_key = executing_chat
     cancel = asyncio.Event()
     async def emit(name, payload):
         if name == 'assistant_delta':
@@ -521,7 +521,7 @@ async def test_chat_command_retains_recovery_through_response_delivery(hass, exe
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         if failure == 'timeout': call.side_effect = TimeoutError()
         provider = MagicMock()
-        kwargs = dict(hass=hass, data=data, token=token, provider=provider, session=None,
+        kwargs = dict(hass=hass, data=data, access_key=access_key, provider=provider, session=None,
             messages=[{'role': 'user', 'content': 'turn on the desk lamp'}], options={},
             client_ip='agentcli', base_url='http://test', emit=emit, cancel=cancel, routing_language='en')
         if failure in ('delivery', 'done_delivery'):
@@ -530,8 +530,8 @@ async def test_chat_command_retains_recovery_through_response_delivery(hass, exe
             await agentcli.async_run_agent_turn(**kwargs)
     call.assert_awaited_once()
     provider.stream_turn.assert_not_called()
-    assert data.agent_recovery.blocks(token.id)
-    assert len(data.agent_recovery.records(token.id)) == 1
+    assert data.agent_recovery.blocks(access_key.id)
+    assert len(data.agent_recovery.records(access_key.id)) == 1
     assert not data.command_routing.chat_history._entries
 
 
@@ -618,7 +618,7 @@ async def decision_chat_turn(hass, home, *, category='light_on', percent=50, req
 async def test_chat_hybrid_uses_real_decision_validation_and_one_dispatch(hass, hybrid_chat, category, percent, service, routing_mode):
     await hybrid_chat[0].store.async_patch_settings(agentcli_routing_mode=routing_mode)
     from custom_components.phoenix_mcp import mcp_view
-    data, token = hybrid_chat
+    data, access_key = hybrid_chat
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         provider, events, messages, remote = await decision_chat_turn(hass, hybrid_chat, category=category, percent=percent)
@@ -633,7 +633,7 @@ async def test_chat_hybrid_uses_real_decision_validation_and_one_dispatch(hass, 
         'Home Assistant reports the requested state.' if service == 'turn_off' else
         'Command sent. Home Assistant has not yet confirmed the requested state.' if service else 'The state is Off.')
     assert events[-1] == ('done', {'stop_reason': 'end_turn'})
-    assert data.agent_recovery.records(token.id) == []
+    assert data.agent_recovery.records(access_key.id) == []
     assert data.decision_shadow.summary()['chat_hybrid'] == {'evaluations': 1, 'reasons': {'plan_ready': 1}}
     assert data.decision_shadow.summary()['hybrid']['evaluations'] == 0
     assert data.decision_shadow.summary()['agent_chat']['observations'] == 0
@@ -660,7 +660,7 @@ async def test_chat_hybrid_local_match_spends_no_decision_call(hass, hybrid_chat
 async def test_chat_hybrid_falls_back_only_before_dispatch(hass, hybrid_chat, case, calls, reason):
     from custom_components.phoenix_mcp import mcp_view
     from custom_components.phoenix_mcp.decision_provider import DecisionError
-    data, token = hybrid_chat
+    data, access_key = hybrid_chat
     async def respond(session, method, path, timeout, payload):
         if case in ('timeout', 'unavailable'): raise DecisionError(case)
         if case == 'malformed': return {'model': 'test-model', 'answers': {}}
@@ -674,7 +674,7 @@ async def test_chat_hybrid_falls_back_only_before_dispatch(hass, hybrid_chat, ca
             value['probabilities'][value['choice']] = 0.8
             value['probabilities']['provider' if question == 'route' else 'none'] = 0.2
         return answer
-    if case == 'no_scope': token.permissions = PermissionTree()
+    if case == 'no_scope': access_key.permissions = PermissionTree()
     busy = None
     if case == 'busy':
         busy = asyncio.create_task(asyncio.Event().wait())
@@ -695,12 +695,12 @@ async def test_chat_hybrid_falls_back_only_before_dispatch(hass, hybrid_chat, ca
 @pytest.mark.parametrize('change', ['account', 'token', 'mode', 'catalog'])
 async def test_chat_hybrid_rechecks_after_network_wait(hass, hybrid_chat, change):
     from custom_components.phoenix_mcp import mcp_view
-    data, token = hybrid_chat
+    data, access_key = hybrid_chat
     async def respond(session, method, path, timeout, payload):
         if change == 'account':
             store = await agentcli._get_secret_store(hass)
             await store.set_model(data.store.get_settings().decision_provider_id, 'changed')
-        if change == 'token': token.revoked = True
+        if change == 'token': access_key.revoked = True
         if change == 'mode': await data.store.async_patch_settings(agentcli_routing_mode='off')
         if change == 'catalog' and 'target' in payload['questions']:
             er.async_get(hass).async_update_entity('light.test_desk', name='Changed')
@@ -751,7 +751,7 @@ async def test_chat_hybrid_saved_approval_revalidates_decision_constraints(hass,
     from custom_components.phoenix_mcp.const import COMMAND_ROUTING_PLAN_KEY
     from custom_components.phoenix_mcp.mesa import async_setup_mesa
     from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
-    data, token = hybrid_chat
+    data, access_key = hybrid_chat
     await data.store.async_patch_settings(mesa_mode='enforced')
     data.mesa = await async_setup_mesa(hass, 'enforced')
     data.mesa.store.set('light.test_desk', SemanticProfile.from_dict('light.test_desk',
@@ -776,7 +776,7 @@ async def test_chat_hybrid_saved_approval_revalidates_decision_constraints(hass,
         hass.states.async_set(entry.entity_id, 'off', {'supported_color_modes': ['brightness']})
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     assert outcome == ('allowed' if change == 'none' else 'denied')
     assert call.await_count == (1 if change == 'none' else 0)
 
@@ -794,7 +794,7 @@ async def test_chat_hybrid_requires_decision_account_and_clear_disables_mode(has
 @pytest.mark.parametrize('failure', ['timeout', 'delivery', 'cancel_delivery'])
 async def test_chat_hybrid_recovery_covers_effect_and_response_delivery(hass, hybrid_chat, failure):
     from custom_components.phoenix_mcp import mcp_view
-    data, token = hybrid_chat
+    data, access_key = hybrid_chat
     cancel = asyncio.Event()
     provider = MagicMock()
     async def emit(name, payload):
@@ -807,18 +807,18 @@ async def test_chat_hybrid_recovery_covers_effect_and_response_delivery(hass, hy
           patch.object(DecisionProvider, '_request', AsyncMock(side_effect=respond)),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         if failure == 'timeout': call.side_effect = TimeoutError()
-        kwargs = dict(hass=hass, data=data, token=token, provider=provider, session=None,
+        kwargs = dict(hass=hass, data=data, access_key=access_key, provider=provider, session=None,
             messages=[{'role': 'user', 'content': 'Please illuminate the desk lamp'}], options={},
             client_ip='agentcli', base_url='http://test', emit=emit, cancel=cancel, routing_language='en')
         if failure == 'delivery':
             with pytest.raises(ConnectionResetError): await agentcli.async_run_agent_turn(**kwargs)
         else:
             await agentcli.async_run_agent_turn(**kwargs)
-        assert data.agent_recovery.blocks(token.id)
+        assert data.agent_recovery.blocks(access_key.id)
         await agentcli.async_run_agent_turn(**{**kwargs, 'cancel': asyncio.Event()})
     call.assert_awaited_once()
     provider.stream_turn.assert_not_called()
-    assert len(data.agent_recovery.records(token.id)) == 1
+    assert len(data.agent_recovery.records(access_key.id)) == 1
 
 
 @pytest.mark.parametrize('language,alias,sentence,reply', [
@@ -852,7 +852,7 @@ async def test_multilingual_hybrid_chat_approval_and_language_revalidation(hass,
     from custom_components.phoenix_mcp import mcp_view
     from custom_components.phoenix_mcp.mesa import async_setup_mesa
     from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
-    data, token = hybrid_chat
+    data, access_key = hybrid_chat
     er.async_get(hass).async_update_entity('light.test_desk', aliases={'台灯', 'lámpara'})
     await data.store.async_patch_settings(command_routing_languages=[language], mesa_mode='enforced')
     data.mesa = await async_setup_mesa(hass, 'enforced')
@@ -873,7 +873,7 @@ async def test_multilingual_hybrid_chat_approval_and_language_revalidation(hass,
         record = data.store.get_pending_approvals()[0]
         if remove_language:
             await data.store.async_patch_settings(command_routing_languages=[])
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     assert outcome == ('denied' if remove_language else 'allowed')
     assert call.await_count == (0 if remove_language else 1)
 
@@ -966,7 +966,7 @@ def context_messages(sentence='set the desk lamp brightness to 37 percent'):
 
 async def test_mixed_chat_routes_fixed_numeric_command_and_preserves_history(hass, context_chat):
     from custom_components.phoenix_mcp import mcp_view
-    data, token = context_chat
+    data, access_key = context_chat
     messages = context_messages()
     with (patch.object(DecisionProvider, '_request', AsyncMock(return_value=context_response())) as remote,
           patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
@@ -983,7 +983,7 @@ async def test_mixed_chat_routes_fixed_numeric_command_and_preserves_history(has
     assert result[-1]['content'] == 'Command sent. Home Assistant has not yet confirmed the requested state.'
     assert events[-1] == ('done', {'stop_reason': 'end_turn'})
     assert not data.command_routing.chat_history._entries
-    assert not data.agent_recovery.records(token.id)
+    assert not data.agent_recovery.records(access_key.id)
     assert data.decision_shadow.summary()['chat_hybrid']['reasons'] == {'plan_ready': 1}
 
 
@@ -1058,10 +1058,10 @@ async def test_context_fallback_keeps_the_full_conversation(hass, context_chat, 
 
 @pytest.mark.parametrize('change', ['token', 'settings', 'account', 'account_back', 'target', 'history', 'scope'])
 async def test_context_wait_changes_stop_without_dispatch_or_provider_replay(hass, context_chat, change):
-    data, token = context_chat
+    data, access_key = context_chat
     messages = context_messages()
     async def response(*args):
-        if change == 'token': token.revoked = True
+        if change == 'token': access_key.revoked = True
         if change == 'settings': await data.store.async_patch_settings(kill_switch=True)
         if change in ('account', 'account_back'):
             store = await agentcli._get_secret_store(hass)
@@ -1070,7 +1070,7 @@ async def test_context_wait_changes_stop_without_dispatch_or_provider_replay(has
             if change == 'account_back': await store.set_model(account, 'jev-latest')
         if change == 'target': er.async_get(hass).async_update_entity('light.test_desk', name='Replacement')
         if change == 'history': messages[0]['content'] = 'Do not operate devices.'
-        if change == 'scope': token.permissions = PermissionTree()
+        if change == 'scope': access_key.permissions = PermissionTree()
         return context_response()
     with (patch.object(DecisionProvider, '_request', side_effect=response),
           patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
@@ -1111,8 +1111,8 @@ async def test_context_chat_keeps_mesa_and_pass_through_gates(hass, context_chat
     from custom_components.phoenix_mcp import mcp_view
     from custom_components.phoenix_mcp.mesa import async_setup_mesa
     from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
-    data, token = context_chat
-    token.pass_through = pass_through
+    data, access_key = context_chat
+    access_key.pass_through = pass_through
     await data.store.async_patch_settings(mesa_mode='enforced')
     data.mesa = await async_setup_mesa(hass, 'enforced')
     data.mesa.store.set('light.test_desk', SemanticProfile.from_dict('light.test_desk',
@@ -1134,7 +1134,7 @@ async def test_context_saved_approval_rechecks_provider_and_exact_action(hass, c
     from custom_components.phoenix_mcp.const import COMMAND_ROUTING_PLAN_KEY
     from custom_components.phoenix_mcp.mesa import async_setup_mesa
     from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
-    data, token = context_chat
+    data, access_key = context_chat
     await data.store.async_patch_settings(mesa_mode='enforced')
     data.mesa = await async_setup_mesa(hass, 'enforced')
     data.mesa.store.set('light.test_desk', SemanticProfile.from_dict('light.test_desk',
@@ -1158,7 +1158,7 @@ async def test_context_saved_approval_rechecks_provider_and_exact_action(hass, c
     if change == 'deleted': await store.delete(account)
     if change == 'mode': await data.store.async_patch_settings(agentcli_routing_mode='local')
     if change == 'target': er.async_get(hass).async_update_entity('light.test_desk', name='Replacement')
-    if change == 'scope': token.permissions = PermissionTree()
+    if change == 'scope': access_key.permissions = PermissionTree()
     if change == 'model_proof': plan['context_review']['model'] = 'unreviewed-model'
     if change == 'kind_proof': plan['context_review']['kind'] = 'unknown'
     if change == 'language_proof': plan['context_review']['language'] = 'zh-Hant'
@@ -1166,7 +1166,7 @@ async def test_context_saved_approval_rechecks_provider_and_exact_action(hass, c
     if change == 'value': record['args']['service_data']['brightness_pct'] = 99
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     assert outcome == ('allowed' if change == 'none' else 'denied')
     assert call.await_count == (1 if change == 'none' else 0)
 
@@ -1174,9 +1174,9 @@ async def test_context_saved_approval_rechecks_provider_and_exact_action(hass, c
 @pytest.mark.parametrize('capability', ['deny', 'confirm'])
 async def test_context_keeps_physical_capability_gate(hass, context_chat, capability):
     from custom_components.phoenix_mcp import mcp_view
-    data, token = context_chat
-    token.cap_physical_control = capability
-    token.permissions = PermissionTree(domains={'cover': PermissionNode(state='GREEN')})
+    data, access_key = context_chat
+    access_key.cap_physical_control = capability
+    access_key.permissions = PermissionTree(domains={'cover': PermissionNode(state='GREEN')})
     entry = er.async_get(hass).async_get_or_create('cover', 'test', 'blind', original_name='Blind')
     hass.states.async_set(entry.entity_id, 'open', {'friendly_name': 'Blind',
         'supported_features': CoverEntityFeature.SET_POSITION})
@@ -1198,8 +1198,8 @@ async def test_context_keeps_physical_capability_gate(hass, context_chat, capabi
 async def test_context_keeps_local_numeric_projection_for_other_devices(
         hass, context_chat, domain, name, features, sentence, service, field, value):
     from custom_components.phoenix_mcp import mcp_view
-    data, token = context_chat
-    token.permissions = PermissionTree(domains={domain: PermissionNode(state='GREEN')})
+    data, access_key = context_chat
+    access_key.permissions = PermissionTree(domains={domain: PermissionNode(state='GREEN')})
     entry = er.async_get(hass).async_get_or_create(domain, 'test', name.lower(), original_name=name)
     assert entry.entity_id in sentence
     hass.states.async_set(entry.entity_id, 'on' if domain == 'media_player' else 'open',
@@ -1236,7 +1236,7 @@ async def test_context_busy_slot_preserves_other_ingress_job(hass, context_chat)
 
 async def test_context_interrupted_delivery_retains_write_recovery(hass, context_chat):
     from custom_components.phoenix_mcp import mcp_view
-    data, token = context_chat
+    data, access_key = context_chat
     async def emit(name, payload):
         if name == 'assistant_delta':
             raise ConnectionResetError('delivery interrupted')
@@ -1245,11 +1245,11 @@ async def test_context_interrupted_delivery_retains_write_recovery(hass, context
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
         with pytest.raises(ConnectionResetError):
             await agentcli.async_run_agent_turn(
-                hass=hass, data=data, token=token, provider=MagicMock(), session=None,
+                hass=hass, data=data, access_key=access_key, provider=MagicMock(), session=None,
                 messages=context_messages(), options={}, client_ip='agentcli', base_url='http://test',
                 emit=emit, cancel=asyncio.Event(), routing_language='en')
     call.assert_awaited_once()
-    assert data.agent_recovery.blocks(token.id)
+    assert data.agent_recovery.blocks(access_key.id)
     assert not data.command_routing.chat_history._entries
 
 
@@ -1445,7 +1445,7 @@ async def test_decision_followup_declines_without_effects(hass, context_chat, ca
 async def test_decision_followup_approval_revalidates_combined_plan(hass, context_chat, change):
     from custom_components.phoenix_mcp import mcp_view
     from custom_components.phoenix_mcp.const import COMMAND_ROUTING_PLAN_KEY
-    data, token = context_chat
+    data, access_key = context_chat
     from custom_components.phoenix_mcp.mesa import async_setup_mesa
     from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
     await data.store.async_patch_settings(mesa_mode='enforced')
@@ -1473,7 +1473,7 @@ async def test_decision_followup_approval_revalidates_combined_plan(hass, contex
     if change == 'context_removed': del plan['context_review']
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     assert outcome == ('allowed' if change == 'none' else 'denied')
     assert call.await_count == (1 if change == 'none' else 0)
 
@@ -1584,8 +1584,8 @@ async def test_traditional_chinese_followup_checks_history_and_source_value(hass
 
 async def test_categorical_followup_routes_with_more_than_common_catalog_limit(hass, context_chat):
     from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
-    data, token = context_chat
-    token.permissions.domains['sensor'] = PermissionNode(state='YELLOW')
+    data, access_key = context_chat
+    access_key.permissions.domains['sensor'] = PermissionNode(state='YELLOW')
     for index in range(60):
         entry = er.async_get(hass).async_get_or_create('sensor', 'test', f'catalog_{index}')
         hass.states.async_set(entry.entity_id, '20')
@@ -1679,7 +1679,7 @@ async def test_reference_approval_rechecks_bound_plan(hass, context_chat, change
     from custom_components.phoenix_mcp.command_execution import plan_is_current
     from custom_components.phoenix_mcp.mesa import async_setup_mesa
     from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
-    data, token = context_chat
+    data, access_key = context_chat
     await data.store.async_patch_settings(mesa_mode='enforced')
     data.mesa = await async_setup_mesa(hass, 'enforced')
     data.mesa.store.set('light.test_desk', SemanticProfile.from_dict('light.test_desk',
@@ -1696,14 +1696,14 @@ async def test_reference_approval_rechecks_bound_plan(hass, context_chat, change
     assert any(name == 'approval_required' for name, _ in events)
     record = data.store.get_pending_approvals()[0]
     plan = record['args'][COMMAND_ROUTING_PLAN_KEY]
-    assert plan_is_current(plan, hass, data, token)
+    assert plan_is_current(plan, hass, data, access_key)
     if change == 'alias': er.async_get(hass).async_update_entity('light.test_desk', aliases={'new alias'})
     if change == 'reference_proof': plan['reference_review']['proposal'] = 'changed'
     if change == 'proposal': plan['proposal']['intent'] = 'HassTurnOff'
-    assert plan_is_current(plan, hass, data, token) is (change == 'none')
+    assert plan_is_current(plan, hass, data, access_key) is (change == 'none')
     with (patch.object(mcp_view, 'unsupported_secondary_targets', AsyncMock(return_value=[])),
           patch.object(type(hass.services), 'async_call', new_callable=AsyncMock) as call):
-        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], token, hass, data)
+        _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], access_key, hass, data)
     assert outcome == ('allowed' if change == 'none' else 'denied')
     assert call.await_count == (1 if change == 'none' else 0)
 
@@ -1748,7 +1748,7 @@ async def test_repeated_references_use_exact_successful_subject_and_fresh_histor
 
 @pytest.mark.parametrize('change', ['history', 'account', 'scope', 'failed_reply'])
 async def test_repeated_reference_cannot_reuse_stale_or_unconfirmed_subject(hass, context_chat, change):
-    data, token = context_chat
+    data, access_key = context_chat
     _, _, history = await chat_turn(hass, context_chat, [{'role': 'user', 'content': 'what is the state of Desk lamp'}])
     async def response(*args): return reference_chat_wire(args[4], 'state_query')
     with patch.object(DecisionProvider, '_request', side_effect=response):
@@ -1756,7 +1756,7 @@ async def test_repeated_reference_cannot_reuse_stale_or_unconfirmed_subject(hass
     if change == 'history': history[-1]['content'] = 'Another lamp is the subject now.'
     elif change == 'account':
         await hass.data['_phoenix_agentcli_store'].set_model(data.store.get_settings().decision_provider_id, 'changed')
-    elif change == 'scope': token.revoked = True
+    elif change == 'scope': access_key.revoked = True
     else:
         history[-1]['content'] = 'The action failed.'
     with patch.object(DecisionProvider, '_request', side_effect=response) as remote:
@@ -1768,8 +1768,8 @@ async def test_repeated_reference_cannot_reuse_stale_or_unconfirmed_subject(hass
 async def test_temporal_chat_command_preserves_full_history_review(hass, context_chat, restricted):
     from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
     from custom_components.phoenix_mcp import mcp_view
-    data, token = context_chat
-    token.permissions.domains['time'] = PermissionNode(state='GREEN')
+    data, access_key = context_chat
+    access_key.permissions.domains['time'] = PermissionNode(state='GREEN')
     entry = er.async_get(hass).async_get_or_create('time', 'test', 'clock', original_name='Test clock')
     hass.states.async_set(entry.entity_id, '12:00:00', {'friendly_name': 'Test clock'})
     async_expose_entity(hass, 'conversation', entry.entity_id, True)
@@ -1803,8 +1803,8 @@ async def test_temporal_chat_command_preserves_full_history_review(hass, context
 async def test_option_command_in_chat_rechecks_complete_history(hass, context_chat, restricted):
     from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
     from custom_components.phoenix_mcp import mcp_view
-    data, token = context_chat
-    token.permissions.domains['select'] = PermissionNode(state='GREEN')
+    data, access_key = context_chat
+    access_key.permissions.domains['select'] = PermissionNode(state='GREEN')
     hass.services.async_register('select', 'select_option', AsyncMock())
     entry = er.async_get(hass).async_get_or_create('select', 'test', 'mode', original_name='Test mode')
     hass.states.async_set(entry.entity_id, 'Home', {'friendly_name': 'Test mode', 'options': ['Home', 'Away']})

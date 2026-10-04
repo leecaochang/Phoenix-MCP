@@ -28,7 +28,7 @@ from custom_components.phoenix_mcp.approvals import (
 )
 from custom_components.phoenix_mcp.const import AGENTCLI_DEEPSEEK_MAX_TOKENS, AGENTCLI_PROVIDERS
 from custom_components.phoenix_mcp.const import MESA_APPROVED_EXECUTOR
-from custom_components.phoenix_mcp.token_store import GlobalSettings
+from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 
 
 # --------------------------------------------------------------------------- #
@@ -1219,9 +1219,9 @@ def test_tool_list_orders_orientation_tools_first():
     # announce_all + pass_through: the full surface, no gating in play, so this
     # exercises pure ordering. Priority tools lead in their declared order; the
     # rest keep source order (stable sort).
-    token = SimpleNamespace(announce_all_tools=True, pass_through=True)
+    access_key = SimpleNamespace(announce_all_tools=True, pass_through=True)
     data = SimpleNamespace(mesa=None)
-    names = [t["name"] for t in agentcli.build_mcp_tool_list(token, data)]
+    names = [t["name"] for t in agentcli.build_mcp_tool_list(access_key, data)]
     priority = list(agentcli._TOOL_PRIORITY)
     assert names[:len(priority)] == priority
     # No duplicates introduced by the reorder.
@@ -1630,7 +1630,7 @@ def _done(stop_reason: str) -> dict:
 
 
 def _loop_data():
-    """A MagicMock PhoenixData that passes _current_dispatch_token: not shutting down,
+    """A MagicMock PhoenixData that passes _current_dispatch_access_key: not shutting down,
     kill switch off, and a live valid token, so dispatches proceed."""
     data = MagicMock()
     data.agent_recovery = AgentRecovery()
@@ -1638,7 +1638,7 @@ def _loop_data():
     data.store.get_settings.return_value = GlobalSettings()
     live = MagicMock(id="tid")
     live.is_valid.return_value = True
-    data.store.get_token_by_id.return_value = live
+    data.store.get_access_key_by_id.return_value = live
     return data
 
 
@@ -1767,11 +1767,11 @@ async def test_focus_marker_split_chunks_is_hidden_signaled_and_not_persisted(ha
     async def emit(name, payload):
         events.append((name, payload))
 
-    token = MagicMock(id="tid")
+    access_key = MagicMock(id="tid")
     with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"):
         messages = await async_run_agent_turn(
-            hass=hass, data=_loop_data(), token=token, provider=provider,
+            hass=hass, data=_loop_data(), access_key=access_key, provider=provider,
             session=MagicMock(), messages=[{"role": "user", "content": "sort this"}],
             options={}, client_ip="agentcli", base_url="http://h", emit=emit,
             cancel=asyncio.Event(), home_focused=True,
@@ -1808,7 +1808,7 @@ async def test_run_agent_turn_uses_home_assistant_timezone_silently(
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
          patch("custom_components.phoenix_mcp.agentcli.dt_util.now", return_value=local_now):
         await async_run_agent_turn(
-            hass=hass, data=data, token=MagicMock(), provider=provider,
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=AsyncMock(), cancel=asyncio.Event(),
         )
@@ -1907,7 +1907,7 @@ async def test_run_agent_turn_read_tool(hass):
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch):
         await async_run_agent_turn(
-            hass=hass, data=data, token=MagicMock(), provider=provider,
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=asyncio.Event(),
         )
@@ -1956,7 +1956,7 @@ async def test_run_agent_turn_adds_logbook_local_companions_before_model_sees_it
          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
          patch("custom_components.phoenix_mcp.agentcli.dt_util.now", return_value=local_now):
         messages = await async_run_agent_turn(
-            hass=hass, data=data, token=MagicMock(), provider=provider,
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=asyncio.Event(),
         )
@@ -2012,7 +2012,7 @@ async def test_run_agent_turn_repeated_rejections_stay_iteration_friendly(hass):
         }), \
         patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=rejected_record):
         task = hass.async_create_task(async_run_agent_turn(
-            hass=hass, data=data, token=MagicMock(), provider=provider,
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=asyncio.Event(),
         ))
@@ -2066,7 +2066,7 @@ async def test_run_agent_turn_emits_turn_cumulative_usage(hass):
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch):
         await async_run_agent_turn(
-            hass=hass, data=data, token=MagicMock(), provider=provider,
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=asyncio.Event(),
         )
@@ -2109,7 +2109,7 @@ async def test_run_agent_turn_inline_approval_resume(hass, approval_status):
         }), \
         patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=approved_record):
         task = hass.async_create_task(async_run_agent_turn(
-            hass=hass, data=data, token=MagicMock(), provider=provider,
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=asyncio.Event(),
         ))
@@ -2166,7 +2166,7 @@ async def test_cancel_mid_approval_wait_skips_remaining_batch_calls(hass):
         }), \
         patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=pending_record):
         task = hass.async_create_task(async_run_agent_turn(
-            hass=hass, data=data, token=MagicMock(), provider=provider,
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=cancel,
         ))
@@ -2315,11 +2315,11 @@ async def test_chat_view_refuses_revoked_or_missing_token():
 
     view = PhoenixAgentCliChatView()
 
-    def _data(token):
+    def _data(access_key):
         d = MagicMock()
         d.shutting_down = False
         d.store.get_settings.return_value = MagicMock(kill_switch=False)
-        d.store.get_token_by_id.return_value = token
+        d.store.get_access_key_by_id.return_value = access_key
         return d
 
     # Missing token: 404.
@@ -2372,7 +2372,7 @@ async def test_chat_view_streams_ready_and_cleans_up(hass, mode):
     tok = MagicMock()
     tok.is_valid.return_value = True
     tok.id = "t1"
-    data.store.get_token_by_id.return_value = tok
+    data.store.get_access_key_by_id.return_value = tok
 
     store = MagicMock()
     store.resolve.return_value = ProviderConfig(kind="claude", model="m", base_url="https://x", api_key="k")
@@ -2419,9 +2419,9 @@ async def test_chat_view_rejects_focus_bypass_without_new_message(hass):
 
     data = MagicMock(ready=True, shutting_down=False)
     data.store.get_settings.return_value = GlobalSettings()
-    token = MagicMock(id="t1")
-    token.is_valid.return_value = True
-    data.store.get_token_by_id.return_value = token
+    access_key = MagicMock(id="t1")
+    access_key.is_valid.return_value = True
+    data.store.get_access_key_by_id.return_value = access_key
     store = MagicMock()
     store.resolve.return_value = ProviderConfig(
         kind="claude", model="m", base_url="https://x", api_key="k",
@@ -2559,13 +2559,13 @@ async def test_run_agent_turn_stops_on_output_budget(hass, monkeypatch):
     async def emit(name, payload):
         events.append((name, payload))
 
-    token = MagicMock()
-    token.id = "tid"
+    access_key = MagicMock()
+    access_key.id = "tid"
     with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", AsyncMock()):
         msgs = await async_run_agent_turn(
-            hass=hass, data=data, token=token, provider=provider,
+            hass=hass, data=data, access_key=access_key, provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=asyncio.Event(),
         )
@@ -2578,13 +2578,13 @@ async def test_run_agent_turn_stops_on_output_budget(hass, monkeypatch):
 
 
 def test_current_dispatch_token_gating():
-    from custom_components.phoenix_mcp.agentcli import _current_dispatch_token
+    from custom_components.phoenix_mcp.agentcli import _current_dispatch_access_key
 
-    def _data(*, kill=False, down=False, token=None):
+    def _data(*, kill=False, down=False, access_key=None):
         d = MagicMock()
         d.shutting_down = down
         d.store.get_settings.return_value = MagicMock(kill_switch=kill)
-        d.store.get_token_by_id.return_value = token
+        d.store.get_access_key_by_id.return_value = access_key
         return d
 
     valid = MagicMock()
@@ -2592,12 +2592,12 @@ def test_current_dispatch_token_gating():
     revoked = MagicMock()
     revoked.is_valid.return_value = False
 
-    assert _current_dispatch_token(_data(kill=True, token=valid), "t") is None
-    assert _current_dispatch_token(_data(down=True, token=valid), "t") is None
-    assert _current_dispatch_token(_data(token=None), "t") is None
-    assert _current_dispatch_token(_data(token=revoked), "t") is None
+    assert _current_dispatch_access_key(_data(kill=True, access_key=valid), "t") is None
+    assert _current_dispatch_access_key(_data(down=True, access_key=valid), "t") is None
+    assert _current_dispatch_access_key(_data(access_key=None), "t") is None
+    assert _current_dispatch_access_key(_data(access_key=revoked), "t") is None
     # Valid, live, kill switch off: a usable token comes back.
-    assert _current_dispatch_token(_data(token=valid), "t") is not None
+    assert _current_dispatch_access_key(_data(access_key=valid), "t") is not None
 
 
 @pytest.mark.asyncio
@@ -2617,14 +2617,14 @@ async def test_run_agent_turn_stops_when_token_revoked_midturn(hass):
     async def emit(name, payload):
         events.append((name, payload))
 
-    token = MagicMock()
-    token.id = "tid"
+    access_key = MagicMock()
+    access_key.id = "tid"
     with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch), \
-         patch("custom_components.phoenix_mcp.agentcli._current_dispatch_token", return_value=None):
+         patch("custom_components.phoenix_mcp.agentcli._current_dispatch_access_key", return_value=None):
         msgs = await async_run_agent_turn(
-            hass=hass, data=data, token=token, provider=provider,
+            hass=hass, data=data, access_key=access_key, provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=asyncio.Event(),
         )
@@ -2668,7 +2668,7 @@ async def test_run_agent_turn_rejection_reason_reaches_agent(hass):
         }), \
         patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=rejected_record):
         task = hass.async_create_task(async_run_agent_turn(
-            hass=hass, data=data, token=MagicMock(), provider=provider,
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=asyncio.Event(),
         ))
@@ -2702,7 +2702,7 @@ async def test_run_agent_turn_retries_transient_connection_error(hass):
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
          patch("custom_components.phoenix_mcp.agentcli._CONNECT_RETRY_BACKOFF_SECONDS", 0.01):
         await async_run_agent_turn(
-            hass=hass, data=data, token=MagicMock(), provider=provider,
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=asyncio.Event(),
         )
@@ -2765,7 +2765,7 @@ async def test_run_agent_turn_does_not_retry_non_retryable_error(hass):
     with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"):
         await async_run_agent_turn(
-            hass=hass, data=data, token=MagicMock(), provider=provider,
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=asyncio.Event(),
         )
@@ -2796,7 +2796,7 @@ async def test_run_agent_turn_preserves_provider_rate_limit_diagnostics(hass):
     with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"):
         await async_run_agent_turn(
-            hass=hass, data=data, token=MagicMock(), provider=provider,
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=asyncio.Event(),
         )
@@ -2837,7 +2837,7 @@ async def test_human_rejection_resets_iteration_budget(hass):
         patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=None), \
          patch("custom_components.phoenix_mcp.agentcli._await_agent_approval", AsyncMock(return_value=rejected)):
         await async_run_agent_turn(
-            hass=hass, data=data, token=MagicMock(), provider=provider,
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=asyncio.Event(), max_iterations=2,
         )
@@ -2861,7 +2861,7 @@ async def test_turn_emits_notice_on_output_limit_and_empty_reply(hass):
         with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
              patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"):
             await async_run_agent_turn(
-                hass=hass, data=data, token=MagicMock(), provider=provider,
+                hass=hass, data=data, access_key=MagicMock(), provider=provider,
                 session=MagicMock(), messages=[], options={}, client_ip="agentcli",
                 base_url="http://h", emit=emit, cancel=asyncio.Event(),
             )
@@ -2902,7 +2902,7 @@ async def test_safety_cap_pauses_at_continue_checkpoint_without_a_human(hass):
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", fake_dispatch):
         messages = await async_run_agent_turn(
-            hass=hass, data=data, token=MagicMock(), provider=provider,
+            hass=hass, data=data, access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=asyncio.Event(), max_iterations=2,
         )
@@ -2928,7 +2928,7 @@ async def test_run_agent_turn_provider_error_stops(hass):
     with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[]), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"):
         await async_run_agent_turn(
-            hass=hass, data=_loop_data(), token=MagicMock(), provider=provider,
+            hass=hass, data=_loop_data(), access_key=MagicMock(), provider=provider,
             session=MagicMock(), messages=[], options={}, client_ip="agentcli",
             base_url="http://h", emit=emit, cancel=asyncio.Event(),
         )
@@ -2947,7 +2947,7 @@ async def test_delete_provider_clears_voice_agent_binding(hass):
     from unittest.mock import AsyncMock, MagicMock, patch
     from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
     from custom_components.phoenix_mcp.const import DOMAIN
-    from custom_components.phoenix_mcp.token_store import GlobalSettings
+    from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 
     holder = {"s": GlobalSettings(voice_agent_enabled=True, voice_agent_token_id="t",
                                   voice_agent_provider_id="pid", voice_agent_model="m")}
@@ -2996,7 +2996,7 @@ async def test_delete_provider_clears_ai_task_binding(hass):
     from unittest.mock import AsyncMock, MagicMock, patch
     from homeassistant.components.http.const import KEY_AUTHENTICATED, KEY_HASS_USER
     from custom_components.phoenix_mcp.const import DOMAIN
-    from custom_components.phoenix_mcp.token_store import GlobalSettings
+    from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 
     holder = {"s": GlobalSettings(ai_task_enabled=True, ai_task_token_id="t",
                                   ai_task_provider_id="pid", ai_task_model="m")}
@@ -4041,7 +4041,7 @@ async def test_provider_failure_after_dispatch_retains_only_write_uncertainty(ha
         [{"type": agentcli.EV_ERROR, "code": "network", "retryable": True}],
     ])
     data = _loop_data()
-    token = data.store.get_token_by_id.return_value
+    access_key = data.store.get_access_key_by_id.return_value
     dispatch = AsyncMock(return_value=({"result": {"content": []}}, tool_name, tool_name, "allowed"))
     events = []
     async def emit(name, payload):
@@ -4049,7 +4049,7 @@ async def test_provider_failure_after_dispatch_retains_only_write_uncertainty(ha
     with patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="sys"), \
          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", dispatch):
-        await async_run_agent_turn(hass=hass, data=data, token=token, provider=provider,
+        await async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider,
             session=None, messages=[], options={}, client_ip="agentcli", base_url="http://h",
             emit=emit, cancel=asyncio.Event())
     assert provider.i == 2
@@ -4057,13 +4057,13 @@ async def test_provider_failure_after_dispatch_retains_only_write_uncertainty(ha
     errors = [body for name, body in events if name == 'error']
     assert len(errors) == 1 and errors[0]['retryable'] is False
     if tool_name == 'call_service':
-        assert data.agent_recovery.blocks(token.id)
-        assert data.agent_recovery.records(token.id)[0]["dispatch_result"] == "received"
+        assert data.agent_recovery.blocks(access_key.id)
+        assert data.agent_recovery.records(access_key.id)[0]["dispatch_result"] == "received"
         assert errors[0]['code'] == 'provider_after_dispatch'
         assert errors[0]['outcome'] == 'outcome_unknown'
     else:
-        assert not data.agent_recovery.blocks(token.id)
-        assert not data.agent_recovery.records(token.id)
+        assert not data.agent_recovery.blocks(access_key.id)
+        assert not data.agent_recovery.records(access_key.id)
         assert errors[0]['code'] == 'network'
         assert errors[0].get('outcome') != 'outcome_unknown'
 
@@ -4125,16 +4125,16 @@ async def test_claude_initial_tool_input_is_validated_and_preserved(initial):
 @pytest.mark.asyncio
 async def test_unreconciled_action_cannot_be_reported_complete_by_a_new_model_turn(hass):
     data = _loop_data()
-    token = data.store.get_token_by_id.return_value
-    await data.agent_recovery.begin(token.id, "call_service", "old")
+    access_key = data.store.get_access_key_by_id.return_value
+    await data.agent_recovery.begin(access_key.id, "call_service", "old")
     data.agent_recovery.interrupted("old")
     provider = _ScriptedProvider([[{"type": agentcli.EV_TEXT, "text": "All done."}, _done("end_turn")]])
     emit = AsyncMock()
-    await async_run_agent_turn(hass=hass, data=data, token=token, provider=provider, session=None,
+    await async_run_agent_turn(hass=hass, data=data, access_key=access_key, provider=provider, session=None,
         messages=[], options={}, client_ip="agentcli", base_url="http://h", emit=emit, cancel=asyncio.Event())
     assert provider.i == 0
     assert emit.await_args_list[0].args[1]["code"] == "outcome_unknown"
-    result = await agentcli._run_headless_turn(hass, data, token, provider, None, "http://h",
+    result = await agentcli._run_headless_turn(hass, data, access_key, provider, None, "http://h",
         system="s", seed="retry", client_ip="voice", max_iterations=2)
     assert result.outcome == agentcli.TURN_OUTCOME_UNKNOWN
     assert result.text == ""
@@ -4288,15 +4288,15 @@ async def test_tencent_replays_reasoning_without_inventing_provider_specific_fla
 @pytest.mark.asyncio
 @pytest.mark.parametrize("mode", ["local_shadow", "hybrid", "auto"])
 @pytest.mark.parametrize("chat_mode", ["off", "local", "hybrid", "auto"])
-async def test_decision_account_admin_catalog_isolated_and_delete_clears_binding(hass, token_store, mode, chat_mode):
+async def test_decision_account_admin_catalog_isolated_and_delete_clears_binding(hass, access_key_store, mode, chat_mode):
     from custom_components.phoenix_mcp.const import DOMAIN
     from custom_components.phoenix_mcp.data import PhoenixData
-    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
     store = agentcli.AgentCliStore(AsyncMock())
     account = await store.add('typesafe', {'api_key':'decision-private-key','model':'jev-latest'})
     chat = await store.add('deepseek', {'api_key':'chat-private-key','model':'chat'})
-    await token_store.async_patch_settings(decision_provider_id=account,decision_shadow_enabled=True,
+    await access_key_store.async_patch_settings(decision_provider_id=account,decision_shadow_enabled=True,
                                           voice_agent_routing_mode=mode, agentcli_routing_mode=chat_mode)
     view = agentcli.PhoenixAgentCliProvidersView(); view.hass = hass
     with patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)):
@@ -4307,10 +4307,10 @@ async def test_decision_account_admin_catalog_isolated_and_delete_clears_binding
             assert 'private-key' not in json.dumps(result)
         delete = agentcli.PhoenixAgentCliProviderView(); delete.hass = hass
         assert (await delete.delete(_admin_request(), instance_id=account)).status == 200
-    assert not token_store.get_settings().decision_shadow_enabled
-    assert token_store.get_settings().decision_provider_id is None
-    assert token_store.get_settings().voice_agent_routing_mode == ("off" if mode == "hybrid" else mode)
-    assert token_store.get_settings().agentcli_routing_mode == ("off" if chat_mode == "hybrid" else chat_mode)
+    assert not access_key_store.get_settings().decision_shadow_enabled
+    assert access_key_store.get_settings().decision_provider_id is None
+    assert access_key_store.get_settings().voice_agent_routing_mode == ("off" if mode == "hybrid" else mode)
+    assert access_key_store.get_settings().agentcli_routing_mode == ("off" if chat_mode == "hybrid" else chat_mode)
     assert store.resolve(chat).model == 'chat'
 
 
@@ -4358,12 +4358,12 @@ async def test_decision_discovery_requires_key_but_not_model(hass, kind):
 
 
 @pytest.mark.parametrize('case', ['valid', 'unlisted', 'offline', 'deleted', 'changed'])
-async def test_decision_model_edits_validate_before_save_and_recheck_account(hass, token_store, case):
+async def test_decision_model_edits_validate_before_save_and_recheck_account(hass, access_key_store, case):
     from custom_components.phoenix_mcp.const import DOMAIN
     from custom_components.phoenix_mcp.data import PhoenixData
     from custom_components.phoenix_mcp.decision_provider import DecisionError, DecisionProvider
 
-    hass.data[DOMAIN] = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+    hass.data[DOMAIN] = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     store = agentcli.AgentCliStore(AsyncMock())
     account = await store.add('typesafe', {'api_key': 'private-key', 'model': 'old-model'})
     view = agentcli.PhoenixAgentCliProviderView()

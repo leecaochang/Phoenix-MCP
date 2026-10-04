@@ -67,7 +67,7 @@ from ..policy_engine import (
     Permission, esphome_entry_for_entity, esphome_entry_writable, resolve,
     resolve_registry_access,
 )
-from ..token_store import TokenRecord
+from ..access_key_store import AccessKeyRecord
 from ..esphome_builder import (
     BuilderAuthRequired,
     BuilderCommandError,
@@ -195,7 +195,7 @@ def esphome_availability(hass: HomeAssistant) -> EsphomeAvailability:
 
 
 def _esphome_actions_for_entity(
-    hass: HomeAssistant, token: TokenRecord, entity_id: str, writable: bool
+    hass: HomeAssistant, access_key: AccessKeyRecord, entity_id: str, writable: bool
 ) -> list[dict]:
     """The owning ESPHome device's user-defined actions, as find_available_actions rows.
 
@@ -213,7 +213,7 @@ def _esphome_actions_for_entity(
     if not name:
         return []
 
-    available = writable or esphome_entry_writable(hass, entry, token)
+    available = writable or esphome_entry_writable(hass, entry, access_key)
     prefix = name.replace("-", "_")
     rows: list[dict] = []
     for svc in (getattr(runtime, "services", None) or {}).values():
@@ -225,10 +225,10 @@ def _esphome_actions_for_entity(
             "available": available,
             "args": [
                 {"name": getattr(arg, "name", None), "type": _esphome_arg_type(arg),
-                 **_esphome_action_metadata(arg, hass, token)}
+                 **_esphome_action_metadata(arg, hass, access_key)}
                 for arg in (getattr(svc, "args", None) or [])
             ],
-            **_esphome_action_metadata(svc, hass, token),
+            **_esphome_action_metadata(svc, hass, access_key),
         }
         if not available:
             row["reason"] = "read-only access to this device"
@@ -260,21 +260,21 @@ def _esphome_arg_type(arg: Any) -> str | None:
     return str(getattr(arg_type, "name", arg_type)).lower()
 
 
-def _esphome_action_metadata(obj: Any, hass: HomeAssistant, token: TokenRecord | None) -> dict:
+def _esphome_action_metadata(obj: Any, hass: HomeAssistant, access_key: AccessKeyRecord | None) -> dict:
     """Optional 2026.9 action descriptions/examples, bounded and scrubbed."""
-    if token is None:
+    if access_key is None:
         return {}
     metadata = {}
     for key in ("description", "example"):
         value = getattr(obj, key, None)
         if isinstance(value, str) and value:
             metadata[key] = redact_diagnostics(redact_inaccessible_entity_ids_in_text(
-                value[:ESPHOME_BUILDER_METADATA_MAX_CHARS], token, hass))
+                value[:ESPHOME_BUILDER_METADATA_MAX_CHARS], access_key, hass))
     return metadata
 
 
 def _esphome_declared_actions(
-    hass: HomeAssistant, device_info: Any, runtime: Any, token: TokenRecord | None = None
+    hass: HomeAssistant, device_info: Any, runtime: Any, access_key: AccessKeyRecord | None = None
 ) -> list[dict]:
     """List a device's user-defined API actions and their HA service names.
 
@@ -298,10 +298,10 @@ def _esphome_declared_actions(
             "registered": bool(hass.services.has_service(_ESPHOME_DOMAIN, ha_service)),
             "args": [
                 {"name": getattr(arg, "name", None), "type": _esphome_arg_type(arg),
-                 **_esphome_action_metadata(arg, hass, token)}
+                 **_esphome_action_metadata(arg, hass, access_key)}
                 for arg in (getattr(service, "args", None) or [])
             ],
-            **_esphome_action_metadata(service, hass, token),
+            **_esphome_action_metadata(service, hass, access_key),
         })
     actions.sort(key=lambda a: a["name"])
     return actions
@@ -329,7 +329,7 @@ def _esphome_dashboard_detail(configured: dict, device_info: Any) -> dict:
 
 
 def _esphome_runtime_detail(
-    hass: HomeAssistant, entry: Any, record: dict, dash_data: dict, token: TokenRecord
+    hass: HomeAssistant, entry: Any, record: dict, dash_data: dict, access_key: AccessKeyRecord
 ) -> None:
     """Fill in live runtime fields for a LOADED ESPHome config entry.
 
@@ -362,7 +362,7 @@ def _esphome_runtime_detail(
             "connections_limit": getattr(bt, "ble_connections_limit", None),
         }
 
-    actions = _esphome_declared_actions(hass, device_info, runtime, token)
+    actions = _esphome_declared_actions(hass, device_info, runtime, access_key)
     if actions:
         record["actions"] = actions
 
@@ -371,10 +371,10 @@ def _esphome_runtime_detail(
 
 
 async def _tool_get_esphome_overview(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: status of the ESPHome devices this token can see."""
-    if effective_cap(token, "cap_diagnostics") == CAP_DENY:
+    if effective_cap(access_key, "cap_diagnostics") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_esphome_overview"
 
     warnings: list[str] = []
@@ -403,7 +403,7 @@ async def _tool_get_esphome_overview(
         visible = sum(
             1
             for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id)
-            if resolve(reg_entry.entity_id, token, hass) in (Permission.READ, Permission.WRITE)
+            if resolve(reg_entry.entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
         )
         if not visible:
             continue
@@ -419,7 +419,7 @@ async def _tool_get_esphome_overview(
         # raises AttributeError. entry.data and entry.unique_id are never read at
         # all: they carry the API encryption key and the device MAC.
         if loaded:
-            _esphome_runtime_detail(hass, entry, record, dash_data, token)
+            _esphome_runtime_detail(hass, entry, record, dash_data, access_key)
         devices.append(record)
 
     devices.sort(key=lambda d: ((d.get("name") or d.get("title") or "").lower()))
@@ -518,7 +518,7 @@ def _esphome_device_for_file(hass: HomeAssistant, rel: str) -> Any | None:
     return entries[0] if len(entries) == 1 else None
 
 
-def _esphome_file_in_scope(hass: HomeAssistant, token: TokenRecord, rel: str, *, write: bool) -> bool:
+def _esphome_file_in_scope(hass: HomeAssistant, access_key: AccessKeyRecord, rel: str, *, write: bool) -> bool:
     """Whether the token may read (or write) the device YAML at rel.
 
     Every adopted owner must be in scope, even when unloaded. Orphan files
@@ -529,14 +529,14 @@ def _esphome_file_in_scope(hass: HomeAssistant, token: TokenRecord, rel: str, *,
     required = (Permission.WRITE,) if write else (Permission.READ, Permission.WRITE)
     return all(
         any(
-            resolve_registry_access(reg_entry.entity_id, token, hass) in required
+            resolve_registry_access(reg_entry.entity_id, access_key, hass) in required
             for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id)
         )
         for entry in entries
     )
 
 
-def _esphome_listing(hass: HomeAssistant, token: TokenRecord) -> list[dict]:
+def _esphome_listing(hass: HomeAssistant, access_key: AccessKeyRecord) -> list[dict]:
     """Recursively list jailed device YAML, without following directory symlinks."""
     root = os.path.join(hass.config.config_dir, _ESPHOME_DIR)
     try:
@@ -560,7 +560,7 @@ def _esphome_listing(hass: HomeAssistant, token: TokenRecord) -> list[dict]:
         full, name = resolved
         if not os.path.isfile(full):
             continue
-        if not _esphome_file_in_scope(hass, token, name, write=False):
+        if not _esphome_file_in_scope(hass, access_key, name, write=False):
             continue
         entry = _esphome_device_for_file(hass, name)
         device = getattr(getattr(entry, "runtime_data", None), "device_info", None)
@@ -578,7 +578,7 @@ def _esphome_listing(hass: HomeAssistant, token: TokenRecord) -> list[dict]:
 
 
 def _esphome_search(
-    hass: HomeAssistant, token: TokenRecord, query: str, case_sensitive: bool, context: int
+    hass: HomeAssistant, access_key: AccessKeyRecord, query: str, case_sensitive: bool, context: int
 ) -> dict:
     """Search only masked, authorized files within a total byte budget."""
     values, _keys = _read_esphome_secrets(hass)
@@ -586,7 +586,7 @@ def _esphome_search(
     matches = []
     scanned = 0
     incomplete = False
-    for row in _esphome_listing(hass, token):
+    for row in _esphome_listing(hass, access_key):
         resolved = _resolve_esphome_path(hass, row["file"])
         if resolved is None:
             continue
@@ -597,7 +597,7 @@ def _esphome_search(
             raw = _read_text_capped(resolved[0])
             scanned += len(raw.encode("utf-8"))
             masked, _paths = redact_esphome_text(raw, values)
-            masked = redact_inaccessible_entity_ids_in_text(masked, token, hass)
+            masked = redact_inaccessible_entity_ids_in_text(masked, access_key, hass)
         except (OSError, ValueError, yaml_includes.YamlParseError):
             incomplete = True
             continue
@@ -635,11 +635,11 @@ def _esphome_paged(rows: list[dict], args: dict, key: str) -> dict:
 
 
 async def _tool_search_esphome_yaml(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """Search masked local device configurations under the authoring capability."""
     resource = "search_esphome_yaml"
-    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", resource
     query = args.get("query")
     sensitive = args.get("case_sensitive", False)
@@ -652,21 +652,21 @@ async def _tool_search_esphome_yaml(
         return _tool_error("Provide a nonempty query of at most 200 characters, a boolean "
                            "case_sensitive, and context_lines between 0 and 3."), "invalid_request", resource
     try:
-        result = await hass.async_add_executor_job(_esphome_search, hass, token, query, sensitive, context)
+        result = await hass.async_add_executor_job(_esphome_search, hass, access_key, query, sensitive, context)
     except (OSError, ValueError):
         return _tool_error("ESPHome configuration search could not complete."), "invalid_request", resource
     rows = [row for row in result["matches"]
-            if _esphome_file_in_scope(hass, token, row["file"], write=False)]
+            if _esphome_file_in_scope(hass, access_key, row["file"], write=False)]
     body = _esphome_paged(rows, args, "matches")
     body["incomplete"] = result["incomplete"]
     return _tool_success(json.dumps(body)), "allowed", resource
 
 
 async def _tool_get_esphome_yaml(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: list ESPHome device YAML files, or read one with credentials masked."""
-    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "get_esphome_yaml"
 
     file_arg = args.get("file")
@@ -674,7 +674,7 @@ async def _tool_get_esphome_yaml(
 
     if file_arg is None or (isinstance(file_arg, str) and not file_arg.strip()):
         try:
-            rows = await hass.async_add_executor_job(_esphome_listing, hass, token)
+            rows = await hass.async_add_executor_job(_esphome_listing, hass, access_key)
         except ValueError:
             return _tool_error("ESPHome configuration inventory exceeds the scan budget."), "invalid_request", "get_esphome_yaml"
         body: dict = {"count": len(rows), "files": rows}
@@ -691,7 +691,7 @@ async def _tool_get_esphome_yaml(
     if resolved is None:
         return _tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", "get_esphome_yaml"
     path, rel = resolved
-    if not _esphome_file_in_scope(hass, token, rel, write=False):
+    if not _esphome_file_in_scope(hass, access_key, rel, write=False):
         return _tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"
 
     try:
@@ -764,7 +764,7 @@ def _esphome_prepare_write(
     return raw, before, existed
 
 
-async def _build_diff_set_esphome_yaml(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+async def _build_diff_set_esphome_yaml(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """Approval diff for a device-YAML write, with both sides masked."""
     resolved = _resolve_esphome_path(hass, args.get("file"))
     rel = resolved[1] if resolved else str(args.get("file"))
@@ -807,14 +807,14 @@ async def _build_diff_set_esphome_yaml(args: dict, token: TokenRecord, hass: Hom
 
 async def _tool_set_esphome_yaml(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: write one ESPHome device YAML file (Confirm-eligible)."""
-    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_esphome_yaml"
 
     pre = _esphome_write_precheck(args)
@@ -825,7 +825,7 @@ async def _tool_set_esphome_yaml(
     if resolved is None:
         return _tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", "set_esphome_yaml"
     path, rel = resolved
-    if not _esphome_file_in_scope(hass, token, rel, write=True):
+    if not _esphome_file_in_scope(hass, access_key, rel, write=True):
         return _tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"
 
     # Parse and splice BEFORE the gate (after the cap-deny check) so a doomed or
@@ -845,17 +845,17 @@ async def _tool_set_esphome_yaml(
         return conflict
 
     blocked = await _gate(
-        "cap_esphome_yaml", token, hass, data,
+        "cap_esphome_yaml", access_key, hass, data,
         tool_name="set_esphome_yaml", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_set_esphome_yaml(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_set_esphome_yaml(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_set_esphome_yaml(args, token, hass, data)
+    return await _execute_set_esphome_yaml(args, access_key, hass, data)
 
 
 async def _execute_set_esphome_yaml(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Apply a device-YAML write, re-validating everything against current disk."""
     resolved = _resolve_esphome_path(hass, args.get("file"))
@@ -864,7 +864,7 @@ async def _execute_set_esphome_yaml(
     path, rel = resolved
     # Re-check scope, parse, splice, and CAS at apply time: an approval window is
     # minutes long and permissions or disk content can drift inside it.
-    if not _esphome_file_in_scope(hass, token, rel, write=True):
+    if not _esphome_file_in_scope(hass, access_key, rel, write=True):
         return _tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"
     # Read the ContextVar HERE, in the event loop, and hand the answer to the
     # worker thread: the executor job does not inherit this context.
@@ -893,7 +893,7 @@ async def _execute_set_esphome_yaml(
     # RAW before/after: restore must reproduce the file exactly, and this is an
     # admin-only surface holding values that are already plaintext on disk.
     await _record_version(
-        data, token, resource_type="esphome_yaml", resource_id=rel,
+        data, access_key, resource_type="esphome_yaml", resource_id=rel,
         action="edit" if existed else "create",
         before=_version_content_payload(before, path=rel),
         after=_version_content_payload(raw, path=rel),
@@ -929,7 +929,7 @@ async def _execute_set_esphome_yaml(
     )
 
 
-def _esphome_delete_precheck(hass: HomeAssistant, token: TokenRecord, args: dict) -> tuple | None:
+def _esphome_delete_precheck(hass: HomeAssistant, access_key: AccessKeyRecord, args: dict) -> tuple | None:
     """Refuse a delete that cannot work, BEFORE it becomes a pending approval.
 
     Runs after the cap-deny check, so a fully denied token still
@@ -939,7 +939,7 @@ def _esphome_delete_precheck(hass: HomeAssistant, token: TokenRecord, args: dict
     if resolved is None:
         return _tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", "delete_esphome_yaml"
     path, rel = resolved
-    if not _esphome_file_in_scope(hass, token, rel, write=True):
+    if not _esphome_file_in_scope(hass, access_key, rel, write=True):
         return _tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"
     if not os.path.exists(path):
         # Byte-identical to the out-of-scope refusal above, so the refusal is not
@@ -948,7 +948,7 @@ def _esphome_delete_precheck(hass: HomeAssistant, token: TokenRecord, args: dict
     return None
 
 
-def _build_diff_delete_esphome_yaml(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _build_diff_delete_esphome_yaml(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """Approval diff for a device-YAML delete. The Before side is masked."""
     resolved = _resolve_esphome_path(hass, args.get("file"))
     rel = resolved[1] if resolved else str(args.get("file"))
@@ -992,7 +992,7 @@ def _build_diff_delete_esphome_yaml(args: dict, token: TokenRecord, hass: HomeAs
 
 
 async def _tool_delete_esphome_yaml(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: delete one ESPHome device YAML file.
@@ -1003,25 +1003,25 @@ async def _tool_delete_esphome_yaml(
     Going through an executor snapshots the file first, which makes the delete
     an ordinary restorable entry in the Changes tab.
     """
-    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_esphome_yaml"
 
-    refusal = _esphome_delete_precheck(hass, token, args)
+    refusal = _esphome_delete_precheck(hass, access_key, args)
     if refusal is not None:
         return refusal
 
     blocked = await _gate(
-        "cap_esphome_yaml", token, hass, data,
+        "cap_esphome_yaml", access_key, hass, data,
         tool_name="delete_esphome_yaml", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_delete_esphome_yaml(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_delete_esphome_yaml(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_delete_esphome_yaml(args, token, hass, data)
+    return await _execute_delete_esphome_yaml(args, access_key, hass, data)
 
 
 async def _execute_delete_esphome_yaml(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Remove the file, after snapshotting it so the delete can be rolled back."""
     resolved = _resolve_esphome_path(hass, args.get("file"))
@@ -1030,7 +1030,7 @@ async def _execute_delete_esphome_yaml(
     path, rel = resolved
     # Re-check at apply time: an approval window is minutes long and both the
     # token's scope and the file itself can drift inside it.
-    if not _esphome_file_in_scope(hass, token, rel, write=True):
+    if not _esphome_file_in_scope(hass, access_key, rel, write=True):
         return _tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"
     if not await hass.async_add_executor_job(os.path.exists, path):
         return _tool_error(_ESPHOME_NOT_FOUND), "not_found", f"esphome:{rel}"
@@ -1045,7 +1045,7 @@ async def _execute_delete_esphome_yaml(
     # one recorded after a successful delete is a window where the only copy is
     # in memory.
     await _record_version(
-        data, token, resource_type="esphome_yaml", resource_id=rel, action="delete",
+        data, access_key, resource_type="esphome_yaml", resource_id=rel, action="delete",
         before=_version_content_payload(before, path=rel), after=None, alias=rel,
     )
     try:
@@ -1106,7 +1106,7 @@ def _builder_refusal(err: BuilderError, resource: str) -> tuple[dict, str, str]:
 
 
 def _esphome_file_precheck(
-    hass: HomeAssistant, token: TokenRecord, args: dict, tool_name: str, *, write: bool = False
+    hass: HomeAssistant, access_key: AccessKeyRecord, args: dict, tool_name: str, *, write: bool = False
 ) -> tuple[tuple[dict, str, str] | None, str, str]:
     """Resolve and authorize a device file for the file-bound builder tools.
 
@@ -1122,7 +1122,7 @@ def _esphome_file_precheck(
     if resolved is None:
         return (_tool_error(_ESPHOME_PATH_REFUSED), "invalid_request", tool_name), "", ""
     path, rel = resolved
-    if not _esphome_file_in_scope(hass, token, rel, write=write):
+    if not _esphome_file_in_scope(hass, access_key, rel, write=write):
         return (_tool_error(_ESPHOME_NOT_FOUND), "denied", f"esphome:{rel}"), path, rel
     if not os.path.isfile(path):
         return (_tool_error(_ESPHOME_NOT_FOUND), "not_found", f"esphome:{rel}"), path, rel
@@ -1171,7 +1171,7 @@ def _esphome_optional_args(args: dict, names: tuple[str, ...]) -> dict:
 
 
 async def _tool_validate_esphome_yaml(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: run the Device Builder's config validation over a device file.
 
@@ -1183,14 +1183,14 @@ async def _tool_validate_esphome_yaml(
     there through set_esphome_yaml, which is capability-gated and can require an
     admin's approval. So the loop is write first, then validate.
     """
-    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "validate_esphome_yaml"
 
     url = _esphome_builder_url(hass)
     if url is None:
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "validate_esphome_yaml"
 
-    refusal, path, rel = _esphome_file_precheck(hass, token, args, "validate_esphome_yaml")
+    refusal, path, rel = _esphome_file_precheck(hass, access_key, args, "validate_esphome_yaml")
     if refusal is not None:
         return refusal
 
@@ -1218,10 +1218,10 @@ async def _tool_validate_esphome_yaml(
 
 
 async def _tool_get_esphome_board(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: look up an ESPHome board's pins and hardware, or search boards."""
-    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "get_esphome_board"
 
     url = _esphome_builder_url(hass)
@@ -1256,10 +1256,10 @@ async def _tool_get_esphome_board(
 
 
 async def _tool_get_esphome_component(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: look up ESPHome component schemas, search them, or list categories."""
-    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "get_esphome_component"
 
     url = _esphome_builder_url(hass)
@@ -1354,17 +1354,17 @@ def _project_esphome_automations(result: Any) -> Any:
 
 
 async def _tool_get_esphome_automations(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: the trigger/action/condition catalog a device's own config supports."""
-    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "get_esphome_automations"
 
     url = _esphome_builder_url(hass)
     if url is None:
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "get_esphome_automations"
 
-    refusal, path, rel = _esphome_file_precheck(hass, token, args, "get_esphome_automations")
+    refusal, path, rel = _esphome_file_precheck(hass, access_key, args, "get_esphome_automations")
     if refusal is not None:
         return refusal
 
@@ -1453,11 +1453,11 @@ def _esphome_job_list(result: Any) -> list[dict]:
 
 
 async def _tool_list_esphome_jobs(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """List scoped firmware job metadata, with paging after authorization."""
     resource = "list_esphome_jobs"
-    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", resource
     status = args.get("status")
     if status is not None and (not isinstance(status, str)
@@ -1468,7 +1468,7 @@ async def _tool_list_esphome_jobs(
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", resource
     payload = {}
     if "file" in args:
-        refusal, _path, rel = _esphome_file_precheck(hass, token, args, resource)
+        refusal, _path, rel = _esphome_file_precheck(hass, access_key, args, resource)
         if refusal is not None:
             return refusal
         payload["configuration"] = rel
@@ -1483,7 +1483,7 @@ async def _tool_list_esphome_jobs(
         if resolved is None or not os.path.isfile(resolved[0]):
             continue
         rel = resolved[1]
-        if (not _esphome_file_in_scope(hass, token, rel, write=False)
+        if (not _esphome_file_in_scope(hass, access_key, rel, write=False)
                 or (payload and rel != payload["configuration"])
                 or (status is not None and status != job.get("status"))):
             continue
@@ -1492,18 +1492,18 @@ async def _tool_list_esphome_jobs(
             value = job.get(key)
             if isinstance(value, str):
                 row[key] = redact_diagnostics(
-                    redact_inaccessible_entity_ids_in_text(value[:ESPHOME_BUILDER_METADATA_MAX_CHARS], token, hass))
+                    redact_inaccessible_entity_ids_in_text(value[:ESPHOME_BUILDER_METADATA_MAX_CHARS], access_key, hass))
         rows.append(row)
     rows.sort(key=lambda row: (row.get("created_at", ""), row.get("job_id", "")), reverse=True)
     return _tool_success(json.dumps(_esphome_paged(rows, args, "jobs"))), "allowed", resource
 
 
 async def _tool_list_esphome_devices(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """Project configured and opt-in importable Builder inventory without network identity."""
     resource = "list_esphome_devices"
-    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", resource
     query = args.get("query", "")
     include = args.get("include_importable", False)
@@ -1537,12 +1537,12 @@ async def _tool_list_esphome_devices(
                 if resolved is None or not os.path.isfile(resolved[0]):
                     continue
                 rel = resolved[1]
-                if not _esphome_file_in_scope(hass, token, rel, write=False):
+                if not _esphome_file_in_scope(hass, access_key, rel, write=False):
                     continue
-                if not _esphome_file_in_scope(hass, token, name + ".yaml", write=False):
+                if not _esphome_file_in_scope(hass, access_key, name + ".yaml", write=False):
                     continue
                 row["file"] = rel
-            elif not _esphome_file_in_scope(hass, token, name + ".yaml", write=False):
+            elif not _esphome_file_in_scope(hass, access_key, name + ".yaml", write=False):
                 # Discovery does not make an adopted but unloaded device an orphan.
                 continue
             runtime = device.get("runtime_state")
@@ -1555,7 +1555,7 @@ async def _tool_list_esphome_devices(
                 value = device.get(key)
                 if isinstance(value, str):
                     row[key] = redact_diagnostics(
-                        redact_inaccessible_entity_ids_in_text(value[:ESPHOME_BUILDER_METADATA_MAX_CHARS], token, hass))
+                        redact_inaccessible_entity_ids_in_text(value[:ESPHOME_BUILDER_METADATA_MAX_CHARS], access_key, hass))
             if query.casefold() not in json.dumps(row).casefold():
                 continue
             rows.append(row)
@@ -1654,7 +1654,7 @@ async def _esphome_latest_job_for_file(hass: HomeAssistant, url: str, rel: str) 
 
 
 async def _esphome_job_precheck(
-    hass: HomeAssistant, token: TokenRecord, url: str, args: dict, tool_name: str,
+    hass: HomeAssistant, access_key: AccessKeyRecord, url: str, args: dict, tool_name: str,
     allow_file: bool = False,
 ) -> tuple[tuple[dict, str, str] | None, dict]:
     """Resolve a job id and authorize the caller against the file it builds.
@@ -1673,7 +1673,7 @@ async def _esphome_job_precheck(
     job_id = args.get("job_id")
     has_file = isinstance(args.get("file"), str) and args["file"].strip()
     if allow_file and has_file and (not isinstance(job_id, str) or not job_id.strip()):
-        refusal, _path, rel = _esphome_file_precheck(hass, token, args, tool_name, write=False)
+        refusal, _path, rel = _esphome_file_precheck(hass, access_key, args, tool_name, write=False)
         if refusal is not None:
             return refusal, {}
         job = await _esphome_latest_job_for_file(hass, url, rel)
@@ -1697,7 +1697,7 @@ async def _esphome_job_precheck(
     if not isinstance(configuration, str) or not esphome_rel_path_ok(configuration):
         return (_tool_error(missing), "not_found", tool_name), {}
     rel = configuration
-    if not _esphome_file_in_scope(hass, token, rel, write=False):
+    if not _esphome_file_in_scope(hass, access_key, rel, write=False):
         return (_tool_error(missing), "denied", f"esphome:{rel}"), {}
     return None, job
 
@@ -1765,7 +1765,7 @@ async def _esphome_dependent_job(
 
 
 async def _tool_compile_esphome_firmware(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: start a firmware build for one device file.
 
@@ -1775,7 +1775,7 @@ async def _tool_compile_esphome_firmware(
     it adds build time rather than authority, and gating it would put an admin
     click in the middle of every iteration of an authoring loop.
     """
-    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "compile_esphome_firmware"
     if "force_local" in args and not isinstance(args["force_local"], bool):
         return _tool_error("force_local must be a boolean."), "invalid_request", "compile_esphome_firmware"
@@ -1785,7 +1785,7 @@ async def _tool_compile_esphome_firmware(
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "compile_esphome_firmware"
 
     refusal, _path, rel = _esphome_file_precheck(
-        hass, token, args, "compile_esphome_firmware", write=True
+        hass, access_key, args, "compile_esphome_firmware", write=True
     )
     if refusal is not None:
         return refusal
@@ -1796,7 +1796,7 @@ async def _tool_compile_esphome_firmware(
 
     check_request_authority()
     refusal, _path, rel = _esphome_file_precheck(
-        hass, token, args, "compile_esphome_firmware", write=True)
+        hass, access_key, args, "compile_esphome_firmware", write=True)
     if refusal is not None:
         return refusal
     payload = {"configuration": rel}
@@ -1863,11 +1863,11 @@ def _esphome_configured_name(path: str, rel: str) -> str:
 
 
 async def _rename_esphome_precheck(
-    hass: HomeAssistant, token: TokenRecord, url: str, args: dict
+    hass: HomeAssistant, access_key: AccessKeyRecord, url: str, args: dict
 ) -> tuple[tuple[dict, str, str] | None, str, str]:
     """Everything rename checks before anything is enqueued."""
     refusal, path, rel = _esphome_file_precheck(
-        hass, token, args, "rename_esphome_device", write=True
+        hass, access_key, args, "rename_esphome_device", write=True
     )
     if refusal is not None:
         return refusal, "", ""
@@ -1914,7 +1914,7 @@ async def _rename_esphome_precheck(
     return None, rel, new_name
 
 
-def _build_diff_rename_esphome_device(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _build_diff_rename_esphome_device(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """Approval diff for a rename. The action-service break is the headline."""
     resolved = _resolve_esphome_path(hass, args.get("file"))
     rel = resolved[1] if resolved else str(args.get("file"))
@@ -1988,7 +1988,7 @@ def _build_diff_rename_esphome_device(args: dict, token: TokenRecord, hass: Home
 
 
 async def _tool_rename_esphome_device(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: rename an ESPHome device, its file, and its running firmware.
@@ -2004,29 +2004,29 @@ async def _tool_rename_esphome_device(
     deletes the new YAML and leaves the original untouched if the compile or
     flash fails.
     """
-    if effective_cap(token, "cap_esphome_flash") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_flash") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "rename_esphome_device"
 
     url = _esphome_builder_url(hass)
     if url is None:
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "rename_esphome_device"
 
-    refusal, rel, _new = await _rename_esphome_precheck(hass, token, url, args)
+    refusal, rel, _new = await _rename_esphome_precheck(hass, access_key, url, args)
     if refusal is not None:
         return refusal
 
     blocked = await _gate(
-        "cap_esphome_flash", token, hass, data,
+        "cap_esphome_flash", access_key, hass, data,
         tool_name="rename_esphome_device", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_rename_esphome_device(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_rename_esphome_device(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_rename_esphome_device(args, token, hass, data)
+    return await _execute_rename_esphome_device(args, access_key, hass, data)
 
 
 async def _execute_rename_esphome_device(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Apply the rename, re-validating everything against current state."""
     url = _esphome_builder_url(hass)
@@ -2035,7 +2035,7 @@ async def _execute_rename_esphome_device(
 
     # Re-run every check: an approval window is minutes long, and a build the
     # operator started meanwhile must not be destroyed by an approval click.
-    refusal, rel, new_name = await _rename_esphome_precheck(hass, token, url, args)
+    refusal, rel, new_name = await _rename_esphome_precheck(hass, access_key, url, args)
     if refusal is not None:
         return refusal
 
@@ -2117,7 +2117,7 @@ async def _execute_rename_esphome_device(
 
 
 async def _tool_clean_esphome_build(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: discard one configuration's build artifacts (a stale cache).
 
@@ -2127,7 +2127,7 @@ async def _tool_clean_esphome_build(
     next build is slower (the tool description says so). firmware/reset_build_env
     stays unreachable: it takes no configuration and CANCELS EVERY in-flight job.
     """
-    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "clean_esphome_build"
 
     url = _esphome_builder_url(hass)
@@ -2135,7 +2135,7 @@ async def _tool_clean_esphome_build(
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "clean_esphome_build"
 
     refusal, _path, rel = _esphome_file_precheck(
-        hass, token, args, "clean_esphome_build", write=True
+        hass, access_key, args, "clean_esphome_build", write=True
     )
     if refusal is not None:
         return refusal
@@ -2193,7 +2193,7 @@ def _esphome_job_started(
 
 
 async def _install_esphome_precheck(
-    hass: HomeAssistant, token: TokenRecord, args: dict
+    hass: HomeAssistant, access_key: AccessKeyRecord, args: dict
 ) -> tuple[tuple[dict, str, str] | None, str, str]:
     """Everything install checks before it is allowed to enqueue anything.
 
@@ -2211,7 +2211,7 @@ async def _install_esphome_precheck(
             "", "",
         )
     refusal, _path, rel = _esphome_file_precheck(
-        hass, token, args, "install_esphome_firmware", write=True
+        hass, access_key, args, "install_esphome_firmware", write=True
     )
     if refusal is not None:
         return refusal, url, ""
@@ -2220,7 +2220,7 @@ async def _install_esphome_precheck(
         return inflight, url, rel
     check_request_authority()
     refusal, _path, rel = _esphome_file_precheck(
-        hass, token, args, "install_esphome_firmware", write=True)
+        hass, access_key, args, "install_esphome_firmware", write=True)
     if refusal is not None:
         return refusal, url, rel
     return None, url, rel
@@ -2228,7 +2228,7 @@ async def _install_esphome_precheck(
 
 async def _tool_install_esphome_firmware(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
@@ -2237,28 +2237,28 @@ async def _tool_install_esphome_firmware(
     """MCP tool: build and flash one device's firmware (Confirm-eligible)."""
     # Capability gate first, so a denied token gets a uniform Forbidden and never
     # learns anything about the file it named.
-    if effective_cap(token, "cap_esphome_flash") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_flash") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "install_esphome_firmware"
 
-    pre, _url, _rel = await _install_esphome_precheck(hass, token, args)
+    pre, _url, _rel = await _install_esphome_precheck(hass, access_key, args)
     if pre is not None:
         return pre
 
     blocked = await _gate(
-        "cap_esphome_flash", token, hass, data,
+        "cap_esphome_flash", access_key, hass, data,
         tool_name="install_esphome_firmware", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_install_esphome_firmware(args, token, hass, data),
+        client_ip=client_ip, diff=lambda: _build_diff_install_esphome_firmware(args, access_key, hass, data),
     )
     if blocked is not None:
         return blocked
-    return await _execute_install_esphome_firmware(args, token, hass, data)
+    return await _execute_install_esphome_firmware(args, access_key, hass, data)
 
 
 async def _execute_install_esphome_firmware(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Side-effect path for install_esphome_firmware."""
-    pre, url, rel = await _install_esphome_precheck(hass, token, args)
+    pre, url, rel = await _install_esphome_precheck(hass, access_key, args)
     if pre is not None:
         return pre
 
@@ -2307,7 +2307,7 @@ _ESPHOME_VERSION_JUMP_RISK = (
 
 
 def _build_diff_install_esphome_firmware(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> dict:
     """Diff payload for install_esphome_firmware approvals.
 
@@ -2349,7 +2349,7 @@ def _build_diff_install_esphome_firmware(
         preview["entities"] = sorted(e.entity_id for e in entries)
         mesa_modes = {}
         for reg_entry in entries:
-            mode = entity_control_mode(data.mesa, token, reg_entry.entity_id)
+            mode = entity_control_mode(data.mesa, access_key, reg_entry.entity_id)
             if mode is not None:
                 mesa_modes[reg_entry.entity_id] = mode
         if mesa_modes:
@@ -2386,13 +2386,13 @@ def _build_diff_install_esphome_firmware(
 
 
 async def _tool_get_esphome_job(
-    args: dict, token: TokenRecord, hass: HomeAssistant, client_ip: str | None = None
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, client_ip: str | None = None
 ) -> tuple[dict, str, str]:
     """MCP tool: report a firmware job's status and log."""
     args, error = normalize_tool_args("get_esphome_job", args)
     if error:
         return _tool_error(error), "invalid_request", "get_esphome_job"
-    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "get_esphome_job"
 
     url = _esphome_builder_url(hass)
@@ -2400,7 +2400,7 @@ async def _tool_get_esphome_job(
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "get_esphome_job"
 
     refusal, job = await _esphome_job_precheck(
-        hass, token, url, args, "get_esphome_job", allow_file=True)
+        hass, access_key, url, args, "get_esphome_job", allow_file=True)
     if refusal is not None:
         return refusal
     # Carries the same stop-here steer as the wait tool on a headless surface:
@@ -2527,7 +2527,7 @@ def _esphome_progress_message(job: dict, rel: str, phase: str) -> str:
 
 
 async def _tool_wait_for_esphome_job(
-    args: dict, token: TokenRecord, hass: HomeAssistant, client_ip: str | None = None
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, client_ip: str | None = None
 ) -> tuple[dict, str, str]:
     """MCP tool: hold until a firmware job finishes, reporting progress meanwhile.
 
@@ -2540,14 +2540,14 @@ async def _tool_wait_for_esphome_job(
     reports "Compiling x: 70%" and then "Flashing x: 40%" and only returns once
     the device has actually been flashed.
     """
-    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "wait_for_esphome_job"
 
     url = _esphome_builder_url(hass)
     if url is None:
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "wait_for_esphome_job"
 
-    refusal, job = await _esphome_job_precheck(hass, token, url, args, "wait_for_esphome_job")
+    refusal, job = await _esphome_job_precheck(hass, access_key, url, args, "wait_for_esphome_job")
     if refusal is not None:
         return refusal
 
@@ -2613,7 +2613,7 @@ async def _tool_wait_for_esphome_job(
 
 
 async def _tool_cancel_esphome_job(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: stop a queued or running firmware job.
 
@@ -2623,14 +2623,14 @@ async def _tool_cancel_esphome_job(
     partition and swaps on completion, so an interrupted upload leaves the device
     running exactly the firmware it already had.
     """
-    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "cancel_esphome_job"
 
     url = _esphome_builder_url(hass)
     if url is None:
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "cancel_esphome_job"
 
-    refusal, job = await _esphome_job_precheck(hass, token, url, args, "cancel_esphome_job")
+    refusal, job = await _esphome_job_precheck(hass, access_key, url, args, "cancel_esphome_job")
     if refusal is not None:
         return refusal
 
@@ -2659,7 +2659,7 @@ async def _tool_cancel_esphome_job(
 
 
 async def _tool_get_esphome_device_logs(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: capture a bounded window of a device's live console output.
 
@@ -2668,14 +2668,14 @@ async def _tool_get_esphome_device_logs(
     the entities Home Assistant exposes, so the device itself is the unit of
     authorization here.
     """
-    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "get_esphome_device_logs"
 
     url = _esphome_builder_url(hass)
     if url is None:
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "get_esphome_device_logs"
 
-    refusal, path, rel = _esphome_file_precheck(hass, token, args, "get_esphome_device_logs")
+    refusal, path, rel = _esphome_file_precheck(hass, access_key, args, "get_esphome_device_logs")
     if refusal is not None:
         return refusal
 
@@ -2717,17 +2717,17 @@ def _esphome_capture_seconds(args: dict) -> int:
 
 
 async def _tool_decode_esphome_backtrace(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: symbolize an ESP32 crash backtrace against the device's build."""
-    if effective_cap(token, "cap_esphome_yaml") == CAP_DENY:
+    if effective_cap(access_key, "cap_esphome_yaml") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "decode_esphome_backtrace"
 
     url = _esphome_builder_url(hass)
     if url is None:
         return _tool_error(_ESPHOME_BUILDER_ABSENT), "invalid_request", "decode_esphome_backtrace"
 
-    refusal, path, rel = _esphome_file_precheck(hass, token, args, "decode_esphome_backtrace")
+    refusal, path, rel = _esphome_file_precheck(hass, access_key, args, "decode_esphome_backtrace")
     if refusal is not None:
         return refusal
 

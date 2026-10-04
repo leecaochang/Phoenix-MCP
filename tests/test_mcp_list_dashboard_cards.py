@@ -18,13 +18,13 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp.card_catalog import CardCatalogStore
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
 
-def _token(**caps) -> TokenRecord:
+def _access_key(**caps) -> AccessKeyRecord:
     base = {"cap_lovelace_write": "allow"}
     base.update(caps)
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x", created_at=utcnow(),
         created_by="u", permissions=PermissionTree(domains={}), **base,
     )
@@ -58,13 +58,13 @@ async def _harvested(**over) -> CardCatalogStore:
     return store
 
 
-async def _call(args, token, hass, data):
-    return await _call_tool("list_dashboard_cards", args, token, hass, data=data)
+async def _call(args, access_key, hass, data):
+    return await _call_tool("list_dashboard_cards", args, access_key, hass, data=data)
 
 
 async def test_unharvested_is_reported_as_unknown_not_empty(hass: HomeAssistant) -> None:
     """A cold catalog reads as unknown, never as 'no custom cards'."""
-    content, outcome, _ = await _call({}, _token(), hass, _data())
+    content, outcome, _ = await _call({}, _access_key(), hass, _data())
     body = _json(content)
 
     assert outcome == "allowed"
@@ -78,7 +78,7 @@ async def test_unharvested_is_reported_as_unknown_not_empty(hass: HomeAssistant)
 
 
 async def test_denied_cap_returns_uniform_forbidden(hass: HomeAssistant) -> None:
-    content, outcome, resource = await _call({}, _token(cap_lovelace_write="deny"), hass, _data())
+    content, outcome, resource = await _call({}, _access_key(cap_lovelace_write="deny"), hass, _data())
 
     assert outcome == "denied"
     assert resource == "list_dashboard_cards"
@@ -87,7 +87,7 @@ async def test_denied_cap_returns_uniform_forbidden(hass: HomeAssistant) -> None
 
 async def test_lean_listing_omits_examples(hass: HomeAssistant) -> None:
     """A discovery call must not spend its budget on examples for unused cards."""
-    content, outcome, _ = await _call({}, _token(), hass, _data(await _harvested()))
+    content, outcome, _ = await _call({}, _access_key(), hass, _data(await _harvested()))
     body = _json(content)
 
     assert outcome == "allowed"
@@ -102,14 +102,14 @@ async def test_lean_listing_omits_examples(hass: HomeAssistant) -> None:
 
 async def test_types_carry_the_custom_prefix(hass: HomeAssistant) -> None:
     """The catalog stores bare types; a card config needs the prefixed form."""
-    content, _, _ = await _call({}, _token(), hass, _data(await _harvested()))
+    content, _, _ = await _call({}, _access_key(), hass, _data(await _harvested()))
     for card in _json(content)["cards"]:
         assert card["type"].startswith("custom:")
 
 
 async def test_unavailable_card_is_flagged_and_available_ones_are_not(hass: HomeAssistant) -> None:
     """A picker entry whose element never loaded must not look usable."""
-    content, _, _ = await _call({}, _token(), hass, _data(await _harvested()))
+    content, _, _ = await _call({}, _access_key(), hass, _data(await _harvested()))
     cards = {c["type"]: c for c in _json(content)["cards"]}
 
     broken = cards["custom:broken-card"]
@@ -123,7 +123,7 @@ async def test_unavailable_card_is_flagged_and_available_ones_are_not(hass: Home
 async def test_single_type_lookup_returns_the_example(hass: HomeAssistant) -> None:
     hass.states.async_set("light.kitchen", "on")
     content, outcome, _ = await _call(
-        {"type": "mushroom-light-card"}, _token(), hass, _data(await _harvested())
+        {"type": "mushroom-light-card"}, _access_key(), hass, _data(await _harvested())
     )
     body = _json(content)
 
@@ -135,14 +135,14 @@ async def test_single_type_lookup_returns_the_example(hass: HomeAssistant) -> No
 
 async def test_single_type_lookup_accepts_custom_prefix(hass: HomeAssistant) -> None:
     content, _, _ = await _call(
-        {"type": "custom:mushroom-light-card"}, _token(), hass, _data(await _harvested())
+        {"type": "custom:mushroom-light-card"}, _access_key(), hass, _data(await _harvested())
     )
     assert _json(content)["found"] is True
 
 
 async def test_missing_type_reports_not_installed(hass: HomeAssistant) -> None:
     content, outcome, _ = await _call(
-        {"type": "custom:nope-card"}, _token(), hass, _data(await _harvested())
+        {"type": "custom:nope-card"}, _access_key(), hass, _data(await _harvested())
     )
     body = _json(content)
 
@@ -153,7 +153,7 @@ async def test_missing_type_reports_not_installed(hass: HomeAssistant) -> None:
 
 async def test_detailed_includes_every_example(hass: HomeAssistant) -> None:
     hass.states.async_set("light.kitchen", "on")
-    content, _, _ = await _call({"detailed": True}, _token(), hass, _data(await _harvested()))
+    content, _, _ = await _call({"detailed": True}, _access_key(), hass, _data(await _harvested()))
     cards = {c["type"]: c for c in _json(content)["cards"]}
 
     assert cards["custom:mushroom-light-card"]["example_config"]["entity"] == "<redacted>"
@@ -164,7 +164,7 @@ async def test_detailed_includes_every_example(hass: HomeAssistant) -> None:
 async def test_wrong_shaped_type_arg_degrades_to_a_listing(hass: HomeAssistant) -> None:
     """str_arg degrades a bad shape to absent instead of inventing an argument."""
     content, outcome, _ = await _call(
-        {"type": ["mushroom-light-card"]}, _token(), hass, _data(await _harvested())
+        {"type": ["mushroom-light-card"]}, _access_key(), hass, _data(await _harvested())
     )
     body = _json(content)
 
@@ -177,15 +177,15 @@ async def test_examples_filter_existing_and_embedded_out_of_scope_entities(hass:
     """Old saved stubs obey current entity authority in both read projections."""
     hass.states.async_set("light.kitchen", "on")
     hass.states.async_set("lock.private_door", "locked")
-    token = _token()
-    token.permissions.domains["light"] = PermissionNode(state="YELLOW")
+    access_key = _access_key()
+    access_key.permissions.domains["light"] = PermissionNode(state="YELLOW")
     catalog = await _harvested(entries=[{
         "type": "scope-card",
         "stub_config": {"entity": "light.kitchen", "nested": ["lock.private_door"],
                         "template": "{{ states('lock.private_door') }}", "password": "private"},
     }])
     for args in ({"type": "scope-card"}, {"detailed": True}):
-        content, outcome, _ = await _call(args, token, hass, _data(catalog))
+        content, outcome, _ = await _call(args, access_key, hass, _data(catalog))
         body = _json(content)
         example = (body["card"] if "card" in body else body["cards"][0])["example_config"]
         assert outcome == "allowed"
@@ -199,8 +199,8 @@ async def test_examples_preserve_placeholders_urls_and_css_but_redact_attribute_
     hass.states.async_set("light.visible", "on")
     hass.states.async_set("lock.private_door", "locked")
     hidden = er.async_get(hass).async_get_or_create("lock", "test", "registered_only", suggested_object_id="registered_only")
-    token = _token()
-    token.permissions.domains["light"] = PermissionNode(state="YELLOW")
+    access_key = _access_key()
+    access_key.permissions.domains["light"] = PermissionNode(state="YELLOW")
     benign = {"entity": "light.example", "image": "/local/images/bg.png",
               "url_path": "https://www.home-assistant.io/docs/configuration.yaml",
               "style": "width: 10.5px", "template": "{{ states.light.visible.state }}"}
@@ -210,7 +210,7 @@ async def test_examples_preserve_placeholders_urls_and_css_but_redact_attribute_
                "password": "secret", "nested": [{"lock.private_door": "must disappear"}]}
     catalog = await _harvested(entries=[{"type": "examples", "stub_config": {"benign": benign, "private": private}}])
     for args in ({"type": "examples"}, {"detailed": True}):
-        content, outcome, _ = await _call(args, token, hass, _data(catalog))
+        content, outcome, _ = await _call(args, access_key, hass, _data(catalog))
         body = _json(content)
         example = (body["card"] if "card" in body else body["cards"][0])["example_config"]
         assert outcome == "allowed"

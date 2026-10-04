@@ -31,7 +31,7 @@ from .device_semantics import (
     device_registry_snapshot_from_registry,
     effective_entity_area_id,
 )
-from .token_store import TokenRecord
+from .access_key_store import AccessKeyRecord
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -82,9 +82,9 @@ def canonical_entity_id(entity_id: str, hass: HomeAssistant) -> str:
     return entry.entity_id if entry else entity_id
 
 
-def resolve(entity_id: str, token: TokenRecord, hass: HomeAssistant) -> Permission:
+def resolve(entity_id: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> Permission:
     """Intersect Phoenix entity grants with the admitted household user's grants."""
-    permission = _resolve_token_access(entity_id, token, hass)
+    permission = _resolve_access_key_access(entity_id, access_key, hass)
     if permission not in (Permission.READ, Permission.WRITE):
         return permission
     from .household_authority import household_authority
@@ -100,7 +100,7 @@ def resolve(entity_id: str, token: TokenRecord, hass: HomeAssistant) -> Permissi
     return permission
 
 
-def _resolve_token_access(entity_id: str, token: TokenRecord, hass: HomeAssistant) -> Permission:
+def _resolve_access_key_access(entity_id: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> Permission:
     """Resolve effective permission for entity_id against a token.
 
     Return values:
@@ -149,20 +149,20 @@ def _resolve_token_access(entity_id: str, token: TokenRecord, hass: HomeAssistan
 
     from .const import (PERSONA_HOME_COMPANION, HOME_COMPANION_SENSOR_CLASSES,
                         HOME_COMPANION_CONTROL_DOMAINS, HOME_COMPANION_READ_DOMAINS)
-    companion = token.persona == PERSONA_HOME_COMPANION
+    companion = access_key.persona == PERSONA_HOME_COMPANION
     if companion:
         state = hass.states.get(entity_id)
         # Restrict device types without changing the shared permission tree.
-        if (token.pass_through or state is None
+        if (access_key.pass_through or state is None
                 or domain not in HOME_COMPANION_CONTROL_DOMAINS | HOME_COMPANION_READ_DOMAINS
                 or (domain == "sensor" and state.attributes.get("device_class") not in HOME_COMPANION_SENSOR_CLASSES)):
             return Permission.NO_ACCESS
 
     # Pass-through bypasses all entity permission resolution
-    if token.pass_through:
+    if access_key.pass_through:
         return Permission.WRITE
 
-    permissions = token.permissions
+    permissions = access_key.permissions
     device_id = entry.device_id if entry else None
 
     entity_node = permissions.entities.get(entity_id)
@@ -188,7 +188,7 @@ def _resolve_token_access(entity_id: str, token: TokenRecord, hass: HomeAssistan
 
 def resolve_registry_access(
     entity_id: str,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     *,
     force_registry_only: bool = False,
@@ -205,7 +205,7 @@ def resolve_registry_access(
     WRITE after the ordinary blocklist/ghost checks; Assist exposure remains the
     caller's shared enumeration filter.
     """
-    ordinary = resolve(entity_id, token, hass)
+    ordinary = resolve(entity_id, access_key, hass)
     if ordinary not in (Permission.READ, Permission.WRITE):
         return ordinary
 
@@ -217,10 +217,10 @@ def resolve_registry_access(
         entry.disabled_by is None and hass.states.get(canonical_id) is not None
     )):
         return ordinary
-    if token.pass_through:
+    if access_key.pass_through:
         return ordinary
 
-    permissions = token.permissions
+    permissions = access_key.permissions
     domain = canonical_id.split(".", 1)[0]
     device_node = permissions.devices.get(entry.device_id) if entry.device_id else None
     domain_node = permissions.domains.get(domain)
@@ -279,7 +279,7 @@ def _phoenix_owned_device(device: Any, hass: HomeAssistant) -> bool:
 
 def resolve_device_registry_access(
     device_id: str,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     *,
     snapshot: DeviceRegistrySnapshot | None = None,
@@ -304,22 +304,22 @@ def resolve_device_registry_access(
     from .household_authority import household_admin_access
 
     if not household_admin_access() and not any(
-        resolve_registry_access(entity_id, token, hass, force_registry_only=device.disabled_by is not None)
+        resolve_registry_access(entity_id, access_key, hass, force_registry_only=device.disabled_by is not None)
         in (Permission.READ, Permission.WRITE) for entity_id in entity_ids
     ):
         return Permission.NO_ACCESS
-    if token.pass_through:
-        expose = assist_expose_check(token, hass)
+    if access_key.pass_through:
+        expose = assist_expose_check(access_key, hass)
         if expose is not None and not any(
             expose(entity_id)
-            and resolve_registry_access(entity_id, token, hass)
+            and resolve_registry_access(entity_id, access_key, hass)
             in (Permission.READ, Permission.WRITE)
             for entity_id in entity_ids
         ):
             return Permission.NO_ACCESS
         return Permission.WRITE
 
-    device_node = token.permissions.devices.get(device_id)
+    device_node = access_key.permissions.devices.get(device_id)
     if device_node is not None:
         if device_node.state == "RED":
             return Permission.DENY
@@ -331,7 +331,7 @@ def resolve_device_registry_access(
     inherited = [
         resolve_registry_access(
             entity_id,
-            token,
+            access_key,
             hass,
             force_registry_only=device.disabled_by is not None,
         )
@@ -348,7 +348,7 @@ def resolve_device_registry_access(
 
 def resolve_device_registry_write(
     device_id: str,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     *,
     snapshot: DeviceRegistrySnapshot | None = None,
@@ -367,9 +367,9 @@ def resolve_device_registry_write(
         return Permission.NOT_FOUND
     if _phoenix_owned_device(device, hass):
         return Permission.NO_ACCESS
-    if token.pass_through:
+    if access_key.pass_through:
         return Permission.WRITE
-    node = token.permissions.devices.get(device_id)
+    node = access_key.permissions.devices.get(device_id)
     if node is None:
         return Permission.NO_ACCESS
     if node.state == "GREEN":
@@ -411,38 +411,38 @@ def config_entry_registry_context(
 
 
 def resolve_config_entry_registry_access(
-    entry_id: str, token: TokenRecord, hass: HomeAssistant
+    entry_id: str, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> Permission:
     """Resolve read visibility inherited from an entry's owned resources."""
     context = config_entry_registry_context(entry_id, hass)
     if context is None:
         return Permission.NOT_FOUND
-    if token.pass_through:
-        expose = assist_expose_check(token, hass)
+    if access_key.pass_through:
+        expose = assist_expose_check(access_key, hass)
         if expose is None or (not context.entity_ids and not context.device_ids):
             return Permission.WRITE
         if any(
             expose(entity_id)
-            and resolve_registry_access(entity_id, token, hass)
+            and resolve_registry_access(entity_id, access_key, hass)
             in (Permission.READ, Permission.WRITE)
             for entity_id in context.entity_ids
         ) or any(
-            resolve_device_registry_access(device_id, token, hass)
+            resolve_device_registry_access(device_id, access_key, hass)
             in (Permission.READ, Permission.WRITE)
             for device_id in context.device_ids
         ):
             return Permission.WRITE
         return Permission.NO_ACCESS
 
-    expose = assist_expose_check(token, hass)
+    expose = assist_expose_check(access_key, hass)
     entity_results = [
-        resolve_registry_access(entity_id, token, hass)
+        resolve_registry_access(entity_id, access_key, hass)
         for entity_id in context.entity_ids
         if expose is None or expose(entity_id)
     ]
     snapshot = device_registry_snapshot(hass)
     device_results = [
-        resolve_device_registry_access(device_id, token, hass, snapshot=snapshot)
+        resolve_device_registry_access(device_id, access_key, hass, snapshot=snapshot)
         for device_id in context.device_ids
     ]
     results = entity_results + device_results
@@ -457,7 +457,7 @@ def resolve_config_entry_registry_access(
 
 def resolve_config_entry_registry_write(
     entry_id: str,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     *,
     force_registry_only: bool = False,
@@ -471,7 +471,7 @@ def resolve_config_entry_registry_write(
     context = config_entry_registry_context(entry_id, hass)
     if context is None:
         return Permission.NOT_FOUND
-    if token.pass_through:
+    if access_key.pass_through:
         return Permission.WRITE
     if not context.entity_ids and not context.device_ids:
         return Permission.NO_ACCESS
@@ -479,7 +479,7 @@ def resolve_config_entry_registry_write(
     entity_results = [
         resolve_registry_access(
             entity_id,
-            token,
+            access_key,
             hass,
             force_registry_only=force_registry_only,
         )
@@ -487,7 +487,7 @@ def resolve_config_entry_registry_write(
     ]
     snapshot = device_registry_snapshot(hass)
     device_results = [
-        resolve_device_registry_write(device_id, token, hass, snapshot=snapshot)
+        resolve_device_registry_write(device_id, access_key, hass, snapshot=snapshot)
         for device_id in context.device_ids
     ]
     results = entity_results + device_results
@@ -536,17 +536,17 @@ def scrub_state_dict(d: dict) -> dict:
     return {**d, "attributes": attrs}
 
 
-def assist_expose_check(token: TokenRecord, hass: HomeAssistant) -> Callable[[str], bool] | None:
+def assist_expose_check(access_key: AccessKeyRecord, hass: HomeAssistant) -> Callable[[str], bool] | None:
     """Return the Assist-exposure predicate for a pass-through token, or None.
 
     Non-None only for pass_through tokens with use_assist_exposure; scoped tokens
     are filtered by their permission tree alone. This is the one shared
-    implementation for every entity-filter path (filter_entities_for_token,
+    implementation for every entity-filter path (filter_entities_for_access_key,
     build_permitted_states/entity_ids, resolve_intent_entities). The rest of the
     filter predicate (domain blocklist, Phoenix-platform sensors, pass-through
     WRITE) lives in resolve() itself, so those paths need only this plus resolve().
     """
-    if not (token.pass_through and token.use_assist_exposure):
+    if not (access_key.pass_through and access_key.use_assist_exposure):
         return None
     from homeassistant.components.homeassistant.exposed_entities import (  # noqa: PLC0415
         async_should_expose,
@@ -558,9 +558,9 @@ def assist_expose_check(token: TokenRecord, hass: HomeAssistant) -> Callable[[st
     return _exposed
 
 
-def filter_entities_for_token(
+def filter_entities_for_access_key(
     entities: list[State],
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
 ) -> list[dict[str, Any]]:
     """Filter a list of State objects to those accessible by token, scrub sensitive attributes.
@@ -571,11 +571,11 @@ def filter_entities_for_token(
     extra is the use_assist_exposure check. Sensitive attributes are
     always scrubbed.
     """
-    expose = assist_expose_check(token, hass)
+    expose = assist_expose_check(access_key, hass)
     return [
         scrub_sensitive_attributes(e)
         for e in entities
-        if resolve(e.entity_id, token, hass) in (Permission.READ, Permission.WRITE)
+        if resolve(e.entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
         and (expose is None or expose(e.entity_id))
     ]
 
@@ -700,7 +700,7 @@ def resolve_service_targets(
     device_id: str | list[str] | None = None,
     area_id: str | list[str] | None = None,
     service_domain: str,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
 ) -> tuple[list[str], int]:
     """Resolve service call targets to a WRITE-permitted, deduplicated entity_id list.
@@ -746,7 +746,7 @@ def resolve_service_targets(
         if eid in seen:
             continue
         seen.add(eid)
-        if resolve(eid, token, hass) == Permission.WRITE:
+        if resolve(eid, access_key, hass) == Permission.WRITE:
             permitted.append(eid)
 
     return permitted, raw_count
@@ -801,7 +801,7 @@ def call_needs_physical_gate(
     entity_id: str | list[str] | None = None,
     device_id: str | list[str] | None = None,
     area_id: str | list[str] | None = None,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
 ) -> bool:
     """True if a call_service must gate on cap_physical_control.
@@ -816,7 +816,7 @@ def call_needs_physical_gate(
         try:
             targets, _ = resolve_service_targets(
                 entity_id=entity_id, device_id=device_id, area_id=area_id,
-                service_domain=domain, token=token, hass=hass,
+                service_domain=domain, access_key=access_key, hass=hass,
             )
         except EntityCreationNotPermitted:
             return False
@@ -826,7 +826,7 @@ def call_needs_physical_gate(
 
 def filter_service_response(
     response_data: Any,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     _depth: int = 0,
 ) -> Any:
@@ -851,7 +851,7 @@ def filter_service_response(
         # or list at this depth could contain entity IDs at deeper levels that
         # would bypass redaction if returned as-is.
         if isinstance(response_data, str) and _ENTITY_ID_RE.match(response_data):
-            perm = resolve(response_data, token, hass)
+            perm = resolve(response_data, access_key, hass)
             if perm in (Permission.NO_ACCESS, Permission.DENY, Permission.NOT_FOUND):
                 return "<redacted>"
             return response_data
@@ -864,7 +864,7 @@ def filter_service_response(
         return response_data
     if isinstance(response_data, str):
         if _ENTITY_ID_RE.match(response_data):
-            perm = resolve(response_data, token, hass)
+            perm = resolve(response_data, access_key, hass)
             if perm in (Permission.NO_ACCESS, Permission.DENY, Permission.NOT_FOUND):
                 return "<redacted>"
         return response_data
@@ -872,21 +872,21 @@ def filter_service_response(
         out: dict = {}
         for k, v in response_data.items():
             if isinstance(k, str) and _ENTITY_ID_RE.match(k):
-                perm = resolve(k, token, hass)
+                perm = resolve(k, access_key, hass)
                 if perm in (Permission.NO_ACCESS, Permission.DENY, Permission.NOT_FOUND):
                     continue
             out[k] = (
                 "<redacted>" if is_sensitive_key(k)
-                else filter_service_response(v, token, hass, _depth + 1)
+                else filter_service_response(v, access_key, hass, _depth + 1)
             )
         return out
     if isinstance(response_data, list):
-        return [filter_service_response(item, token, hass, _depth + 1) for item in response_data]
+        return [filter_service_response(item, access_key, hass, _depth + 1) for item in response_data]
     return response_data
 
 
 def get_effective_hint(
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     entity_id: str,
     hass: HomeAssistant,
     entity_hints: dict[str, str] | None = None,
@@ -899,7 +899,7 @@ def get_effective_hint(
     """
     registry = er.async_get(hass)
     entry = registry.async_get(entity_id)
-    permissions = token.permissions
+    permissions = access_key.permissions
 
     entity_node = permissions.entities.get(entity_id)
     if entity_node and entity_node.hint:
@@ -1078,7 +1078,7 @@ def normalize_intent_selectors(
 
 def resolve_intent_entities(
     hass: HomeAssistant,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     *,
     domains: list[str] | None = None,
     device_classes: list[str] | None = None,
@@ -1116,7 +1116,7 @@ def resolve_intent_entities(
     domains, device_classes = selectors.domains, selectors.device_classes
 
     registry = er.async_get(hass)
-    expose = assist_expose_check(token, hass)
+    expose = assist_expose_check(access_key, hass)
 
     def _intent_eligible(entity_id: str) -> bool:
         # Exclude config/diagnostic and hidden entities from native Hass* intent
@@ -1132,7 +1132,7 @@ def resolve_intent_entities(
 
     permitted: list[State] = [
         s for s in hass.states.async_all()
-        if resolve(s.entity_id, token, hass) in (
+        if resolve(s.entity_id, access_key, hass) in (
             (Permission.READ, Permission.WRITE) if read_only else (Permission.WRITE,)
         )
         and (expose is None or expose(s.entity_id))
@@ -1254,11 +1254,11 @@ def resolve_esphome_user_service(hass: HomeAssistant, service: str) -> Any | Non
     return best
 
 
-def esphome_entry_writable(hass: HomeAssistant, entry: Any, token: TokenRecord) -> bool:
+def esphome_entry_writable(hass: HomeAssistant, entry: Any, access_key: AccessKeyRecord) -> bool:
     """True when the token holds WRITE on at least one of the entry's entities."""
     registry = er.async_get(hass)
     return any(
-        resolve(reg_entry.entity_id, token, hass) is Permission.WRITE
+        resolve(reg_entry.entity_id, access_key, hass) is Permission.WRITE
         for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id)
     )
 
@@ -1302,7 +1302,7 @@ def location_registry_context(
 
 
 def resolve_location_registry_write(
-    kind: str, location_id: str, token: TokenRecord, hass: HomeAssistant,
+    kind: str, location_id: str, access_key: AccessKeyRecord, hass: HomeAssistant,
     *, context: LocationRegistryContext | None = None,
 ) -> Permission:
     """Require whole-membership authority; empty locations require pass-through.
@@ -1313,17 +1313,17 @@ def resolve_location_registry_write(
     context = context or location_registry_context(kind, location_id, hass)
     if context is None:
         return Permission.NO_ACCESS
-    if not token.pass_through:
+    if not access_key.pass_through:
         if not context.entity_ids and not context.device_ids:
             return Permission.NO_ACCESS
         for area_id in context.area_ids:
             area_context = location_registry_context("area", area_id, hass)
             if area_context is None or not (area_context.entity_ids or area_context.device_ids):
                 return Permission.NO_ACCESS
-    if any(resolve_registry_access(entity_id, token, hass, force_registry_only=True)
+    if any(resolve_registry_access(entity_id, access_key, hass, force_registry_only=True)
            != Permission.WRITE for entity_id in context.entity_ids):
         return Permission.NO_ACCESS
-    if any(resolve_device_registry_write(device_id, token, hass) != Permission.WRITE
+    if any(resolve_device_registry_write(device_id, access_key, hass) != Permission.WRITE
            for device_id in context.device_ids):
         return Permission.NO_ACCESS
     return Permission.WRITE

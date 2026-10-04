@@ -25,12 +25,12 @@ from custom_components.phoenix_mcp.mcp_view import (
 )
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
-from custom_components.phoenix_mcp.token_store import (
+from custom_components.phoenix_mcp.access_key_store import (
     GlobalSettings,
     PermissionNode,
     PermissionTree,
-    TokenRecord,
-    TokenStore,
+    AccessKeyRecord,
+    AccessKeyStore,
 )
 
 
@@ -59,8 +59,8 @@ def _profile(key: str, mode: str) -> SemanticProfile:
     )
 
 
-def _token(env: dict, *, cap: str = "allow") -> TokenRecord:
-    return TokenRecord(
+def _access_key(env: dict, *, cap: str = "allow") -> AccessKeyRecord:
+    return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="integration-mesa-matrix",
         token_hash="x",
@@ -75,11 +75,11 @@ def _token(env: dict, *, cap: str = "allow") -> TokenRecord:
 
 
 async def _data(hass: HomeAssistant, mesa_mode: str = "enforced") -> PhoenixData:
-    store = MagicMock(spec=TokenStore)
+    store = MagicMock(spec=AccessKeyStore)
     store.async_lock = asyncio.Lock()
     store.async_save = AsyncMock()
     store.get_settings.return_value = GlobalSettings(mesa_mode=mesa_mode)
-    store.list_tokens.return_value = []
+    store.list_access_keys.return_value = []
     store.get_entity_hints.return_value = {}
     store.get_pending_approvals.return_value = []
     data = PhoenixData(
@@ -152,13 +152,13 @@ def _set_scope(data: PhoenixData, env: dict, scope: str, mode: str) -> None:
 def _decision(
     data: PhoenixData,
     env: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     action: str,
 ):
     result = _config_entry_action_decision(
         data,
-        token,
+        access_key,
         hass,
         env["entry"],
         actions=[action],
@@ -178,7 +178,7 @@ async def test_every_non_empty_read_only_scope_subset_denies(
     data = await _data(hass)
     for scope in scopes:
         _set_scope(data, env, scope, "read_only")
-    decision = _decision(data, env, _token(env), hass, action)
+    decision = _decision(data, env, _access_key(env), hass, action)
     assert decision.decision == "deny"
     assert decision.blocked
     effective_rule = decision.entities[0]["effective_rule"]
@@ -208,7 +208,7 @@ async def test_pairwise_autonomous_cannot_loosen_read_only(
     permissive = pair[1 - restrictive_index]
     _set_scope(data, env, restrictive, "read_only")
     _set_scope(data, env, permissive, "autonomous")
-    decision = _decision(data, env, _token(env), hass, action)
+    decision = _decision(data, env, _access_key(env), hass, action)
     assert decision.decision == "deny"
     effective_rule = decision.entities[0]["effective_rule"]
     assert effective_rule["control_mode"] == "read_only"
@@ -236,7 +236,7 @@ async def test_each_scope_covers_prohibited_advisory_and_confirm(
     env = _environment(hass)
     data = await _data(hass, mesa_mode)
     _set_scope(data, env, scope, control_mode)
-    decision = _decision(data, env, _token(env), hass, action)
+    decision = _decision(data, env, _access_key(env), hass, action)
     assert decision.decision == expected
     if mesa_mode == "advisory":
         assert decision.warnings
@@ -268,7 +268,7 @@ async def test_each_confirm_scope_creates_one_merged_approval(
         _content, outcome, _ = await _call_tool(
             "remove_integration",
             {"entry_id": env["entry_id"]},
-            _token(env),
+            _access_key(env),
             hass,
             data,
         )
@@ -290,7 +290,7 @@ async def test_all_scope_pending_approval_revalidates_every_race(
     data = await _data(hass, "enforced")
     for scope in SCOPES:
         _set_scope(data, env, scope, "confirm")
-    approving_token = _token(env, cap="confirm")
+    approving_token = _access_key(env, cap="confirm")
     gate = AsyncMock(return_value=({}, "pending_approval", "approval"))
     with patch("custom_components.phoenix_mcp.mcp_view._gate", gate):
         _content, outcome, _ = await _call_tool(
@@ -303,7 +303,7 @@ async def test_all_scope_pending_approval_revalidates_every_race(
     assert outcome == "pending_approval"
     approved_args = gate.await_args.kwargs["args"]
 
-    execution_token = _token(env)
+    execution_token = _access_key(env)
     expected = "denied"
     if race == "permission":
         execution_token.permissions.devices[env["device_id"]] = PermissionNode(

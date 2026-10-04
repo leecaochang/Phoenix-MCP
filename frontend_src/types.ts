@@ -73,7 +73,7 @@ export interface PermissionTree {
 
 // A named snapshot of a token's full settings (workspace model): the active
 // preset absorbs live edits when the admin switches to another preset.
-export interface TokenPreset {
+export interface AccessKeyPreset {
   id: string;
   name: string;
   created_at: string | null;
@@ -88,7 +88,7 @@ export interface TokenPreset {
   rate_limit_burst: number;
 }
 
-export interface TokenRecord extends CapabilityFlagsMap {
+export interface AccessKeyRecord extends CapabilityFlagsMap {
   id: string;
   name: string;
   created_at: string;
@@ -105,15 +105,15 @@ export interface TokenRecord extends CapabilityFlagsMap {
   rate_limit_requests: number;
   rate_limit_burst: number;
   permissions: PermissionTree;
-  presets: TokenPreset[];
+  presets: AccessKeyPreset[];
   active_preset_id: string | null;
 }
 
-export interface TokenCreateResponse extends TokenRecord {
+export interface AccessKeyCreateResponse extends AccessKeyRecord {
   token: string;
 }
 
-export interface ArchivedTokenRecord {
+export interface ArchivedAccessKeyRecord {
   id: string;
   name: string;
   created_at: string;
@@ -500,12 +500,12 @@ export interface ResolveResult {
   effective_hint: string | null;
 }
 
-export interface TokenConnection {
+export interface AccessKeyConnection {
   last_used_at: string | null;
   request_count: number;
 }
 
-export interface TokenStats {
+export interface AccessKeyStats {
   token_id: string;
   token_name: string;
   request_count: number;
@@ -524,7 +524,7 @@ export interface ScopeResult {
   capability_flags: CapabilityFlagsMap;
 }
 
-export interface CreateTokenBody {
+export interface CreateAccessKeyBody {
   name: string;
   expires_at?: string;
   pass_through?: boolean;
@@ -533,7 +533,7 @@ export interface CreateTokenBody {
   rate_limit_burst?: number;
 }
 
-export interface PatchTokenBody {
+export interface PatchAccessKeyBody {
   name?: string;
   pass_through?: boolean;
   confirm_pass_through?: boolean;

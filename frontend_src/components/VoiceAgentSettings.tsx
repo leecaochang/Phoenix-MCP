@@ -3,7 +3,7 @@ import { BusyButton } from "./BusyButton";
 import { RoutingStatistics } from "./RoutingStatistics";
 import { CommandRoutingToggle } from "./CommandRoutingToggle";
 import { useEffect, useState } from "react";
-import type { GlobalSettings, TokenRecord, AgentCliInstance } from "../types";
+import type { GlobalSettings, AccessKeyRecord, AgentCliInstance } from "../types";
 import { api } from "../api";
 import { Modal } from "./Modal";
 import { DocsHelpLink } from "./common";
@@ -29,7 +29,7 @@ export function VoiceAgentSettings({
   onChange: (key: keyof GlobalSettings, value: boolean | string) => void;
   saving: boolean;
 }) {
-  const [tokens, setTokens] = useState<TokenRecord[]>([]);
+  const [accessKeys, setAccessKeys] = useState<AccessKeyRecord[]>([]);
   const [instances, setInstances] = useState<AgentCliInstance[]>([]);
   const [models, setModels] = useState<string[]>([]);
   const [showSetup, setShowSetup] = useState(false);
@@ -44,10 +44,10 @@ export function VoiceAgentSettings({
   const pipelineSupported = settings.voice_agent_pipeline_supported ?? true;
   const noProviders = instances.length === 0;
   const fullyConfigured = !!(enabled && tokenId && providerId && model);
-  const companion = tokens.some(token => token.id === tokenId && token.persona === "home_companion");
+  const companion = accessKeys.some(accessKey => accessKey.id === tokenId && accessKey.persona === "home_companion");
 
   useEffect(() => {
-    api.listTokens().then(setTokens).catch(() => setTokens([]));
+    api.listAccessKeys().then(setAccessKeys).catch(() => setAccessKeys([]));
     const loadProviders = () =>
       api.getAgentCliProviders().then((r) => setInstances(r.instances)).catch(() => setInstances([]));
     loadProviders();
@@ -131,7 +131,7 @@ export function VoiceAgentSettings({
           onChange={(e) => onChange("voice_agent_token_id", e.target.value)}
         >
           <option value="">{t("settings.selectToken")}</option>
-          {tokens.map((tok) => (
+          {accessKeys.map((tok) => (
             <option key={tok.id} value={tok.id}>{tok.name}</option>
           ))}
         </BusySelect>

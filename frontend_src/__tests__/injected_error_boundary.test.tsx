@@ -4,7 +4,7 @@ import { act, fireEvent, waitFor } from "@testing-library/react";
 
 const state = vi.hoisted(() => ({ broken: true }));
 vi.mock("../api", () => ({ api: {
-  listTokens: vi.fn().mockResolvedValue([]),
+  listAccessKeys: vi.fn().mockResolvedValue([]),
   getAgentCliProviders: vi.fn().mockResolvedValue({ instances: [] }),
   getSettings: vi.fn().mockResolvedValue({ kill_switch: false, agentcli_scrollback_lines: 500 }),
   getEntityTree: vi.fn().mockResolvedValue({}),

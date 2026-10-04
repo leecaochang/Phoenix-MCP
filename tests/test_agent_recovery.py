@@ -108,7 +108,7 @@ async def test_interrupted_dispatch_never_replays_and_never_stores_arguments(has
         result = {"content": [], "isError": failure == "error"}
         return {"result": result}, "call_service", "call_service", "allowed"
 
-    args = dict(hass=hass, data=data, token=SimpleNamespace(id="token"), name="call_service",
+    args = dict(hass=hass, data=data, access_key=SimpleNamespace(id="token"), name="call_service",
                 arguments={"credential": "never persist this"}, tool_id="t", request_id="r",
                 client_ip="agentcli", base_url="http://example")
     with pytest.raises((asyncio.CancelledError, RecoveryRequired)):
@@ -129,7 +129,7 @@ async def test_unwritable_journal_prevents_dispatch(hass):
     data = SimpleNamespace(agent_recovery=recovery, store=SimpleNamespace(get_pending_approvals=lambda: []))
     dispatch = AsyncMock()
     with pytest.raises(RecoveryRequired):
-        await dispatch_agent_tool(dispatch, hass=hass, data=data, token=SimpleNamespace(id="t"),
+        await dispatch_agent_tool(dispatch, hass=hass, data=data, access_key=SimpleNamespace(id="t"),
                                   name="call_service", arguments={}, tool_id="t", request_id="r",
                                   client_ip="agentcli", base_url="http://example")
     dispatch.assert_not_awaited()
@@ -144,7 +144,7 @@ def test_read_classification_uses_canonical_and_legacy_server_catalog():
     assert not tool_is_read_only("invented_read")
 
 
-async def test_unknown_tool_does_not_create_recovery_barrier(hass, token_store):
+async def test_unknown_tool_does_not_create_recovery_barrier(hass, access_key_store):
     """A real protocol refusal cannot imply an uncertain side effect."""
     from homeassistant.helpers import issue_registry as ir
     from custom_components.phoenix_mcp.audit import AuditLog
@@ -152,23 +152,23 @@ async def test_unknown_tool_does_not_create_recovery_barrier(hass, token_store):
     from custom_components.phoenix_mcp.mcp_view import _dispatch_mcp
     from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 
-    token, _ = await token_store.async_create_token("unknown tool", "admin")
-    data = PhoenixData(store=token_store, rate_limiter=RateLimiter(), audit=AuditLog())
+    access_key, _ = await access_key_store.async_create_access_key("unknown tool", "admin")
+    data = PhoenixData(store=access_key_store, rate_limiter=RateLimiter(), audit=AuditLog())
     hass.data["phoenix_mcp"] = data
     response, _, _, outcome = await dispatch_agent_tool(
-        _dispatch_mcp, hass=hass, data=data, token=token, name="made_up_tool",
+        _dispatch_mcp, hass=hass, data=data, access_key=access_key, name="made_up_tool",
         arguments={}, tool_id="tool", request_id="unknown", client_ip="agentcli",
         base_url="http://example",
     )
     assert response["error"]["code"] == -32602
     assert outcome == "invalid_request"
-    assert data.agent_recovery.records(token.id) == []
-    assert not data.agent_recovery.blocks(token.id)
+    assert data.agent_recovery.records(access_key.id) == []
+    assert not data.agent_recovery.blocks(access_key.id)
     assert ir.async_get(hass).async_get_issue("phoenix_mcp", "agent_recovery_unknown") is None
 
 
 @pytest.mark.parametrize("surface", ["chat", "voice", "ai_task"])
-async def test_provider_loops_continue_after_unknown_tool(hass, token_store, surface):
+async def test_provider_loops_continue_after_unknown_tool(hass, access_key_store, surface):
     """The chat, voice and AI Task loops continue past an unknown tool, via the
     real MCP dispatcher.
     """
@@ -177,8 +177,8 @@ async def test_provider_loops_continue_after_unknown_tool(hass, token_store, sur
     from custom_components.phoenix_mcp.data import PhoenixData
     from custom_components.phoenix_mcp.rate_limiter import RateLimiter
 
-    token, _ = await token_store.async_create_token("loop", "admin")
-    data = PhoenixData(store=token_store, rate_limiter=RateLimiter(), audit=AuditLog(), ready=True)
+    access_key, _ = await access_key_store.async_create_access_key("loop", "admin")
+    data = PhoenixData(store=access_key_store, rate_limiter=RateLimiter(), audit=AuditLog(), ready=True)
     hass.data["phoenix_mcp"] = data
     provider = agentcli.OpenAICompatProvider(agentcli.ProviderConfig(
         kind="chatgpt", model="test", base_url="https://example.test", api_key="test",
@@ -205,44 +205,44 @@ async def test_provider_loops_continue_after_unknown_tool(hass, token_store, sur
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="Test"):
         if surface == "chat":
             await agentcli.async_run_agent_turn(
-                hass=hass, data=data, token=token, provider=provider, session=MagicMock(),
+                hass=hass, data=data, access_key=access_key, provider=provider, session=MagicMock(),
                 messages=[{"role": "user", "content": "test"}], options={}, client_ip="agentcli",
                 base_url="http://example", emit=emit, cancel=asyncio.Event(),
             )
             assert not [payload for name, payload in events if name == "error"]
         else:
             run = agentcli.async_run_voice_turn if surface == "voice" else agentcli.async_run_ai_task
-            assert await run(hass, data, token, provider, MagicMock(), "http://example", "test") == "Recovered."
+            assert await run(hass, data, access_key, provider, MagicMock(), "http://example", "test") == "Recovered."
     assert rounds == 2
-    assert data.agent_recovery.records(token.id) == []
-    assert not data.agent_recovery.blocks(token.id)
+    assert data.agent_recovery.records(access_key.id) == []
+    assert not data.agent_recovery.blocks(access_key.id)
 
 
 @pytest.mark.asyncio
-async def test_legacy_dispatch_cannot_bypass_barrier_but_status_reads_work(hass, token_store):
+async def test_legacy_dispatch_cannot_bypass_barrier_but_status_reads_work(hass, access_key_store):
     import json
     from custom_components.phoenix_mcp.audit import AuditLog
     from custom_components.phoenix_mcp.data import PhoenixData
     from custom_components.phoenix_mcp.rate_limiter import RateLimiter
     from custom_components.phoenix_mcp.mcp_view import _dispatch_mcp
 
-    token, _ = await token_store.async_create_token("recovery", "admin", pass_through=True)
-    data = PhoenixData(store=token_store, rate_limiter=RateLimiter(), audit=AuditLog())
+    access_key, _ = await access_key_store.async_create_access_key("recovery", "admin", pass_through=True)
+    data = PhoenixData(store=access_key_store, rate_limiter=RateLimiter(), audit=AuditLog())
     hass.data["phoenix_mcp"] = data
-    await data.agent_recovery.begin(token.id, "call_service", "prior")
+    await data.agent_recovery.begin(access_key.id, "call_service", "prior")
     data.agent_recovery.interrupted("prior")
     for name in ("call_service", "HassTurnOn", "intent__HassTurnOn"):
         response, _, _, outcome = await _dispatch_mcp(
-            "tools/call", 1, {"name": name, "arguments": {}}, token, hass, data, "legacy", "http://example")
+            "tools/call", 1, {"name": name, "arguments": {}}, access_key, hass, data, "legacy", "http://example")
         assert outcome == "denied"
         assert response["result"]["isError"] is True
         assert "resultType" not in response["result"]
     response, _, _, outcome = await _dispatch_mcp(
-        "tools/call", 2, {"name": "get_approval_status", "arguments": {}}, token, hass, data, "legacy", "http://example")
+        "tools/call", 2, {"name": "get_approval_status", "arguments": {}}, access_key, hass, data, "legacy", "http://example")
     assert outcome == "allowed"
     body = json.loads(response["result"]["content"][0]["text"])
     assert body["agent_recovery"][0]["request_id"] == "prior"
-    other, _ = await token_store.async_create_token("another", "admin")
+    other, _ = await access_key_store.async_create_access_key("another", "admin")
     response, _, _, _ = await _dispatch_mcp(
         "tools/call", 3, {"name": "get_approval_status", "arguments": {}}, other, hass, data, "legacy", "http://example")
     assert json.loads(response["result"]["content"][0]["text"])["agent_recovery"] == []
@@ -261,7 +261,7 @@ async def test_received_receipt_stays_protected_until_provider_turn_finishes(has
 
     @recovery_turn
     async def run(*, hass, data):
-        await dispatch_agent_tool(dispatch, hass=hass, data=data, token=SimpleNamespace(id="token"),
+        await dispatch_agent_tool(dispatch, hass=hass, data=data, access_key=SimpleNamespace(id="token"),
             name="call_service", arguments={}, tool_id="t", request_id="r", client_ip="voice", base_url="http://example")
         received.set()
         await finish.wait()
@@ -291,7 +291,7 @@ async def test_successful_turn_clears_receipts_after_multiple_writes(hass):
     @recovery_turn
     async def run(*, hass, data):
         for rid in ("first", "second"):
-            await dispatch_agent_tool(dispatch, hass=hass, data=data, token=SimpleNamespace(id="token"),
+            await dispatch_agent_tool(dispatch, hass=hass, data=data, access_key=SimpleNamespace(id="token"),
                 name="call_service", arguments={}, tool_id="t", request_id=rid, client_ip="voice", base_url="http://example")
         return SimpleNamespace(outcome="ok")
 
@@ -307,7 +307,7 @@ async def test_report_finalizes_only_received_records_from_its_own_finished_turn
     disk = Disk()
     recovery = AgentRecovery(disk)
     data = SimpleNamespace(agent_recovery=recovery, store=SimpleNamespace(get_pending_approvals=lambda: []))
-    token = SimpleNamespace(id='token')
+    access_key = SimpleNamespace(id='token')
     dispatch = AsyncMock(side_effect=[
         ({'result': {'content': []}}, 'call_service', 'call_service', 'allowed'),
         OSError('Connection interrupted after dispatch'),
@@ -316,7 +316,7 @@ async def test_report_finalizes_only_received_records_from_its_own_finished_turn
     async def run(*, hass, data):
         for rid in ('received', 'unknown'):
             try:
-                await dispatch_agent_tool(dispatch, hass=hass, data=data, token=token, name='call_service',
+                await dispatch_agent_tool(dispatch, hass=hass, data=data, access_key=access_key, name='call_service',
                     arguments={}, tool_id=rid, request_id=rid, client_ip='voice', base_url='http://example')
             except RecoveryRequired:
                 pass

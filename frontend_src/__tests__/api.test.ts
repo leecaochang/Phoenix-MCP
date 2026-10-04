@@ -18,13 +18,13 @@ beforeEach(() => {
   });
 });
 
-describe("api.listTokens", () => {
+describe("api.listAccessKeys", () => {
   it("sends GET to /api/phoenix-mcp/admin/tokens", async () => {
-    const tokens = [{ id: "1", name: "test" }];
-    globalThis.fetch = mockFetchResponse(200, tokens);
+    const accessKeys = [{ id: "1", name: "test" }];
+    globalThis.fetch = mockFetchResponse(200, accessKeys);
 
-    const result = await api.listTokens();
-    expect(result).toEqual(tokens);
+    const result = await api.listAccessKeys();
+    expect(result).toEqual(accessKeys);
     expect(fetch).toHaveBeenCalledWith(
       "/api/phoenix-mcp/admin/tokens",
       expect.objectContaining({ method: "GET" }),
@@ -32,12 +32,12 @@ describe("api.listTokens", () => {
   });
 });
 
-describe("api.createToken", () => {
+describe("api.createAccessKey", () => {
   it("sends POST with JSON body", async () => {
     const created = { id: "1", name: "new", token: "phx_abc" };
     globalThis.fetch = mockFetchResponse(201, created);
 
-    const result = await api.createToken({ name: "new" });
+    const result = await api.createAccessKey({ name: "new" });
     expect(result).toEqual(created);
 
     const [url, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
@@ -47,12 +47,12 @@ describe("api.createToken", () => {
   });
 });
 
-describe("api.patchToken", () => {
+describe("api.patchAccessKey", () => {
   it("sends PATCH with correct URL and body", async () => {
     const updated = { id: "tok-1", name: "test", pass_through: true };
     globalThis.fetch = mockFetchResponse(200, updated);
 
-    await api.patchToken("tok-1", { pass_through: true, confirm_pass_through: true });
+    await api.patchAccessKey("tok-1", { pass_through: true, confirm_pass_through: true });
 
     const [url, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(url).toBe("/api/phoenix-mcp/admin/tokens/tok-1");
@@ -61,11 +61,11 @@ describe("api.patchToken", () => {
   });
 });
 
-describe("api.revokeToken", () => {
+describe("api.revokeAccessKey", () => {
   it("sends DELETE to the correct URL", async () => {
     globalThis.fetch = mockFetchResponse(204);
 
-    await api.revokeToken("tok-1");
+    await api.revokeAccessKey("tok-1");
     expect(fetch).toHaveBeenCalledWith(
       "/api/phoenix-mcp/admin/tokens/tok-1",
       expect.objectContaining({ method: "DELETE" }),
@@ -130,10 +130,10 @@ describe("api.resolve", () => {
   });
 });
 
-describe("api.getTokenConnection", () => {
+describe("api.getAccessKeyConnection", () => {
   it("GETs the connection endpoint for the token", async () => {
     globalThis.fetch = mockFetchResponse(200, { last_used_at: null, request_count: 0 });
-    await api.getTokenConnection("tok-1");
+    await api.getAccessKeyConnection("tok-1");
     const [url, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(url).toBe("/api/phoenix-mcp/admin/tokens/tok-1/connection");
     expect(opts.method).toBe("GET");
@@ -353,9 +353,9 @@ describe("error handling", () => {
   it("throws ApiError on non-ok responses", async () => {
     globalThis.fetch = mockFetchResponse(403, { error: "forbidden", message: "Access denied." });
 
-    await expect(api.listTokens()).rejects.toThrow(ApiError);
+    await expect(api.listAccessKeys()).rejects.toThrow(ApiError);
     try {
-      await api.listTokens();
+      await api.listAccessKeys();
     } catch (e) {
       expect((e as ApiError).status).toBe(403);
       expect((e as ApiError).code).toBe("forbidden");
@@ -399,7 +399,7 @@ describe("Home Assistant authentication", () => {
     setHass({ fetchWithAuth, auth: { refreshAccessToken } });
     globalThis.fetch = mockFetchResponse(200, []);
 
-    await api.listTokens();
+    await api.listAccessKeys();
     expect(fetchWithAuth).toHaveBeenCalledWith(
       "/api/phoenix-mcp/admin/tokens",
       expect.objectContaining({ method: "GET" }),
@@ -411,7 +411,7 @@ describe("Home Assistant authentication", () => {
     setHass(null);
     globalThis.fetch = mockFetchResponse(200, []);
 
-    await expect(api.listTokens()).rejects.toThrow(ApiError);
+    await expect(api.listAccessKeys()).rejects.toThrow(ApiError);
     expect(fetch).not.toHaveBeenCalled();
   });
 });
@@ -589,12 +589,12 @@ it("does not dispatch a queued permission edit under a different HA user", async
 
 it.each([null, 42, "unexpected", { error: "parse_error" }, [null]])("refuses malformed token-list success data: %j", async (body) => {
   globalThis.fetch = mockFetchResponse(200, body);
-  await expect(api.listTokens()).rejects.toMatchObject({ status: 502, code: "invalid_response" });
+  await expect(api.listAccessKeys()).rejects.toMatchObject({ status: 502, code: "invalid_response" });
 });
 
 it("refuses a successful response whose JSON cannot be parsed", async () => {
   globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: () => Promise.reject(new SyntaxError("private content")) });
-  await expect(api.listTokens()).rejects.toMatchObject({ status: 502, code: "invalid_response" });
+  await expect(api.listAccessKeys()).rejects.toMatchObject({ status: 502, code: "invalid_response" });
 });
 
 it("refuses malformed approval rows before the review view consumes them", async () => {
@@ -604,12 +604,12 @@ it("refuses malformed approval rows before the review view consumes them", async
 
 it.each([401, 404, 413, 504])("preserves HTTP %s for a non-JSON error", async status => {
   globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status, statusText: "Gateway failure", json: async () => { throw new SyntaxError(); } });
-  await expect(api.listTokens()).rejects.toMatchObject({ status, code: "parse_error", message: "Gateway failure" });
+  await expect(api.listAccessKeys()).rejects.toMatchObject({ status, code: "parse_error", message: "Gateway failure" });
 });
 
 it("accepts the token audit endpoint's list envelope", async () => {
   globalThis.fetch = mockFetchResponse(200, [{ request_id: "request" }]);
-  expect(await api.getTokenAudit("token")).toEqual([{ request_id: "request" }]);
+  expect(await api.getAccessKeyAudit("token")).toEqual([{ request_id: "request" }]);
 });
 
 it.each([false, true])("restarts an invalidated full MESA load at most once (repeat=%s)", async repeat => {

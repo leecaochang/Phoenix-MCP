@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../api", () => ({
   api: {
-    listTokens: vi.fn().mockResolvedValue([]),
+    listAccessKeys: vi.fn().mockResolvedValue([]),
     getAgentCliProviders: vi.fn().mockResolvedValue({ instances: [] }),
     getSettings: vi.fn().mockResolvedValue({ kill_switch: false, agentcli_scrollback_lines: 500 }),
   },

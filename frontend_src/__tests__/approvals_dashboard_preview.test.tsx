@@ -21,7 +21,7 @@ function record(over: Partial<ApprovalRecord> = {}): ApprovalRecord {
   return {
     id: "appr_1",
     token_id: "t1",
-    token_name: "my_token",
+    token_name: "my_access_key",
     tool_name: "set_dashboard_config",
     cap_name: "cap_lovelace_write",
     args: {},

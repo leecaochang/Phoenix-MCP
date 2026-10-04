@@ -27,7 +27,7 @@ from ..policy_engine import (
     location_registry_context, resolve_location_registry_write,
 )
 from ..request_authority import check_request_authority
-from ..token_store import TokenRecord
+from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
     _approved_exec_ctx, _create_registry_mesa_approval, _gate, _record_version,
     _restore_ctx, _tool_error, _tool_success,
@@ -92,10 +92,10 @@ class LocationPlan:
 
 
 def _prepare(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     *, internal: bool = False,
 ) -> LocationPlan:
-    if effective_cap(token, "cap_registry_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_registry_write") == CAP_DENY:
         raise LocationRefusal("Forbidden.", "denied")
     allowed = {"kind", "operation", "location_id", "changes"}
     if internal:
@@ -111,13 +111,13 @@ def _prepare(
     if operation == "create":
         if "location_id" in args:
             raise LocationRefusal("Creation uses a Home Assistant generated ID; omit location_id.")
-        if not token.pass_through:
+        if not access_key.pass_through:
             raise LocationRefusal("Creating a location requires pass-through authority.", "denied")
     else:
         _text(location_id, "location_id")
         assert isinstance(location_id, str)
         context = location_registry_context(kind, location_id, hass)
-        if resolve_location_registry_write(kind, location_id, token, hass, context=context) != Permission.WRITE:
+        if resolve_location_registry_write(kind, location_id, access_key, hass, context=context) != Permission.WRITE:
             raise LocationRefusal("Location not found or not writable.", "denied")
         assert context is not None
         before = _snapshot(kind, context.entry)
@@ -147,7 +147,7 @@ def _prepare(
         if occupied is not None and (context is None or occupied != context.entry):
             raise LocationRefusal("Location name is unavailable.")
     if changes.get("floor_id") is not None:
-        if resolve_location_registry_write("floor", changes["floor_id"], token, hass) != Permission.WRITE:
+        if resolve_location_registry_write("floor", changes["floor_id"], access_key, hass) != Permission.WRITE:
             raise LocationRefusal("Destination floor not found or not writable.", "denied")
     if "level" in changes:
         value = changes["level"]
@@ -210,7 +210,7 @@ def _prepare(
             for entity_id in context.entity_ids:
                 try:
                     decision = evaluate_registry_action(
-                        data, token, entity_id, action=action, registry_domain=f"{kind}_registry",
+                        data, access_key, entity_id, action=action, registry_domain=f"{kind}_registry",
                         service_data={"name": changes["name"]} if "name" in changes else {},
                         session_id=_TOOL,
                     )
@@ -218,7 +218,7 @@ def _prepare(
                     _LOGGER.exception("MESA location evaluation failed")
                     raise LocationRefusal("MESA safety evaluation failed; no location change was made.", "denied") from None
                 if decision.decision == "deny":
-                    fire_mesa_blocked_event(hass, token, [(entity_id, decision.rule, decision.reason)])
+                    fire_mesa_blocked_event(hass, access_key, [(entity_id, decision.rule, decision.reason)])
                     raise LocationRefusal("MESA blocked the location identity action.", "denied")
                 mesa.append({"entity_id": entity_id, "decision": decision.decision,
                              "profile_fingerprint": decision.profile_fingerprint,
@@ -250,38 +250,38 @@ def _preview(plan: LocationPlan) -> dict[str, Any]:
 
 
 async def _tool_set_area_or_floor(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """Admit exact location writes through the existing registry capability gate."""
     try:
-        plan = _prepare(args, token, hass, data)
+        plan = _prepare(args, access_key, hass, data)
     except LocationRefusal as exc:
         return _tool_error(str(exc)), exc.outcome, _TOOL
     saved = {**args, LOCATION_REGISTRY_BINDING: plan.binding}
     blocked = await _gate(
-        "cap_registry_write", token, hass, data, tool_name=_TOOL, args=saved,
+        "cap_registry_write", access_key, hass, data, tool_name=_TOOL, args=saved,
         request_id=request_id, client_ip=client_ip, diff=lambda: _preview(plan),
     )
     if blocked is not None:
         return blocked
     if any(item["decision"] == "confirm" for item in plan.mesa):
         return await _create_registry_mesa_approval(
-            hass, data, token, tool_name=_TOOL, args=saved, diff=_preview(plan),
+            hass, data, access_key, tool_name=_TOOL, args=saved, diff=_preview(plan),
             request_id=request_id, client_ip=client_ip,
         )
-    return await _execute_set_area_or_floor(args, token, hass, data)
+    return await _execute_set_area_or_floor(args, access_key, hass, data)
 
 
 async def _execute_set_area_or_floor(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
 ) -> tuple[dict, str, str]:
     """Complete validation, fresh merge, mutation and readback before the first await."""
     check_request_authority()
     try:
-        plan = _prepare(args, token, hass, data, internal=True)
+        plan = _prepare(args, access_key, hass, data, internal=True)
         approved = _approved_exec_ctx.get()
-        if (effective_cap(token, "cap_registry_write") == CAP_CONFIRM or any(
+        if (effective_cap(access_key, "cap_registry_write") == CAP_CONFIRM or any(
                 item["decision"] == "confirm" for item in plan.mesa)) and not (approved or _restore_ctx.get() is not None):
             raise LocationRefusal("This location write requires approval.", "denied")
         if approved and args.get(LOCATION_REGISTRY_BINDING) != plan.binding:
@@ -334,7 +334,7 @@ async def _execute_set_area_or_floor(
     if plan.operation == "delete" and before is not None:
         before["restorable"] = False
     await _record_version(
-        data, token, resource_type="area" if plan.kind == "area" else "floor", resource_id=location_id,
+        data, access_key, resource_type="area" if plan.kind == "area" else "floor", resource_id=location_id,
         action={"create": "create", "update": "edit", "delete": "delete"}[plan.operation],
         before=before, after=after, alias=(after or before or {}).get("name"),
     )
@@ -343,7 +343,7 @@ async def _execute_set_area_or_floor(
 
 
 async def restore_location_version(
-    kind: str, location_id: str, target: dict, token: TokenRecord,
+    kind: str, location_id: str, target: dict, access_key: AccessKeyRecord,
     hass: HomeAssistant, data: PhoenixData,
 ) -> tuple[dict, str, str]:
     """Restore supported metadata only to the same surviving location identity."""
@@ -354,5 +354,5 @@ async def restore_location_version(
     changes = {key: value for key, value in target.items() if key in LOCATION_REGISTRY_FIELDS}
     return await _execute_set_area_or_floor(
         {"kind": kind, "operation": "update", "location_id": location_id, "changes": changes},
-        token, hass, data,
+        access_key, hass, data,
     )

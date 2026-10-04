@@ -27,15 +27,15 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
-from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 
 NATIVE = "custom_components.phoenix_mcp.tools.native"
 REPO = pathlib.Path(__file__).resolve().parent.parent
 PKG = REPO / "custom_components" / "phoenix_mcp"
 
 
-def _token() -> TokenRecord:
-    return TokenRecord(
+def _access_key() -> AccessKeyRecord:
+    return AccessKeyRecord(
         id="tok", name="t", token_hash="x", created_at=utcnow(), created_by="admin",
         persona="power_user", permissions=PermissionTree(), cap_broadcast="allow",
     )
@@ -64,7 +64,7 @@ class TestCancelAllTimers:
         hass.services.async_register("timer", "cancel", lambda c: fired.append(c))
 
         with patch(f"{NATIVE}.resolve_intent_entities", return_value=["timer.laundry"]):
-            _content, outcome, _ = await _tool_hass_cancel_all_timers({}, _token(), hass)
+            _content, outcome, _ = await _tool_hass_cancel_all_timers({}, _access_key(), hass)
         await hass.async_block_till_done()
 
         assert fired == [], "a MESA read_only timer was cancelled anyway"
@@ -79,7 +79,7 @@ class TestCancelAllTimers:
         hass.services.async_register("timer", "cancel", lambda c: fired.append(c))
 
         with patch(f"{NATIVE}.resolve_intent_entities", return_value=["timer.laundry"]):
-            _content, outcome, _ = await _tool_hass_cancel_all_timers({}, _token(), hass)
+            _content, outcome, _ = await _tool_hass_cancel_all_timers({}, _access_key(), hass)
         await hass.async_block_till_done()
 
         assert len(fired) == 1
@@ -105,7 +105,7 @@ class TestCancelAllTimers:
 
         with patch(f"{NATIVE}.resolve_intent_entities",
                    return_value=["timer.ok", "timer.blocked"]):
-            content, outcome, _ = await _tool_hass_cancel_all_timers({}, _token(), hass)
+            content, outcome, _ = await _tool_hass_cancel_all_timers({}, _access_key(), hass)
         await hass.async_block_till_done()
 
         assert outcome == "allowed"
@@ -119,7 +119,7 @@ class TestCancelAllTimers:
         from custom_components.phoenix_mcp.tools.native import _tool_hass_cancel_all_timers
 
         with patch(f"{NATIVE}.resolve_intent_entities", return_value=[]):
-            content, outcome, _ = await _tool_hass_cancel_all_timers({}, _token(), hass)
+            content, outcome, _ = await _tool_hass_cancel_all_timers({}, _access_key(), hass)
 
         body = json.loads(content["content"][0]["text"])
         assert body["speech_slots"] == {"canceled": 0}
@@ -143,7 +143,7 @@ class TestBroadcast:
         with patch(f"{NATIVE}.resolve", return_value=__import__(
                 "custom_components.phoenix_mcp.policy_engine", fromlist=["Permission"]
         ).Permission.WRITE):
-            _content, outcome, _ = await _tool_hass_broadcast({"message": "hi"}, _token(), hass)
+            _content, outcome, _ = await _tool_hass_broadcast({"message": "hi"}, _access_key(), hass)
         await hass.async_block_till_done()
 
         assert fired == [], "a MESA read_only satellite was announced to anyway"
@@ -159,7 +159,7 @@ class TestBroadcast:
         hass.services.async_register("assist_satellite", "announce", lambda c: fired.append(c))
 
         with patch(f"{NATIVE}.resolve", return_value=Permission.WRITE):
-            _content, outcome, _ = await _tool_hass_broadcast({"message": "hi"}, _token(), hass)
+            _content, outcome, _ = await _tool_hass_broadcast({"message": "hi"}, _access_key(), hass)
         await hass.async_block_till_done()
 
         assert len(fired) == 1

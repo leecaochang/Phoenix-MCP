@@ -82,7 +82,7 @@ def _number(value: Any, maximum: float) -> TypeGuard[int | float]:
             and 0 <= value <= maximum)
 
 
-async def async_verify_command_state(hass: Any, data: Any, token: Any, plan: dict) -> str:
+async def async_verify_command_state(hass: Any, data: Any, access_key: Any, plan: dict) -> str:
     """Return "matched" or "unconfirmed" from scoped state reads.
 
     Never resends, polls a device, or clears recovery.
@@ -92,11 +92,11 @@ async def async_verify_command_state(hass: Any, data: Any, token: Any, plan: dic
     proposal = plan.get("proposal", {})
     if service_arguments(proposal) is None:
         return "unconfirmed"
-    authority = RequestAuthority(hass, data, token.id, token.token_hash)
+    authority = RequestAuthority(hass, data, access_key.id, access_key.token_hash)
     loop = asyncio.get_running_loop()
     deadline = loop.time() + COMMAND_VERIFICATION_WAIT_SECONDS
     while True:
-        current = authority.current_token()
+        current = authority.current_access_key()
         if current.settings_version != plan.get("token_version"):
             return "unconfirmed"
         # Recheck read access, exposure and registry identity before every read.

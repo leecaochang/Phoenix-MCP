@@ -19,7 +19,7 @@ function record(id: string, over: Partial<ApprovalRecord> = {}): ApprovalRecord 
   return {
     id,
     token_id: "t1",
-    token_name: "my_token",
+    token_name: "my_access_key",
     tool_name: "edit_automation",
     cap_name: "cap_automation_write",
     args: {},

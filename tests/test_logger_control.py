@@ -18,12 +18,12 @@ from custom_components.phoenix_mcp.mcp_view import _dispatch_mcp
 from tests.test_mcp_view import _make_data, _make_hass, _make_token
 
 
-async def _call(args, *, tool="set_integration_log_level", token=None, data=None, hass=None):
-    token = token or _make_token(cap_log_read="allow", cap_log_control="allow")[0]
-    data = data or _make_data(token)
+async def _call(args, *, tool="set_integration_log_level", access_key=None, data=None, hass=None):
+    access_key = access_key or _make_token(cap_log_read="allow", cap_log_control="allow")[0]
+    data = data or _make_data(access_key)
     hass = hass or _make_hass(data)
     response, _method, _resource, outcome = await _dispatch_mcp(
-        "tools/call", 7, {"name": tool, "arguments": args}, token, hass, data,
+        "tools/call", 7, {"name": tool, "arguments": args}, access_key, hass, data,
         "127.0.0.1", base_url="http://homeassistant.local",
     )
     text = response["result"]["content"][0]["text"]
@@ -36,8 +36,8 @@ async def _call(args, *, tool="set_integration_log_level", token=None, data=None
 
 @pytest.mark.asyncio
 async def test_capabilities_are_checked_before_arguments():
-    token = _make_token(cap_log_read="deny", cap_log_control="allow")[0]
-    body, result, outcome = await _call({"integration": "SECRET.MARKER"}, token=token)
+    access_key = _make_token(cap_log_read="deny", cap_log_control="allow")[0]
+    body, result, outcome = await _call({"integration": "SECRET.MARKER"}, access_key=access_key)
     assert outcome == "denied"
     assert result["isError"] is True
     assert body.startswith("Forbidden:")
@@ -53,11 +53,11 @@ async def test_capabilities_are_checked_before_arguments():
     {"integration": "mqtt", "level": "INFO", "persistence": "none", "duration_minutes": 121},
 ])
 async def test_invalid_shapes_fail_before_logger_access(args):
-    token = _make_token(cap_log_read="allow", cap_log_control="allow")[0]
-    data = _make_data(token)
+    access_key = _make_token(cap_log_read="allow", cap_log_control="allow")[0]
+    data = _make_data(access_key)
     data.logger_control = MagicMock()
     with patch("custom_components.phoenix_mcp.mcp_view._visible_logger_domains") as visible:
-        _body, result, outcome = await _call(args, token=token, data=data)
+        _body, result, outcome = await _call(args, access_key=access_key, data=data)
     assert outcome == "invalid_request"
     assert result["isError"] is True
     visible.assert_not_called()
@@ -65,8 +65,8 @@ async def test_invalid_shapes_fail_before_logger_access(args):
 
 @pytest.mark.asyncio
 async def test_noop_skips_approval_when_setting_matches():
-    token = _make_token(cap_log_read="allow", cap_log_control="confirm")[0]
-    data = _make_data(token)
+    access_key = _make_token(cap_log_read="allow", cap_log_control="confirm")[0]
+    data = _make_data(access_key)
     manager = MagicMock()
     manager.adapter.declared_loggers = AsyncMock(return_value={"homeassistant.components.mqtt"})
     manager.adapter.get_override.return_value = IntegrationOverride("WARNING", "none")
@@ -77,7 +77,7 @@ async def test_noop_skips_approval_when_setting_matches():
     ), patch("custom_components.phoenix_mcp.mcp_view._gate", new=AsyncMock()) as gate:
         body, _result, outcome = await _call(
             {"integration": "mqtt", "level": "WARNING", "persistence": "none"},
-            token=token, data=data,
+            access_key=access_key, data=data,
         )
     assert outcome == "allowed"
     assert body["changed"] is False
@@ -86,8 +86,8 @@ async def test_noop_skips_approval_when_setting_matches():
 
 @pytest.mark.asyncio
 async def test_set_uses_integration_logger_set_and_returns_verbose_warnings():
-    token = _make_token(cap_log_read="allow", cap_log_control="allow")[0]
-    data = _make_data(token)
+    access_key = _make_token(cap_log_read="allow", cap_log_control="allow")[0]
+    data = _make_data(access_key)
     manager = MagicMock()
     manager.adapter.declared_loggers = AsyncMock(return_value={"custom_components.demo", "homeassistant.components.demo"})
     manager.adapter.get_override.side_effect = [
@@ -104,7 +104,7 @@ async def test_set_uses_integration_logger_set_and_returns_verbose_warnings():
     ):
         body, _result, outcome = await _call(
             {"integration": "demo", "level": "DEBUG", "persistence": "none"},
-            token=token, data=data,
+            access_key=access_key, data=data,
         )
     assert outcome == "allowed"
     assert body["affected_loggers"] == ["custom_components.demo", "homeassistant.components.demo"]
@@ -114,8 +114,8 @@ async def test_set_uses_integration_logger_set_and_returns_verbose_warnings():
 
 @pytest.mark.asyncio
 async def test_list_reports_source_and_only_scoped_domains():
-    token = _make_token(cap_log_read="allow")[0]
-    data = _make_data(token)
+    access_key = _make_token(cap_log_read="allow")[0]
+    data = _make_data(access_key)
     manager = MagicMock()
     manager.adapter.source_status.return_value = {"status": "available"}
     manager.adapter.declared_loggers = AsyncMock(return_value={"homeassistant.components.demo"})
@@ -125,7 +125,7 @@ async def test_list_reports_source_and_only_scoped_domains():
     data.logger_control = manager
     with patch("custom_components.phoenix_mcp.mcp_view._visible_logger_domains", return_value={"demo"}):
         body, _result, outcome = await _call(
-            {}, tool="list_integration_log_levels", token=token, data=data
+            {}, tool="list_integration_log_levels", access_key=access_key, data=data
         )
     assert outcome == "allowed"
     assert body["source"] == {
@@ -296,8 +296,8 @@ async def test_active_timed_override_store_warns_before_discarding(caplog):
 
 @pytest.mark.asyncio
 async def test_approval_execution_rejects_logger_context_race():
-    token = _make_token(cap_log_read="allow", cap_log_control="allow")[0]
-    data = _make_data(token)
+    access_key = _make_token(cap_log_read="allow", cap_log_control="allow")[0]
+    data = _make_data(access_key)
     manager = MagicMock()
     manager.adapter.declared_loggers = AsyncMock(side_effect=[
         {"homeassistant.components.demo"},
@@ -311,7 +311,7 @@ async def test_approval_execution_rejects_logger_context_race():
     ):
         body, result, outcome = await _call(
             {"integration": "demo", "level": "WARNING", "persistence": "none"},
-            token=token, data=data,
+            access_key=access_key, data=data,
         )
     assert outcome == "denied"
     assert result["isError"] is True

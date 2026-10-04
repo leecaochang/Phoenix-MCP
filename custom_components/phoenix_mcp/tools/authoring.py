@@ -46,9 +46,9 @@ from ..data import PhoenixData
 from ..entity_registration import async_observe_registration
 from ..helpers import content_hash, dict_arg, diff_summary_fields as _summary, effective_cap, str_arg, _strict_phoenix_log_text
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _cas_conflict, _gate, _record_version, _tool_error, _tool_success, _truncate
-from ..policy_engine import Permission, filter_entities_for_token, resolve
+from ..policy_engine import Permission, filter_entities_for_access_key, resolve
 from ..request_authority import AuthorityChangedError, check_request_authority
-from ..token_store import TokenRecord
+from ..access_key_store import AccessKeyRecord
 from .. import yaml_includes
 
 _LOGGER = logging.getLogger(__name__)
@@ -61,7 +61,7 @@ _SCRIPT_LOCK_KEY = f"{DOMAIN}_script_lock"
 
 
 async def _finish_entity_write(
-    hass: HomeAssistant, token: TokenRecord, *, domain: Literal["scene", "script"],
+    hass: HomeAssistant, access_key: AccessKeyRecord, *, domain: Literal["scene", "script"],
     storage_id: str, config: dict, tool_name: str,
 ) -> tuple[dict, str, str]:
     """Reload a saved, versioned write and report observation separately.
@@ -83,13 +83,13 @@ async def _finish_entity_write(
         check_request_authority()
         _LOGGER.error(
             "%s reload failed after configuration was saved: %s",
-            tool_name, _strict_phoenix_log_text(format_exc(), token, hass),
+            tool_name, _strict_phoenix_log_text(format_exc(), access_key, hass),
         )
         body.update(
             reload_status="failed",
             registration={"status": "not_checked", "entity_id": None, "state_present": None},
             error=(
-                _strict_phoenix_log_text(str(exc), token, hass)[:500]
+                _strict_phoenix_log_text(str(exc), access_key, hass)[:500]
                 if isinstance(exc, HomeAssistantError)
                 else "Internal reload error. Check HA logs for details."
             ),
@@ -100,14 +100,14 @@ async def _finish_entity_write(
         return result, "invalid_request", tool_name
 
     try:
-        body["registration"] = await async_observe_registration(hass, token, domain, storage_id)
+        body["registration"] = await async_observe_registration(hass, access_key, domain, storage_id)
     except AuthorityChangedError:
         raise
     except Exception:
         check_request_authority()
         _LOGGER.error(
             "%s registration observation failed: %s",
-            tool_name, _strict_phoenix_log_text(format_exc(), token, hass),
+            tool_name, _strict_phoenix_log_text(format_exc(), access_key, hass),
         )
         body["registration"] = {"status": "observation_failed", "entity_id": None, "state_present": None}
     check_request_authority()
@@ -263,13 +263,13 @@ def _delete_cas_conflict(
 
 
 async def _tool_list_automations(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: list accessible automation.* entities with their editable id."""
-    if effective_cap(token, "cap_registry_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_registry_read") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "list_automations"
     items: list[dict] = []
-    for e in filter_entities_for_token(hass.states.async_all(), token, hass):
+    for e in filter_entities_for_access_key(hass.states.async_all(), access_key, hass):
         if not e["entity_id"].startswith("automation."):
             continue
         attrs = e.get("attributes", {})
@@ -284,10 +284,10 @@ async def _tool_list_automations(
 
 
 async def _tool_get_automation(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read one automation's current stored config, with a content_hash."""
-    if effective_cap(token, "cap_automation_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_automation_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "get_automation"
     automation_id = str(args.get("automation_id") or "").strip()
     if not automation_id:
@@ -390,30 +390,30 @@ async def _automation_write_precheck(
 
 async def _tool_create_automation(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: create a new UI automation by appending to automations.yaml."""
-    if effective_cap(token, "cap_automation_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_automation_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "create_automation"
     pre = await _automation_write_precheck(args, hass, "create_automation", require_id=False)
     if pre is not None:
         return pre
     blocked = await _gate(
-        "cap_automation_write", token, hass, data,
+        "cap_automation_write", access_key, hass, data,
         tool_name="create_automation", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_create_automation(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_create_automation(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_create_automation(args, token, hass, data)
+    return await _execute_create_automation(args, access_key, hass, data)
 
 
 async def _execute_create_automation(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     error = _automation_argument_error(args, create=True)
     if error:
@@ -458,7 +458,7 @@ async def _execute_create_automation(
         return _tool_error("Failed to create automation. Check HA logs for details."), "invalid_request", "create_automation"
 
     await _record_version(
-        data, token, resource_type="automation", resource_id=automation_id,
+        data, access_key, resource_type="automation", resource_id=automation_id,
         action="create", before=None, after=config, alias=config.get("alias"),
     )
     return _tool_success(json.dumps(config, indent=2, default=str)), "allowed", "create_automation"
@@ -466,30 +466,30 @@ async def _execute_create_automation(
 
 async def _tool_edit_automation(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: replace the config of an existing UI automation."""
-    if effective_cap(token, "cap_automation_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_automation_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "edit_automation"
     pre = await _automation_write_precheck(args, hass, "edit_automation", require_id=True)
     if pre is not None:
         return pre
     blocked = await _gate(
-        "cap_automation_write", token, hass, data,
+        "cap_automation_write", access_key, hass, data,
         tool_name="edit_automation", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_edit_automation(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_edit_automation(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_edit_automation(args, token, hass, data)
+    return await _execute_edit_automation(args, access_key, hass, data)
 
 
 async def _execute_edit_automation(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     error = _automation_argument_error(args, create=False)
     if error:
@@ -532,7 +532,7 @@ async def _execute_edit_automation(
         return _tool_error("Failed to edit automation. Check HA logs for details."), "invalid_request", "edit_automation"
 
     await _record_version(
-        data, token, resource_type="automation", resource_id=automation_id,
+        data, access_key, resource_type="automation", resource_id=automation_id,
         action="edit", before=before_cfg, after=config, alias=config.get("alias"),
     )
     return _tool_success(json.dumps(config, indent=2, default=str)), "allowed", "edit_automation"
@@ -540,14 +540,14 @@ async def _execute_edit_automation(
 
 async def _tool_delete_automation(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: permanently delete a UI automation."""
-    if effective_cap(token, "cap_automation_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_automation_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_automation"
     automation_id = str_arg(args.get("automation_id")).strip()
     if not automation_id:
@@ -556,20 +556,20 @@ async def _tool_delete_automation(
     if current is None:
         return _tool_error(f"No automation found with id '{automation_id}'."), "denied", "delete_automation"
     blocked = await _gate(
-        "cap_automation_write", token, hass, data,
+        "cap_automation_write", access_key, hass, data,
         tool_name="delete_automation", args=args, request_id=request_id,
         client_ip=client_ip,
         diff=lambda: _build_diff_delete_automation(
-            args, token, hass, reviewed=current
+            args, access_key, hass, reviewed=current
         ),
     )
     if blocked is not None:
         return blocked
-    return await _execute_delete_automation(args, token, hass, data)
+    return await _execute_delete_automation(args, access_key, hass, data)
 
 
 async def _execute_delete_automation(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     automation_id = args.get("automation_id", "").strip()
     if not automation_id:
@@ -615,7 +615,7 @@ async def _execute_delete_automation(
         return _tool_error("Failed to delete automation. Check HA logs for details."), "invalid_request", "delete_automation"
 
     await _record_version(
-        data, token, resource_type="automation", resource_id=automation_id,
+        data, access_key, resource_type="automation", resource_id=automation_id,
         action="delete", before=removed, after=None,
         alias=removed.get("alias") if isinstance(removed, dict) else None,
     )
@@ -623,13 +623,13 @@ async def _execute_delete_automation(
 
 
 async def _tool_list_scripts(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: list accessible script.* entities with their editable id."""
-    if effective_cap(token, "cap_registry_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_registry_read") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "list_scripts"
     items: list[dict] = []
-    for e in filter_entities_for_token(hass.states.async_all(), token, hass):
+    for e in filter_entities_for_access_key(hass.states.async_all(), access_key, hass):
         entity_id = e["entity_id"]
         if not entity_id.startswith("script."):
             continue
@@ -645,10 +645,10 @@ async def _tool_list_scripts(
 
 
 async def _tool_get_script(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read one script's current stored config, with a content_hash."""
-    if effective_cap(token, "cap_script_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_script_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "get_script"
     script_id = str(args.get("script_id") or "").strip()
     if not script_id:
@@ -682,30 +682,30 @@ async def _script_write_precheck(args: dict, hass: HomeAssistant, tool_name: str
 
 async def _tool_create_script(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: create a new script in scripts.yaml."""
-    if effective_cap(token, "cap_script_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_script_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "create_script"
     pre = await _script_write_precheck(args, hass, "create_script")
     if pre is not None:
         return pre
     blocked = await _gate(
-        "cap_script_write", token, hass, data,
+        "cap_script_write", access_key, hass, data,
         tool_name="create_script", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_create_script(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_create_script(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_create_script(args, token, hass, data)
+    return await _execute_create_script(args, access_key, hass, data)
 
 
 async def _execute_create_script(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     script_id = args.get("script_id", "").strip()
     if not script_id:
@@ -745,7 +745,7 @@ async def _execute_create_script(
                 outcome = "invalid_request" if op.error_kind == "already_exists" else "denied"
                 return _tool_error(op.error_text), outcome, "create_script"
             await _record_version(
-                data, token, resource_type="script", resource_id=script_id,
+                data, access_key, resource_type="script", resource_id=script_id,
                 action="create", before=None, after=config, alias=config.get("alias"),
             )
     except AuthorityChangedError:
@@ -755,20 +755,20 @@ async def _execute_create_script(
         return _tool_error("Failed to create script. Check HA logs for details."), "invalid_request", "create_script"
 
     return await _finish_entity_write(
-        hass, token, domain="script", storage_id=script_id, config=config, tool_name="create_script",
+        hass, access_key, domain="script", storage_id=script_id, config=config, tool_name="create_script",
     )
 
 
 async def _tool_edit_script(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: replace the config of an existing script in scripts.yaml."""
-    if effective_cap(token, "cap_script_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_script_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "edit_script"
     pre = await _script_write_precheck(args, hass, "edit_script")
     if pre is not None:
@@ -779,17 +779,17 @@ async def _tool_edit_script(
     if stale is not None:
         return stale
     blocked = await _gate(
-        "cap_script_write", token, hass, data,
+        "cap_script_write", access_key, hass, data,
         tool_name="edit_script", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_edit_script(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_edit_script(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_edit_script(args, token, hass, data)
+    return await _execute_edit_script(args, access_key, hass, data)
 
 
 async def _execute_edit_script(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     script_id = args.get("script_id", "").strip()
     if not script_id:
@@ -837,7 +837,7 @@ async def _execute_edit_script(
             else:
                 before_cfg = op.before
             await _record_version(
-                data, token, resource_type="script", resource_id=script_id,
+                data, access_key, resource_type="script", resource_id=script_id,
                 action="edit", before=before_cfg, after=config, alias=config.get("alias"),
             )
     except AuthorityChangedError:
@@ -847,20 +847,20 @@ async def _execute_edit_script(
         return _tool_error("Failed to edit script. Check HA logs for details."), "invalid_request", "edit_script"
 
     return await _finish_entity_write(
-        hass, token, domain="script", storage_id=script_id, config=config, tool_name="edit_script",
+        hass, access_key, domain="script", storage_id=script_id, config=config, tool_name="edit_script",
     )
 
 
 async def _tool_delete_script(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: permanently delete a script from scripts.yaml."""
-    if effective_cap(token, "cap_script_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_script_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_script"
     script_id = str_arg(args.get("script_id")).strip()
     if not script_id:
@@ -871,18 +871,18 @@ async def _tool_delete_script(
     if current is None:
         return _tool_error(f"No script found with id '{script_id}'."), "denied", "delete_script"
     blocked = await _gate(
-        "cap_script_write", token, hass, data,
+        "cap_script_write", access_key, hass, data,
         tool_name="delete_script", args=args, request_id=request_id,
         client_ip=client_ip,
-        diff=lambda: _build_diff_delete_script(args, token, hass, reviewed=current),
+        diff=lambda: _build_diff_delete_script(args, access_key, hass, reviewed=current),
     )
     if blocked is not None:
         return blocked
-    return await _execute_delete_script(args, token, hass, data)
+    return await _execute_delete_script(args, access_key, hass, data)
 
 
 async def _execute_delete_script(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     script_id = args.get("script_id", "").strip()
     if not script_id:
@@ -930,7 +930,7 @@ async def _execute_delete_script(
         return _tool_error("Failed to delete script. Check HA logs for details."), "invalid_request", "delete_script"
 
     await _record_version(
-        data, token, resource_type="script", resource_id=script_id,
+        data, access_key, resource_type="script", resource_id=script_id,
         action="delete", before=before_cfg, after=None,
         alias=before_cfg.get("alias") if isinstance(before_cfg, dict) else None,
     )
@@ -978,10 +978,10 @@ def _trace_summary(short: dict) -> dict:
 
 
 async def _tool_get_automation_traces(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: execution traces for an accessible automation."""
-    if effective_cap(token, "cap_traces") == CAP_DENY:
+    if effective_cap(access_key, "cap_traces") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_automation_traces"
 
     raw = str(args.get("automation_id") or args.get("entity_id") or "").strip()
@@ -1002,7 +1002,7 @@ async def _tool_get_automation_traces(
                 break
 
     # Scope: nonexistent and inaccessible look identical (no oracle).
-    if entity_id is None or unique_id is None or resolve(entity_id, token, hass) not in (Permission.READ, Permission.WRITE):
+    if entity_id is None or unique_id is None or resolve(entity_id, access_key, hass) not in (Permission.READ, Permission.WRITE):
         return _tool_error("Automation not found."), "not_found", raw
 
     from homeassistant.components.trace.const import DATA_TRACE  # noqa: PLC0415
@@ -1045,9 +1045,9 @@ def _scene_member_entities(config: Any) -> list[str]:
     return list(ents.keys()) if isinstance(ents, dict) else []
 
 
-def _unwritable_scene_members(config: Any, token: TokenRecord, hass: HomeAssistant) -> list[str]:
+def _unwritable_scene_members(config: Any, access_key: AccessKeyRecord, hass: HomeAssistant) -> list[str]:
     """Scene member entities the token cannot WRITE (the scene will actuate them)."""
-    return sorted(e for e in _scene_member_entities(config) if resolve(e, token, hass) != Permission.WRITE)
+    return sorted(e for e in _scene_member_entities(config) if resolve(e, access_key, hass) != Permission.WRITE)
 
 
 def _valid_scene_config(config: Any) -> bool:
@@ -1059,13 +1059,13 @@ def _valid_scene_config(config: Any) -> bool:
 
 
 async def _tool_list_scenes(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: list accessible scene.* entities with their editable scene id."""
-    if effective_cap(token, "cap_registry_read") == CAP_DENY:
+    if effective_cap(access_key, "cap_registry_read") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "list_scenes"
     scenes: list[dict] = []
-    for e in filter_entities_for_token(hass.states.async_all(), token, hass):
+    for e in filter_entities_for_access_key(hass.states.async_all(), access_key, hass):
         if not e["entity_id"].startswith("scene."):
             continue
         attrs = e.get("attributes", {})
@@ -1079,7 +1079,7 @@ async def _tool_list_scenes(
 
 
 async def _tool_get_scene(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: read one scene's current stored config, with a content_hash.
 
@@ -1087,13 +1087,13 @@ async def _tool_get_scene(
     cannot write is refused with the same message as a missing scene, so the
     scene id is not an existence oracle.
     """
-    if effective_cap(token, "cap_scene_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_scene_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "get_scene"
     scene_id = str(args.get("scene_id") or "").strip()
     if not scene_id:
         return _tool_error("scene_id is required."), "invalid_request", "get_scene"
     config = await _read_config_entry(hass, "scene", scene_id)
-    if config is None or _unwritable_scene_members(config, token, hass):
+    if config is None or _unwritable_scene_members(config, access_key, hass):
         return _tool_error(
             f"No scene found with id '{scene_id}', or it controls entities outside your write scope."
         ), "denied", f"scene:{scene_id}"
@@ -1101,12 +1101,12 @@ async def _tool_get_scene(
 
 
 async def _scene_write(
-    config: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData, *, tool_name: str, scene_id: str, replace: bool
+    config: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData, *, tool_name: str, scene_id: str, replace: bool
 ) -> tuple[dict, str, str]:
     """Shared create/edit body: validate, scope-check members, write scenes.yaml, reload."""
     if not _valid_scene_config(config):
         return _tool_error("config must include a non-empty 'name' and a non-empty 'entities' map."), "invalid_request", tool_name
-    bad = _unwritable_scene_members(config, token, hass)
+    bad = _unwritable_scene_members(config, access_key, hass)
     if bad:
         return _tool_error("Scene references entities this access key cannot write: " + ", ".join(bad)), "denied", tool_name
 
@@ -1131,7 +1131,7 @@ async def _scene_write(
                     # edit a scene whose CURRENT members are all WRITE-accessible. A
                     # missing scene and an out-of-scope one return the same error so the
                     # id is not an existence oracle.
-                    if idx is None or _unwritable_scene_members(items[idx], token, hass):
+                    if idx is None or _unwritable_scene_members(items[idx], access_key, hass):
                         return _tool_error(f"No scene found with id '{scene_id}', or it controls entities outside your write scope."), "denied", tool_name
                     before_cfg = items[idx]
                     items[idx] = config
@@ -1147,7 +1147,7 @@ async def _scene_write(
                 current = await hass.async_add_executor_job(
                     yaml_includes.read_entry, hass.config.config_dir, "scene", scene_id,
                 )
-                if current is None or _unwritable_scene_members(current, token, hass):
+                if current is None or _unwritable_scene_members(current, access_key, hass):
                     return _tool_error(f"No scene found with id '{scene_id}', or it controls entities outside your write scope."), "denied", tool_name
                 op = await hass.async_add_executor_job(
                     yaml_includes.perform_edit, hass.config.config_dir, "scene",
@@ -1165,7 +1165,7 @@ async def _scene_write(
                 if not op.ok:
                     return _tool_error(op.error_text), "denied", tool_name
             await _record_version(
-                data, token, resource_type="scene", resource_id=scene_id,
+                data, access_key, resource_type="scene", resource_id=scene_id,
                 action="edit" if replace else "create",
                 before=before_cfg, after=config, alias=config.get("name"),
             )
@@ -1175,7 +1175,7 @@ async def _scene_write(
         _LOGGER.exception("%s failed", tool_name)
         return _tool_error(f"Failed to {tool_name.replace('_', ' ')}. Check HA logs for details."), "invalid_request", tool_name
     return await _finish_entity_write(
-        hass, token, domain="scene", storage_id=scene_id, config=config, tool_name=tool_name,
+        hass, access_key, domain="scene", storage_id=scene_id, config=config, tool_name=tool_name,
     )
 
 
@@ -1197,27 +1197,27 @@ def _scene_write_precheck(args: dict, tool_name: str, *, require_id: bool) -> tu
 
 
 async def _tool_create_scene(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: create a scene (Confirm-gated)."""
-    if effective_cap(token, "cap_scene_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_scene_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "create_scene"
     pre = _scene_write_precheck(args, "create_scene", require_id=False)
     if pre is not None:
         return pre
     blocked = await _gate(
-        "cap_scene_write", token, hass, data,
+        "cap_scene_write", access_key, hass, data,
         tool_name="create_scene", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_create_scene(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_create_scene(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_create_scene(args, token, hass, data)
+    return await _execute_create_scene(args, access_key, hass, data)
 
 
 async def _execute_create_scene(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     config = args.get("config")
     if not isinstance(config, dict):
@@ -1226,17 +1226,17 @@ async def _execute_create_scene(
     # create mints a new one.
     scene_id = str(args.get("scene_id") or "").strip() or "phoenix_mcp_" + uuid.uuid4().hex[:16]
     return await _scene_write(
-        config, token, hass, data, tool_name="create_scene",
+        config, access_key, hass, data, tool_name="create_scene",
         scene_id=scene_id, replace=False,
     )
 
 
 async def _tool_edit_scene(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: edit a scene (Confirm-gated)."""
-    if effective_cap(token, "cap_scene_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_scene_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "edit_scene"
     pre = _scene_write_precheck(args, "edit_scene", require_id=True)
     if pre is not None:
@@ -1247,17 +1247,17 @@ async def _tool_edit_scene(
     if stale is not None:
         return stale
     blocked = await _gate(
-        "cap_scene_write", token, hass, data,
+        "cap_scene_write", access_key, hass, data,
         tool_name="edit_scene", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_edit_scene(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_edit_scene(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_edit_scene(args, token, hass, data)
+    return await _execute_edit_scene(args, access_key, hass, data)
 
 
 async def _execute_edit_scene(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     scene_id = str(args.get("scene_id") or "").strip()
     config = args.get("config")
@@ -1270,35 +1270,35 @@ async def _execute_edit_scene(
     stale = await _entry_cas_conflict(args, hass, "scene", scene_id, "edit_scene")
     if stale is not None:
         return stale
-    return await _scene_write(config, token, hass, data, tool_name="edit_scene", scene_id=scene_id, replace=True)
+    return await _scene_write(config, access_key, hass, data, tool_name="edit_scene", scene_id=scene_id, replace=True)
 
 
 async def _tool_delete_scene(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: delete a scene (Confirm-gated)."""
-    if effective_cap(token, "cap_scene_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_scene_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "delete_scene"
     scene_id = str_arg(args.get("scene_id")).strip()
     if not scene_id:
         return _tool_error("scene_id is required."), "invalid_request", "delete_scene"
     args, current = await _bind_delete_args(args, hass, "scene", scene_id)
-    if current is None or _unwritable_scene_members(current, token, hass):
+    if current is None or _unwritable_scene_members(current, access_key, hass):
         return _tool_error(f"No scene found with id '{scene_id}', or it controls entities outside your write scope."), "denied", "delete_scene"
     blocked = await _gate(
-        "cap_scene_write", token, hass, data,
+        "cap_scene_write", access_key, hass, data,
         tool_name="delete_scene", args=args, request_id=request_id,
         client_ip=client_ip,
-        diff=lambda: _build_diff_delete_scene(args, token, hass, reviewed=current),
+        diff=lambda: _build_diff_delete_scene(args, access_key, hass, reviewed=current),
     )
     if blocked is not None:
         return blocked
-    return await _execute_delete_scene(args, token, hass, data)
+    return await _execute_delete_scene(args, access_key, hass, data)
 
 
 async def _execute_delete_scene(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     scene_id = str(args.get("scene_id") or "").strip()
     if not scene_id:
@@ -1323,7 +1323,7 @@ async def _execute_delete_scene(
                 existing = next((s for s in items if isinstance(s, dict) and str(s.get("id")) == scene_id), None)
                 # The token may only delete a scene whose current members are all
                 # WRITE-accessible. Missing and out-of-scope return the same error.
-                if existing is None or _unwritable_scene_members(existing, token, hass):
+                if existing is None or _unwritable_scene_members(existing, access_key, hass):
                     return _tool_error(f"No scene found with id '{scene_id}', or it controls entities outside your write scope."), "denied", "delete_scene"
                 stale = _delete_cas_conflict(args, existing, "delete_scene")
                 if stale is not None:
@@ -1337,7 +1337,7 @@ async def _execute_delete_scene(
                 existing = await hass.async_add_executor_job(
                     yaml_includes.read_entry, hass.config.config_dir, "scene", scene_id,
                 )
-                if existing is None or _unwritable_scene_members(existing, token, hass):
+                if existing is None or _unwritable_scene_members(existing, access_key, hass):
                     return _tool_error(f"No scene found with id '{scene_id}', or it controls entities outside your write scope."), "denied", "delete_scene"
                 check_request_authority()
                 op = await hass.async_add_executor_job(
@@ -1362,14 +1362,14 @@ async def _execute_delete_scene(
         _LOGGER.exception("delete_scene failed")
         return _tool_error("Failed to delete scene. Check HA logs for details."), "invalid_request", "delete_scene"
     await _record_version(
-        data, token, resource_type="scene", resource_id=scene_id,
+        data, access_key, resource_type="scene", resource_id=scene_id,
         action="delete", before=existing, after=None,
         alias=existing.get("name") if isinstance(existing, dict) else None,
     )
     return _tool_success(f"Scene '{scene_id}' deleted successfully."), "allowed", "delete_scene"
 
 
-def _build_diff_create_automation(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _build_diff_create_automation(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     config = dict_arg(args.get("config"))
     return {
         "kind": "config_diff",
@@ -1401,7 +1401,7 @@ def _authoring_entry_label(
     return None
 
 
-async def _build_diff_edit_automation(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+async def _build_diff_edit_automation(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     automation_id = (args.get("automation_id") or "").strip()
     config = dict_arg(args.get("config"))
     before = await _entry_before_json(hass, "automation", automation_id)
@@ -1418,7 +1418,7 @@ async def _build_diff_edit_automation(args: dict, token: TokenRecord, hass: Home
 
 
 async def _build_diff_delete_automation(
-    args: dict, token: TokenRecord, hass: HomeAssistant, *, reviewed: Any = _ENTRY_NOT_CAPTURED
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, *, reviewed: Any = _ENTRY_NOT_CAPTURED
 ) -> dict:
     automation_id = str_arg(args.get("automation_id")).strip()
     before = await _entry_before_json(
@@ -1478,7 +1478,7 @@ async def _entry_before_json(
         return None
 
 
-def _build_diff_create_scene(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _build_diff_create_scene(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     config = dict_arg(args.get("config"))
     members = _scene_member_entities(config)
     return {
@@ -1488,11 +1488,11 @@ def _build_diff_create_scene(args: dict, token: TokenRecord, hass: HomeAssistant
         "before": None,
         "after": _truncate(json.dumps(config, indent=2, default=str)),
         "preview": {"name": config.get("name"), "entities": members,
-                    "unwritable_entities": _unwritable_scene_members(config, token, hass)},
+                    "unwritable_entities": _unwritable_scene_members(config, access_key, hass)},
     }
 
 
-async def _build_diff_edit_scene(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+async def _build_diff_edit_scene(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     scene_id = str(args.get("scene_id") or "").strip()
     config = dict_arg(args.get("config"))
     before = await _entry_before_json(hass, "scene", scene_id)
@@ -1503,12 +1503,12 @@ async def _build_diff_edit_scene(args: dict, token: TokenRecord, hass: HomeAssis
         "before": before,
         "after": _truncate(json.dumps(config, indent=2, default=str)),
         "preview": {"name": config.get("name"), "entities": _scene_member_entities(config),
-                    "unwritable_entities": _unwritable_scene_members(config, token, hass)},
+                    "unwritable_entities": _unwritable_scene_members(config, access_key, hass)},
     }
 
 
 async def _build_diff_delete_scene(
-    args: dict, token: TokenRecord, hass: HomeAssistant, *, reviewed: Any = _ENTRY_NOT_CAPTURED
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, *, reviewed: Any = _ENTRY_NOT_CAPTURED
 ) -> dict:
     scene_id = str(args.get("scene_id") or "").strip()
     before = await _entry_before_json(hass, "scene", scene_id, current=reviewed)
@@ -1522,7 +1522,7 @@ async def _build_diff_delete_scene(
     }
 
 
-def _build_diff_create_script(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _build_diff_create_script(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     script_id = (args.get("script_id") or "").strip()
     config = dict_arg(args.get("config"))
     return {
@@ -1537,7 +1537,7 @@ def _build_diff_create_script(args: dict, token: TokenRecord, hass: HomeAssistan
     }
 
 
-async def _build_diff_edit_script(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+async def _build_diff_edit_script(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     script_id = (args.get("script_id") or "").strip()
     config = dict_arg(args.get("config"))
     before = await _entry_before_json(hass, "script", script_id, wrap_key=script_id)
@@ -1554,7 +1554,7 @@ async def _build_diff_edit_script(args: dict, token: TokenRecord, hass: HomeAssi
 
 
 async def _build_diff_delete_script(
-    args: dict, token: TokenRecord, hass: HomeAssistant, *, reviewed: Any = _ENTRY_NOT_CAPTURED
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, *, reviewed: Any = _ENTRY_NOT_CAPTURED
 ) -> dict:
     script_id = str_arg(args.get("script_id")).strip()
     before = await _entry_before_json(

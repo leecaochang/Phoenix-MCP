@@ -24,12 +24,12 @@ from custom_components.phoenix_mcp.mcp_view import (
 )
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
-from custom_components.phoenix_mcp.token_store import (
+from custom_components.phoenix_mcp.access_key_store import (
     GlobalSettings,
     PermissionNode,
     PermissionTree,
-    TokenRecord,
-    TokenStore,
+    AccessKeyRecord,
+    AccessKeyStore,
 )
 from custom_components.phoenix_mcp.version_store import VersionStore
 from custom_components.phoenix_mcp.ws_dispatch import async_ws_command
@@ -50,8 +50,8 @@ def _profile(key: str, mode: str, reason: str = "Helper safety test") -> Semanti
     )
 
 
-def _token(domain: str, *, cap: str = "confirm") -> TokenRecord:
-    return TokenRecord(
+def _access_key(domain: str, *, cap: str = "confirm") -> AccessKeyRecord:
+    return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="helper-mesa-test",
         token_hash="x",
@@ -64,7 +64,7 @@ def _token(domain: str, *, cap: str = "confirm") -> TokenRecord:
 
 
 async def _data(hass: HomeAssistant, mesa_mode: str = "enforced") -> PhoenixData:
-    store = MagicMock(spec=TokenStore)
+    store = MagicMock(spec=AccessKeyStore)
     store.async_lock = asyncio.Lock()
     store.async_save = AsyncMock()
     store.get_settings.return_value = GlobalSettings(mesa_mode=mesa_mode)
@@ -137,7 +137,7 @@ async def test_read_only_blocks_recent_helper_edit_and_delete_before_approval(
             ),
         ):
             content, outcome, _resource = await _call_tool(
-                tool_name, args, _token(helper_type), hass, data
+                tool_name, args, _access_key(helper_type), hass, data
             )
             assert outcome == "denied"
             denial = json.loads(content["content"][0]["text"])
@@ -167,7 +167,7 @@ async def test_domain_read_only_blocks_helper_create_before_approval(
         content, outcome, _resource = await _call_tool(
             "create_helper",
             {"helper_type": helper_type, "config": dict(_HELPERS[helper_type])},
-            _token(helper_type),
+            _access_key(helper_type),
             hass,
             data,
         )
@@ -188,7 +188,7 @@ async def test_new_read_only_profile_invalidates_pending_tag_delete(
         _content, outcome, _resource = await _call_tool(
             "delete_helper",
             {"helper_type": "tag", "helper_id": helper_id},
-            _token("tag"),
+            _access_key("tag"),
             hass,
             data,
         )
@@ -201,7 +201,7 @@ async def test_new_read_only_profile_invalidates_pending_tag_delete(
         _profile(entity_id, "read_only", "Protected while approval waited"),
     )
     content, outcome, _resource = await async_execute_approved_tool(
-        "delete_helper", saved_args, _token("tag"), hass, data
+        "delete_helper", saved_args, _access_key("tag"), hass, data
     )
     assert outcome == "denied"
     assert "changed after this helper request was reviewed" in content["content"][0]["text"]
@@ -217,7 +217,7 @@ async def test_capability_approval_covers_unchanged_domain_confirm_on_create(
         "input_button", _profile("input_button", "confirm")
     )
     gate = AsyncMock(return_value=({}, "pending_approval", "approval-1"))
-    token = _token("input_button")
+    access_key = _access_key("input_button")
     with patch("custom_components.phoenix_mcp.tools.helper._gate", gate):
         _content, outcome, _resource = await _call_tool(
             "create_helper",
@@ -225,7 +225,7 @@ async def test_capability_approval_covers_unchanged_domain_confirm_on_create(
                 "helper_type": "input_button",
                 "config": {"name": "Confirmed helper"},
             },
-            token,
+            access_key,
             hass,
             data,
         )
@@ -235,7 +235,7 @@ async def test_capability_approval_covers_unchanged_domain_confirm_on_create(
     assert diff["preview"]["mesa"]["decision"] == "confirm"
 
     content, outcome, _resource = await async_execute_approved_tool(
-        "create_helper", saved_args, token, hass, data
+        "create_helper", saved_args, access_key, hass, data
     )
     assert outcome == "allowed", content
     helper = json.loads(content["content"][0]["text"])["helper"]
@@ -270,7 +270,7 @@ async def test_mesa_confirm_uses_one_helper_approval_when_capability_allows(
         _content, outcome, _resource = await _call_tool(
             "delete_helper",
             {"helper_type": "tag", "helper_id": helper_id},
-            _token("tag", cap="allow"),
+            _access_key("tag", cap="allow"),
             hass,
             data,
         )
@@ -347,7 +347,7 @@ async def test_read_only_blocks_config_flow_helper_settings_before_approval(
         registry_entry.entity_id,
         _profile(registry_entry.entity_id, "read_only"),
     )
-    token = _token("sensor")
+    access_key = _access_key("sensor")
     gate = AsyncMock()
 
     async def _helper_integration(_hass, _domain):
@@ -366,7 +366,7 @@ async def test_read_only_blocks_config_flow_helper_settings_before_approval(
                 "entry_id": entry.entry_id,
                 "settings": {"entity_id": "sensor.source", "hysteresis": 1.0},
             },
-            token,
+            access_key,
             hass,
             data,
         )
@@ -387,7 +387,7 @@ async def test_template_menu_uses_selected_entity_domain_for_mesa(hass, kind):
                 {"step_id": "user", "data": {"next_step_id": kind}},
                 {"step_id": kind, "data": {"name": "MESA Template", "state": "{{ 7 }}"}},
             ],
-        }, _token(kind), hass, data)
+        }, _access_key(kind), hass, data)
     assert outcome == "denied", content
     assert "read_only" in content["content"][0]["text"]
     gate.assert_not_awaited()
@@ -408,25 +408,25 @@ async def test_template_restore_retains_approved_mesa_fingerprint(hass, changed)
     entry = result["result"]
     snapshot = template_snapshot(hass, entry)
     hass.config_entries.async_update_entry(entry, options={**entry.options, "state": "{{ 8 }}"})
-    data, token = await _data(hass), _token("sensor")
+    data, access_key = await _data(hass), _access_key("sensor")
     entity_id = snapshot["entities"][0]["entity_id"]
     data.mesa.store.set(entity_id, _profile(entity_id, "confirm"))
-    rid = await data.config_recovery.begin(f"config_entry:{entry.entry_id}", "edit", token.id, snapshot)
+    rid = await data.config_recovery.begin(f"config_entry:{entry.entry_id}", "edit", access_key.id, snapshot)
     await data.config_recovery.mark(rid, "verified")
     data.config_recovery.leave(rid)
     args = {"recovery_id": rid, "side": "before"}
-    content, outcome, _ = await _call_tool("restore_configuration", args, token, hass, data)
+    content, outcome, _ = await _call_tool("restore_configuration", args, access_key, hass, data)
     assert outcome == "allowed", content
     receipt = json.loads(content["content"][0]["text"])
     args.update({key: receipt[key] for key in ("snapshot_digest", "target_fingerprint")})
     gate = AsyncMock(return_value=({}, "pending_approval", "approval-1"))
     with patch("custom_components.phoenix_mcp.tools.helper._gate", gate):
-        _, outcome, _ = await _call_tool("restore_configuration", args, token, hass, data)
+        _, outcome, _ = await _call_tool("restore_configuration", args, access_key, hass, data)
     assert outcome == "pending_approval"
     saved_args = gate.await_args.kwargs["args"]
     if changed:
         data.mesa.store.set(entity_id, _profile(entity_id, "read_only"))
-    content, outcome, _ = await async_execute_approved_tool("restore_configuration", saved_args, token, hass, data)
+    content, outcome, _ = await async_execute_approved_tool("restore_configuration", saved_args, access_key, hass, data)
     if changed:
         assert outcome == "denied", content
         assert entry.options["state"] == "{{ 8 }}"
@@ -438,27 +438,27 @@ async def test_template_restore_retains_approved_mesa_fingerprint(hass, changed)
 
 
 async def test_allow_capability_and_advisory_mesa_need_no_template_approval(hass):
-    data, token = await _data(hass, "advisory"), _token("sensor", cap="allow")
+    data, access_key = await _data(hass, "advisory"), _access_key("sensor", cap="allow")
     assert await async_setup_component(hass, "homeassistant", {})
     content, outcome, _ = await _call_tool("create_helper", {
         "helper_type": "template", "flow_steps": [
             {"step_id": "user", "data": {"next_step_id": "sensor"}},
             {"step_id": "sensor", "data": {"name": "Advisory helper", "state": "{{ 7 }}"}},
         ],
-    }, token, hass, data)
+    }, access_key, hass, data)
     assert outcome == "allowed", content
     entry_id = json.loads(content["content"][0]["text"])["config_entry"]["entry_id"]
     content, outcome, _ = await _call_tool("set_helper_settings", {
         "entry_id": entry_id, "settings": {"state": "{{ 8 }}"},
-    }, token, hass, data)
+    }, access_key, hass, data)
     assert outcome == "allowed", content
     rid = json.loads(content["content"][0]["text"])["recovery_id"]
     args = {"recovery_id": rid, "side": "before"}
-    content, outcome, _ = await _call_tool("restore_configuration", args, token, hass, data)
+    content, outcome, _ = await _call_tool("restore_configuration", args, access_key, hass, data)
     assert outcome == "allowed", content
     receipt = json.loads(content["content"][0]["text"])
     args.update({key: receipt[key] for key in ("snapshot_digest", "target_fingerprint")})
-    content, outcome, _ = await _call_tool("restore_configuration", args, token, hass, data)
+    content, outcome, _ = await _call_tool("restore_configuration", args, access_key, hass, data)
     assert outcome == "allowed", content
     assert hass.config_entries.async_get_entry(entry_id).options["state"] == "{{ 7 }}"
     data.store.get_pending_approvals.assert_not_called()

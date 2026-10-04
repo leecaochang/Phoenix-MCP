@@ -358,7 +358,7 @@ def test_tool_badges_use_current_capability_labels() -> None:
 
 def test_documented_mesa_baseline_and_default_match_runtime() -> None:
     from custom_components.phoenix_mcp.mesa_core import DOMAIN_SAFETY_BASELINE
-    from custom_components.phoenix_mcp.token_store import GlobalSettings
+    from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 
     assert GlobalSettings().mesa_mode == "advisory"
     assert DOMAIN_SAFETY_BASELINE["light"] == "autonomous"

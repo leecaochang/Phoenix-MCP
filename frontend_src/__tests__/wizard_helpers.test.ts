@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { load } from "js-yaml";
-import { buildAgentTabs, buildBearerValue, buildClaudeCommand, buildCodexCommand, buildCodexConfig, buildCursorJson, buildGeminiCommand, buildHarnessConfig, buildMcpJson, buildMcpUrl, buildSkillInstall, buildTestPrompt, codexTokenEnv, firstGreenEntity, firstGreenTarget, harnessServerName, mcpServerName, skillUrlFromMcp } from "../wizard_helpers";
+import { buildAgentTabs, buildBearerValue, buildClaudeCommand, buildCodexCommand, buildCodexConfig, buildCursorJson, buildGeminiCommand, buildHarnessConfig, buildMcpJson, buildMcpUrl, buildSkillInstall, buildTestPrompt, codexAccessKeyEnv, firstGreenEntity, firstGreenTarget, harnessServerName, mcpServerName, skillUrlFromMcp } from "../wizard_helpers";
 import { PERSONA_CAP_DEFAULTS } from "../personas";
 import type { EntityTree, PermissionTree } from "../types";
 
@@ -26,13 +26,13 @@ describe("mcpServerName", () => {
   });
 });
 
-describe("codexTokenEnv", () => {
+describe("codexAccessKeyEnv", () => {
   it("derives a valid uppercase env identifier", () => {
-    expect(codexTokenEnv("Steve-Laptop")).toBe("PHOENIX_TOKEN_STEVE_LAPTOP");
-    expect(codexTokenEnv("Steve-Laptop")).toMatch(/^[A-Z_][A-Z0-9_]*$/);
+    expect(codexAccessKeyEnv("Steve-Laptop")).toBe("PHOENIX_ACCESS_KEY_STEVE_LAPTOP");
+    expect(codexAccessKeyEnv("Steve-Laptop")).toMatch(/^[A-Z_][A-Z0-9_]*$/);
   });
   it("distinct token names give distinct env vars", () => {
-    expect(codexTokenEnv("voice")).not.toBe(codexTokenEnv("admin"));
+    expect(codexAccessKeyEnv("voice")).not.toBe(codexAccessKeyEnv("admin"));
   });
 });
 
@@ -67,17 +67,17 @@ describe("buildGeminiCommand", () => {
 
 describe("buildCodexConfig", () => {
   it("emits a config.toml table with url and bearer_token_env_var", () => {
-    const cfg = buildCodexConfig("http://ha/api/phoenix-mcp", "phx-voice", "PHOENIX_TOKEN_VOICE");
+    const cfg = buildCodexConfig("http://ha/api/phoenix-mcp", "phx-voice", "PHOENIX_ACCESS_KEY_VOICE");
     expect(cfg).toContain("[mcp_servers.phx-voice]");
     expect(cfg).toContain('url = "http://ha/api/phoenix-mcp"');
-    expect(cfg).toContain('bearer_token_env_var = "PHOENIX_TOKEN_VOICE"');
+    expect(cfg).toContain('bearer_token_env_var = "PHOENIX_ACCESS_KEY_VOICE"');
   });
 });
 
 describe("HTTP client configuration", () => {
   it("adds Codex over HTTP using the configured bearer environment variable", () => {
-    expect(buildCodexCommand("http://ha/api/phoenix-mcp", "phx-voice", "PHOENIX_TOKEN_VOICE"))
-      .toBe("codex mcp add phx-voice --url http://ha/api/phoenix-mcp --bearer-token-env-var PHOENIX_TOKEN_VOICE");
+    expect(buildCodexCommand("http://ha/api/phoenix-mcp", "phx-voice", "PHOENIX_ACCESS_KEY_VOICE"))
+      .toBe("codex mcp add phx-voice --url http://ha/api/phoenix-mcp --bearer-token-env-var PHOENIX_ACCESS_KEY_VOICE");
   });
 
   it("quotes editable URL metacharacters instead of expanding them in a shell", () => {
@@ -85,7 +85,7 @@ describe("HTTP client configuration", () => {
     for (const command of [
       buildClaudeCommand(url, "phx_abc", "phx-voice"),
       buildGeminiCommand(url, "phx_abc", "phx-voice"),
-      buildCodexCommand(url, "phx-voice", "PHOENIX_TOKEN_VOICE"),
+      buildCodexCommand(url, "phx-voice", "PHOENIX_ACCESS_KEY_VOICE"),
     ]) {
       expect(command).toContain("'https://ha.test/api/phoenix-mcp?x=$(touch injected)&y='\\''test'\\''' ");
     }
@@ -138,14 +138,14 @@ describe("buildAgentTabs", () => {
   it("Codex tab gives the exact Authorization header key/value as fields and a per-token env var", () => {
     const codex = buildAgentTabs("http://ha/api/phoenix-mcp", "phx_abc", "Voice_Assist").find((t) => t.key === "codex")!;
     expect(codex.blocks[0].code).toContain("codex mcp add phx-voice-assist --url");
-    expect(codex.blocks[0].code).toContain("export PHOENIX_TOKEN_VOICE_ASSIST=phx_abc");
+    expect(codex.blocks[0].code).toContain("export PHOENIX_ACCESS_KEY_VOICE_ASSIST=phx_abc");
     const guiFields = codex.blocks[1].fields!;
     expect(guiFields).toContainEqual({ label: "Server name", value: "phx-voice-assist" });
     expect(guiFields).toContainEqual({ label: "Header key", value: "Authorization" });
     expect(guiFields).toContainEqual({ label: "Header value", value: "Bearer phx_abc" });
     expect(codex.blocks[2].title).toContain("~/.codex/config.toml");
     expect(codex.blocks[2].code).toContain("[mcp_servers.phx-voice-assist]");
-    expect(codex.blocks[2].code).toContain('bearer_token_env_var = "PHOENIX_TOKEN_VOICE_ASSIST"');
+    expect(codex.blocks[2].code).toContain('bearer_token_env_var = "PHOENIX_ACCESS_KEY_VOICE_ASSIST"');
   });
 });
 

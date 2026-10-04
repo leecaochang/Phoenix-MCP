@@ -129,8 +129,8 @@ from .const import (
     VOICE_AGENT_CLIENT_IP,
 )
 from .data import PhoenixData
-from .helpers import canonical_language, get_client_ip, token_has_write_scope, voice_text
-from .token_store import TokenRecord
+from .helpers import canonical_language, get_client_ip, access_key_has_write_scope, voice_text
+from .access_key_store import AccessKeyRecord
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -2419,7 +2419,7 @@ _TOOL_PRIORITY = (
 )
 
 
-def build_mcp_tool_list(token: TokenRecord, data: PhoenixData) -> list[dict]:
+def build_mcp_tool_list(access_key: AccessKeyRecord, data: PhoenixData) -> list[dict]:
     """The tool defs this token would announce, cap key stripped (mirrors tools/list)."""
     from .mcp_view import (  # noqa: PLC0415
         _ENTITY_TOOL_DEFS, _NATIVE_TOOL_DEFS, _SYSTEM_TOOL_DEFS, _tool_is_announced,
@@ -2428,17 +2428,17 @@ def build_mcp_tool_list(token: TokenRecord, data: PhoenixData) -> list[dict]:
     from .household_authority import household_tool_access
 
     from .home_companion import is_companion, internal_turn, wrapper_tool
-    if is_companion(token) and not internal_turn(token):
+    if is_companion(access_key) and not internal_turn(access_key):
         return [wrapper_tool()]
-    announce_all = getattr(token, "announce_all_tools", False) and not is_companion(token)
-    has_write = token_has_write_scope(token)
+    announce_all = getattr(access_key, "announce_all_tools", False) and not is_companion(access_key)
+    has_write = access_key_has_write_scope(access_key)
     hass = getattr(data, "hass", None)
     mesa_defs = mesa_tool_defs() if getattr(data, "mesa", None) is not None else []
     out = []
     for d in list(_ENTITY_TOOL_DEFS) + list(_NATIVE_TOOL_DEFS) + list(_SYSTEM_TOOL_DEFS) + mesa_defs:
-        if household_tool_access(d["name"]) and (announce_all or _tool_is_announced(d, token, has_write, cast(Any, hass))):
+        if household_tool_access(d["name"]) and (announce_all or _tool_is_announced(d, access_key, has_write, cast(Any, hass))):
             out.append({k: v for k, v in d.items() if k not in ("cap", "caps", "caps_any", "requires")})
-    if is_companion(token):
+    if is_companion(access_key):
         from .const import HOME_COMPANION_TOOLS
         out = [tool for tool in out if tool["name"] in HOME_COMPANION_TOOLS]
     rank = {name: i for i, name in enumerate(_TOOL_PRIORITY)}
@@ -2446,17 +2446,17 @@ def build_mcp_tool_list(token: TokenRecord, data: PhoenixData) -> list[dict]:
     return out
 
 
-def build_agent_tool_list(token: TokenRecord, data: PhoenixData, surface: str) -> list[dict]:
+def build_agent_tool_list(access_key: AccessKeyRecord, data: PhoenixData, surface: str) -> list[dict]:
     """Share each planner's complete announced catalog with tool review."""
-    tools = build_mcp_tool_list(token, data)
+    tools = build_mcp_tool_list(access_key, data)
     # Chat already supplies current local time in every turn's system context.
     return deepcopy([tool for tool in tools if surface != "chat"
                      or tool.get("name") not in ("llm__GetDateTime", "GetDateTime")])
 
 
-def catalog_payload_metrics(token: TokenRecord, data: PhoenixData) -> dict[str, int]:
+def catalog_payload_metrics(access_key: AccessKeyRecord, data: PhoenixData) -> dict[str, int]:
     """Return deterministic byte metrics for the token's announced catalog."""
-    tools = build_mcp_tool_list(token, data)
+    tools = build_mcp_tool_list(access_key, data)
     canonical = json.dumps(tools, sort_keys=True, separators=(",", ":")).encode()
     claude = ClaudeProvider(ProviderConfig("claude", "metrics", "")).format_tools(tools)
     openai = OpenAICompatProvider(ProviderConfig("chatgpt", "metrics", "")).format_tools(tools)
@@ -3403,7 +3403,7 @@ async def _run_tool_batch(
     appends a synthetic error rather than being skipped. That is why this drains
     the whole batch instead of returning early.
 
-    The token is re-resolved per call (_current_dispatch_token), so a mid-turn
+    The token is re-resolved per call (_current_dispatch_access_key), so a mid-turn
     revoke, expiry, kill switch or cap narrowing is honored BEFORE any side
     effect, not just at the start of the turn.
     """
@@ -3417,9 +3417,9 @@ async def _run_tool_batch(
 
     for tc in tool_calls:
         name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
-        dispatch_token = None if (cancel.is_set() or stop_turn) \
-            else _current_dispatch_token(data, token_id)
-        if dispatch_token is None:
+        dispatch_access_key = None if (cancel.is_set() or stop_turn) \
+            else _current_dispatch_access_key(data, token_id)
+        if dispatch_access_key is None:
             stop_turn = True
             if cancel.is_set():
                 reason: str | None = "Cancelled by the operator; not run."
@@ -3461,7 +3461,7 @@ async def _run_tool_batch(
             resp_msg, _m, _r, outcome = await _dispatch_with_progress(
                 emit, tc.get("id"),
                 dispatch_agent_tool(
-                    _dispatch_mcp, hass=hass, data=data, token=dispatch_token,
+                    _dispatch_mcp, hass=hass, data=data, access_key=dispatch_access_key,
                     name=name, arguments=args, tool_id=tc.get("id"),
                     client_ip=client_ip, base_url=base_url, request_id=dispatch_request_id,
                 ),
@@ -3554,7 +3554,7 @@ from .conversation_log import recorded_chat, flush_assistant
 @tracked_turn("chat")
 @recovery_turn
 async def async_run_agent_turn(
-    *, hass: HomeAssistant, data: PhoenixData, token: TokenRecord,
+    *, hass: HomeAssistant, data: PhoenixData, access_key: AccessKeyRecord,
     provider: ClaudeProvider | OpenAICompatProvider,
     session: ClientSession, messages: list[dict], options: dict,
     client_ip: str, base_url: str,
@@ -3574,8 +3574,8 @@ async def async_run_agent_turn(
     is the turn-level policy the phases must not own: the runaway-iteration cap
     and its human-in-the-loop reset, the output budget, and how the turn ends.
     """
-    await data.agent_recovery.reconcile(data.store, token.id)
-    if data.agent_recovery.blocks(token.id):
+    await data.agent_recovery.reconcile(data.store, access_key.id)
+    if data.agent_recovery.blocks(access_key.id):
         await emit("error", {"code": "outcome_unknown", "retryable": False,
                              "message": "An earlier action outcome is unknown. Check Phoenix MCP > Needs attention before continuing."})
         await emit("messages", {"messages": messages})
@@ -3583,13 +3583,13 @@ async def async_run_agent_turn(
         return messages
 
     from .chat_routing import async_route_chat_command
-    if not await async_route_chat_command(hass, data, token, messages, routing_language, cancel,
+    if not await async_route_chat_command(hass, data, access_key, messages, routing_language, cancel,
                                            base_url=base_url, client_ip=client_ip, emit=emit):
         return messages
 
     from .home_companion import is_companion, async_delegate
     from .const import HOME_COMPANION_REPORT_STATUSES
-    if is_companion(token):
+    if is_companion(access_key):
         request = messages[-1].get("content") if messages and messages[-1].get("role") == "user" else None
         if not isinstance(request, str) or cancel.is_set():
             await emit("error", {"code": "cancelled" if cancel.is_set() else "invalid_request",
@@ -3597,7 +3597,7 @@ async def async_run_agent_turn(
             await emit("messages", {"messages": messages})
             await emit("done", {"stop_reason": "error"})
             return messages
-        task = asyncio.create_task(async_delegate(hass, data, token, request, routing_language, base_url,
+        task = asyncio.create_task(async_delegate(hass, data, access_key, request, routing_language, base_url,
                                                    style=conversation_style, detail=detail_level))
         stopped = asyncio.create_task(cancel.wait())
         try:
@@ -3613,7 +3613,7 @@ async def async_run_agent_turn(
                     await emit("assistant_delta", {"text": report["message"]})
                 for url in report["review_urls"]:
                     record = get_approval(data.store, url.rsplit("/", 1)[-1])
-                    if record is not None and record.token_id == token.id:
+                    if record is not None and record.token_id == access_key.id:
                         await emit("approval_required", {
                             "approval_id": record.id, "review_url": url, "tool_name": record.tool_name,
                             "expires_at": record.expires_at, "diff": record.diff,
@@ -3630,12 +3630,12 @@ async def async_run_agent_turn(
         return messages
 
     from .tool_routing import create_review_state, async_review_tools, withheld_results
-    review_state = create_review_state(data, token, "chat")
+    review_state = create_review_state(data, access_key, "chat")
 
     from .mcp_view import _build_instructions  # noqa: PLC0415
 
     system = (
-        _build_instructions(token, data, base_url)
+        _build_instructions(access_key, data, base_url)
         + _agentcli_time_context(hass)
         + _conversation_behavior_prompt(
             conversation_style, detail_level, home_focused=home_focused,
@@ -3643,14 +3643,14 @@ async def async_run_agent_turn(
         + _AGENTCLI_ADDENDUM
         + _home_focus_output_contract(home_focused)
     )
-    agent_tools = build_agent_tool_list(token, data, "chat")
+    agent_tools = build_agent_tool_list(access_key, data, "chat")
     tools = provider.format_tools(agent_tools)
-    # The token is re-resolved per dispatch (see _current_dispatch_token), so a
+    # The token is re-resolved per dispatch (see _current_dispatch_access_key), so a
     # mid-turn revoke/expire/cap-change/kill-switch is honored before any side
     # effect. Each dispatch gets the inline-confirm wait zeroed so a confirm gate
     # returns pending immediately (snappy approval card); the loop's own longer,
     # cancel-aware wait runs afterward.
-    token_id = token.id
+    token_id = access_key.id
 
     stop_reason = "end_turn"
     dispatch_started = False
@@ -3863,7 +3863,7 @@ class _HeadlessTurnResult:
 async def _run_headless_turn(
     hass: HomeAssistant,
     data: PhoenixData,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     provider: ClaudeProvider | OpenAICompatProvider,
     session: ClientSession,
     base_url: str,
@@ -3893,23 +3893,23 @@ async def _run_headless_turn(
     sharing _run_tool_batch, which blocks up to AGENTCLI_APPROVAL_WAIT_SECONDS on
     a human.
 
-    The token is re-resolved before every dispatch (_current_dispatch_token), so a
+    The token is re-resolved before every dispatch (_current_dispatch_access_key), so a
     mid-turn revoke, expiry, kill switch or cap narrowing is honored before any
     side effect.
     """
     from .mcp_view import _dispatch_mcp  # noqa: PLC0415
 
-    await data.agent_recovery.reconcile(data.store, token.id)
-    if data.agent_recovery.blocks(token.id):
+    await data.agent_recovery.reconcile(data.store, access_key.id)
+    if data.agent_recovery.blocks(access_key.id):
         return _HeadlessTurnResult("", [], outcome=TURN_OUTCOME_UNKNOWN, blocked_by_prior_action=True)
 
     from .tool_routing import create_review_state, async_review_tools, withheld_results
     from .home_companion import is_companion
-    review_state = None if is_companion(token) else create_review_state(data, token, routing_surface)
-    agent_tools = build_agent_tool_list(token, data, routing_surface)
+    review_state = None if is_companion(access_key) else create_review_state(data, access_key, routing_surface)
+    agent_tools = build_agent_tool_list(access_key, data, routing_surface)
     tools = provider.format_tools(agent_tools)
     messages: list[dict] = [{"role": "user", "content": seed}]
-    token_id = token.id
+    token_id = access_key.id
     cancel = asyncio.Event()  # never fired; the stream primitive expects one
     final_text = ""
     review_urls: list[str] = []
@@ -3947,7 +3947,7 @@ async def _run_headless_turn(
                 "If the results are insufficient, explain what is known and what is missing. "
                 "Do not claim that no action occurred when a control tool already ran."
             )
-        if not check_turn_context(token, round_system, messages):
+        if not check_turn_context(access_key, round_system, messages):
             return _HeadlessTurnResult("", review_urls, outcome=TURN_OUTPUT_LIMIT)
         tool_calls: list[dict] = []
         assistant_msg: dict | None = None
@@ -3968,7 +3968,7 @@ async def _run_headless_turn(
                 stop_reason = ev["stop_reason"]
                 assistant_msg = ev["assistant_msg"]
             elif etype == EV_ERROR:
-                if (internal_turn(token) and not write_started and not tool_calls
+                if (internal_turn(access_key) and not write_started and not tool_calls
                         and (ev.get('code') in HOME_COMPANION_FORMAT_ERROR_CODES
                              or (ev.get('diagnostic') or {}).get('category') in HOME_COMPANION_FORMAT_ERROR_CODES)
                         and format_corrections < HOME_COMPANION_MAX_FORMAT_CORRECTIONS
@@ -4013,7 +4013,7 @@ async def _run_headless_turn(
             return _HeadlessTurnResult("", review_urls, outcome=TURN_EXHAUSTED)
         if stop_reason != "tool_use":
             from .home_companion import invalid_count_report
-            if (not write_started and invalid_count_report(token, final_text)
+            if (not write_started and invalid_count_report(access_key, final_text)
                     and format_corrections < HOME_COMPANION_MAX_FORMAT_CORRECTIONS
                     and iteration < max_iterations - 1):
                 format_corrections += 1
@@ -4038,12 +4038,12 @@ async def _run_headless_turn(
             break
 
         from .home_companion import preflight_control_calls, incomplete_proposal
-        if validation_results := preflight_control_calls(token, tool_calls):
+        if validation_results := preflight_control_calls(access_key, tool_calls):
             for proposed, validation in zip(tool_calls, validation_results):
                 record_rejected_tool(proposed.get("id"), proposed.get("name"), proposed.get("input"),
                                      reason=validation["result_text"], stage="companion_preflight")
             if write_started:
-                incomplete_proposal(token)
+                incomplete_proposal(access_key)
                 return _HeadlessTurnResult(json.dumps({'status': 'refused', 'message': 'A later control proposal was invalid and was not run.'}), review_urls)
             if (format_corrections >= HOME_COMPANION_MAX_FORMAT_CORRECTIONS
                     or iteration >= max_iterations - 2):
@@ -4068,8 +4068,8 @@ async def _run_headless_turn(
         results: list[dict] = []
         for tc in tool_calls:
             name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
-            dispatch_token = _current_dispatch_token(data, token_id)
-            if dispatch_token is None:
+            dispatch_access_key = _current_dispatch_access_key(data, token_id)
+            if dispatch_access_key is None:
                 record_rejected_tool(tc.get("id"), name, tc.get("input"),
                                      reason="This access key is no longer authorized; the tool was not run.", stage="authority_guard")
                 authority_lost = True
@@ -4080,7 +4080,7 @@ async def _run_headless_turn(
                 })
                 continue
             dispatch_request_id = generate_request_id()
-            if ambiguous_control(dispatch_token, hass, name, tc.get("input")):
+            if ambiguous_control(dispatch_access_key, hass, name, tc.get("input")):
                 record_rejected_tool(tc.get("id"), name, tc.get("input"),
                                      reason="The target is ambiguous; no action was executed.", stage="target_guard")
                 return _HeadlessTurnResult(json.dumps({'status': 'clarification_needed', 'message': 'Ambiguous target.'}), review_urls)
@@ -4088,7 +4088,7 @@ async def _run_headless_turn(
             write_started = write_started or not tool_is_read_only(name)
             try:
                 resp_msg, _m, _r, outcome = await dispatch_agent_tool(
-                    _dispatch_mcp, hass=hass, data=data, token=dispatch_token,
+                    _dispatch_mcp, hass=hass, data=data, access_key=dispatch_access_key,
                     name=name, arguments=tc.get("input") or {}, tool_id=tc.get("id"),
                     client_ip=client_ip, base_url=base_url, request_id=dispatch_request_id,
                 )
@@ -4117,12 +4117,12 @@ async def _run_headless_turn(
                     "is_error": False,
                 })
                 from .home_companion import internal_turn
-                if internal_turn(dispatch_token):
+                if internal_turn(dispatch_access_key):
                     return _HeadlessTurnResult("", review_urls)
                 continue
             content = result.get("content", [])
             result_text = _flatten_text(content)
-            reference = count_source(dispatch_token, name)
+            reference = count_source(dispatch_access_key, name)
             if reference is not None:
                 try:
                     body = json.loads(result_text)
@@ -4206,7 +4206,7 @@ def _voice_home_focus_bypass(user_text: str, language: object = None) -> bool:
 async def async_run_voice_turn(
     hass: HomeAssistant,
     data: PhoenixData,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     provider: ClaudeProvider | OpenAICompatProvider,
     session: ClientSession,
     base_url: str,
@@ -4235,8 +4235,8 @@ async def async_run_voice_turn(
     """
     from .home_companion import is_companion, internal_turn, async_delegate
     from .const import HOME_COMPANION_REPORT_STATUSES
-    if is_companion(token) and not internal_turn(token):
-        report = await async_delegate(hass, data, token, user_text, language, base_url)
+    if is_companion(access_key) and not internal_turn(access_key):
+        report = await async_delegate(hass, data, access_key, user_text, language, base_url)
         voice_result("ok" if report["status"] in HOME_COMPANION_REPORT_STATUSES
                      else report["status"], bool(report["review_urls"]), bool(report["message"]))
         answer = report["message"]
@@ -4257,9 +4257,9 @@ async def async_run_voice_turn(
     )
 
     turn = await _run_headless_turn(
-        hass, data, token, provider, session, base_url,
+        hass, data, access_key, provider, session, base_url,
         system=(
-            _build_instructions(token, data, base_url)
+            _build_instructions(access_key, data, base_url)
             + behavior
             + _VOICE_ADDENDUM
             + _home_focus_output_contract(home_focused)
@@ -4343,7 +4343,7 @@ class AiTaskError(Exception):
 async def async_run_ai_task(
     hass: HomeAssistant,
     data: PhoenixData,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     provider: ClaudeProvider | OpenAICompatProvider,
     session: ClientSession,
     base_url: str,
@@ -4366,11 +4366,11 @@ async def async_run_ai_task(
     """
     from .home_companion import is_companion, async_delegate
     companion_authority = None
-    if is_companion(token):
+    if is_companion(access_key):
         from .command_routing import RoutingAuthority
-        companion_authority = RoutingAuthority.capture(data, token)
+        companion_authority = RoutingAuthority.capture(data, access_key)
         settings = data.store.get_settings()
-        report = await async_delegate(hass, data, token, instructions, hass.config.language, base_url,
+        report = await async_delegate(hass, data, access_key, instructions, hass.config.language, base_url,
                                       style=settings.ai_task_conversation_style, detail=settings.ai_task_detail_level)
         if companion_authority.current(hass) is None:
             raise AiTaskError(voice_text(hass.config.language, "token_unavailable"))
@@ -4383,7 +4383,7 @@ async def async_run_ai_task(
     from .mcp_view import _build_instructions  # noqa: PLC0415
 
     settings = data.store.get_settings()
-    system = _build_instructions(token, data, base_url)
+    system = _build_instructions(access_key, data, base_url)
     if structure_json is None:
         system += _conversation_behavior_prompt(
             settings.ai_task_conversation_style,
@@ -4399,7 +4399,7 @@ async def async_run_ai_task(
         system += _AI_TASK_STRUCTURE_DIRECTIVE.format(schema=json.dumps(structure_json))
 
     turn = await _run_headless_turn(
-        hass, data, token, provider, session, base_url,
+        hass, data, access_key, provider, session, base_url,
         system=system, seed=instructions, client_ip=AI_TASK_CLIENT_IP,
         max_iterations=1 if companion_authority is not None else max_iterations, routing_surface="ai_task", routing_language=hass.config.language,
         response_only=companion_authority is not None,
@@ -4448,23 +4448,23 @@ def _status_of(result: dict) -> str:
     return STATUS_APPROVED if not result.get("isError") else STATUS_FAILED
 
 
-def _zero_inline_wait(token: TokenRecord) -> TokenRecord:
+def _zero_inline_wait(access_key: AccessKeyRecord) -> AccessKeyRecord:
     """Return a copy of the token with confirm_inline_wait_seconds zeroed.
 
     Falls back to the original token if it is not a dataclass.
     """
     try:
-        return dataclasses.replace(token, confirm_inline_wait_seconds=0)
+        return dataclasses.replace(access_key, confirm_inline_wait_seconds=0)
     except (TypeError, ValueError):
-        return token
+        return access_key
 
 
-def _current_dispatch_token(data: PhoenixData, token_id: str) -> TokenRecord | None:
+def _current_dispatch_access_key(data: PhoenixData, token_id: str) -> AccessKeyRecord | None:
     """Re-resolve the token for one tool dispatch, or None if it may no longer act.
 
     A single Agent Chat turn can stay open a long time (a confirm gate blocks on
     an approval wait), so authority must be re-checked before EVERY side effect,
-    not just at stream open, mirroring async_get_authenticated_token on the MCP path.
+    not just at stream open, mirroring async_get_authenticated_access_key on the MCP path.
     Returns None when Phoenix MCP is shutting down, the runtime kill switch is on, or the
     token has been revoked/expired or narrowed away since the turn started; the
     fresh record is returned otherwise so cap changes take effect immediately.
@@ -4475,10 +4475,10 @@ def _current_dispatch_token(data: PhoenixData, token_id: str) -> TokenRecord | N
         or data.store.get_settings().kill_switch
     ):
         return None
-    token = data.store.get_token_by_id(token_id)
-    if token is None or not token.is_valid():
+    access_key = data.store.get_access_key_by_id(token_id)
+    if access_key is None or not access_key.is_valid():
         return None
-    return _zero_inline_wait(token)
+    return _zero_inline_wait(access_key)
 
 
 # --------------------------------------------------------------------------- #
@@ -4505,7 +4505,7 @@ class PhoenixAgentCliChatView(PhoenixView):
                 key="setupMissing",
             )
 
-        # Agent Chat bypasses async_get_authenticated_token (it is admin-authed, not
+        # Agent Chat bypasses async_get_authenticated_access_key (it is admin-authed, not
         # bearer-authed), so it must enforce the same invariants that gate every
         # MCP request: shutdown, the runtime kill switch, and token validity.
         settings = data.store.get_settings()
@@ -4516,13 +4516,13 @@ class PhoenixAgentCliChatView(PhoenixView):
             )
 
         token_id = str(body.get("token_id") or "")
-        token = data.store.get_token_by_id(token_id)
-        if token is None:
+        access_key = data.store.get_access_key_by_id(token_id)
+        if access_key is None:
             return _err(
-                "not_found", "Access Key not found.", 404, rid,
+                "not_found", "Access key not found.", 404, rid,
                 key="tokenNotFound",
             )
-        if not token.is_valid():
+        if not access_key.is_valid():
             return _err(
                 "invalid_request", "This access key is revoked or expired.", 400, rid,
                 key="tokenInactive",
@@ -4630,7 +4630,7 @@ class PhoenixAgentCliChatView(PhoenixView):
         try:
             await emit("ready", {"provider": cfg.kind, "model": cfg.model, "token_id": token_id})
             await async_run_agent_turn(
-                hass=self.hass, data=data, token=token, provider=provider,
+                hass=self.hass, data=data, access_key=access_key, provider=provider,
                 session=session, messages=messages, options=options or {},
                 log_conversation_id=body.get("log_conversation_id"),
                 client_ip=client_ip, base_url=base_url, emit=emit, cancel=cancel,

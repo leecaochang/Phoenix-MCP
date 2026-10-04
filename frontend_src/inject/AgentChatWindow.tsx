@@ -11,7 +11,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { api, setHass } from "../api";
 import { loadTranslations, resolveLanguage, syncTranslations } from "../i18n";
 import { AgentCliWindow, focusAgentCliPopup } from "../components/AgentCliWindow";
-import type { AgentCliInstance, TokenRecord } from "../types";
+import type { AgentCliInstance, AccessKeyRecord } from "../types";
 import { JS_BUILD } from "../version";
 import { getAgentCliOwner, patchDurable as patchAgentCliDurable } from "../utils/agentcli_state";
 import {
@@ -27,7 +27,7 @@ function getHass(): any {
 }
 
 interface BootData {
-  tokens: TokenRecord[];
+  accessKeys: AccessKeyRecord[];
   instances: AgentCliInstance[];
   scrollback: number;
 }
@@ -44,14 +44,14 @@ function Boot({
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([api.listTokens(), api.getAgentCliProviders(), api.getSettings()])
-      .then(([tokens, prov, settings]) => {
+    Promise.all([api.listAccessKeys(), api.getAgentCliProviders(), api.getSettings()])
+      .then(([accessKeys, prov, settings]) => {
         if (cancelled) return;
         if (settings.kill_switch) {
           onClose();
           return;
         }
-        setData({ tokens, instances: prov.instances, scrollback: settings.agentcli_scrollback_lines });
+        setData({ accessKeys, instances: prov.instances, scrollback: settings.agentcli_scrollback_lines });
       })
       .catch(() => { if (!cancelled) onClose(); });  // can't load (e.g. kill switch) -> close
     return () => { cancelled = true; };
@@ -76,20 +76,20 @@ function Boot({
   useEffect(() => {
     const refresh = () => setReloadKey((k) => k + 1);
     window.addEventListener("phx-agentcli-providers-changed", refresh);
-    window.addEventListener("phx-tokens-changed", refresh);
+    window.addEventListener("phx-access-keys-changed", refresh);
     return () => {
       window.removeEventListener("phx-agentcli-providers-changed", refresh);
-      window.removeEventListener("phx-tokens-changed", refresh);
+      window.removeEventListener("phx-access-keys-changed", refresh);
     };
   }, []);
 
   if (!data) return null;  // brief; the window appears once its data has loaded
   return (
     <AgentCliWindow
-      tokens={data.tokens}
+      accessKeys={data.accessKeys}
       instances={data.instances}
       scrollbackLines={data.scrollback}
-      initialTokenId={tokenId || data.tokens[0]?.id || ""}
+      initialAccessKeyId={tokenId || data.accessKeys[0]?.id || ""}
       onClose={onClose}
       hass={getHass()}
       getHass={getHass}
@@ -103,7 +103,7 @@ let persistenceOwner: string | null = null;
 let reloadStrings: (() => void) | null = null;
 let root: Root | null = null;
 let themeObserver: MutationObserver | null = null;
-let activeTokenId = "";
+let activeAccessKeyId = "";
 let summonVersion = 0;
 let reviewResumeFrame: number | null = null;
 
@@ -150,7 +150,7 @@ function paintAgentChat(): void {
   root?.render(
     <ErrorBoundary key={persistenceOwner} onClose={hideAgentChat}>
     <Boot
-      tokenId={activeTokenId}
+      tokenId={activeAccessKeyId}
       onClose={hideAgentChat}
       summonVersion={summonVersion}
     />
@@ -231,12 +231,12 @@ export function hideAgentChat(): void {
   root = null;
   host?.remove();
   host = null;
-  activeTokenId = "";
+  activeAccessKeyId = "";
   summonVersion = 0;
 }
 
 export function showAgentChat(tokenId?: string): void {
-  if (tokenId !== undefined) activeTokenId = tokenId;
+  if (tokenId !== undefined) activeAccessKeyId = tokenId;
   if (host) {
     // Keep the mounted chat and its live conversation intact. A fresh render of
     // the same Boot tree only changes this signal; AgentCliWindow uses it to

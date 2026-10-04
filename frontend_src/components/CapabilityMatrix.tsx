@@ -1,5 +1,5 @@
 import React from "react";
-import type { CapMode, CapName, CapTier, TokenRecord, PatchTokenBody } from "../types";
+import type { CapMode, CapName, CapTier, AccessKeyRecord, PatchAccessKeyBody } from "../types";
 import { api } from "../api";
 import { t } from "../i18n";
 import { tRich } from "../i18n/rich";
@@ -10,8 +10,8 @@ export interface EsphomeAvailability {
 }
 
 interface Props {
-  token: TokenRecord;
-  onUpdate: (updated: TokenRecord) => void;
+  accessKey: AccessKeyRecord;
+  onUpdate: (updated: AccessKeyRecord) => void;
   // What ESPHome surfaces this system has, when known. The row stays settable
   // either way so a token can be prepared before ESPHome is installed; this only
   // explains why the tools are not showing up yet.
@@ -272,17 +272,17 @@ const MODE_DESC_KEYS: Record<CapMode, string> = {
   confirm: "caps.modeDescConfirm",
 };
 
-export function CapabilityMatrix({ token, onUpdate, esphome }: Props) {
+export function CapabilityMatrix({ accessKey, onUpdate, esphome }: Props) {
   const [saving, setSaving] = React.useState<CapName | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   async function setMode(cap: CapName, mode: CapMode) {
-    if (saving !== null || token[cap] === mode) return;
+    if (saving !== null || accessKey[cap] === mode) return;
     setSaving(cap);
     setError(null);
     try {
-      const body = { [cap]: mode } as unknown as PatchTokenBody;
-      const updated = await api.patchToken(token.id, body);
+      const body = { [cap]: mode } as unknown as PatchAccessKeyBody;
+      const updated = await api.patchAccessKey(accessKey.id, body);
       onUpdate(updated);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("caps.updateFailed"));
@@ -304,7 +304,7 @@ export function CapabilityMatrix({ token, onUpdate, esphome }: Props) {
   return (
     <div className="capability-matrix">
       {error && <div className="banner banner-error mb-8">{error}</div>}
-      {token.pass_through && (
+      {accessKey.pass_through && (
         <div className="amber-block mb-8">
           <p>
             {tRich("caps.passThroughNotice", { strong: (c) => <strong>{c}</strong> })}
@@ -318,7 +318,7 @@ export function CapabilityMatrix({ token, onUpdate, esphome }: Props) {
           <div key={tier} className="cap-tier-group">
             <div className="cap-tier-header">{t(TIER_LABEL_KEYS[tier])}</div>
             {items.map((cap) => {
-              const current = token[cap.key];
+              const current = accessKey[cap.key];
               const isSaving = saving === cap.key;
               const notice = cap.key === "cap_esphome_yaml" || cap.key === "cap_esphome_flash"
                 ? esphomeNotice(esphome) : null;

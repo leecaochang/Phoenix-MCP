@@ -97,7 +97,7 @@ def read_fault_snapshot(config_dir: str) -> FaultSnapshot:
             os.close(directory)
 
 
-def _scrub_block(text, token, hass):
+def _scrub_block(text, access_key, hass):
     """Keep frame locations useful without disclosing host paths or thread IDs."""
     text = _URL.sub("<redacted-url>", text)
     lines = []
@@ -108,18 +108,18 @@ def _scrub_block(text, token, hass):
             # Scrubbing them as prose would erase filenames such as sensor.py.
             path = _strict_diagnostic_text(_safe_log_path(match[2], hass))
             line = (match[1] + '"' + path + '"' + match[3]
-                    + _strict_phoenix_log_text(line[match.end():], token, hass))
+                    + _strict_phoenix_log_text(line[match.end():], access_key, hass))
         else:
-            line = _strict_phoenix_log_text(line, token, hass)
+            line = _strict_phoenix_log_text(line, access_key, hass)
         lines.append(_ABSOLUTE_PATH.sub("<redacted-path>", _THREAD_ID.sub(r"\1<thread>", line)))
     return "".join(lines)
 
 
-def _decode_cursor(cursor, token):
+def _decode_cursor(cursor, access_key):
     """Authenticate and validate cursor shape before any file I/O."""
     try:
         payload, signature = cursor.split(".")
-        expected = hmac.new(token.token_hash.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        expected = hmac.new(access_key.token_hash.encode(), payload.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(signature, expected):
             raise ValueError
         value = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
@@ -133,15 +133,15 @@ def _decode_cursor(cursor, token):
         raise ValueError("Invalid or stale fault-log cursor. Restart the query.") from exc
 
 
-def _cursor_offset(cursor, fingerprint, token):
+def _cursor_offset(cursor, fingerprint, access_key):
     """Bind a validated cursor to the current scrubbed view and filters."""
-    value = _decode_cursor(cursor, token)
+    value = _decode_cursor(cursor, access_key)
     if value["view"] != fingerprint:
         raise ValueError("Invalid or stale fault-log cursor. Restart the query.")
     return value["offset"]
 
 
-def fault_log_page(snapshot, token, hass, *, search, order, limit, cursor):
+def fault_log_page(snapshot, access_key, hass, *, search, order, limit, cursor):
     """Scrub before matching and paginate complete retained blocks only."""
     source = {
         "kind": "home_assistant_fault_log", "status": snapshot.status,
@@ -176,7 +176,7 @@ def fault_log_page(snapshot, token, hass, *, search, order, limit, cursor):
         ) or len(block.encode("utf-8")) > FAULT_LOG_MAX_BLOCK_BYTES):
             omitted = True
             continue
-        safe = _scrub_block(block, token, hass).strip()
+        safe = _scrub_block(block, access_key, hass).strip()
         if len(json.dumps({"text": safe}).encode("utf-8")) > FAULT_LOG_MAX_BLOCK_BYTES:
             omitted = True
             continue
@@ -191,7 +191,7 @@ def fault_log_page(snapshot, token, hass, *, search, order, limit, cursor):
     fingerprint = hashlib.sha256(json.dumps(
         [source, body["filters"], blocks], sort_keys=True
     ).encode()).hexdigest()
-    offset = _cursor_offset(cursor, fingerprint, token) if cursor else 0
+    offset = _cursor_offset(cursor, fingerprint, access_key) if cursor else 0
     matched = [block for block in blocks if not search or search.casefold() in block.casefold()]
     if cursor and offset >= len(matched):
         raise ValueError("Invalid or stale fault-log cursor. Restart the query.")
@@ -213,17 +213,17 @@ def fault_log_page(snapshot, token, hass, *, search, order, limit, cursor):
         payload = base64.urlsafe_b64encode(json.dumps(
             {"offset": next_offset, "view": fingerprint}, separators=(",", ":")
         ).encode()).decode().rstrip("=")
-        signature = hmac.new(token.token_hash.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        signature = hmac.new(access_key.token_hash.encode(), payload.encode(), hashlib.sha256).hexdigest()
         body["next_cursor"] = payload + "." + signature
     if body["crash_recorded"] is False:
         body["message"] = "No fault dump is recorded in this source. This does not prove Home Assistant has never crashed."
     return body
 
 
-async def async_fault_log_query(args, token, hass):
+async def async_fault_log_query(args, access_key, hass):
     """Apply capability and current-authority gates around the protected read."""
     resource = "get_logs"
-    if any(effective_cap(token, cap) == CAP_DENY for cap in ("cap_log_read", "cap_diagnostics")):
+    if any(effective_cap(access_key, cap) == CAP_DENY for cap in ("cap_log_read", "cap_diagnostics")):
         return _tool_error("Forbidden."), "denied", resource
     if any(key in args for key in ("level", "integration", "logger", "since", "until", "path",
                                    "detail_ref", "detail_field", "message_index", "detail_offset")):
@@ -242,7 +242,7 @@ async def async_fault_log_query(args, token, hass):
         return _tool_error("limit must be an integer from 1 to 100."), "invalid_request", resource
     if cursor:
         try:
-            _decode_cursor(cursor, token)
+            _decode_cursor(cursor, access_key)
         except ValueError as exc:
             return _tool_error(str(exc)), "invalid_request", resource
     check_request_authority()
@@ -250,11 +250,11 @@ async def async_fault_log_query(args, token, hass):
     check_request_authority()
     authority = request_authority.get()
     if authority is not None:
-        token = authority.current_token()
-    if any(effective_cap(token, cap) == CAP_DENY for cap in ("cap_log_read", "cap_diagnostics")):
+        access_key = authority.current_access_key()
+    if any(effective_cap(access_key, cap) == CAP_DENY for cap in ("cap_log_read", "cap_diagnostics")):
         return _tool_error("Forbidden."), "denied", resource
     try:
-        body = fault_log_page(snapshot, token, hass, search=search or None,
+        body = fault_log_page(snapshot, access_key, hass, search=search or None,
                               order=order, limit=limit, cursor=cursor or None)
     except ValueError as exc:
         return _tool_error(str(exc)), "invalid_request", resource

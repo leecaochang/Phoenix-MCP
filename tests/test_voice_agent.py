@@ -23,7 +23,7 @@ from custom_components.phoenix_mcp.const import (
     VOICE_AGENT_CLIENT_IP,
     VOICE_TEMPLATES,
 )
-from custom_components.phoenix_mcp.token_store import GlobalSettings
+from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 
 
 class _MockProvider:
@@ -91,20 +91,20 @@ def _make_data(**settings_over):
 
 @pytest.mark.asyncio
 async def test_prior_action_warning_says_new_request_was_not_executed(hass):
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
-    await data.agent_recovery.begin(token.id, 'call_service', 'earlier')
+    await data.agent_recovery.begin(access_key.id, 'call_service', 'earlier')
     data.agent_recovery.interrupted('earlier')
     with patch('custom_components.phoenix_mcp.mcp_view._build_instructions', return_value='sys'), \
          patch.object(agentcli, '_stream_turn_resilient') as stream:
-        result = await async_run_voice_turn(hass, data, token, _MockProvider(), None, '', 'Turn on the light.', language='en')
+        result = await async_run_voice_turn(hass, data, access_key, _MockProvider(), None, '', 'Turn on the light.', language='en')
     assert result == VOICE_TEMPLATES['prior_action_unresolved']
     stream.assert_not_called()
-    assert data.agent_recovery.blocks(token.id)
+    assert data.agent_recovery.blocks(access_key.id)
 
 @pytest.mark.asyncio
 async def test_voice_turn_tool_then_answer_uses_voice_sentinel():
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     provider = _MockProvider()
     dispatch = _dispatch_ok('{"state": "on"}')
@@ -114,10 +114,10 @@ async def test_voice_turn_tool_then_answer_uses_voice_sentinel():
     )
     with patch.object(agentcli, "_stream_turn_resilient", stream), \
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch.object(agentcli, "_current_dispatch_token", return_value=token), \
+         patch.object(agentcli, "_current_dispatch_access_key", return_value=access_key), \
          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=dispatch), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
-        text = await async_run_voice_turn(MagicMock(), data, token, provider, MagicMock(), "http://h", "is the light on?")
+        text = await async_run_voice_turn(MagicMock(), data, access_key, provider, MagicMock(), "http://h", "is the light on?")
 
     assert text == "The light is on."
     assert dispatch.calls == [{"client_ip": VOICE_AGENT_CLIENT_IP, "name": "get_state"}]
@@ -125,7 +125,7 @@ async def test_voice_turn_tool_then_answer_uses_voice_sentinel():
 
 @pytest.mark.asyncio
 async def test_voice_focus_refusal_strips_marker_and_gives_localized_recovery():
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data(
         voice_agent_conversation_style="calm_guide",
         voice_agent_detail_level="detailed",
@@ -147,7 +147,7 @@ async def test_voice_focus_refusal_strips_marker_and_gives_localized_recovery():
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
         text = await async_run_voice_turn(
-            MagicMock(), data, token, _MockProvider(), MagicMock(), "http://h",
+            MagicMock(), data, access_key, _MockProvider(), MagicMock(), "http://h",
             "write a sort algorithm", language="zh-Hans",
         )
     assert marker not in text
@@ -163,7 +163,7 @@ async def test_voice_focus_refusal_strips_marker_and_gives_localized_recovery():
 
 @pytest.mark.asyncio
 async def test_voice_answer_anyway_is_a_deterministic_one_turn_bypass():
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data(voice_agent_home_focused=True)
     capture: dict = {}
     events = [{"type": EV_TEXT, "text": "Jane Austen."}, _done("end_turn")]
@@ -177,7 +177,7 @@ async def test_voice_answer_anyway_is_a_deterministic_one_turn_bypass():
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
         text = await async_run_voice_turn(
-            MagicMock(), data, token, _MockProvider(), MagicMock(), "http://h",
+            MagicMock(), data, access_key, _MockProvider(), MagicMock(), "http://h",
             "Who wrote Emma? ANSWER   ANYWAY.",
         )
 
@@ -204,12 +204,12 @@ def test_voice_answer_anyway_recognizes_localized_phrase(language, phrase):
 
 @pytest.mark.asyncio
 async def test_voice_turn_pending_becomes_queued_without_blocking():
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     provider = _MockProvider()
     record = SimpleNamespace(
         id="ap1", status="pending", expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
-        token_id=token.id, tool_name="call_service", request_id="",
+        token_id=access_key.id, tool_name="call_service", request_id="",
     )
 
     async def dispatch_pending(method, msg_id, params, *a, **k):
@@ -222,11 +222,11 @@ async def test_voice_turn_pending_becomes_queued_without_blocking():
     )
     with patch.object(agentcli, "_stream_turn_resilient", stream), \
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch.object(agentcli, "_current_dispatch_token", return_value=token), \
+         patch.object(agentcli, "_current_dispatch_access_key", return_value=access_key), \
          patch.object(agentcli, "get_approval", return_value=record), \
          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=dispatch_pending), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
-        text = await async_run_voice_turn(MagicMock(), data, token, provider, MagicMock(), "http://h", "unlock the door")
+        text = await async_run_voice_turn(MagicMock(), data, access_key, provider, MagicMock(), "http://h", "unlock the door")
 
     assert text == "It is queued for approval."
     fed_back = provider.tool_result_batches[0][0]["result_text"]
@@ -235,11 +235,11 @@ async def test_voice_turn_pending_becomes_queued_without_blocking():
 
 @pytest.mark.asyncio
 async def test_voice_turn_appends_review_link_only_when_requested():
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     record = SimpleNamespace(
         id="ap1", status="pending", expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
-        token_id=token.id, tool_name="call_service", request_id="",
+        token_id=access_key.id, tool_name="call_service", request_id="",
     )
 
     async def dispatch_pending(method, msg_id, params, *a, **k):
@@ -255,12 +255,12 @@ async def test_voice_turn_appends_review_link_only_when_requested():
     for include, expect_link in ((True, True), (False, False)):
         with patch.object(agentcli, "_stream_turn_resilient", stream_factory()), \
              patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-             patch.object(agentcli, "_current_dispatch_token", return_value=token), \
+             patch.object(agentcli, "_current_dispatch_access_key", return_value=access_key), \
              patch.object(agentcli, "get_approval", return_value=record), \
              patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=dispatch_pending), \
              patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
             text = await async_run_voice_turn(
-                MagicMock(), data, token, _MockProvider(), MagicMock(), "http://h", "unlock",
+                MagicMock(), data, access_key, _MockProvider(), MagicMock(), "http://h", "unlock",
                 include_review_links=include,
             )
         assert ("http://h/phoenix-mcp/approvals/ap1" in text) is expect_link
@@ -269,7 +269,7 @@ async def test_voice_turn_appends_review_link_only_when_requested():
 
 @pytest.mark.asyncio
 async def test_voice_turn_authority_loss_skips_side_effect():
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     provider = _MockProvider()
     dispatch = _dispatch_ok("should not run")
@@ -279,10 +279,10 @@ async def test_voice_turn_authority_loss_skips_side_effect():
     )
     with patch.object(agentcli, "_stream_turn_resilient", stream), \
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch.object(agentcli, "_current_dispatch_token", return_value=None), \
+         patch.object(agentcli, "_current_dispatch_access_key", return_value=None), \
          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=dispatch), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
-        text = await async_run_voice_turn(MagicMock(), data, token, provider, MagicMock(), "http://h", "unlock")
+        text = await async_run_voice_turn(MagicMock(), data, access_key, provider, MagicMock(), "http://h", "unlock")
 
     assert dispatch.calls == []  # no side effect ran
     assert text == "I could not do that."
@@ -297,7 +297,7 @@ async def test_voice_turn_stops_when_the_provider_blows_the_output_budget():
     hostile provider could otherwise accumulate several stream-sized responses in
     memory with no operator watching. AGENTCLI_MAX_TURN_OUTPUT_BYTES bounds it.
     """
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     provider = _MockProvider()
     huge = {"role": "assistant", "content": "x" * (AGENTCLI_MAX_TURN_OUTPUT_BYTES + 1)}
@@ -309,7 +309,7 @@ async def test_voice_turn_stops_when_the_provider_blows_the_output_budget():
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
         text = await async_run_voice_turn(
-            MagicMock(), data, token, provider, MagicMock(), "http://h", "hi")
+            MagicMock(), data, access_key, provider, MagicMock(), "http://h", "hi")
 
     # The partial text the model had already produced is preferred over an apology.
     assert text == "partial"
@@ -321,7 +321,7 @@ async def test_voice_turn_stops_when_the_provider_blows_the_output_budget():
 @pytest.mark.asyncio
 async def test_voice_turn_output_budget_speaks_when_there_is_no_partial_text():
     """With nothing said yet, the ceiling still produces a sayable sentence."""
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     provider = _MockProvider()
     huge = {"role": "assistant", "content": "x" * (AGENTCLI_MAX_TURN_OUTPUT_BYTES + 1)}
@@ -330,7 +330,7 @@ async def test_voice_turn_output_budget_speaks_when_there_is_no_partial_text():
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
         text = await async_run_voice_turn(
-            MagicMock(), data, token, provider, MagicMock(), "http://h", "hi")
+            MagicMock(), data, access_key, provider, MagicMock(), "http://h", "hi")
 
     assert text == VOICE_TEMPLATES["output_limit"]
 
@@ -344,7 +344,7 @@ async def test_voice_turn_stops_after_one_round_when_authority_is_lost():
     of answering, every call would be refused identically, so the loop stops rather
     than spending its remaining rounds re-reporting one refusal.
     """
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     provider = _MockProvider()
     dispatch = _dispatch_ok("should not run")
@@ -352,11 +352,11 @@ async def test_voice_turn_stops_after_one_round_when_authority_is_lost():
     stream = _staged_stream([_tool_ev("call_service", "t1"), _done("tool_use")])
     with patch.object(agentcli, "_stream_turn_resilient", stream), \
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch.object(agentcli, "_current_dispatch_token", return_value=None), \
+         patch.object(agentcli, "_current_dispatch_access_key", return_value=None), \
          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=dispatch), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
         await async_run_voice_turn(
-            MagicMock(), data, token, provider, MagicMock(), "http://h", "unlock",
+            MagicMock(), data, access_key, provider, MagicMock(), "http://h", "unlock",
             max_iterations=20)
 
     assert dispatch.calls == []
@@ -368,17 +368,17 @@ async def test_voice_turn_stops_after_one_round_when_authority_is_lost():
 @pytest.mark.asyncio
 async def test_voice_turn_running_out_of_steps_says_so():
     """Exhaustion is spoken as its own cause, not the generic apology."""
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     provider = _MockProvider()
     stream = _staged_stream([_tool_ev("get_state", "t1"), _done("tool_use")])
     with patch.object(agentcli, "_stream_turn_resilient", stream), \
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch.object(agentcli, "_current_dispatch_token", return_value=token), \
+         patch.object(agentcli, "_current_dispatch_access_key", return_value=access_key), \
          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=_dispatch_ok("on")), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
         text = await async_run_voice_turn(
-            MagicMock(), data, token, provider, MagicMock(), "http://h", "hi",
+            MagicMock(), data, access_key, provider, MagicMock(), "http://h", "hi",
             max_iterations=3)
 
     assert text == VOICE_TEMPLATES["out_of_steps"]
@@ -387,7 +387,7 @@ async def test_voice_turn_running_out_of_steps_says_so():
 @pytest.mark.asyncio
 async def test_voice_turn_marks_an_answer_the_model_truncated():
     """A cut-off answer is acted on as a whole one unless it says otherwise."""
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     provider = _MockProvider()
     stream = _staged_stream([
@@ -399,7 +399,7 @@ async def test_voice_turn_marks_an_answer_the_model_truncated():
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
         text = await async_run_voice_turn(
-            MagicMock(), data, token, provider, MagicMock(), "http://h", "hi")
+            MagicMock(), data, access_key, provider, MagicMock(), "http://h", "hi")
 
     assert text == f"The kitchen light is {VOICE_TEMPLATES['answer_truncated']}"
 
@@ -408,17 +408,17 @@ async def test_voice_turn_marks_an_answer_the_model_truncated():
 @pytest.mark.parametrize("language", ["zh-Hans", "ko"])
 async def test_voice_failure_sentences_follow_the_conversation_language(language: str):
     """Every spoken non-answer is localized, not just the pre-loop declines."""
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     provider = _MockProvider()
     stream = _staged_stream([_tool_ev("get_state", "t1"), _done("tool_use")])
     with patch.object(agentcli, "_stream_turn_resilient", stream), \
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
-         patch.object(agentcli, "_current_dispatch_token", return_value=token), \
+         patch.object(agentcli, "_current_dispatch_access_key", return_value=access_key), \
          patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=_dispatch_ok("on")), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
         text = await async_run_voice_turn(
-            MagicMock(), data, token, provider, MagicMock(), "http://h", "hi",
+            MagicMock(), data, access_key, provider, MagicMock(), "http://h", "hi",
             max_iterations=3, language=language)
 
     assert text != VOICE_TEMPLATES["out_of_steps"], "still English under a zh-Hans conversation"
@@ -427,14 +427,14 @@ async def test_voice_failure_sentences_follow_the_conversation_language(language
 
 @pytest.mark.asyncio
 async def test_voice_turn_provider_error_yields_spoken_fallback():
-    token = _make_token()
+    access_key = _make_token()
     data = _make_data()
     provider = _MockProvider()
     stream = _staged_stream([{"type": EV_ERROR, "message": "the model is down"}])
     with patch.object(agentcli, "_stream_turn_resilient", stream), \
          patch.object(agentcli, "build_mcp_tool_list", return_value=[]), \
          patch("custom_components.phoenix_mcp.mcp_view._build_instructions", return_value="SYS"):
-        text = await async_run_voice_turn(MagicMock(), data, token, provider, MagicMock(), "http://h", "hi")
+        text = await async_run_voice_turn(MagicMock(), data, access_key, provider, MagicMock(), "http://h", "hi")
     assert "the model is down" in text
 
 
@@ -464,7 +464,7 @@ async def test_voice_answer_happy_path_runs_the_loop():
     )
     store = MagicMock()
     store.resolve.return_value = SimpleNamespace(model="m")
-    with patch.object(agentcli, "_current_dispatch_token", return_value=_make_token()), \
+    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_token()), \
          patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)), \
          patch.object(agentcli, "build_provider", return_value=_MockProvider()), \
          patch.object(agentcli, "async_run_voice_turn", AsyncMock(return_value="The garage is closed.")):
@@ -480,7 +480,7 @@ async def test_voice_answer_unknown_provider_is_misconfigured():
     )
     store = MagicMock()
     store.resolve.return_value = None
-    with patch.object(agentcli, "_current_dispatch_token", return_value=_make_token()), \
+    with patch.object(agentcli, "_current_dispatch_access_key", return_value=_make_token()), \
          patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=store)):
         text = await voice_agent.async_voice_answer(MagicMock(), data, "hi")
     assert "not fully configured" in text.lower()

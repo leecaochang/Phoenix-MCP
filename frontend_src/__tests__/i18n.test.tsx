@@ -162,8 +162,8 @@ describe("loadTranslations", () => {
     vi.stubGlobal("fetch", fn);
     return fn;
   };
-  const authenticatedHass = (token = "tok-test") => ({
-    auth: { data: { access_token: token } },
+  const authenticatedHass = (accessKey = "tok-test") => ({
+    auth: { data: { access_token: accessKey } },
     fetchWithAuth: vi.fn((path: string, init?: RequestInit) => fetch(path, init)),
   });
 

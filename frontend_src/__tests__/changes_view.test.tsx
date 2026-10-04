@@ -9,8 +9,8 @@ vi.mock("../api", () => ({
     listVersions: vi.fn(),
     getVersion: vi.fn(),
     restoreVersion: vi.fn(),
-    listTokens: vi.fn().mockResolvedValue([]),
-    listArchivedTokens: vi.fn().mockResolvedValue([]),
+    listAccessKeys: vi.fn().mockResolvedValue([]),
+    listArchivedAccessKeys: vi.fn().mockResolvedValue([]),
   },
 }));
 
@@ -22,7 +22,7 @@ function version(over: Partial<VersionSummary> = {}): VersionSummary {
     alias: "My automation",
     action: "create",
     token_id: "t1",
-    token_name: "my_token",
+    token_name: "my_access_key",
     approved_by_user_id: null,
     timestamp: "2026-01-01T00:00:00Z",
     has_before: false,

@@ -14,7 +14,7 @@ from custom_components.phoenix_mcp.audit import (
     generate_request_id,
 )
 from custom_components.phoenix_mcp.const import AUDIT_LOG_MAXLEN
-from custom_components.phoenix_mcp.token_store import GlobalSettings
+from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 
 
 # ---------------------------------------------------------------------------

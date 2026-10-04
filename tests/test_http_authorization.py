@@ -7,17 +7,17 @@ from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.audit import AuditLog
-from custom_components.phoenix_mcp.const import DOMAIN, TOKEN_PREFIX
+from custom_components.phoenix_mcp.const import DOMAIN, ACCESS_KEY_PREFIX
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import ALL_MCP_VIEWS
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
-from custom_components.phoenix_mcp.token_store import TokenStore
+from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
 
 
 @pytest.fixture
 async def http_authority(hass, hass_client_no_auth):
     assert await async_setup_component(hass, "http", {})
-    store = await TokenStore.async_create(hass)
+    store = await AccessKeyStore.async_create(hass)
     data = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
     assert data.enforce_mcp_lifecycle is True
     hass.data[DOMAIN] = data
@@ -41,8 +41,8 @@ def _initialize():
 @pytest.mark.parametrize("path", ["/api/phoenix-mcp", "/api/phoenix-mcp/context"])
 async def test_unknown_well_formed_bearer_is_unauthorized(http_authority, path):
     client, data = http_authority
-    _, known = await data.store.async_create_token("known", "admin")
-    raw = TOKEN_PREFIX + "0" * (len(known) - len(TOKEN_PREFIX))
+    _, known = await data.store.async_create_access_key("known", "admin")
+    raw = ACCESS_KEY_PREFIX + "0" * (len(known) - len(ACCESS_KEY_PREFIX))
     response = await (client.post(path, headers=_headers(raw), json=_initialize()) if path.endswith("mcp")
                       else client.get(path, headers=_headers(raw)))
     assert response.status == 401
@@ -51,16 +51,16 @@ async def test_unknown_well_formed_bearer_is_unauthorized(http_authority, path):
 
 async def test_expired_unarchived_bearer_is_refused_and_archived(http_authority):
     client, data = http_authority
-    token, raw = await data.store.async_create_token("expired", "admin", expires_at=utcnow() - timedelta(seconds=1))
+    access_key, raw = await data.store.async_create_access_key("expired", "admin", expires_at=utcnow() - timedelta(seconds=1))
     response = await client.get("/api/phoenix-mcp/context", headers=_headers(raw))
     assert response.status == 401
-    assert data.store.get_token_by_id(token.id) is None
-    assert any(record.id == token.id for record in data.store.list_archived())
+    assert data.store.get_access_key_by_id(access_key.id) is None
+    assert any(record.id == access_key.id for record in data.store.list_archived())
 
 
 async def test_real_single_request_rate_limit_is_enforced(http_authority):
     client, data = http_authority
-    _, raw = await data.store.async_create_token("limited", "admin", rate_limit_requests=1, rate_limit_burst=0)
+    _, raw = await data.store.async_create_access_key("limited", "admin", rate_limit_requests=1, rate_limit_burst=0)
     first = await client.get("/api/phoenix-mcp/context", headers=_headers(raw))
     second = await client.get("/api/phoenix-mcp/context", headers=_headers(raw))
     assert first.status == 200
@@ -72,7 +72,7 @@ async def test_real_single_request_rate_limit_is_enforced(http_authority):
 @pytest.mark.parametrize("method,path", [("POST", "/api/phoenix-mcp"), ("DELETE", "/api/phoenix-mcp"), ("GET", "/api/phoenix-mcp/context")])
 async def test_unavailable_runtime_refuses_every_authenticated_ingress(http_authority, state, method, path):
     client, data = http_authority
-    _, raw = await data.store.async_create_token("bound", "admin")
+    _, raw = await data.store.async_create_access_key("bound", "admin")
     if state == "kill_switch":
         data.store.get_settings().kill_switch = True
     elif state == "not_ready":
@@ -85,8 +85,8 @@ async def test_unavailable_runtime_refuses_every_authenticated_ingress(http_auth
 
 async def test_session_cannot_be_used_or_deleted_by_another_token(http_authority):
     client, data = http_authority
-    _, raw_a = await data.store.async_create_token("a", "admin", rate_limit_requests=0)
-    _, raw_b = await data.store.async_create_token("b", "admin", rate_limit_requests=0)
+    _, raw_a = await data.store.async_create_access_key("a", "admin", rate_limit_requests=0)
+    _, raw_b = await data.store.async_create_access_key("b", "admin", rate_limit_requests=0)
     response = await client.post("/api/phoenix-mcp", headers=_headers(raw_a), json=_initialize())
     assert response.status == 200
     session = response.headers["Mcp-Session-Id"]
@@ -102,7 +102,7 @@ async def test_session_cannot_be_used_or_deleted_by_another_token(http_authority
 
 async def test_delete_refuses_foreign_origin(http_authority):
     client, data = http_authority
-    _, raw = await data.store.async_create_token("owner", "admin")
+    _, raw = await data.store.async_create_access_key("owner", "admin")
     response = await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())
     assert response.status == 200
     headers = _headers(raw, **{"Mcp-Session-Id": response.headers["Mcp-Session-Id"], "Origin": "https://foreign.example"})
@@ -113,7 +113,7 @@ async def test_request_notification_refused_before_dispatch_and_session_allocati
     from unittest.mock import AsyncMock
     from custom_components.phoenix_mcp import mcp_view
     client, data = http_authority
-    _, raw = await data.store.async_create_token("notifications", "admin", rate_limit_requests=0)
+    _, raw = await data.store.async_create_access_key("notifications", "admin", rate_limit_requests=0)
     dispatch = AsyncMock()
     monkeypatch.setattr(mcp_view, "_dispatch_mcp", dispatch)
     response = await client.post("/api/phoenix-mcp", headers=_headers(raw),
@@ -125,7 +125,7 @@ async def test_request_notification_refused_before_dispatch_and_session_allocati
 
 async def test_legacy_initialized_first_batch_unknown_method_and_resource_preserve_session(http_authority):
     client, data = http_authority
-    _, raw = await data.store.async_create_token("legacy", "admin", rate_limit_requests=0)
+    _, raw = await data.store.async_create_access_key("legacy", "admin", rate_limit_requests=0)
     response = await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())
     session = response.headers["Mcp-Session-Id"]
     headers = _headers(raw, **{"Mcp-Session-Id": session})
@@ -146,7 +146,7 @@ async def test_legacy_initialized_first_batch_unknown_method_and_resource_preser
 async def test_non_tool_exception_is_scrubbed_and_retains_rpc_id(http_authority, monkeypatch, caplog):
     from custom_components.phoenix_mcp import mcp_view
     client, data = http_authority
-    _, raw = await data.store.async_create_token("exception", "admin", rate_limit_requests=0)
+    _, raw = await data.store.async_create_access_key("exception", "admin", rate_limit_requests=0)
     async def broken(*args, **kwargs):
         raise RuntimeError("private-value-and-path")
     monkeypatch.setattr(mcp_view, "_dispatch_mcp_authorized", broken)
@@ -163,7 +163,7 @@ async def test_all_admin_routes_reject_real_read_only_ha_identity(hass, hass_cli
     from custom_components.phoenix_mcp.admin_view import ALL_ADMIN_VIEWS
     from custom_components.phoenix_mcp.agentcli import ALL_AGENTCLI_ADMIN_VIEWS, ALL_AGENTCLI_CHAT_VIEWS
     assert await async_setup_component(hass, "http", {})
-    store = await TokenStore.async_create(hass)
+    store = await AccessKeyStore.async_create(hass)
     hass.data[DOMAIN] = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
     views = ALL_ADMIN_VIEWS + ALL_AGENTCLI_ADMIN_VIEWS + ALL_AGENTCLI_CHAT_VIEWS
     for view_cls in views:
@@ -179,18 +179,18 @@ async def test_all_admin_routes_reject_real_read_only_ha_identity(hass, hass_cli
             response = await client.request(method, path, json={})
             assert response.status == 403, (method, path, await response.text())
             assert (await response.json())["error"] == "forbidden"
-    assert store.list_tokens() == []
+    assert store.list_access_keys() == []
 
 
 async def _initialized_session(client, data, *, rate=0):
-    token, raw = await data.store.async_create_token("session", "admin", rate_limit_requests=rate, rate_limit_burst=0)
+    access_key, raw = await data.store.async_create_access_key("session", "admin", rate_limit_requests=rate, rate_limit_burst=0)
     response = await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())
     assert response.status == 200
     headers = _headers(raw, **{"Mcp-Session-Id": response.headers["Mcp-Session-Id"]})
     response = await client.post("/api/phoenix-mcp", headers=headers,
                                  json={"jsonrpc": "2.0", "method": "notifications/initialized"})
     assert response.status == 202
-    return token, raw, headers
+    return access_key, raw, headers
 
 
 @pytest.mark.parametrize("version", ["2025-06-18", "2025-11-25", "2099-01-01"])
@@ -219,7 +219,7 @@ async def test_authority_loss_wire_code_matches_era_after_real_dispatch(http_aut
     from custom_components.phoenix_mcp.const import MCP_AUTHORITY_CHANGED_ERROR
 
     client, data = http_authority
-    token, raw, headers = await _initialized_session(client, data)
+    access_key, raw, headers = await _initialized_session(client, data)
     body = {"jsonrpc": "2.0", "id": "authority", "method": "tools/list", "params": {}}
     if modern:
         headers = _headers(raw, **{"MCP-Protocol-Version": "2026-07-28", "Mcp-Method": "tools/list"})
@@ -243,7 +243,7 @@ async def test_authority_loss_wire_code_matches_era_after_real_dispatch(http_aut
 
     async def revoke_after_dispatch(*args, **kwargs):
         result = await original(*args, **kwargs)
-        await data.store.async_archive_token(token.id, revoked=True)
+        await data.store.async_archive_access_key(access_key.id, revoked=True)
         return result
 
     monkeypatch.setattr(mcp_view, "_dispatch_mcp_authorized", revoke_after_dispatch)
@@ -252,7 +252,7 @@ async def test_authority_loss_wire_code_matches_era_after_real_dispatch(http_aut
     assert response.status == 200
     assert reply["error"]["code"] == (MCP_AUTHORITY_CHANGED_ERROR if modern else -32000)
     assert "result" not in reply
-    rows = data.audit.query(token_id=token.id, limit=20)
+    rows = data.audit.query(token_id=access_key.id, limit=20)
     assert any(row.request_id == response.headers["X-Phoenix-Request-ID"] and row.outcome == "denied" for row in rows)
 
 
@@ -260,7 +260,7 @@ async def test_legacy_session_capacity_retries_without_eviction_and_delete_relea
     from custom_components.phoenix_mcp import mcp_view
 
     client, data = http_authority
-    monkeypatch.setattr(mcp_view, "_MCP_LEGACY_SESSION_TOKEN_LIMIT", 2)
+    monkeypatch.setattr(mcp_view, "_MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT", 2)
     _, raw, headers = await _initialized_session(client, data)
     second = await client.post("/api/phoenix-mcp", headers=_headers(raw), json=_initialize())
     assert second.status == 200
@@ -315,7 +315,7 @@ async def test_batch_within_capacity_refuses_exhausted_remaining_budget_before_d
 @pytest.mark.parametrize("version", ["2025-06-18", "2025-11-25", "2099-01-01"])
 async def test_initialize_negotiates_legacy_despite_foreign_header(http_authority, version):
     client, data = http_authority
-    _, raw = await data.store.async_create_token("negotiate", "admin", rate_limit_requests=0)
+    _, raw = await data.store.async_create_access_key("negotiate", "admin", rate_limit_requests=0)
     response = await client.post("/api/phoenix-mcp", headers=_headers(raw, **{"MCP-Protocol-Version": version}), json=_initialize())
     assert response.status == 200
     assert (await response.json())["result"]["protocolVersion"] == "2025-03-26"
@@ -344,7 +344,7 @@ async def test_modern_resource_error_uses_modern_code_and_retains_id(http_author
     import json
 
     client, data = http_authority
-    _, raw = await data.store.async_create_token("resource", "admin", rate_limit_requests=0)
+    _, raw = await data.store.async_create_access_key("resource", "admin", rate_limit_requests=0)
     headers = _headers(raw, **{"MCP-Protocol-Version": "2026-07-28", "Mcp-Method": "resources/read", "Mcp-Name": "missing://resource"})
     if sse:
         headers["Accept"] = "application/json, text/event-stream"

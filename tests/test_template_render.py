@@ -15,17 +15,17 @@ from custom_components.phoenix_mcp.audit import AuditLog
 from custom_components.phoenix_mcp.const import TEMPLATE_WORKER_CONCURRENCY
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
-from custom_components.phoenix_mcp.token_store import TokenRecord
+from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord
 
 
 def _env():
-    token = TokenRecord(id='template', name='template', token_hash='hash', created_at=utcnow(), created_by='admin', pass_through=True)
-    return token, PhoenixData(store=MagicMock(), rate_limiter=RateLimiter(), audit=AuditLog())
+    access_key = AccessKeyRecord(id='template', name='template', token_hash='hash', created_at=utcnow(), created_by='admin', pass_through=True)
+    return access_key, PhoenixData(store=MagicMock(), rate_limiter=RateLimiter(), audit=AuditLog())
 
 
 @pytest.mark.parametrize('cancel', [False, True])
 async def test_worker_is_killed_and_reaped_on_timeout_or_cancel(hass, cancel):
-    token, data = _env()
+    access_key, data = _env()
     started = asyncio.Event()
     process = MagicMock(returncode=None)
     async def communicate(payload):
@@ -34,7 +34,7 @@ async def test_worker_is_killed_and_reaped_on_timeout_or_cancel(hass, cancel):
     process.communicate = communicate
     process.wait = AsyncMock()
     with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock(return_value=process)), patch.object(template_render, 'TEMPLATE_WORKER_TIMEOUT_SECONDS', 0.01):
-        task = asyncio.create_task(template_render.async_render_template_for_token('ok', token, hass, data))
+        task = asyncio.create_task(template_render.async_render_template_for_access_key('ok', access_key, hass, data))
         await started.wait()
         if cancel:
             task.cancel()
@@ -46,13 +46,13 @@ async def test_worker_is_killed_and_reaped_on_timeout_or_cancel(hass, cancel):
 
 
 async def test_worker_receives_scrubbed_snapshot_only(hass):
-    token, data = _env()
+    access_key, data = _env()
     hass.states.async_set('sensor.visible', '42', {'access_token': 'never-copy', 'unit_of_measurement': 'C'})
     process = MagicMock(returncode=0)
     process.communicate = AsyncMock(return_value=(b'42', b''))
     process.wait = AsyncMock()
     with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock(return_value=process)):
-        assert await template_render.async_render_template_for_token("{{ states('sensor.visible') }}", token, hass, data) == '42'
+        assert await template_render.async_render_template_for_access_key("{{ states('sensor.visible') }}", access_key, hass, data) == '42'
     payload = json.loads(process.communicate.call_args.args[0])
     assert set(payload) == {'template', 'states', 'time_zone'}
     assert 'never-copy' not in json.dumps(payload)
@@ -61,12 +61,12 @@ async def test_worker_receives_scrubbed_snapshot_only(hass):
 
 
 async def test_saturated_worker_limit_refuses_before_spawn(hass):
-    token, data = _env()
+    access_key, data = _env()
     for _ in range(TEMPLATE_WORKER_CONCURRENCY):
         await data.template_slots.acquire()
     with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock()) as spawn:
         with pytest.raises(ValueError, match='capacity'):
-            await template_render.async_render_template_for_token('ok', token, hass, data)
+            await template_render.async_render_template_for_access_key('ok', access_key, hass, data)
     spawn.assert_not_called()
 
 
@@ -78,8 +78,8 @@ async def test_saturated_worker_limit_refuses_before_spawn(hass):
 ])
 async def test_real_worker_budgets_leave_event_loop_responsive(hass, template, expected, monkeypatch):
     monkeypatch.setenv("PYTHONMALLOC", "mimalloc")
-    token, data = _env()
-    task = asyncio.create_task(template_render.async_render_template_for_token(template, token, hass, data))
+    access_key, data = _env()
+    task = asyncio.create_task(template_render.async_render_template_for_access_key(template, access_key, hass, data))
     heartbeats = 0
     while not task.done():
         await asyncio.sleep(0.01)
@@ -93,27 +93,27 @@ async def test_real_worker_budgets_leave_event_loop_responsive(hass, template, e
 
 
 async def test_worker_inherits_runtime_dependency_paths(hass, monkeypatch):
-    token, data = _env()
+    access_key, data = _env()
     monkeypatch.setenv('PYTHONMALLOC', 'mimalloc')
     monkeypatch.setattr(sys, 'path', [*sys.path, '/runtime/integration-dependencies'])
     process = MagicMock(returncode=0)
     process.communicate = AsyncMock(return_value=(b'42', b''))
     process.wait = AsyncMock()
     with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock(return_value=process)) as spawn:
-        assert await template_render.async_render_template_for_token('{{ 6 * 7 }}', token, hass, data) == '42'
+        assert await template_render.async_render_template_for_access_key('{{ 6 * 7 }}', access_key, hass, data) == '42'
     assert '/runtime/integration-dependencies' in spawn.call_args.kwargs['env']['PYTHONPATH']
     assert spawn.call_args.kwargs['env']['PYTHONMALLOC'] == 'pymalloc'
     assert template_render.os.environ['PYTHONMALLOC'] == 'mimalloc'
 
 
 async def test_worker_startup_failure_has_safe_diagnostic(hass, caplog):
-    token, data = _env()
+    access_key, data = _env()
     process = MagicMock(returncode=70)
     process.communicate = AsyncMock(return_value=(b'', b'ModuleNotFoundError module=example_dependency\n'))
     process.wait = AsyncMock()
     with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock(return_value=process)):
         with pytest.raises(template_render.TemplateRenderError, match='could not start'):
-            await template_render.async_render_template_for_token('private-template-value', token, hass, data)
+            await template_render.async_render_template_for_access_key('private-template-value', access_key, hass, data)
     assert 'module=example_dependency' in caplog.text
     assert 'private-template-value' not in caplog.text
     process.wait.assert_awaited_once()
@@ -177,13 +177,13 @@ async def test_parent_classifies_worker_failures(hass, returncode, payload, expe
     import signal
     if returncode == -24:
         returncode = -signal.SIGXCPU
-    token, data = _env()
+    access_key, data = _env()
     process = MagicMock(returncode=returncode)
     process.communicate = AsyncMock(return_value=(payload, b'private-stderr'))
     process.wait = AsyncMock()
     with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock(return_value=process)):
         with pytest.raises(template_render.TemplateRenderError) as failure:
-            await template_render.async_render_template_for_token('first\n{{ 1 / 0 }}', token, hass, data)
+            await template_render.async_render_template_for_access_key('first\n{{ 1 / 0 }}', access_key, hass, data)
     assert expected in str(failure.value)
     assert 'secret' not in str(failure.value)
     assert 'private-stderr' not in str(failure.value)
@@ -191,10 +191,10 @@ async def test_parent_classifies_worker_failures(hass, returncode, payload, expe
 
 
 async def test_spawn_failure_is_safe_and_releases_capacity(hass):
-    token, data = _env()
+    access_key, data = _env()
     with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock(side_effect=OSError('private-path'))):
         with pytest.raises(template_render.TemplateRenderError, match='could not start') as failure:
-            await template_render.async_render_template_for_token('ok', token, hass, data)
+            await template_render.async_render_template_for_access_key('ok', access_key, hass, data)
     assert 'private-path' not in str(failure.value)
     assert data.template_slots._value == TEMPLATE_WORKER_CONCURRENCY
 
@@ -205,17 +205,17 @@ async def test_diagnostics_recheck_real_authority_after_worker_wait(hass, change
     from custom_components.phoenix_mcp.request_authority import (
         AuthorityChangedError, RequestAuthority, policy_version, request_authority,
     )
-    token, data = _env()
+    access_key, data = _env()
     data.ready = True
     hass.data[DOMAIN] = data
-    data.store.get_token_by_hash.return_value = token
+    data.store.get_access_key_by_hash.return_value = access_key
     data.store.get_settings.return_value.kill_switch = False
     process = MagicMock(returncode=65)
     async def communicate(payload):
         if change == 'policy':
-            token.settings_version += 1
+            access_key.settings_version += 1
         elif change == 'revoke':
-            data.store.get_token_by_hash.return_value = None
+            data.store.get_access_key_by_hash.return_value = None
         elif change == 'kill':
             data.store.get_settings.return_value.kill_switch = True
         else:
@@ -223,13 +223,13 @@ async def test_diagnostics_recheck_real_authority_after_worker_wait(hass, change
         return b'{"kind":"syntax","message":"never-disclose","line":1}', b''
     process.communicate = communicate
     process.wait = AsyncMock()
-    authority_reset = request_authority.set(RequestAuthority(hass, data, token.id, token.token_hash))
-    policy_reset = policy_version.set(token.settings_version)
+    authority_reset = request_authority.set(RequestAuthority(hass, data, access_key.id, access_key.token_hash))
+    policy_reset = policy_version.set(access_key.settings_version)
     try:
         with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock(return_value=process)):
             from custom_components.phoenix_mcp.mcp_view import _tool_render_template
             with pytest.raises(AuthorityChangedError):
-                await _tool_render_template({'template': 'private-input'}, token, hass, data)
+                await _tool_render_template({'template': 'private-input'}, access_key, hass, data)
     finally:
         request_authority.reset(authority_reset)
         policy_version.reset(policy_reset)
@@ -270,12 +270,12 @@ async def test_error_response_uses_only_scoped_snapshot(hass, monkeypatch):
     from types import SimpleNamespace
     from custom_components.phoenix_mcp import template_worker
     from custom_components.phoenix_mcp.mcp_view import _tool_render_template
-    from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree
+    from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
 
-    token, data = _env()
-    token.pass_through = False
-    token.cap_template_render = 'allow'
-    token.permissions = PermissionTree(entities={'sensor.allowed': PermissionNode(state='YELLOW')})
+    access_key, data = _env()
+    access_key.pass_through = False
+    access_key.cap_template_render = 'allow'
+    access_key.permissions = PermissionTree(entities={'sensor.allowed': PermissionNode(state='YELLOW')})
     hass.states.async_set('sensor.allowed', 'private-visible-value', {'access_token': 'private-credential'})
     hass.states.async_set('sensor.hidden', 'private-hidden-value')
     snapshots = []
@@ -301,10 +301,10 @@ async def test_error_response_uses_only_scoped_snapshot(hass, monkeypatch):
         return process
     with patch.object(template_render.asyncio, 'create_subprocess_exec', spawn):
         arguments = {'template': "{{ states('sensor.hidden') | int }}"}
-        hidden, outcome, _ = await _tool_render_template(arguments, token, hass, data)
+        hidden, outcome, _ = await _tool_render_template(arguments, access_key, hass, data)
         hass.states.async_remove('sensor.hidden')
-        missing, _, _ = await _tool_render_template(arguments, token, hass, data)
-        visible, _, _ = await _tool_render_template({'template': "{{ states('sensor.allowed') | int }}"}, token, hass, data)
+        missing, _, _ = await _tool_render_template(arguments, access_key, hass, data)
+        visible, _, _ = await _tool_render_template({'template': "{{ states('sensor.allowed') | int }}"}, access_key, hass, data)
     assert hidden == missing
     assert outcome == 'invalid_request' and hidden['isError']
     assert 'Line 1:' in hidden['content'][0]['text']
@@ -316,11 +316,11 @@ async def test_error_response_uses_only_scoped_snapshot(hass, monkeypatch):
 
 async def test_capability_denial_precedes_diagnostics(hass):
     from custom_components.phoenix_mcp.mcp_view import _tool_render_template
-    token, data = _env()
-    token.pass_through = False
-    token.cap_template_render = 'deny'
+    access_key, data = _env()
+    access_key.pass_through = False
+    access_key.cap_template_render = 'deny'
     with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock()) as spawn:
-        result, outcome, _ = await _tool_render_template({'template': '{{ invalid + }}'}, token, hass, data)
+        result, outcome, _ = await _tool_render_template({'template': '{{ invalid + }}'}, access_key, hass, data)
     assert outcome == 'denied'
     assert result['isError'] and result['content'][0]['text'] == 'Forbidden.'
     spawn.assert_not_called()
@@ -328,7 +328,7 @@ async def test_capability_denial_precedes_diagnostics(hass):
 
 async def test_authority_change_during_reaping_suppresses_diagnostics(hass):
     from custom_components.phoenix_mcp.request_authority import AuthorityChangedError
-    token, data = _env()
+    access_key, data = _env()
     process = MagicMock(returncode=65)
     process.communicate = AsyncMock(return_value=(b'{"kind":"division","line":1}', b''))
     authority_changed = False
@@ -341,14 +341,14 @@ async def test_authority_change_during_reaping_suppresses_diagnostics(hass):
     process.wait = wait
     with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock(return_value=process)), patch.object(template_render, 'check_request_authority', check):
         with pytest.raises(AuthorityChangedError):
-            await template_render.async_render_template_for_token('{{ 1 / 0 }}', token, hass, data)
+            await template_render.async_render_template_for_access_key('{{ 1 / 0 }}', access_key, hass, data)
 
 
 @pytest.mark.skipif(sys.platform != 'linux', reason='HA production OS resource limits require Linux')
 async def test_real_worker_returns_template_location(hass):
-    token, data = _env()
+    access_key, data = _env()
     with pytest.raises(template_render.TemplateRenderError, match='Line 2:'):
-        await template_render.async_render_template_for_token('\n{{ 1 / 0 }}', token, hass, data)
+        await template_render.async_render_template_for_access_key('\n{{ 1 / 0 }}', access_key, hass, data)
 
 
 def test_coverage_records_disposable_worker_without_importing_it_in_parent(tmp_path):

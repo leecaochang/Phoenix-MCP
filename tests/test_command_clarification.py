@@ -15,17 +15,17 @@ from custom_components.phoenix_mcp.command_routing import async_evaluate_command
 from custom_components.phoenix_mcp.const import DOMAIN, COMMAND_CLARIFICATION_LIMIT
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
 
 
 @pytest.fixture
-async def ambiguous_home(hass, token_store, immediate_command_observation):
-    token, _ = await token_store.async_create_token('clarification', 'test', rate_limit_requests=0)
-    token.permissions = PermissionTree(domains={'light': PermissionNode(state='GREEN')})
-    token.cap_physical_control = 'allow'
-    data = PhoenixData(store=token_store, audit=AuditLog(), rate_limiter=RateLimiter())
+async def ambiguous_home(hass, access_key_store, immediate_command_observation):
+    access_key, _ = await access_key_store.async_create_access_key('clarification', 'test', rate_limit_requests=0)
+    access_key.permissions = PermissionTree(domains={'light': PermissionNode(state='GREEN')})
+    access_key.cap_physical_control = 'allow'
+    data = PhoenixData(store=access_key_store, audit=AuditLog(), rate_limiter=RateLimiter())
     hass.data[DOMAIN] = data
-    await token_store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=token.id,
+    await access_key_store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=access_key.id,
         voice_agent_provider_id='p', voice_agent_model='m', voice_agent_routing_mode='local',
         agentcli_routing_mode='local', command_routing_timeout_ms=5000, mesa_mode='off')
     ids = []
@@ -36,7 +36,7 @@ async def ambiguous_home(hass, token_store, immediate_command_observation):
         ids.append(entry.entity_id)
     assert await async_setup_component(hass, 'homeassistant', {})
     assert await async_setup_component(hass, 'conversation', {})
-    return SimpleNamespace(data=data, token=token, ids=sorted(ids))
+    return SimpleNamespace(data=data, access_key=access_key, ids=sorted(ids))
 
 
 def test_memory_is_one_use_bounded_expiring_and_binding_specific():
@@ -61,29 +61,29 @@ def test_memory_is_one_use_bounded_expiring_and_binding_specific():
 
 async def test_no_clarification_details_in_default_preview(hass, ambiguous_home):
     h = ambiguous_home
-    result = await async_evaluate_command(hass, h.data, h.token, 'turn on the desk lamp')
+    result = await async_evaluate_command(hass, h.data, h.access_key, 'turn on the desk lamp')
     assert result['reason'] == 'no_target' and '_clarification' not in result
 
 
 @pytest.mark.parametrize('answer', ['1', 'light.test_0', '2', 'one', 'two'])
 async def test_number_and_exact_id_recheck_original_request(hass, ambiguous_home, answer):
     h = ambiguous_home
-    result = await async_evaluate_command(hass, h.data, h.token, 'turn on the desk lamp', clarify=True)
+    result = await async_evaluate_command(hass, h.data, h.access_key, 'turn on the desk lamp', clarify=True)
     assert '_clarification' in result, result
     request = result['_clarification']
-    selected, reply = await cc.async_clarification_reply(hass, h.data, h.token, request, answer, 'en', ingress='voice')
+    selected, reply = await cc.async_clarification_reply(hass, h.data, h.access_key, request, answer, 'en', ingress='voice')
     assert reply is None and selected is not None
     assert selected['entity_ids'] == [h.ids[1 if answer in ('2', 'two') else 0]]
-    plan = _capture_plan(hass, h.data, h.token, selected)
-    assert plan_is_current(plan, hass, h.data, h.token)
+    plan = _capture_plan(hass, h.data, h.access_key, selected)
+    assert plan_is_current(plan, hass, h.data, h.access_key)
 
 
 @pytest.mark.parametrize('change', ['alias', 'scope', 'new_competitor', 'unavailable', 'custom'])
 async def test_changed_choices_never_select_from_old_list(hass, ambiguous_home, change):
     h = ambiguous_home
-    request = (await async_evaluate_command(hass, h.data, h.token, 'turn on the desk lamp', clarify=True))['_clarification']
+    request = (await async_evaluate_command(hass, h.data, h.access_key, 'turn on the desk lamp', clarify=True))['_clarification']
     if change == 'alias': er.async_get(hass).async_update_entity(h.ids[1], aliases={'Other'})
-    if change == 'scope': h.token.permissions.entities[h.ids[1]] = PermissionNode(state='YELLOW')
+    if change == 'scope': h.access_key.permissions.entities[h.ids[1]] = PermissionNode(state='YELLOW')
     if change == 'new_competitor':
         entry = er.async_get(hass).async_get_or_create('light', 'test', 'third', original_name='Desk lamp')
         hass.states.async_set(entry.entity_id, 'off', {'friendly_name': 'Desk lamp'})
@@ -96,7 +96,7 @@ async def test_changed_choices_never_select_from_old_list(hass, ambiguous_home, 
     else:
         context = nullcontext()
     with context:
-        selected, reply = await cc.async_clarification_reply(hass, h.data, h.token, request, '1', 'en', ingress='voice')
+        selected, reply = await cc.async_clarification_reply(hass, h.data, h.access_key, request, '1', 'en', ingress='voice')
     assert selected is None and 'repeat the full command' in reply
 
 
@@ -104,23 +104,23 @@ async def test_changed_choices_never_select_from_old_list(hass, ambiguous_home, 
     ('1 and turn off everything', None), ('maybe the first', None), ('turn off the lamp 0', None)])
 async def test_cancel_and_unrecognized_reply_consume_no_action(hass, ambiguous_home, answer, expected):
     h = ambiguous_home
-    request = (await async_evaluate_command(hass, h.data, h.token, 'turn on the desk lamp', clarify=True))['_clarification']
-    proposal, reply = await cc.async_clarification_reply(hass, h.data, h.token, request, answer, 'en', ingress='voice')
+    request = (await async_evaluate_command(hass, h.data, h.access_key, 'turn on the desk lamp', clarify=True))['_clarification']
+    proposal, reply = await cc.async_clarification_reply(hass, h.data, h.access_key, request, answer, 'en', ingress='voice')
     assert proposal is None and reply == expected
 
 
 @pytest.mark.parametrize('change', ['new_competitor', 'alias', 'scope'])
 async def test_competitor_changes_invalidate_captured_choice_plan(hass, ambiguous_home, change):
     h = ambiguous_home
-    request = (await async_evaluate_command(hass, h.data, h.token, 'turn on the desk lamp', clarify=True))['_clarification']
-    proposal, _ = await cc.async_clarification_reply(hass, h.data, h.token, request, '1', 'en', ingress='voice')
-    plan = _capture_plan(hass, h.data, h.token, proposal)
+    request = (await async_evaluate_command(hass, h.data, h.access_key, 'turn on the desk lamp', clarify=True))['_clarification']
+    proposal, _ = await cc.async_clarification_reply(hass, h.data, h.access_key, request, '1', 'en', ingress='voice')
+    plan = _capture_plan(hass, h.data, h.access_key, proposal)
     if change == 'new_competitor':
         entry = er.async_get(hass).async_get_or_create('light', 'test', 'third', original_name='Desk lamp')
         hass.states.async_set(entry.entity_id, 'off', {'friendly_name': 'Desk lamp'})
     elif change == 'alias': er.async_get(hass).async_update_entity(h.ids[1], aliases={'Other'})
-    else: h.token.permissions.entities[h.ids[1]] = PermissionNode(state='YELLOW')
-    assert not plan_is_current(plan, hass, h.data, h.token)
+    else: h.access_key.permissions.entities[h.ids[1]] = PermissionNode(state='YELLOW')
+    assert not plan_is_current(plan, hass, h.data, h.access_key)
 
 
 @pytest.mark.parametrize('ingress', ['voice', 'chat'])
@@ -142,7 +142,7 @@ async def test_two_turn_choice_runs_existing_dispatch_and_approval(hass, ambiguo
         if ingress == 'voice':
             return await voice_agent.async_voice_answer(hass, h.data, sentence, language='en', conversation_id='c')
         messages.append({'role': 'user', 'content': sentence})
-        await agentcli.async_run_agent_turn(hass=hass, data=h.data, token=h.token, provider=provider,
+        await agentcli.async_run_agent_turn(hass=hass, data=h.data, access_key=h.access_key, provider=provider,
             session=None, messages=messages, options={}, client_ip='agentcli', base_url='http://test',
             emit=AsyncMock(), cancel=asyncio.Event(), routing_language='en')
         return messages[-1]['content']
@@ -160,7 +160,7 @@ async def test_two_turn_choice_runs_existing_dispatch_and_approval(hass, ambiguo
             record, = h.data.store.get_pending_approvals()
             if confirm == 'stale':
                 er.async_get(hass).async_update_entity(h.ids[1], aliases={'Changed competitor'})
-            _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], h.token, hass, h.data)
+            _, outcome, _ = await mcp_view.async_execute_approved_tool(record['tool_name'], record['args'], h.access_key, hass, h.data)
             assert outcome == ('denied' if confirm == 'stale' else 'allowed')
         if confirm == 'stale':
             call.assert_not_called()
@@ -190,7 +190,7 @@ async def test_cancelled_choice_is_counted_without_a_model_or_action(hass, ambig
                 await voice_agent.async_voice_answer(hass, h.data, sentence, language='en', conversation_id='cancel-test')
             else:
                 messages.append({'role': 'user', 'content': sentence})
-                await agentcli.async_run_agent_turn(hass=hass, data=h.data, token=h.token, provider=provider,
+                await agentcli.async_run_agent_turn(hass=hass, data=h.data, access_key=h.access_key, provider=provider,
                     session=None, messages=messages, options={}, client_ip='agentcli', base_url='http://test',
                     emit=AsyncMock(), cancel=asyncio.Event(), routing_language='en')
         call.assert_not_called()

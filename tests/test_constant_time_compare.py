@@ -18,14 +18,14 @@ import pathlib
 
 import pytest
 
-from custom_components.phoenix_mcp import token_store
+from custom_components.phoenix_mcp import access_key_store
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 PKG = REPO / "custom_components" / "phoenix_mcp"
 
 # Names that hold a secret or its digest. A == against any of these is forbidden:
 # tokens are compared with hmac.compare_digest on their SHA-256 hashes.
-SECRET_NAMES = {"token_hash", "presented_hash", "stored_hash", "presented_token", "raw_token"}
+SECRET_NAMES = {"token_hash", "presented_hash", "stored_hash", "presented_token", "raw_access_key"}
 
 
 def _package_files() -> list[pathlib.Path]:
@@ -35,10 +35,10 @@ def _package_files() -> list[pathlib.Path]:
 
 def test_hmac_compare_actually_uses_compare_digest():
     """The one helper every authentication path goes through."""
-    src = ast.parse(pathlib.Path(token_store.__file__).read_text())
+    src = ast.parse(pathlib.Path(access_key_store.__file__).read_text())
     node = next((n for n in ast.walk(src)
                  if isinstance(n, ast.FunctionDef) and n.name == "hmac_compare"), None)
-    assert node is not None, "token_store.hmac_compare is gone; where does auth compare now?"
+    assert node is not None, "access_key_store.hmac_compare is gone; where does auth compare now?"
     body = ast.unparse(node)
     assert "hmac.compare_digest(" in body, (
         "hmac_compare no longer calls hmac.compare_digest. This is rule 1 and no "
@@ -49,7 +49,7 @@ def test_hmac_compare_actually_uses_compare_digest():
 
 def test_hmac_compare_is_really_constant_time_at_runtime():
     """The helper resolves to the real hmac.compare_digest, not a shadowed or stubbed one."""
-    hmac_compare = token_store.hmac_compare
+    hmac_compare = access_key_store.hmac_compare
 
     assert hmac_compare("a" * 64, "a" * 64) is True
     assert hmac_compare("a" * 64, "b" * 64) is False
@@ -87,13 +87,13 @@ def test_no_secret_is_compared_with_equality_anywhere():
 
 def test_authentication_lookups_route_through_the_helper():
     """The call sites, so the helper cannot be quietly bypassed."""
-    src = pathlib.Path(token_store.__file__).read_text()
+    src = pathlib.Path(access_key_store.__file__).read_text()
     tree = ast.parse(src)
     lookups = [n for n in ast.walk(tree)
                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
                and "token_hash" in ast.unparse(n)
                and n.name != "hmac_compare"
-               and ("get_token_by_hash" in n.name or "by_hash" in n.name)]
+               and ("get_access_key_by_hash" in n.name or "by_hash" in n.name)]
     assert lookups, "no token-by-hash lookup found; has it been renamed?"
     for node in lookups:
         body = ast.unparse(node)

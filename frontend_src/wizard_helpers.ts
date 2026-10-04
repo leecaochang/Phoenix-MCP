@@ -24,21 +24,21 @@ export function skillUrlFromMcp(mcpUrl: string): string {
 // client. Token names match ^[A-Za-z0-9_-]{3,32}$ (backend TOKEN_NAME_REGEX)
 // and the backend rejects two tokens whose lowercased name slugs collide, so
 // this derivation is unique across tokens without extra sanitization.
-export function mcpServerName(tokenName: string): string {
-  return "phx-" + tokenName.toLowerCase().replace(/_/g, "-");
+export function mcpServerName(accessKeyName: string): string {
+  return "phx-" + accessKeyName.toLowerCase().replace(/_/g, "-");
 }
 
 // The env var Codex's config.toml reads the token from. Must also be unique
 // per token: two [mcp_servers.*] tables sharing one env var would collide.
-// The PHOENIX_TOKEN_ prefix keeps it a valid identifier for any token name.
-export function codexTokenEnv(tokenName: string): string {
-  return "PHOENIX_TOKEN_" + tokenName.toUpperCase().replace(/-/g, "_");
+// The PHOENIX_ACCESS_KEY_ prefix keeps it a valid identifier for any token name.
+export function codexAccessKeyEnv(accessKeyName: string): string {
+  return "PHOENIX_ACCESS_KEY_" + accessKeyName.toUpperCase().replace(/-/g, "_");
 }
 
 // Harness accepts at most 32 characters. The backend's unique token slug fits
 // without truncation; omit the optional phx- prefix for this client only.
-export function harnessServerName(tokenName: string): string {
-  return mcpServerName(tokenName).slice(4);
+export function harnessServerName(accessKeyName: string): string {
+  return mcpServerName(accessKeyName).slice(4);
 }
 
 // Editable URLs can contain shell metacharacters. Keep ordinary URLs readable
@@ -50,22 +50,22 @@ function shellArg(value: string): string {
 }
 
 // The `claude mcp add` command. Phoenix MCP authenticates via
-// `Authorization: Bearer phx_<token>` (NOT X-API-Key, NOT OAuth) and the
+// `Authorization: Bearer phx_<access_key>` (NOT X-API-Key, NOT OAuth) and the
 // Streamable HTTP transport is `--transport http`.
-export function buildClaudeCommand(url: string, token: string, serverName: string): string {
-  return `claude mcp add --transport http ${serverName} ${shellArg(url)} --header ${shellArg(`Authorization: ${buildBearerValue(token)}`)}`;
+export function buildClaudeCommand(url: string, accessKey: string, serverName: string): string {
+  return `claude mcp add --transport http ${serverName} ${shellArg(url)} --header ${shellArg(`Authorization: ${buildBearerValue(accessKey)}`)}`;
 }
 
 // A generic MCP server config block for clients that use a JSON file
 // (the MCP spec calls this transport streamable-http; "http" is the common alias).
-export function buildMcpJson(url: string, token: string, serverName: string): string {
+export function buildMcpJson(url: string, accessKey: string, serverName: string): string {
   return JSON.stringify(
     {
       mcpServers: {
         [serverName]: {
           type: "http",
           url,
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${accessKey}` },
         },
       },
     },
@@ -75,19 +75,19 @@ export function buildMcpJson(url: string, token: string, serverName: string): st
 }
 
 // Gemini CLI: `gemini mcp add <name> <url> --transport http --header ...`.
-export function buildGeminiCommand(url: string, token: string, serverName: string): string {
-  return `gemini mcp add ${serverName} ${shellArg(url)} --transport http --header ${shellArg(`Authorization: ${buildBearerValue(token)}`)}`;
+export function buildGeminiCommand(url: string, accessKey: string, serverName: string): string {
+  return `gemini mcp add ${serverName} ${shellArg(url)} --transport http --header ${shellArg(`Authorization: ${buildBearerValue(accessKey)}`)}`;
 }
 
 // The value for an Authorization header (for GUI clients that take a header
 // key/value, like Codex's "Connect to a custom MCP" form).
-export function buildBearerValue(token: string): string {
-  return `Bearer ${token}`;
+export function buildBearerValue(accessKey: string): string {
+  return `Bearer ${accessKey}`;
 }
 
 // Codex shares its HTTP MCP configuration across local clients.
-export function buildCodexEnv(token: string, envVar: string): string {
-  return `export ${envVar}=${shellArg(token)}`;
+export function buildCodexEnv(accessKey: string, envVar: string): string {
+  return `export ${envVar}=${shellArg(accessKey)}`;
 }
 export function buildCodexCommand(url: string, serverName: string, envVar: string): string {
   return `codex mcp add ${serverName} --url ${shellArg(url)} --bearer-token-env-var ${envVar}`;
@@ -96,16 +96,16 @@ export function buildCodexConfig(url: string, serverName: string, envVar: string
   return `[mcp_servers.${serverName}]\nurl = ${JSON.stringify(url)}\nbearer_token_env_var = ${JSON.stringify(envVar)}`;
 }
 
-export function buildHarnessConfig(url: string, token: string, tokenName: string): string {
-  const name = harnessServerName(tokenName);
-  return `- insert:\n    - id: mcp-phx-${name}\n      name: '@deepseek-ai/dsh-mcp-client'\n      config:\n        serverName: ${JSON.stringify(name)}\n        transport: streamable-http\n        url: ${JSON.stringify(url)}\n        headers:\n          Authorization: ${JSON.stringify(buildBearerValue(token))}`;
+export function buildHarnessConfig(url: string, accessKey: string, accessKeyName: string): string {
+  const name = harnessServerName(accessKeyName);
+  return `- insert:\n    - id: mcp-phx-${name}\n      name: '@deepseek-ai/dsh-mcp-client'\n      config:\n        serverName: ${JSON.stringify(name)}\n        transport: streamable-http\n        url: ${JSON.stringify(url)}\n        headers:\n          Authorization: ${JSON.stringify(buildBearerValue(accessKey))}`;
 }
 
 // Cursor reads remote servers from ~/.cursor/mcp.json using url + headers
 // (no "type" field), so it gets its own builder.
-export function buildCursorJson(url: string, token: string, serverName: string): string {
+export function buildCursorJson(url: string, accessKey: string, serverName: string): string {
   return JSON.stringify(
-    { mcpServers: { [serverName]: { url, headers: { Authorization: `Bearer ${token}` } } } },
+    { mcpServers: { [serverName]: { url, headers: { Authorization: `Bearer ${accessKey}` } } } },
     null,
     2,
   );
@@ -126,27 +126,27 @@ export interface AgentTab {
   blocks: AgentBlock[];
 }
 
-// Per-agent connection instructions, default first (Claude Code). tokenName
+// Per-agent connection instructions, default first (Claude Code). accessKeyName
 // drives each client's per-token server name (and Codex env var), so entries can
 // coexist without replacing one another. Harness is an external client, separate
 // from Agent Chat providers.
-export function buildAgentTabs(url: string, token: string, tokenName: string): AgentTab[] {
-  const serverName = mcpServerName(tokenName);
-  const envVar = codexTokenEnv(tokenName);
+export function buildAgentTabs(url: string, accessKey: string, accessKeyName: string): AgentTab[] {
+  const serverName = mcpServerName(accessKeyName);
+  const envVar = codexAccessKeyEnv(accessKeyName);
   return [
     {
       key: "claude",
       label: "Claude Code",
       href: "https://code.claude.com/docs/en/mcp",
       blocks: [
-        { hint: t("wizard.agentClaudeHint"), code: buildClaudeCommand(url, token, serverName) },
+        { hint: t("wizard.agentClaudeHint"), code: buildClaudeCommand(url, accessKey, serverName) },
       ],
     },
     {
       key: "gemini",
       label: "Gemini CLI",
       href: "https://geminicli.com/docs/tools/mcp-server/",
-      blocks: [{ hint: t("wizard.agentGeminiHint"), code: buildGeminiCommand(url, token, serverName) }],
+      blocks: [{ hint: t("wizard.agentGeminiHint"), code: buildGeminiCommand(url, accessKey, serverName) }],
     },
     {
       key: "codex",
@@ -157,7 +157,7 @@ export function buildAgentTabs(url: string, token: string, tokenName: string): A
         {
           title: t("wizard.codexEnvTitle", { envVar }),
           hint: t("wizard.codexEnvHint", { envVar }),
-          code: `${buildCodexEnv(token, envVar)}\n${buildCodexCommand(url, serverName, envVar)}`,
+          code: `${buildCodexEnv(accessKey, envVar)}\n${buildCodexCommand(url, serverName, envVar)}`,
         },
         {
           title: t("wizard.codexAppSettingsTitle"),
@@ -165,7 +165,7 @@ export function buildAgentTabs(url: string, token: string, tokenName: string): A
           fields: [
             { label: t("wizard.codexServerNameLabel"), value: serverName },
             { label: t("wizard.codexHeaderKeyLabel"), value: "Authorization" },
-            { label: t("wizard.codexHeaderValueLabel"), value: buildBearerValue(token) },
+            { label: t("wizard.codexHeaderValueLabel"), value: buildBearerValue(accessKey) },
           ],
         },
         {
@@ -180,7 +180,7 @@ export function buildAgentTabs(url: string, token: string, tokenName: string): A
       label: "Cursor",
       href: "https://cursor.com/docs/mcp",
       intro: t("wizard.agentCursorIntro"),
-      blocks: [{ code: buildCursorJson(url, token, serverName) }],
+      blocks: [{ code: buildCursorJson(url, accessKey, serverName) }],
     },
     {
       key: "deepseek-harness",
@@ -191,7 +191,7 @@ export function buildAgentTabs(url: string, token: string, tokenName: string): A
         {
           title: t("wizard.harnessConfigTitle"),
           hint: t("wizard.harnessConfigHint"),
-          code: buildHarnessConfig(url, token, tokenName),
+          code: buildHarnessConfig(url, accessKey, accessKeyName),
         },
         {
           title: t("wizard.harnessLaunchTitle"),
@@ -205,7 +205,7 @@ export function buildAgentTabs(url: string, token: string, tokenName: string): A
       label: t("wizard.agentOtherLabel"),
       href: "https://modelcontextprotocol.io/",
       intro: t("wizard.agentOtherIntro"),
-      blocks: [{ code: buildMcpJson(url, token, serverName) }],
+      blocks: [{ code: buildMcpJson(url, accessKey, serverName) }],
     },
   ];
 }

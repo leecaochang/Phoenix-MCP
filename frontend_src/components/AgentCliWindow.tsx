@@ -24,7 +24,7 @@ import type {
   AgentCliProviderKind,
   AgentCliInstance,
   DeclaredModelCaps,
-  TokenRecord,
+  AccessKeyRecord,
 } from "../types";
 import { hasMessage, localeClock, localeCompactNumber, localeNumber, resolveLanguage, t } from "../i18n";
 import { tRich } from "../i18n/rich";
@@ -412,10 +412,10 @@ export function buildOptions(
 }
 
 interface Props {
-  tokens: TokenRecord[];
+  accessKeys: AccessKeyRecord[];
   instances: AgentCliInstance[];
   scrollbackLines: number;
-  initialTokenId: string;
+  initialAccessKeyId: string;
   onClose: () => void;
   hass?: unknown;
   getHass?: () => unknown;
@@ -579,7 +579,7 @@ export function clampPosToViewport(
 }
 
 export function AgentCliWindow({
-  tokens, instances, scrollbackLines, initialTokenId, onClose, hass = null, getHass: getLiveHass,
+  accessKeys, instances, scrollbackLines, initialAccessKeyId, onClose, hass = null, getHass: getLiveHass,
   summonVersion,
 }: Props) {
   // Restore persisted window state (survives navigation away/back and reopen).
@@ -588,7 +588,7 @@ export function AgentCliWindow({
   const firstInstance = (instances.some((i) => i.id === saved.instanceId) && saved.instanceId)
     || instances[0]?.id || "";
 
-  const [tokenId, setTokenId] = useState(saved.tokenId || initialTokenId || tokens[0]?.id || "");
+  const [tokenId, setAccessKeyId] = useState(saved.tokenId || initialAccessKeyId || accessKeys[0]?.id || "");
   const [instanceId, setInstanceId] = useState<string>(firstInstance);
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState<string>(saved.model);
@@ -851,15 +851,15 @@ export function AgentCliWindow({
   }, [instances, instanceId]);
 
   // Same as above for the token: a revoke elsewhere (Token Detail fires
-  // phx-tokens-changed, which both window hosts turn into a fresh tokens prop)
+  // phx-access-keys-changed, which both window hosts turn into a fresh tokens prop)
   // must not leave a dead token selected. Falls back to another available
   // token, or "" if none remain; the conversation-reset effect above already
   // clears history whenever tokenId changes, including this reselect.
   useEffect(() => {
-    if (tokenId && !tokens.some((tok) => tok.id === tokenId)) {
-      setTokenId(tokens[0]?.id ?? "");
+    if (tokenId && !accessKeys.some((tok) => tok.id === tokenId)) {
+      setAccessKeyId(accessKeys[0]?.id ?? "");
     }
-  }, [tokens, tokenId]);
+  }, [accessKeys, tokenId]);
 
   const scrollToLatest = useCallback(() => {
     const el = bodyRef.current;
@@ -1054,7 +1054,7 @@ export function AgentCliWindow({
     setPendingContinue(null);
     cancelledRef.current = false;
     lastQueryRef.current = mode === "continue" ? "" : text;
-    const stateless = tokens.find((token) => token.id === tokenId)?.persona === "home_companion";
+    const stateless = accessKeys.find((accessKey) => accessKey.id === tokenId)?.persona === "home_companion";
     if (stateless) {
       setTurns([]);
       setSessionTurns([], persistenceOwner);
@@ -1269,7 +1269,7 @@ export function AgentCliWindow({
         if (finalText) setAnnouncement(finalText);
       }
     }
-  }, [sending, tokens, turns, scrollbackLines, tokenId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps]);
+  }, [sending, accessKeys, turns, scrollbackLines, tokenId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps]);
 
   const answerAnyway = useCallback((prompt: string) => {
     if (sending || !prompt) return;
@@ -1864,8 +1864,8 @@ export function AgentCliWindow({
           <div className="agentcli-controls">
             <label className="agentcli-control" title={t("agentchat.tokenHint")}>
               <span>{t("agentchat.token")}</span>
-              <select className="input agentcli-select" value={tokenId} onChange={(e) => { setGearOpen(false); setTokenId(e.target.value); }} aria-label={t("agentchat.token")} disabled={sending}>
-                {tokens.map((tok) => <option key={tok.id} value={tok.id}>{tok.name}</option>)}
+              <select className="input agentcli-select" value={tokenId} onChange={(e) => { setGearOpen(false); setAccessKeyId(e.target.value); }} aria-label={t("agentchat.token")} disabled={sending}>
+                {accessKeys.map((tok) => <option key={tok.id} value={tok.id}>{tok.name}</option>)}
               </select>
             </label>
             <label className="agentcli-control" title={t("agentchat.providerHint")}>

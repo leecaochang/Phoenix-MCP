@@ -20,7 +20,7 @@ from custom_components.phoenix_mcp import mcp_view
 from custom_components.phoenix_mcp.tools import blueprint as blueprint_tools
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _EXECUTOR_REGISTRY, _call_tool
-from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.version_store import VersionStore
 from custom_components.phoenix_mcp.ws_dispatch import WsDispatchError
 
@@ -47,7 +47,7 @@ mode: single
 async def test_unsafe_yaml_never_reaches_blueprint_approval(hass, bp_env, tool, suffix):
     args = {"domain": "automation", "path": "author/unsafe.yaml", "content": VALID + suffix}
     with patch.object(blueprint_tools, "_gate", new_callable=AsyncMock) as gate:
-        result, outcome, _ = await _call(tool, args, _token(cap_blueprint_write="confirm"), hass)
+        result, outcome, _ = await _call(tool, args, _access_key(cap_blueprint_write="confirm"), hass)
     assert outcome == "invalid_request"
     assert "YAML" in _text(result)
     gate.assert_not_awaited()
@@ -62,14 +62,14 @@ async def test_secret_source_never_creates_approval(hass, bp_env, tool):
     if tool != "delete_blueprint":
         args["content"] = secret_source if tool == "create_blueprint" else VALID
     with patch.object(blueprint_tools, "_gate", new_callable=AsyncMock) as gate:
-        result, outcome, _ = await _call(tool, args, _token(cap_blueprint_write="confirm"), hass)
+        result, outcome, _ = await _call(tool, args, _access_key(cap_blueprint_write="confirm"), hass)
     assert outcome == "invalid_request"
     gate.assert_not_awaited()
     assert "cannot be snapshotted safely" in _text(result)
     assert "blueprint-secret" not in _text(result)
 
 
-def _token(**caps) -> TokenRecord:
+def _access_key(**caps) -> AccessKeyRecord:
     base = {
         "cap_blueprint_write": "allow",
         "cap_automation_write": "allow",
@@ -77,7 +77,7 @@ def _token(**caps) -> TokenRecord:
         "cap_config_read": "allow",
     }
     base.update(caps)
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x",
         created_at=utcnow(), created_by="u", permissions=PermissionTree(), **base,
     )
@@ -97,8 +97,8 @@ def _text(content: dict) -> str:
     return content["content"][0]["text"]
 
 
-async def _call(name, args, token, hass, data=None):
-    return await _call_tool(name, args, token, hass, data if data is not None else MagicMock())
+async def _call(name, args, access_key, hass, data=None):
+    return await _call_tool(name, args, access_key, hass, data if data is not None else MagicMock())
 
 
 @pytest.fixture
@@ -170,7 +170,7 @@ class TestDualCapabilityGate:
         content, outcome, _ = await _call(
             "create_blueprint",
             {"domain": "automation", "path": "author/x.yaml", "content": VALID},
-            _token(cap_blueprint_write="deny"), hass)
+            _access_key(cap_blueprint_write="deny"), hass)
         assert outcome == "denied"
         assert "Forbidden" in _text(content)
 
@@ -181,14 +181,14 @@ class TestDualCapabilityGate:
             "create_blueprint",
             {"domain": "script", "path": "s.yaml", "content": VALID.replace(
                 "domain: automation", "domain: script")},
-            _token(cap_script_write="deny"), hass)
+            _access_key(cap_script_write="deny"), hass)
         assert outcome == "denied"
 
     async def test_automation_cap_denied_blocks_automation_blueprint(self, hass, bp_env):
         _, outcome, _ = await _call(
             "create_blueprint",
             {"domain": "automation", "path": "author/x.yaml", "content": VALID},
-            _token(cap_automation_write="deny"), hass)
+            _access_key(cap_automation_write="deny"), hass)
         assert outcome == "denied"
 
     async def test_other_domain_cap_is_irrelevant(self, hass, bp_env):
@@ -197,7 +197,7 @@ class TestDualCapabilityGate:
             _, outcome, _ = await _call(
                 "create_blueprint",
                 {"domain": "automation", "path": "author/x.yaml", "content": VALID},
-                _token(cap_script_write="deny"), hass, _data()[0])
+                _access_key(cap_script_write="deny"), hass, _data()[0])
         assert outcome == "allowed"
 
     async def test_denied_token_learns_nothing_about_its_payload(self, hass, bp_env):
@@ -205,7 +205,7 @@ class TestDualCapabilityGate:
         content, outcome, _ = await _call(
             "create_blueprint",
             {"domain": "not-a-domain", "path": "///", "content": "garbage: ["},
-            _token(cap_blueprint_write="deny"), hass)
+            _access_key(cap_blueprint_write="deny"), hass)
         assert outcome == "denied"
         body = _text(content)
         assert "YAML" not in body and "path must be" not in body
@@ -230,7 +230,7 @@ class TestPathJail:
         content, outcome, _ = await _call(
             "create_blueprint",
             {"domain": "automation", "path": bad, "content": VALID},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
         assert "relative .yaml" in _text(content)
 
@@ -239,7 +239,7 @@ class TestPathJail:
             content, outcome, _ = await _call(
                 "create_blueprint",
                 {"domain": "automation", "path": "deep/nested/ok.yaml", "content": VALID},
-                _token(), hass, _data()[0])
+                _access_key(), hass, _data()[0])
         assert outcome == "allowed"
         assert _json(content)["path"] == "deep/nested/ok.yaml"
 
@@ -247,7 +247,7 @@ class TestPathJail:
         _, outcome, _ = await _call(
             "create_blueprint",
             {"domain": "template", "path": "x.yaml", "content": VALID},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
 
 
@@ -258,7 +258,7 @@ class TestPreGateValidation:
         content, outcome, _ = await _call(
             "create_blueprint",
             {"domain": "automation", "path": "author/x.yaml", "content": "a: [unclosed"},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
         assert "not valid YAML" in _text(content)
 
@@ -266,7 +266,7 @@ class TestPreGateValidation:
         content, outcome, _ = await _call(
             "create_blueprint",
             {"domain": "automation", "path": "author/x.yaml", "content": "triggers: []\n"},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
         assert "not a valid automation blueprint" in _text(content)
 
@@ -276,7 +276,7 @@ class TestPreGateValidation:
             "create_blueprint",
             {"domain": "automation", "path": "author/x.yaml",
              "content": VALID.replace("domain: automation", "domain: script")},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
         assert "not a valid automation blueprint" in _text(content)
 
@@ -286,7 +286,7 @@ class TestPreGateValidation:
             "create_blueprint",
             {"domain": "automation", "path": "author/x.yaml",
              "content": VALID.replace("!input trigger_entity", "!input nope")},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
         assert "not a valid automation blueprint" in _text(content)
 
@@ -296,7 +296,7 @@ class TestPreGateValidation:
         _, outcome, _ = await _call_tool(
             "create_blueprint",
             {"domain": "automation", "path": "author/x.yaml", "content": "a: [unclosed"},
-            _token(cap_blueprint_write="confirm"), hass, data)
+            _access_key(cap_blueprint_write="confirm"), hass, data)
         assert outcome == "invalid_request"
         data.store.set_pending_approvals.assert_not_called()
 
@@ -304,7 +304,7 @@ class TestPreGateValidation:
         _, outcome, _ = await _call(
             "create_blueprint",
             {"domain": "automation", "path": "author/x.yaml", "content": "   "},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
 
 
@@ -315,7 +315,7 @@ class TestCreate:
             content, outcome, resource = await _call(
                 "create_blueprint",
                 {"domain": "automation", "path": "author/new.yaml", "content": VALID},
-                _token(), hass, data)
+                _access_key(), hass, data)
         assert outcome == "allowed"
         assert resource == "blueprint:automation/author/new.yaml"
         assert isinstance(_json(content).get("recovery_id"), str)
@@ -331,7 +331,7 @@ class TestCreate:
         content, outcome, _ = await _call(
             "create_blueprint",
             {"domain": "automation", "path": "author/existing.yaml", "content": VALID},
-            _token(), hass, _data()[0])
+            _access_key(), hass, _data()[0])
         assert outcome == "invalid_request"
         assert "already exists" in _text(content)
 
@@ -340,7 +340,7 @@ class TestCreate:
         _, outcome, _ = await _call(
             "create_blueprint",
             {"domain": "automation", "path": "author/nosuffix", "content": VALID},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
 
 
@@ -349,7 +349,7 @@ class TestEdit:
         content, outcome, _ = await _call(
             "edit_blueprint",
             {"domain": "automation", "path": "author/ghost.yaml", "content": VALID},
-            _token(), hass, _data()[0])
+            _access_key(), hass, _data()[0])
         assert outcome == "not_found"
         assert "not found" in _text(content).lower()
 
@@ -361,7 +361,7 @@ class TestEdit:
             _content, outcome, _ = await _call(
                 "edit_blueprint",
                 {"domain": "automation", "path": "author/existing.yaml", "content": new},
-                _token(), hass, data)
+                _access_key(), hass, data)
         assert outcome == "allowed"
         assert ws.await_args.args[2]["allow_override"] is True
         assert isinstance(_json(_content).get("recovery_id"), str)
@@ -378,7 +378,7 @@ class TestEdit:
             content, outcome, _ = await _call(
                 "edit_blueprint",
                 {"domain": "automation", "path": "author/existing.yaml", "content": VALID},
-                _token(), hass, _data()[0])
+                _access_key(), hass, _data()[0])
         assert outcome == "allowed"
         body = _json(content)
         assert body["reloaded"] == ["automation.a", "automation.b"]
@@ -390,7 +390,7 @@ class TestEdit:
             content, outcome, _ = await _call(
                 "edit_blueprint",
                 {"domain": "automation", "path": "author/existing.yaml", "content": VALID},
-                _token(), hass, _data()[0])
+                _access_key(), hass, _data()[0])
         assert outcome == "invalid_request"
         assert "disk full" in _text(content)
 
@@ -403,7 +403,7 @@ class TestDelete:
             content, outcome, _ = await _call(
                 "delete_blueprint",
                 {"domain": "automation", "path": "author/existing.yaml"},
-                _token(), hass, data)
+                _access_key(), hass, data)
         assert outcome == "allowed"
         assert ws.await_args.args[1] == "blueprint/delete"
         assert _json(content)["deleted"] is True
@@ -416,7 +416,7 @@ class TestDelete:
         _, outcome, _ = await _call(
             "delete_blueprint",
             {"domain": "automation", "path": "author/ghost.yaml"},
-            _token(), hass, _data()[0])
+            _access_key(), hass, _data()[0])
         assert outcome == "not_found"
 
     async def test_in_use_refusal_from_ha_surfaces(self, hass, bp_env):
@@ -428,7 +428,7 @@ class TestDelete:
             content, outcome, _ = await _call(
                 "delete_blueprint",
                 {"domain": "automation", "path": "author/existing.yaml"},
-                _token(), hass, _data()[0])
+                _access_key(), hass, _data()[0])
         assert outcome == "invalid_request"
         assert "in use" in _text(content)
 
@@ -438,7 +438,7 @@ class TestDelete:
             _, outcome, _ = await _call(
                 "delete_blueprint",
                 {"domain": "automation", "path": "author/existing.yaml"},
-                _token(), hass, _data()[0])
+                _access_key(), hass, _data()[0])
         assert outcome == "allowed"
 
 
@@ -490,21 +490,21 @@ class TestBlueprintRestore:
     """
 
     async def test_restore_token_carries_explicit_allows_for_exempt_caps(self):
-        token = mcp_view._restore_token("admin-1")
-        assert token.cap_automation_write == "allow"
-        assert token.cap_script_write == "allow"
-        assert token.cap_blueprint_write == "allow"
+        access_key = mcp_view._restore_access_key("admin-1")
+        assert access_key.cap_automation_write == "allow"
+        assert access_key.cap_script_write == "allow"
+        assert access_key.cap_blueprint_write == "allow"
 
     async def test_restore_edits_an_existing_blueprint(self, hass, bp_env):
         from custom_components.phoenix_mcp.mcp_view import async_restore_version
         data, versions = _data()
-        token = _token()
+        access_key = _access_key()
         _write_existing(bp_env)  # V1 on disk
         v2 = VALID.replace("Test Blueprint", "Test Blueprint v2")
         with _patch_ws(return_value={"overrides_existing": True}), _patch_consumers([]):
             await _call("edit_blueprint",
                         {"domain": "automation", "path": "author/existing.yaml", "content": v2},
-                        token, hass, data)
+                        access_key, hass, data)
         edit_ver = versions.list_for("blueprint", "automation/author/existing.yaml")[0]
         assert edit_ver.action == "edit"
 
@@ -522,12 +522,12 @@ class TestBlueprintRestore:
         import os
         from custom_components.phoenix_mcp.mcp_view import async_restore_version
         data, versions = _data()
-        token = _token()
+        access_key = _access_key()
         target = _write_existing(bp_env)
         with _patch_ws(return_value={}), _patch_consumers([]):
             await _call("delete_blueprint",
                         {"domain": "automation", "path": "author/existing.yaml"},
-                        token, hass, data)
+                        access_key, hass, data)
         assert not os.path.isfile(target)  # the mock applies HA's validated delete effect
         del_ver = versions.list_for("blueprint", "automation/author/existing.yaml")[0]
         assert del_ver.action == "delete"

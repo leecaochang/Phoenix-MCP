@@ -29,12 +29,12 @@ from custom_components.phoenix_mcp.mcp_view import (
 )
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProfile
-from custom_components.phoenix_mcp.token_store import (
+from custom_components.phoenix_mcp.access_key_store import (
     GlobalSettings,
     PermissionNode,
     PermissionTree,
-    TokenRecord,
-    TokenStore,
+    AccessKeyRecord,
+    AccessKeyStore,
 )
 
 
@@ -50,8 +50,8 @@ def _profile(key: str, mode: str) -> SemanticProfile:
     )
 
 
-def _token(device_id: str, *, cap: str = "allow", state: str = "GREEN") -> TokenRecord:
-    return TokenRecord(
+def _access_key(device_id: str, *, cap: str = "allow", state: str = "GREEN") -> AccessKeyRecord:
+    return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="device-remove-test",
         token_hash="x",
@@ -66,11 +66,11 @@ def _token(device_id: str, *, cap: str = "allow", state: str = "GREEN") -> Token
 
 
 async def _data(hass: HomeAssistant, mesa_mode: str = "off") -> PhoenixData:
-    store = MagicMock(spec=TokenStore)
+    store = MagicMock(spec=AccessKeyStore)
     store.async_lock = asyncio.Lock()
     store.async_save = AsyncMock()
     store.get_settings.return_value = GlobalSettings(mesa_mode=mesa_mode)
-    store.list_tokens.return_value = []
+    store.list_access_keys.return_value = []
     store.get_entity_hints.return_value = {}
     store.get_pending_approvals.return_value = []
     data = PhoenixData(
@@ -146,7 +146,7 @@ async def test_unsupported_integration_is_refused_before_approval(
         content, outcome, _ = await _call_tool(
             "remove_device",
             {"device_id": removal_env["device"].id},
-            _token(removal_env["device"].id, cap="confirm"),
+            _access_key(removal_env["device"].id, cap="confirm"),
             hass,
             data,
         )
@@ -171,7 +171,7 @@ async def test_hook_rejection_or_exception_leaves_registry_ownership(
         AsyncMock(return_value=hook),
     ):
         content, outcome, _ = await _call_tool(
-            "remove_device", {"device_id": device_id}, _token(device_id), hass, data
+            "remove_device", {"device_id": device_id}, _access_key(device_id), hass, data
         )
     assert outcome == "denied"
     assert "integration" in content["content"][0]["text"].lower()
@@ -196,7 +196,7 @@ async def test_integration_may_remove_device_itself(
         AsyncMock(return_value=remove_in_hook),
     ):
         content, outcome, _ = await _call_tool(
-            "remove_device", {"device_id": device_id}, _token(device_id), hass, data
+            "remove_device", {"device_id": device_id}, _access_key(device_id), hass, data
         )
     assert outcome == "allowed"
     assert _body(content)["device_disappeared"] is True
@@ -222,7 +222,7 @@ async def test_child_device_removal_uses_child_ownership(
         AsyncMock(return_value=hook),
     ):
         content, outcome, _ = await _call_tool(
-            "remove_device", {"device_id": child.id}, _token(child.id), hass, data
+            "remove_device", {"device_id": child.id}, _access_key(child.id), hass, data
         )
 
     assert outcome == "allowed"
@@ -269,7 +269,7 @@ async def test_multi_owner_requires_selection_and_removes_only_selected_owner(
         patch.object(registry, "async_update_device", side_effect=legacy_update),
     ):
         content, outcome, _ = await _call_tool(
-            "remove_device", {"device_id": device_id}, _token(device_id), hass, data
+            "remove_device", {"device_id": device_id}, _access_key(device_id), hass, data
         )
         assert outcome == "invalid_request"
         assert "multiple owners" in content["content"][0]["text"]
@@ -277,7 +277,7 @@ async def test_multi_owner_requires_selection_and_removes_only_selected_owner(
         content, outcome, _ = await _call_tool(
             "remove_device",
             {"device_id": device_id, "config_entry_id": removal_env["owner"].entry_id},
-            _token(device_id),
+            _access_key(device_id),
             hass,
             data,
         )
@@ -305,19 +305,19 @@ async def test_preview_contains_exact_affected_relationships_and_safety_context(
 ):
     device_id = removal_env["device"].id
     data = await _data(hass)
-    data.store.list_tokens.return_value = [_token(device_id)]
+    data.store.list_access_keys.return_value = [_access_key(device_id)]
     hook = AsyncMock(return_value=True)
     with patch(
         "custom_components.phoenix_mcp.mcp_view._async_device_removal_hook",
         AsyncMock(return_value=hook),
     ):
         context = await _resolve_device_removal_context(
-            {"device_id": device_id}, _token(device_id), hass
+            {"device_id": device_id}, _access_key(device_id), hass
         )
     assert not isinstance(context, tuple)
     mesa = _device_mesa_decision(
         data,
-        _token(device_id),
+        _access_key(device_id),
         hass,
         context.device,
         actions=["remove"],
@@ -332,7 +332,7 @@ async def test_preview_contains_exact_affected_relationships_and_safety_context(
         AsyncMock(return_value=relationships),
     ):
         diff = await _build_diff_remove_device(
-            context, _token(device_id), hass, data, mesa
+            context, _access_key(device_id), hass, data, mesa
         )
     preview = diff["preview"]
     assert preview["affected_entities"] == [removal_env["entity_id"]]
@@ -382,7 +382,7 @@ async def test_mesa_evaluates_exact_selected_owner_membership(
                 "device_id": device_id,
                 "config_entry_id": removal_env["owner"].entry_id,
             },
-            _token(device_id),
+            _access_key(device_id),
             hass,
             data,
         )
@@ -404,7 +404,7 @@ async def test_affected_read_only_and_empty_membership_fail_closed(
         AsyncMock(return_value=hook),
     ):
         content, outcome, _ = await _call_tool(
-            "remove_device", {"device_id": device_id}, _token(device_id), hass, data
+            "remove_device", {"device_id": device_id}, _access_key(device_id), hass, data
         )
     assert outcome == "denied"
     assert "read_only" in content["content"][0]["text"]
@@ -417,7 +417,7 @@ async def test_affected_read_only_and_empty_membership_fail_closed(
         AsyncMock(return_value=hook),
     ):
         content, outcome, _ = await _call_tool(
-            "remove_device", {"device_id": device_id}, _token(device_id), hass, data
+            "remove_device", {"device_id": device_id}, _access_key(device_id), hass, data
         )
     assert outcome == "denied"
     assert "unresolved_device_context" in content["content"][0]["text"]
@@ -441,7 +441,7 @@ async def test_approval_revalidates_membership_permission_capability_and_support
         _content, outcome, _ = await _call_tool(
             "remove_device",
             {"device_id": device_id},
-            _token(device_id, cap="confirm"),
+            _access_key(device_id, cap="confirm"),
             hass,
             data,
         )
@@ -458,7 +458,7 @@ async def test_approval_revalidates_membership_permission_capability_and_support
         AsyncMock(return_value=hook),
     ):
         content, outcome, _ = await async_execute_approved_tool(
-            "remove_device", approved_args, _token(device_id), hass, data
+            "remove_device", approved_args, _access_key(device_id), hass, data
         )
     assert outcome == "denied"
     assert "changed after approval" in content["content"][0]["text"]
@@ -469,16 +469,16 @@ async def test_approval_revalidates_membership_permission_capability_and_support
         AsyncMock(return_value=None),
     ):
         _content, outcome, _ = await _execute_remove_device(
-            approved_args, _token(device_id), hass, data
+            approved_args, _access_key(device_id), hass, data
         )
     assert outcome == "invalid_request"
 
     _content, outcome, _ = await _execute_remove_device(
-        approved_args, _token(device_id, cap="deny"), hass, data
+        approved_args, _access_key(device_id, cap="deny"), hass, data
     )
     assert outcome == "denied"
     _content, outcome, _ = await _execute_remove_device(
-        approved_args, _token(device_id, state="RED"), hass, data
+        approved_args, _access_key(device_id, state="RED"), hass, data
     )
     assert outcome == "denied"
 
@@ -496,7 +496,7 @@ async def test_phoenix_owned_entry_is_never_removable(hass: HomeAssistant):
         AsyncMock(return_value=AsyncMock(return_value=True)),
     ):
         content, outcome, _ = await _call_tool(
-            "remove_device", {"device_id": device.id}, _token(device.id), hass, data
+            "remove_device", {"device_id": device.id}, _access_key(device.id), hass, data
         )
     assert outcome in ("denied", "not_found")
     assert content.get("isError") is True
@@ -507,7 +507,7 @@ async def test_phoenix_owned_entry_is_never_removable(hass: HomeAssistant):
 async def test_removal_revalidates_after_each_wait(hass, removal_env, phase, change):
     """A new target or lost grant during an await cannot authorize cleanup."""
     device_id = removal_env["device"].id
-    token = _token(device_id)
+    access_key = _access_key(device_id)
     data = await _data(hass, "enforced" if change == "mesa" else "off")
     if change == "mesa":
         data.mesa.store.set(
@@ -531,14 +531,14 @@ async def test_removal_revalidates_after_each_wait(hass, removal_env, phase, cha
 
     with patch("custom_components.phoenix_mcp.mcp_view._async_device_removal_hook", side_effect=load):
         task = asyncio.create_task(_execute_remove_device(
-            {"device_id": device_id}, token, hass, data
+            {"device_id": device_id}, access_key, hass, data
         ))
         try:
             await asyncio.wait_for(entered.wait(), 1)
             if change == "scope":
-                token.permissions.devices[device_id].state = "RED"
+                access_key.permissions.devices[device_id].state = "RED"
             elif change == "capability":
-                token.cap_integration_write = "deny"
+                access_key.cap_integration_write = "deny"
             elif change == "membership":
                 _add_owner_entity(hass, removal_env["owner"], device_id, "new-during-wait")
             else:
@@ -565,7 +565,7 @@ async def test_removal_revalidates_after_each_wait(hass, removal_env, phase, cha
 @pytest.mark.parametrize("phase", ["loading", "hook"])
 async def test_cancelled_removal_never_runs_later_cleanup(hass, removal_env, phase):
     device_id = removal_env["device"].id
-    token = _token(device_id)
+    access_key = _access_key(device_id)
     data = await _data(hass)
     entered = asyncio.Event()
 
@@ -585,7 +585,7 @@ async def test_cancelled_removal_never_runs_later_cleanup(hass, removal_env, pha
 
     with patch("custom_components.phoenix_mcp.mcp_view._async_device_removal_hook", side_effect=load):
         task = asyncio.create_task(_execute_remove_device(
-            {"device_id": device_id}, token, hass, data
+            {"device_id": device_id}, access_key, hass, data
         ))
         await asyncio.wait_for(entered.wait(), 1)
         task.cancel()

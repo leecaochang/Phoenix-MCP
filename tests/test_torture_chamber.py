@@ -33,7 +33,7 @@ from custom_components.phoenix_mcp import mcp_view, mesa_tools
 from custom_components.phoenix_mcp.const import CAPABILITY_NAMES
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool
-from custom_components.phoenix_mcp.token_store import GlobalSettings, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import GlobalSettings, PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.tool_contracts import normalize_tool_args
 from custom_components.phoenix_mcp.tools import config_files, discovery
 from custom_components.phoenix_mcp.version_store import VersionStore
@@ -247,12 +247,12 @@ def _data() -> PhoenixData:
     return PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), versions=VersionStore())
 
 
-def _token(mode: str) -> TokenRecord:
+def _access_key(mode: str) -> AccessKeyRecord:
     """A token whose every capability is `mode`, with an EMPTY permission tree.
 
     No entity is ever in scope, so nothing real is actuated.
     """
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="torture", token_hash="x", created_at=utcnow(),
         created_by="admin", permissions=PermissionTree(domains={}),
         **{cap: mode for cap in CAPABILITY_NAMES},
@@ -330,7 +330,7 @@ async def test_structured_get_state_seed_reaches_permission_resolution(
 
     with patch.object(mcp_view, "resolve", resolver):
         result, outcome, resource = await _call_tool(
-            "get_state", seed, _token("allow"), hass, _data(), "req", "1.2.3.4"
+            "get_state", seed, _access_key("allow"), hass, _data(), "req", "1.2.3.4"
         )
 
     resolver.assert_called_once_with(seed["entity_id"], ANY, hass)
@@ -344,8 +344,8 @@ async def test_structured_get_states_seed_reaches_scope_filter(
     seed = _placeholder("arguments", tool_def["inputSchema"])
     scope_filter = MagicMock(return_value=[])
 
-    with patch.object(mcp_view, "filter_entities_for_token", scope_filter):
-        await _call_tool("get_states", seed, _token("allow"), hass, _data())
+    with patch.object(mcp_view, "filter_entities_for_access_key", scope_filter):
+        await _call_tool("get_states", seed, _access_key("allow"), hass, _data())
 
     scope_filter.assert_called_once()
 
@@ -358,7 +358,7 @@ async def test_structured_call_service_seed_reaches_executor(hass: HomeAssistant
     executor = AsyncMock(return_value=expected)
 
     with patch.object(mcp_view, "_execute_call_service", executor):
-        result = await _call_tool("call_service", seed, _token("allow"), hass, _data())
+        result = await _call_tool("call_service", seed, _access_key("allow"), hass, _data())
 
     assert result == expected
     executor.assert_awaited_once()
@@ -373,7 +373,7 @@ async def test_structured_dry_run_seed_reaches_target_resolution(
     resolver = MagicMock(return_value=([], 0))
 
     with patch.object(discovery, "resolve_service_targets", resolver):
-        await _call_tool("dry_run_service", seed, _token("allow"), hass, _data())
+        await _call_tool("dry_run_service", seed, _access_key("allow"), hass, _data())
 
     resolver.assert_called_once()
 
@@ -387,7 +387,7 @@ async def test_structured_relationship_seed_reaches_scope_resolution(
     resolver = MagicMock(return_value=expected)
 
     with patch.object(discovery, "_relationship_scope", resolver):
-        result = await _call_tool("get_relationships", seed, _token("allow"), hass, _data())
+        result = await _call_tool("get_relationships", seed, _access_key("allow"), hass, _data())
 
     assert result == expected
     resolver.assert_called_once()
@@ -404,7 +404,7 @@ async def test_structured_yaml_patch_seed_reaches_target_resolution(
     ):
         with pytest.raises(RuntimeError, match="target reached"):
             await _call_tool(
-                "patch_yaml_config", seed, _token("allow"), hass, _data()
+                "patch_yaml_config", seed, _access_key("allow"), hass, _data()
             )
 
 
@@ -422,7 +422,7 @@ async def test_get_state_attack_reaches_deliberately_broken_resolver(
     with patch.object(mcp_view, "resolve", side_effect=RuntimeError("mutation reached")):
         with pytest.raises(RuntimeError, match="mutation reached"):
             await _call_tool(
-                "get_state", attack, _token("allow"), hass, _data(), "req", "1.2.3.4"
+                "get_state", attack, _access_key("allow"), hass, _data(), "req", "1.2.3.4"
             )
 
 
@@ -441,9 +441,9 @@ def test_every_tool_falls_into_a_known_archetype():
 @pytest.mark.parametrize("tool_def", ALL_DEFS, ids=lambda d: d["name"])
 async def test_denied_token_survives_hostile_input(tool_def: dict, hass: HomeAssistant):
     """Invariants 1-3 against a token holding nothing."""
-    token, data, name = _token("deny"), _data(), tool_def["name"]
+    access_key, data, name = _access_key("deny"), _data(), tool_def["name"]
     for label, args in _attacks(tool_def):
-        result, outcome, resource = await _call_tool(name, args, token, hass, data, "req", "1.2.3.4")
+        result, outcome, resource = await _call_tool(name, args, access_key, hass, data, "req", "1.2.3.4")
         _assert_contract(result, outcome, resource, f"{name}/{label}")
 
 
@@ -464,9 +464,9 @@ async def test_cap_denied_tool_never_echoes_the_payload(tool_def: dict, hass: Ho
     any precheck; otherwise it could ask "would this have worked?" and read the
     answer off the error text.
     """
-    token, data, name = _token("deny"), _data(), tool_def["name"]
+    access_key, data, name = _access_key("deny"), _data(), tool_def["name"]
     for label, args in _attacks(tool_def):
-        result, _outcome, _resource = await _call_tool(name, args, token, hass, data, "req", "1.2.3.4")
+        result, _outcome, _resource = await _call_tool(name, args, access_key, hass, data, "req", "1.2.3.4")
         text = "\n".join(i["text"] for i in result["content"])
         assert MARKER not in text, (
             f"{name}/{label}: a token denied {mcp_view._tool_caps(tool_def)} got its own payload "
@@ -481,9 +481,9 @@ async def test_permitted_token_survives_hostile_input(tool_def: dict, hass: Home
     The attack reaches the tool's own argument handling instead of stopping at the
     cap gate.
     """
-    token, data, name = _token("allow"), _data(), tool_def["name"]
+    access_key, data, name = _access_key("allow"), _data(), tool_def["name"]
     for label, args in _attacks(tool_def):
-        result, outcome, resource = await _call_tool(name, args, token, hass, data, "req", "1.2.3.4")
+        result, outcome, resource = await _call_tool(name, args, access_key, hass, data, "req", "1.2.3.4")
         _assert_contract(result, outcome, resource, f"{name}/{label}")
 
 
@@ -497,10 +497,10 @@ async def test_concurrent_identical_calls_do_not_break_each_other(
     no return_exceptions so a raise fails the test rather than hiding in a result
     list.
     """
-    token, data, name = _token("allow"), _data(), tool_def["name"]
+    access_key, data, name = _access_key("allow"), _data(), tool_def["name"]
     args = _baseline(tool_def)
     outcomes = await asyncio.gather(*(
-        _call_tool(name, dict(args), token, hass, data, f"req{i}", "1.2.3.4") for i in range(2)
+        _call_tool(name, dict(args), access_key, hass, data, f"req{i}", "1.2.3.4") for i in range(2)
     ))
     for i, (result, outcome, resource) in enumerate(outcomes):
         _assert_contract(result, outcome, resource, f"{name}/concurrent-{i}")
@@ -514,10 +514,10 @@ async def test_unknown_arguments_are_tolerated_not_rejected(hass: HomeAssistant)
     an oversight, and the sweep only asserts the call survives, not that it
     succeeds.
     """
-    token, data = _token("allow"), _data()
+    access_key, data = _access_key("allow"), _data()
     hass.states.async_set("light.kitchen", "on")
     clean, _, _ = await _call_tool(
-        "get_states", {"projection": {"kind": "compact"}}, token, hass, data
+        "get_states", {"projection": {"kind": "compact"}}, access_key, hass, data
     )
     dirty, outcome, _ = await _call_tool(
         "get_states",
@@ -526,7 +526,7 @@ async def test_unknown_arguments_are_tolerated_not_rejected(hass: HomeAssistant)
             f"{MARKER}_unknown": MARKER,
             "nonsense": [1, 2],
         },
-        token,
+        access_key,
         hass,
         data,
     )

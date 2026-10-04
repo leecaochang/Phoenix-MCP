@@ -68,7 +68,7 @@ if TYPE_CHECKING:
     from .approvals import PendingApproval
     from .data import PhoenixData
     from .mesa_core import SemanticProfile, ValidationIssue
-    from .token_store import TokenRecord
+    from .access_key_store import AccessKeyRecord
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -493,7 +493,7 @@ def read_automation_configs(hass: HomeAssistant) -> list[dict[str, Any]]:
     return [item for item in data if isinstance(item, dict)] if isinstance(data, list) else []
 
 
-def build_caller_context(token: TokenRecord, session_id: str) -> CallerContext:
+def build_caller_context(access_key: AccessKeyRecord, session_id: str) -> CallerContext:
     """Map a Phoenix MCP token to a MESA CallerContext.
 
     Phoenix MCP has no per-user roles; the token's persona is its only role-like
@@ -501,11 +501,11 @@ def build_caller_context(token: TokenRecord, session_id: str) -> CallerContext:
     the token id (stable across renames); the name is surfaced as display_name.
     """
     return CallerContext(
-        caller_id=token.id,
-        roles=[token.persona] if token.persona else [],
+        caller_id=access_key.id,
+        roles=[access_key.persona] if access_key.persona else [],
         is_authenticated=True,
         session_id=session_id,
-        display_name=token.name,
+        display_name=access_key.name,
     )
 
 
@@ -704,7 +704,7 @@ class RegistryMesaDecision:
 
 def evaluate_registry_action(
     data: PhoenixData,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     entity_id: str,
     *,
     action: str,
@@ -773,7 +773,7 @@ def evaluate_registry_action(
     verdict = evaluate_service_entities(
         runtime,
         settings.mesa_mode,
-        token,
+        access_key,
         [entity_id],
         domain=registry_domain,
         service=action,
@@ -821,7 +821,7 @@ def _host_enforced(settings_mode: str, result: Any) -> bool:
 def evaluate_service_entities(
     runtime: MesaRuntime,
     settings_mode: str,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     entities: list[str],
     *,
     domain: str,
@@ -839,7 +839,7 @@ def evaluate_service_entities(
     Approval satisfies only confirmation, never another restriction.
     """
     verdict = MesaVerdict()
-    caller = build_caller_context(token, session_id)
+    caller = build_caller_context(access_key, session_id)
     service_str = f"{domain}.{service}"
     now = dt_util.now()
     for entity_id in entities:
@@ -913,7 +913,7 @@ def evaluate_service_entities(
 
 
 def entity_control_mode(
-    runtime: MesaRuntime | None, token: TokenRecord, entity_id: str, session_id: str = "phoenix_mcp"
+    runtime: MesaRuntime | None, access_key: AccessKeyRecord, entity_id: str, session_id: str = "phoenix_mcp"
 ) -> str | None:
     """Best-effort effective MESA control_mode for one entity (advisory display).
 
@@ -933,7 +933,7 @@ def entity_control_mode(
             entity_id=entity_id,
             service=f"{entity_id.split('.')[0]}.turn_on",
             service_params={"entity_id": entity_id},
-            caller_context=build_caller_context(token, session_id),
+            caller_context=build_caller_context(access_key, session_id),
             current_time=dt_util.now(),
         )
         cm = result.effective_profile.operational_boundaries.control_mode
@@ -944,7 +944,7 @@ def entity_control_mode(
 
 def mesa_confirm_preview(
     data: PhoenixData,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     *,
     domain: str,
     service: str,
@@ -966,7 +966,7 @@ def mesa_confirm_preview(
         if runtime is None or settings.mesa_mode == MESA_MODE_OFF or not entities:
             return []
         verdict = evaluate_service_entities(
-            runtime, settings.mesa_mode, token, list(entities),
+            runtime, settings.mesa_mode, access_key, list(entities),
             domain=domain, service=service, service_data=service_data,
             session_id="approval_diff",
         )
@@ -1044,7 +1044,7 @@ class MesaGateOutcome:
 async def async_apply_mesa_to_call(
     hass: HomeAssistant,
     data: PhoenixData,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     *,
     domain: str,
     service: str,
@@ -1088,11 +1088,11 @@ async def async_apply_mesa_to_call(
     # Only this path sets the audit context: the same enforcer runs from
     # dry_run_service / find_available_actions to PREVIEW a verdict, and a
     # preview is not a denial worth a row in the operator's log.
-    with mesa_audit.request_context(token, request_id, client_ip):
+    with mesa_audit.request_context(access_key, request_id, client_ip):
         verdict = evaluate_service_entities(
             runtime,
             settings.mesa_mode,
-            token,
+            access_key,
             entities,
             domain=domain,
             service=service,
@@ -1133,7 +1133,7 @@ async def async_apply_mesa_to_call(
         approval = await async_create_mesa_approval(
             hass,
             data,
-            token,
+            access_key,
             args=saved_args,
             diff=diff,
             request_id=request_id,
@@ -1168,7 +1168,7 @@ async def async_apply_mesa_to_call(
 async def async_create_mesa_approval(
     hass: HomeAssistant,
     data: PhoenixData,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     *,
     args: dict[str, Any],
     diff: dict[str, Any],
@@ -1192,8 +1192,8 @@ async def async_create_mesa_approval(
     async with data.store.async_lock:
         approval = await async_create_pending_approval(
             data.store,
-            token_id=token.id,
-            token_name=token.name,
+            token_id=access_key.id,
+            token_name=access_key.name,
             tool_name=tool_name,
             cap_name=MESA_CONFIRM_CAP,
             args=args,
@@ -1207,7 +1207,7 @@ async def async_create_mesa_approval(
 
 
 def fire_mesa_blocked_event(
-    hass: HomeAssistant, token: TokenRecord, blocked: list[tuple[str, str, str]]
+    hass: HomeAssistant, access_key: AccessKeyRecord, blocked: list[tuple[str, str, str]]
 ) -> None:
     """Fire phoenix_mcp_mesa_blocked for each entity MESA refused (automation hooks)."""
     from .const import DOMAIN
@@ -1216,8 +1216,8 @@ def fire_mesa_blocked_event(
         hass.bus.async_fire(
             f"{DOMAIN}_mesa_blocked",
             {
-                "token_id": token.id,
-                "token_name": token.name,
+                "token_id": access_key.id,
+                "token_name": access_key.name,
                 "entity_id": entity_id,
                 "rule_applied": rule,
                 "timestamp": dt_util.utcnow().isoformat(),
@@ -1225,7 +1225,7 @@ def fire_mesa_blocked_event(
         )
 
 
-def release_token_leases(data: Any, token_id: str) -> int:
+def release_access_key_leases(data: Any, token_id: str) -> int:
     """Drop any advisory leases a token still holds. Returns how many.
 
     Called when a token is revoked or expires. Bookkeeping, not a safety

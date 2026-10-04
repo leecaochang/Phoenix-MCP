@@ -14,7 +14,7 @@ import pytest
 
 from custom_components.phoenix_mcp import panel as panel_mod
 from custom_components.phoenix_mcp.const import DOMAIN
-from custom_components.phoenix_mcp.token_store import GlobalSettings
+from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 
 
 def _make_hass(inject_enabled: bool) -> MagicMock:

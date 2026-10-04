@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Literal
 from homeassistant.util.dt import parse_datetime, utcnow
 
 from .const import AUDIT_LOG_MAXLEN, AUDIT_STORAGE_VERSION
-from .token_store import GlobalSettings
+from .access_key_store import GlobalSettings
 
 if TYPE_CHECKING:
     from homeassistant.helpers.storage import Store

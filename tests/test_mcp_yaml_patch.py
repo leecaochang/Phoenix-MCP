@@ -23,7 +23,7 @@ from custom_components.phoenix_mcp.tools.config_files import (
     _build_diff_patch_yaml_config,
     _execute_patch_yaml_config,
 )
-from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 
 # A configuration.yaml with the shapes that matter: a comment tied to the key
 # below it, a comment separated from one by a blank line, nesting, a custom tag,
@@ -54,10 +54,10 @@ def isolated_config_dir(hass, tmp_path):
     return tmp_path
 
 
-def _token(**caps) -> TokenRecord:
+def _access_key(**caps) -> AccessKeyRecord:
     base = {"cap_yaml_edit": "allow"}
     base.update(caps)
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x",
         created_at=utcnow(), created_by="u", permissions=PermissionTree(), **base,
     )
@@ -77,14 +77,14 @@ def _json(content: dict) -> dict:
     return json.loads(content["content"][0]["text"])
 
 
-async def _call(args, token, hass, data=None):
+async def _call(args, access_key, hass, data=None):
     args = dict(args)
     address = {"kind": "key", "value": args.pop("key")}
     change = {"kind": args.pop("op", "set")}
     if "content" in args:
         change["content"] = args.pop("content")
     args.update({"address": address, "change": change})
-    return await _call_tool("patch_yaml_config", args, token, hass, data or _data())
+    return await _call_tool("patch_yaml_config", args, access_key, hass, data or _data())
 
 
 def _data():
@@ -255,7 +255,7 @@ class TestPatchTool:
     async def test_a_patch_writes_only_the_addressed_key(self, hass):
         _write(hass)
         content, outcome, _ = await _call(
-            {"key": "recorder.purge_keep_days", "content": "30"}, _token(), hass)
+            {"key": "recorder.purge_keep_days", "content": "30"}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["key"] == "recorder.purge_keep_days" and body["op"] == "set"
@@ -266,7 +266,7 @@ class TestPatchTool:
         _write(hass)
         content, outcome, _ = await _call(
             {"key": "tts", "op": "append", "content": "platform: piper"},
-            _token(), hass,
+            _access_key(), hass,
         )
         assert outcome == "allowed"
         assert _json(content)["op"] == "append"
@@ -274,12 +274,12 @@ class TestPatchTool:
 
     async def test_the_returned_hash_chains_to_the_next_patch(self, hass):
         _write(hass)
-        content, _, _ = await _call({"key": "logger", "content": "default: info\n"}, _token(), hass)
+        content, _, _ = await _call({"key": "logger", "content": "default: info\n"}, _access_key(), hass)
         chained = _json(content)["content_hash"]
         assert chained == content_hash(_read(hass))
         _, outcome, _ = await _call(
             {"key": "recorder.purge_keep_days", "content": "1", "expected_hash": chained},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "allowed"
 
     @pytest.mark.parametrize("key", ["recorder", "recorder.exclude", "tts", "automation"])
@@ -295,10 +295,10 @@ class TestPatchTool:
         """
         _write(hass)
         content, outcome, _ = await _call_tool(
-            "get_yaml_config", {"key": key}, _token(), hass, _data())
+            "get_yaml_config", {"key": key}, _access_key(), hass, _data())
         assert outcome == "allowed"
         fragment = _json(content)["content"]
-        _, outcome, _ = await _call({"key": key, "content": fragment}, _token(), hass)
+        _, outcome, _ = await _call({"key": key, "content": fragment}, _access_key(), hass)
         assert outcome == "allowed"
         after = _read(hass)
         assert yaml_patch.load_tagged_lenient(after) == yaml_patch.load_tagged_lenient(SAMPLE)
@@ -312,7 +312,7 @@ class TestPatchTool:
         _write(hass)
         _, outcome, _ = await _call(
             {"key": "recorder.exclude.entity_globs", "content": "- sensor.*_debug_*"},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "allowed"
         assert _read(hass) == SAMPLE.replace("sensor.*_energy_*", "sensor.*_debug_*")
 
@@ -323,7 +323,7 @@ class TestPatchTool:
         """
         _write(hass)
         content, outcome, _ = await _call(
-            {"key": "recorder.nonsense.deep", "content": "!!!"}, _token(cap_yaml_edit="deny"), hass)
+            {"key": "recorder.nonsense.deep", "content": "!!!"}, _access_key(cap_yaml_edit="deny"), hass)
         assert outcome == "denied"
         text = content["content"][0]["text"]
         assert "nonsense" not in text and "does not exist" not in text
@@ -339,7 +339,7 @@ class TestPatchTool:
         data.store.get_pending_approvals.return_value = []
         _, outcome, _ = await _call(
             {"key": "recorder.include.entities", "content": "- sensor.a"},
-            _token(cap_yaml_edit="confirm"), hass, data)
+            _access_key(cap_yaml_edit="confirm"), hass, data)
         assert outcome == "invalid_request"
         data.store.set_pending_approvals.assert_not_called()
 
@@ -348,7 +348,7 @@ class TestPatchTool:
         _write(hass, "http:\n  server_port: 8123\n")
         content, outcome, _ = await _call(
             {"key": "http", "content": "server_port: 8123\ntrusted_proxies:\n  - 0.0.0.0/0\n"},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
         assert "trusted_proxies" in content["content"][0]["text"]
         assert "trusted_proxies" not in _read(hass)
@@ -356,7 +356,7 @@ class TestPatchTool:
     async def test_a_top_level_removal_declares_itself(self, hass):
         """A top-level removal is declared by the key argument, not remove_keys."""
         _write(hass)
-        _, outcome, _ = await _call({"key": "tts", "op": "remove"}, _token(), hass)
+        _, outcome, _ = await _call({"key": "tts", "op": "remove"}, _access_key(), hass)
         assert outcome == "allowed"
         out = _read(hass)
         assert "tts:" not in out
@@ -367,7 +367,7 @@ class TestPatchTool:
         _write(hass)
         content, outcome, _ = await _call(
             {"key": "recorder.include", "content": "entities:\n  - <redacted>\n"},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
         assert "<redacted>" in content["content"][0]["text"]
 
@@ -375,7 +375,7 @@ class TestPatchTool:
         _write(hass)
         _, outcome, _ = await _call(
             {"key": "recorder.purge_keep_days", "content": "30", "expected_hash": "stale"},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
         assert _read(hass) == SAMPLE
 
@@ -384,7 +384,7 @@ class TestPatchTool:
         _write(hass)
         args = {"key": "recorder.include", "content": "entities:\n  - sensor.a\n"}
         _write(hass, "default_config:\n")  # recorder is gone by approval time
-        _, outcome, _ = await _execute_patch_yaml_config(args, _token(), hass, _data())
+        _, outcome, _ = await _execute_patch_yaml_config(args, _access_key(), hass, _data())
         assert outcome == "invalid_request"
         assert _read(hass) == "default_config:\n"
 
@@ -394,12 +394,12 @@ class TestPatchTool:
         _write(hass)
         captured = {}
 
-        async def _capture(data, token, **kwargs):
+        async def _capture(data, access_key, **kwargs):
             captured.update(kwargs)
 
         monkeypatch.setattr(
             "custom_components.phoenix_mcp.tools.config_files._record_version", _capture)
-        await _call({"key": "recorder.purge_keep_days", "content": "30"}, _token(), hass)
+        await _call({"key": "recorder.purge_keep_days", "content": "30"}, _access_key(), hass)
         assert captured["resource_type"] == "yaml_config"
         assert captured["before"]["content"] == SAMPLE
         assert captured["after"]["content"] == _read(hass)
@@ -412,7 +412,7 @@ class TestPatchDiff:
     async def test_the_diff_is_scoped_to_the_addressed_key(self, hass):
         _write(hass)
         diff = await _build_diff_patch_yaml_config(
-            {"key": "recorder.purge_keep_days", "content": "30"}, _token(), hass)
+            {"key": "recorder.purge_keep_days", "content": "30"}, _access_key(), hass)
         assert diff["before"] == "10"
         assert diff["after"] == "30"
         # The rest of the file is nowhere in what the operator is shown.
@@ -422,13 +422,13 @@ class TestPatchDiff:
     async def test_a_new_key_has_no_before_side(self, hass):
         _write(hass)
         diff = await _build_diff_patch_yaml_config(
-            {"key": "logger", "content": "default: warning\n"}, _token(), hass)
+            {"key": "logger", "content": "default: warning\n"}, _access_key(), hass)
         assert diff["before"] is None
         assert diff["after"] == "default: warning\n"
 
     async def test_a_removal_has_no_after_side(self, hass):
         _write(hass)
-        diff = await _build_diff_patch_yaml_config({"key": "tts", "op": "remove"}, _token(), hass)
+        diff = await _build_diff_patch_yaml_config({"key": "tts", "op": "remove"}, _access_key(), hass)
         assert diff["after"] is None
         assert diff["before"] == "- platform: google_translate"
         assert "Remove" in diff["summary"]
@@ -437,7 +437,7 @@ class TestPatchDiff:
         _write(hass)
         diff = await _build_diff_patch_yaml_config(
             {"key": "tts", "op": "append", "content": "platform: piper"},
-            _token(), hass,
+            _access_key(), hass,
         )
         assert diff["before"] is None
         assert diff["after"] == "platform: piper"
@@ -447,7 +447,7 @@ class TestPatchDiff:
         _write(hass, "recorder:\n  purge_keep_days: 1\n")
         diff = await _build_diff_patch_yaml_config(
             {"key": "recorder", "content": "db_url: mysql://u:hunter2@h/db\npassword: hunter2\n"},
-            _token(), hass)
+            _access_key(), hass)
         assert "hunter2" not in json.dumps(diff)
 
 

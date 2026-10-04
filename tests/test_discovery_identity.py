@@ -11,11 +11,11 @@ from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.tools import discovery
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
 
-def _token():
-    return TokenRecord(id="read", name="read", token_hash="hash", created_by="admin", created_at=utcnow(),
+def _access_key():
+    return AccessKeyRecord(id="read", name="read", token_hash="hash", created_by="admin", created_at=utcnow(),
         cap_search="allow", permissions=PermissionTree(domains={
             kind: PermissionNode(state="GREEN") for kind in ("light", "automation", "scene")}))
 
@@ -47,22 +47,22 @@ async def idless_home(hass):
 @pytest.mark.parametrize("tool", ["get_relationships", "describe_entity", "whatif"])
 @pytest.mark.parametrize("hidden", [False, True])
 async def test_idless_consumers_use_loaded_identity_without_guessing(hass, idless_home, tool, hidden):
-    token = _token()
-    token.permissions.entities["automation.shared_name"] = PermissionNode(state="RED")
+    access_key = _access_key()
+    access_key.permissions.entities["automation.shared_name"] = PermissionNode(state="RED")
     if hidden:
         for eid in idless_home:
-            token.permissions.entities[eid] = PermissionNode(state="RED")
+            access_key.permissions.entities[eid] = PermissionNode(state="RED")
     # Isolate the source scan from the optional graph so it cannot mask omissions.
     with patch.object(discovery, "_relationship_graph_hits", return_value=(set(), [], False)):
         if tool == "get_relationships":
-            body = _body(await discovery._tool_get_relationships({"scope": {"kind": "entity", "id": "light.visible"}}, token, hass))
+            body = _body(await discovery._tool_get_relationships({"scope": {"kind": "entity", "id": "light.visible"}}, access_key, hass))
             rows = body["consumers"]
         elif tool == "describe_entity":
-            body = _body(await discovery._tool_describe_entity({"entity_id": "light.visible"}, token, hass,
+            body = _body(await discovery._tool_describe_entity({"entity_id": "light.visible"}, access_key, hass,
                 SimpleNamespace(mesa=None, store=SimpleNamespace(get_settings=lambda: None))))
             rows = body["referenced_by"]
         else:
-            body = _body(await discovery._tool_whatif({"entity_id": "light.visible", "hypothetical_state": "on"}, token, hass))
+            body = _body(await discovery._tool_whatif({"entity_id": "light.visible", "hypothetical_state": "on"}, access_key, hass))
             rows = body["candidates"]
     assert len(rows) == (0 if hidden else (1 if tool == "whatif" else 2)), body
     assert "_identity_config" not in json.dumps(body)
@@ -77,7 +77,7 @@ async def test_idless_consumers_use_loaded_identity_without_guessing(hass, idles
 async def test_search_handles_malformed_friendly_names(hass, name, query):
     hass.states.async_set("light.alpha", "on", {"friendly_name": "Alpha"})
     hass.states.async_set("light.odd", "off", {"friendly_name": name})
-    body = _body(await discovery._tool_search_entities({"query": query}, _token(), hass,
+    body = _body(await discovery._tool_search_entities({"query": query}, _access_key(), hass,
         SimpleNamespace(mesa=None, store=SimpleNamespace(get_settings=lambda: None))))
     assert all(row["friendly_name"] is None or isinstance(row["friendly_name"], str) for row in body["entities"])
 
@@ -88,7 +88,7 @@ async def test_unloaded_consumer_reports_coverage_without_disclosing_identity(ha
     with open(hass.config.path("automations.yaml"), "w") as file:
         yaml.safe_dump([config], file)
     with patch.object(discovery, "_relationship_graph_hits", return_value=(set(), [], False)):
-        body = _body(await discovery._tool_get_relationships({"scope": {"kind": "entity", "id": "light.visible"}}, _token(), hass))
+        body = _body(await discovery._tool_get_relationships({"scope": {"kind": "entity", "id": "light.visible"}}, _access_key(), hass))
     assert body["consumers"] == []
     assert "Private unloaded consumer" not in json.dumps(body)
     gap = next(gap for gap in body["not_searched"] if gap["kind"] == "consumer_identity")
@@ -118,7 +118,7 @@ async def test_many_reference_holders_do_not_rescan_the_registry(hass, monkeypat
 
     monkeypatch.setattr(type(registry.entities), "values", counted_values)
     with patch.object(discovery, "_relationship_graph_hits", return_value=(set(), [], False)):
-        body = _body(await discovery._tool_get_relationships({"scope": {"kind": "entity", "id": "light.visible"}}, _token(), hass))
+        body = _body(await discovery._tool_get_relationships({"scope": {"kind": "entity", "id": "light.visible"}}, _access_key(), hass))
     assert len(body["consumers"]) == 100
     assert len(body["dangling_references"]) == 10
     assert scans <= 2

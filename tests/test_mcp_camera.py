@@ -15,7 +15,7 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp.const import MESA_MODE_ADVISORY, MESA_MODE_OFF
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _call_tool
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
 
 def _data(*, mesa_mode: str = MESA_MODE_OFF, mesa: object | None = None) -> PhoenixData:
@@ -30,8 +30,8 @@ def _data(*, mesa_mode: str = MESA_MODE_OFF, mesa: object | None = None) -> Phoe
     )
 
 
-def _token(*, camera: str = "allow", camera_scope: str = "GREEN") -> TokenRecord:
-    return TokenRecord(
+def _access_key(*, camera: str = "allow", camera_scope: str = "GREEN") -> AccessKeyRecord:
+    return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="camera-test",
         token_hash="x",
@@ -59,7 +59,7 @@ async def test_returns_standard_mcp_image_content(hass) -> None:
     with patch.object(camera, "async_get_image", AsyncMock(return_value=image)) as get_image:
         result, outcome, resource = await _call_tool(
             "get_camera_image", {"entity_id": "camera.front_door"},
-            _token(), hass, _data(), "req-1", None,
+            _access_key(), hass, _data(), "req-1", None,
         )
 
     assert outcome == "allowed"
@@ -85,7 +85,7 @@ async def test_missing_mesa_runtime_refuses_camera_unless_explicitly_off(
     with patch.object(_camera_module(), "async_get_image", AsyncMock(return_value=image)) as fetch:
         result, outcome, resource = await _call_tool(
             "get_camera_image", {"entity_id": "camera.front_door"},
-            _token(), hass, data, "missing-runtime", None,
+            _access_key(), hass, data, "missing-runtime", None,
         )
     assert resource == "camera.front_door"
     if mesa_mode == "off":
@@ -101,7 +101,7 @@ async def test_missing_mesa_runtime_refuses_camera_unless_explicitly_off(
 async def test_requires_dedicated_capability_before_entity_lookup(hass) -> None:
     result, outcome, resource = await _call_tool(
         "get_camera_image", {"entity_id": "camera.secret"},
-        _token(camera="deny"), hass, _data(), "req-1", None,
+        _access_key(camera="deny"), hass, _data(), "req-1", None,
     )
 
     assert outcome == "denied"
@@ -113,7 +113,7 @@ async def test_requires_camera_permission(hass) -> None:
     hass.states.async_set("camera.front_door", "idle")
     result, outcome, _ = await _call_tool(
         "get_camera_image", {"entity_id": "camera.front_door"},
-        _token(camera_scope="RED"), hass, _data(), "req-1", None,
+        _access_key(camera_scope="RED"), hass, _data(), "req-1", None,
     )
 
     assert outcome == "denied"
@@ -126,7 +126,7 @@ async def test_rejects_invalid_dimensions_without_fetching(hass) -> None:
     with patch.object(camera, "async_get_image", AsyncMock()) as get_image:
         result, outcome, _ = await _call_tool(
             "get_camera_image", {"entity_id": "camera.front_door", "width": 2049},
-            _token(), hass, _data(), "req-1", None,
+            _access_key(), hass, _data(), "req-1", None,
         )
 
     assert outcome == "invalid_request"
@@ -145,7 +145,7 @@ async def test_rejects_empty_oversized_and_unsupported_images(hass) -> None:
         with patch.object(camera, "async_get_image", AsyncMock(return_value=image)):
             result, outcome, _ = await _call_tool(
                 "get_camera_image", {"entity_id": "camera.front_door"},
-                _token(), hass, _data(), "req-1", None,
+                _access_key(), hass, _data(), "req-1", None,
             )
         assert outcome == "invalid_request"
         assert result["content"][0]["text"]
@@ -157,7 +157,7 @@ async def test_handles_camera_timeout_without_leaking_exception(hass) -> None:
     with patch.object(camera, "async_get_image", AsyncMock(side_effect=asyncio.TimeoutError)):
         result, outcome, _ = await _call_tool(
             "get_camera_image", {"entity_id": "camera.front_door"},
-            _token(), hass, _data(), "req-1", None,
+            _access_key(), hass, _data(), "req-1", None,
         )
 
     assert outcome == "invalid_request"
@@ -180,7 +180,7 @@ async def test_mesa_deny_for_is_honored_without_control_mode_gate(hass) -> None:
     with patch.object(camera, "async_get_image", AsyncMock()) as get_image:
         result, outcome, _ = await _call_tool(
             "get_camera_image", {"entity_id": "camera.front_door"},
-            _token(), hass, data, "req-1", None,
+            _access_key(), hass, data, "req-1", None,
         )
 
     assert outcome == "denied"

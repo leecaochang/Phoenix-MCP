@@ -25,10 +25,10 @@ from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.policy_engine import Permission, resolve
-from custom_components.phoenix_mcp.token_store import (
+from custom_components.phoenix_mcp.access_key_store import (
     PermissionNode,
     PermissionTree,
-    TokenRecord,
+    AccessKeyRecord,
 )
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
@@ -55,8 +55,8 @@ def registry_with_a_phoenix_sensor(hass: HomeAssistant):
     return reg
 
 
-def _token(**kw) -> TokenRecord:
-    return TokenRecord(
+def _access_key(**kw) -> AccessKeyRecord:
+    return AccessKeyRecord(
         id="tok", name="t", token_hash="x", created_at=utcnow(), created_by="admin",
         permissions=kw.pop("permissions", PermissionTree()), **kw)
 
@@ -71,16 +71,16 @@ class TestResolve:
             self, hass, registry_with_a_phoenix_sensor):
         """An admin cannot grant it by mistake; the check runs before the tree."""
         tree = PermissionTree(entities={PHOENIX_SENSOR: PermissionNode(state="GREEN")})
-        assert resolve(PHOENIX_SENSOR, _token(permissions=tree), hass) is Permission.NO_ACCESS
+        assert resolve(PHOENIX_SENSOR, _access_key(permissions=tree), hass) is Permission.NO_ACCESS
 
     def test_phoenix_sensor_is_no_access_under_pass_through(
             self, hass, registry_with_a_phoenix_sensor):
         """Pass-through bypasses the permission tree, never this."""
-        assert resolve(PHOENIX_SENSOR, _token(pass_through=True), hass) is Permission.NO_ACCESS
+        assert resolve(PHOENIX_SENSOR, _access_key(pass_through=True), hass) is Permission.NO_ACCESS
 
     def test_an_ordinary_sensor_is_not_blocked(self, hass, registry_with_a_phoenix_sensor):
         """The keep side, so a filter that blocks everything cannot pass."""
-        assert resolve(ORDINARY, _token(pass_through=True), hass) is Permission.WRITE
+        assert resolve(ORDINARY, _access_key(pass_through=True), hass) is Permission.WRITE
 
 
 # --------------------------------------------------------------------------
@@ -154,7 +154,7 @@ class TestPassThroughFastPaths:
         data.store.get_entity_hints.return_value = {}
         hass.data[DOMAIN] = data
 
-        body = _build_context_json(_token(pass_through=True), hass)
+        body = _build_context_json(_access_key(pass_through=True), hass)
         ids = {e["entity_id"] for e in body["entities"]}
         assert PHOENIX_SENSOR not in ids
         assert ORDINARY in ids, "the context is empty; the absence assertion is vacuous"
@@ -171,11 +171,11 @@ class TestPassThroughFastPaths:
         data = MagicMock()
         data.store.get_entity_hints.return_value = {}
         hass.data[DOMAIN] = data
-        token = _token(pass_through=True)
+        access_key = _access_key(pass_through=True)
 
-        fast = {e["entity_id"] for e in _build_context_json(token, hass)["entities"]}
+        fast = {e["entity_id"] for e in _build_context_json(access_key, hass)["entities"]}
         slow = {s.entity_id for s in hass.states.async_all()
-                if resolve(s.entity_id, token, hass) in (Permission.READ, Permission.WRITE)}
+                if resolve(s.entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)}
         assert fast == slow, (
             "the pass-through fast path and resolve() disagree about which "
             f"entities are visible; only in fast: {sorted(fast - slow)}, "

@@ -23,7 +23,7 @@ from .const import (
 from .numeric_recognition import NumericIdMatch, recognize_numeric_ids
 from .intent_recognition import RecognitionUnavailable, SentenceTriggerMatch, async_recognize
 from .policy_engine import Permission, resolve, resolve_intent_entities
-from .token_store import GlobalSettings, TokenRecord
+from .access_key_store import GlobalSettings, AccessKeyRecord
 from .request_authority import AuthorityChangedError, RequestAuthority
 
 if TYPE_CHECKING:
@@ -95,24 +95,24 @@ class RoutingAuthority:
     settings_values: dict
 
     @classmethod
-    def capture(cls, data: PhoenixData, token: TokenRecord) -> RoutingAuthority:
-        return cls(data, token.id, token.token_hash, token.settings_version,
+    def capture(cls, data: PhoenixData, access_key: AccessKeyRecord) -> RoutingAuthority:
+        return cls(data, access_key.id, access_key.token_hash, access_key.settings_version,
                    data.store.get_settings(), data.store.get_settings().to_dict())
 
-    def current(self, hass: HomeAssistant) -> TokenRecord | None:
+    def current(self, hass: HomeAssistant) -> AccessKeyRecord | None:
         data = self.data
         if (data.store.get_settings() is not self.settings
                 or self.settings.to_dict() != self.settings_values):
             return None
         try:
-            token = RequestAuthority(hass, data, self.token_id, self.token_hash).current_token()
+            access_key = RequestAuthority(hass, data, self.token_id, self.token_hash).current_access_key()
         except AuthorityChangedError:
             return None
-        return token if token.settings_version == self.version else None
+        return access_key if access_key.settings_version == self.version else None
 
 
 
-def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant, *,
+def _proposal(result: Any, access_key: AccessKeyRecord, hass: HomeAssistant, *,
               candidates: list[str] | None = None, selected: str | None = None) -> tuple[str, dict | None]:
     """Map only supported, complete HA slots against current Phoenix scope."""
     if isinstance(result, NumericIdMatch):
@@ -121,7 +121,7 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant, *,
         operation = numeric_operation(result.intent)
         if (operation is None or not operation.valid_value(result.value)
                 or not valid_target_value(hass.states.get(result.entity_id), result.intent, result.value)
-                or _target_fingerprint(hass, token, result.entity_id, result.intent) is None):
+                or _target_fingerprint(hass, access_key, result.entity_id, result.intent) is None):
             return "no_target", None
         return "supported", {"intent": result.intent, "entity_ids": [result.entity_id],
                              operation.proposal_field: result.value}
@@ -136,7 +136,7 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant, *,
     slots = {name: entity.value for name, entity in result.entities.items()}
     if intent_name == "HassGetState":
         from .command_summary import local_summary
-        summary = local_summary(hass, token, result, slots)
+        summary = local_summary(hass, access_key, result, slots)
         if summary is not None:
             return "supported", summary
     if intent_name == "HassLightSet" and "temperature" in slots and "brightness" not in slots:
@@ -171,7 +171,7 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant, *,
     target_domains = ([domains] if domains else [expected_domain] if native_action and expected_domain is not None else
                       list(operation.match_domains) if operation else None)
     ids = resolve_intent_entities(
-        hass, token, name=name, area=area,
+        hass, access_key, name=name, area=area,
         domains=target_domains,
         device_classes=[device_class] if device_class else None, read_only=True,
         allow_duplicate_names=candidates is not None or selected is not None,
@@ -202,7 +202,7 @@ def _proposal(result: Any, token: TokenRecord, hass: HomeAssistant, *,
     if not read_only and any(state is None or not supports_command(state, intent_name) for state in states):
         return "unsupported", None
     if not read_only and any(
-        not entity_id.startswith(f"{expected_domain}.") or resolve(entity_id, token, hass) != Permission.WRITE
+        not entity_id.startswith(f"{expected_domain}.") or resolve(entity_id, access_key, hass) != Permission.WRITE
         for entity_id in ids
     ):
         return "no_target", None
@@ -262,8 +262,8 @@ async def _recognize_command(hass: HomeAssistant, authority: RoutingAuthority,
     result = await async_recognize(hass, sentence, language, strict=True, **context)
     if result is not None:
         return result
-    token = authority.current(hass)
-    if token is None:
+    access_key = authority.current(hass)
+    if access_key is None:
         return None
     from .command_execution import _target_fingerprint
 
@@ -271,7 +271,7 @@ async def _recognize_command(hass: HomeAssistant, authority: RoutingAuthority,
     for state in hass.states.async_all():
         if state.entity_id not in sentence:
             continue
-        if any(_target_fingerprint(hass, token, state.entity_id, intent) is not None
+        if any(_target_fingerprint(hass, access_key, state.entity_id, intent) is not None
                for intent in COMMAND_ROUTING_NUMERIC_OPERATIONS):
             targets.append(state.entity_id)
         if len(targets) > COMMAND_ROUTING_NUMERIC_TARGET_LIMIT:
@@ -287,7 +287,7 @@ async def _recognize_command(hass: HomeAssistant, authority: RoutingAuthority,
 
 
 async def async_evaluate_command(
-    hass: HomeAssistant, data: PhoenixData, token: TokenRecord,
+    hass: HomeAssistant, data: PhoenixData, access_key: AccessKeyRecord,
     sentence: object, language: object = "en", *, preview: bool = False, ingress: str = "voice",
     voice_origin: dict | None = None,
     clarify: bool = False,
@@ -312,7 +312,7 @@ async def async_evaluate_command(
                 "reason": reason, "proposal": proposal, "executed": False,
                 "elapsed_ms": round((monotonic() - start) * 1000, 2)}
 
-    authority = RoutingAuthority.capture(data, token)
+    authority = RoutingAuthority.capture(data, access_key)
     if authority.current(hass) is None:
         return outcome("authority_changed")
     if (not isinstance(sentence, str) or not sentence.strip()

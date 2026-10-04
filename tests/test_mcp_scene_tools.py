@@ -19,19 +19,19 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.mcp_view import _EXECUTOR_REGISTRY, _call_tool
 from custom_components.phoenix_mcp.tools.authoring import _read_scenes_yaml
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
 pytestmark = pytest.mark.usefixtures("immediate_authoring_observation")
 
 
-def _token(permissions: PermissionTree | None = None, **caps) -> TokenRecord:
+def _access_key(permissions: PermissionTree | None = None, **caps) -> AccessKeyRecord:
     tree = permissions or PermissionTree(domains={
         "light": PermissionNode(state="GREEN"),
         "scene": PermissionNode(state="GREEN"),
     })
     base = {"cap_scene_write": "allow", "cap_registry_read": "allow"}
     base.update(caps)
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x",
         created_at=utcnow(), created_by="u", permissions=tree, **base,
     )
@@ -71,8 +71,8 @@ def scene_env(hass: HomeAssistant):
     return hass
 
 
-async def _call(name, args, token, hass):
-    return await _call_tool(name, args, token, hass, MagicMock())
+async def _call(name, args, access_key, hass):
+    return await _call_tool(name, args, access_key, hass, MagicMock())
 
 
 class TestExecutorRegistration:
@@ -85,12 +85,12 @@ class TestCreateScene:
     async def test_deny_without_cap(self, hass, scene_env):
         content, outcome, _ = await _call(
             "create_scene", {"config": {"name": "Movie", "entities": {"light.kitchen": "on"}}},
-            _token(cap_scene_write="deny"), hass)
+            _access_key(cap_scene_write="deny"), hass)
         assert outcome == "denied"
 
     async def test_create_writes_yaml(self, hass, scene_env):
         content, outcome, _ = await _call(
-            "create_scene", {"config": {"name": "Movie", "entities": {"light.kitchen": "on"}}}, _token(), hass)
+            "create_scene", {"config": {"name": "Movie", "entities": {"light.kitchen": "on"}}}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["config"]["name"] == "Movie"
@@ -100,43 +100,43 @@ class TestCreateScene:
 
     async def test_rejects_unwritable_member(self, hass, scene_env):
         content, outcome, _ = await _call(
-            "create_scene", {"config": {"name": "Bad", "entities": {"sensor.secret": "1"}}}, _token(), hass)
+            "create_scene", {"config": {"name": "Bad", "entities": {"sensor.secret": "1"}}}, _access_key(), hass)
         assert outcome == "denied"
         assert "sensor.secret" in content["content"][0]["text"]
 
     async def test_invalid_config(self, hass, scene_env):
-        content, outcome, _ = await _call("create_scene", {"config": {"name": "NoEntities"}}, _token(), hass)
+        content, outcome, _ = await _call("create_scene", {"config": {"name": "NoEntities"}}, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_invalid_config_confirm_mode_rejected_before_pending(self, hass, scene_env):
         """An invalid scene config fails before any approval is created, even in confirm mode."""
         content, outcome, _ = await _call(
-            "create_scene", {"config": {"name": "NoEntities"}}, _token(cap_scene_write="confirm"), hass)
+            "create_scene", {"config": {"name": "NoEntities"}}, _access_key(cap_scene_write="confirm"), hass)
         assert outcome == "invalid_request"
 
 
 class TestEditScene:
     async def test_edit_by_id(self, hass, scene_env):
         created = _json((await _call(
-            "create_scene", {"config": {"name": "Movie", "entities": {"light.kitchen": "on"}}}, _token(), hass))[0])
+            "create_scene", {"config": {"name": "Movie", "entities": {"light.kitchen": "on"}}}, _access_key(), hass))[0])
         sid = created["scene_id"]
         content, outcome, _ = await _call(
-            "edit_scene", {"scene_id": sid, "config": {"name": "Movie2", "entities": {"light.kitchen": "off"}}}, _token(), hass)
+            "edit_scene", {"scene_id": sid, "config": {"name": "Movie2", "entities": {"light.kitchen": "off"}}}, _access_key(), hass)
         assert outcome == "allowed"
         stored = {s["id"]: s for s in _read_scenes_yaml(hass.config.path("scenes.yaml"))}
         assert stored[sid]["name"] == "Movie2"
 
     async def test_invalid_config_confirm_mode_rejected_before_pending(self, hass, scene_env):
         created = _json((await _call(
-            "create_scene", {"config": {"name": "Movie", "entities": {"light.kitchen": "on"}}}, _token(), hass))[0])
+            "create_scene", {"config": {"name": "Movie", "entities": {"light.kitchen": "on"}}}, _access_key(), hass))[0])
         sid = created["scene_id"]
         content, outcome, _ = await _call(
-            "edit_scene", {"scene_id": sid, "config": {"name": "NoEntities"}}, _token(cap_scene_write="confirm"), hass)
+            "edit_scene", {"scene_id": sid, "config": {"name": "NoEntities"}}, _access_key(cap_scene_write="confirm"), hass)
         assert outcome == "invalid_request"
 
     async def test_edit_unknown(self, hass, scene_env):
         content, outcome, _ = await _call(
-            "edit_scene", {"scene_id": "nope", "config": {"name": "x", "entities": {"light.kitchen": "on"}}}, _token(), hass)
+            "edit_scene", {"scene_id": "nope", "config": {"name": "x", "entities": {"light.kitchen": "on"}}}, _access_key(), hass)
         assert outcome == "denied"
 
     async def test_missing_and_out_of_scope_same_reason(self, hass, scene_env):
@@ -145,9 +145,9 @@ class TestEditScene:
         # name. The caller can write sensor.secret (so the new-member check
         # passes) but not the existing member light.kitchen.
         created = _json((await _call(
-            "create_scene", {"config": {"name": "Movie", "entities": {"light.kitchen": "on"}}}, _token(), hass))[0])
+            "create_scene", {"config": {"name": "Movie", "entities": {"light.kitchen": "on"}}}, _access_key(), hass))[0])
         sid = created["scene_id"]
-        attacker = _token(PermissionTree(domains={"sensor": PermissionNode(state="GREEN")}))
+        attacker = _access_key(PermissionTree(domains={"sensor": PermissionNode(state="GREEN")}))
         out_of_scope = (await _call(
             "edit_scene", {"scene_id": sid, "config": {"name": "x", "entities": {"sensor.secret": "1"}}}, attacker, hass))[0]["content"][0]["text"]
         missing = (await _call(
@@ -162,9 +162,9 @@ class TestEditScene:
         # member (sensor.secret) but NOT the existing member light.kitchen cannot
         # replace it: the existing-member ownership check denies.
         created = _json((await _call(
-            "create_scene", {"config": {"name": "Movie", "entities": {"light.kitchen": "on"}}}, _token(), hass))[0])
+            "create_scene", {"config": {"name": "Movie", "entities": {"light.kitchen": "on"}}}, _access_key(), hass))[0])
         sid = created["scene_id"]
-        attacker = _token(PermissionTree(domains={"sensor": PermissionNode(state="GREEN")}))
+        attacker = _access_key(PermissionTree(domains={"sensor": PermissionNode(state="GREEN")}))
         content, outcome, _ = await _call(
             "edit_scene", {"scene_id": sid, "config": {"name": "Hijacked", "entities": {"sensor.secret": "1"}}}, attacker, hass)
         assert outcome == "denied"
@@ -176,21 +176,21 @@ class TestEditScene:
 class TestDeleteScene:
     async def test_delete(self, hass, scene_env):
         created = _json((await _call(
-            "create_scene", {"config": {"name": "Movie", "entities": {"light.kitchen": "on"}}}, _token(), hass))[0])
+            "create_scene", {"config": {"name": "Movie", "entities": {"light.kitchen": "on"}}}, _access_key(), hass))[0])
         sid = created["scene_id"]
-        content, outcome, _ = await _call("delete_scene", {"scene_id": sid}, _token(), hass)
+        content, outcome, _ = await _call("delete_scene", {"scene_id": sid}, _access_key(), hass)
         assert outcome == "allowed"
         assert all(s["id"] != sid for s in _read_scenes_yaml(hass.config.path("scenes.yaml")))
 
     async def test_delete_unknown(self, hass, scene_env):
-        _, outcome, _ = await _call("delete_scene", {"scene_id": "nope"}, _token(), hass)
+        _, outcome, _ = await _call("delete_scene", {"scene_id": "nope"}, _access_key(), hass)
         assert outcome == "denied"
 
     async def test_delete_out_of_scope_existing_members_denied(self, hass, scene_env):
         created = _json((await _call(
-            "create_scene", {"config": {"name": "Movie", "entities": {"light.kitchen": "on"}}}, _token(), hass))[0])
+            "create_scene", {"config": {"name": "Movie", "entities": {"light.kitchen": "on"}}}, _access_key(), hass))[0])
         sid = created["scene_id"]
-        attacker = _token(PermissionTree(domains={"scene": PermissionNode(state="GREEN")}))
+        attacker = _access_key(PermissionTree(domains={"scene": PermissionNode(state="GREEN")}))
         _, outcome, _ = await _call("delete_scene", {"scene_id": sid}, attacker, hass)
         assert outcome == "denied"
         # Still present on disk.
@@ -199,12 +199,12 @@ class TestDeleteScene:
     async def test_delete_removes_registry_orphan(self, hass, scene_env):
         # Deleting a scene must remove its entity-registry entry.
         created = _json((await _call(
-            "create_scene", {"config": {"name": "Movie", "entities": {"light.kitchen": "on"}}}, _token(), hass))[0])
+            "create_scene", {"config": {"name": "Movie", "entities": {"light.kitchen": "on"}}}, _access_key(), hass))[0])
         sid = created["scene_id"]
         reg = er.async_get(hass)
         scene_entry = reg.async_get_or_create("scene", "homeassistant", sid, suggested_object_id="movie")
         assert reg.async_get(scene_entry.entity_id) is not None
-        _, outcome, _ = await _call("delete_scene", {"scene_id": sid}, _token(), hass)
+        _, outcome, _ = await _call("delete_scene", {"scene_id": sid}, _access_key(), hass)
         assert outcome == "allowed"
         assert reg.async_get(scene_entry.entity_id) is None  # orphan purged
 
@@ -212,12 +212,12 @@ class TestDeleteScene:
 class TestListScenes:
     async def test_lists_accessible(self, hass, scene_env):
         hass.states.async_set("scene.movie", "scening", {"friendly_name": "Movie", "id": "phx_abc"})
-        content, outcome, _ = await _call("list_scenes", {}, _token(), hass)
+        content, outcome, _ = await _call("list_scenes", {}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         sc = next(s for s in body["scenes"] if s["entity_id"] == "scene.movie")
         assert sc["scene_id"] == "phx_abc"
 
     async def test_deny_without_cap(self, hass, scene_env):
-        _, outcome, _ = await _call("list_scenes", {}, _token(cap_registry_read="deny"), hass)
+        _, outcome, _ = await _call("list_scenes", {}, _access_key(cap_registry_read="deny"), hass)
         assert outcome == "denied"

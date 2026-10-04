@@ -28,11 +28,11 @@ from custom_components.phoenix_mcp.mesa_core.audit import (
     audit_logger,
     emit_audit_event,
 )
-from custom_components.phoenix_mcp.token_store import GlobalSettings, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import GlobalSettings, PermissionTree, AccessKeyRecord
 
 
-def _token(**kw) -> TokenRecord:
-    return TokenRecord(
+def _access_key(**kw) -> AccessKeyRecord:
+    return AccessKeyRecord(
         id="tok", name="Road test", token_hash="x", created_at=utcnow(),
         created_by="admin", permissions=PermissionTree(), **kw,
     )
@@ -89,7 +89,7 @@ def _emit(decision: str, *, event_type: str = "enforcement_decision", **kw) -> N
 class TestFiltering:
     def test_a_block_is_recorded_against_the_request(self, bridge_data):
         data, _ = bridge_data
-        with request_context(_token(), "req-1", "10.0.0.5"):
+        with request_context(_access_key(), "req-1", "10.0.0.5"):
             _emit("blocked")
         entries = data.audit.query()
         assert len(entries) == 1
@@ -108,7 +108,7 @@ class TestFiltering:
         # Nothing in Phoenix MCP inspects the privacy path, so this is a case the
         # bridge reaches and a hand-rolled mirror of the verdict would not.
         data, _ = bridge_data
-        with request_context(_token(), "req-2", None):
+        with request_context(_access_key(), "req-2", None):
             _emit("denied", event_type="privacy_access", action="access", rule_applied="privacy:deny_for")
         entries = data.audit.query()
         assert len(entries) == 1
@@ -119,7 +119,7 @@ class TestFiltering:
         # person entity. Recording those would evict real request history from a
         # fixed-size ring buffer.
         data, _ = bridge_data
-        with request_context(_token(), "req-3", None):
+        with request_context(_access_key(), "req-3", None):
             _emit("allowed")
             _emit("allowed", event_type="privacy_access", action="access")
             _emit("granted", event_type="lease", action="lease_request")
@@ -143,7 +143,7 @@ class TestFiltering:
         data, _ = bridge_data
         errors: list[object] = []
         monkeypatch.setattr(logging.Handler, "handleError", lambda self, record: errors.append(record))
-        with request_context(_token(), "req-4", None):
+        with request_context(_access_key(), "req-4", None):
             audit_logger.info("an ordinary log line")
         assert data.audit.query() == []
         assert errors == []
@@ -158,7 +158,7 @@ class TestSettingsAndSafety:
         previous = audit_logger.level
         audit_logger.setLevel(logging.INFO)
         try:
-            with request_context(_token(), "req-5", None):
+            with request_context(_access_key(), "req-5", None):
                 _emit("blocked")
             assert data.audit.query() == []
         finally:
@@ -175,7 +175,7 @@ class TestSettingsAndSafety:
 
         monkeypatch.setattr(data.audit, "record", boom)
         monkeypatch.setattr(logging.Handler, "handleError", lambda self, record: None)
-        with request_context(_token(), "req-6", None):
+        with request_context(_access_key(), "req-6", None):
             _emit("blocked")  # must not raise
 
 
@@ -189,7 +189,7 @@ class TestLifecycle:
             detach_mesa_audit_bridge(bridge)
             detach_mesa_audit_bridge(bridge)  # idempotent
             detach_mesa_audit_bridge(None)
-            with request_context(_token(), "req-7", None):
+            with request_context(_access_key(), "req-7", None):
                 _emit("blocked")
             assert data.audit.query() == []
         finally:
@@ -207,7 +207,7 @@ class TestLifecycle:
                 detach_mesa_audit_bridge(bridge)
             bridge = attach_mesa_audit_bridge(data)
             try:
-                with request_context(_token(), "req-8", None):
+                with request_context(_access_key(), "req-8", None):
                     _emit("blocked")
                 assert len(data.audit.query()) == 1
             finally:
@@ -240,7 +240,7 @@ class TestConfirmIsNotADenial:
         audit_logger.setLevel(logging.INFO)
         try:
             outcome = await async_apply_mesa_to_call(
-                hass, data, _token(),
+                hass, data, _access_key(),
                 domain="timer", service="cancel", service_data={},
                 entities=["timer.ok"], request_id="req-confirm",
                 client_ip="127.0.0.1", session_id="s",
@@ -279,7 +279,7 @@ class TestConfirmIsNotADenial:
         audit_logger.setLevel(logging.INFO)
         try:
             outcome = await async_apply_mesa_to_call(
-                hass, data, _token(),
+                hass, data, _access_key(),
                 domain="timer", service="cancel", service_data={},
                 entities=[f"timer.ok{i}" for i in range(6)] + ["timer.leak"],
                 request_id="req-mixed", client_ip="127.0.0.1", session_id="s",
@@ -305,7 +305,7 @@ class TestConfirmIsNotADenial:
         still recording, so this cannot pass by recording nothing at all.
         """
         data, _ = bridge_data
-        with request_context(_token(), "req-confirm", None):
+        with request_context(_access_key(), "req-confirm", None):
             _emit("blocked", rule_applied="control_mode:confirm_no_channel",
                   entity_id="timer.ok")
             _emit("blocked", rule_applied="control_mode:prohibited",
@@ -342,7 +342,7 @@ class TestLoggerLevelCoupling:
         bridge = attach_mesa_audit_bridge(data)
         try:
             outcome = await async_apply_mesa_to_call(
-                hass, data, _token(),
+                hass, data, _access_key(),
                 domain="lock", service="unlock", service_data={},
                 entities=["lock.front"], request_id="req-quiet",
                 client_ip="127.0.0.1", session_id="s",
@@ -375,7 +375,7 @@ class TestThroughTheRealEnforcer:
         audit_logger.setLevel(logging.INFO)
         try:
             outcome = await async_apply_mesa_to_call(
-                hass, data, _token(),
+                hass, data, _access_key(),
                 domain="lock", service="unlock", service_data={},
                 entities=["lock.front"], request_id="req-live",
                 client_ip="127.0.0.1", session_id="s",
@@ -390,38 +390,38 @@ class TestThroughTheRealEnforcer:
 
 
 @pytest.mark.parametrize("surface", ["lease", "camera"])
-async def test_real_ingress_attributes_mesa_denials_and_resets_context(hass, token_store, surface):
+async def test_real_ingress_attributes_mesa_denials_and_resets_context(hass, access_key_store, surface):
     """Real lease/privacy decisions carry the admitted request, never later previews."""
     from custom_components.phoenix_mcp.data import PhoenixData
     from custom_components.phoenix_mcp.mcp_view import _call_tool
     from custom_components.phoenix_mcp.rate_limiter import RateLimiter
-    from custom_components.phoenix_mcp.token_store import PermissionNode
+    from custom_components.phoenix_mcp.access_key_store import PermissionNode
 
     runtime = await async_setup_mesa(hass, "enforced")
-    await token_store.async_patch_settings(mesa_mode="enforced")
+    await access_key_store.async_patch_settings(mesa_mode="enforced")
     entity = "light.audit_fixture" if surface == "lease" else "camera.audit_fixture"
     hass.states.async_set(entity, "idle")
-    token, _ = await token_store.async_create_token("audit-fixture", "admin")
-    token.permissions = PermissionTree(entities={entity: PermissionNode(state="GREEN")})
-    token.cap_config_read = "allow"
-    token.cap_camera_read = "allow"
-    data = PhoenixData(store=token_store, audit=AuditLog(), rate_limiter=RateLimiter(), mesa=runtime)
+    access_key, _ = await access_key_store.async_create_access_key("audit-fixture", "admin")
+    access_key.permissions = PermissionTree(entities={entity: PermissionNode(state="GREEN")})
+    access_key.cap_config_read = "allow"
+    access_key.cap_camera_read = "allow"
+    data = PhoenixData(store=access_key_store, audit=AuditLog(), rate_limiter=RateLimiter(), mesa=runtime)
     if surface == "lease":
         await runtime.lease_manager.arequest([entity], 20, session_id="other-owner")
         tool, args = "mesa_request_lease", {"entities": [entity], "duration_seconds": 10}
     else:
         runtime.store.set(entity, SemanticProfile.from_dict(entity, {
-            "semantic_profile": {"privacy_classification": {"level": "sensitive", "access_roles": {"deny_for": [token.persona]}}},
+            "semantic_profile": {"privacy_classification": {"level": "sensitive", "access_roles": {"deny_for": [access_key.persona]}}},
         }, default_origin=MetadataOrigin.USER))
         tool, args = "get_camera_image", {"entity_id": entity}
     bridge = attach_mesa_audit_bridge(data)
     previous = audit_logger.level
     audit_logger.setLevel(logging.INFO)
     try:
-        await _call_tool(tool, args, token, hass, data, "audit-ingress", "192.0.2.1")
+        await _call_tool(tool, args, access_key, hass, data, "audit-ingress", "192.0.2.1")
         rows = data.audit.query()
         assert len(rows) == 1
-        assert rows[0].token_id == token.id
+        assert rows[0].token_id == access_key.id
         assert rows[0].request_id == "audit-ingress"
         assert rows[0].client_ip == "192.0.2.1"
         assert rows[0].method == ("mesa:lease" if surface == "lease" else "mesa:privacy_access")

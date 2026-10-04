@@ -1,4 +1,4 @@
-import type { TokenRecord } from "./types";
+import type { AccessKeyRecord } from "./types";
 import { localeDate, localeDateTime, t } from "./i18n";
 
 export const HIGH_RISK_DOMAINS = new Set([
@@ -79,9 +79,9 @@ export function formatDateTime(iso: string | null): string {
   return localeDateTime(iso);
 }
 
-export function tokenStatus(token: TokenRecord): string {
-  if (token.revoked) return "Revoked";
-  if (token.expires_at && new Date(token.expires_at) <= new Date()) return "Expired";
+export function accessKeyStatus(accessKey: AccessKeyRecord): string {
+  if (accessKey.revoked) return "Revoked";
+  if (accessKey.expires_at && new Date(accessKey.expires_at) <= new Date()) return "Expired";
   return "Active";
 }
 
@@ -95,15 +95,15 @@ export const PERMISSION_LABEL_KEYS: Record<string, string> = {
   NOT_FOUND: "perms.stateNotFound",
 };
 
-/** Display labels for tokenStatus()'s stable internal values. */
-export const TOKEN_STATUS_KEYS: Record<string, string> = {
+/** Display labels for accessKeyStatus()'s stable internal values. */
+export const ACCESS_KEY_STATUS_KEYS: Record<string, string> = {
   Active: "tokens.statusActive",
   Expired: "tokens.statusExpired",
   Revoked: "tokens.statusRevoked",
 };
 
-export function tokenStatusLabel(status: string): string {
-  const key = TOKEN_STATUS_KEYS[status];
+export function accessKeyStatusLabel(status: string): string {
+  const key = ACCESS_KEY_STATUS_KEYS[status];
   return key ? t(key) : status;
 }
 

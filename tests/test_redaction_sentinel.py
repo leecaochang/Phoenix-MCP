@@ -20,12 +20,12 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp.const import REDACTION_SENTINEL
 from custom_components.phoenix_mcp.helpers import redact_structure
 from custom_components.phoenix_mcp.policy_engine import filter_service_response
-from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 
 
-def _token() -> TokenRecord:
+def _access_key() -> AccessKeyRecord:
     """A token with an empty tree, so every entity resolves to NO_ACCESS."""
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x", created_at=utcnow(),
         created_by="u", permissions=PermissionTree(domains={}),
     )
@@ -33,7 +33,7 @@ def _token() -> TokenRecord:
 
 async def test_filter_service_response_emits_the_constant(hass: HomeAssistant) -> None:
     """The entity-id redaction path is what a dashboard read goes through."""
-    out = filter_service_response({"entity": "light.not_visible"}, _token(), hass)
+    out = filter_service_response({"entity": "light.not_visible"}, _access_key(), hass)
     assert out["entity"] == REDACTION_SENTINEL
 
 
@@ -43,7 +43,7 @@ async def test_ghost_entity_redacts_identically(hass: HomeAssistant) -> None:
     It redacts like any inaccessible entity, so a dashboard carrying dead references
     stays redacted even for a token whose permissions are widened.
     """
-    out = filter_service_response({"entity": "lock.deleted_long_ago"}, _token(), hass)
+    out = filter_service_response({"entity": "lock.deleted_long_ago"}, _access_key(), hass)
     assert out["entity"] == REDACTION_SENTINEL
 
 

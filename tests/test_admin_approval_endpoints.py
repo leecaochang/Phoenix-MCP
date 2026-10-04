@@ -28,18 +28,18 @@ from custom_components.phoenix_mcp.approvals import (
     STATUS_REJECTED,
 )
 from custom_components.phoenix_mcp.audit import AuditLog
-from custom_components.phoenix_mcp.const import DOMAIN, TOKEN_PREFIX
+from custom_components.phoenix_mcp.const import DOMAIN, ACCESS_KEY_PREFIX
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
-from custom_components.phoenix_mcp.token_store import GlobalSettings, TokenRecord, TokenStore
+from custom_components.phoenix_mcp.access_key_store import GlobalSettings, AccessKeyRecord, AccessKeyStore
 
 
 # ---- helpers -----------------------------------------------------------------
 
 
-def _make_token(token_id: str = "tok-1", name: str = "alice", **caps) -> TokenRecord:
-    raw = TOKEN_PREFIX + secrets.token_hex(32)
-    return TokenRecord(
+def _make_token(token_id: str = "tok-1", name: str = "alice", **caps) -> AccessKeyRecord:
+    raw = ACCESS_KEY_PREFIX + secrets.token_hex(32)
+    return AccessKeyRecord(
         id=token_id,
         name=name,
         token_hash=hashlib.sha256(raw.encode()).hexdigest(),
@@ -73,9 +73,9 @@ def _make_pending(approval_id: str, token_id: str = "tok-1", **kwargs) -> dict:
     return base
 
 
-def _make_store(pending: list[dict] | None = None, tokens: list[TokenRecord] | None = None,
+def _make_store(pending: list[dict] | None = None, access_keys: list[AccessKeyRecord] | None = None,
                 kill_switch: bool = False) -> MagicMock:
-    store = MagicMock(spec=TokenStore)
+    store = MagicMock(spec=AccessKeyStore)
     store._pending = list(pending or [])
     store.async_save = AsyncMock()
     store.async_lock = asyncio.Lock()
@@ -83,8 +83,8 @@ def _make_store(pending: list[dict] | None = None, tokens: list[TokenRecord] | N
     store.set_pending_approvals = MagicMock(side_effect=lambda lst: setattr(store, "_pending", lst))
     settings = GlobalSettings(kill_switch=kill_switch)
     store.get_settings = MagicMock(return_value=settings)
-    by_id = {t.id: t for t in (tokens or [])}
-    store.get_token_by_id = MagicMock(side_effect=lambda i: by_id.get(i))
+    by_id = {t.id: t for t in (access_keys or [])}
+    store.get_access_key_by_id = MagicMock(side_effect=lambda i: by_id.get(i))
     return store
 
 
@@ -358,8 +358,8 @@ class TestApprovalReject:
 class TestApprovalApprove:
     @pytest.mark.asyncio
     async def test_approve_runs_executor_and_marks_approved(self):
-        token = _make_token("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -388,8 +388,8 @@ class TestApprovalApprove:
         a restart in that window must find a marker, not an untouched pending record
         whose action may already have applied. Observed from inside the executor.
         """
-        token = _make_token("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -433,8 +433,8 @@ class TestApprovalApprove:
         take the marker cannot record the outcome either. Running anyway would leave a
         pending record whose action has run with nothing saying so.
         """
-        token = _make_token("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         store.async_save = AsyncMock(side_effect=OSError("disk full"))
         data = _make_data(store)
         hass = _make_hass(data)
@@ -459,8 +459,8 @@ class TestApprovalApprove:
     async def test_approve_rejected_when_already_in_progress(self):
         # Double-run race guard: an approve whose id is already claimed by a
         # concurrent in-flight approve returns 409 and never runs the executor.
-        token = _make_token("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         data.approvals_in_progress.add("appr_a")
         hass = _make_hass(data)
@@ -481,8 +481,8 @@ class TestApprovalApprove:
 
     @pytest.mark.asyncio
     async def test_approve_cannot_claim_during_core_wipe(self):
-        token = _make_token("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         data.core_wipe_in_progress = True
         hass = _make_hass(data)
@@ -503,8 +503,8 @@ class TestApprovalApprove:
 
     @pytest.mark.asyncio
     async def test_two_admin_clients_cannot_execute_the_same_approval_twice(self):
-        token = _make_token("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -538,13 +538,13 @@ class TestApprovalApprove:
 
     @pytest.mark.asyncio
     async def test_approve_expires_an_overdue_record_before_claiming_it(self):
-        token = _make_token("tok-1", cap_restart="confirm")
+        access_key = _make_token("tok-1", cap_restart="confirm")
         pending = _make_pending(
             "appr_a",
             token_id="tok-1",
             expires_at=(utcnow() - timedelta(seconds=1)).isoformat(),
         )
-        store = _make_store(pending=[pending], tokens=[token])
+        store = _make_store(pending=[pending], access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -569,8 +569,8 @@ class TestApprovalApprove:
 
     @pytest.mark.asyncio
     async def test_approve_reads_settings_after_waiting_for_the_store_lock(self):
-        token = _make_token("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -606,8 +606,8 @@ class TestApprovalApprove:
 
     @pytest.mark.asyncio
     async def test_marker_save_cancellation_does_not_strand_the_local_claim(self):
-        token = _make_token("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -637,8 +637,8 @@ class TestApprovalApprove:
     @pytest.mark.asyncio
     async def test_approve_releases_in_progress_claim(self):
         # The claim is released after execution so the id is not stuck.
-        token = _make_token("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -658,8 +658,8 @@ class TestApprovalApprove:
 
     @pytest.mark.asyncio
     async def test_approve_conflicts_if_record_resolved_during_execution(self):
-        token = _make_token("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -693,8 +693,8 @@ class TestApprovalApprove:
 
     @pytest.mark.asyncio
     async def test_approve_rejected_when_executor_returns_error(self):
-        token = _make_token("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -715,8 +715,8 @@ class TestApprovalApprove:
 
     @pytest.mark.asyncio
     async def test_approve_cancels_when_token_revoked(self):
-        # No token in store, so get_token_by_id returns None.
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[])
+        # No token in store, so get_access_key_by_id returns None.
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -736,8 +736,8 @@ class TestApprovalApprove:
 
     @pytest.mark.asyncio
     async def test_approve_rejected_when_cap_now_deny(self):
-        token = _make_token("tok-1", cap_restart="deny")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="deny")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -761,7 +761,7 @@ class TestApprovalApprove:
         # The MESA sentinel cap is not a real token capability, so effective_cap
         # would auto-deny it. The approve path must skip that recheck and execute
         # (MESA re-validation lives inside the executor instead).
-        token = _make_token("tok-1")  # no mesa cap; effective_cap would be deny
+        access_key = _make_token("tok-1")  # no mesa cap; effective_cap would be deny
         pending = _make_pending(
             "appr_m",
             token_id="tok-1",
@@ -769,7 +769,7 @@ class TestApprovalApprove:
             tool_name=MESA_APPROVED_EXECUTOR,
             args={"domain": "light", "service": "turn_on", "entity_id": ["light.a"]},
         )
-        store = _make_store(pending=[pending], tokens=[token])
+        store = _make_store(pending=[pending], access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -790,10 +790,10 @@ class TestApprovalApprove:
 
     @pytest.mark.asyncio
     async def test_approve_cancels_when_kill_switch_engaged(self):
-        token = _make_token("tok-1", cap_restart="confirm")
+        access_key = _make_token("tok-1", cap_restart="confirm")
         store = _make_store(
             pending=[_make_pending("appr_a", token_id="tok-1")],
-            tokens=[token],
+            access_keys=[access_key],
             kill_switch=True,
         )
         data = _make_data(store)
@@ -813,10 +813,10 @@ class TestApprovalApprove:
 
     @pytest.mark.asyncio
     async def test_approve_idempotent_on_terminal(self):
-        token = _make_token("tok-1", cap_restart="confirm")
+        access_key = _make_token("tok-1", cap_restart="confirm")
         store = _make_store(
             pending=[_make_pending("appr_a", token_id="tok-1", status=STATUS_APPROVED)],
-            tokens=[token],
+            access_keys=[access_key],
         )
         data = _make_data(store)
         hass = _make_hass(data)
@@ -884,8 +884,8 @@ class TestApprovalClaimSignal:
 
         Firing it afterwards would coincide with the resolved event and change nothing.
         """
-        token = _make_token("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -913,8 +913,8 @@ class TestApprovalClaimSignal:
 
         It has no UI state of its own, so dismissal is its way of going non-actionable.
         """
-        token = _make_token("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -941,8 +941,8 @@ class TestApprovalClaimSignal:
         The resolved event already removed it everywhere; a release would re-offer a
         dead action.
         """
-        token = _make_token("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -969,8 +969,8 @@ class TestApprovalClaimSignal:
         one (failed, execution_interrupted) and the surfaces learn from the resolved
         event rather than from the approval reappearing.
         """
-        token = _make_token("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -998,8 +998,8 @@ class TestApprovalClaimSignal:
     async def test_a_second_approve_after_a_raising_executor_cannot_run_it_again(self):
         # The two-POST shape: the whole point is that the admin looking at the
         # 500 cannot click Approve again and apply the side effect twice.
-        token = _make_token("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -1031,8 +1031,8 @@ class TestApprovalClaimSignal:
         # and nothing can have applied. That one stays retryable, and the marker is
         # cleared so a later startup does not resolve a healthy pending approval as
         # interrupted.
-        token = _make_token("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -1064,10 +1064,10 @@ class TestApprovalClaimSignal:
         """
         from custom_components.phoenix_mcp import mcp_view
 
-        token = _make_token("tok-1", cap_restart="confirm")
+        access_key = _make_token("tok-1", cap_restart="confirm")
         store = _make_store(
             pending=[_make_pending("appr_a", token_id="tok-1", tool_name="restart_ha")],
-            tokens=[token])
+            access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -1103,10 +1103,10 @@ class TestApprovalClaimSignal:
         """
         from custom_components.phoenix_mcp import mcp_view
 
-        token = _make_token("tok-1", cap_restart="confirm")
+        access_key = _make_token("tok-1", cap_restart="confirm")
         store = _make_store(
             pending=[_make_pending("appr_a", token_id="tok-1", tool_name="restart_ha")],
-            tokens=[token])
+            access_keys=[access_key])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -1141,7 +1141,7 @@ class TestApprovalClaimSignal:
 
         pending = _make_pending("appr_a", token_id="tok-1", tool_name="restart_ha")
         pending["execution_started_at"] = utcnow().isoformat()
-        store = _make_store(pending=[pending], tokens=[])
+        store = _make_store(pending=[pending], access_keys=[])
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -1209,8 +1209,8 @@ class TestApprovalAuditLogging:
 
     @pytest.mark.asyncio
     async def test_approve_writes_allowed_audit_entry(self):
-        token = _make_token("tok-1", cap_restart="confirm")
-        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], tokens=[token])
+        access_key = _make_token("tok-1", cap_restart="confirm")
+        store = _make_store(pending=[_make_pending("appr_a", token_id="tok-1")], access_keys=[access_key])
         data = _make_data_real_audit(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalApproveView()
@@ -1243,8 +1243,8 @@ class TestBatchApprove:
     """
 
     @staticmethod
-    def _view_and_request(pending, tokens, ids, kill_switch=False):
-        store = _make_store(pending=pending, tokens=tokens, kill_switch=kill_switch)
+    def _view_and_request(pending, access_keys, ids, kill_switch=False):
+        store = _make_store(pending=pending, access_keys=access_keys, kill_switch=kill_switch)
         data = _make_data(store)
         hass = _make_hass(data)
         view = PhoenixAdminApprovalBatchApproveView()
@@ -1254,10 +1254,10 @@ class TestBatchApprove:
 
     @pytest.mark.asyncio
     async def test_approves_every_id_in_order(self):
-        token = _make_token("tok-1", cap_restart="confirm")
+        access_key = _make_token("tok-1", cap_restart="confirm")
         view, request, store, _data = self._view_and_request(
             [_make_pending("appr_a"), _make_pending("appr_b"), _make_pending("appr_c")],
-            [token], ["appr_a", "appr_b", "appr_c"],
+            [access_key], ["appr_a", "appr_b", "appr_c"],
         )
         seen: list[str] = []
 
@@ -1284,10 +1284,10 @@ class TestBatchApprove:
         The second approval fails, so the third never reaches its executor and stays
         individually approvable.
         """
-        token = _make_token("tok-1", cap_restart="confirm")
+        access_key = _make_token("tok-1", cap_restart="confirm")
         view, request, store, _data = self._view_and_request(
             [_make_pending("appr_a"), _make_pending("appr_b"), _make_pending("appr_c")],
-            [token], ["appr_a", "appr_b", "appr_c"],
+            [access_key], ["appr_a", "appr_b", "appr_c"],
         )
         seen: list[str] = []
 
@@ -1321,9 +1321,9 @@ class TestBatchApprove:
         execution_failed while _approve_approval still answers 200; counting that as
         applied would report a failed write as a success.
         """
-        token = _make_token("tok-1", cap_restart="confirm")
+        access_key = _make_token("tok-1", cap_restart="confirm")
         view, request, _store, _data = self._view_and_request(
-            [_make_pending("appr_a")], [token], ["appr_a"],
+            [_make_pending("appr_a")], [access_key], ["appr_a"],
         )
 
         async def _fake_executor(name, args, tok, hass, data):
@@ -1341,10 +1341,10 @@ class TestBatchApprove:
 
     @pytest.mark.asyncio
     async def test_kill_switch_stops_the_batch_at_the_first_item(self):
-        token = _make_token("tok-1", cap_restart="confirm")
+        access_key = _make_token("tok-1", cap_restart="confirm")
         view, request, store, _data = self._view_and_request(
             [_make_pending("appr_a"), _make_pending("appr_b")],
-            [token], ["appr_a", "appr_b"], kill_switch=True,
+            [access_key], ["appr_a", "appr_b"], kill_switch=True,
         )
         executor = AsyncMock()
         with \
@@ -1397,11 +1397,11 @@ async def test_approved_executor_carries_current_authority_across_wait(change):
         check_request_authority, policy_version, request_authority,
     )
 
-    token = _make_token("tok-1", cap_registry_write="confirm")
-    store = _make_store(tokens=[token], pending=[_make_pending(
+    access_key = _make_token("tok-1", cap_registry_write="confirm")
+    store = _make_store(access_keys=[access_key], pending=[_make_pending(
         "appr_registry", tool_name="set_entity", cap_name="cap_registry_write",
     )])
-    store.get_token_by_hash.return_value = token
+    store.get_access_key_by_hash.return_value = access_key
     data = _make_data(store)
     hass = _make_hass(data)
     view = PhoenixAdminApprovalApproveView()
@@ -1411,8 +1411,8 @@ async def test_approved_executor_carries_current_authority_across_wait(change):
 
     async def executor(args, tok, hass_, data_):
         check_request_authority()
-        assert request_authority.get().token_id == token.id
-        assert policy_version.get() == token.settings_version
+        assert request_authority.get().token_id == access_key.id
+        assert policy_version.get() == access_key.settings_version
         entered.set()
         await release.wait()
         check_request_authority()
@@ -1430,9 +1430,9 @@ async def test_approved_executor_carries_current_authority_across_wait(change):
         try:
             await asyncio.wait_for(entered.wait(), 1)
             if change == "revocation":
-                store.get_token_by_hash.return_value = None
+                store.get_access_key_by_hash.return_value = None
             elif change == "policy":
-                token.settings_version += 1
+                access_key.settings_version += 1
             elif change == "runtime":
                 data.shutting_down = True
             else:

@@ -21,7 +21,7 @@ from ..helpers import effective_cap, str_arg
 from ..mesa import build_caller_context
 from ..mesa_audit import request_context
 from ..policy_engine import Permission, canonical_entity_id, resolve
-from ..token_store import TokenRecord
+from ..access_key_store import AccessKeyRecord
 from ..tool_common import _CAP_FORBIDDEN_MESSAGE, _tool_error
 
 _LOGGER = logging.getLogger(__name__)
@@ -49,14 +49,14 @@ def _dimension(value: Any, name: str) -> tuple[int | None, str | None]:
 
 async def _tool_get_camera_image(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: retrieve one scoped camera image as an MCP image block."""
-    if effective_cap(token, "cap_camera_read") != CAP_ALLOW:
+    if effective_cap(access_key, "cap_camera_read") != CAP_ALLOW:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "get_camera_image"
 
     raw_entity_id = str_arg(args.get("entity_id"))
@@ -67,7 +67,7 @@ async def _tool_get_camera_image(
     if not valid_entity_id(entity_id) or not entity_id.startswith("camera."):
         return _camera_denied(entity_id, "not_found")
 
-    permission = resolve(entity_id, token, hass)
+    permission = resolve(entity_id, access_key, hass)
     if permission == Permission.NOT_FOUND:
         return _camera_denied(entity_id, "not_found")
     if permission not in (Permission.READ, Permission.WRITE):
@@ -81,10 +81,10 @@ async def _tool_get_camera_image(
             return _camera_denied(entity_id)
         else:
             profile = runtime.resolver.resolve(entity_id)
-            with request_context(token, request_id, client_ip):
+            with request_context(access_key, request_id, client_ip):
                 decision = runtime.enforcer.privacy.evaluate(
                     profile.privacy_classification,
-                    build_caller_context(token, request_id or "get_camera_image"),
+                    build_caller_context(access_key, request_id or "get_camera_image"),
                     entity_id=entity_id,
                     is_person=profile.domain == "person",
                     is_minor=profile.person_traits.is_minor is True,

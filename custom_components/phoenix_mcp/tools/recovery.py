@@ -21,13 +21,13 @@ from .helper import (
 )
 
 
-def _may_restore_record(record: dict | None, token) -> bool:
+def _may_restore_record(record: dict | None, access_key) -> bool:
     """Agent records are owner-only; HA admin restoration uses a bound context."""
     if record is None:
         return False
     context = _restore_ctx.get()
-    return record.get("token_id") == token.id or (
-        context is not None and token.id == f"__restore__:{context['user_id']}"
+    return record.get("token_id") == access_key.id or (
+        context is not None and access_key.id == f"__restore__:{context['user_id']}"
     )
 
 
@@ -101,7 +101,7 @@ def _dashboard_registry_lookup_key(record: dict[str, Any], side: str, snapshot: 
 
 async def _tool_restore_configuration(
     args: dict,
-    token,
+    access_key,
     hass,
     data,
     request_id: str = "",
@@ -114,7 +114,7 @@ async def _tool_restore_configuration(
     execute step then revalidates both against the live target before writing.
     """
     tool = "restore_configuration"
-    if all(effective_cap(token, cap) == "deny" for cap in (
+    if all(effective_cap(access_key, cap) == "deny" for cap in (
         "cap_helper_write", "cap_energy_write", "cap_yaml_edit", "cap_filesystem",
         "cap_blueprint_write", "cap_lovelace_write",
     )):
@@ -124,7 +124,7 @@ async def _tool_restore_configuration(
     if not isinstance(rid, str) or not rid or side not in ("before", "source"):
         return _tool_error("recovery_id and side ('before' or 'source') are required."), "invalid_request", tool
     record = data.config_recovery.get(rid)
-    if not _may_restore_record(record, token):
+    if not _may_restore_record(record, access_key):
         return _tool_error("Configuration recovery record not found."), "not_found", tool
     assert record is not None
     if not data.config_recovery.inactive(rid) or (record.get("phase") in ("prepared", "dispatching", "partial", "unknown")
@@ -133,32 +133,32 @@ async def _tool_restore_configuration(
     selected = record.get(side)
     if isinstance(selected, dict) and selected.get("snapshot_type") == "energy_preferences":
         return await _tool_restore_energy_configuration(
-            args, record, side, token, hass, data, request_id, client_ip,
+            args, record, side, access_key, hass, data, request_id, client_ip,
         )
     if isinstance(selected, dict) and selected.get("snapshot_type") in ("authored_file", "yaml_file"):
         return await _tool_restore_file_configuration(
-            args, record, side, token, hass, data, request_id, client_ip,
+            args, record, side, access_key, hass, data, request_id, client_ip,
         )
     if isinstance(selected, dict) and selected.get("snapshot_type") == "blueprint_source":
         return await _tool_restore_blueprint_configuration(
-            args, record, side, token, hass, data, request_id, client_ip,
+            args, record, side, access_key, hass, data, request_id, client_ip,
         )
     if isinstance(selected, dict) and selected.get("snapshot_type") == "dashboard_layout":
         return await _tool_restore_dashboard_layout(
-            args, record, side, token, hass, data, request_id, client_ip,
+            args, record, side, access_key, hass, data, request_id, client_ip,
         )
     if isinstance(selected, dict) and selected.get("snapshot_type") == "dashboard_registry":
         return await _tool_restore_dashboard_registry(
-            args, record, side, token, hass, data, request_id, client_ip,
+            args, record, side, access_key, hass, data, request_id, client_ip,
         )
-    if effective_cap(token, "cap_helper_write") == "deny":
+    if effective_cap(access_key, "cap_helper_write") == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     try:
         from ..template_recovery import validate_restore_scope, validate_snapshot
 
         selected = _selected_template_snapshot(record, side)
         validate_snapshot(selected)
-        validate_restore_scope(selected, token, hass)
+        validate_restore_scope(selected, access_key, hass)
         digest = content_hash(selected)
         target = _template_record_target(record, side, hass)
         fingerprint = content_hash(target)
@@ -173,10 +173,10 @@ async def _tool_restore_configuration(
     entity_id = selected["entities"][0]["entity_id"]
     current_entry = hass.config_entries.async_get_entry(selected["entry_id"])
     action = "settings" if current_entry is not None else "create"
-    if _unwritable_option_entities(options, token, hass, template_type=options["template_type"]):
+    if _unwritable_option_entities(options, access_key, hass, template_type=options["template_type"]):
         return _tool_error("The Template snapshot references entities outside this access key's current write scope."), "denied", tool
     context = _helper_mesa_context(
-        data, token, [entity_id], action=action,
+        data, access_key, [entity_id], action=action,
         service_data={"helper_type": options["template_type"], "config": options},
         session_id=tool,
     )
@@ -206,17 +206,17 @@ async def _tool_restore_configuration(
         "target_fingerprint": fingerprint,
     }
     approval_args, blocked = await _helper_mesa_approval_gate(
-        bound, token, hass, data, context=context,
+        bound, access_key, hass, data, context=context,
         tool_name=tool, request_id=request_id, client_ip=client_ip,
         diff_builder=lambda: _restore_diff(record, side, target),
     )
     if blocked is not None:
         return blocked
-    return await _execute_restore_configuration(approval_args, token, hass, data)
+    return await _execute_restore_configuration(approval_args, access_key, hass, data)
 
 
 async def _tool_restore_file_configuration(
-    args: dict, record: dict[str, Any], side: str, token, hass, data,
+    args: dict, record: dict[str, Any], side: str, access_key, hass, data,
     request_id: str, client_ip: str | None,
 ) -> tuple[dict, str, str]:
     """Preflight a jailed file restore and bind its live content fingerprint."""
@@ -237,7 +237,7 @@ async def _tool_restore_file_configuration(
     if family == "yaml_file" and not want_exists:
         return _tool_error("Restoring an absent YAML include would delete configuration; this inverse is refused."), "invalid_request", tool
     cap = "cap_yaml_edit" if family == "yaml_file" else "cap_filesystem"
-    if effective_cap(token, cap) == "deny":
+    if effective_cap(access_key, cap) == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     rel, content = snapshot.get("resource_id"), snapshot.get("content")
     if not isinstance(rel, str) or (want_exists and not isinstance(content, str)):
@@ -312,7 +312,7 @@ async def _tool_restore_file_configuration(
     bound = {"recovery_id": record["id"], "side": side,
              "snapshot_digest": digest, "target_fingerprint": fingerprint}
     blocked = await _gate(
-        cap, token, hass, data, tool_name=tool, args=bound,
+        cap, access_key, hass, data, tool_name=tool, args=bound,
         request_id=request_id, client_ip=client_ip,
         diff=lambda: {"kind": "config_diff", "summary": "Restore authored file content",
                       "target": {"type": family, "id": rel, "label": rel},
@@ -320,7 +320,7 @@ async def _tool_restore_file_configuration(
     )
     if blocked is not None:
         return blocked
-    return await _execute_restore_configuration(bound, token, hass, data)
+    return await _execute_restore_configuration(bound, access_key, hass, data)
 
 
 def _blueprint_target_snapshot(domain: str, path: str, content: str | None) -> dict:
@@ -329,7 +329,7 @@ def _blueprint_target_snapshot(domain: str, path: str, content: str | None) -> d
 
 
 async def _tool_restore_blueprint_configuration(
-    args: dict, record: dict[str, Any], side: str, token, hass, data,
+    args: dict, record: dict[str, Any], side: str, access_key, hass, data,
     request_id: str, client_ip: str | None,
 ) -> tuple[dict, str, str]:
     """Preflight one blueprint source restore under its dual gate.
@@ -348,7 +348,7 @@ async def _tool_restore_blueprint_configuration(
             or type(snapshot.get("exists")) is not bool
             or snapshot.get("exists") != isinstance(snapshot.get("content"), str)):
         return _tool_error("The selected blueprint snapshot is incomplete."), "invalid_request", tool
-    denied = _blueprint_denied(token, {"domain": domain}, tool)
+    denied = _blueprint_denied(access_key, {"domain": domain}, tool)
     if denied is not None:
         return denied
     resolved = _resolve_blueprint_path(hass, domain, path)
@@ -378,7 +378,7 @@ async def _tool_restore_blueprint_configuration(
     bound = {"recovery_id": record["id"], "side": side,
              "snapshot_digest": digest, "target_fingerprint": fingerprint}
     blocked = await _gate(
-        "cap_blueprint_write", token, hass, data, tool_name=tool, args=bound,
+        "cap_blueprint_write", access_key, hass, data, tool_name=tool, args=bound,
         request_id=request_id, client_ip=client_ip,
         diff=lambda: {"kind": "yaml_diff", "summary": "Restore blueprint source",
                       "target": {"type": "blueprint", "id": f"{domain}/{path}", "label": path},
@@ -386,11 +386,11 @@ async def _tool_restore_blueprint_configuration(
     )
     if blocked is not None:
         return blocked
-    return await _execute_restore_configuration(bound, token, hass, data)
+    return await _execute_restore_configuration(bound, access_key, hass, data)
 
 
 async def _tool_restore_dashboard_layout(
-    args: dict, record: dict[str, Any], side: str, token, hass, data,
+    args: dict, record: dict[str, Any], side: str, access_key, hass, data,
     request_id: str, client_ip: str | None,
 ) -> tuple[dict, str, str]:
     """Preflight a dashboard layout restore under cap_lovelace_write."""
@@ -403,7 +403,7 @@ async def _tool_restore_dashboard_layout(
     if (not isinstance(snapshot, dict) or snapshot.get("schema") != 1
             or snapshot.get("exists") is not True or not isinstance(snapshot.get("config"), dict)):
         return _tool_error("This dashboard layout snapshot has no restorable layout."), "invalid_request", tool
-    if effective_cap(token, "cap_lovelace_write") == "deny":
+    if effective_cap(access_key, "cap_lovelace_write") == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     url_path = snapshot.get("url_path")
     if url_path is not None and not isinstance(url_path, str):
@@ -426,8 +426,8 @@ async def _tool_restore_dashboard_layout(
             "diff": {
                 "kind": "yaml_diff", "summary": "Restore dashboard layout",
                 "target": {"type": "dashboard", "id": snapshot["resource_id"], "label": url_path or "Default"},
-                "before": json.dumps(filter_service_response(current, token, hass), default=str) if current else None,
-                "after": json.dumps(filter_service_response(snapshot["config"], token, hass), default=str),
+                "before": json.dumps(filter_service_response(current, access_key, hass), default=str) if current else None,
+                "after": json.dumps(filter_service_response(snapshot["config"], access_key, hass), default=str),
             },
         }, default=str)), "allowed", tool
     if args.get("snapshot_digest") != digest or args.get("target_fingerprint") != fingerprint:
@@ -435,20 +435,20 @@ async def _tool_restore_dashboard_layout(
     bound = {"recovery_id": record["id"], "side": side,
              "snapshot_digest": digest, "target_fingerprint": fingerprint}
     blocked = await _gate(
-        "cap_lovelace_write", token, hass, data, tool_name=tool, args=bound,
+        "cap_lovelace_write", access_key, hass, data, tool_name=tool, args=bound,
         request_id=request_id, client_ip=client_ip,
         diff=lambda: {"kind": "yaml_diff", "summary": "Restore dashboard layout",
                       "target": {"type": "dashboard", "id": snapshot["resource_id"], "label": url_path or "Default"},
-                      "before": json.dumps(filter_service_response(current, token, hass), default=str) if current else None,
-                      "after": json.dumps(filter_service_response(snapshot["config"], token, hass), default=str)},
+                      "before": json.dumps(filter_service_response(current, access_key, hass), default=str) if current else None,
+                      "after": json.dumps(filter_service_response(snapshot["config"], access_key, hass), default=str)},
     )
     if blocked is not None:
         return blocked
-    return await _execute_restore_configuration(bound, token, hass, data)
+    return await _execute_restore_configuration(bound, access_key, hass, data)
 
 
 async def _tool_restore_dashboard_registry(
-    args: dict, record: dict[str, Any], side: str, token, hass, data,
+    args: dict, record: dict[str, Any], side: str, access_key, hass, data,
     request_id: str, client_ip: str | None,
 ) -> tuple[dict, str, str]:
     """Preflight dashboard registry metadata restoration under cap_lovelace_write."""
@@ -460,7 +460,7 @@ async def _tool_restore_dashboard_registry(
             or not isinstance(snapshot.get("resource_id"), str)
             or not isinstance(snapshot.get("exists"), bool)):
         return _tool_error("This dashboard registry snapshot is invalid."), "invalid_request", tool
-    if effective_cap(token, "cap_lovelace_write") == "deny":
+    if effective_cap(access_key, "cap_lovelace_write") == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     try:
         lookup_key = _dashboard_registry_lookup_key(record, side, snapshot)
@@ -484,7 +484,7 @@ async def _tool_restore_dashboard_registry(
     bound = {"recovery_id": record["id"], "side": side,
              "snapshot_digest": digest, "target_fingerprint": fingerprint}
     blocked = await _gate(
-        "cap_lovelace_write", token, hass, data, tool_name=tool, args=bound,
+        "cap_lovelace_write", access_key, hass, data, tool_name=tool, args=bound,
         request_id=request_id, client_ip=client_ip,
         diff=lambda: {"kind": "config_diff", "summary": "Restore dashboard registry entry",
                       "target": {"type": "dashboard", "id": snapshot["resource_id"]},
@@ -493,15 +493,15 @@ async def _tool_restore_dashboard_registry(
     )
     if blocked is not None:
         return blocked
-    return await _execute_restore_configuration(bound, token, hass, data)
+    return await _execute_restore_configuration(bound, access_key, hass, data)
 
 
-async def _execute_restore_dashboard_registry(args, record, side, snapshot, token, hass, data):
+async def _execute_restore_dashboard_registry(args, record, side, snapshot, access_key, hass, data):
     """Revalidate and restore one dashboard registry row, recording the inverse."""
     from .lovelace import _dashboard_registry_snapshot
 
     tool = "restore_configuration"
-    if effective_cap(token, "cap_lovelace_write") == "deny":
+    if effective_cap(access_key, "cap_lovelace_write") == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     if (snapshot.get("schema") != 1 or not isinstance(snapshot.get("resource_id"), str)
             or not isinstance(snapshot.get("exists"), bool)):
@@ -519,7 +519,7 @@ async def _execute_restore_dashboard_registry(args, record, side, snapshot, toke
         recovery = data.config_recovery
         resource = f"dashboard_registry:{key}"
         async with recovery.resource(resource):
-            rid = await recovery.begin(resource, "dashboard_registry_restore", token.id, target, expected=snapshot)
+            rid = await recovery.begin(resource, "dashboard_registry_restore", access_key.id, target, expected=snapshot)
             try:
                 await recovery.mark(rid, "dispatching")
                 current = await _dashboard_registry_snapshot(hass, key)
@@ -580,7 +580,7 @@ async def _execute_restore_dashboard_registry(args, record, side, snapshot, toke
 
 
 async def _tool_restore_energy_configuration(
-    args: dict, record: dict[str, Any], side: str, token, hass, data,
+    args: dict, record: dict[str, Any], side: str, access_key, hass, data,
     request_id: str, client_ip: str | None,
 ) -> tuple[dict, str, str]:
     """Preflight an Energy restore and bind its live target into Phoenix approval."""
@@ -590,14 +590,14 @@ async def _tool_restore_energy_configuration(
     )
 
     tool = "restore_configuration"
-    if effective_cap(token, "cap_energy_write") == "deny":
+    if effective_cap(access_key, "cap_energy_write") == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     selected = record.get(side)
     if not isinstance(selected, dict):
         return _tool_error("The selected Energy recovery side is unavailable."), "invalid_request", tool
     try:
         validate_energy_recovery_snapshot(selected)
-        validate_energy_recovery_scope(selected, token, hass)
+        validate_energy_recovery_scope(selected, access_key, hass)
         target = await energy_recovery_target(hass)
         digest = content_hash(selected)
         fingerprint = content_hash(target)
@@ -610,7 +610,7 @@ async def _tool_restore_energy_configuration(
             "status": "needs_confirmation", "recovery_id": record["id"], "side": side,
             "snapshot_digest": digest, "target_fingerprint": fingerprint,
             "diff": energy_recovery_diff(
-                target, selected, side, token, hass,
+                target, selected, side, access_key, hass,
             ),
         }, default=str)), "allowed", tool
     if args.get("snapshot_digest") != digest or args.get("target_fingerprint") != fingerprint:
@@ -620,19 +620,19 @@ async def _tool_restore_energy_configuration(
         "snapshot_digest": digest, "target_fingerprint": fingerprint,
     }
     blocked = await _gate(
-        "cap_energy_write", token, hass, data,
+        "cap_energy_write", access_key, hass, data,
         tool_name=tool, args=bound, request_id=request_id, client_ip=client_ip,
         diff=lambda: energy_recovery_diff(
-            target, selected, side, token, hass,
+            target, selected, side, access_key, hass,
         ),
     )
     if blocked is not None:
         return blocked
-    return await _execute_restore_configuration(bound, token, hass, data)
+    return await _execute_restore_configuration(bound, access_key, hass, data)
 
 
 async def _execute_restore_configuration(
-    args: dict, token, hass, data
+    args: dict, access_key, hass, data
 ) -> tuple[dict, str, str]:
     """Revalidate owner, snapshot digest and target fingerprint after approval.
 
@@ -641,7 +641,7 @@ async def _execute_restore_configuration(
     """
     tool = "restore_configuration"
     record = data.config_recovery.get(str(args.get("recovery_id") or ""))
-    if not _may_restore_record(record, token):
+    if not _may_restore_record(record, access_key):
         return _tool_error("Configuration recovery record not found."), "not_found", tool
     assert record is not None
     if record.get("phase") in ("prepared", "dispatching", "partial", "unknown") and recovery_resolution.get() != record["id"]:
@@ -656,37 +656,37 @@ async def _execute_restore_configuration(
             validate_energy_recovery_scope, validate_energy_recovery_snapshot,
         )
 
-        if effective_cap(token, "cap_energy_write") == "deny":
+        if effective_cap(access_key, "cap_energy_write") == "deny":
             return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
         try:
             validate_energy_recovery_snapshot(selected)
-            validate_energy_recovery_scope(selected, token, hass)
+            validate_energy_recovery_scope(selected, access_key, hass)
             if content_hash(selected) != args.get("snapshot_digest"):
                 return _tool_error("The selected Energy recovery snapshot changed after approval."), "invalid_request", tool
             if content_hash(await energy_recovery_target(hass)) != args.get("target_fingerprint"):
                 return _tool_error("The Energy target changed after approval."), "invalid_request", tool
             check_request_authority()
-            return await restore_energy_configuration(selected, token, hass, data)
+            return await restore_energy_configuration(selected, access_key, hass, data)
         except ConfigurationRecoveryError as exc:
             return _tool_error(str(exc)), "invalid_request", tool
         except Exception:  # noqa: BLE001 - family adapter owns the recovery outcome
             return _tool_error("Energy restoration failed; inspect Home Assistant and configuration recovery before retrying."), "invalid_request", tool
     if isinstance(selected, dict) and selected.get("snapshot_type") in ("authored_file", "yaml_file"):
-        return await _execute_restore_file_configuration(args, record, side, selected, token, hass, data)
+        return await _execute_restore_file_configuration(args, record, side, selected, access_key, hass, data)
     if isinstance(selected, dict) and selected.get("snapshot_type") == "blueprint_source":
-        return await _execute_restore_blueprint_configuration(args, record, side, selected, token, hass, data)
+        return await _execute_restore_blueprint_configuration(args, record, side, selected, access_key, hass, data)
     if isinstance(selected, dict) and selected.get("snapshot_type") == "dashboard_layout":
-        return await _execute_restore_dashboard_layout(args, record, side, selected, token, hass, data)
+        return await _execute_restore_dashboard_layout(args, record, side, selected, access_key, hass, data)
     if isinstance(selected, dict) and selected.get("snapshot_type") == "dashboard_registry":
-        return await _execute_restore_dashboard_registry(args, record, side, selected, token, hass, data)
-    if effective_cap(token, "cap_helper_write") == "deny":
+        return await _execute_restore_dashboard_registry(args, record, side, selected, access_key, hass, data)
+    if effective_cap(access_key, "cap_helper_write") == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     try:
         from ..template_recovery import restore_template, validate_restore_scope, validate_snapshot
 
         selected = _selected_template_snapshot(record, side)
         validate_snapshot(selected)
-        validate_restore_scope(selected, token, hass)
+        validate_restore_scope(selected, access_key, hass)
         if content_hash(selected) != args.get("snapshot_digest"):
             return _tool_error("The selected recovery snapshot changed after approval."), "invalid_request", tool
         if content_hash(_template_record_target(record, side, hass)) != args.get("target_fingerprint"):
@@ -694,7 +694,7 @@ async def _execute_restore_configuration(
         current_entry = hass.config_entries.async_get_entry(selected["entry_id"])
         action = "settings" if current_entry is not None else "create"
         context = _enforce_helper_mesa_context(
-            args, token, hass, data, [selected["entities"][0]["entity_id"]],
+            args, access_key, hass, data, [selected["entities"][0]["entity_id"]],
             action=action,
             service_data={"helper_type": selected["options"]["template_type"], "config": selected["options"]},
             session_id=tool,
@@ -703,7 +703,7 @@ async def _execute_restore_configuration(
             return context
         check_request_authority()
         return await restore_template(
-            selected, token, hass, data, mesa_fingerprint=args.get(_HELPER_MESA_FINGERPRINT),
+            selected, access_key, hass, data, mesa_fingerprint=args.get(_HELPER_MESA_FINGERPRINT),
         )
     except PermissionError:
         return _tool_error("Forbidden."), "denied", tool
@@ -713,7 +713,7 @@ async def _execute_restore_configuration(
         return _tool_error("Template restoration failed; inspect Home Assistant and configuration recovery before retrying."), "invalid_request", tool
 
 
-async def _execute_restore_file_configuration(args, record, side, snapshot, token, hass, data):
+async def _execute_restore_file_configuration(args, record, side, snapshot, access_key, hass, data):
     """Revalidate a file adapter, then use its own jailed write transaction."""
     from .config_files import (
         _authored_file_snapshot, _get_yaml_file_lock, _recoverable_file_delete, _recoverable_file_write,
@@ -725,7 +725,7 @@ async def _execute_restore_file_configuration(args, record, side, snapshot, toke
     tool = "restore_configuration"
     family = snapshot.get("snapshot_type")
     cap = "cap_yaml_edit" if family == "yaml_file" else "cap_filesystem"
-    if effective_cap(token, cap) == "deny":
+    if effective_cap(access_key, cap) == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     want_exists = snapshot.get("exists") is True
     if (snapshot.get("exists") not in (True, False)
@@ -757,7 +757,7 @@ async def _execute_restore_file_configuration(args, record, side, snapshot, toke
                 if not exists:
                     return _tool_success(json.dumps({"status": "verified", "already_applied": True})), "allowed", tool
                 return await _recoverable_file_delete(
-                    path=path, rel=rel, before_content=current, token=token,
+                    path=path, rel=rel, before_content=current, access_key=access_key,
                     data=data, operation=tool, hass=hass,
                 )
             if family == "yaml_file":
@@ -778,7 +778,7 @@ async def _execute_restore_file_configuration(args, record, side, snapshot, toke
                         return refusal
             return await _recoverable_file_write(
                 path=path, rel=rel, before_exists=exists, before_content=current,
-                content=content, token=token, data=data, operation=tool,
+                content=content, access_key=access_key, data=data, operation=tool,
                 display_path=rel, hass=hass, snapshot_type=family, return_result=True,
             ) or (_tool_error("File restoration was not applied."), "invalid_request", tool)
     except ConfigurationRecoveryError as exc:
@@ -787,7 +787,7 @@ async def _execute_restore_file_configuration(args, record, side, snapshot, toke
         return _tool_error("File restoration failed; inspect configuration recovery before retrying."), "invalid_request", tool
 
 
-async def _execute_restore_blueprint_configuration(args, record, side, snapshot, token, hass, data):
+async def _execute_restore_blueprint_configuration(args, record, side, snapshot, access_key, hass, data):
     """Restore blueprint source only through HA's validated blueprint commands."""
     from .blueprint import (
         _blueprint_denied, _blueprint_recovery_snapshot, _canonical_blueprint_source, _read_blueprint_source,
@@ -799,7 +799,7 @@ async def _execute_restore_blueprint_configuration(args, record, side, snapshot,
 
     tool = "restore_configuration"
     domain, path = snapshot.get("domain"), snapshot.get("path")
-    denied = _blueprint_denied(token, {"domain": domain}, tool)
+    denied = _blueprint_denied(access_key, {"domain": domain}, tool)
     if denied is not None:
         return denied
     if (snapshot.get("schema") != 1 or domain not in ("automation", "script")
@@ -821,7 +821,7 @@ async def _execute_restore_blueprint_configuration(args, record, side, snapshot,
             before = _blueprint_recovery_snapshot(domain, path, before_text)
             if content_hash(before) != args.get("target_fingerprint"):
                 return _tool_error("The blueprint target changed after approval."), "invalid_request", tool
-            rid = await recovery.begin(resource, tool, token.id, before, source=snapshot, expected=snapshot)
+            rid = await recovery.begin(resource, tool, access_key.id, before, source=snapshot, expected=snapshot)
             try:
                 await recovery.mark(rid, "dispatching")
                 check_request_authority()
@@ -842,7 +842,7 @@ async def _execute_restore_blueprint_configuration(args, record, side, snapshot,
                 await recovery.mark(rid, "verified", observed_hash=content_hash(observed or ""))
                 await recovery.set_source(rid, _blueprint_recovery_snapshot(domain, path, observed))
                 await _record_version(
-                    data, token, resource_type="blueprint", resource_id=f"{domain}/{path}",
+                    data, access_key, resource_type="blueprint", resource_id=f"{domain}/{path}",
                     action="edit" if observed is not None else "delete",
                     before=_version_content_payload(before_text) if before_text is not None else None,
                     after=_version_content_payload(observed) if observed is not None else None,
@@ -863,14 +863,14 @@ async def _execute_restore_blueprint_configuration(args, record, side, snapshot,
         return _tool_error("Blueprint restoration failed; inspect configuration recovery before retrying."), "invalid_request", tool
 
 
-async def _execute_restore_dashboard_layout(args, record, side, snapshot, token, hass, data):
+async def _execute_restore_dashboard_layout(args, record, side, snapshot, access_key, hass, data):
     """Recheck the live dashboard and delegate to its locked layout adapter."""
     from .lovelace import _dashboard_layout_snapshot, _recoverable_dashboard_save
     from ..ws_dispatch import WsDashboardNotFoundError, async_get_lovelace_config
     from ..tool_common import _record_version
 
     tool = "restore_configuration"
-    if effective_cap(token, "cap_lovelace_write") == "deny":
+    if effective_cap(access_key, "cap_lovelace_write") == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool
     if (snapshot.get("schema") != 1 or snapshot.get("exists") is not True
             or not isinstance(snapshot.get("config"), dict)):
@@ -891,14 +891,14 @@ async def _execute_restore_dashboard_layout(args, record, side, snapshot, token,
         check_request_authority()
         result = await _recoverable_dashboard_save(
             url_path=url_path, before=before, after=snapshot["config"],
-            token=token, hass=hass, data=data, return_result=True,
+            access_key=access_key, hass=hass, data=data, return_result=True,
         )
         if result is None or result[1] != "allowed":
             return result or (_tool_error("Dashboard layout restore was not applied."), "invalid_request", tool)
         if json.loads(result[0]["content"][0]["text"]).get("status") != "verified":
             return result
         await _record_version(
-            data, token, resource_type="dashboard", resource_id=snapshot["resource_id"],
+            data, access_key, resource_type="dashboard", resource_id=snapshot["resource_id"],
             action="edit", before=before, after=snapshot["config"],
             alias=url_path or "(default)",
         )

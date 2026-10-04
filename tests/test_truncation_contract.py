@@ -67,10 +67,10 @@ def _hass_with_logs(data, count: int):
     return hass
 
 
-async def _call_get_logs(hass, token, data, args: dict) -> dict:
+async def _call_get_logs(hass, access_key, data, args: dict) -> dict:
     res, _m, _r, outcome = await _dispatch_mcp(
         "tools/call", 3, {"name": "get_logs", "arguments": args},
-        token, hass, data, "127.0.0.1", base_url="http://h",
+        access_key, hass, data, "127.0.0.1", base_url="http://h",
     )
     assert outcome == "allowed"
     return json.loads(res["result"]["content"][0]["text"])
@@ -79,10 +79,10 @@ async def _call_get_logs(hass, token, data, args: dict) -> dict:
 class TestGetLogsReportsTruncation:
     @pytest.mark.asyncio
     async def test_clipped_page_is_flagged_and_counts_the_rest(self):
-        token, _ = _make_token(cap_log_read="allow")
-        data = _make_data(token)
+        access_key, _ = _make_token(cap_log_read="allow")
+        data = _make_data(access_key)
         hass = _hass_with_logs(data, 10)
-        body = await _call_get_logs(hass, token, data, {"limit": 3})
+        body = await _call_get_logs(hass, access_key, data, {"limit": 3})
         assert body["count"] == 3
         assert body["matched_buckets"] == 10
         assert body["has_more"] is True
@@ -90,10 +90,10 @@ class TestGetLogsReportsTruncation:
 
     @pytest.mark.asyncio
     async def test_complete_page_is_not_flagged(self):
-        token, _ = _make_token(cap_log_read="allow")
-        data = _make_data(token)
+        access_key, _ = _make_token(cap_log_read="allow")
+        data = _make_data(access_key)
         hass = _hass_with_logs(data, 3)
-        body = await _call_get_logs(hass, token, data, {"limit": 10})
+        body = await _call_get_logs(hass, access_key, data, {"limit": 10})
         assert body["count"] == 3
         assert body["matched_buckets"] == 3
         assert body["has_more"] is False
@@ -106,8 +106,8 @@ class TestGetLogsReportsTruncation:
         Otherwise an agent that narrowed by integration would read the instance-wide
         count as its own result set and conclude it was missing rows.
         """
-        token, _ = _make_token(cap_log_read="allow")
-        data = _make_data(token)
+        access_key, _ = _make_token(cap_log_read="allow")
+        data = _make_data(access_key)
         hass = _make_hass(data)
         entries = [
             make_log_entry(
@@ -118,7 +118,7 @@ class TestGetLogsReportsTruncation:
         ]
         entries.append(make_log_entry(name="homeassistant.components.climate"))
         attach_log_store(hass, make_log_store(entries))
-        body = await _call_get_logs(hass, token, data, {"integration": "light"})
+        body = await _call_get_logs(hass, access_key, data, {"integration": "light"})
         assert body["matched_buckets"] == 2
         assert body["has_more"] is False
 

@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from custom_components.phoenix_mcp.const import DOMAIN, TOKEN_PREFIX
+from custom_components.phoenix_mcp.const import DOMAIN, ACCESS_KEY_PREFIX
 from custom_components.phoenix_mcp.helpers import (
     _PHOENIX_LOGGER_PREFIXES,
     _scrub_log_text,
@@ -32,7 +32,7 @@ def test_token_scrub_pattern_tracks_the_real_token_prefix():
     A drifted pattern fails open: live bearer tokens would flow through to a
     caller holding cap_log_read and nothing raises.
     """
-    minted = TOKEN_PREFIX + "b" * 64
+    minted = ACCESS_KEY_PREFIX + "b" * 64
     assert minted not in _scrub_log_text(f"Bearer {minted} rejected")
 
 

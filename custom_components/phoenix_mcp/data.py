@@ -17,7 +17,7 @@ from .routing_statistics import RoutingStatistics
 from .const import TEMPLATE_WORKER_CONCURRENCY
 from .card_catalog import CardCatalogStore
 from .rate_limiter import RateLimiter
-from .token_store import TokenStore
+from .access_key_store import AccessKeyStore
 from .version_store import VersionStore
 
 if TYPE_CHECKING:
@@ -36,7 +36,7 @@ class PhoenixData:
     from views, sensors, and __init__ callbacks without globals.
     """
 
-    store: TokenStore
+    store: AccessKeyStore
     rate_limiter: RateLimiter
     audit: AuditLog
     # The HomeAssistant instance, set in __init__. Optional so direct constructions
@@ -76,7 +76,7 @@ class PhoenixData:
     # memory only; after a restart the worst case is one repeated advisory.
     stale_tools_advised: dict[str, str] = field(default_factory=dict)
     # In-memory request/denied/rate-limit counters keyed by token ID.
-    token_counters: dict[str, dict[str, int]] = field(default_factory=dict)
+    access_key_counters: dict[str, dict[str, int]] = field(default_factory=dict)
     # Approval IDs whose saved action is currently mid-execution. Guards
     # _approve_approval against a concurrent double-approve re-running the same
     # side effect. The durable execution_started_at marker handles process loss.
@@ -94,16 +94,16 @@ class PhoenixData:
     # Assist, MESA, or injector reconciliation lets an older PATCH finish after a
     # newer one and put runtime state back on the obsolete generation.
     settings_update_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
-    # Keyed by token name slug; values are the list of PhoenixTokenSensor instances.
+    # Keyed by token name slug; values are the list of PhoenixAccessKeySensor instances.
     platform_entities: dict[str, list] = field(default_factory=dict)
     # Keyed by token ID for fast sensor lookup during counter updates.
-    token_id_sensors: dict[str, list] = field(default_factory=dict)
+    access_key_id_sensors: dict[str, list] = field(default_factory=dict)
     async_add_entities_cb: Callable | None = None
     # Per-token expiry timers. Values are cancel callbacks from hass.async_call_later.
     expiry_timers: dict[str, Callable] = field(default_factory=dict)
     # Callbacks wired by __init__.py to decouple sensor lifecycle from views.
-    async_on_token_created: Callable | None = None
-    async_on_token_archived: Callable | None = None
+    async_on_access_key_created: Callable | None = None
+    async_on_access_key_archived: Callable | None = None
     # Set to True once client routes have been registered; prevents duplicate registration.
     routes_registered: bool = False
     # Registers the agent-facing views when setup skipped them (kill switch on).
@@ -128,7 +128,7 @@ class PhoenixData:
     # Called by the admin settings PATCH when audit_flush_interval changes, so
     # the periodic flush timer picks up the new interval immediately.
     reschedule_audit_flush: Callable | None = None
-    # Debounce state for per-request sensor writes (helpers.update_token_counter):
+    # Debounce state for per-request sensor writes (helpers.update_access_key_counter):
     # token IDs with unwritten counter changes, and the pending flush cancel.
     sensor_write_dirty: set[str] = field(default_factory=set)
     sensor_flush_cancel: Callable | None = None

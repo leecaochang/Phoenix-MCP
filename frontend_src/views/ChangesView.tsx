@@ -136,7 +136,7 @@ export function ChangesView({ hass }: { hass: unknown }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [tokenNames, setTokenNames] = useState<Map<string, string>>(new Map());
+  const [accessKeyNames, setAccessKeyNames] = useState<Map<string, string>>(new Map());
   const [hasMore, setHasMore] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const selectedRef = useRef<string | null>(null);
@@ -145,22 +145,22 @@ export function ChangesView({ hass }: { hass: unknown }) {
   // token_id -> latest known name, so a renamed token shows its new name here.
   // Covers archived tokens too, so a renamed-then-revoked token resolves to its
   // final name rather than the one captured with the change.
-  const loadTokens = useCallback(async () => {
+  const loadAccessKeys = useCallback(async () => {
     try {
       const [active, archived] = await Promise.all([
-        api.listTokens(),
-        api.listArchivedTokens().catch(() => []),
+        api.listAccessKeys(),
+        api.listArchivedAccessKeys().catch(() => []),
       ]);
       const map = new Map<string, string>();
       for (const t of archived) map.set(t.id, t.name);
       for (const t of active) map.set(t.id, t.name);
-      setTokenNames(map);
+      setAccessKeyNames(map);
     } catch {
       // Names fall back to the value captured with each change.
     }
   }, []);
 
-  useEffect(() => { loadTokens(); }, [loadTokens]);
+  useEffect(() => { loadAccessKeys(); }, [loadAccessKeys]);
 
   // offset === 0 always replaces the feed (a fresh top page: initial load, manual
   // refresh, or a background poll or event), because the feed is a live list and
@@ -221,7 +221,7 @@ export function ChangesView({ hass }: { hass: unknown }) {
     return (
       <ChangeDetail
         versionId={selected}
-        tokenNames={tokenNames}
+        accessKeyNames={accessKeyNames}
         onSelectVersion={setSelected}
         onBack={() => { setSelected(null); loadFeed(0); }}
         onRestored={async () => {
@@ -244,7 +244,7 @@ export function ChangesView({ hass }: { hass: unknown }) {
             {t("changes.subtitle")}
           </p>
         </div>
-        <button className="btn btn-ghost btn-sm btn-icon" onClick={() => { loadFeed(0); loadTokens(); }} title={t("common.refresh")} aria-label={t("changes.refreshAria")}>
+        <button className="btn btn-ghost btn-sm btn-icon" onClick={() => { loadFeed(0); loadAccessKeys(); }} title={t("common.refresh")} aria-label={t("changes.refreshAria")}>
           <RefreshIcon />
         </button>
       </div>
@@ -270,7 +270,7 @@ export function ChangesView({ hass }: { hass: unknown }) {
                 {label(v)}
                 {versionSummary(v) ? <span className="changes-summary">{versionSummary(v)}</span> : null}
               </span>
-              <span className="changes-col-who">{whoNow(v, tokenNames)}</span>
+              <span className="changes-col-who">{whoNow(v, accessKeyNames)}</span>
               <span className="changes-col-when">{formatDateTime(v.timestamp)}</span>
             </button>
           ))}
@@ -288,9 +288,9 @@ export function ChangesView({ hass }: { hass: unknown }) {
 }
 
 function ChangeDetail(
-  { versionId, tokenNames, onSelectVersion, onBack, onRestored }: {
+  { versionId, accessKeyNames, onSelectVersion, onBack, onRestored }: {
     versionId: string;
-    tokenNames: Map<string, string>;
+    accessKeyNames: Map<string, string>;
     onSelectVersion: (id: string) => void;
     onBack: () => void;
     onRestored: () => Promise<void>;
@@ -432,7 +432,7 @@ function ChangeDetail(
             <code className="change-detail-type">{resourceTypeLabel(record.resource_type)}</code>
             {versionSummary(record) ? <span className="change-detail-summary">{versionSummary(record)}</span> : null}
             <span className="change-detail-when">{formatDateTime(record.timestamp)}</span>
-            <span className="change-detail-by">{t("changes.byWho", { who: whoDetail(record, tokenNames) })}</span>
+            <span className="change-detail-by">{t("changes.byWho", { who: whoDetail(record, accessKeyNames) })}</span>
           </div>
 
           <div className="change-detail-body">

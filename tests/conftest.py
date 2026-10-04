@@ -139,14 +139,14 @@ def mock_store(mock_store_data):
 
 
 @pytest.fixture
-async def token_store(hass, mock_store):
-    from custom_components.phoenix_mcp.token_store import TokenStore
+async def access_key_store(hass, mock_store):
+    from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
 
     with patch(
-        "custom_components.phoenix_mcp.token_store._PhoenixStore",
+        "custom_components.phoenix_mcp.access_key_store._PhoenixStore",
         return_value=mock_store,
     ):
-        instance = await TokenStore.async_create(hass)
+        instance = await AccessKeyStore.async_create(hass)
     return instance
 
 

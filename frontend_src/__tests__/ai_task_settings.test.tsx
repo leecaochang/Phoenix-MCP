@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, fireEvent, screen, waitFor } from "@testing-library/react";
 
-const listTokens = vi.fn();
+const listAccessKeys = vi.fn();
 const getAgentCliProviders = vi.fn();
 const getAgentCliModels = vi.fn();
 const getAiTaskPreferred = vi.fn();
@@ -10,7 +10,7 @@ const clearAiTaskPreferred = vi.fn();
 
 vi.mock("../api", () => ({
   api: {
-    listTokens: (...a: unknown[]) => listTokens(...a),
+    listAccessKeys: (...a: unknown[]) => listAccessKeys(...a),
     getAgentCliProviders: (...a: unknown[]) => getAgentCliProviders(...a),
     getAgentCliModels: (...a: unknown[]) => getAgentCliModels(...a),
     getAiTaskPreferred: (...a: unknown[]) => getAiTaskPreferred(...a),
@@ -48,7 +48,7 @@ function renderCard(s: GlobalSettings, onChange = vi.fn()) {
 describe("AiTaskSettings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    listTokens.mockResolvedValue([{ id: "tok-1", name: "ai-token" }]);
+    listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "ai-token" }]);
     getAgentCliProviders.mockResolvedValue({ instances: [{ id: "i1", kind: "claude", name: "Claude", model: "claude-opus-4-8" }] });
     getAgentCliModels.mockResolvedValue({ models: ["claude-opus-4-8"] });
     getAiTaskPreferred.mockResolvedValue(prefStatus());
@@ -61,7 +61,7 @@ describe("AiTaskSettings", () => {
     expect(screen.getByText("AI Task")).toBeTruthy();
     fireEvent.click(screen.getByLabelText("Enable Phoenix MCP AI Task"));
     expect(onChange).toHaveBeenCalledWith("ai_task_enabled", true);
-    await waitFor(() => expect(listTokens).toHaveBeenCalled());
+    await waitFor(() => expect(listAccessKeys).toHaveBeenCalled());
   });
 
   it("writes the token and provider selections", async () => {
@@ -163,7 +163,7 @@ describe("AiTaskSettings", () => {
   });
 
   it("does not expose internal decision review for any token", async () => {
-    listTokens.mockResolvedValue([{ id: "tok-1", name: "Home token", persona: "home_companion" },
+    listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "Home token", persona: "home_companion" },
       { id: "tok-2", name: "Ordinary token", persona: "voice_assistant" }]);
     const { rerender } = render(<AiTaskSettings settings={settings({ ai_task_token_id: "tok-1", ai_task_tool_routing_mode: "observe" })} onChange={vi.fn()} saving={false} />);
     await screen.findByRole("option", { name: "Home token" });

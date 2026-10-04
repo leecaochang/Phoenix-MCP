@@ -49,10 +49,10 @@ function CommandBlock(
   );
 }
 
-export function ConnectInstructions({ token, tokenName }: { token: string; tokenName: string }) {
+export function ConnectInstructions({ accessKey, accessKeyName }: { accessKey: string; accessKeyName: string }) {
   const [mcpUrl, setMcpUrl] = useState(buildMcpUrl(window.location.origin));
   const [agentTab, setAgentTab] = useState("claude");
-  const tabs = buildAgentTabs(mcpUrl, token, tokenName);
+  const tabs = buildAgentTabs(mcpUrl, accessKey, accessKeyName);
   const current = tabs.find((t) => t.key === agentTab) ?? tabs[0];
   const skillUrl = skillUrlFromMcp(mcpUrl);
 
@@ -84,7 +84,7 @@ export function ConnectInstructions({ token, tokenName }: { token: string; token
       </p>
       <CopyCodeBox label={t("wizard.mcpServerUrl")} value={mcpUrl} onChange={setMcpUrl} />
       <small className="wizard-hint">{t("wizard.urlHint")}</small>
-      <CopyCodeBox label={t("wizard.tokenLabel")} value={token} />
+      <CopyCodeBox label={t("wizard.tokenLabel")} value={accessKey} />
       <small className="wizard-hint">
         {tRich("wizard.serverNameHint", { code: (c) => <code>{c}</code> })}
       </small>

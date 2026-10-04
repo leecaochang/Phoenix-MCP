@@ -32,12 +32,12 @@ from custom_components.phoenix_mcp.mcp_view import (
     async_execute_approved_tool,
 )
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
-from custom_components.phoenix_mcp.token_store import (
+from custom_components.phoenix_mcp.access_key_store import (
     GlobalSettings,
     PermissionNode,
     PermissionTree,
-    TokenRecord,
-    TokenStore,
+    AccessKeyRecord,
+    AccessKeyStore,
 )
 from custom_components.phoenix_mcp.tools.integration_reconfigure import (
     ReconfigureFlowResult,
@@ -68,11 +68,11 @@ def test_approval_summary_and_all_catalogs_state_the_review_limitations():
 
 
 async def _data(hass: HomeAssistant) -> PhoenixData:
-    store = MagicMock(spec=TokenStore)
+    store = MagicMock(spec=AccessKeyStore)
     store.async_lock = asyncio.Lock()
     store.async_save = AsyncMock()
     store.get_settings.return_value = GlobalSettings(mesa_mode="off")
-    store.list_tokens.return_value = []
+    store.list_access_keys.return_value = []
     store.get_entity_hints.return_value = {}
     store.get_pending_approvals.return_value = []
     data = PhoenixData(
@@ -113,7 +113,7 @@ def reconfigure_env(hass: HomeAssistant) -> dict:
     return {"entry": entry, "device": device, "entity": entity}
 
 
-def _token(
+def _access_key(
     env: dict,
     *,
     cap="allow",
@@ -122,7 +122,7 @@ def _token(
     device_state="GREEN",
     entity_state=None,
 ):
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="reconfigure-test",
         token_hash="x",
@@ -148,7 +148,7 @@ async def test_capability_is_enforced_for_pass_through(hass, reconfigure_env):
     _content, outcome, _resource = await _call_tool(
         "reconfigure_integration",
         {"entry_id": reconfigure_env["entry"].entry_id, "config": {}},
-        _token(reconfigure_env, cap="deny", pass_through=True),
+        _access_key(reconfigure_env, cap="deny", pass_through=True),
         hass,
         data,
     )
@@ -170,7 +170,7 @@ async def test_complete_config_entry_write_is_required(
         content, outcome, _resource = await _call_tool(
             "reconfigure_integration",
             {"entry_id": reconfigure_env["entry"].entry_id, "config": {}},
-            _token(reconfigure_env, **token_kwargs),
+            _access_key(reconfigure_env, **token_kwargs),
             hass,
             data,
         )
@@ -184,7 +184,7 @@ async def test_list_integrations_accepts_either_capability(hass, reconfigure_env
     content, outcome, _resource = await _call_tool(
         "list_integrations",
         {},
-        _token(reconfigure_env, cap="allow", write="deny"),
+        _access_key(reconfigure_env, cap="allow", write="deny"),
         hass,
         data,
     )
@@ -206,7 +206,7 @@ async def test_review_preview_redacts_credentials_but_keeps_endpoint(
             },
             "menu_choices": ["local"],
         },
-        _token(reconfigure_env),
+        _access_key(reconfigure_env),
         hass,
     )
     preview = diff["preview"]
@@ -237,7 +237,7 @@ async def test_approval_binds_private_identity_and_keeps_exact_durable_args(
         _content, outcome, _resource = await _call_tool(
             "reconfigure_integration",
             args,
-            _token(reconfigure_env, cap="confirm"),
+            _access_key(reconfigure_env, cap="confirm"),
             hass,
             data,
         )
@@ -262,7 +262,7 @@ async def test_real_durable_approval_replay_keeps_raw_config_but_public_view_doe
     content, outcome, _resource = await _call_tool(
         "reconfigure_integration",
         args,
-        _token(reconfigure_env, cap="confirm"),
+        _access_key(reconfigure_env, cap="confirm"),
         hass,
         data,
     )
@@ -283,7 +283,7 @@ async def test_identity_race_refuses_before_starting_flow(hass, reconfigure_env)
         await _call_tool(
             "reconfigure_integration",
             args,
-            _token(reconfigure_env, cap="confirm"),
+            _access_key(reconfigure_env, cap="confirm"),
             hass,
             data,
         )
@@ -299,7 +299,7 @@ async def test_identity_race_refuses_before_starting_flow(hass, reconfigure_env)
         content, outcome, _resource = await async_execute_approved_tool(
             "reconfigure_integration",
             saved,
-            _token(reconfigure_env, cap="confirm"),
+            _access_key(reconfigure_env, cap="confirm"),
             hass,
             data,
         )
@@ -329,7 +329,7 @@ async def test_same_domain_shared_owner_is_blocked(hass, reconfigure_env):
         content, outcome, _resource = await _call_tool(
             "reconfigure_integration",
             {"entry_id": reconfigure_env["entry"].entry_id, "config": {}},
-            _token(reconfigure_env),
+            _access_key(reconfigure_env),
             hass,
             data,
         )
@@ -362,7 +362,7 @@ async def test_applied_result_is_versioned_redacted_and_never_retryable(
                 "entry_id": entry.entry_id,
                 "config": {"host": "ha.example.test", "password": "do-not-store"},
             },
-            _token(reconfigure_env),
+            _access_key(reconfigure_env),
             hass,
             data,
         )
@@ -415,7 +415,7 @@ async def test_post_apply_private_identity_change_has_explicit_status(
         content, outcome, _resource = await _call_tool(
             "reconfigure_integration",
             {"entry_id": entry.entry_id, "config": {}},
-            _token(reconfigure_env),
+            _access_key(reconfigure_env),
             hass,
             data,
         )

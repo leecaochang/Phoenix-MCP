@@ -30,7 +30,7 @@ from ..helpers import (
 from ..mesa import async_apply_mesa_to_call
 from ..policy_engine import Permission, resolve
 from ..request_authority import AuthorityChangedError, check_request_authority, dispatch_request_id, mark_dispatch_started
-from ..token_store import TokenRecord
+from ..access_key_store import AccessKeyRecord
 from ..tool_common import (
     _approved_exec_ctx, _gate, _pending_or_inline, _tool_error, _tool_success,
     redaction_sentinel_path, _tool_pending,
@@ -115,23 +115,23 @@ def _calendar_journal(data: PhoenixData, hass: HomeAssistant) -> CalendarWriteJo
     return data.calendar_writes
 
 
-def _safe_calendar_data(value: Any, token: TokenRecord, hass: HomeAssistant) -> Any:
+def _safe_calendar_data(value: Any, access_key: AccessKeyRecord, hass: HomeAssistant) -> Any:
     value = redact_structure(value)
     if isinstance(value, str):
-        return redact_inaccessible_entity_ids_in_text(value, token, hass)
+        return redact_inaccessible_entity_ids_in_text(value, access_key, hass)
     if isinstance(value, list):
-        return [_safe_calendar_data(item, token, hass) for item in value]
+        return [_safe_calendar_data(item, access_key, hass) for item in value]
     if isinstance(value, dict):
-        return {key: _safe_calendar_data(item, token, hass) for key, item in value.items()}
+        return {key: _safe_calendar_data(item, access_key, hass) for key, item in value.items()}
     return value
 
 
-def _calendar_entity(entity_id: Any, token: TokenRecord, hass: HomeAssistant, *, write: bool = False) -> Any:
+def _calendar_entity(entity_id: Any, access_key: AccessKeyRecord, hass: HomeAssistant, *, write: bool = False) -> Any:
     """Authorize before inspecting the integration or its feature flags."""
     if not isinstance(entity_id, str) or not valid_entity_id(entity_id):
         raise ValueError("entity_id must be a calendar entity ID.")
     allowed = (Permission.WRITE,) if write else (Permission.READ, Permission.WRITE)
-    if resolve(entity_id, token, hass) not in allowed:
+    if resolve(entity_id, access_key, hass) not in allowed:
         raise PermissionError("Calendar not found.")
     if not entity_id.startswith("calendar."):
         raise ValueError("entity_id must be a calendar entity ID.")
@@ -209,9 +209,9 @@ def _calendar_serialized(event: dict) -> dict:
             value.isoformat() if hasattr(value, "isoformat") else value for key, value in event.items()}
 
 
-async def _calendar_write_plan(args: dict, token: TokenRecord, hass: HomeAssistant, operation: str) -> dict:
+async def _calendar_write_plan(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, operation: str) -> dict:
     entity_id = args.get("entity_id")
-    entity = _calendar_entity(entity_id, token, hass, write=True)
+    entity = _calendar_entity(entity_id, access_key, hass, write=True)
     from homeassistant.components.calendar import CalendarEntityFeature
 
     feature = getattr(CalendarEntityFeature, f"{operation.upper()}_EVENT", 0)
@@ -283,38 +283,38 @@ async def _calendar_write_plan(args: dict, token: TokenRecord, hass: HomeAssista
             event = None
     rows = await _calendar_events(entity, hass, start, end) if operation == "create" else rows
     check_request_authority()
-    _calendar_entity(entity_id, token, hass, write=True)
+    _calendar_entity(entity_id, access_key, hass, write=True)
     plan.update({"event": _calendar_serialized(event) if event is not None else None,
                  "start_time": start.isoformat(), "end_time": end.isoformat(),
                  "existing_ids": [[row.get("uid"), row.get("recurrence_id")] for row in rows] if operation == "create" else None})
     return plan
 
 
-async def _tool_calendar_write(args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+async def _tool_calendar_write(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
                                request_id: str, client_ip: str | None, *, operation: str, tool_name: str) -> tuple[dict, str, str]:
-    if effective_cap(token, "cap_calendar_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_calendar_write") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", tool_name
     try:
-        plan = await _calendar_write_plan(args, token, hass, operation)
+        plan = await _calendar_write_plan(args, access_key, hass, operation)
         saved = bind_targets({"_calendar_plan": plan}, [plan["entity_id"]], hass)
-        gated = await _gate("cap_calendar_write", token, hass, data, tool_name=tool_name,
+        gated = await _gate("cap_calendar_write", access_key, hass, data, tool_name=tool_name,
                             args=saved, request_id=request_id, client_ip=client_ip,
-                            diff=lambda: _calendar_diff(plan, token, hass))
+                            diff=lambda: _calendar_diff(plan, access_key, hass))
         if gated is not None:
             return gated
-        return await _execute_calendar_write(saved, token, hass, data, operation=operation, tool_name=tool_name)
+        return await _execute_calendar_write(saved, access_key, hass, data, operation=operation, tool_name=tool_name)
     except AuthorityChangedError:
         raise
     except PermissionError:
         return _tool_error("Calendar not found."), "denied", tool_name
     except ValueError as exc:
-        return _tool_error(_safe_calendar_data(str(exc), token, hass)), "invalid_request", tool_name
+        return _tool_error(_safe_calendar_data(str(exc), access_key, hass)), "invalid_request", tool_name
     except Exception:
         _LOGGER.exception("Calendar precheck failed")
         return _tool_error("Calendar event validation or read failed. No write was dispatched."), "invalid_request", tool_name
 
 
-def _calendar_diff(plan: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _calendar_diff(plan: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     if plan["operation"] == "create":
         summary = diff_summary_fields("create_calendar_event")
     elif plan["operation"] == "update":
@@ -322,16 +322,16 @@ def _calendar_diff(plan: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
     else:
         summary = diff_summary_fields("delete_calendar_event")
     return {"kind": "calendar_event", **summary,
-            "before": _safe_calendar_data(plan["before"], token, hass), "after": _safe_calendar_data(plan["event"], token, hass),
+            "before": _safe_calendar_data(plan["before"], access_key, hass), "after": _safe_calendar_data(plan["event"], access_key, hass),
             "preview": {"target_semantics": "exact", "resolved_entity_ids": [plan["entity_id"]],
                         "uid": plan.get("uid"), "recurrence_id": plan.get("recurrence_id"),
                         "recurrence_range": plan.get("recurrence_range"),
                         "recovery": "Occurrence snapshot only; no automatic rollback or complete series restoration."}}
 
 
-async def _execute_calendar_write(args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+async def _execute_calendar_write(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
                                   *, operation: str, tool_name: str) -> tuple[dict, str, str]:
-    if effective_cap(token, "cap_calendar_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_calendar_write") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", tool_name
     plan = args.get("_calendar_plan")
     if not isinstance(plan, dict) or plan.get("operation") != operation:
@@ -340,20 +340,20 @@ async def _execute_calendar_write(args: dict, token: TokenRecord, hass: HomeAssi
     journal = _calendar_journal(data, hass)
     check_request_authority()
     try:
-        _calendar_entity(entity_id, token, hass, write=True)
+        _calendar_entity(entity_id, access_key, hass, write=True)
         if not targets_current(args, [entity_id], hass):
             raise PermissionError
     except (PermissionError, ValueError):
         return _tool_error("Calendar not found or its identity changed."), "denied", entity_id
     mesa = await async_apply_mesa_to_call(
-        hass, data, token, domain="calendar", service=f"{operation}_event",
+        hass, data, access_key, domain="calendar", service=f"{operation}_event",
         service_data=plan["event"] or {}, entities=[entity_id], request_id=dispatch_request_id.get(), client_ip=None,
-        session_id=token.id, confirm_approved=_approved_exec_ctx.get(),
+        session_id=access_key.id, confirm_approved=_approved_exec_ctx.get(),
         approval_tool_name=tool_name, approval_args=args,
-        approval_diff=_calendar_diff(plan, token, hass), require_all=True,
+        approval_diff=_calendar_diff(plan, access_key, hass), require_all=True,
     )
     if mesa.decision == "pending":
-        return await _pending_or_inline(hass, data, token, mesa.approval)
+        return await _pending_or_inline(hass, data, access_key, mesa.approval)
     if mesa.decision != "allow":
         return _tool_error("Forbidden."), "denied", entity_id
     async with journal.lock:
@@ -361,12 +361,12 @@ async def _execute_calendar_write(args: dict, token: TokenRecord, hass: HomeAssi
         ready_for_dispatch = False
         try:
             check_request_authority()
-            entity = _calendar_entity(entity_id, token, hass, write=True)
+            entity = _calendar_entity(entity_id, access_key, hass, write=True)
             if not targets_current(args, [entity_id], hass):
                 raise PermissionError
             public = {key: plan[key] for key in ("entity_id", "uid", "recurrence_id", "recurrence_range", "start_time", "end_time") if key in plan}
             public.update({"expected_hash": content_hash(plan["before"]), "mode": "replace", "event": plan["event"]} if operation == "update" else {"event": plan["event"]} if operation == "create" else {"expected_hash": content_hash(plan["before"])})
-            fresh = await _calendar_write_plan(public, token, hass, operation)
+            fresh = await _calendar_write_plan(public, access_key, hass, operation)
             if fresh != plan:
                 raise ValueError("Calendar event or readback context changed. Submit a new request.")
             records = await journal.load()
@@ -375,7 +375,7 @@ async def _execute_calendar_write(args: dict, token: TokenRecord, hass: HomeAssi
                 if removable is None:
                     raise ValueError("Calendar recovery storage is full. No write was dispatched.")
                 records.remove(removable)
-            receipt = {"receipt_id": uuid.uuid4().hex, "token_id": token.id,
+            receipt = {"receipt_id": uuid.uuid4().hex, "token_id": access_key.id,
                        "identity": target_binding([entity_id], hass), "entity_id": entity_id,
                        "status": "outcome_unknown", "created_at": dt_util.utcnow().isoformat(),
                        "operation": operation, "before": copy.deepcopy(plan["before"]),
@@ -384,19 +384,19 @@ async def _execute_calendar_write(args: dict, token: TokenRecord, hass: HomeAssi
             records.append(receipt)
             await journal.save()
             check_request_authority()
-            _calendar_entity(entity_id, token, hass, write=True)
-            if effective_cap(token, "cap_calendar_write") == CAP_DENY:
+            _calendar_entity(entity_id, access_key, hass, write=True)
+            if effective_cap(access_key, "cap_calendar_write") == CAP_DENY:
                 raise PermissionError
             if not targets_current(args, [entity_id], hass):
                 raise PermissionError
-            if await _calendar_write_plan(public, token, hass, operation) != plan:
+            if await _calendar_write_plan(public, access_key, hass, operation) != plan:
                 raise ValueError("Calendar event changed before dispatch. Submit a new request.")
             mesa = await async_apply_mesa_to_call(
-                hass, data, token, domain="calendar", service=f"{operation}_event",
+                hass, data, access_key, domain="calendar", service=f"{operation}_event",
                 service_data=plan["event"] or {}, entities=[entity_id], request_id=dispatch_request_id.get(), client_ip=None,
-                session_id=token.id, confirm_approved=_approved_exec_ctx.get(),
+                session_id=access_key.id, confirm_approved=_approved_exec_ctx.get(),
                 approval_tool_name=tool_name, approval_args=args,
-                approval_diff=_calendar_diff(plan, token, hass), require_all=True,
+                approval_diff=_calendar_diff(plan, access_key, hass), require_all=True,
             )
             if mesa.decision == "pending" and mesa.approval is not None:
                 # Waiting inline while holding the journal lock would deadlock replay.
@@ -404,8 +404,8 @@ async def _execute_calendar_write(args: dict, token: TokenRecord, hass: HomeAssi
             if mesa.decision != "allow":
                 raise PermissionError
             check_request_authority()
-            entity = _calendar_entity(entity_id, token, hass, write=True)
-            if effective_cap(token, "cap_calendar_write") == CAP_DENY or not targets_current(args, [entity_id], hass):
+            entity = _calendar_entity(entity_id, access_key, hass, write=True)
+            if effective_cap(access_key, "cap_calendar_write") == CAP_DENY or not targets_current(args, [entity_id], hass):
                 raise PermissionError
             ready_for_dispatch = True
         except AuthorityChangedError:
@@ -413,7 +413,7 @@ async def _execute_calendar_write(args: dict, token: TokenRecord, hass: HomeAssi
         except PermissionError:
             return _tool_error("Calendar not found or its identity changed."), "denied", entity_id
         except ValueError as exc:
-            return _tool_error(_safe_calendar_data(str(exc), token, hass)), "invalid_request", entity_id
+            return _tool_error(_safe_calendar_data(str(exc), access_key, hass)), "invalid_request", entity_id
         except Exception:
             _LOGGER.exception("Calendar write preparation failed")
             return _tool_error("Calendar write preparation failed. No write was dispatched."), "invalid_request", entity_id
@@ -448,7 +448,7 @@ async def _execute_calendar_write(args: dict, token: TokenRecord, hass: HomeAssi
                 read_start = _calendar_time(plan["event"]["start"])
                 read_end = min(_calendar_time(plan["event"]["end"]), read_start + timedelta(days=CALENDAR_MAX_WINDOW_DAYS))
             rows = await _calendar_events(entity, hass, read_start, read_end)
-            _calendar_entity(entity_id, token, hass, write=True)
+            _calendar_entity(entity_id, access_key, hass, write=True)
             if operation == "create":
                 candidates = [row for row in rows if row.get("uid") and [row.get("uid"), row.get("recurrence_id")] not in plan["existing_ids"]
                               and all(row.get(key) == value for key, value in plan["event"].items())]
@@ -463,59 +463,59 @@ async def _execute_calendar_write(args: dict, token: TokenRecord, hass: HomeAssi
         except Exception:
             _LOGGER.exception("Calendar dispatch or readback failed")
             # A saved applied receipt distinguishes a readback failure from uncertain dispatch.
-            return _calendar_result(receipt, token, hass, error=True)
+            return _calendar_result(receipt, access_key, hass, error=True)
         finally:
             journal.active.discard(receipt["receipt_id"])
-        return _calendar_result(receipt, token, hass)
+        return _calendar_result(receipt, access_key, hass)
 
 
-def _calendar_result(receipt: dict, token: TokenRecord, hass: HomeAssistant, *, error: bool = False) -> tuple[dict, str, str]:
+def _calendar_result(receipt: dict, access_key: AccessKeyRecord, hass: HomeAssistant, *, error: bool = False) -> tuple[dict, str, str]:
     check_request_authority()
-    _calendar_entity(receipt["entity_id"], token, hass)
+    _calendar_entity(receipt["entity_id"], access_key, hass)
     body = {key: value for key, value in receipt.items() if key not in ("token_id", "identity")}
     if receipt["after"] is not None:
         body["after"] = {**receipt["after"], "content_hash": content_hash(receipt["after"])}
-    result = _tool_success(json.dumps(_safe_calendar_data(body, token, hass)))
+    result = _tool_success(json.dumps(_safe_calendar_data(body, access_key, hass)))
     if error:
         result["isError"] = True
     return result, "invalid_request" if error else "allowed", receipt["entity_id"]
 
 
-async def _execute_create_calendar_event(args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData) -> tuple[dict, str, str]:
-    return await _execute_calendar_write(args, token, hass, data, operation="create", tool_name="create_calendar_event")
+async def _execute_create_calendar_event(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData) -> tuple[dict, str, str]:
+    return await _execute_calendar_write(args, access_key, hass, data, operation="create", tool_name="create_calendar_event")
 
 
-async def _execute_update_calendar_event(args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData) -> tuple[dict, str, str]:
-    return await _execute_calendar_write(args, token, hass, data, operation="update", tool_name="update_calendar_event")
+async def _execute_update_calendar_event(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData) -> tuple[dict, str, str]:
+    return await _execute_calendar_write(args, access_key, hass, data, operation="update", tool_name="update_calendar_event")
 
 
-async def _execute_delete_calendar_event(args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData) -> tuple[dict, str, str]:
-    return await _execute_calendar_write(args, token, hass, data, operation="delete", tool_name="delete_calendar_event")
+async def _execute_delete_calendar_event(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData) -> tuple[dict, str, str]:
+    return await _execute_calendar_write(args, access_key, hass, data, operation="delete", tool_name="delete_calendar_event")
 
 
-async def _tool_get_calendar_write(args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData) -> tuple[dict, str, str]:
+async def _tool_get_calendar_write(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData) -> tuple[dict, str, str]:
     try:
-        _calendar_entity(args.get("entity_id"), token, hass)
+        _calendar_entity(args.get("entity_id"), access_key, hass)
     except (PermissionError, ValueError):
         return _tool_error("Calendar write not found."), "not_found", "get_calendar_write"
     journal = _calendar_journal(data, hass)
     async with journal.lock:
         records = await journal.load()
         check_request_authority()
-        visible = [row for row in records if row["entity_id"] == args["entity_id"] and row["token_id"] == token.id
+        visible = [row for row in records if row["entity_id"] == args["entity_id"] and row["token_id"] == access_key.id
                    and row["identity"] == target_binding([args["entity_id"]], hass)]
         if "receipt_id" not in args:
             check_request_authority()
-            _calendar_entity(args["entity_id"], token, hass)
+            _calendar_entity(args["entity_id"], access_key, hass)
             rows = [{key: row[key] for key in ("receipt_id", "operation", "status", "created_at")} for row in visible]
             return _tool_success(json.dumps({"writes": rows})), "allowed", args["entity_id"]
         receipt = next((row for row in visible if row["receipt_id"] == args.get("receipt_id")), None)
         if receipt is None:
             return _tool_error("Calendar write not found."), "not_found", "get_calendar_write"
         try:
-            _calendar_entity(receipt["entity_id"], token, hass)
+            _calendar_entity(receipt["entity_id"], access_key, hass)
             if receipt["identity"] != target_binding([receipt["entity_id"]], hass):
                 raise PermissionError
         except (PermissionError, ValueError):
             return _tool_error("Calendar write not found."), "not_found", "get_calendar_write"
-        return _calendar_result(receipt, token, hass)
+        return _calendar_result(receipt, access_key, hass)

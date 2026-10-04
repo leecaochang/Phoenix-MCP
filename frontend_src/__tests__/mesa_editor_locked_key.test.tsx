@@ -71,7 +71,7 @@ describe("the callers that supply their own target", () => {
   /** Everything above tests ProfileEditor, but each caller must pass `lockedKey`.
    *  Those tests would stay green if a caller dropped it: the "tested next to the
    *  seam, not at it" trap. Reading the call site is crude but guards the real
-   *  seam, and rendering TokenDetailView here would mean mocking many endpoints
+   *  seam, and rendering AccessKeyDetailView here would mean mocking many endpoints
    *  to assert one prop.
    */
   const callSiteOf = (file: string) => {
@@ -82,7 +82,7 @@ describe("the callers that supply their own target", () => {
   };
 
   it("the permission tree locks the target it was clicked on", () => {
-    expect(callSiteOf("views/TokenDetail.tsx")).toMatch(/\blockedKey\b/);
+    expect(callSiteOf("views/AccessKeyDetail.tsx")).toMatch(/\blockedKey\b/);
   });
 
   it("the in-context injector does too", () => {

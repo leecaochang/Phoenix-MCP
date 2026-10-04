@@ -13,7 +13,7 @@ function entry(over: Partial<AuditEntry> = {}): AuditEntry {
     request_id: "r1",
     timestamp: "2026-01-01T00:00:00Z",
     token_id: "t1",
-    token_name: "my_token",
+    token_name: "my_access_key",
     method: "tools/call",
     resource: "create_automation",
     outcome: "allowed",
@@ -38,7 +38,7 @@ describe("AuditView", () => {
       total: 3,
     });
 
-    const { findByText, queryByText } = render(<AuditView tokens={[]} />);
+    const { findByText, queryByText } = render(<AuditView accessKeys={[]} />);
     await findByText("create_automation");
 
     expect(api.getAudit).toHaveBeenCalledWith({
@@ -54,7 +54,7 @@ describe("AuditView", () => {
       .mockResolvedValueOnce({ entries: [entry({ request_id: "r1", resource: "first" })], total: 2 })
       .mockResolvedValueOnce({ entries: [entry({ request_id: "r2", resource: "second" })], total: 2 });
 
-    const { findByText, getByText, queryByText } = render(<AuditView tokens={[]} />);
+    const { findByText, getByText, queryByText } = render(<AuditView accessKeys={[]} />);
     await findByText("first");
 
     fireEvent.click(getByText("Load more"));
@@ -67,7 +67,7 @@ describe("AuditView", () => {
 
   it("changing a dropdown filter reloads from offset 0 with the filter applied", async () => {
     vi.mocked(api.getAudit).mockResolvedValue({ entries: [entry()], total: 1 });
-    const { findByText, getByLabelText } = render(<AuditView tokens={[]} />);
+    const { findByText, getByLabelText } = render(<AuditView accessKeys={[]} />);
     await findByText("create_automation");
 
     fireEvent.change(getByLabelText("Filter by outcome"), { target: { value: "denied" } });
@@ -84,7 +84,7 @@ describe("AuditView", () => {
       .mockReturnValueOnce(stale.promise)
       .mockReturnValueOnce(current.promise);
 
-    const { getByLabelText, findByText, queryByText } = render(<AuditView tokens={[]} />);
+    const { getByLabelText, findByText, queryByText } = render(<AuditView accessKeys={[]} />);
     await waitFor(() => expect(api.getAudit).toHaveBeenCalledTimes(1));
     fireEvent.change(getByLabelText("Filter by outcome"), { target: { value: "denied" } });
     await waitFor(() => expect(api.getAudit).toHaveBeenCalledTimes(2));
@@ -100,7 +100,7 @@ describe("AuditView", () => {
   it("debounces the method/resource/ip text filters instead of firing per keystroke", async () => {
     vi.useFakeTimers();
     vi.mocked(api.getAudit).mockResolvedValue({ entries: [], total: 0 });
-    const { getByLabelText } = render(<AuditView tokens={[]} />);
+    const { getByLabelText } = render(<AuditView accessKeys={[]} />);
     await vi.waitFor(() => expect(api.getAudit).toHaveBeenCalledTimes(1));
 
     fireEvent.change(getByLabelText("Filter by method"), { target: { value: "c" } });
@@ -127,7 +127,7 @@ describe("AuditView", () => {
       total: 4,
     });
 
-    const { findByText, getByRole, getByText } = render(<AuditView tokens={[]} />);
+    const { findByText, getByRole, getByText } = render(<AuditView accessKeys={[]} />);
     await findByText("Agent Chat");
 
     expect(getByRole("columnheader", { name: /Source/ })).toBeTruthy();
@@ -143,7 +143,7 @@ describe("AuditView", () => {
   it("filters a friendly Agent Chat source name using the stored marker", async () => {
     vi.useFakeTimers();
     vi.mocked(api.getAudit).mockResolvedValue({ entries: [], total: 0 });
-    const { getByLabelText } = render(<AuditView tokens={[]} />);
+    const { getByLabelText } = render(<AuditView accessKeys={[]} />);
     await vi.waitFor(() => expect(api.getAudit).toHaveBeenCalledTimes(1));
 
     fireEvent.change(getByLabelText("Filter by source"), { target: { value: "Agent Chat" } });

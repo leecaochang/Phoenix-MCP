@@ -44,16 +44,16 @@ class ToolReviewState:
     replans: int = 0
 
 
-def create_review_state(data: Any, token: Any, surface: str) -> ToolReviewState:
+def create_review_state(data: Any, access_key: Any, surface: str) -> ToolReviewState:
     """Capture routing authority for observe or advise mode on a non-companion token.
 
     Companion tokens and the off mode get an empty state, which leaves the loop unchanged.
     """
     from .home_companion import is_companion
-    if is_companion(token):
+    if is_companion(access_key):
         return ToolReviewState()
     mode = getattr(data.store.get_settings(), TOOL_ROUTING_SETTINGS[surface], "off")
-    return ToolReviewState(RoutingAuthority.capture(data, token) if mode in ("observe", "advise") else None)
+    return ToolReviewState(RoutingAuthority.capture(data, access_key) if mode in ("observe", "advise") else None)
 
 
 def qualified_languages(cfg: Any) -> list[str]:
@@ -73,7 +73,7 @@ def withheld_results(calls: list[dict], review: ToolReview) -> list[dict]:
             for call in calls]
 
 
-def _context(hass: Any, token: Any, messages: list[dict], calls: list[dict], system: str,
+def _context(hass: Any, access_key: Any, messages: list[dict], calls: list[dict], system: str,
              language: str, catalog: list[dict], secret: str | None) -> dict:
     history = pending_context_history(messages, calls)
     if history is None:
@@ -84,7 +84,7 @@ def _context(hass: Any, token: Any, messages: list[dict], calls: list[dict], sys
             raise DecisionError("context_unavailable")
         for text in history_texts(state, check_sensitive=True):
             if ((secret and secret in text) or
-                    redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(text) or "", token, hass) != text):
+                    redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(text) or "", access_key, hass) != text):
                 raise DecisionError("context_unavailable")
         if (not catalog or len({tool["name"] for tool in catalog}) != len(catalog)
                 or any(not isinstance(tool.get("name"), str) or not tool["name"] for tool in catalog)
@@ -159,8 +159,8 @@ async def async_review_tools(hass: Any, data: Any, turn: ToolReviewState, *, sur
         try:
             async with asyncio.timeout(authority.settings.decision_timeout_ms / 1000):
                 store = await _get_secret_store(hass)
-                token = authority.current(hass)
-                if token is None:
+                access_key = authority.current(hass)
+                if access_key is None:
                     return result("authority_changed")
                 account = authority.settings.decision_provider_id
                 cfg = store.resolve(account, purpose="decision") if account else None
@@ -169,10 +169,10 @@ async def async_review_tools(hass: Any, data: Any, turn: ToolReviewState, *, sur
                 admitted = TOOL_ROUTING_QUALIFIED_MODELS.get((cfg.kind, cfg.base_url, cfg.model, lang), ())
                 if mode == "advise" and not admitted:
                     return result("unqualified")
-                catalog = build_agent_tool_list(token, data, surface)
+                catalog = build_agent_tool_list(access_key, data, surface)
                 if announced_tools is not None and catalog != announced_tools:
                     return result("catalog_changed")
-                snapshot = _context(hass, token, messages, calls, system, lang, catalog, cfg.api_key)
+                snapshot = _context(hass, access_key, messages, calls, system, lang, catalog, cfg.api_key)
 
                 def guard() -> None:
                     current = authority.current(hass)

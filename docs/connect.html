@@ -53,7 +53,7 @@
               <li>Claude now uses one hosted remote-connector system across the web app, Desktop, mobile apps, and Cowork. Connections originate from Anthropic's cloud, so the MCP endpoint must be public.</li>
               <li>Personal plans add connectors under <strong>Customize &gt; Connectors</strong>. Team and Enterprise owners add them for the organization before members connect.</li>
               <li>Users can control connector access and individual tool permissions.</li>
-              <li>Request header authentication is a limited organization beta. Choose <strong>Authentication: No sign-in</strong>, add a required <code>Authorization</code> header, and enter the full value <code>Bearer phx_your_token_here</code>. Dialog layouts vary; some show authentication fields under <strong>Advanced</strong>.</li>
+              <li>Request header authentication is a limited organization beta. Choose <strong>Authentication: No sign-in</strong>, add a required <code>Authorization</code> header, and enter the full value <code>Bearer phx_your_access_key_here</code>. Dialog layouts vary; some show authentication fields under <strong>Advanced</strong>.</li>
               <li>The access key is shared by everyone in the organization who uses the connector. Create a dedicated least-privilege Phoenix access key for this connector.</li>
               <li>Do not put the access key in the connector URL. Claude sends request-header values exactly as entered and does not add the <code>Bearer</code> prefix for you.</li>
             </ul>
@@ -84,17 +84,17 @@
             <p>Run this in your terminal, substituting your Home Assistant address and the access key you copied. Phoenix MCP derives a distinct server name from each access key's name (lowercase, underscores changed to hyphens, with a <code>phx-</code> prefix), so an access key named <code>claude-code</code> registers as <code>phx-claude-code</code>.</p>
             <pre class="code" data-lang="bash" data-label="Local address"><code>claude mcp add --transport http phx-claude-code \
   http://your-ha-address:8123/api/phoenix-mcp \
-  --header "Authorization: Bearer phx_your_token_here"</code></pre>
+  --header "Authorization: Bearer phx_your_access_key_here"</code></pre>
             <p>If you reach Home Assistant through Nabu Casa or a custom domain, use that URL instead.</p>
             <pre class="code" data-lang="bash" data-label="Remote address"><code>claude mcp add --transport http phx-claude-code \
   https://your-instance.ui.nabu.casa/api/phoenix-mcp \
-  --header "Authorization: Bearer phx_your_token_here"</code></pre>
+  --header "Authorization: Bearer phx_your_access_key_here"</code></pre>
             <p>This example uses Claude Code's CLI and registers the server for your current project. Add <code>--scope user</code> to use it across projects. The panel's <strong>Connect</strong> step generates commands or configs for the clients below. Each client must support Streamable HTTP at <code>/api/phoenix-mcp</code> and an <code>Authorization: Bearer</code> header carrying your access key.</p>
           </div></div>
 
           <div class="step"><div class="step-body">
             <h3>Verify the connection</h3>
-            <p>Start a new Claude Code session and run <code>/mcp</code>. The <code>phx-&lt;token-name&gt;</code> server should show as connected. Ask the client to list your entities or check a light to confirm.</p>
+            <p>Start a new Claude Code session and run <code>/mcp</code>. The <code>phx-&lt;access-key-name&gt;</code> server should show as connected. Ask the client to list your entities or check a light to confirm.</p>
           </div></div>
 
           <div class="step"><div class="step-body">
@@ -118,19 +118,19 @@
 
         <h3 id="gemini-cli">Gemini CLI</h3>
         <pre class="code" data-lang="bash"><code>gemini mcp add phx-home http://your-ha-address:8123/api/phoenix-mcp \
-  --transport http --header 'Authorization: Bearer phx_your_token_here'</code></pre>
+  --transport http --header 'Authorization: Bearer phx_your_access_key_here'</code></pre>
         <p>Run from your project directory, then check with <code>gemini mcp list</code>. Add <code>--scope user</code> to make it available across projects. See <a href="https://geminicli.com/docs/tools/mcp-server/" target="_blank" rel="noopener">Gemini's MCP instructions</a>.</p>
 
         <h3 id="codex">Codex</h3>
-        <pre class="code" data-lang="bash"><code>export PHOENIX_TOKEN_HOME=phx_your_token_here
+        <pre class="code" data-lang="bash"><code>export PHOENIX_ACCESS_KEY_HOME=phx_your_access_key_here
 codex mcp add phx-home --url http://your-ha-address:8123/api/phoenix-mcp \
-  --bearer-token-env-var PHOENIX_TOKEN_HOME</code></pre>
-        <p>Check with <code>codex mcp list</code>, then start Codex from that shell. For future terminals, put the export in your shell profile. In PowerShell, set <code>$env:PHOENIX_TOKEN_HOME="phx_your_token_here"</code> for the current session; <code>setx</code> only affects newly started processes.</p>
+  --bearer-token-env-var PHOENIX_ACCESS_KEY_HOME</code></pre>
+        <p>Check with <code>codex mcp list</code>, then start Codex from that shell. For future terminals, put the export in your shell profile. In PowerShell, set <code>$env:PHOENIX_ACCESS_KEY_HOME="phx_your_access_key_here"</code> for the current session; <code>setx</code> only affects newly started processes.</p>
         <p>Alternatively, add this table to <code>~/.codex/config.toml</code> or a project's <code>.codex/config.toml</code>, with the same environment variable set before starting Codex:</p>
         <pre class="code" data-lang="toml"><code>[mcp_servers.phx-home]
 url = "http://your-ha-address:8123/api/phoenix-mcp"
-bearer_token_env_var = "PHOENIX_TOKEN_HOME"</code></pre>
-        <p>Local Codex clients share MCP configuration on the same host. An app launched separately may not inherit shell variables. In that case, use the app's MCP server settings: add a Streamable HTTP server, leave its bearer token environment field empty, and add <code>Authorization</code> with the value <code>Bearer phx_your_token_here</code>. Save and reconnect. Choose one setup method; see the <a href="https://learn.chatgpt.com/docs/extend/mcp?surface=cli" target="_blank" rel="noopener">official MCP documentation</a>.</p>
+bearer_token_env_var = "PHOENIX_ACCESS_KEY_HOME"</code></pre>
+        <p>Local Codex clients share MCP configuration on the same host. An app launched separately may not inherit shell variables. In that case, use the app's MCP server settings: add a Streamable HTTP server, leave its bearer token environment field empty, and add <code>Authorization</code> with the value <code>Bearer phx_your_access_key_here</code>. Save and reconnect. Choose one setup method; see the <a href="https://learn.chatgpt.com/docs/extend/mcp?surface=cli" target="_blank" rel="noopener">official MCP documentation</a>.</p>
 
         <h3 id="cursor">Cursor</h3>
         <p>Add this entry to <code>~/.cursor/mcp.json</code> for all projects or <code>.cursor/mcp.json</code> for one project, preserving any existing servers. Enable it in Cursor's MCP settings.</p>
@@ -138,7 +138,7 @@ bearer_token_env_var = "PHOENIX_TOKEN_HOME"</code></pre>
   "mcpServers": {
     "phx-home": {
       "url": "http://your-ha-address:8123/api/phoenix-mcp",
-      "headers": { "Authorization": "Bearer phx_your_token_here" }
+      "headers": { "Authorization": "Bearer phx_your_access_key_here" }
     }
   }
 }</code></pre>
@@ -162,7 +162,7 @@ bearer_token_env_var = "PHOENIX_TOKEN_HOME"</code></pre>
         transport: streamable-http
         url: "http://your-ha-address:8123/api/phoenix-mcp"
         headers:
-          Authorization: "Bearer phx_your_token_here"</code></pre>
+          Authorization: "Bearer phx_your_access_key_here"</code></pre>
         <h4>CLI alternative</h4>
         <p>For a CLI launch, save the same YAML as a new <code>phoenix.cordis.yml</code> file in your working directory. Install Node.js, then run from that directory. This launches the web interface; it does not start the desktop app.</p>
         <pre class="code" data-lang="bash"><code>npx @deepseek-ai/dsh web --patch "$PWD/phoenix.cordis.yml"</code></pre>

@@ -12,16 +12,16 @@ from homeassistant.setup import async_setup_component
 from custom_components.phoenix_mcp.command_routing import async_evaluate_command
 from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree
 
 
 @pytest.fixture
-async def routing(hass, token_store):
-    token, _ = await token_store.async_create_token("routing", "test")
-    token.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
-    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+async def routing(hass, access_key_store):
+    access_key, _ = await access_key_store.async_create_access_key("routing", "test")
+    access_key.permissions = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
+    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
-    return data, token
+    return data, access_key
 
 
 def recognition(intent="HassTurnOn", **slots):
@@ -49,9 +49,9 @@ async def english_home(hass, routing):
     ("what is the state of the kitchen lamp", "HassGetState"),
 ])
 async def test_real_ha_candidates_have_no_effect(hass, routing, english_home, sentence, intent):
-    data, token = routing
+    data, access_key = routing
     with patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call:
-        result = await async_evaluate_command(hass, data, token, sentence)
+        result = await async_evaluate_command(hass, data, access_key, sentence)
     assert result["route"] == "local_candidate", result
     assert result["proposal"]["intent"] == intent
     assert result["proposal"]["entity_ids"] == [english_home]
@@ -66,8 +66,8 @@ async def test_real_ha_candidates_have_no_effect(hass, routing, english_home, se
     "why is the kitchen lamp off", "turn on the missing lamp", "turn on everything",
 ])
 async def test_real_ha_unsupported_sentences_fall_back(hass, routing, english_home, sentence):
-    data, token = routing
-    result = await async_evaluate_command(hass, data, token, sentence)
+    data, access_key = routing
+    result = await async_evaluate_command(hass, data, access_key, sentence)
     assert result["route"] == "provider", result
     assert result["proposal"] is None
 
@@ -80,7 +80,7 @@ async def test_real_ha_unsupported_sentences_fall_back(hass, routing, english_ho
     (["hs"], "supported"), (["rgbw"], "supported"),
 ])
 async def test_brightness_candidate_requires_device_support(hass, routing, english_home, modes, expected):
-    data, token = routing
+    data, access_key = routing
     state = hass.states.get(english_home)
     attributes = dict(state.attributes)
     if modes is None:
@@ -89,49 +89,49 @@ async def test_brightness_candidate_requires_device_support(hass, routing, engli
         attributes["supported_color_modes"] = modes
     hass.states.async_set(english_home, "off", attributes)
     with patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call:
-        result = await async_evaluate_command(hass, data, token, "set the kitchen lamp brightness to 50 percent")
+        result = await async_evaluate_command(hass, data, access_key, "set the kitchen lamp brightness to 50 percent")
     assert result["reason"] == expected, result
     assert bool(result["proposal"]) == (expected == "supported")
     call.assert_not_called()
     # A non-dimmable light can still be a valid on/off target.
-    assert (await async_evaluate_command(hass, data, token, "turn on the kitchen lamp"))["reason"] == "supported"
+    assert (await async_evaluate_command(hass, data, access_key, "turn on the kitchen lamp"))["reason"] == "supported"
 
 
 async def test_area_brightness_requires_every_target_to_support_it(hass, routing, english_home):
-    data, token = routing
+    data, access_key = routing
     registry = er.async_get(hass)
     other = registry.async_get_or_create("light", "test", "nondimmable")
     registry.async_update_entity(other.entity_id, area_id=registry.async_get(english_home).area_id)
     hass.states.async_set(other.entity_id, "off", {"supported_color_modes": ["onoff"]})
-    result = await async_evaluate_command(hass, data, token, "set the brightness in the kitchen to 50 percent")
+    result = await async_evaluate_command(hass, data, access_key, "set the brightness in the kitchen to 50 percent")
     assert result["reason"] == "unsupported", result
     assert result["proposal"] is None
     hass.states.async_set(other.entity_id, "off", {"supported_color_modes": ["brightness"]})
-    result = await async_evaluate_command(hass, data, token, "set the brightness in the kitchen to 50 percent")
+    result = await async_evaluate_command(hass, data, access_key, "set the brightness in the kitchen to 50 percent")
     assert result["reason"] == "supported", result
     assert result["proposal"]["entity_ids"] == sorted([english_home, other.entity_id])
 
 
 async def test_hidden_and_missing_targets_are_indistinguishable(hass, routing, english_home):
-    data, token = routing
-    token.permissions = PermissionTree()
+    data, access_key = routing
+    access_key.permissions = PermissionTree()
     for name in ("Kitchen lamp", "Missing"):
         with patch("custom_components.phoenix_mcp.command_routing.async_recognize", AsyncMock(return_value=recognition(name=name))):
-            result = await async_evaluate_command(hass, data, token, "turn on the lamp")
+            result = await async_evaluate_command(hass, data, access_key, "turn on the lamp")
         assert result["reason"] == "no_target"
         assert result["proposal"] is None
 
 
 @pytest.mark.parametrize("change", ["scope", "rotate", "revoke", "kill", "settings", "runtime"])
 async def test_authority_is_checked_after_recognition(hass, routing, english_home, change):
-    data, token = routing
+    data, access_key = routing
     async def recognize(*args, **kwargs):
         if change == "scope":
-            token.settings_version += 1
+            access_key.settings_version += 1
         elif change == "rotate":
-            token.token_hash = "replacement"
+            access_key.token_hash = "replacement"
         elif change == "revoke":
-            token.revoked = True
+            access_key.revoked = True
         elif change == "kill":
             data.store.get_settings().kill_switch = True
         elif change == "settings":
@@ -140,14 +140,14 @@ async def test_authority_is_checked_after_recognition(hass, routing, english_hom
             hass.data[DOMAIN] = object()
         return recognition(name="Kitchen lamp")
     with patch("custom_components.phoenix_mcp.command_routing.async_recognize", recognize):
-        result = await async_evaluate_command(hass, data, token, "turn on the kitchen lamp")
+        result = await async_evaluate_command(hass, data, access_key, "turn on the kitchen lamp")
     assert result["reason"] == "authority_changed"
     assert result["proposal"] is None
 
 
 @pytest.mark.parametrize("cancel", [False, True])
 async def test_timeout_and_cancellation_keep_worker_capacity(hass, routing, cancel):
-    data, token = routing
+    data, access_key = routing
     await data.store.async_patch_settings(command_routing_timeout_ms=50)
     started, finish = asyncio.Event(), asyncio.Event()
     async def recognize(*args, **kwargs):
@@ -155,7 +155,7 @@ async def test_timeout_and_cancellation_keep_worker_capacity(hass, routing, canc
         await finish.wait()
         return None
     with patch("custom_components.phoenix_mcp.command_routing.async_recognize", recognize):
-        caller = asyncio.create_task(async_evaluate_command(hass, data, token, "turn on the lamp"))
+        caller = asyncio.create_task(async_evaluate_command(hass, data, access_key, "turn on the lamp"))
         await started.wait()
         if cancel:
             caller.cancel()
@@ -164,17 +164,17 @@ async def test_timeout_and_cancellation_keep_worker_capacity(hass, routing, canc
         else:
             assert (await caller)["reason"] == "timeout"
         assert not data.command_routing.task.done()
-        assert (await async_evaluate_command(hass, data, token, "turn on the lamp"))["reason"] == "busy"
+        assert (await async_evaluate_command(hass, data, access_key, "turn on the lamp"))["reason"] == "busy"
         finish.set()
         await data.command_routing.task
-        assert (await async_evaluate_command(hass, data, token, "turn on the lamp"))["reason"] == "no_match"
+        assert (await async_evaluate_command(hass, data, access_key, "turn on the lamp"))["reason"] == "no_match"
 
 
 @pytest.mark.parametrize("language", ["fr", "zh", "zh-Hans", "es", "", None, []])
 async def test_non_english_never_calls_recognizer(hass, routing, language):
-    data, token = routing
+    data, access_key = routing
     with patch("custom_components.phoenix_mcp.command_routing.async_recognize") as recognize:
-        assert (await async_evaluate_command(hass, data, token, "hello", language))["reason"] == "unsupported_language"
+        assert (await async_evaluate_command(hass, data, access_key, "hello", language))["reason"] == "unsupported_language"
     recognize.assert_not_called()
 
 @pytest.mark.parametrize("intent,slots", [
@@ -189,18 +189,18 @@ async def test_non_english_never_calls_recognizer(hass, routing, language):
     ("HassTurnOn", {"name": "Desk lamp", "timer": 5}),
 ])
 async def test_unsupported_slots_are_never_ignored(hass, routing, english_home, intent, slots):
-    data, token = routing
+    data, access_key = routing
     with patch("custom_components.phoenix_mcp.command_routing.async_recognize", AsyncMock(return_value=recognition(intent, **slots))):
-        result = await async_evaluate_command(hass, data, token, "test")
+        result = await async_evaluate_command(hass, data, access_key, "test")
     assert result["proposal"] is None
 
 
 @pytest.mark.parametrize("change", ["read_only", "unavailable", "hidden", "custom", "duplicate"])
 async def test_uncertain_targets_do_not_become_candidates(hass, routing, english_home, change):
-    data, token = routing
+    data, access_key = routing
     result = recognition(name="Desk lamp")
     if change == "read_only":
-        token.permissions.domains["light"].state = "YELLOW"
+        access_key.permissions.domains["light"].state = "YELLOW"
     elif change == "unavailable":
         hass.states.async_set(english_home, "unavailable")
     elif change == "hidden":
@@ -213,13 +213,13 @@ async def test_uncertain_targets_do_not_become_candidates(hass, routing, english
     else:
         result.intent_metadata = {"hass_custom_sentence": True}
     with patch("custom_components.phoenix_mcp.command_routing.async_recognize", AsyncMock(return_value=result)):
-        assert (await async_evaluate_command(hass, data, token, "test"))["proposal"] is None
+        assert (await async_evaluate_command(hass, data, access_key, "test"))["proposal"] is None
 
 
 async def test_voice_shadow_preserves_normal_provider_turn(hass, routing, english_home):
     from custom_components.phoenix_mcp import agentcli, voice_agent
-    data, token = routing
-    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=token.id,
+    data, access_key = routing
+    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=access_key.id,
         voice_agent_provider_id="p", voice_agent_model="model", voice_agent_routing_mode="local_shadow")
     provider_store = MagicMock()
     provider_store.resolve.return_value = SimpleNamespace(model="model")
@@ -240,8 +240,8 @@ async def test_voice_shadow_preserves_normal_provider_turn(hass, routing, englis
 
 async def test_voice_off_skips_recognition(hass, routing):
     from custom_components.phoenix_mcp import agentcli, voice_agent
-    data, token = routing
-    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=token.id,
+    data, access_key = routing
+    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=access_key.id,
         voice_agent_provider_id="p", voice_agent_model="model")
     provider_store = MagicMock()
     provider_store.resolve.return_value = SimpleNamespace(model="model")
@@ -254,13 +254,13 @@ async def test_voice_off_skips_recognition(hass, routing):
 
 async def test_voice_does_not_contact_provider_after_authority_changes(hass, routing):
     from custom_components.phoenix_mcp import agentcli, voice_agent
-    data, token = routing
-    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=token.id,
+    data, access_key = routing
+    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=access_key.id,
         voice_agent_provider_id="p", voice_agent_model="model", voice_agent_routing_mode="local_shadow")
     provider_store = MagicMock()
     provider_store.resolve.return_value = SimpleNamespace(model="model")
     async def recognize(*args, **kwargs):
-        token.revoked = True
+        access_key.revoked = True
         return recognition(name="Desk lamp")
     with (patch.object(agentcli, "_get_secret_store", AsyncMock(return_value=provider_store)),
           patch.object(agentcli, "build_provider") as build,
@@ -272,8 +272,8 @@ async def test_voice_does_not_contact_provider_after_authority_changes(hass, rou
 
 async def test_voice_rechecks_settings_after_loading_provider_config(hass, routing):
     from custom_components.phoenix_mcp import agentcli, voice_agent
-    data, token = routing
-    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=token.id,
+    data, access_key = routing
+    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=access_key.id,
         voice_agent_provider_id="p", voice_agent_model="model", voice_agent_routing_mode="local_shadow")
     async def provider_store(_hass):
         await data.store.async_patch_settings(voice_agent_routing_mode="off")
@@ -288,10 +288,10 @@ async def test_voice_rechecks_settings_after_loading_provider_config(hass, routi
     recognize.assert_not_called()
 
 
-async def test_routing_settings_persist_and_invalid_modes_fail_closed(token_store):
-    from custom_components.phoenix_mcp.token_store import GlobalSettings
-    await token_store.async_patch_settings(voice_agent_routing_mode="local_shadow", command_routing_timeout_ms=1700)
-    restored = GlobalSettings.from_dict(token_store.get_settings().to_dict())
+async def test_routing_settings_persist_and_invalid_modes_fail_closed(access_key_store):
+    from custom_components.phoenix_mcp.access_key_store import GlobalSettings
+    await access_key_store.async_patch_settings(voice_agent_routing_mode="local_shadow", command_routing_timeout_ms=1700)
+    restored = GlobalSettings.from_dict(access_key_store.get_settings().to_dict())
     assert restored.voice_agent_routing_mode == "local_shadow"
     assert restored.command_routing_timeout_ms == 1700
     assert GlobalSettings.from_dict({}).voice_agent_routing_mode == "off"
@@ -311,10 +311,10 @@ async def test_strict_recognition_uses_exposed_exact_aliases(
     """Separate recognition vocabulary from the token's unchanged write scope."""
     from homeassistant.components.homeassistant.exposed_entities import async_expose_entity
 
-    data, token = routing
+    data, access_key = routing
     async_expose_entity(hass, "conversation", english_home, exposed)
     await hass.async_block_till_done()
-    result = await async_evaluate_command(hass, data, token, sentence)
+    result = await async_evaluate_command(hass, data, access_key, sentence)
     assert result["reason"] == expected, result
     if expected == "supported":
         assert result["proposal"]["entity_ids"] == [english_home]
@@ -327,27 +327,27 @@ async def test_strict_recognition_uses_exposed_exact_aliases(
     ("es", "Lámpara", "enciende la lámpara"),
 ])
 async def test_multilingual_preview_uses_real_ha_intents_without_effects(hass, routing, english_home, language, name, sentence):
-    data, token = routing
+    data, access_key = routing
     er.async_get(hass).async_update_entity(english_home, aliases={name})
     with patch.object(type(hass.services), "async_call", new_callable=AsyncMock) as call:
-        result = await async_evaluate_command(hass, data, token, sentence, language, preview=True)
+        result = await async_evaluate_command(hass, data, access_key, sentence, language, preview=True)
     assert result["reason"] == "supported", result
     assert result["proposal"] == {"intent": "HassTurnOn", "entity_ids": [english_home]}
     assert result["executed"] is False
     call.assert_not_called()
     assert data.store.get_pending_approvals() == []
     # The same text and tag cannot enter automatic routing at this checkpoint.
-    assert (await async_evaluate_command(hass, data, token, sentence, language))["reason"] == "unsupported_language"
-    token.permissions = PermissionTree()
-    hidden = await async_evaluate_command(hass, data, token, sentence, language, preview=True)
+    assert (await async_evaluate_command(hass, data, access_key, sentence, language))["reason"] == "unsupported_language"
+    access_key.permissions = PermissionTree()
+    hidden = await async_evaluate_command(hass, data, access_key, sentence, language, preview=True)
     assert hidden["proposal"] is None and hidden["reason"] == "no_target"
 
 
 @pytest.mark.parametrize("language", ["xx", "unknown", "", [], None])
 async def test_preview_rejects_unadmitted_languages_before_recognition(hass, routing, language):
-    data, token = routing
+    data, access_key = routing
     with patch("custom_components.phoenix_mcp.command_routing.async_recognize") as recognize:
-        result = await async_evaluate_command(hass, data, token, "command", language, preview=True)
+        result = await async_evaluate_command(hass, data, access_key, "command", language, preview=True)
     assert result["reason"] == "unsupported_language"
     recognize.assert_not_called()
 
@@ -359,9 +359,9 @@ async def test_preview_rejects_unadmitted_languages_before_recognition(hass, rou
     ("es", "Lámpara", "enciende la lámpara dentro de diez minutos"),
 ])
 async def test_real_multilingual_preview_declines_negated_and_deferred_commands(hass, routing, english_home, language, name, sentence):
-    data, token = routing
+    data, access_key = routing
     er.async_get(hass).async_update_entity(english_home, aliases={name})
-    result = await async_evaluate_command(hass, data, token, sentence, language, preview=True)
+    result = await async_evaluate_command(hass, data, access_key, sentence, language, preview=True)
     assert result["proposal"] is None, result
     assert result["route"] == "provider"
 
@@ -382,26 +382,26 @@ def test_selected_routing_languages_do_not_fall_back_to_english(tag, expected):
 async def test_routing_language_selection_round_trip_and_snapshot(hass, routing, selection):
     from custom_components.phoenix_mcp.admin_view import _validated_settings_patch
     from custom_components.phoenix_mcp.command_routing import RoutingAuthority
-    from custom_components.phoenix_mcp.token_store import GlobalSettings
-    data, token = routing
+    from custom_components.phoenix_mcp.access_key_store import GlobalSettings
+    data, access_key = routing
     assert GlobalSettings.from_dict({}).command_routing_languages == ["en"]
     changes, error = await _validated_settings_patch({"command_routing_languages": selection}, data, hass, "test")
     assert error is None
     await data.store.async_patch_settings(**changes)
     assert GlobalSettings.from_dict(data.store.get_settings().to_dict()).command_routing_languages == selection
-    authority = RoutingAuthority.capture(data, token)
+    authority = RoutingAuthority.capture(data, access_key)
     data.store.get_settings().command_routing_languages.append("en")
     assert authority.current(hass) is None
     # Preview remains available independently of selected automatic languages.
     with patch("custom_components.phoenix_mcp.command_routing.async_recognize", AsyncMock(return_value=None)) as recognize:
-        await async_evaluate_command(hass, data, token, "打开台灯", "zh-Hans", preview=True)
+        await async_evaluate_command(hass, data, access_key, "打开台灯", "zh-Hans", preview=True)
     recognize.assert_awaited_once_with(hass, "打开台灯", "zh-CN", strict=True)
 
 
 @pytest.mark.parametrize("selection", [None, True, "es", [True], [["en"]], ["en", "en"], ["xx"], ["not-a-language"]])
 async def test_invalid_routing_language_selection_fails_closed(hass, routing, selection):
     from custom_components.phoenix_mcp.admin_view import _validated_settings_patch
-    from custom_components.phoenix_mcp.token_store import GlobalSettings
+    from custom_components.phoenix_mcp.access_key_store import GlobalSettings
     data, _ = routing
     _, error = await _validated_settings_patch({"command_routing_languages": selection}, data, hass, "test")
     assert error.status == 400
@@ -411,11 +411,11 @@ async def test_invalid_routing_language_selection_fails_closed(hass, routing, se
 @pytest.mark.parametrize("ingress", ["voice", "chat"])
 @pytest.mark.parametrize("language,ha_language", [("es-MX", "es"), ("zh-Hans", "zh-CN"), ("fr", "fr"), ("zh-Hant", "zh-TW")])
 async def test_auto_follows_supported_ingress_language_without_legacy_allowlist(hass, routing, english_home, ingress, language, ha_language):
-    data, token = routing
+    data, access_key = routing
     key = "agentcli_routing_mode" if ingress == "chat" else "voice_agent_routing_mode"
     await data.store.async_patch_settings(**{key: "auto", "command_routing_languages": []})
     with patch("custom_components.phoenix_mcp.command_routing.async_recognize", AsyncMock(return_value=recognition(name="Desk lamp"))) as recognize:
-        result = await async_evaluate_command(hass, data, token, "command", language, ingress=ingress)
+        result = await async_evaluate_command(hass, data, access_key, "command", language, ingress=ingress)
     if ha_language:
         recognize.assert_awaited_once_with(hass, "command", ha_language, strict=True)
         assert result["proposal"]
@@ -425,7 +425,7 @@ async def test_auto_follows_supported_ingress_language_without_legacy_allowlist(
 
 
 def test_routing_settings_round_trip_without_version_markers():
-    from custom_components.phoenix_mcp.token_store import GlobalSettings
+    from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 
     restored = GlobalSettings.from_dict({
         "voice_agent_routing_mode": "local", "agentcli_routing_mode": "hybrid",

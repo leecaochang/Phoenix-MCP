@@ -1,7 +1,7 @@
 {
   "notification": {
-    "approval.message": "액세스 키 '{token}'이(가) 승인을 요청했습니다.\n\n[Phoenix MCP에서 검토]({url})",
-    "rate_limit.message": "Phoenix MCP: 액세스 키 '{token}'이(가) 속도 제한에 도달했습니다.",
+    "approval.message": "액세스 키 '{access_key}'이(가) 승인을 요청했습니다.\n\n[Phoenix MCP에서 검토]({url})",
+    "rate_limit.message": "Phoenix MCP: 액세스 키 '{access_key}'이(가) 속도 제한에 도달했습니다.",
     "rate_limit.title": "Phoenix MCP 알림"
   },
   "panel": {
@@ -1789,7 +1789,7 @@
       "codexHeaderValueLabel": "헤더 값",
       "codexServerNameLabel": "서버 이름",
       "connectAgentTitle": "Phoenix MCP를 AI 에이전트에 연결",
-      "connectIntro": "에이전트에 Phoenix MCP를 MCP 서버로 추가하십시오. Home Assistant 로그인이나 OAuth가 아닌 <code>Authorization: Bearer <token></code>으로 인증합니다. 신뢰할 수 없는 네트워크에서는 HTTPS를 사용하세요. bearer 액세스 키를 셸 기록, 공유 파일, 스크린샷 또는 버전 관리에 포함하지 마세요. 액세스 키가 노출되면 교체하세요.",
+      "connectIntro": "에이전트에 Phoenix MCP를 MCP 서버로 추가하십시오. Home Assistant 로그인이나 OAuth가 아닌 <code>Authorization: Bearer phx_...</code>으로 인증합니다. 신뢰할 수 없는 네트워크에서는 HTTPS를 사용하세요. bearer 액세스 키를 셸 기록, 공유 파일, 스크린샷 또는 버전 관리에 포함하지 마세요. 액세스 키가 노출되면 교체하세요.",
       "connectLater": "나중에 연결",
       "connectTitle": "첫 AI 에이전트 연결",
       "connected": "연결되었습니다! 에이전트가 Phoenix MCP에 도달했습니다.",
@@ -1955,7 +1955,7 @@
       "nameDuplicateError": "이 이름(또는 동일한 슬러그)의 액세스 키가 이미 존재합니다.",
       "nameFormatError": "이름은 3-32자여야 합니다. 문자, 숫자, _ 또는 -만 사용할 수 있습니다.",
       "nameLabel": "이름 (필수)",
-      "namePlaceholder": "my_token",
+      "namePlaceholder": "my_access_key",
       "nameRuleError": "3-32자: 문자, 숫자, 하이픈 또는 밑줄.",
       "off": "꺼짐",
       "on": "켜짐",

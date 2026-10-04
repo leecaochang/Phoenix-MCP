@@ -1,6 +1,6 @@
 import { BusyButton } from "./BusyButton";
 import React, { useEffect, useRef, useState } from "react";
-import type { TokenRecord, CreateTokenBody } from "../types";
+import type { AccessKeyRecord, CreateAccessKeyBody } from "../types";
 import { api } from "../api";
 import { copyToClipboard } from "../utils";
 import { t } from "../i18n";
@@ -12,7 +12,7 @@ const NAME_REGEX = /^[A-Za-z0-9_\-]{3,32}$/;
 
 interface Props {
   existingNames: string[];
-  onCreated: (token: TokenRecord, rawToken: string) => void;
+  onCreated: (accessKey: AccessKeyRecord, rawAccessKey: string) => void;
   onClose: () => void;
   onOpenSettings: () => void;
 }
@@ -51,20 +51,20 @@ export function CopyButton({ text, label = t("tokens.copyToClipboard") }: { text
 // post-create modal and the onboarding wizard so both look identical. The
 // warning text is overridable because the wizard shows the token again on its
 // Connect step, so the default "will not be shown again" copy is inaccurate there.
-export function RawTokenDisplay({ rawToken, note }: { rawToken: string; note?: React.ReactNode }) {
+export function RawAccessKeyDisplay({ rawAccessKey, note }: { rawAccessKey: string; note?: React.ReactNode }) {
   return (
     <>
       <div className="amber-block">
         {note ?? <p>{tRich("tokens.rawTokenNote", { strong: (c) => <strong>{c}</strong> })}</p>}
       </div>
-      <CopyCodeBox value={rawToken} />
+      <CopyCodeBox value={rawAccessKey} />
     </>
   );
 }
 
 interface PostCreateProps {
-  rawToken: string;
-  tokenName: string;
+  rawAccessKey: string;
+  accessKeyName: string;
   onOpenSettings: () => void;   // "Setup Agent Chat" -> closes this modal, opens Settings
   onDone: () => void;           // finish -> refresh + open the new token's detail page
 }
@@ -72,7 +72,7 @@ interface PostCreateProps {
 // After a token is created, offer three ways forward instead of dumping the raw
 // token immediately: connect an external agent, set up in-panel Agent Chat, or
 // just reveal the token to copy.
-function PostCreateModal({ rawToken, tokenName, onOpenSettings, onDone }: PostCreateProps) {
+function PostCreateModal({ rawAccessKey, accessKeyName, onOpenSettings, onDone }: PostCreateProps) {
   const [view, setView] = useState<"choice" | "connect" | "token">("choice");
 
   // On view switches the clicked control unmounts; refocus the first control
@@ -89,7 +89,7 @@ function PostCreateModal({ rawToken, tokenName, onOpenSettings, onDone }: PostCr
 
   return (
     <Modal titleId="created-token-title" onClose={onDone}>
-      <h3 className="modal-title" id="created-token-title">{t("tokens.tokenCreatedTitle", { name: tokenName })}</h3>
+      <h3 className="modal-title" id="created-token-title">{t("tokens.tokenCreatedTitle", { name: accessKeyName })}</h3>
       <div ref={viewsRef} style={{ display: "contents" }}>
 
       {view === "choice" && (
@@ -118,7 +118,7 @@ function PostCreateModal({ rawToken, tokenName, onOpenSettings, onDone }: PostCr
       {view === "connect" && (
         <>
           <button className="btn btn-text btn-sm" onClick={() => setView("choice")}><span aria-hidden="true">&larr;</span> {t("tokens.back")}</button>
-          <ConnectInstructions token={rawToken} tokenName={tokenName} />
+          <ConnectInstructions accessKey={rawAccessKey} accessKeyName={accessKeyName} />
           <div className="modal-actions">
             <button className="btn btn-primary" onClick={onDone}>{t("tokens.done")}</button>
           </div>
@@ -128,7 +128,7 @@ function PostCreateModal({ rawToken, tokenName, onOpenSettings, onDone }: PostCr
       {view === "token" && (
         <>
           <button className="btn btn-text btn-sm" onClick={() => setView("choice")}><span aria-hidden="true">&larr;</span> {t("tokens.back")}</button>
-          <RawTokenDisplay rawToken={rawToken} />
+          <RawAccessKeyDisplay rawAccessKey={rawAccessKey} />
           <div className="banner banner-info">
             {t("tokens.postCreateReplaceNote")}
           </div>
@@ -142,7 +142,7 @@ function PostCreateModal({ rawToken, tokenName, onOpenSettings, onDone }: PostCr
   );
 }
 
-export function TokenCreateModal({ existingNames, onCreated, onClose, onOpenSettings }: Props) {
+export function AccessKeyCreateModal({ existingNames, onCreated, onClose, onOpenSettings }: Props) {
   const [name, setName] = useState("");
   const [ttlUnit, setTtlUnit] = useState<TtlUnit>("none");
   const [ttlValue, setTtlValue] = useState("24");
@@ -152,7 +152,7 @@ export function TokenCreateModal({ existingNames, onCreated, onClose, onOpenSett
   const [rateLimitBurst, setRateLimitBurst] = useState("10");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [createdToken, setCreatedToken] = useState<{ record: TokenRecord; raw: string } | null>(null);
+  const [createdAccessKey, setCreatedAccessKey] = useState<{ record: AccessKeyRecord; raw: string } | null>(null);
 
   const nameError = (() => {
     if (!name) return null;
@@ -185,7 +185,7 @@ export function TokenCreateModal({ existingNames, onCreated, onClose, onOpenSett
         expiresAt = addMinutes(minutes);
       }
       const burstNum = burstDisabled ? 0 : parseInt(rateLimitBurst, 10);
-      const body: CreateTokenBody = {
+      const body: CreateAccessKeyBody = {
         name,
         expires_at: expiresAt,
         pass_through: passThrough,
@@ -193,12 +193,12 @@ export function TokenCreateModal({ existingNames, onCreated, onClose, onOpenSett
         rate_limit_requests: parseInt(rateLimitRequests, 10) || 0,
         rate_limit_burst: burstNum,
       };
-      const resp = await api.createToken(body);
-      const { token: rawToken, ...record } = resp;
-      setCreatedToken({ record, raw: rawToken });
+      const resp = await api.createAccessKey(body);
+      const { token: rawAccessKey, ...record } = resp;
+      setCreatedAccessKey({ record, raw: rawAccessKey });
       // The caller's onRefresh covers the panel shell, but the floating chat
       // window is a separate bundle that only learns about new tokens here.
-      window.dispatchEvent(new CustomEvent("phx-tokens-changed"));
+      window.dispatchEvent(new CustomEvent("phx-access-keys-changed"));
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("tokens.createFailed"));
     } finally {
@@ -206,14 +206,14 @@ export function TokenCreateModal({ existingNames, onCreated, onClose, onOpenSett
     }
   }
 
-  if (createdToken) {
+  if (createdAccessKey) {
     return (
       <PostCreateModal
-        rawToken={createdToken.raw}
-        tokenName={createdToken.record.name}
+        rawAccessKey={createdAccessKey.raw}
+        accessKeyName={createdAccessKey.record.name}
         onOpenSettings={() => { onClose(); onOpenSettings(); }}
         onDone={() => {
-          onCreated(createdToken.record, createdToken.raw);
+          onCreated(createdAccessKey.record, createdAccessKey.raw);
           onClose();
         }}
       />

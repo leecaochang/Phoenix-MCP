@@ -1,6 +1,6 @@
 """The token template sandbox exposes only permission-filtered entity state.
 
-render_template_for_token() must not leak state through helper functions, Jinja2
+render_template_for_access_key() must not leak state through helper functions, Jinja2
 filters or enumeration helpers.
 """
 
@@ -9,17 +9,17 @@ from __future__ import annotations
 import pytest
 from homeassistant.util.dt import utcnow
 
-from custom_components.phoenix_mcp.helpers import render_template_for_token
-from custom_components.phoenix_mcp.token_store import (
+from custom_components.phoenix_mcp.helpers import render_template_for_access_key
+from custom_components.phoenix_mcp.access_key_store import (
     PermissionNode,
     PermissionTree,
-    TokenRecord,
+    AccessKeyRecord,
 )
 
 
-def _scoped_token() -> TokenRecord:
+def _scoped_token() -> AccessKeyRecord:
     """A token that can READ sensor.allowed but has no grant for sensor.secret."""
-    return TokenRecord(
+    return AccessKeyRecord(
         id="t1",
         name="scoped",
         token_hash="x",
@@ -42,13 +42,13 @@ def two_states(hass):
 
 
 def test_permitted_entity_renders(two_states):
-    token = _scoped_token()
-    assert render_template_for_token("{{ states('sensor.allowed') }}", token, two_states) == "42"
+    access_key = _scoped_token()
+    assert render_template_for_access_key("{{ states('sensor.allowed') }}", access_key, two_states) == "42"
 
 
 def test_out_of_scope_state_function_returns_unknown(two_states):
-    token = _scoped_token()
-    assert render_template_for_token("{{ states('sensor.secret') }}", token, two_states) == "unknown"
+    access_key = _scoped_token()
+    assert render_template_for_access_key("{{ states('sensor.secret') }}", access_key, two_states) == "unknown"
 
 
 @pytest.mark.parametrize(
@@ -61,8 +61,8 @@ def test_out_of_scope_state_function_returns_unknown(two_states):
 )
 def test_state_helpers_as_functions_do_not_leak(two_states, template, expected):
     """The permission-restricted helper functions answer as if the entity is absent."""
-    token = _scoped_token()
-    out = render_template_for_token(template, token, two_states)
+    access_key = _scoped_token()
+    out = render_template_for_access_key(template, access_key, two_states)
     assert out == expected
     assert "topsecret" not in out
 
@@ -78,9 +78,9 @@ def test_state_helpers_as_functions_do_not_leak(two_states, template, expected):
 )
 def test_state_helpers_as_filters_do_not_leak(two_states, template):
     """State helpers used as filters must not expose real state."""
-    token = _scoped_token()
+    access_key = _scoped_token()
     with pytest.raises(Exception) as exc:
-        render_template_for_token(template, token, two_states)
+        render_template_for_access_key(template, access_key, two_states)
     assert "topsecret" not in str(exc.value)
 
 
@@ -94,12 +94,12 @@ def test_state_helpers_as_filters_do_not_leak(two_states, template):
 )
 def test_enumeration_helpers_blocked(two_states, template):
     """Enumeration helpers return empty (blocklist stubs) or raise; none reveals sensor.secret."""
-    token = _scoped_token()
+    access_key = _scoped_token()
     # Control render first: shows the sandbox renderer works in this code path, so
     # a wholesale rendering failure fails loudly instead of passing as "did not leak".
-    assert render_template_for_token("{{ states('sensor.allowed') }}", token, two_states) == "42"
+    assert render_template_for_access_key("{{ states('sensor.allowed') }}", access_key, two_states) == "42"
     try:
-        out = render_template_for_token(template, token, two_states)
+        out = render_template_for_access_key(template, access_key, two_states)
     except Exception as exc:
         # A controlled block (raise) is acceptable, but the exception text must not
         # leak either.
@@ -111,19 +111,19 @@ def test_enumeration_helpers_blocked(two_states, template):
 
 def test_time_helpers_available(two_states):
     """now()/utcnow()/today_at() work although the hass-less environment omits them by default."""
-    token = _scoped_token()
-    out = render_template_for_token("{{ now().year }}", token, two_states)
+    access_key = _scoped_token()
+    out = render_template_for_access_key("{{ now().year }}", access_key, two_states)
     assert int(out) >= 2024
-    out = render_template_for_token("{{ utcnow().year }}", token, two_states)
+    out = render_template_for_access_key("{{ utcnow().year }}", access_key, two_states)
     assert int(out) >= 2024
     # today_at returns a datetime; just confirm it renders without error.
-    render_template_for_token("{{ today_at('00:00') }}", token, two_states)
+    render_template_for_access_key("{{ today_at('00:00') }}", access_key, two_states)
 
 
 def test_safe_math_filters_available(two_states):
-    token = _scoped_token()
-    assert render_template_for_token("{{ [3,1,2] | sort | first }}", token, two_states) == "1"
-    assert render_template_for_token("{{ 10 | int + 5 }}", token, two_states) == "15"
+    access_key = _scoped_token()
+    assert render_template_for_access_key("{{ [3,1,2] | sort | first }}", access_key, two_states) == "1"
+    assert render_template_for_access_key("{{ 10 | int + 5 }}", access_key, two_states) == "15"
 
 
 def test_sandbox_audit_reports_no_unrecognized_names(caplog):

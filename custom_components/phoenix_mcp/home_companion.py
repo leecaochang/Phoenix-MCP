@@ -51,13 +51,13 @@ _presentation: ContextVar[tuple[str, str] | None] = ContextVar("phoenix_companio
 _turn: ContextVar[CompanionTurn | None] = ContextVar("phoenix_companion_turn", default=None)
 
 
-def is_companion(token: Any) -> bool:
-    return getattr(token, "persona", None) == PERSONA_HOME_COMPANION
+def is_companion(access_key: Any) -> bool:
+    return getattr(access_key, "persona", None) == PERSONA_HOME_COMPANION
 
 
-def internal_turn(token: Any) -> bool:
+def internal_turn(access_key: Any) -> bool:
     turn = _turn.get()
-    return bool(turn is not None and turn.token_id == token.id)
+    return bool(turn is not None and turn.token_id == access_key.id)
 
 
 def wrapper_tool() -> dict:
@@ -94,14 +94,14 @@ def wrapper_tool() -> dict:
     }
 
 
-def authorize_call(token: Any, name: str, arguments: Any) -> str | None:
+def authorize_call(access_key: Any, name: str, arguments: Any) -> str | None:
     """Refuse guessed tools and recursive wrappers before dispatch or approvals."""
-    if token.pass_through:
+    if access_key.pass_through:
         return "Home Companion requires scoped permissions; disable pass-through."
     turn = _turn.get()
     if name == "home_request":
         return "Recursive delegation is not available." if turn is not None else None
-    if not internal_turn(token) or name not in HOME_COMPANION_TOOLS:
+    if not internal_turn(access_key) or name not in HOME_COMPANION_TOOLS:
         return "This persona exposes only home_request; the requested tool is unavailable."
     if turn is None or turn.calls >= HOME_COMPANION_MAX_CALLS:
         return "The request reached its internal tool limit; not executed."
@@ -118,10 +118,10 @@ def authorize_call(token: Any, name: str, arguments: Any) -> str | None:
     return None
 
 
-def record_outcome(token: Any, name: str, outcome: str, result: dict | None = None,
+def record_outcome(access_key: Any, name: str, outcome: str, result: dict | None = None,
                    arguments: dict | None = None, hass: Any = None) -> None:
     turn = _turn.get()
-    if internal_turn(token) and turn is not None:
+    if internal_turn(access_key) and turn is not None:
         turn.outcomes.append({"tool": name, "outcome": outcome})
         turn.evidence.observe(name, outcome, result, arguments)
         if hass is not None:
@@ -135,23 +135,23 @@ def record_outcome(token: Any, name: str, outcome: str, result: dict | None = No
                     turn.evidence.areas[eid] = area.name
             from .helpers import redact_inaccessible_entity_ids_in_text, redact_secrets_in_text
             def scrub(text: str) -> str:
-                return redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(text) or "", token, hass)
+                return redact_inaccessible_entity_ids_in_text(redact_secrets_in_text(text) or "", access_key, hass)
             for labels in (turn.evidence.targets, turn.evidence.candidates, turn.evidence.readings, turn.evidence.areas):
                 for eid, label in labels.items():
                     labels[eid] = scrub(label)
             turn.evidence.warnings = [scrub(warning) for warning in turn.evidence.warnings]
 
 
-def check_turn_context(token: Any, system: str, messages: list[dict]) -> bool:
-    if not internal_turn(token):
+def check_turn_context(access_key: Any, system: str, messages: list[dict]) -> bool:
+    if not internal_turn(access_key):
         return True
     check_request_authority()
     return len(json.dumps({"system": system, "messages": messages}, ensure_ascii=False).encode()) <= HOME_COMPANION_MAX_CONTEXT_BYTES
 
 
-def preflight_control_calls(token: Any, calls: list[dict]) -> list[dict] | None:
+def preflight_control_calls(access_key: Any, calls: list[dict]) -> list[dict] | None:
     """Withhold an invalid native batch before a write claim, without repairing it."""
-    if not internal_turn(token):
+    if not internal_turn(access_key):
         return None
     check_request_authority()
     from .tools.native import validate_native_control_args
@@ -167,17 +167,17 @@ def preflight_control_calls(token: Any, calls: list[dict]) -> list[dict] | None:
             for call in calls]
 
 
-def incomplete_proposal(token: Any) -> None:
+def incomplete_proposal(access_key: Any) -> None:
     """Preserve completed receipts while reporting a later withheld control batch."""
     turn = _turn.get()
-    if internal_turn(token) and turn is not None:
+    if internal_turn(access_key) and turn is not None:
         turn.evidence.incomplete = True
 
 
-def ambiguous_control(token: Any, hass: Any, name: str, arguments: Any = None) -> bool:
+def ambiguous_control(access_key: Any, hass: Any, name: str, arguments: Any = None) -> bool:
     """Veto ungrounded context references and tied names before claiming a write."""
     turn = _turn.get()
-    if not internal_turn(token) or turn is None or name not in HOME_COMPANION_CONTROL_TOOLS:
+    if not internal_turn(access_key) or turn is None or name not in HOME_COMPANION_CONTROL_TOOLS:
         return False
     check_request_authority()
     request = turn.request.casefold()
@@ -186,7 +186,7 @@ def ambiguous_control(token: Any, hass: Any, name: str, arguments: Any = None) -
     from homeassistant.helpers import area_registry as ar, entity_registry as er
     from .device_semantics import device_registry_snapshot, effective_entity_area_id
     domains = list(HOME_COMPANION_TOOL_DOMAINS.get(name, sorted(HOME_COMPANION_CONTROL_DOMAINS)))
-    states = [hass.states.get(eid) for eid in resolve_intent_entities(hass, token, domains=domains)]
+    states = [hass.states.get(eid) for eid in resolve_intent_entities(hass, access_key, domains=domains)]
     # Singular/plural suffix normalization compares evidence; it never selects a target.
     request_words = {word.removesuffix('s') for word in words}
     scores = []
@@ -244,10 +244,10 @@ def _one_edit(left: str, right: str) -> bool:
     return any(long[:i] + long[i + 1:] == short for i in range(len(long)))
 
 
-def count_source(token: Any, name: str) -> dict | None:
+def count_source(access_key: Any, name: str) -> dict | None:
     """Expose the server-recorded source index inside the private planner transcript."""
     turn = _turn.get()
-    if not internal_turn(token) or turn is None or name != 'search_entities':
+    if not internal_turn(access_key) or turn is None or name != 'search_entities':
         return None
     source = turn.evidence.calls - 1
     return {'kind': 'count', 'source': source} if source in turn.evidence.search_totals else None
@@ -289,14 +289,14 @@ def _parse_final_answer(text: str, evidence: ResponseEvidence) -> dict | None:
         return None
 
 
-def invalid_count_report(token: Any, text: str) -> bool:
+def invalid_count_report(access_key: Any, text: str) -> bool:
     """Let the bounded loop correct final formatting after scoped count discovery."""
     turn = _turn.get()
-    return bool(internal_turn(token) and turn and turn.evidence.search_totals
+    return bool(internal_turn(access_key) and turn and turn.evidence.search_totals
                 and not turn.evidence.attempts and _parse_final_answer(text, turn.evidence) is None)
 
 
-async def run_request(arguments: dict, token: Any, hass: Any, data: Any) -> tuple:
+async def run_request(arguments: dict, access_key: Any, hass: Any, data: Any) -> tuple:
     """Use the shared headless engine and existing write-recovery/approval path."""
     from .agentcli import (
         _get_secret_store, _run_headless_turn, build_provider, build_agent_tool_list, _conversation_behavior_prompt,
@@ -311,14 +311,14 @@ async def run_request(arguments: dict, token: Any, hass: Any, data: Any) -> tupl
             or not isinstance(arguments.get("language", "en"), str)
             or not 1 <= len(arguments.get("language", "en")) <= 32):
         return _result("invalid_request", "Provide a nonempty bounded request and optional language.")
-    if token.id in data.home_companion_active:
+    if access_key.id in data.home_companion_active:
         return _result("busy", "", language=arguments.get("language", "en"))
-    data.home_companion_active.add(token.id)
+    data.home_companion_active.add(access_key.id)
     context = None
     guard_context = None
-    turn = CompanionTurn(token.id, language=arguments.get("language", "en"), request=arguments["request"])
+    turn = CompanionTurn(access_key.id, language=arguments.get("language", "en"), request=arguments["request"])
     try:
-        authority = RoutingAuthority.capture(data, token)
+        authority = RoutingAuthority.capture(data, access_key)
         settings = data.store.get_settings()
         turn.style, turn.detail = _presentation.get() or (settings.voice_agent_conversation_style, settings.voice_agent_detail_level)
         account = settings.voice_agent_provider_id
@@ -341,7 +341,7 @@ async def run_request(arguments: dict, token: Any, hass: Any, data: Any) -> tupl
         guard_context = execution_guard.set(guard)
         context = _turn.set(turn)
         guard()
-        catalog = build_agent_tool_list(token, data, "voice")
+        catalog = build_agent_tool_list(access_key, data, "voice")
         if (len(catalog) > len(HOME_COMPANION_TOOLS) or
                 len(json.dumps(catalog, ensure_ascii=False).encode()) > HOME_COMPANION_MAX_CATALOG_BYTES):
             return _result("catalog_unavailable", "The complete permitted catalog exceeds this persona's budget.")
@@ -386,7 +386,7 @@ async def run_request(arguments: dict, token: Any, hass: Any, data: Any) -> tupl
         try:
             async with asyncio.timeout_at(deadline):
                 result = await _run_headless_turn(
-                    hass, data, token, build_provider(cfg), async_get_clientsession(hass), "",
+                    hass, data, access_key, build_provider(cfg), async_get_clientsession(hass), "",
                     system=system, seed=arguments["request"], client_ip=HOME_COMPANION_CLIENT_IP,
                     max_iterations=HOME_COMPANION_MAX_ROUNDS, routing_surface="voice",
                     routing_language=arguments.get("language", "en"),
@@ -396,18 +396,18 @@ async def run_request(arguments: dict, token: Any, hass: Any, data: Any) -> tupl
         except TimeoutError:
             guard()
             return _result("outcome_unknown" if turn.write_started else "timeout", outcomes=turn.outcomes,
-                           recovery_required=data.agent_recovery.blocks(token.id))
+                           recovery_required=data.agent_recovery.blocks(access_key.id))
         if (result.outcome not in {TURN_OK, TURN_AUTHORITY_LOST} and not result.blocked_by_prior_action
                 and turn.evidence.accepted and not turn.evidence.incomplete):
             # Native command receipts own the response even if subsequent model narration fails.
             # Unknown dispatch records are never cleared by this receipt-only finalization.
             await data.agent_recovery.complete_received_turn(hass, result.recovery_turn_id)
             guard()
-            if data.agent_recovery.blocks(token.id):
+            if data.agent_recovery.blocks(access_key.id):
                 return _result("outcome_unknown", outcomes=turn.outcomes, recovery_required=True)
         elif result.outcome != TURN_OK:
             return _result(result.outcome, outcomes=turn.outcomes,
-                           recovery_required=result.blocked_by_prior_action or data.agent_recovery.blocks(token.id))
+                           recovery_required=result.blocked_by_prior_action or data.agent_recovery.blocks(access_key.id))
         if result.review_urls or turn.evidence.pending:
             return _result("pending_approval", outcomes=turn.outcomes, review_urls=result.review_urls)
         if turn.evidence.accepted and turn.calls < HOME_COMPANION_MAX_CALLS:
@@ -418,7 +418,7 @@ async def run_request(arguments: dict, token: Any, hass: Any, data: Any) -> tupl
             try:
                 async with asyncio.timeout_at(deadline):
                     await dispatch_agent_tool(
-                        _dispatch_mcp, hass=hass, data=data, token=token, name="get_states",
+                        _dispatch_mcp, hass=hass, data=data, access_key=access_key, name="get_states",
                         arguments={"projection": {"kind": "full"}}, tool_id="companion_readback", client_ip=HOME_COMPANION_CLIENT_IP,
                         base_url="", request_id=generate_request_id(),
                     )
@@ -446,16 +446,16 @@ async def run_request(arguments: dict, token: Any, hass: Any, data: Any) -> tupl
     except Exception as exc:
         log_internal_failure(_LOGGER, "home_companion", exc)
         return _result("outcome_unknown" if turn.write_started else "provider_error", outcomes=turn.outcomes,
-                       recovery_required=data.agent_recovery.blocks(token.id))
+                       recovery_required=data.agent_recovery.blocks(access_key.id))
     finally:
         if context is not None:
             _turn.reset(context)
         if guard_context is not None:
             execution_guard.reset(guard_context)
-        data.home_companion_active.discard(token.id)
+        data.home_companion_active.discard(access_key.id)
 
 
-async def async_delegate(hass: Any, data: Any, token: Any, request: str, language: object,
+async def async_delegate(hass: Any, data: Any, access_key: Any, request: str, language: object,
                          base_url: str, *, style: str | None = None, detail: str | None = None) -> dict:
     """Delegate original ingress text once through normal MCP and recovery gates."""
     from .agent_recovery import dispatch_agent_tool
@@ -467,7 +467,7 @@ async def async_delegate(hass: Any, data: Any, token: Any, request: str, languag
     presentation = _presentation.set((style or settings.voice_agent_conversation_style, detail or settings.voice_agent_detail_level))
     try:
         response, _, _, _ = await dispatch_agent_tool(
-            _dispatch_mcp, hass=hass, data=data, token=token, name="home_request",
+            _dispatch_mcp, hass=hass, data=data, access_key=access_key, name="home_request",
             arguments={"request": request, "language": language if isinstance(language, str) and language else "en"},
             tool_id="home_companion", client_ip=HOME_COMPANION_CLIENT_IP, base_url=base_url,
             request_id=generate_request_id(),

@@ -12,7 +12,7 @@ from homeassistant.util.json import SerializationError
 from custom_components.phoenix_mcp.agent_recovery import AgentRecovery, RecoveryRequired
 from custom_components.phoenix_mcp.config_recovery import ConfigurationRecovery
 from custom_components.phoenix_mcp.durable_storage import DurableStorageError, DurableStore
-from custom_components.phoenix_mcp.token_store import TokenStore
+from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
 from custom_components.phoenix_mcp.tools.calendar import CalendarWriteJournal
 
 
@@ -55,9 +55,9 @@ async def test_critical_storage_raises_when_real_ha_writer_fails(hass, failure, 
             with pytest.raises(DurableStorageError):
                 await journal.save()
         else:
-            tokens = await TokenStore.async_create(hass)
+            access_keys = await AccessKeyStore.async_create(hass)
             with pytest.raises(DurableStorageError):
-                await tokens.async_create_token("test", "admin")
+                await access_keys.async_create_access_key("test", "admin")
         assert not Path(store.path).exists()
 
 

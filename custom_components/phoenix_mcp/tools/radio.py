@@ -60,7 +60,7 @@ from ..tool_common import (
     _truncate,
 )
 from ..policy_engine import Permission, resolve
-from ..token_store import TokenRecord
+from ..access_key_store import AccessKeyRecord
 from .. import radio as radio_backend
 
 _LOGGER = logging.getLogger(__name__)
@@ -334,7 +334,7 @@ def _property_fallback_summary(
 
 
 def _resolve_radio_device(
-    args: dict, token: TokenRecord, hass: HomeAssistant, tool_name: str, *, require_write: bool
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, tool_name: str, *, require_write: bool
 ) -> _ResolvedRadioDevice | tuple[dict, str, str]:
     """Resolve a device_id to a _ResolvedRadioDevice, or the tool error to return.
 
@@ -354,7 +354,7 @@ def _resolve_radio_device(
     device = device_registry_snapshot(hass).get(device_id)
     ent_reg = er.async_get(hass)
     accessible = [
-        eid for eid in _accessible_entity_ids(token, hass)
+        eid for eid in _accessible_entity_ids(access_key, hass)
         if (entry := ent_reg.async_get(eid)) is not None and entry.device_id == device_id
     ]
     if device is None or not accessible:
@@ -363,7 +363,7 @@ def _resolve_radio_device(
     if detected is None:
         return _tool_error("Not a radio-managed device."), "invalid_request", device_id
     if require_write and not any(
-        resolve(eid, token, hass) == Permission.WRITE for eid in accessible
+        resolve(eid, access_key, hass) == Permission.WRITE for eid in accessible
     ):
         return (
             _tool_error("Read-only access to this device; radio writes need write access."),
@@ -375,12 +375,12 @@ def _resolve_radio_device(
 
 
 async def _resolve_z2m_option_change(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> _ResolvedZ2MOptionChange | tuple[dict, str, str]:
     """Resolve, validate, and conflict-check a converter-option update."""
     tool = "set_zigbee_device_options"
     resolved = _resolve_radio_device(
-        args, token, hass, tool, require_write=True
+        args, access_key, hass, tool, require_write=True
     )
     if isinstance(resolved, tuple):
         return resolved
@@ -453,11 +453,11 @@ async def _resolve_z2m_option_change(
 
 
 async def _resolve_z2m_property_change(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> _ResolvedZ2MPropertyChange | tuple[dict, str, str]:
     """Resolve, ownership-check, validate, and conflict-check a direct write."""
     tool = "set_zigbee_device_property"
-    resolved = _resolve_radio_device(args, token, hass, tool, require_write=True)
+    resolved = _resolve_radio_device(args, access_key, hass, tool, require_write=True)
     if isinstance(resolved, tuple):
         return resolved
     if resolved.backend != radio_backend.BACKEND_Z2M:
@@ -515,7 +515,7 @@ async def _resolve_z2m_property_change(
         )
     coverage = _z2m_property_coverage(hass, resolved.device.id, entry)
     if property_name in coverage.owners:
-        accessible = _accessible_entity_ids(token, hass)
+        accessible = _accessible_entity_ids(access_key, hass)
         visible = sorted(set(coverage.owners[property_name]) & accessible)
         message = (
             f"Use Home Assistant entity {visible[0]} for this property."
@@ -563,7 +563,7 @@ async def _resolve_z2m_property_change(
                 resolved.device.id,
                 include_disabled_entities=True,
             )
-            if resolve(registry_entry.entity_id, token, hass) == Permission.WRITE
+            if resolve(registry_entry.entity_id, access_key, hass) == Permission.WRITE
         )
     )
     return _ResolvedZ2MPropertyChange(
@@ -588,7 +588,7 @@ def _valid_content_hash(value: Any) -> bool:
 
 
 def _radio_mesa_entities(
-    token: TokenRecord, hass: HomeAssistant, device_ids: set[str]
+    access_key: AccessKeyRecord, hass: HomeAssistant, device_ids: set[str]
 ) -> tuple[str, ...]:
     """All registry entities on selected devices that the token may write."""
     registry = er.async_get(hass)
@@ -599,7 +599,7 @@ def _radio_mesa_entities(
             for entry in er.async_entries_for_device(
                 registry, device_id, include_disabled_entities=True
             )
-            if resolve(entry.entity_id, token, hass) == Permission.WRITE
+            if resolve(entry.entity_id, access_key, hass) == Permission.WRITE
         )
     )
 
@@ -740,10 +740,10 @@ def _resolved_group_view(
 
 
 async def _scoped_zigbee_groups(
-    token: TokenRecord, hass: HomeAssistant
+    access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[list[_ResolvedZigbeeGroup], list[dict[str, str]]]:
     """Read every present backend and retain only accessible group entities."""
-    accessible = set(_accessible_entity_ids(token, hass))
+    accessible = set(_accessible_entity_ids(access_key, hass))
     groups: list[_ResolvedZigbeeGroup] = []
     errors: list[dict[str, str]] = []
     for backend in radio_backend.present_zigbee_backends(hass):
@@ -763,10 +763,10 @@ async def _scoped_zigbee_groups(
 
 
 async def _scoped_groupable_members(
-    token: TokenRecord, hass: HomeAssistant
+    access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> list[dict[str, Any]]:
     """Project exact groupable endpoints for visible devices on both backends."""
-    accessible = set(_accessible_entity_ids(token, hass))
+    accessible = set(_accessible_entity_ids(access_key, hass))
     visible = _scoped_zigbee_device_map(hass, accessible)
     by_key: dict[tuple[str, str], set[int]] = {}
     if radio_backend.BACKEND_Z2M in radio_backend.present_zigbee_backends(hass):
@@ -844,7 +844,7 @@ def _project_zigbee_group(group: _ResolvedZigbeeGroup) -> dict[str, Any]:
 
 async def _resolve_zigbee_group(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     tool: str,
     *,
@@ -854,7 +854,7 @@ async def _resolve_zigbee_group(
     entity_id = args.get("group_entity_id")
     if not isinstance(entity_id, str) or not entity_id:
         return _tool_error("group_entity_id is required."), "invalid_request", tool
-    permission = resolve(entity_id, token, hass)
+    permission = resolve(entity_id, access_key, hass)
     if permission not in {Permission.READ, Permission.WRITE}:
         return _tool_error("Group not found."), "not_found", entity_id
     if require_write and permission != Permission.WRITE:
@@ -863,7 +863,7 @@ async def _resolve_zigbee_group(
             "denied",
             entity_id,
         )
-    groups, _errors = await _scoped_zigbee_groups(token, hass)
+    groups, _errors = await _scoped_zigbee_groups(access_key, hass)
     matches = [group for group in groups if entity_id in group.entity_ids]
     if len(matches) != 1:
         return _tool_error("Group not found."), "not_found", entity_id
@@ -921,7 +921,7 @@ def _group_member_args(args: dict) -> list[dict[str, Any]] | None:
 
 async def _resolve_group_members(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     tool: str,
     *,
@@ -935,7 +935,7 @@ async def _resolve_group_members(
     seen: set[tuple[str, int]] = set()
     for index, item in enumerate(raw_members):
         resolved = _resolve_radio_device(
-            {"device_id": item.get("device_id")}, token, hass, tool, require_write=True
+            {"device_id": item.get("device_id")}, access_key, hass, tool, require_write=True
         )
         if isinstance(resolved, tuple):
             return resolved
@@ -969,13 +969,13 @@ async def _resolve_group_members(
 
 
 def _group_mesa_entities(
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     group_entity_id: str | None,
     devices: tuple[_ResolvedRadioDevice, ...],
 ) -> tuple[str, ...]:
     anchors = set(
-        _radio_mesa_entities(token, hass, {device.device.id for device in devices})
+        _radio_mesa_entities(access_key, hass, {device.device.id for device in devices})
     )
     if group_entity_id is not None:
         anchors.add(group_entity_id)
@@ -983,14 +983,14 @@ def _group_mesa_entities(
 
 
 async def _resolve_create_zigbee_group(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> _ResolvedZigbeeGroupChange | tuple[dict, str, str]:
     tool = "create_zigbee_group"
     try:
         name = radio_backend.validate_zigbee_group_name(args.get("name"))
     except radio_backend.ZigbeeGroupConfigurationError as exc:
         return _tool_error(str(exc)), "invalid_request", tool
-    resolved_members = await _resolve_group_members(args, token, hass, tool)
+    resolved_members = await _resolve_group_members(args, access_key, hass, tool)
     if isinstance(resolved_members, tuple):
         return resolved_members
     devices, endpoints = resolved_members.devices, resolved_members.endpoints
@@ -1016,18 +1016,18 @@ async def _resolve_create_zigbee_group(
         members=devices,
         endpoints=endpoints,
         before_hash=None,
-        mesa_entities=_group_mesa_entities(token, hass, None, devices),
+        mesa_entities=_group_mesa_entities(access_key, hass, None, devices),
     )
 
 
 async def _resolve_set_zigbee_group_members(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> _ResolvedZigbeeGroupChange | tuple[dict, str, str]:
     tool = "set_zigbee_group_members"
     operation = args.get("operation")
     if operation not in {"add", "remove"}:
         return _tool_error("operation must be add or remove."), "invalid_request", tool
-    group = await _resolve_zigbee_group(args, token, hass, tool, require_write=True)
+    group = await _resolve_zigbee_group(args, access_key, hass, tool, require_write=True)
     if isinstance(group, tuple):
         return group
     expected_hash = args.get("expected_hash")
@@ -1041,7 +1041,7 @@ async def _resolve_set_zigbee_group_members(
         )
     resolved_members = await _resolve_group_members(
         args,
-        token,
+        access_key,
         hass,
         tool,
         require_groupable=operation == "add",
@@ -1078,15 +1078,15 @@ async def _resolve_set_zigbee_group_members(
         members=devices,
         endpoints=endpoints,
         before_hash=group.content_hash,
-        mesa_entities=_group_mesa_entities(token, hass, group.entity_id, devices),
+        mesa_entities=_group_mesa_entities(access_key, hass, group.entity_id, devices),
     )
 
 
 async def _resolve_remove_zigbee_group(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> _ResolvedZigbeeGroupChange | tuple[dict, str, str]:
     tool = "remove_zigbee_group"
-    group = await _resolve_zigbee_group(args, token, hass, tool, require_write=True)
+    group = await _resolve_zigbee_group(args, access_key, hass, tool, require_write=True)
     if isinstance(group, tuple):
         return group
     expected_hash = args.get("expected_hash")
@@ -1106,7 +1106,7 @@ async def _resolve_remove_zigbee_group(
     endpoints: list[int] = []
     for device_id, endpoint in group.visible_members:
         resolved = _resolve_radio_device(
-            {"device_id": device_id}, token, hass, tool, require_write=True
+            {"device_id": device_id}, access_key, hass, tool, require_write=True
         )
         if isinstance(resolved, tuple):
             return resolved
@@ -1123,13 +1123,13 @@ async def _resolve_remove_zigbee_group(
         endpoints=tuple(endpoints),
         before_hash=group.content_hash,
         mesa_entities=_group_mesa_entities(
-            token, hass, group.entity_id, device_tuple
+            access_key, hass, group.entity_id, device_tuple
         ),
     )
 
 
 async def _resolve_zigbee_binding_change(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> _ResolvedZigbeeBindingChange | tuple[dict, str, str]:
     """Resolve both scoped devices and validate one backend binding change."""
     tool = "set_zigbee_binding"
@@ -1139,12 +1139,12 @@ async def _resolve_zigbee_binding_change(
     source_id = args.get("source_device_id")
     target_id = args.get("target_device_id")
     source = _resolve_radio_device(
-        {"device_id": source_id}, token, hass, tool, require_write=True
+        {"device_id": source_id}, access_key, hass, tool, require_write=True
     )
     if isinstance(source, tuple):
         return source
     target = _resolve_radio_device(
-        {"device_id": target_id}, token, hass, tool, require_write=True
+        {"device_id": target_id}, access_key, hass, tool, require_write=True
     )
     if isinstance(target, tuple):
         return target
@@ -1161,7 +1161,7 @@ async def _resolve_zigbee_binding_change(
             source.device.id,
         )
     mesa_entities = _radio_mesa_entities(
-        token, hass, {source.device.id, target.device.id}
+        access_key, hass, {source.device.id, target.device.id}
     )
     if source.backend == radio_backend.BACKEND_ZHA:
         z2m_only = (
@@ -1264,11 +1264,11 @@ async def _resolve_zigbee_binding_change(
 
 
 async def _resolve_zigbee_reporting_change(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> _ResolvedZigbeeReportingChange | tuple[dict, str, str]:
     """Resolve and conflict-check one Zigbee2MQTT reporting update."""
     tool = "configure_zigbee_reporting"
-    resolved = _resolve_radio_device(args, token, hass, tool, require_write=True)
+    resolved = _resolve_radio_device(args, access_key, hass, tool, require_write=True)
     if isinstance(resolved, tuple):
         return resolved
     if resolved.backend != radio_backend.BACKEND_Z2M:
@@ -1336,7 +1336,7 @@ class _ResolvedPermitJoin:
 
 
 def _resolve_topology_scan(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> _ResolvedTopologyScan | tuple[dict, str, str]:
     """Validate the backend and capture only devices visible to this token."""
     tool = "scan_zigbee_topology"
@@ -1357,7 +1357,7 @@ def _resolve_topology_scan(
     elif backend not in present:
         return _tool_error("That Zigbee backend is not available."), "invalid_request", tool
 
-    accessible = _accessible_entity_ids(token, hass)
+    accessible = _accessible_entity_ids(access_key, hass)
     scoped = _scoped_zigbee_device_map(hass, accessible)
     visible_map = {
         ieee: device_id
@@ -1374,7 +1374,7 @@ def _resolve_topology_scan(
 
 
 def _resolve_permit_join(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> _ResolvedPermitJoin | tuple[dict, str, str]:
     """Validate permit_zigbee_join args into a _ResolvedPermitJoin, or the tool error.
 
@@ -1396,7 +1396,7 @@ def _resolve_permit_join(
     router_label = None
     if args.get("device_id"):
         resolved = _resolve_radio_device(
-            args, token, hass, "permit_zigbee_join", require_write=False
+            args, access_key, hass, "permit_zigbee_join", require_write=False
         )
         if isinstance(resolved, tuple):
             return resolved
@@ -1419,9 +1419,9 @@ def _resolve_permit_join(
 
 
 async def _build_diff_permit_zigbee_join(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> dict:
-    permit = _resolve_permit_join(args, token, hass)
+    permit = _resolve_permit_join(args, access_key, hass)
     if isinstance(permit, tuple):
         return {"kind": "system_action", **_summary("zigbee_permit"), "preview": {}}
     backend, duration, router_label = permit.backend, permit.duration, permit.router_label
@@ -1443,10 +1443,10 @@ async def _build_diff_permit_zigbee_join(
 
 
 async def _build_diff_scan_zigbee_topology(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> dict:
     """Approval preview for the active mesh scan."""
-    resolved = _resolve_topology_scan(args, token, hass)
+    resolved = _resolve_topology_scan(args, access_key, hass)
     if isinstance(resolved, tuple):
         return {
             "kind": "system_action",
@@ -1485,10 +1485,10 @@ def _radio_device_diff_preview(device: Any, ieee: str) -> dict:
 
 
 async def _build_diff_reconfigure_zigbee_device(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> dict:
     resolved = _resolve_radio_device(
-        args, token, hass, "reconfigure_zigbee_device", require_write=True
+        args, access_key, hass, "reconfigure_zigbee_device", require_write=True
     )
     if isinstance(resolved, tuple):
         return {"kind": "system_action", **_summary("zigbee_reconfigure"), "preview": {}}
@@ -1506,13 +1506,13 @@ async def _build_diff_reconfigure_zigbee_device(
 
 async def _build_diff_set_zigbee_device_options(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     *,
     change: _ResolvedZ2MOptionChange | None = None,
 ) -> dict:
     if change is None:
-        resolved_change = await _resolve_z2m_option_change(args, token, hass)
+        resolved_change = await _resolve_z2m_option_change(args, access_key, hass)
     else:
         resolved_change = change
     if isinstance(resolved_change, tuple):
@@ -1552,13 +1552,13 @@ async def _build_diff_set_zigbee_device_options(
 
 async def _build_diff_set_zigbee_device_property(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     *,
     change: _ResolvedZ2MPropertyChange | None = None,
 ) -> dict:
     """Approval preview for one exact direct exposed-property change."""
-    resolved_change = change or await _resolve_z2m_property_change(args, token, hass)
+    resolved_change = change or await _resolve_z2m_property_change(args, access_key, hass)
     if isinstance(resolved_change, tuple):
         return {
             "kind": "config_diff",
@@ -1578,7 +1578,7 @@ async def _build_diff_set_zigbee_device_property(
         ),
     }
     mesa_note = _mesa_confirm_annotation(
-        token,
+        access_key,
         hass,
         [("zigbee", "set_property", list(change.mesa_entities))],
     )
@@ -1600,13 +1600,13 @@ async def _build_diff_set_zigbee_device_property(
 
 async def _build_diff_set_zigbee_binding(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     *,
     change: _ResolvedZigbeeBindingChange | None = None,
 ) -> dict:
     """Approval preview for one registry-scoped binding relationship."""
-    resolved = change or await _resolve_zigbee_binding_change(args, token, hass)
+    resolved = change or await _resolve_zigbee_binding_change(args, access_key, hass)
     if isinstance(resolved, tuple):
         return {
             "kind": "config_diff",
@@ -1666,7 +1666,7 @@ async def _build_diff_set_zigbee_binding(
     if change.backend == radio_backend.BACKEND_ZHA:
         preview["selection"] = "ZHA will derive every compatible endpoint and cluster."
     mesa_note = _mesa_confirm_annotation(
-        token,
+        access_key,
         hass,
         [("zigbee", "set_binding", list(change.mesa_entities))],
     )
@@ -1728,7 +1728,7 @@ def _group_change_states(
 
 async def _build_diff_zigbee_group(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     *,
     tool_name: str,
@@ -1739,7 +1739,7 @@ async def _build_diff_zigbee_group(
         "set_zigbee_group_members": _resolve_set_zigbee_group_members,
         "remove_zigbee_group": _resolve_remove_zigbee_group,
     }[tool_name]
-    resolved = change or await resolver(args, token, hass)
+    resolved = change or await resolver(args, access_key, hass)
     if isinstance(resolved, tuple):
         return {
             "kind": "config_diff",
@@ -1761,7 +1761,7 @@ async def _build_diff_zigbee_group(
     if change.before_hash:
         preview["content_hash"] = change.before_hash
     mesa_note = _mesa_confirm_annotation(
-        token,
+        access_key,
         hass,
         [("zigbee", f"group_{change.operation}", list(change.mesa_entities))],
     )
@@ -1792,13 +1792,13 @@ async def _build_diff_zigbee_group(
 
 async def _build_diff_configure_zigbee_reporting(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     *,
     change: _ResolvedZigbeeReportingChange | None = None,
 ) -> dict:
     """Approval preview for one exact reporting record."""
-    resolved = change or await _resolve_zigbee_reporting_change(args, token, hass)
+    resolved = change or await _resolve_zigbee_reporting_change(args, access_key, hass)
     if isinstance(resolved, tuple):
         return {
             "kind": "config_diff",
@@ -1846,10 +1846,10 @@ async def _build_diff_configure_zigbee_reporting(
 
 
 async def _build_diff_remove_zigbee_device(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> dict:
     resolved = _resolve_radio_device(
-        args, token, hass, "remove_zigbee_device", require_write=True
+        args, access_key, hass, "remove_zigbee_device", require_write=True
     )
     if isinstance(resolved, tuple):
         return {"kind": "system_action", **_summary("zigbee_remove"), "preview": {}}
@@ -1862,7 +1862,7 @@ async def _build_diff_remove_zigbee_device(
     preview["entities"] = sorted(entry.entity_id for entry in entries)
     mesa_modes = {}
     for entry in entries:
-        mode = entity_control_mode(data.mesa, token, entry.entity_id)
+        mode = entity_control_mode(data.mesa, access_key, entry.entity_id)
         if mode is not None:
             mesa_modes[entry.entity_id] = mode
     if mesa_modes:
@@ -1878,10 +1878,10 @@ async def _build_diff_remove_zigbee_device(
 
 
 async def _tool_get_radio_network(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: report every radio network present (safe projection only)."""
-    if effective_cap(token, "cap_diagnostics") == CAP_DENY:
+    if effective_cap(access_key, "cap_diagnostics") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_radio_network"
     networks = await radio_backend.async_radio_networks(hass)
     return (
@@ -1892,13 +1892,13 @@ async def _tool_get_radio_network(
 
 
 async def _tool_get_zigbee_groups(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: scoped group membership and groupable endpoint inventory."""
-    if effective_cap(token, "cap_diagnostics") == CAP_DENY:
+    if effective_cap(access_key, "cap_diagnostics") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_zigbee_groups"
-    groups, errors = await _scoped_zigbee_groups(token, hass)
-    candidates = await _scoped_groupable_members(token, hass)
+    groups, errors = await _scoped_zigbee_groups(access_key, hass)
+    candidates = await _scoped_groupable_members(access_key, hass)
     body: dict[str, Any] = {
         "groups": [_project_zigbee_group(group) for group in groups],
         "groupable_members": candidates,
@@ -1914,7 +1914,7 @@ async def _tool_get_zigbee_groups(
 
 async def _tool_scan_zigbee_topology(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
@@ -1922,19 +1922,19 @@ async def _tool_scan_zigbee_topology(
 ) -> tuple[dict, str, str]:
     """MCP tool: run one approval-eligible active Zigbee mesh scan."""
     caps = ("cap_diagnostics", "cap_radio_write")
-    if any(effective_cap(token, cap) == CAP_DENY for cap in caps):
+    if any(effective_cap(access_key, cap) == CAP_DENY for cap in caps):
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "scan_zigbee_topology"
-    resolved = _resolve_topology_scan(args, token, hass)
+    resolved = _resolve_topology_scan(args, access_key, hass)
     if isinstance(resolved, tuple):
         return resolved
-    diff = await _build_diff_scan_zigbee_topology(args, token, hass)
+    diff = await _build_diff_scan_zigbee_topology(args, access_key, hass)
     if not _approved_exec_ctx.get():
         for cap in caps:
-            if effective_cap(token, cap) != CAP_CONFIRM:
+            if effective_cap(access_key, cap) != CAP_CONFIRM:
                 continue
             blocked = await _gate(
                 cap,
-                token,
+                access_key,
                 hass,
                 data,
                 tool_name="scan_zigbee_topology",
@@ -1945,18 +1945,18 @@ async def _tool_scan_zigbee_topology(
             )
             if blocked is not None:
                 return blocked
-    return await _execute_scan_zigbee_topology(args, token, hass, data)
+    return await _execute_scan_zigbee_topology(args, access_key, hass, data)
 
 
 async def _execute_scan_zigbee_topology(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Re-resolve scope, scan, and project without returning radio addresses."""
     del data
     caps = ("cap_diagnostics", "cap_radio_write")
-    if any(effective_cap(token, cap) == CAP_DENY for cap in caps):
+    if any(effective_cap(access_key, cap) == CAP_DENY for cap in caps):
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "scan_zigbee_topology"
-    resolved = _resolve_topology_scan(args, token, hass)
+    resolved = _resolve_topology_scan(args, access_key, hass)
     if isinstance(resolved, tuple):
         return resolved
     _set_progress_status(
@@ -2001,13 +2001,13 @@ async def _execute_scan_zigbee_topology(
 
 
 async def _tool_get_radio_device(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: radio-level diagnostics for one visible device."""
-    if effective_cap(token, "cap_diagnostics") == CAP_DENY:
+    if effective_cap(access_key, "cap_diagnostics") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "get_radio_device"
     resolved = _resolve_radio_device(
-        args, token, hass, "get_radio_device", require_write=False
+        args, access_key, hass, "get_radio_device", require_write=False
     )
     if isinstance(resolved, tuple):
         return resolved
@@ -2021,7 +2021,7 @@ async def _tool_get_radio_device(
                 # Registered in HA but unknown to Z2M (a stale discovery
                 # leftover). The token already sees the device, so no oracle.
                 return _tool_error("Device is not on the Zigbee network."), "invalid_request", device.id
-            accessible = _accessible_entity_ids(token, hass)
+            accessible = _accessible_entity_ids(access_key, hass)
             projected = radio_backend.project_z2m_device(
                 entry,
                 current_options=current_options,
@@ -2063,7 +2063,7 @@ async def _tool_get_radio_device(
                 coverage = _z2m_property_coverage(hass, device.id, entry)
                 owners = coverage.owners.get(requested_property, ())
                 if owners:
-                    accessible = _accessible_entity_ids(token, hass)
+                    accessible = _accessible_entity_ids(access_key, hass)
                     visible_owners = sorted(set(owners) & accessible)
                     message = (
                         f"Use Home Assistant entity {visible_owners[0]} for this property."
@@ -2093,12 +2093,12 @@ async def _tool_get_radio_device(
                 }
         else:
             raw = await radio_backend.async_zha_device_info(hass, ieee)
-            accessible = _accessible_entity_ids(token, hass)
+            accessible = _accessible_entity_ids(access_key, hass)
             projected = radio_backend.project_zha_device(
                 raw,
                 accessible_entity_ids=accessible,
                 visible_ieee_map=radio_backend.visible_zigbee_device_map(hass, accessible),
-                pass_through=token.pass_through,
+                pass_through=access_key.pass_through,
             )
             projected["radio_configuration"] = {
                 "status": "managed_by_zha",
@@ -2119,31 +2119,31 @@ async def _tool_get_radio_device(
 
 
 async def _tool_permit_zigbee_join(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: open/close the Zigbee join window (Confirm-eligible)."""
     # Capability gate first: a denied token gets a uniform Forbidden with no
     # device work, so the tool can never be a scope/existence oracle.
-    if effective_cap(token, "cap_radio_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_radio_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "permit_zigbee_join"
-    pre = _resolve_permit_join(args, token, hass)
+    pre = _resolve_permit_join(args, access_key, hass)
     if isinstance(pre, tuple):
         return pre
     blocked = await _gate(
-        "cap_radio_write", token, hass, data,
+        "cap_radio_write", access_key, hass, data,
         tool_name="permit_zigbee_join", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_permit_zigbee_join(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_permit_zigbee_join(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_permit_zigbee_join(args, token, hass, data)
+    return await _execute_permit_zigbee_join(args, access_key, hass, data)
 
 
 async def _execute_permit_zigbee_join(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    permit = _resolve_permit_join(args, token, hass)
+    permit = _resolve_permit_join(args, access_key, hass)
     if isinstance(permit, tuple):
         return permit
     backend, duration = permit.backend, permit.duration
@@ -2169,32 +2169,32 @@ async def _execute_permit_zigbee_join(
 
 
 async def _tool_reconfigure_zigbee_device(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: re-interview a Zigbee device (Confirm-eligible)."""
-    if effective_cap(token, "cap_radio_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_radio_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "reconfigure_zigbee_device"
     pre = _resolve_radio_device(
-        args, token, hass, "reconfigure_zigbee_device", require_write=True
+        args, access_key, hass, "reconfigure_zigbee_device", require_write=True
     )
     if isinstance(pre, tuple):
         return pre
     blocked = await _gate(
-        "cap_radio_write", token, hass, data,
+        "cap_radio_write", access_key, hass, data,
         tool_name="reconfigure_zigbee_device", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_reconfigure_zigbee_device(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_reconfigure_zigbee_device(args, access_key, hass),
     )
     if blocked is not None:
         return blocked
-    return await _execute_reconfigure_zigbee_device(args, token, hass, data)
+    return await _execute_reconfigure_zigbee_device(args, access_key, hass, data)
 
 
 async def _execute_reconfigure_zigbee_device(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     resolved = _resolve_radio_device(
-        args, token, hass, "reconfigure_zigbee_device", require_write=True
+        args, access_key, hass, "reconfigure_zigbee_device", require_write=True
     )
     if isinstance(resolved, tuple):
         return resolved
@@ -2230,18 +2230,18 @@ async def _execute_reconfigure_zigbee_device(
 
 
 async def _tool_set_zigbee_device_options(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: change Z2M converter options (Confirm-eligible)."""
-    if effective_cap(token, "cap_radio_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_radio_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_zigbee_device_options"
-    pre = await _resolve_z2m_option_change(args, token, hass)
+    pre = await _resolve_z2m_option_change(args, access_key, hass)
     if isinstance(pre, tuple):
         return pre
     blocked = await _gate(
         "cap_radio_write",
-        token,
+        access_key,
         hass,
         data,
         tool_name="set_zigbee_device_options",
@@ -2249,19 +2249,19 @@ async def _tool_set_zigbee_device_options(
         request_id=request_id,
         client_ip=client_ip,
         diff=lambda: _build_diff_set_zigbee_device_options(
-            args, token, hass, change=pre
+            args, access_key, hass, change=pre
         ),
     )
     if blocked is not None:
         return blocked
-    return await _execute_set_zigbee_device_options(args, token, hass, data)
+    return await _execute_set_zigbee_device_options(args, access_key, hass, data)
 
 
 async def _execute_set_zigbee_device_options(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     """Apply one validated option update and record its bounded history."""
-    change = await _resolve_z2m_option_change(args, token, hass)
+    change = await _resolve_z2m_option_change(args, access_key, hass)
     if isinstance(change, tuple):
         return change
     confirmation = "response"
@@ -2347,7 +2347,7 @@ async def _execute_set_zigbee_device_options(
     }
     await _record_version(
         data,
-        token,
+        access_key,
         resource_type="device",
         resource_id=change.device.id,
         action="edit",
@@ -2386,7 +2386,7 @@ async def _execute_set_zigbee_device_options(
 
 async def _tool_set_zigbee_device_property(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
@@ -2397,18 +2397,18 @@ async def _tool_set_zigbee_device_property(
     Gated by cap_radio_write and cap_physical_control, then MESA.
     """
     caps = ("cap_radio_write", "cap_physical_control")
-    if any(effective_cap(token, cap) == CAP_DENY for cap in caps):
+    if any(effective_cap(access_key, cap) == CAP_DENY for cap in caps):
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_zigbee_device_property"
-    pre = await _resolve_z2m_property_change(args, token, hass)
+    pre = await _resolve_z2m_property_change(args, access_key, hass)
     if isinstance(pre, tuple):
         return pre
     pre_diff = await _build_diff_set_zigbee_device_property(
-        args, token, hass, change=pre
+        args, access_key, hass, change=pre
     )
     mesa_outcome = await async_apply_mesa_to_call(
         hass,
         data,
-        token,
+        access_key,
         domain="zigbee",
         service="set_property",
         service_data={"property": pre.property_name, "value": pre.after},
@@ -2423,20 +2423,20 @@ async def _tool_set_zigbee_device_property(
         require_all=True,
     )
     if mesa_outcome.blocked:
-        fire_mesa_blocked_event(hass, token, mesa_outcome.blocked)
+        fire_mesa_blocked_event(hass, access_key, mesa_outcome.blocked)
     if mesa_outcome.decision == "pending":
-        return await _pending_or_inline(hass, data, token, mesa_outcome.approval)
+        return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", pre.device.id
     if mesa_outcome.warnings:
         _mesa_advisory_ctx.set(True)
     if not _approved_exec_ctx.get():
         for cap in caps:
-            if effective_cap(token, cap) != CAP_CONFIRM:
+            if effective_cap(access_key, cap) != CAP_CONFIRM:
                 continue
             blocked = await _gate(
                 cap,
-                token,
+                access_key,
                 hass,
                 data,
                 tool_name="set_zigbee_device_property",
@@ -2448,13 +2448,13 @@ async def _tool_set_zigbee_device_property(
             if blocked is not None:
                 return blocked
     return await _execute_set_zigbee_device_property(
-        args, token, hass, data, request_id=request_id, client_ip=client_ip
+        args, access_key, hass, data, request_id=request_id, client_ip=client_ip
     )
 
 
 async def _execute_set_zigbee_device_property(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
@@ -2462,21 +2462,21 @@ async def _execute_set_zigbee_device_property(
 ) -> tuple[dict, str, str]:
     """Apply one exact direct property write after all gates are satisfied."""
     if any(
-        effective_cap(token, cap) == CAP_DENY
+        effective_cap(access_key, cap) == CAP_DENY
         for cap in ("cap_radio_write", "cap_physical_control")
     ):
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_zigbee_device_property"
-    change = await _resolve_z2m_property_change(args, token, hass)
+    change = await _resolve_z2m_property_change(args, access_key, hass)
     if isinstance(change, tuple):
         return change
 
     diff = await _build_diff_set_zigbee_device_property(
-        args, token, hass, change=change
+        args, access_key, hass, change=change
     )
     mesa_outcome = await async_apply_mesa_to_call(
         hass,
         data,
-        token,
+        access_key,
         domain="zigbee",
         service="set_property",
         service_data={
@@ -2494,10 +2494,10 @@ async def _execute_set_zigbee_device_property(
         require_all=True,
     )
     if mesa_outcome.blocked:
-        fire_mesa_blocked_event(hass, token, mesa_outcome.blocked)
+        fire_mesa_blocked_event(hass, access_key, mesa_outcome.blocked)
     if mesa_outcome.decision == "pending":
         return await _pending_or_inline(
-            hass, data, token, mesa_outcome.approval
+            hass, data, access_key, mesa_outcome.approval
         )
     if mesa_outcome.decision == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", change.device.id
@@ -2519,7 +2519,7 @@ async def _execute_set_zigbee_device_property(
     label = change.device.name_by_user or change.device.name or change.ieee
     await _record_version(
         data,
-        token,
+        access_key,
         resource_type="device",
         resource_id=change.device.id,
         action="edit",
@@ -2560,7 +2560,7 @@ async def _execute_set_zigbee_device_property(
 
 async def _tool_set_zigbee_binding(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
@@ -2571,18 +2571,18 @@ async def _tool_set_zigbee_binding(
     Gated by cap_radio_write and cap_physical_control, then MESA.
     """
     caps = ("cap_radio_write", "cap_physical_control")
-    if any(effective_cap(token, cap) == CAP_DENY for cap in caps):
+    if any(effective_cap(access_key, cap) == CAP_DENY for cap in caps):
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_zigbee_binding"
-    pre = await _resolve_zigbee_binding_change(args, token, hass)
+    pre = await _resolve_zigbee_binding_change(args, access_key, hass)
     if isinstance(pre, tuple):
         return pre
     pre_diff = await _build_diff_set_zigbee_binding(
-        args, token, hass, change=pre
+        args, access_key, hass, change=pre
     )
     mesa_outcome = await async_apply_mesa_to_call(
         hass,
         data,
-        token,
+        access_key,
         domain="zigbee",
         service="set_binding",
         service_data={
@@ -2602,20 +2602,20 @@ async def _tool_set_zigbee_binding(
         require_all=True,
     )
     if mesa_outcome.blocked:
-        fire_mesa_blocked_event(hass, token, mesa_outcome.blocked)
+        fire_mesa_blocked_event(hass, access_key, mesa_outcome.blocked)
     if mesa_outcome.decision == "pending":
-        return await _pending_or_inline(hass, data, token, mesa_outcome.approval)
+        return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", pre.source.device.id
     if mesa_outcome.warnings:
         _mesa_advisory_ctx.set(True)
     if not _approved_exec_ctx.get():
         for cap in caps:
-            if effective_cap(token, cap) != CAP_CONFIRM:
+            if effective_cap(access_key, cap) != CAP_CONFIRM:
                 continue
             blocked = await _gate(
                 cap,
-                token,
+                access_key,
                 hass,
                 data,
                 tool_name="set_zigbee_binding",
@@ -2627,13 +2627,13 @@ async def _tool_set_zigbee_binding(
             if blocked is not None:
                 return blocked
     return await _execute_set_zigbee_binding(
-        args, token, hass, data, request_id=request_id, client_ip=client_ip
+        args, access_key, hass, data, request_id=request_id, client_ip=client_ip
     )
 
 
 async def _execute_set_zigbee_binding(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
@@ -2641,20 +2641,20 @@ async def _execute_set_zigbee_binding(
 ) -> tuple[dict, str, str]:
     """Revalidate, apply, and audit one exact binding relationship."""
     if any(
-        effective_cap(token, cap) == CAP_DENY
+        effective_cap(access_key, cap) == CAP_DENY
         for cap in ("cap_radio_write", "cap_physical_control")
     ):
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "set_zigbee_binding"
-    change = await _resolve_zigbee_binding_change(args, token, hass)
+    change = await _resolve_zigbee_binding_change(args, access_key, hass)
     if isinstance(change, tuple):
         return change
     diff = await _build_diff_set_zigbee_binding(
-        args, token, hass, change=change
+        args, access_key, hass, change=change
     )
     mesa_outcome = await async_apply_mesa_to_call(
         hass,
         data,
-        token,
+        access_key,
         domain="zigbee",
         service="set_binding",
         service_data={
@@ -2674,9 +2674,9 @@ async def _execute_set_zigbee_binding(
         require_all=True,
     )
     if mesa_outcome.blocked:
-        fire_mesa_blocked_event(hass, token, mesa_outcome.blocked)
+        fire_mesa_blocked_event(hass, access_key, mesa_outcome.blocked)
     if mesa_outcome.decision == "pending":
-        return await _pending_or_inline(hass, data, token, mesa_outcome.approval)
+        return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", change.source.device.id
     if mesa_outcome.warnings:
@@ -2735,7 +2735,7 @@ async def _execute_set_zigbee_binding(
     }
     await _record_version(
         data,
-        token,
+        access_key,
         resource_type="device",
         resource_id=change.source.device.id,
         action="edit",
@@ -2793,21 +2793,21 @@ async def _execute_set_zigbee_binding(
 
 async def _tool_configure_zigbee_reporting(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: configure one Z2M attribute reporting record."""
-    if effective_cap(token, "cap_radio_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_radio_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "configure_zigbee_reporting"
-    pre = await _resolve_zigbee_reporting_change(args, token, hass)
+    pre = await _resolve_zigbee_reporting_change(args, access_key, hass)
     if isinstance(pre, tuple):
         return pre
     blocked = await _gate(
         "cap_radio_write",
-        token,
+        access_key,
         hass,
         data,
         tool_name="configure_zigbee_reporting",
@@ -2815,24 +2815,24 @@ async def _tool_configure_zigbee_reporting(
         request_id=request_id,
         client_ip=client_ip,
         diff=lambda: _build_diff_configure_zigbee_reporting(
-            args, token, hass, change=pre
+            args, access_key, hass, change=pre
         ),
     )
     if blocked is not None:
         return blocked
-    return await _execute_configure_zigbee_reporting(args, token, hass, data)
+    return await _execute_configure_zigbee_reporting(args, access_key, hass, data)
 
 
 async def _execute_configure_zigbee_reporting(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
 ) -> tuple[dict, str, str]:
     """Revalidate, apply, exactly confirm, and audit reporting configuration."""
-    if effective_cap(token, "cap_radio_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_radio_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "configure_zigbee_reporting"
-    change = await _resolve_zigbee_reporting_change(args, token, hass)
+    change = await _resolve_zigbee_reporting_change(args, access_key, hass)
     if isinstance(change, tuple):
         return change
     try:
@@ -2865,7 +2865,7 @@ async def _execute_configure_zigbee_reporting(
     )
     await _record_version(
         data,
-        token,
+        access_key,
         resource_type="device",
         resource_id=change.device.id,
         action="edit",
@@ -2914,7 +2914,7 @@ _GROUP_CHANGE_RESOLVERS = {
 
 async def _tool_zigbee_group_change(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     *,
@@ -2927,19 +2927,19 @@ async def _tool_zigbee_group_change(
     cap_radio_write and cap_physical_control, then MESA.
     """
     caps = ("cap_radio_write", "cap_physical_control")
-    if any(effective_cap(token, cap) == CAP_DENY for cap in caps):
+    if any(effective_cap(access_key, cap) == CAP_DENY for cap in caps):
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
     resolver = _GROUP_CHANGE_RESOLVERS[tool_name]
-    pre = await resolver(args, token, hass)
+    pre = await resolver(args, access_key, hass)
     if isinstance(pre, tuple):
         return pre
     pre_diff = await _build_diff_zigbee_group(
-        args, token, hass, tool_name=tool_name, change=pre
+        args, access_key, hass, tool_name=tool_name, change=pre
     )
     mesa_outcome = await async_apply_mesa_to_call(
         hass,
         data,
-        token,
+        access_key,
         domain="zigbee",
         service=f"group_{pre.operation}",
         service_data={
@@ -2961,20 +2961,20 @@ async def _tool_zigbee_group_change(
         require_all=True,
     )
     if mesa_outcome.blocked:
-        fire_mesa_blocked_event(hass, token, mesa_outcome.blocked)
+        fire_mesa_blocked_event(hass, access_key, mesa_outcome.blocked)
     if mesa_outcome.decision == "pending":
-        return await _pending_or_inline(hass, data, token, mesa_outcome.approval)
+        return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
     if mesa_outcome.warnings:
         _mesa_advisory_ctx.set(True)
     if not _approved_exec_ctx.get():
         for cap in caps:
-            if effective_cap(token, cap) != CAP_CONFIRM:
+            if effective_cap(access_key, cap) != CAP_CONFIRM:
                 continue
             blocked = await _gate(
                 cap,
-                token,
+                access_key,
                 hass,
                 data,
                 tool_name=tool_name,
@@ -2987,7 +2987,7 @@ async def _tool_zigbee_group_change(
                 return blocked
     return await _execute_zigbee_group_change(
         args,
-        token,
+        access_key,
         hass,
         data,
         tool_name=tool_name,
@@ -2998,7 +2998,7 @@ async def _tool_zigbee_group_change(
 
 async def _execute_zigbee_group_change(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     *,
@@ -3008,20 +3008,20 @@ async def _execute_zigbee_group_change(
 ) -> tuple[dict, str, str]:
     """Revalidate, execute, exactly confirm, and audit one group change."""
     if any(
-        effective_cap(token, cap) == CAP_DENY
+        effective_cap(access_key, cap) == CAP_DENY
         for cap in ("cap_radio_write", "cap_physical_control")
     ):
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
-    change = await _GROUP_CHANGE_RESOLVERS[tool_name](args, token, hass)
+    change = await _GROUP_CHANGE_RESOLVERS[tool_name](args, access_key, hass)
     if isinstance(change, tuple):
         return change
     diff = await _build_diff_zigbee_group(
-        args, token, hass, tool_name=tool_name, change=change
+        args, access_key, hass, tool_name=tool_name, change=change
     )
     mesa_outcome = await async_apply_mesa_to_call(
         hass,
         data,
-        token,
+        access_key,
         domain="zigbee",
         service=f"group_{change.operation}",
         service_data={
@@ -3043,9 +3043,9 @@ async def _execute_zigbee_group_change(
         require_all=True,
     )
     if mesa_outcome.blocked:
-        fire_mesa_blocked_event(hass, token, mesa_outcome.blocked)
+        fire_mesa_blocked_event(hass, access_key, mesa_outcome.blocked)
     if mesa_outcome.decision == "pending":
-        return await _pending_or_inline(hass, data, token, mesa_outcome.approval)
+        return await _pending_or_inline(hass, data, access_key, mesa_outcome.approval)
     if mesa_outcome.decision == "deny":
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", tool_name
     if mesa_outcome.warnings:
@@ -3097,7 +3097,7 @@ async def _execute_zigbee_group_change(
     target_id = change.group.entity_id if change.group else change.members[0].device.id
     await _record_version(
         data,
-        token,
+        access_key,
         resource_type="device",
         resource_id=target_id,
         action=(
@@ -3145,62 +3145,62 @@ async def _execute_zigbee_group_change(
 
 
 async def _execute_create_zigbee_group(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     return await _execute_zigbee_group_change(
-        args, token, hass, data, tool_name="create_zigbee_group",
+        args, access_key, hass, data, tool_name="create_zigbee_group",
         request_id=request_id, client_ip=client_ip,
     )
 
 
 async def _execute_set_zigbee_group_members(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     return await _execute_zigbee_group_change(
-        args, token, hass, data, tool_name="set_zigbee_group_members",
+        args, access_key, hass, data, tool_name="set_zigbee_group_members",
         request_id=request_id, client_ip=client_ip,
     )
 
 
 async def _execute_remove_zigbee_group(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     return await _execute_zigbee_group_change(
-        args, token, hass, data, tool_name="remove_zigbee_group",
+        args, access_key, hass, data, tool_name="remove_zigbee_group",
         request_id=request_id, client_ip=client_ip,
     )
 
 
 async def _tool_remove_zigbee_device(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
     request_id: str = "", client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
     """MCP tool: remove a device from the Zigbee network (Confirm-eligible)."""
-    if effective_cap(token, "cap_radio_write") == CAP_DENY:
+    if effective_cap(access_key, "cap_radio_write") == CAP_DENY:
         return _tool_error(_CAP_FORBIDDEN_MESSAGE), "denied", "remove_zigbee_device"
     pre = _resolve_radio_device(
-        args, token, hass, "remove_zigbee_device", require_write=True
+        args, access_key, hass, "remove_zigbee_device", require_write=True
     )
     if isinstance(pre, tuple):
         return pre
     blocked = await _gate(
-        "cap_radio_write", token, hass, data,
+        "cap_radio_write", access_key, hass, data,
         tool_name="remove_zigbee_device", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_remove_zigbee_device(args, token, hass, data),
+        client_ip=client_ip, diff=lambda: _build_diff_remove_zigbee_device(args, access_key, hass, data),
     )
     if blocked is not None:
         return blocked
-    return await _execute_remove_zigbee_device(args, token, hass, data)
+    return await _execute_remove_zigbee_device(args, access_key, hass, data)
 
 
 async def _execute_remove_zigbee_device(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     resolved = _resolve_radio_device(
-        args, token, hass, "remove_zigbee_device", require_write=True
+        args, access_key, hass, "remove_zigbee_device", require_write=True
     )
     if isinstance(resolved, tuple):
         return resolved

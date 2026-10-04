@@ -23,16 +23,16 @@ from custom_components.phoenix_mcp.tools.esphome import esphome_availability
 from custom_components.phoenix_mcp.version_store import VersionStore
 from custom_components.phoenix_mcp.policy_engine import resolve_esphome_user_service
 from custom_components.phoenix_mcp.ws_dispatch import ALLOWED_WS_COMMANDS
-from custom_components.phoenix_mcp.token_store import PermissionNode, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionNode, PermissionTree, AccessKeyRecord
 
 _DASHBOARD_PATCH = "custom_components.phoenix_mcp.tools.esphome._esphome_dashboard"
 
 
-def _token(permissions: PermissionTree | None = None, **caps) -> TokenRecord:
+def _access_key(permissions: PermissionTree | None = None, **caps) -> AccessKeyRecord:
     tree = permissions or PermissionTree(domains={"sensor": PermissionNode(state="GREEN")})
     base = {"cap_diagnostics": "allow"}
     base.update(caps)
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x",
         created_at=utcnow(), created_by="u", permissions=tree, **base,
     )
@@ -42,10 +42,10 @@ def _json(content: dict) -> dict:
     return json.loads(content["content"][0]["text"])
 
 
-async def _call(name, args, token, hass):
+async def _call(name, args, access_key, hass):
     if name in {"call_service", "dry_run_service"} and isinstance(args.get("service"), str):
         args = {"service": {"domain": args.pop("domain"), "name": args.pop("service"), "data": args.pop("service_data", {})}, **args}
-    return await _call_tool(name, args, token, hass, MagicMock())
+    return await _call_tool(name, args, access_key, hass, MagicMock())
 
 
 def _device_info(**overrides):
@@ -141,14 +141,14 @@ def _dashboard(data=None, last_update_success=True):
 class TestOverviewGating:
     async def test_cap_denied(self, hass):
         content, outcome, resource = await _call(
-            "get_esphome_overview", {}, _token(cap_diagnostics="deny"), hass)
+            "get_esphome_overview", {}, _access_key(cap_diagnostics="deny"), hass)
         assert outcome == "denied"
         assert resource == "get_esphome_overview"
         assert "Forbidden" in content["content"][0]["text"]
 
     async def test_no_esphome_entries(self, hass):
         with patch(_DASHBOARD_PATCH, return_value=None):
-            content, outcome, _ = await _call("get_esphome_overview", {}, _token(), hass)
+            content, outcome, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["count"] == 0
@@ -158,10 +158,10 @@ class TestOverviewGating:
 class TestOverviewScoping:
     async def test_device_with_no_accessible_entity_is_absent(self, hass, esphome_entries):
         _esphome_entry(hass, esphome_entries, entity_ids=("light.other_thing",), runtime=_runtime())
-        token = _token(permissions=PermissionTree(
+        access_key = _access_key(permissions=PermissionTree(
             domains={"sensor": PermissionNode(state="GREEN")}))
         with patch(_DASHBOARD_PATCH, return_value=None):
-            content, _, _ = await _call("get_esphome_overview", {}, token, hass)
+            content, _, _ = await _call("get_esphome_overview", {}, access_key, hass)
         assert _json(content)["count"] == 0
 
     async def test_accessible_device_is_present_with_count(self, hass, esphome_entries):
@@ -170,7 +170,7 @@ class TestOverviewScoping:
             entity_ids=("sensor.rf_blaster1_rssi", "sensor.rf_blaster1_uptime"),
             runtime=_runtime())
         with patch(_DASHBOARD_PATCH, return_value=None):
-            content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
+            content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         body = _json(content)
         assert body["count"] == 1
         assert body["devices"][0]["accessible_entity_count"] == 2
@@ -183,7 +183,7 @@ class TestOverviewUnloadedEntries:
         _esphome_entry(hass, esphome_entries, state=ConfigEntryState.NOT_LOADED, runtime=None,
                              title="Bluetooth Proxy Steve Office")
         with patch(_DASHBOARD_PATCH, return_value=None):
-            content, outcome, _ = await _call("get_esphome_overview", {}, _token(), hass)
+            content, outcome, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         assert outcome == "allowed"
         device = _json(content)["devices"][0]
         assert device["loaded"] is False
@@ -198,7 +198,7 @@ class TestOverviewUnloadedEntries:
         _esphome_entry(hass, esphome_entries, state=ConfigEntryState.SETUP_ERROR,
                        runtime=_runtime())
         with patch(_DASHBOARD_PATCH, return_value=None):
-            content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
+            content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         device = _json(content)["devices"][0]
         assert device["loaded"] is False
         assert "available" not in device
@@ -209,7 +209,7 @@ class TestOverviewUnloadedEntries:
         _esphome_entry(hass, esphome_entries, entity_ids=("light.not_mine",),
                              state=ConfigEntryState.NOT_LOADED, runtime=None)
         with patch(_DASHBOARD_PATCH, return_value=None):
-            content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
+            content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         assert _json(content)["count"] == 0
 
 
@@ -217,7 +217,7 @@ class TestOverviewSecurityPins:
     async def test_no_mac_address_anywhere(self, hass, esphome_entries):
         _esphome_entry(hass, esphome_entries, runtime=_runtime())
         with patch(_DASHBOARD_PATCH, return_value=None):
-            content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
+            content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         raw = content["content"][0]["text"]
         assert "AA:BB:CC:DD:EE:FF" not in raw
         assert "AA:BB:CC:DD:EE:00" not in raw
@@ -229,7 +229,7 @@ class TestOverviewSecurityPins:
         # read it, so a leak here would show up verbatim in the response.
         entry.data = {"noise_psk": "SUPERSECRETPSK=", "host": "192.168.1.55"}
         with patch(_DASHBOARD_PATCH, return_value=None):
-            content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
+            content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         raw = content["content"][0]["text"]
         assert "SUPERSECRETPSK=" not in raw
         assert "192.168.1.55" not in raw
@@ -242,7 +242,7 @@ class TestOverviewSecurityPins:
             "address": "rf-blaster1.local", "web_port": 80,
         }})
         with patch(_DASHBOARD_PATCH, return_value=dash):
-            content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
+            content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         raw = content["content"][0]["text"]
         assert "rf-blaster1.local" not in raw
         assert "rf-blaster1.yaml" in raw
@@ -252,7 +252,7 @@ class TestOverviewDashboard:
     async def test_absent_dashboard_warns(self, hass, esphome_entries):
         _esphome_entry(hass, esphome_entries, runtime=_runtime())
         with patch(_DASHBOARD_PATCH, return_value=None):
-            content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
+            content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         body = _json(content)
         assert any("Device Builder is not available" in w for w in body["warnings"])
         assert "device_builder" not in body["devices"][0]
@@ -263,7 +263,7 @@ class TestOverviewDashboard:
                                            "current_version": "2026.7.0"}},
                           last_update_success=False)
         with patch(_DASHBOARD_PATCH, return_value=dash):
-            content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
+            content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         body = _json(content)
         assert any("unreachable at its last refresh" in w for w in body["warnings"])
         assert body["devices"][0]["device_builder"]["configuration"] == "rf-blaster1.yaml"
@@ -273,7 +273,7 @@ class TestOverviewDashboard:
         dash = _dashboard({"rf-blaster1": {"configuration": "rf-blaster1.yaml",
                                            "current_version": "2026.7.0"}})
         with patch(_DASHBOARD_PATCH, return_value=dash):
-            content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
+            content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         assert _json(content)["devices"][0]["device_builder"]["update_available"] is True
 
     async def test_update_available_false_when_versions_match(self, hass, esphome_entries):
@@ -281,7 +281,7 @@ class TestOverviewDashboard:
         dash = _dashboard({"rf-blaster1": {"configuration": "rf-blaster1.yaml",
                                            "current_version": "2026.7.0"}})
         with patch(_DASHBOARD_PATCH, return_value=dash):
-            content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
+            content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         assert _json(content)["devices"][0]["device_builder"]["update_available"] is False
 
     async def test_hidden_configurations_do_not_affect_visible_counts(self, hass, esphome_entries):
@@ -292,7 +292,7 @@ class TestOverviewDashboard:
             "doorbell": {"configuration": "esphome-web-31fca4.yaml", "current_version": "2026.7.0"},
         })
         with patch(_DASHBOARD_PATCH, return_value=dash):
-            content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
+            content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         raw = content["content"][0]["text"]
         assert "unmapped_configurations" not in _json(content)
         assert _json(content)["count"] == 1
@@ -305,14 +305,14 @@ class TestOverviewBluetoothProxy:
         bt = SimpleNamespace(available=True, ble_connections_free=2, ble_connections_limit=3)
         _esphome_entry(hass, esphome_entries, runtime=_runtime(bluetooth_device=bt))
         with patch(_DASHBOARD_PATCH, return_value=None):
-            content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
+            content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         assert _json(content)["devices"][0]["bluetooth_proxy"] == {
             "available": True, "connections_free": 2, "connections_limit": 3}
 
     async def test_absent_when_not_a_proxy(self, hass, esphome_entries):
         _esphome_entry(hass, esphome_entries, runtime=_runtime())
         with patch(_DASHBOARD_PATCH, return_value=None):
-            content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
+            content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         assert "bluetooth_proxy" not in _json(content)["devices"][0]
 
 
@@ -335,7 +335,7 @@ class TestUserServiceDispatch:
             "call_service",
             {"domain": "esphome", "service": "rf_blaster1_transmit_raw",
              "service_data": {"timings": [1, 2, 3], "repeats": 2}},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "allowed"
         assert _json(content) == {"success": True}
         assert len(calls) == 1
@@ -347,12 +347,12 @@ class TestUserServiceDispatch:
     async def test_read_only_token_refused(self, hass, esphome_entries):
         _esphome_entry(hass, esphome_entries, runtime=_runtime(services={1: _user_service()}))
         calls = await self._register(hass)
-        token = _token(permissions=PermissionTree(
+        access_key = _access_key(permissions=PermissionTree(
             domains={"sensor": PermissionNode(state="YELLOW")}))
         content, outcome, _ = await _call(
             "call_service",
             {"domain": "esphome", "service": "rf_blaster1_transmit_raw", "service_data": {}},
-            token, hass)
+            access_key, hass)
         assert outcome == "denied"
         assert "Forbidden" in content["content"][0]["text"]
         assert calls == []
@@ -364,7 +364,7 @@ class TestUserServiceDispatch:
         content, outcome, _ = await _call(
             "call_service",
             {"domain": "esphome", "service": "ghost_device_transmit_raw", "service_data": {}},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "denied"
         assert "Forbidden" in content["content"][0]["text"]
         assert calls == []
@@ -379,7 +379,7 @@ class TestUserServiceDispatch:
         content, outcome, _ = await _call(
             "call_service",
             {"domain": "esphome", "service": "rf_blaster1_legacy_blast", "service_data": {}},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "denied"
         assert "Forbidden" in content["content"][0]["text"]
         assert calls == []
@@ -408,7 +408,7 @@ class TestUserServiceDispatch:
             "call_service",
             {"domain": "esphome", "service": "rf_blaster1_transmit_raw",
              "service_data": {"timing": [1]}},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
         assert "extra keys not allowed" in content["content"][0]["text"]
 
@@ -418,7 +418,7 @@ class TestUserServiceDispatch:
         _, _, resource = await _call(
             "call_service",
             {"domain": "esphome", "service": "rf_blaster1_transmit_raw", "service_data": {}},
-            _token(), hass)
+            _access_key(), hass)
         assert resource == "service:esphome/rf_blaster1_transmit_raw"
 
 
@@ -429,7 +429,7 @@ class TestUserServiceDryRun:
             "dry_run_service",
             {"domain": "esphome", "service": "rf_blaster1_transmit_raw",
              "service_data": {"timings": [1], "bogus": 1}},
-            _token(cap_search="allow"), hass)
+            _access_key(cap_search="allow"), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["device_action"] is True
@@ -443,12 +443,12 @@ class TestUserServiceDryRun:
 
     async def test_read_only_token_predicts_denied(self, hass, esphome_entries):
         _esphome_entry(hass, esphome_entries, runtime=_runtime(services={1: _user_service()}))
-        token = _token(cap_search="allow", permissions=PermissionTree(
+        access_key = _access_key(cap_search="allow", permissions=PermissionTree(
             domains={"sensor": PermissionNode(state="YELLOW")}))
         content, _, _ = await _call(
             "dry_run_service",
             {"domain": "esphome", "service": "rf_blaster1_transmit_raw", "service_data": {}},
-            token, hass)
+            access_key, hass)
         body = _json(content)
         assert body["would_execute"] is False
         assert body["predicted_outcome"] == "denied"
@@ -460,7 +460,7 @@ class TestUserServiceDiscovery:
         hass.states.async_set("sensor.rf_blaster1_rssi", "-60")
         content, outcome, _ = await _call(
             "find_available_actions", {"entity_id": "sensor.rf_blaster1_rssi"},
-            _token(cap_search="allow"), hass)
+            _access_key(cap_search="allow"), hass)
         assert outcome == "allowed"
         rows = [a for a in _json(content)["actions"] if a["service"].startswith("esphome.")]
         assert len(rows) == 1
@@ -476,10 +476,10 @@ class TestUserServiceDiscovery:
     async def test_read_only_entity_marks_action_unavailable(self, hass, esphome_entries):
         _esphome_entry(hass, esphome_entries, runtime=_runtime(services={1: _user_service()}))
         hass.states.async_set("sensor.rf_blaster1_rssi", "-60")
-        token = _token(cap_search="allow", permissions=PermissionTree(
+        access_key = _access_key(cap_search="allow", permissions=PermissionTree(
             domains={"sensor": PermissionNode(state="YELLOW")}))
         content, _, _ = await _call(
-            "find_available_actions", {"entity_id": "sensor.rf_blaster1_rssi"}, token, hass)
+            "find_available_actions", {"entity_id": "sensor.rf_blaster1_rssi"}, access_key, hass)
         rows = [a for a in _json(content)["actions"] if a["service"].startswith("esphome.")]
         assert rows[0]["available"] is False
         assert rows[0]["reason"] == "read-only access to this device"
@@ -489,7 +489,7 @@ class TestUserServiceDiscovery:
         hass.states.async_set("sensor.unrelated", "1")
         content, _, _ = await _call(
             "find_available_actions", {"entity_id": "sensor.unrelated"},
-            _token(cap_search="allow"), hass)
+            _access_key(cap_search="allow"), hass)
         assert [a for a in _json(content)["actions"] if a["service"].startswith("esphome.")] == []
 
 
@@ -518,10 +518,10 @@ SECRETS_YAML = 'wifi_ssid: MyHomeNetwork\nwifi_password: housepassword1\n'
 
 
 
-def _yaml_token(**caps) -> TokenRecord:
+def _yaml_token(**caps) -> AccessKeyRecord:
     base = {"cap_esphome_yaml": "allow"}
     base.update(caps)
-    return _token(**base)
+    return _access_key(**base)
 
 
 class TestDeviceYamlRead:
@@ -770,15 +770,15 @@ class TestDeviceYamlRestore:
         versions = VersionStore()
         data = PhoenixData(
             store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=versions)
-        token = _yaml_token()
+        access_key = _yaml_token()
 
-        read, _, _ = await _call_tool("get_esphome_yaml", {"file": "rf-blaster1.yaml"}, token, hass, data)
+        read, _, _ = await _call_tool("get_esphome_yaml", {"file": "rf-blaster1.yaml"}, access_key, hass, data)
         masked = _json(read)
         edited = masked["content"].replace("baud_rate: 9600", "baud_rate: 115200")
         _c, outcome, _r = await _call_tool(
             "set_esphome_yaml",
             {"file": "rf-blaster1.yaml", "content": edited, "expected_hash": masked["content_hash"]},
-            token, hass, data)
+            access_key, hass, data)
         assert outcome == "allowed"
         assert "baud_rate: 115200" in (esphome_dir / "rf-blaster1.yaml").read_text()
 
@@ -933,7 +933,7 @@ class TestDeviceYamlApprovalFlow:
         assert outcome == "invalid_request"
 
 
-async def _inventory_call(hass, name, args, result, token=None):
+async def _inventory_call(hass, name, args, result, access_key=None):
     from custom_components.phoenix_mcp.esphome_builder import BuilderResult
 
     builder = AsyncMock(return_value=BuilderResult(result=result))
@@ -941,7 +941,7 @@ async def _inventory_call(hass, name, args, result, token=None):
     with patch(_DASHBOARD_PATCH, return_value=dashboard), patch(
         "custom_components.phoenix_mcp.tools.esphome.async_builder_command", builder
     ):
-        reply = await _call(name, args, token or _yaml_token(), hass)
+        reply = await _call(name, args, access_key or _yaml_token(), hass)
     return reply, builder
 
 
@@ -951,7 +951,7 @@ class TestScopedEsphomeInventory:
                               example="password=example-secret")
         service = SimpleNamespace(name="announce", args=[arg], description="Announce " + "x" * 1000)
         _esphome_entry(hass, esphome_entries, runtime=_runtime(services={1: service}))
-        content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
+        content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         action = _json(content)["devices"][0]["actions"][0]
         assert len(action["description"]) <= 512
         assert "light.private" not in action["args"][0]["description"]
@@ -961,10 +961,10 @@ class TestScopedEsphomeInventory:
         entry = _esphome_entry(hass, esphome_entries, entity_ids=("light.private",),
                                state=ConfigEntryState.NOT_LOADED, runtime=None)
         entry.data = {"device_name": "private"}
-        token = _yaml_token(permissions=PermissionTree(
+        access_key = _yaml_token(permissions=PermissionTree(
             entities={"light.private": PermissionNode(state="GREEN")}))
-        assert not esphome._esphome_file_in_scope(hass, token, "private.yaml", write=True)
-        assert not esphome._esphome_file_in_scope(hass, token, "private.yaml", write=False)
+        assert not esphome._esphome_file_in_scope(hass, access_key, "private.yaml", write=True)
+        assert not esphome._esphome_file_in_scope(hass, access_key, "private.yaml", write=False)
 
     @pytest.mark.parametrize("name", ["search_esphome_yaml", "list_esphome_jobs", "list_esphome_devices"])
     async def test_denied_capability_precedes_bad_arguments_and_io(self, hass, name):
@@ -1127,7 +1127,7 @@ class TestOverviewDeclaredActions:
         _esphome_entry(hass, esphome_entries, runtime=runtime)
         hass.services.async_register("esphome", "rf_blaster1_transmit_raw", lambda call: None)
         with patch(_DASHBOARD_PATCH, return_value=None):
-            content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
+            content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         action = _json(content)["devices"][0]["actions"][0]
         assert action["name"] == "transmit_raw"
         # Hyphens in the device name become underscores in the HA service name.
@@ -1142,11 +1142,11 @@ class TestOverviewDeclaredActions:
         runtime = _runtime(services={1: _user_service()})
         _esphome_entry(hass, esphome_entries, runtime=runtime)
         with patch(_DASHBOARD_PATCH, return_value=None):
-            content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
+            content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         assert _json(content)["devices"][0]["actions"][0]["registered"] is False
 
     async def test_no_actions_key_when_device_declares_none(self, hass, esphome_entries):
         _esphome_entry(hass, esphome_entries, runtime=_runtime())
         with patch(_DASHBOARD_PATCH, return_value=None):
-            content, _, _ = await _call("get_esphome_overview", {}, _token(), hass)
+            content, _, _ = await _call("get_esphome_overview", {}, _access_key(), hass)
         assert "actions" not in _json(content)["devices"][0]

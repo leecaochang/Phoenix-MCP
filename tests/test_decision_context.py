@@ -20,7 +20,7 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.decision_context import async_preview_context, context_history
 from custom_components.phoenix_mcp.decision_provider import DecisionError, DecisionProvider
 from custom_components.phoenix_mcp.helpers import redact_inaccessible_entity_ids_in_text
-from custom_components.phoenix_mcp.token_store import PermissionTree, PermissionNode
+from custom_components.phoenix_mcp.access_key_store import PermissionTree, PermissionNode
 
 HISTORY = [{'role': 'user', 'content': 'We are discussing how brightness works.'},
            {'role': 'assistant', 'content': 'Brightness is expressed as a percentage.'}]
@@ -46,32 +46,32 @@ def wire_answer(result=None):
 
 
 @pytest.fixture
-async def context_home(hass, token_store):
-    token, _ = await token_store.async_create_token('context_preview', 'test')
-    token.permissions = PermissionTree(domains={'light': PermissionNode(state='GREEN')})
-    data = PhoenixData(store=token_store, rate_limiter=MagicMock(), audit=MagicMock())
+async def context_home(hass, access_key_store):
+    access_key, _ = await access_key_store.async_create_access_key('context_preview', 'test')
+    access_key.permissions = PermissionTree(domains={'light': PermissionNode(state='GREEN')})
+    data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
     store = agentcli.AgentCliStore(AsyncMock())
     account = await store.add('typesafe', {'api_key': 'test-private-key', 'model': 'jev-latest'})
     # Context tests exercise real recognition without depending on cold-start speed.
-    await token_store.async_patch_settings(decision_provider_id=account, command_routing_timeout_ms=5000)
+    await access_key_store.async_patch_settings(decision_provider_id=account, command_routing_timeout_ms=5000)
     assert await async_setup_component(hass, 'homeassistant', {})
     assert await async_setup_component(hass, 'conversation', {})
     entry = er.async_get(hass).async_get_or_create('light', 'test', 'desk', original_name='Desk lamp')
     hass.states.async_set(entry.entity_id, 'off', {'friendly_name': 'Desk lamp',
         'supported_color_modes': ['brightness'], 'access_token': 'never-send-state'})
-    local = await async_evaluate_command(hass, data, token, SENTENCE, 'en', preview=True)
+    local = await async_evaluate_command(hass, data, access_key, SENTENCE, 'en', preview=True)
     assert local['reason'] == 'supported' and local['proposal']['brightness_pct'] == 37
     with patch.object(agentcli, '_get_secret_store', AsyncMock(return_value=store)):
-        yield data, token, store, account, entry.entity_id, local
+        yield data, access_key, store, account, entry.entity_id, local
     data.decision_shadow.cancel()
     if data.decision_shadow.task:
         await asyncio.gather(data.decision_shadow.task, return_exceptions=True)
 
 
 async def preview(hass, home, history=None, local=None):
-    data, token, _, _, _, recognized = home
-    return await async_preview_context(hass, data, token, SENTENCE, 'en',
+    data, access_key, _, _, _, recognized = home
+    return await async_preview_context(hass, data, access_key, SENTENCE, 'en',
                                        HISTORY if history is None else history,
                                        recognized if local is None else local)
 
@@ -140,18 +140,18 @@ async def test_sensitive_or_oversized_history_is_not_rewritten_and_sent(hass, co
 
 
 async def test_entity_privacy_preserves_permitted_ids_and_punctuation(hass, context_home):
-    _, token, _, _, entity, _ = context_home
+    _, access_key, _, _, entity, _ = context_home
     text = f'{entity}. {entity}! switch.hidden. switch.hidden... host.example.com'
-    assert redact_inaccessible_entity_ids_in_text(text, token, hass) == (
+    assert redact_inaccessible_entity_ids_in_text(text, access_key, hass) == (
         f'{entity}. {entity}! <redacted-entity>. <redacted-entity>... host.example.com')
 
 
 @pytest.mark.parametrize('change,reason', [('token', 'authority_changed'), ('target', 'context_changed')])
 async def test_secret_store_wait_rechecks_before_sending(hass, context_home, change, reason):
-    _, token, store, _, entity, _ = context_home
+    _, access_key, store, _, entity, _ = context_home
     async def load(*args):
         if change == 'token':
-            token.revoked = True
+            access_key.revoked = True
         else:
             er.async_get(hass).async_update_entity(entity, name='Changed target')
         return store
@@ -201,9 +201,9 @@ async def test_primary_state_candidate_does_not_send_state(hass, context_home):
     ('account', 'authority_changed'), ('change_back', 'authority_changed'), ('deleted', 'authority_changed'),
     ('runtime', 'authority_changed'), ('target', 'context_changed'), ('scope', 'context_changed')])
 async def test_wait_rechecks_relevant_authority_and_context(hass, context_home, change, reason):
-    data, token, store, account, entity, _ = context_home
+    data, access_key, store, account, entity, _ = context_home
     async def respond(*args):
-        if change == 'token': token.revoked = True
+        if change == 'token': access_key.revoked = True
         if change == 'settings': await data.store.async_patch_settings(kill_switch=True)
         if change in ('account', 'change_back'):
             await store.set_model(account, 'changed-model')
@@ -211,7 +211,7 @@ async def test_wait_rechecks_relevant_authority_and_context(hass, context_home, 
         if change == 'deleted': await store.delete(account)
         if change == 'runtime': hass.data[DOMAIN] = None
         if change == 'target': er.async_get(hass).async_update_entity(entity, name='Different lamp')
-        if change == 'scope': token.permissions = PermissionTree()
+        if change == 'scope': access_key.permissions = PermissionTree()
         return answer()
     with patch.object(DecisionProvider, 'review_context', side_effect=respond):
         result = await preview(hass, context_home)
@@ -229,7 +229,7 @@ async def test_provider_failures_are_generic_and_inert(hass, context_home, failu
 
 @pytest.mark.parametrize('cancel_kind', ['owner', 'caller', 'timeout'])
 async def test_context_uses_shared_slot_and_cancellation(hass, context_home, cancel_kind):
-    data, token, *_ = context_home
+    data, access_key, *_ = context_home
     entered, exited = asyncio.Event(), asyncio.Event()
     if cancel_kind == 'timeout': await data.store.async_patch_settings(decision_timeout_ms=250)
     async def wait(*args):
@@ -240,7 +240,7 @@ async def test_context_uses_shared_slot_and_cancellation(hass, context_home, can
         pending = asyncio.create_task(preview(hass, context_home))
         await entered.wait()
         assert (await preview(hass, context_home))['reason'] == 'busy'
-        assert data.decision_shadow.start(hass, data, token, 'hello', 'en') is None
+        assert data.decision_shadow.start(hass, data, access_key, 'hello', 'en') is None
         if cancel_kind == 'owner': data.decision_shadow.cancel()
         if cancel_kind == 'caller': pending.cancel()
         if cancel_kind == 'caller':
@@ -333,7 +333,7 @@ async def test_administrator_preview_never_returns_a_plan_for_eligible_chat_acco
 
 async def test_rich_preview_is_inert_and_internal_preparation_requires_evaluated_model(hass, context_home, provider_context_history):
     from custom_components.phoenix_mcp.decision_context import async_prepare_chat_context
-    data, token, store, *_ = context_home
+    data, access_key, store, *_ = context_home
     hass.data['_phoenix_agentcli_store'] = store
     await data.store.async_patch_settings(agentcli_routing_mode='auto')
     response = answer(); response['model'] = 'jev-1.13.0'
@@ -343,7 +343,7 @@ async def test_rich_preview_is_inert_and_internal_preparation_requires_evaluated
         assert result['reason'] == 'compatible' and result['executed'] is False and '_plan' not in result
         state = review.await_args.args[1]
         assert state['history'] == provider_context_history and state['history_format'] == 'provider_messages'
-        result = await async_prepare_chat_context(hass, data, token, SENTENCE, 'en', provider_context_history,
+        result = await async_prepare_chat_context(hass, data, access_key, SENTENCE, 'en', provider_context_history,
                                                  context_home[-1], asyncio.Event())
         assert result['reason'] == 'plan_ready' and review.await_count == 2
         assert result['_plan']['proposal'] == context_home[-1]['proposal']
@@ -410,7 +410,7 @@ async def test_secret_field_names_are_checked_in_native_objects_and_encoded_json
     ('zh-Hans', '请把 Desk lamp 的亮度设为百分之三十七。'),
 ])
 async def test_preview_of_decision_candidate_reviews_full_history_without_plan(hass, context_home, decline, language, sentence):
-    data, token, _, _, entity, _ = context_home
+    data, access_key, _, _, entity, _ = context_home
     seen = []
     async def response(*args):
         payload = args[4]; seen.append(payload)
@@ -425,7 +425,7 @@ async def test_preview_of_decision_candidate_reviews_full_history_without_plan(h
             for name, question in payload['questions'].items()}}
     with (patch.object(DecisionProvider, '_request', side_effect=response) as remote,
           patch('custom_components.phoenix_mcp.mcp_view._dispatch_mcp') as dispatch):
-        result = await async_preview_context(hass, data, token, sentence, language, HISTORY,
+        result = await async_preview_context(hass, data, access_key, sentence, language, HISTORY,
                                             {'reason': 'no_match', 'proposal': None})
     assert remote.await_count == 2
     assert result['reason'] == ('provider_fallback' if decline else 'compatible')
@@ -436,7 +436,7 @@ async def test_preview_of_decision_candidate_reviews_full_history_without_plan(h
 
 
 async def test_explicit_candidate_decline_preserves_fallback_in_context_preview(hass, context_home):
-    data, token, *_ = context_home
+    data, access_key, *_ = context_home
     async def response(*args):
         payload = args[4]
         selected = {'route': 'provider', 'target': 'none'}
@@ -446,7 +446,7 @@ async def test_explicit_candidate_decline_preserves_fallback_in_context_preview(
             for name, spec in payload['questions'].items()}}
     history = [{'role': 'user', 'content': 'turn on Desk lamp'}, {'role': 'assistant', 'content': 'Command sent.'}]
     with patch.object(DecisionProvider, '_request', side_effect=response) as request:
-        result = await async_preview_context(hass, data, token, 'turn it off', 'en', history,
+        result = await async_preview_context(hass, data, access_key, 'turn it off', 'en', history,
                                               {'reason': 'no_match', 'proposal': None})
     request.assert_awaited_once()
     assert result['reason'] == 'provider_fallback'
@@ -456,28 +456,28 @@ async def test_explicit_candidate_decline_preserves_fallback_in_context_preview(
 async def test_decimal_text_is_preserved_but_numeric_entity_ids_keep_scope(hass, context_home, entity_exists):
     from homeassistant.helpers import entity_registry as er
     from custom_components.phoenix_mcp.helpers import redact_inaccessible_entity_ids_in_text
-    _, token, *_ = context_home
+    _, access_key, *_ = context_home
     if entity_exists == 'state':
         hass.states.async_set('21.5', 'private')
     if entity_exists == 'registry':
         er.async_get(hass).async_get_or_create('21', 'test', 'numeric_id', suggested_object_id='5')
-    result = redact_inaccessible_entity_ids_in_text('Set to 21.5 degrees', token, hass)
+    result = redact_inaccessible_entity_ids_in_text('Set to 21.5 degrees', access_key, hass)
     assert result == ('Set to 21.5 degrees' if entity_exists == 'no' else 'Set to <redacted-entity> degrees')
-    assert '<redacted-entity>' in redact_inaccessible_entity_ids_in_text('Read sensor.hidden', token, hass)
+    assert '<redacted-entity>' in redact_inaccessible_entity_ids_in_text('Read sensor.hidden', access_key, hass)
 
 
 @pytest.mark.parametrize('tool_name', ['get_capability_summary', 'get_audit_summary'])
 @pytest.mark.parametrize('source', ['agentcli', 'assist', 'voice', 'ai_task', 'home_companion', '127.0.0.1'])
 async def test_access_key_introspection_preserves_context_on_every_ingress(hass, context_home, tool_name, source):
     from custom_components.phoenix_mcp.mcp_view import _dispatch_mcp
-    data, token, *_ = context_home
+    data, access_key, *_ = context_home
     data.audit.query.return_value = []
     response, _, _, outcome = await _dispatch_mcp(
-        'tools/call', 1, {'name': tool_name, 'arguments': {}}, token, hass, data, source, '')
+        'tools/call', 1, {'name': tool_name, 'arguments': {}}, access_key, hass, data, source, '')
     assert outcome == 'allowed'
     content = response['result']['content'][0]['text']
     body = json.loads(content)
-    assert body['access_key_name'] == token.name
+    assert body['access_key_name'] == access_key.name
     assert 'token_name' not in body
     history = [HISTORY[0], {'role': 'assistant', 'content': '', 'tool_calls': [{
         'id': 'summary', 'type': 'function', 'function': {'name': tool_name, 'arguments': '{}'}}]},

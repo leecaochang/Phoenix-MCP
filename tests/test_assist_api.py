@@ -37,15 +37,15 @@ from custom_components.phoenix_mcp.assist_api import (
     async_register_assist_api,
     async_unregister_assist_api,
 )
-from custom_components.phoenix_mcp.const import ASSIST_CLIENT_IP, DOMAIN, TOKEN_PREFIX
-from custom_components.phoenix_mcp.token_store import GlobalSettings, PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.const import ASSIST_CLIENT_IP, DOMAIN, ACCESS_KEY_PREFIX
+from custom_components.phoenix_mcp.access_key_store import GlobalSettings, PermissionTree, AccessKeyRecord
 
 
-def _make_token(*, announce_all: bool = False, cap_config_read: str = "allow") -> TokenRecord:
+def _make_token(*, announce_all: bool = False, cap_config_read: str = "allow") -> AccessKeyRecord:
     from homeassistant.util.dt import utcnow
 
-    raw = TOKEN_PREFIX + secrets.token_hex(32)
-    return TokenRecord(
+    raw = ACCESS_KEY_PREFIX + secrets.token_hex(32)
+    return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="voice-token",
         token_hash=hashlib.sha256(raw.encode()).hexdigest(),
@@ -57,11 +57,11 @@ def _make_token(*, announce_all: bool = False, cap_config_read: str = "allow") -
     )
 
 
-def _make_data(token: TokenRecord | None, *, kill_switch: bool = False, bound_id=None) -> SimpleNamespace:
+def _make_data(access_key: AccessKeyRecord | None, *, kill_switch: bool = False, bound_id=None) -> SimpleNamespace:
     settings = GlobalSettings(kill_switch=kill_switch, assist_bound_token_id=bound_id)
     store = MagicMock()
     store.get_settings.return_value = settings
-    store.get_token_by_id.side_effect = lambda tid: token if (token and tid == token.id) else None
+    store.get_access_key_by_id.side_effect = lambda tid: access_key if (access_key and tid == access_key.id) else None
     return SimpleNamespace(
         store=store,
         mesa=None,
@@ -167,10 +167,10 @@ async def test_assist_provider_schemas_preserve_complete_catalog(hass, hass_admi
     """Exercise HA's serializer hook for the whole native, Phoenix and MESA catalog."""
     from custom_components.phoenix_mcp.agentcli import build_mcp_tool_list
 
-    token = _make_token(announce_all=True)
-    data = _make_data(token, bound_id=token.id)
+    access_key = _make_token(announce_all=True)
+    data = _make_data(access_key, bound_id=access_key.id)
     data.mesa = MagicMock()
-    definitions = {d["name"]: deepcopy(d["inputSchema"]) for d in build_mcp_tool_list(token, data)}
+    definitions = {d["name"]: deepcopy(d["inputSchema"]) for d in build_mcp_tool_list(access_key, data)}
     context = _ctx()
     context.context.user_id = hass_admin_user.id
     instance = await PhoenixAssistAPI(hass, data).async_get_api_instance(context)
@@ -188,8 +188,8 @@ async def test_assist_serializer_preserves_extensions_and_isolates_mutation(hass
               "exclusiveMinimum": 0, "description": "A positive integer or null."}},
               "x-provider": {"type": "example", "notes": "Retained extension."}, "required": ["value"]}
     original = deepcopy(schema)
-    token = _make_token()
-    data = _make_data(token, bound_id=token.id)
+    access_key = _make_token()
+    data = _make_data(access_key, bound_id=access_key.id)
     definition = {"name": "fixture", "description": "Schema fixture.", "inputSchema": schema}
     with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[definition]):
         instance = await PhoenixAssistAPI(hass, data).async_get_api_instance(_ctx())
@@ -206,8 +206,8 @@ async def test_assist_serializer_preserves_extensions_and_isolates_mutation(hass
 async def test_assist_serializer_survives_ha_merged_api_and_native_selectors(hass):
     from homeassistant.helpers import llm, selector
 
-    token = _make_token()
-    data = _make_data(token, bound_id=token.id)
+    access_key = _make_token()
+    data = _make_data(access_key, bound_id=access_key.id)
     api = PhoenixAssistAPI(hass, data)
     instance = await llm.MergedAPI([api]).async_get_api_instance(_ctx())
     for tool in instance.tools:
@@ -221,8 +221,8 @@ async def test_assist_serializer_survives_ha_merged_api_and_native_selectors(has
 
 @pytest.mark.asyncio
 async def test_assist_schema_snapshots_are_isolated_between_turns(hass):
-    token = _make_token()
-    data = _make_data(token, bound_id=token.id)
+    access_key = _make_token()
+    data = _make_data(access_key, bound_id=access_key.id)
     first_schema = {"type": "object", "properties": {"value": {"type": "integer", "maximum": 3}}}
     second_schema = {"type": "object", "properties": {"value": {"type": "integer", "maximum": 1}}}
     with patch("custom_components.phoenix_mcp.agentcli.build_mcp_tool_list", return_value=[
@@ -259,10 +259,10 @@ async def test_assist_safely_omits_schemas_incompatible_with_installed_gemini_fo
         format_schema({"type": ["string", "null"]})
     assert format_schema({"anyOf": [{"type": "string"}, {"type": "integer"}]}) == {}
 
-    token = _make_token(announce_all=True)
-    data = _make_data(token, bound_id=token.id)
+    access_key = _make_token(announce_all=True)
+    data = _make_data(access_key, bound_id=access_key.id)
     data.mesa = MagicMock()
-    definitions = {d["name"]: deepcopy(d["inputSchema"]) for d in build_mcp_tool_list(token, data)}
+    definitions = {d["name"]: deepcopy(d["inputSchema"]) for d in build_mcp_tool_list(access_key, data)}
     context = _ctx()
     context.platform = "google_generative_ai_conversation"
     instance = await PhoenixAssistAPI(hass, data).async_get_api_instance(context)
@@ -282,8 +282,8 @@ async def test_assist_safely_omits_schemas_incompatible_with_installed_gemini_fo
 @pytest.mark.asyncio
 @pytest.mark.parametrize("keyword", ["unevaluatedProperties", "$dynamicRef"])
 async def test_assist_omits_real_incompatible_schema_without_breaking_other_tools(hass, caplog, keyword):
-    token = _make_token()
-    data = _make_data(token, bound_id=token.id)
+    access_key = _make_token()
+    data = _make_data(access_key, bound_id=access_key.id)
     unsupported = {"type": "object", "properties": {"nested": {"type": "object",
                    keyword: False if keyword == "unevaluatedProperties" else "#anchor"}}}
     definitions = [{"name": "unsupported", "inputSchema": unsupported},
@@ -331,8 +331,8 @@ async def test_unbound_instance_has_no_tools_and_never_raises(hass):
 
 @pytest.mark.asyncio
 async def test_kill_switch_yields_no_tools(hass):
-    token = _make_token()
-    data = _make_data(token, kill_switch=True, bound_id=token.id)
+    access_key = _make_token()
+    data = _make_data(access_key, kill_switch=True, bound_id=access_key.id)
     api = PhoenixAssistAPI(hass, data)
     instance = await api.async_get_api_instance(_ctx())
     assert instance.tools == []
@@ -342,12 +342,12 @@ async def test_kill_switch_yields_no_tools(hass):
 async def test_bound_instance_tools_mirror_tools_list_gating(hass, hass_admin_user):
     from custom_components.phoenix_mcp.agentcli import build_mcp_tool_list
 
-    token = _make_token(cap_config_read="allow")
-    data = _make_data(token, bound_id=token.id)
+    access_key = _make_token(cap_config_read="allow")
+    data = _make_data(access_key, bound_id=access_key.id)
     api = PhoenixAssistAPI(hass, data)
     instance = await api.async_get_api_instance(_ctx(hass_admin_user.id))
 
-    expected = {d["name"] for d in build_mcp_tool_list(token, data)}
+    expected = {d["name"] for d in build_mcp_tool_list(access_key, data)}
     assert {t.name for t in instance.tools} == expected
     assert expected  # non-empty for a read-capable token
 
@@ -368,9 +368,9 @@ async def test_announce_all_widens_the_tool_set(hass):
 async def test_one_unconvertible_schema_is_skipped_not_fatal(hass, hass_admin_user):
     from custom_components.phoenix_mcp.agentcli import build_mcp_tool_list
 
-    token = _make_token()
-    data = _make_data(token, bound_id=token.id)
-    names = [d["name"] for d in build_mcp_tool_list(token, data)]
+    access_key = _make_token()
+    data = _make_data(access_key, bound_id=access_key.id)
+    names = [d["name"] for d in build_mcp_tool_list(access_key, data)]
     victim = names[0]
     real = assist_api._convert_to_voluptuous
 
@@ -402,8 +402,8 @@ async def test_one_unconvertible_schema_is_skipped_not_fatal(hass, hass_admin_us
 
 @pytest.mark.asyncio
 async def test_tool_call_dispatches_with_assist_sentinel(hass):
-    token = _make_token()
-    data = _make_data(token, bound_id=token.id)
+    access_key = _make_token()
+    data = _make_data(access_key, bound_id=access_key.id)
     hass.data[DOMAIN] = data
 
     captured = {}
@@ -413,7 +413,7 @@ async def test_tool_call_dispatches_with_assist_sentinel(hass):
         captured["name"] = params["name"]
         return ({"result": {"content": [{"type": "text", "text": '{"state": "on"}'}]}}, "get_state", "get_state", "allowed")
 
-    tool = PhoenixAssistTool("get_state", "d", MagicMock(), token.id)
+    tool = PhoenixAssistTool("get_state", "d", MagicMock(), access_key.id)
     with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=fake_dispatch):
         result = await tool.async_call(hass, _tool_input({"entity_id": "light.x"}), _ctx())
 
@@ -426,8 +426,8 @@ async def test_tool_call_dispatches_with_assist_sentinel(hass):
 async def test_confirm_gated_call_returns_queued(hass):
     from homeassistant.util.dt import utcnow
 
-    token = _make_token()
-    data = _make_data(token, bound_id=token.id)
+    access_key = _make_token()
+    data = _make_data(access_key, bound_id=access_key.id)
     hass.data[DOMAIN] = data
 
     pending = {
@@ -437,14 +437,14 @@ async def test_confirm_gated_call_returns_queued(hass):
     }
     record = SimpleNamespace(
         id="ap-1", status="pending", expires_at=utcnow() + timedelta(minutes=5),
-        token_id=token.id, tool_name="call_service", request_id="",
+        token_id=access_key.id, tool_name="call_service", request_id="",
     )
 
     async def fake_dispatch(*a, **k):
         record.request_id = k["request_id"]
         return (pending, "call_service", "call_service", "pending_approval")
 
-    tool = PhoenixAssistTool("call_service", "d", MagicMock(), token.id)
+    tool = PhoenixAssistTool("call_service", "d", MagicMock(), access_key.id)
     with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=fake_dispatch), \
          patch("custom_components.phoenix_mcp.agentcli.get_approval", return_value=record):
         result = await tool.async_call(hass, _tool_input({}), _ctx())
@@ -455,26 +455,26 @@ async def test_confirm_gated_call_returns_queued(hass):
 
 @pytest.mark.asyncio
 async def test_tool_call_on_revoked_token_returns_error(hass):
-    token = _make_token()
-    data = _make_data(token, bound_id=token.id)
-    data.store.get_token_by_id.side_effect = lambda tid: None  # gone since instance built
+    access_key = _make_token()
+    data = _make_data(access_key, bound_id=access_key.id)
+    data.store.get_access_key_by_id.side_effect = lambda tid: None  # gone since instance built
     hass.data[DOMAIN] = data
 
-    tool = PhoenixAssistTool("get_state", "d", MagicMock(), token.id)
+    tool = PhoenixAssistTool("get_state", "d", MagicMock(), access_key.id)
     result = await tool.async_call(hass, _tool_input({}), _ctx())
     assert "error" in result
 
 
 @pytest.mark.asyncio
 async def test_error_result_is_surfaced_not_raised(hass):
-    token = _make_token()
-    data = _make_data(token, bound_id=token.id)
+    access_key = _make_token()
+    data = _make_data(access_key, bound_id=access_key.id)
     hass.data[DOMAIN] = data
 
     async def fake_dispatch(*a, **k):
         return ({"result": {"content": [{"type": "text", "text": "Forbidden."}], "isError": True}}, "x", "x", "denied")
 
-    tool = PhoenixAssistTool("get_state", "d", MagicMock(), token.id)
+    tool = PhoenixAssistTool("get_state", "d", MagicMock(), access_key.id)
     with patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp", side_effect=fake_dispatch):
         result = await tool.async_call(hass, _tool_input({}), _ctx())
     assert result == {"error": "Forbidden."}

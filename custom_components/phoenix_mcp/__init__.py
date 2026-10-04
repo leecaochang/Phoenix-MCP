@@ -22,10 +22,10 @@ from .agent_recovery import AgentRecovery, STORAGE_KEY as AGENT_RECOVERY_STORAGE
 from .card_catalog import CardCatalogStore
 from .const import APPROVAL_SWEEP_INTERVAL, AUDIT_STORAGE_KEY, AUDIT_STORAGE_VERSION, CARD_CATALOG_STORAGE_KEY, CARD_CATALOG_STORAGE_VERSION, DOMAIN, EXPIRY_CHECK_INTERVAL, FLUSH_INTERVAL, RUNTIME_READY_KEY, SENSOR_PUSH_INTERVAL, VERSION_STORAGE_KEY, VERSION_STORAGE_VERSION
 from .data import PhoenixData
-from .helpers import async_archive_expired_token, cancel_expiry_timer, schedule_expiry_timer
+from .helpers import async_archive_expired_access_key, cancel_expiry_timer, schedule_expiry_timer
 from .policy_engine import template_blocklist_vars
 from .rate_limiter import RateLimiter
-from .token_store import TokenStore
+from .access_key_store import AccessKeyStore
 
 # HA-added template names (globals, filters, and tests) that are safe: pure
 # math/string/data helpers with no entity state or registry access. When the
@@ -109,7 +109,7 @@ def _audit_template_sandbox() -> None:
     """Warn about unrecognized names in Phoenix MCP's template render environment.
 
     Runs once at setup. Audits the hass-less environment actually used by
-    render_template_for_token() across globals, filters, AND tests (Jinja2
+    render_template_for_access_key() across globals, filters, AND tests (Jinja2
     render variables cannot shadow filters or tests, so every name HA registers
     there is reachable). Any unrecognized name triggers a log warning so future
     HA versions adding new template functions don't silently bypass Phoenix MCP
@@ -311,7 +311,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     Schedules a periodic flush of last_used_at timestamps and wires registry
     change listeners to invalidate the entity tree cache.
     """
-    store = await TokenStore.async_create(hass)
+    store = await AccessKeyStore.async_create(hass)
     rate_limiter = RateLimiter()
     audit_store: Store[dict] = Store(hass, AUDIT_STORAGE_VERSION, AUDIT_STORAGE_KEY)
     audit = AuditLog(store=audit_store, maxlen=store.get_settings().audit_log_maxlen)
@@ -497,19 +497,19 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     _sync_voice_agent()
     entry.async_on_unload(lambda: async_unregister_voice_agent(hass, entry))
 
-    from .sensor import async_create_token_sensors, async_remove_token_sensors
+    from .sensor import async_create_access_key_sensors, async_remove_access_key_sensors
 
-    async def _on_token_created(token) -> None:
+    async def _on_access_key_created(access_key) -> None:
         """Create sensor entities when a new token is minted."""
-        await async_create_token_sensors(hass, entry, token)
-        schedule_expiry_timer(hass, data, token)
+        await async_create_access_key_sensors(hass, entry, access_key)
+        schedule_expiry_timer(hass, data, access_key)
 
-    async def _on_token_archived(token_slug: str) -> None:
+    async def _on_access_key_archived(access_key_slug: str) -> None:
         """Remove sensor entities when a token is revoked or archived."""
-        await async_remove_token_sensors(hass, token_slug)
+        await async_remove_access_key_sensors(hass, access_key_slug)
 
-    data.async_on_token_created = _on_token_created
-    data.async_on_token_archived = _on_token_archived
+    data.async_on_access_key_created = _on_access_key_created
+    data.async_on_access_key_archived = _on_access_key_archived
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     data.forwarded_platforms.update(PLATFORMS)
@@ -557,7 +557,7 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     entry.async_on_unload(cancel_flush)
 
     async def _push_sensor_updates(_now=None) -> None:
-        for sensors in data.token_id_sensors.values():
+        for sensors in data.access_key_id_sensors.values():
             for sensor in sensors:
                 if sensor.hass is not None:
                     sensor.async_write_ha_state()
@@ -606,15 +606,15 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
 
     entry.async_on_unload(_cancel_pending_sensor_flush)
 
-    async def _check_expired_tokens(_now=None) -> None:
-        for token in list(store.list_tokens()):
-            if token.is_expired():
-                await async_archive_expired_token(hass, data, token)
+    async def _check_expired_access_keys(_now=None) -> None:
+        for access_key in list(store.list_access_keys()):
+            if access_key.is_expired():
+                await async_archive_expired_access_key(hass, data, access_key)
 
-    await _check_expired_tokens()
-    for _token in store.list_tokens():
-        schedule_expiry_timer(hass, data, _token)
-    cancel_expiry = async_track_time_interval(hass, _check_expired_tokens, EXPIRY_CHECK_INTERVAL)
+    await _check_expired_access_keys()
+    for _access_key in store.list_access_keys():
+        schedule_expiry_timer(hass, data, _access_key)
+    cancel_expiry = async_track_time_interval(hass, _check_expired_access_keys, EXPIRY_CHECK_INTERVAL)
     entry.async_on_unload(cancel_expiry)
     def _cancel_expiry_timers() -> None:
         for token_id in list(data.expiry_timers):
@@ -880,14 +880,14 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Delete credentials while preserving configuration and recovery evidence."""
     from .agentcli import async_wipe_agentcli_secrets
-    from .approvals import async_cancel_approvals_for_token, dismiss_approval_notification, fire_approval_resolved_event
+    from .approvals import async_cancel_approvals_for_access_key, dismiss_approval_notification, fire_approval_resolved_event
 
-    store = await TokenStore.async_create(hass)
+    store = await AccessKeyStore.async_create(hass)
     changed = []
     async with store.async_lock:
-        for token in store.list_tokens():
-            changed.extend(await async_cancel_approvals_for_token(store, token.id, reason="integration_removed"))
-            await store.async_archive_token(token.id, revoked=True)
+        for access_key in store.list_access_keys():
+            changed.extend(await async_cancel_approvals_for_access_key(store, access_key.id, reason="integration_removed"))
+            await store.async_archive_access_key(access_key.id, revoked=True)
         await store.async_patch_settings(assist_bound_token_id=None,
             voice_agent_enabled=False, voice_agent_token_id=None,
             voice_agent_provider_id=None, voice_agent_model=None, ai_task_enabled=False, ai_task_token_id=None,

@@ -9,7 +9,7 @@ from homeassistant.setup import async_setup_component
 from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.token_store import TokenRecord, PermissionTree
+from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, PermissionTree
 from custom_components.phoenix_mcp.tools.recovery import _tool_restore_configuration
 from custom_components.phoenix_mcp.tools.lovelace import _execute_set_dashboard_config, _recoverable_dashboard_save
 from custom_components.phoenix_mcp.tools.config_files import _authored_file_snapshot
@@ -21,8 +21,8 @@ def runtime():
     return PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock())
 
 
-def token(**caps):
-    return TokenRecord(id="audit", name="audit", token_hash="x", created_at=utcnow(), created_by="test", permissions=PermissionTree(), **caps)
+def access_key(**caps):
+    return AccessKeyRecord(id="audit", name="audit", token_hash="x", created_at=utcnow(), created_by="test", permissions=PermissionTree(), **caps)
 
 
 def body(result):
@@ -34,7 +34,7 @@ async def test_file_recovery_preserves_line_endings_through_write_read_and_resto
     from custom_components.phoenix_mcp.tools.config_files import _execute_write_file, _tool_read_file
     from custom_components.phoenix_mcp.helpers import content_hash
 
-    t, d = token(cap_filesystem="allow"), runtime()
+    t, d = access_key(cap_filesystem="allow"), runtime()
     path = Path(hass.config.path("www", "endings.txt"))
     path.parent.mkdir(parents=True, exist_ok=True)
     before = newline.join(["original", "text", ""])
@@ -60,7 +60,7 @@ async def test_file_recovery_preserves_line_endings_through_write_read_and_resto
 async def test_real_dashboard_registry_restore_updates_only_supported_fields(hass, hass_admin_user):
     assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
     from custom_components.phoenix_mcp.tools.lovelace import _execute_create_dashboard, _execute_edit_dashboard
-    t, d = token(cap_lovelace_write="allow"), runtime()
+    t, d = access_key(cap_lovelace_write="allow"), runtime()
     created = await _execute_create_dashboard({"config": {"url_path": "audit-board", "title": "Before"}}, t, hass, d)
     assert created[1] == "allowed", created
     row = body(created)["dashboard"]
@@ -91,7 +91,7 @@ async def test_dashboard_registry_stale_metadata_retains_barrier(
     from custom_components.phoenix_mcp.config_recovery import ConfigurationRecoveryError
     from custom_components.phoenix_mcp.tools import lovelace
     assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
-    t, d = token(cap_lovelace_write="allow"), runtime()
+    t, d = access_key(cap_lovelace_write="allow"), runtime()
     config = {"url_path": "readback-board", "title": "Before", field: previous}
     if operation == "edit":
         created = await lovelace._execute_create_dashboard({"config": config}, t, hass, d)
@@ -136,7 +136,7 @@ async def test_dashboard_registry_stale_metadata_retains_barrier(
 async def test_dashboard_registry_missing_submitted_field_is_incomplete(hass, hass_admin_user):
     from custom_components.phoenix_mcp.tools import lovelace
     assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
-    t, d = token(cap_lovelace_write="allow"), runtime()
+    t, d = access_key(cap_lovelace_write="allow"), runtime()
     created = await lovelace._execute_create_dashboard(
         {"config": {"url_path": "nullable-board", "title": "Before", "icon": "mdi:home"}}, t, hass, d,
     )
@@ -171,7 +171,7 @@ async def test_dashboard_registry_missing_submitted_field_is_incomplete(hass, ha
 async def test_dashboard_registry_native_null_clear_is_verified(hass, hass_admin_user):
     from custom_components.phoenix_mcp.tools import lovelace
     assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
-    t, d = token(cap_lovelace_write="allow"), runtime()
+    t, d = access_key(cap_lovelace_write="allow"), runtime()
     created = await lovelace._execute_create_dashboard(
         {"config": {"url_path": "clear-board", "title": "Before", "icon": "mdi:home"}}, t, hass, d,
     )
@@ -188,7 +188,7 @@ async def test_dashboard_registry_native_null_clear_is_verified(hass, hass_admin
 async def test_real_dashboard_layout_write_returns_recovery_id(hass):
     assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
     d = runtime()
-    result = await _execute_set_dashboard_config({"config": {"views": []}}, token(cap_lovelace_write="allow"), hass, d)
+    result = await _execute_set_dashboard_config({"config": {"views": []}}, access_key(cap_lovelace_write="allow"), hass, d)
     assert result[1] == "allowed", result
     assert d.config_recovery.records()[0]["phase"] == "verified"
     assert body(result)["recovery_id"] == d.config_recovery.records()[0]["id"]
@@ -199,7 +199,7 @@ async def test_dashboard_layout_restore_records_only_verified_history(hass, stal
     from custom_components.phoenix_mcp.tools import lovelace
     from custom_components.phoenix_mcp.ws_dispatch import async_get_lovelace_config, async_save_lovelace_config
     assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
-    t, d = token(cap_lovelace_write="allow"), runtime()
+    t, d = access_key(cap_lovelace_write="allow"), runtime()
     before, after = {"views": [{"title": "Before"}]}, {"views": [{"title": "After"}]}
     await lovelace._execute_set_dashboard_config({"config": before}, t, hass, d)
     edited = await lovelace._execute_set_dashboard_config({"config": after}, t, hass, d)
@@ -232,7 +232,7 @@ async def test_dashboard_layout_restore_records_only_verified_history(hass, stal
 
 
 async def test_file_restore_preview_compares_live_content(hass):
-    d, t = runtime(), token(cap_filesystem="allow")
+    d, t = runtime(), access_key(cap_filesystem="allow")
     rel = "www/audit.txt"
     p = Path(hass.config.path(rel))
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -249,7 +249,7 @@ async def test_file_restore_preview_compares_live_content(hass):
 
 
 async def test_timeout_after_dashboard_effect_keeps_barrier(hass):
-    d, t = runtime(), token(cap_lovelace_write="allow")
+    d, t = runtime(), access_key(cap_lovelace_write="allow")
     before, after = {"views": []}, {"views": [{"title": "Changed"}]}
     actual = dict(before)
     async def save(*args):
@@ -257,7 +257,7 @@ async def test_timeout_after_dashboard_effect_keeps_barrier(hass):
         actual.update(after)
         raise WsDispatchError("WebSocket command timed out.")
     with patch("custom_components.phoenix_mcp.tools.lovelace.async_get_lovelace_config", AsyncMock(return_value=before)), patch("custom_components.phoenix_mcp.tools.lovelace.async_save_lovelace_config", AsyncMock(side_effect=save)):
-        result = await _recoverable_dashboard_save(url_path=None, before=before, after=after, token=t, hass=hass, data=d)
+        result = await _recoverable_dashboard_save(url_path=None, before=before, after=after, access_key=t, hass=hass, data=d)
     assert actual == after
     assert result[1] == "invalid_request"
     assert d.config_recovery.records()[0]["phase"] == "unknown"
@@ -267,7 +267,7 @@ async def test_timeout_after_dashboard_effect_keeps_barrier(hass):
 
 
 async def test_energy_partial_readback_returns_observed_state(hass):
-    d, t = runtime(), token(cap_energy_write="allow")
+    d, t = runtime(), access_key(cap_energy_write="allow")
     before = {"energy_sources": [], "device_consumption": [{"stat_consumption": "sensor.old", "name": "Old"}], "device_consumption_water": []}
     with patch("custom_components.phoenix_mcp.tools.energy._read_prefs_raw", AsyncMock(return_value=before)), patch("custom_components.phoenix_mcp.tools.energy.async_ws_command", AsyncMock(return_value=None)):
         result = await _execute_edit_energy_config({"op": "remove_device", "device_name": "Old"}, t, hass, d)
@@ -308,7 +308,7 @@ async def test_admin_restore_button_restores_another_tokens_file(hass, hass_admi
 async def test_real_blueprint_formatting_is_verified(hass, hass_admin_user):
     from custom_components.phoenix_mcp.tools.blueprint import _execute_create_blueprint
     assert await async_setup_component(hass, "automation", {})
-    t = token(cap_blueprint_write="allow", cap_automation_write="allow")
+    t = access_key(cap_blueprint_write="allow", cap_automation_write="allow")
     d = runtime()
     content = '# A preserved comment\nblueprint:\n  name: "Audit blueprint"\n  domain: automation\n  input: {}\ntriggers: []\nactions: []\n'
     result = await _execute_create_blueprint({"domain": "automation", "path": "audit/example.yaml", "content": content}, t, hass, d)
@@ -327,7 +327,7 @@ async def test_template_recreation_refuses_revoked_entity_scope(hass, scope, exi
     from homeassistant.helpers import entity_registry as er
     from custom_components.phoenix_mcp.template_recovery import template_snapshot
     from custom_components.phoenix_mcp.mcp_view import _call_tool
-    from custom_components.phoenix_mcp.token_store import PermissionNode
+    from custom_components.phoenix_mcp.access_key_store import PermissionNode
     assert await async_setup_component(hass, "homeassistant", {})
     flow = hass.config_entries.flow
     result = await flow.async_init("template", context={"source": SOURCE_USER})
@@ -336,7 +336,7 @@ async def test_template_recreation_refuses_revoked_entity_scope(hass, scope, exi
     await hass.async_block_till_done()
     entry = result["result"]
     saved = template_snapshot(hass, entry)
-    t, d = token(cap_helper_write="allow"), runtime()
+    t, d = access_key(cap_helper_write="allow"), runtime()
     t.permissions = PermissionTree(domains={"sensor": PermissionNode(state="GREEN")})
     rid = await d.config_recovery.begin(f"config_entry:{entry.entry_id}", "remove_integration", t.id, saved)
     if not existing:
@@ -451,22 +451,22 @@ async def test_ambiguous_ws_failure_preserves_family_barrier(hass, family):
         raise WsDispatchError("Command timed out after dispatch")
 
     if family == "energy":
-        t = token(cap_energy_write="allow")
+        t = access_key(cap_energy_write="allow")
         prefs = {"energy_sources": [], "device_consumption": [{"name": "Old", "stat_consumption": "external:old"}], "device_consumption_water": []}
         resource = "energy:preferences"
         with patch("custom_components.phoenix_mcp.tools.energy._read_prefs_raw", AsyncMock(return_value=prefs)), patch("custom_components.phoenix_mcp.tools.energy.async_ws_command", AsyncMock(side_effect=uncertain)):
             result = await _execute_edit_energy_config({"op": "remove_device", "device_name": "Old"}, t, hass, d)
     elif family == "blueprint":
-        t = token(cap_blueprint_write="allow", cap_automation_write="allow")
+        t = access_key(cap_blueprint_write="allow", cap_automation_write="allow")
         resource = "blueprint:automation/test/error.yaml"
         with patch("custom_components.phoenix_mcp.tools.blueprint.async_ws_command", AsyncMock(side_effect=uncertain)):
             result = await _execute_create_blueprint({"domain": "automation", "path": "test/error.yaml", "content": "blueprint:\n  name: Test\n  domain: automation\ntriggers: []\nactions: []\n"}, t, hass, d)
     else:
-        t = token(cap_lovelace_write="allow")
+        t = access_key(cap_lovelace_write="allow")
         resource = "dashboard_registry:test-board"
         before = {"snapshot_type": "dashboard_registry", "schema": 1, "resource_id": "test-board", "exists": False, "dashboard": None}
         with patch("custom_components.phoenix_mcp.tools.lovelace._dashboard_registry_snapshot", AsyncMock(return_value=before)), patch("custom_components.phoenix_mcp.tools.lovelace.async_ws_command", AsyncMock(side_effect=uncertain)):
-            result = await _recoverable_dashboard_registry_write(dashboard_id="test-board", before=before, operation="create", command="lovelace/dashboards/create", payload={}, token=t, hass=hass, data=d)
+            result = await _recoverable_dashboard_registry_write(dashboard_id="test-board", before=before, operation="create", command="lovelace/dashboards/create", payload={}, access_key=t, hass=hass, data=d)
     assert result[1] == "invalid_request"
     assert len(effects) == 1
     assert d.config_recovery.records()[0]["phase"] == "unknown"
@@ -477,7 +477,7 @@ async def test_ambiguous_ws_failure_preserves_family_barrier(hass, family):
 async def test_template_preview_compares_live_options(hass):
     from homeassistant.config_entries import SOURCE_USER
     from custom_components.phoenix_mcp.template_recovery import template_snapshot
-    from custom_components.phoenix_mcp.token_store import PermissionNode
+    from custom_components.phoenix_mcp.access_key_store import PermissionNode
     assert await async_setup_component(hass, "homeassistant", {})
     flow = hass.config_entries.flow
     result = await flow.async_init("template", context={"source": SOURCE_USER})
@@ -486,7 +486,7 @@ async def test_template_preview_compares_live_options(hass):
     await hass.async_block_till_done()
     entry = result["result"]
     snapshot = template_snapshot(hass, entry)
-    t, d = token(cap_helper_write="allow"), runtime()
+    t, d = access_key(cap_helper_write="allow"), runtime()
     t.permissions = PermissionTree(domains={"sensor": PermissionNode(state="GREEN")})
     rid = await d.config_recovery.begin(f"config_entry:{entry.entry_id}", "edit", t.id, snapshot)
     hass.config_entries.async_update_entry(entry, options={**entry.options, "state": "{{ 8 }}"})
@@ -505,7 +505,7 @@ async def test_structural_dashboard_writes_return_recovery_id(hass, op):
     from custom_components.phoenix_mcp.ws_dispatch import async_save_lovelace_config
     assert await async_setup_component(hass, "lovelace", {"lovelace": {}})
     await async_save_lovelace_config(hass, None, {"views": [{"title": "Start", "cards": []}]})
-    d, t = runtime(), token(cap_lovelace_write="allow")
+    d, t = runtime(), access_key(cap_lovelace_write="allow")
     if op == "card":
         result = await _execute_add_dashboard_card({"view_index": 0, "card": {"type": "markdown", "content": "Test"}}, t, hass, d)
     else:
@@ -518,7 +518,7 @@ async def test_structural_dashboard_writes_return_recovery_id(hass, op):
 async def test_real_blueprint_restore_accepts_ha_serialization(hass, hass_admin_user):
     from custom_components.phoenix_mcp.tools.blueprint import _blueprint_recovery_snapshot
     assert await async_setup_component(hass, "automation", {})
-    d, t = runtime(), token(cap_blueprint_write="allow", cap_automation_write="allow")
+    d, t = runtime(), access_key(cap_blueprint_write="allow", cap_automation_write="allow")
     content = '# Original formatting\nblueprint:\n  name: "Restored"\n  domain: automation\n  input:\n    entity:\n      name: Target\ntriggers: []\nactions:\n  - action: light.turn_on\n    target:\n      entity_id: !input entity\n'
     path = Path(hass.config.path("blueprints", "automation", "test", "restore.yaml"))
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -557,10 +557,10 @@ async def test_real_ws_timeout_is_never_a_pre_dispatch_refusal(hass, hass_admin_
 
 async def test_pre_dispatch_refusal_does_not_leave_uncertain_barrier(hass):
     from custom_components.phoenix_mcp.ws_dispatch import WsCommandNotDispatchedError
-    d, t = runtime(), token(cap_lovelace_write="allow")
+    d, t = runtime(), access_key(cap_lovelace_write="allow")
     before = {"views": []}
     with patch("custom_components.phoenix_mcp.tools.lovelace.async_get_lovelace_config", AsyncMock(return_value=before)), patch("custom_components.phoenix_mcp.tools.lovelace.async_save_lovelace_config", AsyncMock(side_effect=WsCommandNotDispatchedError("Invalid schema"))):
-        result = await _recoverable_dashboard_save(url_path=None, before=before, after={"views": [{"title": "Changed"}]}, token=t, hass=hass, data=d)
+        result = await _recoverable_dashboard_save(url_path=None, before=before, after={"views": [{"title": "Changed"}]}, access_key=t, hass=hass, data=d)
     assert result[1] == "invalid_request"
     assert d.config_recovery.records()[0]["phase"] == "not_applied"
     await d.config_recovery.begin("dashboard_layout:lovelace", "next", t.id, {})

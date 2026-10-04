@@ -36,7 +36,7 @@ if TYPE_CHECKING:
     from .data import PhoenixData
     from .mesa import MesaRuntime
     from .mesa_core import SemanticProfile
-    from .token_store import TokenRecord
+    from .access_key_store import AccessKeyRecord
 
 MESA_TOOL_NAMES = frozenset({
     "mesa_query_profiles",
@@ -154,9 +154,9 @@ def _not_found_envelope(entity_id: str) -> dict[str, Any]:
     }
 
 
-def _is_visible(entity_id: str, token: TokenRecord, hass: HomeAssistant) -> bool:
+def _is_visible(entity_id: str, access_key: AccessKeyRecord, hass: HomeAssistant) -> bool:
     """True when the token may read the entity (READ or WRITE)."""
-    return resolve(entity_id, token, hass) in (Permission.READ, Permission.WRITE)
+    return resolve(entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
 
 
 class ScopedProfileStore:
@@ -181,16 +181,16 @@ class ScopedProfileStore:
     filter it to keys with at least one visible entity mapping to them.
     """
 
-    def __init__(self, inner, token: TokenRecord, hass: HomeAssistant) -> None:
+    def __init__(self, inner, access_key: AccessKeyRecord, hass: HomeAssistant) -> None:
         self._inner = inner
-        self._token = token
+        self._access_key = access_key
         self._hass = hass
 
     def entity_keys(self) -> list[str]:
-        return [k for k in self._inner.entity_keys() if _is_visible(k, self._token, self._hass)]
+        return [k for k in self._inner.entity_keys() if _is_visible(k, self._access_key, self._hass)]
 
     def get(self, entity_id: str) -> SemanticProfile | None:
-        if not _is_visible(entity_id, self._token, self._hass):
+        if not _is_visible(entity_id, self._access_key, self._hass):
             return None
         return self._inner.get(entity_id)
 
@@ -255,7 +255,7 @@ _RESTRICTIVE_MODES = ("prohibited", "read_only")
 
 def authored_restrictions(
     runtime: "MesaRuntime",
-    token: "TokenRecord",
+    access_key: "AccessKeyRecord",
     hass: HomeAssistant,
     *,
     limit: int = MAX_PREVIEW_ENTITY_IDS,
@@ -268,7 +268,7 @@ def authored_restrictions(
     dominated by them). ScopedProfileStore hides out-of-scope authored entities,
     so this is not an enumeration oracle.
     """
-    scoped = ScopedProfileStore(runtime.store, token, hass)
+    scoped = ScopedProfileStore(runtime.store, access_key, hass)
     by_mode: dict[str, int] = {}
     restricted: list[dict[str, str]] = []
     truncated = 0
@@ -359,16 +359,16 @@ def _integration_version(hass: HomeAssistant, entity_id: str) -> str | None:
 
 def _build_handlers(
     runtime: MesaRuntime,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     session_id: str,
     get_semantic_moments: Any = None,
 ) -> MesaToolHandlers:
-    scoped = ScopedProfileStore(runtime.store, token, hass)
+    scoped = ScopedProfileStore(runtime.store, access_key, hass)
     resolver = InheritanceResolver(
         store=scoped,  # type: ignore[arg-type]  # ScopedProfileStore duck-types ProfileStore's read surface by design; mesa_core is read-only so it cannot declare a Protocol
     )
-    ctx = build_caller_context(token, session_id)
+    ctx = build_caller_context(access_key, session_id)
     return MesaToolHandlers(
         store=scoped,  # type: ignore[arg-type]  # ScopedProfileStore duck-types ProfileStore's read surface by design; mesa_core is read-only so it cannot declare a Protocol
         resolver=resolver,
@@ -390,7 +390,7 @@ def _tool_success(text: str) -> dict[str, Any]:
 async def async_call_mesa_tool(
     tool_name: str,
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     session_id: str,
@@ -399,7 +399,7 @@ async def async_call_mesa_tool(
 
     Returns the standard Phoenix MCP tool tuple (result, outcome, resource).
     """
-    if effective_cap(token, MESA_TOOLS_CAP) == CAP_DENY:
+    if effective_cap(access_key, MESA_TOOLS_CAP) == CAP_DENY:
         return _tool_error("Forbidden."), "denied", tool_name
 
     runtime = data.mesa
@@ -408,7 +408,7 @@ async def async_call_mesa_tool(
 
     if tool_name in _LEASE_TOOLS:
         # Leases belong to the token across stateless calls (see _LEASE_TOOLS).
-        session_id = token.id
+        session_id = access_key.id
         if tool_name == "mesa_request_lease":
             entities = args.get("entities")
             if isinstance(entities, list) and entities:
@@ -419,7 +419,7 @@ async def async_call_mesa_tool(
                 # standard generic denial.
                 in_scope = [
                     e for e in entities
-                    if isinstance(e, str) and resolve(e, token, hass) is Permission.WRITE
+                    if isinstance(e, str) and resolve(e, access_key, hass) is Permission.WRITE
                 ]
                 if not in_scope:
                     return _tool_error("Forbidden."), "denied", tool_name
@@ -430,7 +430,7 @@ async def async_call_mesa_tool(
         entity_id = args.get("entity_id")
         # An out-of-scope or ghost entity must look exactly like a nonexistent
         # one. resolve() also enforces the phx-domain blocklist.
-        if entity_id and not _is_visible(entity_id, token, hass):
+        if entity_id and not _is_visible(entity_id, access_key, hass):
             return (
                 _tool_success(json.dumps(_not_found_envelope(entity_id))),
                 "not_found",
@@ -449,7 +449,7 @@ async def async_call_mesa_tool(
             get_semantic_moments = lambda eid: moments if eid == entity_id else None  # noqa: E731
 
     handlers = _build_handlers(
-        runtime, token, hass, session_id, get_semantic_moments=get_semantic_moments
+        runtime, access_key, hass, session_id, get_semantic_moments=get_semantic_moments
     )
     handler = getattr(handlers, tool_name)
     result = await handler(args)

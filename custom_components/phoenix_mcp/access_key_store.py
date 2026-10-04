@@ -51,7 +51,7 @@ from .const import (
     DEFAULT_RATE_LIMIT_REQUESTS,
     MAX_CONFIRM_INLINE_WAIT_SECONDS,
     MIN_CONFIRM_INLINE_WAIT_SECONDS,
-    MAX_PRESETS_PER_TOKEN,
+    MAX_PRESETS_PER_ACCESS_KEY,
     MESA_MODE_ADVISORY,
     MESA_MODES,
     PERSONA_CUSTOM,
@@ -59,8 +59,8 @@ from .const import (
     PERSONA_NAMES,
     STORAGE_KEY,
     STORAGE_VERSION,
-    TOKEN_HEX_LENGTH,
-    TOKEN_PREFIX,
+    ACCESS_KEY_HEX_LENGTH,
+    ACCESS_KEY_PREFIX,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -193,7 +193,7 @@ class PermissionTree:
 
 
 @dataclass
-class TokenPreset:
+class AccessKeyPreset:
     """A named snapshot of a token's full settings (the workspace model).
 
     Presets hold caps, persona, permission tree, rate limits, pass_through,
@@ -232,7 +232,7 @@ class TokenPreset:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> TokenPreset:
+    def from_dict(cls, data: dict) -> AccessKeyPreset:
         caps: dict[str, str] = {}
         raw_caps = data.get("caps") or {}
         for cap_name in CAPABILITY_NAMES:
@@ -257,26 +257,26 @@ class TokenPreset:
         )
 
 
-def snapshot_preset(token: TokenRecord, name: str, preset_id: str | None = None) -> TokenPreset:
+def snapshot_preset(access_key: AccessKeyRecord, name: str, preset_id: str | None = None) -> AccessKeyPreset:
     """Build a preset from a token's CURRENT live settings (deep-copied tree)."""
-    return TokenPreset(
+    return AccessKeyPreset(
         id=preset_id or str(uuid.uuid4()),
         name=name,
         created_at=utcnow(),
-        caps=token.caps_dict(),
-        persona=token.persona,
-        permissions=PermissionTree.from_dict(token.permissions.to_dict()),
-        pass_through=token.pass_through,
-        use_assist_exposure=token.use_assist_exposure,
-        announce_all_tools=token.announce_all_tools,
-        confirm_inline_wait_seconds=token.confirm_inline_wait_seconds,
-        rate_limit_requests=token.rate_limit_requests,
-        rate_limit_burst=token.rate_limit_burst,
+        caps=access_key.caps_dict(),
+        persona=access_key.persona,
+        permissions=PermissionTree.from_dict(access_key.permissions.to_dict()),
+        pass_through=access_key.pass_through,
+        use_assist_exposure=access_key.use_assist_exposure,
+        announce_all_tools=access_key.announce_all_tools,
+        confirm_inline_wait_seconds=access_key.confirm_inline_wait_seconds,
+        rate_limit_requests=access_key.rate_limit_requests,
+        rate_limit_burst=access_key.rate_limit_burst,
     )
 
 
 @dataclass
-class TokenRecord:
+class AccessKeyRecord:
     """Active Phoenix MCP token with its configuration and permission tree.
 
     Capability flags are tri-state strings ("deny" / "allow" / "confirm").
@@ -303,7 +303,7 @@ class TokenRecord:
     # before falling back to the immediate pending_approval reply. 0 is off (the
     # unattended-agent mode); a positive value is clamped to
     # [MIN, MAX]_CONFIRM_INLINE_WAIT_SECONDS. The product default is OFF:
-    # async_create_token and from_dict both use DEFAULT_CONFIRM_INLINE_WAIT_SECONDS,
+    # async_create_access_key and from_dict both use DEFAULT_CONFIRM_INLINE_WAIT_SECONDS,
     # and a directly constructed record also defaults to 0.
     confirm_inline_wait_seconds: int = 0
     rate_limit_requests: int = DEFAULT_RATE_LIMIT_REQUESTS
@@ -354,7 +354,7 @@ class TokenRecord:
     # Settings presets (the workspace model): active_preset_id is sticky.
     # Manual edits never clear it; they are the active preset's unsaved state,
     # absorbed back into it when the admin switches presets.
-    presets: list[TokenPreset] = field(default_factory=list)
+    presets: list[AccessKeyPreset] = field(default_factory=list)
     active_preset_id: str | None = None
     # Staleness tracking for the in-band "tool list changed" advisory (storage
     # only, not in to_dict): settings_version bumps on any settings/caps/
@@ -369,7 +369,7 @@ class TokenRecord:
     # staleness axis. settings_version catches the OPERATOR changing the token;
     # this catches the CODE changing (a deploy) under a client that already
     # fetched its schemas. Empty means never recorded and is deliberately NOT
-    # treated as stale: token_store cannot import mcp_view to learn the current
+    # treated as stale: access_key_store cannot import mcp_view to learn the current
     # fingerprint (the dependency runs the other way), and guessing a baseline
     # would advise every such token once for nothing. The first tools/list
     # records it.
@@ -432,7 +432,7 @@ class TokenRecord:
         return d
 
     @classmethod
-    def from_dict(cls, data: dict) -> TokenRecord:
+    def from_dict(cls, data: dict) -> AccessKeyRecord:
         cap_kwargs: dict[str, str] = {}
         for cap_name in CAPABILITY_NAMES:
             value = data.get(cap_name)
@@ -444,10 +444,10 @@ class TokenRecord:
             persona = PERSONA_CUSTOM
         # Presets parse leniently: a corrupt preset is dropped with a warning,
         # never at the cost of the whole token record.
-        presets: list[TokenPreset] = []
+        presets: list[AccessKeyPreset] = []
         for p in data.get("presets") or []:
             try:
-                presets.append(TokenPreset.from_dict(p))
+                presets.append(AccessKeyPreset.from_dict(p))
             except Exception as exc:  # noqa: BLE001 - any unparseable preset is dropped, never the token
                 _LOGGER.warning(
                     "Dropping corrupt preset %r on access key %r: %s",
@@ -503,7 +503,7 @@ class TokenRecord:
 
 
 @dataclass
-class ArchivedTokenRecord:
+class ArchivedAccessKeyRecord:
     """Archived snapshot of a revoked or expired token. Retained for audit purposes.
 
     Only audit-trail fields are retained. pass_through, capability flags,
@@ -538,7 +538,7 @@ class ArchivedTokenRecord:
         return d
 
     @classmethod
-    def from_dict(cls, data: dict) -> ArchivedTokenRecord:
+    def from_dict(cls, data: dict) -> ArchivedAccessKeyRecord:
         return cls(
             id=data["id"],
             name=data["name"],
@@ -839,7 +839,7 @@ class _PhoenixStore(DurableStore[dict]):
         return raw
 
 
-class TokenStore:
+class AccessKeyStore:
     """Manages persistent storage and in-memory state for Phoenix MCP tokens."""
 
     def __init__(self, hass: HomeAssistant, store: Store) -> None:
@@ -847,8 +847,8 @@ class TokenStore:
         self._store = store
         self._usage_version = 0
         self._saved_usage_version = 0
-        self._tokens: dict[str, TokenRecord] = {}
-        self._archived: dict[str, ArchivedTokenRecord] = {}
+        self._access_keys: dict[str, AccessKeyRecord] = {}
+        self._archived: dict[str, ArchivedAccessKeyRecord] = {}
         self._pending_approvals: list[dict] = []
         self._settings: GlobalSettings = GlobalSettings()
         # Global per-entity hints (entity_id to hint text), surfaced to every token
@@ -857,8 +857,8 @@ class TokenStore:
         self.async_lock: asyncio.Lock = asyncio.Lock()
 
     @classmethod
-    async def async_create(cls, hass: HomeAssistant) -> TokenStore:
-        """Create a TokenStore and load persisted data from HA storage."""
+    async def async_create(cls, hass: HomeAssistant) -> AccessKeyStore:
+        """Create a AccessKeyStore and load persisted data from HA storage."""
         store: Store[dict] = _PhoenixStore(hass, STORAGE_VERSION, STORAGE_KEY, atomic_writes=True)
         instance = cls(hass, store)
         await instance.async_load()
@@ -869,22 +869,22 @@ class TokenStore:
         raw = await self._store.async_load()
         raw, normalized = _normalize_storage_root(raw)
 
-        tokens: dict[str, TokenRecord] = {}
+        access_keys: dict[str, AccessKeyRecord] = {}
         for r in raw.get("tokens", []):
             try:
-                record = TokenRecord.from_dict(r)
-                tokens[record.id] = record
+                record = AccessKeyRecord.from_dict(r)
+                access_keys[record.id] = record
             except Exception as exc:  # noqa: BLE001 - any unparseable record is skipped; one bad record must never abort setup
                 _LOGGER.warning(
                     "Skipping corrupt access key record %r: %s",
                     r.get("id", "?") if isinstance(r, dict) else "?", exc,
                 )
-        self._tokens = tokens
+        self._access_keys = access_keys
 
-        archived: dict[str, ArchivedTokenRecord] = {}
+        archived: dict[str, ArchivedAccessKeyRecord] = {}
         for r in raw.get("archived_tokens", []):
             try:
-                archived_record = ArchivedTokenRecord.from_dict(r)
+                archived_record = ArchivedAccessKeyRecord.from_dict(r)
                 archived[archived_record.id] = archived_record
             except Exception as exc:  # noqa: BLE001 - any unparseable record is skipped; one bad record must never abort setup
                 _LOGGER.warning(
@@ -914,7 +914,7 @@ class TokenStore:
         usage_version = self._usage_version
         await self._store.async_save({
             "version": STORAGE_VERSION,
-            "tokens": [t.to_storage_dict() for t in self._tokens.values()],
+            "tokens": [t.to_storage_dict() for t in self._access_keys.values()],
             "archived_tokens": [a.to_storage_dict() for a in self._archived.values()],
             "pending_approvals": self._pending_approvals,
             "settings": self._settings.to_dict(),
@@ -930,7 +930,7 @@ class TokenStore:
         """Replace the pending-approvals array in memory. Caller must save."""
         self._pending_approvals = approvals
 
-    async def async_create_token(
+    async def async_create_access_key(
         self,
         name: str,
         created_by: str,
@@ -939,16 +939,16 @@ class TokenStore:
         use_assist_exposure: bool = False,
         rate_limit_requests: int = DEFAULT_RATE_LIMIT_REQUESTS,
         rate_limit_burst: int = DEFAULT_RATE_LIMIT_BURST,
-    ) -> tuple[TokenRecord, str]:
-        """Generate a new token, store it, and return (record, raw_token).
+    ) -> tuple[AccessKeyRecord, str]:
+        """Generate a new token, store it, and return (record, raw_access_key).
 
-        The raw_token value is returned exactly once and never stored. Callers
+        The raw_access_key value is returned exactly once and never stored. Callers
         must pass it to the client immediately and discard it.
         """
-        raw_token = TOKEN_PREFIX + secrets.token_hex(TOKEN_HEX_LENGTH // 2)
-        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
+        raw_access_key = ACCESS_KEY_PREFIX + secrets.token_hex(ACCESS_KEY_HEX_LENGTH // 2)
+        token_hash = hashlib.sha256(raw_access_key.encode()).hexdigest()
         now = utcnow()
-        record = TokenRecord(
+        record = AccessKeyRecord(
             id=str(uuid.uuid4()),
             name=name,
             token_hash=token_hash,
@@ -968,81 +968,81 @@ class TokenStore:
             preset = snapshot_preset(record, DEFAULT_PRESET_NAME)
             record.presets.append(preset)
             record.active_preset_id = preset.id
-        self._tokens[record.id] = record
+        self._access_keys[record.id] = record
         await self.async_save()
-        return record, raw_token
+        return record, raw_access_key
 
-    def get_token_by_id(self, token_id: str) -> TokenRecord | None:
-        return self._tokens.get(token_id)
+    def get_access_key_by_id(self, token_id: str) -> AccessKeyRecord | None:
+        return self._access_keys.get(token_id)
 
-    def get_token_by_hash(self, token_hash: str) -> TokenRecord | None:
+    def get_access_key_by_hash(self, token_hash: str) -> AccessKeyRecord | None:
         """Find a token by `hmac.compare_digest` over SHA-256 hashes, never `==`."""
-        for token in self._tokens.values():
-            if hmac_compare(token.token_hash, token_hash):
-                return token
+        for access_key in self._access_keys.values():
+            if hmac_compare(access_key.token_hash, token_hash):
+                return access_key
         return None
 
-    def get_archived_by_hash(self, token_hash: str) -> ArchivedTokenRecord | None:
+    def get_archived_by_hash(self, token_hash: str) -> ArchivedAccessKeyRecord | None:
         for record in self._archived.values():
             if hmac_compare(record.token_hash, token_hash):
                 return record
         return None
 
-    def list_tokens(self) -> list[TokenRecord]:
-        return list(self._tokens.values())
+    def list_access_keys(self) -> list[AccessKeyRecord]:
+        return list(self._access_keys.values())
 
-    def list_archived(self) -> list[ArchivedTokenRecord]:
+    def list_archived(self) -> list[ArchivedAccessKeyRecord]:
         return list(self._archived.values())
 
-    def active_token_count(self) -> int:
-        return len(self._tokens)
+    def active_access_key_count(self) -> int:
+        return len(self._access_keys)
 
-    def name_slug_exists(self, name: str, exclude_token_id: str | None = None) -> bool:
+    def name_slug_exists(self, name: str, exclude_access_key_id: str | None = None) -> bool:
         """Return True if a token with an equivalent slug already exists.
 
-        exclude_token_id skips that token, so a rename can keep (or re-case) its
+        exclude_access_key_id skips that token, so a rename can keep (or re-case) its
         own name without colliding with itself.
         """
-        slug = token_name_slug(name)
+        slug = access_key_name_slug(name)
         return any(
-            token_name_slug(t.name) == slug
-            for tid, t in self._tokens.items()
-            if tid != exclude_token_id
+            access_key_name_slug(t.name) == slug
+            for tid, t in self._access_keys.items()
+            if tid != exclude_access_key_id
         )
 
-    async def async_archive_token(
+    async def async_archive_access_key(
         self,
         token_id: str,
         revoked: bool,
         revoked_at: datetime | None = None,
-    ) -> ArchivedTokenRecord | None:
+    ) -> ArchivedAccessKeyRecord | None:
         """Move a token from the active list to the archive and persist.
 
         Returns None if the token_id is not found.
         """
-        token = self._tokens.pop(token_id, None)
-        if token is None:
+        access_key = self._access_keys.pop(token_id, None)
+        if access_key is None:
             return None
-        archived = ArchivedTokenRecord(
-            id=token.id,
-            name=token.name,
-            token_hash=token.token_hash,
-            created_at=token.created_at,
-            created_by=token.created_by,
+        archived = ArchivedAccessKeyRecord(
+            id=access_key.id,
+            name=access_key.name,
+            token_hash=access_key.token_hash,
+            created_at=access_key.created_at,
+            created_by=access_key.created_by,
             revoked_at=revoked_at or utcnow(),
             revoked=revoked,
-            expires_at=token.expires_at,
-            last_used_at=token.last_used_at,
+            expires_at=access_key.expires_at,
+            last_used_at=access_key.last_used_at,
         )
         self._archived[archived.id] = archived
         await self.async_save()
         return archived
 
-    async def async_patch_token(
+    async def async_patch_access_key(
         self,
         token_id: str,
         **kwargs,
-    ) -> TokenRecord | None:
+    ) -> AccessKeyRecord | None:
         """Update mutable capability and rate-limit fields on a token and persist.
 
         Callers must hold self.async_lock. A rate_limit_requests of 0 forces
@@ -1052,8 +1052,8 @@ class TokenStore:
         CAP_GRANT_TRANSITIONS) the grant run is recorded so admitted requests stay
         valid (accepts_policy_version). Returns None if the token is not found.
         """
-        token = self._tokens.get(token_id)
-        if token is None:
+        access_key = self._access_keys.get(token_id)
+        if access_key is None:
             return None
         mutable_fields = {
             "name",
@@ -1066,11 +1066,11 @@ class TokenStore:
             "persona",
         }
         cap_fields = set(CAPABILITY_NAMES)
-        grant_only = bool(kwargs) and token.persona != PERSONA_HOME_COMPANION and all(
+        grant_only = bool(kwargs) and access_key.persona != PERSONA_HOME_COMPANION and all(
             key in cap_fields and (
-                value == getattr(token, key)
-                or (getattr(token, key), value) in CAP_GRANT_TRANSITIONS
-            ) and not (token.pass_through and getattr(token, key) == "deny" and value == "confirm")
+                value == getattr(access_key, key)
+                or (getattr(access_key, key), value) in CAP_GRANT_TRANSITIONS
+            ) and not (access_key.pass_through and getattr(access_key, key) == "deny" and value == "confirm")
             for key, value in kwargs.items()
         )
         cap_changed = False
@@ -1084,55 +1084,55 @@ class TokenStore:
                     raise ValueError(
                         f"Capability {key!r} does not support 'confirm' mode"
                     )
-                setattr(token, key, value)
+                setattr(access_key, key, value)
                 cap_changed = True
             elif key in mutable_fields:
                 if key == "persona" and value not in PERSONA_NAMES:
                     raise ValueError(f"Unknown persona: {value!r}")
                 if key == "confirm_inline_wait_seconds":
                     value = _clamp_inline_wait(value)
-                setattr(token, key, value)
-        if token.persona == PERSONA_HOME_COMPANION:
-            token.pass_through = False
-            token.announce_all_tools = False
-        if token.rate_limit_requests == 0:
-            token.rate_limit_burst = 0
+                setattr(access_key, key, value)
+        if access_key.persona == PERSONA_HOME_COMPANION:
+            access_key.pass_through = False
+            access_key.announce_all_tools = False
+        if access_key.rate_limit_requests == 0:
+            access_key.rate_limit_burst = 0
         # Re-derive the persona from the resulting cap set so the label stays
         # honest: tweaking any cap drops the token to "custom" (or to a different
         # matching persona).
-        if cap_changed and token.persona != PERSONA_HOME_COMPANION:
+        if cap_changed and access_key.persona != PERSONA_HOME_COMPANION:
             from .personas import detect_persona  # noqa: PLC0415 - avoid circular import at module load
-            token.persona = detect_persona(token.caps_dict())
+            access_key.persona = detect_persona(access_key.caps_dict())
         # Anything beyond a bare rename or an inline-wait tweak changes what the
         # connected agent may see or do, so advance the staleness counter (drives
         # the in-band advisory). confirm_inline_wait_seconds changes neither the
         # tool list nor the caps, so like name it must not fire a spurious advisory.
         non_invalidating = {"name", "confirm_inline_wait_seconds"}
         if cap_changed or any(k not in non_invalidating for k in kwargs):
-            previous_version = token.settings_version
-            token.settings_version += 1
+            previous_version = access_key.settings_version
+            access_key.settings_version += 1
             if grant_only:
-                if token.capability_grant_version != previous_version:
-                    token.capability_grant_base = previous_version
-                token.capability_grant_version = token.settings_version
-        token.updated_at = utcnow()
+                if access_key.capability_grant_version != previous_version:
+                    access_key.capability_grant_base = previous_version
+                access_key.capability_grant_version = access_key.settings_version
+        access_key.updated_at = utcnow()
         await self.async_save()
-        return token
+        return access_key
 
     async def async_set_permissions(
         self,
         token_id: str,
         permissions: PermissionTree,
-    ) -> TokenRecord | None:
+    ) -> AccessKeyRecord | None:
         """Replace the entire permission tree for a token and persist."""
-        token = self._tokens.get(token_id)
-        if token is None:
+        access_key = self._access_keys.get(token_id)
+        if access_key is None:
             return None
-        token.permissions = permissions
-        token.settings_version += 1
-        token.updated_at = utcnow()
+        access_key.permissions = permissions
+        access_key.settings_version += 1
+        access_key.updated_at = utcnow()
         await self.async_save()
-        return token
+        return access_key
 
     async def async_patch_permission_node(
         self,
@@ -1141,34 +1141,34 @@ class TokenStore:
         node_id: str,
         state: str,
         hint: str | None = None,
-    ) -> TokenRecord | None:
+    ) -> AccessKeyRecord | None:
         """Set or clear a single permission node and persist.
 
         Setting state to GREY removes the node entirely (GREY is the default
         and is not stored explicitly).
         """
-        token = self._tokens.get(token_id)
-        if token is None:
+        access_key = self._access_keys.get(token_id)
+        if access_key is None:
             return None
         if node_type not in ("domains", "devices", "entities"):
             return None
-        collection = getattr(token.permissions, node_type, None)
+        collection = getattr(access_key.permissions, node_type, None)
         if collection is None:
             return None
         if state == "GREY":
             collection.pop(node_id, None)
         else:
             collection[node_id] = PermissionNode(state=state, hint=hint)
-        token.settings_version += 1
-        token.updated_at = utcnow()
+        access_key.settings_version += 1
+        access_key.updated_at = utcnow()
         await self.async_save()
-        return token
+        return access_key
 
-    def _preset_name_taken(self, token: TokenRecord, name: str, exclude_id: str | None = None) -> bool:
+    def _preset_name_taken(self, access_key: AccessKeyRecord, name: str, exclude_id: str | None = None) -> bool:
         lowered = name.lower()
-        return any(p.name.lower() == lowered for p in token.presets if p.id != exclude_id)
+        return any(p.name.lower() == lowered for p in access_key.presets if p.id != exclude_id)
 
-    async def async_add_preset(self, token_id: str, name: str) -> TokenRecord | None:
+    async def async_add_preset(self, token_id: str, name: str) -> AccessKeyRecord | None:
         """Snapshot the token's CURRENT settings as a new preset and mark it active.
 
         Callers must hold self.async_lock. The new preset equals the live state
@@ -1177,60 +1177,60 @@ class TokenStore:
         move into the new preset). Raises ValueError on a duplicate name or
         when the per-token cap is reached. Returns None if the token is missing.
         """
-        token = self._tokens.get(token_id)
-        if token is None:
+        access_key = self._access_keys.get(token_id)
+        if access_key is None:
             return None
-        if len(token.presets) >= MAX_PRESETS_PER_TOKEN:
-            raise ValueError(f"An access key can have at most {MAX_PRESETS_PER_TOKEN} presets")
-        if self._preset_name_taken(token, name):
+        if len(access_key.presets) >= MAX_PRESETS_PER_ACCESS_KEY:
+            raise ValueError(f"An access key can have at most {MAX_PRESETS_PER_ACCESS_KEY} presets")
+        if self._preset_name_taken(access_key, name):
             raise ValueError(f"A preset named {name!r} already exists on this access key")
-        preset = snapshot_preset(token, name)
-        token.presets.append(preset)
-        token.active_preset_id = preset.id
-        token.updated_at = utcnow()
+        preset = snapshot_preset(access_key, name)
+        access_key.presets.append(preset)
+        access_key.active_preset_id = preset.id
+        access_key.updated_at = utcnow()
         await self.async_save()
-        return token
+        return access_key
 
-    async def async_rename_preset(self, token_id: str, preset_id: str, name: str) -> TokenRecord | None:
+    async def async_rename_preset(self, token_id: str, preset_id: str, name: str) -> AccessKeyRecord | None:
         """Rename a preset. Callers must hold self.async_lock.
 
         Raises LookupError for an unknown preset and ValueError for a duplicate
         name. Returns None if the token is missing.
         """
-        token = self._tokens.get(token_id)
-        if token is None:
+        access_key = self._access_keys.get(token_id)
+        if access_key is None:
             return None
-        preset = next((p for p in token.presets if p.id == preset_id), None)
+        preset = next((p for p in access_key.presets if p.id == preset_id), None)
         if preset is None:
             raise LookupError(f"No preset {preset_id!r} on this access key")
-        if self._preset_name_taken(token, name, exclude_id=preset_id):
+        if self._preset_name_taken(access_key, name, exclude_id=preset_id):
             raise ValueError(f"A preset named {name!r} already exists on this access key")
         preset.name = name
-        token.updated_at = utcnow()
+        access_key.updated_at = utcnow()
         await self.async_save()
-        return token
+        return access_key
 
-    async def async_delete_preset(self, token_id: str, preset_id: str) -> TokenRecord | None:
+    async def async_delete_preset(self, token_id: str, preset_id: str) -> AccessKeyRecord | None:
         """Delete a preset. Callers must hold self.async_lock.
 
         The ACTIVE preset cannot be deleted (it is where the token's unsaved
         changes live; switch away first). Raises LookupError for an unknown
         preset, ValueError for the active one. Returns None if the token is missing.
         """
-        token = self._tokens.get(token_id)
-        if token is None:
+        access_key = self._access_keys.get(token_id)
+        if access_key is None:
             return None
-        preset = next((p for p in token.presets if p.id == preset_id), None)
+        preset = next((p for p in access_key.presets if p.id == preset_id), None)
         if preset is None:
             raise LookupError(f"No preset {preset_id!r} on this access key")
-        if preset_id == token.active_preset_id:
+        if preset_id == access_key.active_preset_id:
             raise ValueError("The active preset cannot be deleted; switch to another preset first")
-        token.presets.remove(preset)
-        token.updated_at = utcnow()
+        access_key.presets.remove(preset)
+        access_key.updated_at = utcnow()
         await self.async_save()
-        return token
+        return access_key
 
-    async def async_sync_preset(self, token_id: str, preset_id: str) -> TokenRecord | None:
+    async def async_sync_preset(self, token_id: str, preset_id: str) -> AccessKeyRecord | None:
         """Overwrite a preset's payload from the token's live settings (auto-save-back).
 
         Callers must hold self.async_lock. Keeps the preset's id, name, and
@@ -1238,16 +1238,16 @@ class TokenStore:
         the token is missing. Does not bump settings_version (the live state
         the agent sees is unchanged).
         """
-        token = self._tokens.get(token_id)
-        if token is None:
+        access_key = self._access_keys.get(token_id)
+        if access_key is None:
             return None
-        for i, preset in enumerate(token.presets):
+        for i, preset in enumerate(access_key.presets):
             if preset.id == preset_id:
-                synced = snapshot_preset(token, preset.name, preset_id=preset.id)
+                synced = snapshot_preset(access_key, preset.name, preset_id=preset.id)
                 synced.created_at = preset.created_at
-                token.presets[i] = synced
+                access_key.presets[i] = synced
                 await self.async_save()
-                return token
+                return access_key
         raise LookupError(f"No preset {preset_id!r} on this access key")
 
     async def async_seed_default_presets(self) -> int:
@@ -1258,12 +1258,12 @@ class TokenStore:
         alone). Returns the number of tokens seeded.
         """
         seeded = 0
-        for token in self._tokens.values():
-            if token.presets:
+        for access_key in self._access_keys.values():
+            if access_key.presets:
                 continue
-            preset = snapshot_preset(token, DEFAULT_PRESET_NAME)
-            token.presets.append(preset)
-            token.active_preset_id = preset.id
+            preset = snapshot_preset(access_key, DEFAULT_PRESET_NAME)
+            access_key.presets.append(preset)
+            access_key.active_preset_id = preset.id
             seeded += 1
         if seeded:
             await self.async_save()
@@ -1275,9 +1275,9 @@ class TokenStore:
         Flushed periodically to storage by the interval registered in __init__.py
         and immediately on HA shutdown.
         """
-        token = self._tokens.get(token_id)
-        if token is not None and token.last_used_at != timestamp:
-            token.last_used_at = timestamp
+        access_key = self._access_keys.get(token_id)
+        if access_key is not None and access_key.last_used_at != timestamp:
+            access_key.last_used_at = timestamp
             self._usage_version += 1
 
     async def async_flush_last_used(self) -> None:
@@ -1295,21 +1295,21 @@ class TokenStore:
             await self.async_save()
         return True
 
-    async def async_rotate_token(self, token_id: str) -> tuple[TokenRecord, str] | None:
+    async def async_rotate_access_key(self, token_id: str) -> tuple[AccessKeyRecord, str] | None:
         """Replace the token hash with a freshly generated value and persist.
 
-        Returns (updated_record, raw_token) on success, or None if the token is not found.
+        Returns (updated_record, raw_access_key) on success, or None if the token is not found.
         The raw token is returned exactly once and never stored. Callers must pass it to
         the client immediately and discard it.
         """
-        token = self._tokens.get(token_id)
-        if token is None:
+        access_key = self._access_keys.get(token_id)
+        if access_key is None:
             return None
-        raw_token = TOKEN_PREFIX + secrets.token_hex(TOKEN_HEX_LENGTH // 2)
-        token.token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-        token.updated_at = utcnow()
+        raw_access_key = ACCESS_KEY_PREFIX + secrets.token_hex(ACCESS_KEY_HEX_LENGTH // 2)
+        access_key.token_hash = hashlib.sha256(raw_access_key.encode()).hexdigest()
+        access_key.updated_at = utcnow()
         await self.async_save()
-        return token, raw_token
+        return access_key, raw_access_key
 
     def get_settings(self) -> GlobalSettings:
         return self._settings
@@ -1346,7 +1346,7 @@ class TokenStore:
         admin wipe handler captures them first to dismiss their notifications and
         fire phoenix_mcp_approval_resolved, mirroring revocation.
         """
-        self._tokens.clear()
+        self._access_keys.clear()
         self._archived.clear()
         self._pending_approvals = []
         self._settings = GlobalSettings()
@@ -1354,7 +1354,7 @@ class TokenStore:
         await self.async_save()
 
 
-def token_name_slug(name: str) -> str:
+def access_key_name_slug(name: str) -> str:
     """Normalize a token name to a slug (lowercase, hyphens to underscores)."""
     return name.lower().replace("-", "_")
 

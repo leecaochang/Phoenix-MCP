@@ -16,7 +16,7 @@ from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.helpers import content_hash
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
-from custom_components.phoenix_mcp.token_store import TokenStore
+from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
 from custom_components.phoenix_mcp.tools import calendar as tools
 
 
@@ -53,11 +53,11 @@ class WritableCalendar(CalendarEntity):
 
 @pytest.fixture
 async def calendar_env(hass):
-    store = TokenStore(hass, AsyncMock())
+    store = AccessKeyStore(hass, AsyncMock())
     store.get_settings().mesa_mode = "off"
-    token, _ = await store.async_create_token('calendar-tests', 'admin', rate_limit_requests=0)
-    token.pass_through = True
-    token.cap_calendar_write = 'allow'
+    access_key, _ = await store.async_create_access_key('calendar-tests', 'admin', rate_limit_requests=0)
+    access_key.pass_through = True
+    access_key.cap_calendar_write = 'allow'
     data = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
     hass.data[DOMAIN] = data
     entity = WritableCalendar()
@@ -65,7 +65,7 @@ async def calendar_env(hass):
     registry.async_get_or_create('calendar', 'local_calendar', 'calendar-test', suggested_object_id='test')
     hass.states.async_set('calendar.test', 'off')
     hass.data[DATA_COMPONENT] = SimpleNamespace(get_entity=lambda eid: entity if eid == entity.entity_id else None)
-    return hass, data, token, entity
+    return hass, data, access_key, entity
 
 
 def payload(result):
@@ -73,8 +73,8 @@ def payload(result):
 
 
 async def call(env, name, args):
-    hass, data, token, _ = env
-    return await mcp_view._call_tool(name, args, token, hass, data)
+    hass, data, access_key, _ = env
+    return await mcp_view._call_tool(name, args, access_key, hass, data)
 
 
 CREATE = {'entity_id': 'calendar.test', 'event': {'summary': 'Appointment', 'start': '2026-10-02', 'end': '2026-10-03', 'description': 'Original', 'location': 'Office'}}
@@ -216,9 +216,9 @@ async def test_cancelled_dispatch_keeps_unknown_receipt(calendar_env, monkeypatc
 
 async def test_receipt_is_token_and_identity_scoped(calendar_env):
     body = payload(await call(calendar_env, 'create_calendar_event', CREATE))
-    token, _ = await calendar_env[1].store.async_create_token('other-calendar', 'admin', rate_limit_requests=0)
-    token.pass_through = True
-    result = await mcp_view._call_tool('get_calendar_write', {'entity_id': 'calendar.test', 'receipt_id': body['receipt_id']}, token, calendar_env[0], calendar_env[1])
+    access_key, _ = await calendar_env[1].store.async_create_access_key('other-calendar', 'admin', rate_limit_requests=0)
+    access_key.pass_through = True
+    result = await mcp_view._call_tool('get_calendar_write', {'entity_id': 'calendar.test', 'receipt_id': body['receipt_id']}, access_key, calendar_env[0], calendar_env[1])
     assert result[1] == 'not_found'
     er.async_get(calendar_env[0]).async_update_entity('calendar.test', new_unique_id='replaced')
     assert (await call(calendar_env, 'get_calendar_write', {'entity_id': 'calendar.test', 'receipt_id': body['receipt_id']}))[1] == 'not_found'
@@ -249,16 +249,16 @@ async def test_integration_validation_error_scrubs_secrets_and_hidden_entities(c
 
 async def test_authority_changed_during_event_read_blocks_write(calendar_env, monkeypatch):
     from custom_components.phoenix_mcp.request_authority import RequestAuthority, AuthorityChangedError, request_authority, policy_version
-    hass, data, token, entity = calendar_env
+    hass, data, access_key, entity = calendar_env
     data.ready = True
     original = entity.async_get_events
     async def change_after_read(*args):
         rows = await original(*args)
-        token.settings_version += 1
+        access_key.settings_version += 1
         return rows
     monkeypatch.setattr(entity, 'async_get_events', change_after_read)
-    authority = request_authority.set(RequestAuthority(hass, data, token.id, token.token_hash))
-    epoch = policy_version.set(token.settings_version)
+    authority = request_authority.set(RequestAuthority(hass, data, access_key.id, access_key.token_hash))
+    epoch = policy_version.set(access_key.settings_version)
     try:
         with pytest.raises(AuthorityChangedError):
             await call(calendar_env, 'create_calendar_event', CREATE)
@@ -327,13 +327,13 @@ async def test_generic_calendar_discovery_and_preview_agree(calendar_env):
 async def real_calendar_env(calendar_env):
     from homeassistant.components.local_calendar.calendar import LocalCalendarEntity
     from ical.calendar import Calendar
-    hass, data, token, _ = calendar_env
+    hass, data, access_key, _ = calendar_env
     entity = LocalCalendarEntity(AsyncMock(), Calendar(), 'Test', 'local-test')
     entity.hass = hass
     entity.entity_id = 'calendar.test'
     entity.async_update_ha_state = AsyncMock()
     hass.data[DATA_COMPONENT] = SimpleNamespace(get_entity=lambda eid: entity if eid == entity.entity_id else None)
-    return hass, data, token, entity
+    return hass, data, access_key, entity
 
 
 async def test_real_local_calendar_replacement_clears_optional_strings(real_calendar_env):
@@ -389,11 +389,11 @@ async def test_recurrence_rule_removal_is_refused(calendar_env):
 
 async def test_unknown_receipt_capacity_requires_explicit_review_without_replay(calendar_env):
     from custom_components.phoenix_mcp.const import CALENDAR_RECEIPT_LIMIT
-    hass, data, token, entity = calendar_env
+    hass, data, access_key, entity = calendar_env
     journal = tools.CalendarWriteJournal(hass)
     data.calendar_writes = journal
     journal.records = [{"receipt_id": f"r-{i}", "entity_id": entity.entity_id,
-                        "status": "outcome_unknown", "operation": "create", "token_id": token.id,
+                        "status": "outcome_unknown", "operation": "create", "token_id": access_key.id,
                         "created_at": "2026-10-02T00:00:00+00:00", "identity": {},
                         "requested": {}, "before": None, "after": None, "recovery": "Manual review required."}
                        for i in range(CALENDAR_RECEIPT_LIMIT)]
@@ -429,7 +429,7 @@ async def test_calendar_preparation_exits_retain_only_not_applied_receipts(calen
     from homeassistant.helpers import issue_registry as ir
     from custom_components.phoenix_mcp.approvals import async_create_pending_approval
 
-    hass, data, token, entity = calendar_env
+    hass, data, access_key, entity = calendar_env
     original = tools._calendar_write_plan
 
     async def plan(*args):
@@ -444,7 +444,7 @@ async def test_calendar_preparation_exits_retain_only_not_applied_receipts(calen
 
     async def mesa(*args, **kwargs):
         if failure == "pending" and data.calendar_writes is not None and data.calendar_writes.records:
-            approval = await async_create_pending_approval(data.store, token_id=token.id, token_name=token.name,
+            approval = await async_create_pending_approval(data.store, token_id=access_key.id, token_name=access_key.name,
                 tool_name="create_calendar_event", cap_name="cap_calendar_write", args={}, diff={}, request_id="held")
             return SimpleNamespace(decision="pending", approval=approval)
         return await original_mesa(*args, **kwargs)

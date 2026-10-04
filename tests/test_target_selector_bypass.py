@@ -18,7 +18,7 @@ from custom_components.phoenix_mcp.const import (
     DOMAIN,
     SECONDARY_TARGET_SELECTOR_KEYS,
     TARGET_SELECTOR_KEYS,
-    TOKEN_PREFIX,
+    ACCESS_KEY_PREFIX,
 )
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.helpers import sanitize_service_data
@@ -27,7 +27,7 @@ from custom_components.phoenix_mcp.service_targets import (
     secondary_target_fields,
     unsupported_secondary_targets,
 )
-from custom_components.phoenix_mcp.token_store import TokenRecord, TokenStore
+from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord, AccessKeyStore
 
 # A body carrying every selector Home Assistant honours, alongside real service
 # data. The real data must survive; every selector must not.
@@ -40,14 +40,14 @@ _ALL_SELECTORS = {
 }
 
 
-def _make_token(**caps: str) -> tuple[TokenRecord, str]:
+def _make_token(**caps: str) -> tuple[AccessKeyRecord, str]:
     import uuid
 
     from homeassistant.util.dt import utcnow
 
-    raw = TOKEN_PREFIX + secrets.token_hex(32)
+    raw = ACCESS_KEY_PREFIX + secrets.token_hex(32)
     return (
-        TokenRecord(
+        AccessKeyRecord(
             id=str(uuid.uuid4()),
             name="test-token",
             token_hash=hashlib.sha256(raw.encode()).hexdigest(),
@@ -59,9 +59,9 @@ def _make_token(**caps: str) -> tuple[TokenRecord, str]:
     )
 
 
-def _make_data(token: TokenRecord) -> PhoenixData:
-    store = MagicMock(spec=TokenStore)
-    store.get_token_by_hash.return_value = token
+def _make_data(access_key: AccessKeyRecord) -> PhoenixData:
+    store = MagicMock(spec=AccessKeyStore)
+    store.get_access_key_by_hash.return_value = access_key
     store.get_settings.return_value = MagicMock(
         kill_switch=False,
         disable_all_logging=False,
@@ -221,12 +221,12 @@ def test_sanitizer_degrades_a_wrong_shaped_value_to_empty():
 
 
 @pytest.mark.asyncio
-async def test_mcp_call_service_refuses_misplaced_selectors(hass, token_store):
+async def test_mcp_call_service_refuses_misplaced_selectors(hass, access_key_store):
     """A target selector inside service_data is refused, not forwarded to HA."""
     from custom_components.phoenix_mcp.mcp_view import _execute_call_service
 
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _hass_with(data)
 
     args = {
@@ -239,7 +239,7 @@ async def test_mcp_call_service_refuses_misplaced_selectors(hass, token_store):
         "custom_components.phoenix_mcp.mcp_view.resolve_service_targets",
         return_value=(["light.kitchen"], 1),
     ):
-        result, outcome, _ = await _execute_call_service(args, token, hass, data, request_id="r1")
+        result, outcome, _ = await _execute_call_service(args, access_key, hass, data, request_id="r1")
 
     assert outcome == "invalid_request"
     assert "targets" in result["content"][0]["text"]
@@ -247,12 +247,12 @@ async def test_mcp_call_service_refuses_misplaced_selectors(hass, token_store):
 
 
 @pytest.mark.asyncio
-async def test_mcp_call_service_refuses_tts_secondary_target(hass, token_store):
+async def test_mcp_call_service_refuses_tts_secondary_target(hass, access_key_store):
     """A permitted TTS entity cannot be used to speak on a denied media player."""
     from custom_components.phoenix_mcp.mcp_view import _execute_call_service
 
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     hass = _hass_with(data)
     args = {
         "domain": "tts",
@@ -268,7 +268,7 @@ async def test_mcp_call_service_refuses_tts_secondary_target(hass, token_store):
         "custom_components.phoenix_mcp.mcp_view.resolve_service_targets"
     ) as resolve:
         content, outcome, resource = await _execute_call_service(
-            args, token, hass, data, request_id="r1"
+            args, access_key, hass, data, request_id="r1"
         )
 
     assert outcome == "invalid_request"
@@ -302,7 +302,7 @@ async def test_runtime_service_description_adds_secondary_target_guard(hass):
 
 
 @pytest.mark.asyncio
-async def test_approved_reexecution_refuses_misplaced_selectors(hass, token_store):
+async def test_approved_reexecution_refuses_misplaced_selectors(hass, access_key_store):
     """An approval whose saved args carry a selector is refused when it executes.
 
     A confirm-gated call persists the caller's arguments verbatim and re-runs them
@@ -312,8 +312,8 @@ async def test_approved_reexecution_refuses_misplaced_selectors(hass, token_stor
     """
     from custom_components.phoenix_mcp.mcp_view import async_execute_approved_tool
 
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     from homeassistant.helpers import entity_registry as er
     from custom_components.phoenix_mcp.approval_targets import bind_targets
     er.async_get(hass).async_get_or_create("light", "test", "kitchen", suggested_object_id="kitchen")
@@ -321,7 +321,7 @@ async def test_approved_reexecution_refuses_misplaced_selectors(hass, token_stor
     hass.data[DOMAIN] = data
     from pytest_homeassistant_custom_component.common import async_mock_service
     calls = async_mock_service(hass, "light", "turn_on")
-    token.pass_through = True
+    access_key.pass_through = True
 
     saved_args = {
         "domain": "light",
@@ -330,13 +330,13 @@ async def test_approved_reexecution_refuses_misplaced_selectors(hass, token_stor
         "service_data": dict(_ALL_SELECTORS),
     }
     saved_args = bind_targets(saved_args, ["light.kitchen"], hass)
-    result, outcome, _ = await async_execute_approved_tool("call_service", saved_args, token, hass, data)
+    result, outcome, _ = await async_execute_approved_tool("call_service", saved_args, access_key, hass, data)
     assert outcome == "invalid_request", result
     assert not calls
 
 
 @pytest.mark.asyncio
-async def test_dry_run_refuses_misplaced_selectors(hass, token_store):
+async def test_dry_run_refuses_misplaced_selectors(hass, access_key_store):
     """dry_run_service refuses misplaced selectors before consulting MESA.
 
     The preview predicts the verdict of the call that would actually run, so it
@@ -344,8 +344,8 @@ async def test_dry_run_refuses_misplaced_selectors(hass, token_store):
     """
     from custom_components.phoenix_mcp.tools import discovery
 
-    token, _ = _make_token(cap_search="allow")
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_search="allow")
+    data = _make_data(access_key)
     data.mesa = MagicMock()
     data.store.get_settings.return_value.mesa_mode = "enforced"
     hass = _hass_with(data)
@@ -368,7 +368,7 @@ async def test_dry_run_refuses_misplaced_selectors(hass, token_store):
         patch.object(discovery, "resolve_service_targets", return_value=(["light.kitchen"], 1)),
         patch.object(discovery, "evaluate_service_entities", side_effect=_capture),
     ):
-        result, outcome, _ = await discovery._tool_dry_run_service(args, token, hass, data)
+        result, outcome, _ = await discovery._tool_dry_run_service(args, access_key, hass, data)
 
     assert outcome == "invalid_request"
     assert "targets" in result["content"][0]["text"]
@@ -376,7 +376,7 @@ async def test_dry_run_refuses_misplaced_selectors(hass, token_store):
 
 
 @pytest.mark.asyncio
-async def test_mesa_evaluates_exactly_the_parameters_that_execute(hass, token_store):
+async def test_mesa_evaluates_exactly_the_parameters_that_execute(hass, access_key_store):
     """MESA judges the call that runs, not a filtered view of it.
 
     The property is an equality, not a subset: a decision about a different payload
@@ -393,8 +393,8 @@ async def test_mesa_evaluates_exactly_the_parameters_that_execute(hass, token_st
     """
     from custom_components.phoenix_mcp.mcp_view import _execute_call_service
 
-    token, _ = _make_token()
-    data = _make_data(token)
+    access_key, _ = _make_token()
+    data = _make_data(access_key)
     data.store.get_settings.return_value.mesa_mode = "enforced"
     hass = _hass_with(data)
 
@@ -417,7 +417,7 @@ async def test_mesa_evaluates_exactly_the_parameters_that_execute(hass, token_st
         "custom_components.phoenix_mcp.mcp_view.resolve_service_targets",
         return_value=(["light.kitchen", "light.hall"], 2),
     ):
-        await _execute_call_service(args, token, hass, data, request_id="r1")
+        await _execute_call_service(args, access_key, hass, data, request_id="r1")
 
     executed = _call_data(hass)
     assert [e["entity_id"] for e in evaluated] == ["light.kitchen", "light.hall"], (
@@ -487,8 +487,8 @@ async def test_remote_text_device_reaches_scoped_boundary(
     from custom_components.phoenix_mcp import mcp_view
     from custom_components.phoenix_mcp.tools import discovery
 
-    token, _ = _make_token(cap_search='allow', cap_physical_control='allow')
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_search='allow', cap_physical_control='allow')
+    data = _make_data(access_key)
     hass = _hass_with(data)
     service_data = {'device': 'test_command_group', 'command': 'not_sent'}
     public_args = {
@@ -502,7 +502,7 @@ async def test_remote_text_device_reaches_scoped_boundary(
         patch.object(discovery, 'resolve_service_targets', return_value=(['remote.test'], 1)),
     ):
         if surface == 'preview':
-            content, outcome, _ = await discovery._tool_dry_run_service(public_args, token, hass, data)
+            content, outcome, _ = await discovery._tool_dry_run_service(public_args, access_key, hass, data)
             assert outcome == 'allowed'
             body = json.loads(content['content'][0]['text'])
             assert body['resolved_entities'] == ['remote.test']
@@ -510,11 +510,11 @@ async def test_remote_text_device_reaches_scoped_boundary(
             hass.services.async_call.assert_not_called()
         else:
             if surface == 'request':
-                content, outcome, _ = await mcp_view._tool_call_service(public_args, token, hass, data)
+                content, outcome, _ = await mcp_view._tool_call_service(public_args, access_key, hass, data)
             else:
                 content, outcome, _ = await mcp_view._execute_call_service(
                     {'domain': 'remote', 'service': service, 'entity_id': 'remote.test',
-                     'service_data': service_data}, token, hass, data
+                     'service_data': service_data}, access_key, hass, data
                 )
             assert outcome == 'allowed', content
             assert _call_data(hass) == {**service_data, 'entity_id': ['remote.test']}
@@ -569,15 +569,15 @@ async def test_description_change_is_rechecked_by_executor(remote_service_descri
     """Approval cannot preserve a text exception after metadata becomes a target."""
     from custom_components.phoenix_mcp import mcp_view
 
-    token, _ = _make_token(cap_physical_control='allow')
-    data = _make_data(token)
+    access_key, _ = _make_token(cap_physical_control='allow')
+    data = _make_data(access_key)
     hass = _hass_with(data)
     remote_service_descriptions['remote']['send_command']['fields']['device']['selector'] = {'device': {}}
     with patch('custom_components.phoenix_mcp.service_targets.async_get_all_descriptions',
                AsyncMock(return_value=remote_service_descriptions)):
         content, outcome, _ = await mcp_view._execute_call_service(
             {'domain': 'remote', 'service': 'send_command', 'entity_id': 'remote.test',
-             'service_data': {'device': 'group', 'command': 'not_sent'}}, token, hass, data,
+             'service_data': {'device': 'group', 'command': 'not_sent'}}, access_key, hass, data,
             mesa_approved=True,
         )
     assert outcome == 'invalid_request'

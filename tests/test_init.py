@@ -117,7 +117,7 @@ def _settings(kill_switch: bool = False):
 def _mock_store(kill_switch: bool = False) -> MagicMock:
     store = MagicMock()
     store.get_settings.return_value = _settings(kill_switch)
-    store.list_tokens.return_value = []
+    store.list_access_keys.return_value = []
     store.get_pending_approvals.return_value = []
     store.async_flush_last_used = AsyncMock()
     store.async_lock = asyncio.Lock()
@@ -139,7 +139,7 @@ async def _run_setup(hass: HomeAssistant, *, kill_switch: bool = False, mesa_fai
 
     mesa = AsyncMock(side_effect=RuntimeError("boom")) if mesa_fail else AsyncMock(return_value=None)
 
-    with patch.object(phoenix_init.TokenStore, "async_create", AsyncMock(return_value=store)), \
+    with patch.object(phoenix_init.AccessKeyStore, "async_create", AsyncMock(return_value=store)), \
          patch("custom_components.phoenix_mcp.mesa.async_setup_mesa", mesa), \
          patch("custom_components.phoenix_mcp.panel.async_register_phoenix_panel", AsyncMock()), \
          patch("custom_components.phoenix_mcp.panel.async_sync_mesa_inject", AsyncMock()), \
@@ -157,7 +157,7 @@ async def _run_setup(hass: HomeAssistant, *, kill_switch: bool = False, mesa_fai
 async def test_setup_publishes_ai_task_availability_after_ready(hass, phoenix_ai_task_platform, disabled):
     """Run real entity registration before setup publishes its final readiness."""
     from custom_components.phoenix_mcp import ai_task
-    from custom_components.phoenix_mcp.token_store import GlobalSettings
+    from custom_components.phoenix_mcp.access_key_store import GlobalSettings
     from homeassistant.helpers import entity_registry as er
 
     platform, _ = phoenix_ai_task_platform
@@ -260,7 +260,7 @@ async def test_mandatory_platform_failure_rolls_back_every_published_surface(
     store = _mock_store()
     forward = AsyncMock(side_effect=RuntimeError("sensor setup failed"))
 
-    with patch.object(phoenix_init.TokenStore, "async_create", AsyncMock(return_value=store)), \
+    with patch.object(phoenix_init.AccessKeyStore, "async_create", AsyncMock(return_value=store)), \
          patch("custom_components.phoenix_mcp.mesa.async_setup_mesa", AsyncMock(return_value=None)), \
          patch("custom_components.phoenix_mcp.panel.async_register_phoenix_panel", AsyncMock()), \
          patch("custom_components.phoenix_mcp.panel.async_sync_mesa_inject", AsyncMock()), \
@@ -300,7 +300,7 @@ async def test_setup_can_retry_after_mandatory_platform_failure(hass: HomeAssist
     store = _mock_store()
     forward = AsyncMock(side_effect=[RuntimeError("first attempt"), None])
 
-    with patch.object(phoenix_init.TokenStore, "async_create", AsyncMock(return_value=store)), \
+    with patch.object(phoenix_init.AccessKeyStore, "async_create", AsyncMock(return_value=store)), \
          patch("custom_components.phoenix_mcp.mesa.async_setup_mesa", AsyncMock(return_value=None)), \
          patch("custom_components.phoenix_mcp.panel.async_register_phoenix_panel", AsyncMock()), \
          patch("custom_components.phoenix_mcp.panel.async_sync_mesa_inject", AsyncMock()), \

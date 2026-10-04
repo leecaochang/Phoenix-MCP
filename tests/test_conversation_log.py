@@ -16,22 +16,22 @@ from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mcp_view import _dispatch_mcp
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
-from custom_components.phoenix_mcp.token_store import GlobalSettings, TokenRecord, TokenStore
+from custom_components.phoenix_mcp.access_key_store import GlobalSettings, AccessKeyRecord, AccessKeyStore
 
 
 @pytest.fixture
 def conversation_data(hass):
-    token = TokenRecord(id="test-id", name="test-client", token_hash="hash", created_at=utcnow(),
+    access_key = AccessKeyRecord(id="test-id", name="test-client", token_hash="hash", created_at=utcnow(),
                         created_by="test-admin", pass_through=True)
-    store = MagicMock(spec=TokenStore)
+    store = MagicMock(spec=AccessKeyStore)
     store.get_settings.return_value = GlobalSettings(conversation_log_enabled=True, mesa_mode="off")
-    store.get_token_by_id.return_value = token
-    store.get_token_by_hash.return_value = token
+    store.get_access_key_by_id.return_value = access_key
+    store.get_access_key_by_hash.return_value = access_key
     store.get_pending_approvals.return_value = []
     store.get_entity_hints.return_value = {}
     data = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog(), hass=hass)
     hass.data[DOMAIN] = data
-    yield data, token
+    yield data, access_key
     if data.sensor_flush_cancel is not None:
         data.sensor_flush_cancel()
 
@@ -92,20 +92,20 @@ def test_recording_opt_in_and_all_logging_switch():
 
 @pytest.mark.asyncio
 async def test_real_external_dispatch_keeps_full_result_and_denials(hass, conversation_data):
-    data, token = conversation_data
+    data, access_key = conversation_data
     text = "ordinary " * 2000
     hass.states.async_set("sensor.conversation_test", "ok", {"description": text})
     result = await _dispatch_mcp("tools/call", 1, {"name": "get_state", "arguments": {"entity_id": "sensor.conversation_test", "projection": {"kind": "full"}}},
-                                 token, hass, data, "127.0.0.1", "")
+                                 access_key, hass, data, "127.0.0.1", "")
     entry = only(data.conversations)
     assert result[3] == "allowed", result
     assert entry["prompt"] is None and entry["response"] is None
     assert entry["coverage"] == "tool_exchange"
     assert entry["events"][1]["payload"] == result[0]
     assert text in json.dumps(entry)
-    token.pass_through = False
+    access_key.pass_through = False
     result = await _dispatch_mcp("tools/call", 2, {"name": "get_state", "arguments": {"entity_id": "sensor.conversation_test", "projection": {"kind": "full"}}},
-                                 token, hass, data, "127.0.0.1", "")
+                                 access_key, hass, data, "127.0.0.1", "")
     assert result[3] == "denied"
     denied = data.conversations.detail(data.conversations.query()["entries"][0]["id"])
     assert denied["execution_status"] == "denied"
@@ -113,14 +113,14 @@ async def test_real_external_dispatch_keeps_full_result_and_denials(hass, conver
 
 @pytest.mark.asyncio
 async def test_concurrent_owned_turns_never_mix_same_token(hass, conversation_data):
-    data, token = conversation_data
+    data, access_key = conversation_data
     hass.states.async_set("sensor.conversation_test", "on")
 
     @history.recorded_turn("test", "prompt")
     async def turn(data, prompt):
         await asyncio.sleep(0)
         await _dispatch_mcp("tools/call", 1, {"name": "get_state", "arguments": {"entity_id": "sensor.conversation_test", "projection": {"kind": "full"}}},
-                            token, hass, data, "agentcli", "")
+                            access_key, hass, data, "agentcli", "")
         return prompt + " reply"
 
     await asyncio.gather(turn(data, "first"), turn(data, "second"))
@@ -151,7 +151,7 @@ async def test_nested_delegation_no_duplicate_entry(conversation_data):
 
 @pytest.mark.asyncio
 async def test_stream_fragments_scrubbed_together_and_reasoning_excluded(conversation_data):
-    data, token = conversation_data
+    data, access_key = conversation_data
 
     @history.recorded_chat
     async def chat(**kwargs):
@@ -161,7 +161,7 @@ async def test_stream_fragments_scrubbed_together_and_reasoning_excluded(convers
         await emit("thinking_delta", {"text": "private thought"})
         await emit("error", {"code": "provider_error", "message": "Unavailable"})
 
-    await chat(data=data, token=token, messages=[{"role": "user", "content": "Hello"}], emit=AsyncMock())
+    await chat(data=data, access_key=access_key, messages=[{"role": "user", "content": "Hello"}], emit=AsyncMock())
     entry = only(data.conversations)
     assert "canary-stream" not in json.dumps(entry)
     assert "private thought" not in json.dumps(entry)
@@ -191,7 +191,7 @@ async def test_clear_and_disable_invalidate_running_handles(conversation_data):
 
 @pytest.mark.asyncio
 async def test_enable_during_disabled_turn_does_not_backfill(hass, conversation_data):
-    data, token = conversation_data
+    data, access_key = conversation_data
     settings = data.store.get_settings()
     settings.conversation_log_enabled = False
 
@@ -199,7 +199,7 @@ async def test_enable_during_disabled_turn_does_not_backfill(hass, conversation_
     async def turn(data, prompt):
         settings.conversation_log_enabled = True
         await _dispatch_mcp("tools/call", 1, {"name": "get_state", "arguments": {"entity_id": "sensor.unavailable"}},
-                            token, hass, data, "voice", "")
+                            access_key, hass, data, "voice", "")
         return "end"
 
     await turn(data, "unrecorded")
@@ -310,12 +310,12 @@ async def test_storage_failure_is_reported_without_raw_exception(conversation_da
 
 @pytest.mark.asyncio
 async def test_cleared_approval_scope_cannot_create_fresh_exchange(hass, conversation_data):
-    data, token = conversation_data
+    data, access_key = conversation_data
     log = history.recorder(data)
     await log.async_clear()
     with log.approval_scope("deleted-approval"):
         await _dispatch_mcp("tools/call", 1, {"name": "get_state", "arguments": {"entity_id": "sensor.missing"}},
-                            token, hass, data, "assist", "")
+                            access_key, hass, data, "assist", "")
     assert not log.query()["entries"]
 
 
@@ -379,19 +379,19 @@ def test_inline_resolution_is_not_overwritten_by_pending_receipt(conversation_da
 @pytest.mark.asyncio
 async def test_changed_configuration_remains_visible_after_response_failure(conversation_data):
     from custom_components.phoenix_mcp.tool_common import _record_version
-    data, token = conversation_data
+    data, access_key = conversation_data
     data.versions.record = AsyncMock()
 
     @history.recorded_chat
     async def chat(**kwargs):
         handle = history._current.get()
         data.conversations.event(handle, "tool_call", {"name": "update_script"})
-        await _record_version(data, token, resource_type="script", resource_id="smoke", action="update",
+        await _record_version(data, access_key, resource_type="script", resource_id="smoke", action="update",
                               before={"text": "api_key: canary-before\nold"}, after={"text": "api_key: canary-after\nnew"})
         data.conversations.event(handle, "tool_result", {"success": True}, outcome="allowed")
         await kwargs["emit"]("error", {"code": "provider_error", "message": "Unavailable"})
 
-    await chat(data=data, token=token, messages=[{"role": "user", "content": "Change the script"}], emit=AsyncMock())
+    await chat(data=data, access_key=access_key, messages=[{"role": "user", "content": "Change the script"}], emit=AsyncMock())
     entry = only(data.conversations)
     assert entry["change_count"] == 1 and entry["execution_status"] == "allowed"
     assert entry["status"] == "failed" and entry["response_status"] == "failed"
@@ -403,10 +403,10 @@ async def test_changed_configuration_remains_visible_after_response_failure(conv
 @pytest.mark.asyncio
 async def test_uncertain_write_failure_preserves_transport_outcome(hass, conversation_data, monkeypatch):
     from custom_components.phoenix_mcp import mcp_view
-    data, token = conversation_data
+    data, access_key = conversation_data
     monkeypatch.setattr(mcp_view, "_dispatch_mcp_authorized", AsyncMock(side_effect=OSError("synthetic write failure")))
     result = await _dispatch_mcp("tools/call", 1, {"name": "call_service", "arguments": {}},
-                                 token, hass, data, "127.0.0.1", "")
+                                 access_key, hass, data, "127.0.0.1", "")
     assert result[3] == "invalid_request"
     entry = only(data.conversations)
     assert entry["execution_status"] == "unknown"
@@ -415,13 +415,13 @@ async def test_uncertain_write_failure_preserves_transport_outcome(hass, convers
 
 @pytest.mark.asyncio
 async def test_continuation_does_not_mislabel_provider_tool_envelope_as_prompt(conversation_data):
-    data, token = conversation_data
+    data, access_key = conversation_data
 
     @history.recorded_chat
     async def chat(**kwargs):
         await kwargs["emit"]("assistant_delta", {"text": "Continued response"})
 
-    await chat(data=data, token=token, messages=[{"role": "user", "content": [
+    await chat(data=data, access_key=access_key, messages=[{"role": "user", "content": [
         {"type": "tool_result", "tool_use_id": "provider-id", "content": "provider-only-envelope"},
     ]}], emit=AsyncMock())
     entry = only(data.conversations)
@@ -433,20 +433,20 @@ async def test_continuation_does_not_mislabel_provider_tool_envelope_as_prompt(c
 @pytest.mark.asyncio
 async def test_selected_identity_is_sanitized_without_copying_provider_secrets(conversation_data):
     from custom_components.phoenix_mcp.agentcli import ProviderConfig
-    data, token = conversation_data
+    data, access_key = conversation_data
     cfg = ProviderConfig(kind="openai", model="selected-model", base_url="https://secret-host.invalid",
                          api_key="canary-provider-key")
 
     @history.recorded_chat
     async def chat(**kwargs):
-        history.record_identity(token=SimpleNamespace(id="delegated-id", name="Other"),
+        history.record_identity(access_key=SimpleNamespace(id="delegated-id", name="Other"),
                                 config=ProviderConfig(kind="other", model="other-model", base_url=""))
         await kwargs["emit"]("assistant_delta", {"text": "Done"})
 
-    await chat(data=data, token=token, provider=SimpleNamespace(cfg=cfg),
+    await chat(data=data, access_key=access_key, provider=SimpleNamespace(cfg=cfg),
                messages=[{"role": "user", "content": "Hello"}], emit=AsyncMock())
     entry = only(data.conversations)
-    assert entry["metadata"] == {"access_key_id": token.id, "access_key_name": token.name,
+    assert entry["metadata"] == {"access_key_id": access_key.id, "access_key_name": access_key.name,
                                  "provider": "openai", "model": "selected-model"}
     assert "canary-provider-key" not in json.dumps(entry) and "secret-host" not in json.dumps(entry)
     store = AsyncMock()
@@ -458,7 +458,7 @@ async def test_selected_identity_is_sanitized_without_copying_provider_secrets(c
     handle = data.conversations.begin("ai_task")
     ctx = history._current.set(handle)
     try:
-        history.record_identity(token=token, config=ProviderConfig(kind="custom", model="password=canary-model", base_url=""))
+        history.record_identity(access_key=access_key, config=ProviderConfig(kind="custom", model="password=canary-model", base_url=""))
     finally:
         history._current.reset(ctx)
     assert "canary-model" not in json.dumps(data.conversations.detail(handle[1]))
@@ -557,7 +557,7 @@ def test_content_search_and_multimodal_excerpt(conversation_data):
 
 @pytest.mark.asyncio
 async def test_narration_keeps_its_place_before_tools(conversation_data):
-    data, token = conversation_data
+    data, access_key = conversation_data
 
     @history.recorded_chat
     async def chat(**kwargs):
@@ -566,7 +566,7 @@ async def test_narration_keeps_its_place_before_tools(conversation_data):
         history.record_event(data, "tool_result", "on", outcome="allowed")
         await kwargs["emit"]("assistant_delta", {"text": "The light is on."})
 
-    await chat(data=data, token=token, messages=[{"role": "user", "content": "Is it on?"}], emit=AsyncMock())
+    await chat(data=data, access_key=access_key, messages=[{"role": "user", "content": "Is it on?"}], emit=AsyncMock())
     entry = only(data.conversations)
     assert [e["kind"] for e in entry["events"]] == ["assistant_text", "tool_call", "tool_result", "assistant_text"]
     assert entry["events"][0]["payload"] == "Let me check."
@@ -632,12 +632,12 @@ async def test_completion_saves_coalesce_but_clear_and_shutdown_flush(conversati
 async def test_unavailable_local_voice_command_records_failure(hass, conversation_data):
     from custom_components.phoenix_mcp.command_execution import _dispatch_command
     from custom_components.phoenix_mcp.routing_statistics import local_result
-    data, token = conversation_data
+    data, access_key = conversation_data
     authority = SimpleNamespace(current=lambda _hass: None)
 
     @history.recorded_turn("voice", "prompt")
     async def turn(data, prompt):
-        reply = await _dispatch_command(hass, data, token, {}, authority, "", False)
+        reply = await _dispatch_command(hass, data, access_key, {}, authority, "", False)
         local_result(reply, "local")
         return reply.text
 
@@ -679,7 +679,7 @@ def test_many_operations_remain_bounded_and_mixed(conversation_data):
 
 @pytest.mark.asyncio
 async def test_sanitized_stream_overflow_cannot_reuse_earlier_narration(conversation_data, monkeypatch):
-    data, token = conversation_data
+    data, access_key = conversation_data
     monkeypatch.setattr(history, "CONVERSATION_LOG_SCAN_BYTES", 500)
 
     @history.recorded_chat
@@ -688,7 +688,7 @@ async def test_sanitized_stream_overflow_cannot_reuse_earlier_narration(conversa
         history.flush_assistant()
         await kwargs["emit"]("assistant_delta", {"text": "x" * 501})
 
-    await chat(data=data, token=token, messages=[{"role": "user", "content": "Hello"}], emit=AsyncMock())
+    await chat(data=data, access_key=access_key, messages=[{"role": "user", "content": "Hello"}], emit=AsyncMock())
     entry = only(data.conversations)
     assert entry["response"] is None
     assert entry["response_status"] == "size_limit"
@@ -726,7 +726,7 @@ def test_rejected_argument_text_scrubs_complete_and_incomplete_secrets(raw):
 ])
 async def test_provider_rejected_calls_reach_history_not_client_diagnostics(conversation_data, kind, arguments, reason):
     from custom_components.phoenix_mcp import agentcli
-    data, token = conversation_data
+    data, access_key = conversation_data
     if kind == "claude":
         frames = [
             {"type": "content_block_start", "index": 0, "content_block": {"type": "text"}},
@@ -765,7 +765,7 @@ async def test_provider_rejected_calls_reach_history_not_client_diagnostics(conv
             tools=[], options={}, cancel=asyncio.Event(), emit=kwargs["emit"],
             usage_done_input=0, usage_done_output=0, context_tokens=0)
 
-    result = await chat(data=data, token=token, messages=[{"role": "user", "content": "Graph the battery"}], emit=emit)
+    result = await chat(data=data, access_key=access_key, messages=[{"role": "user", "content": "Graph the battery"}], emit=emit)
     assert result.errored and not result.tool_calls
     entry = only(data.conversations)
     assert entry["status"] == "failed" and entry["tool_count"] == 0 and entry["execution_status"] == "no_tools"
@@ -811,19 +811,19 @@ async def test_rejected_call_recording_obeys_privacy_limits_and_failures(convers
 
 def test_explicit_chat_groups_are_oldest_first_and_sessions_stay_separate(conversation_data):
     from uuid import uuid4
-    data, token = conversation_data
+    data, access_key = conversation_data
     log = history.recorder(data)
     chat, other = str(uuid4()), str(uuid4())
     first = log.begin('agentcli', prompt='First request')
-    log.bind_chat(first, chat, token, has_history=False)
+    log.bind_chat(first, chat, access_key, has_history=False)
     log.finish(first, response='First reply')
     standalone = log.begin('mcp')
     log.finish(standalone)
     second = log.begin('agentcli', prompt='Follow-up')
-    log.bind_chat(second, chat, token, has_history=True)
+    log.bind_chat(second, chat, access_key, has_history=True)
     log.finish(second, response='Second reply')
     different = log.begin('agentcli', prompt='Different chat')
-    log.bind_chat(different, other, token, has_history=False)
+    log.bind_chat(different, other, access_key, has_history=False)
     log.finish(different, response='Other reply')
     rows = log.query(grouped=True)['entries']
     assert [row['id'] for row in rows] == [different[1], first[1], standalone[1]]
@@ -832,7 +832,7 @@ def test_explicit_chat_groups_are_oldest_first_and_sessions_stay_separate(conver
     assert log.query(grouped=True, search='Follow-up')['entries'][0]['turns'] == rows[1]['turns']
     assert log.query(grouped=True, limit=1, offset=1)['entries'][0]['id'] == first[1]
     reset = log.begin('agentcli', prompt='Reset with same client ID')
-    log.bind_chat(reset, chat, token, has_history=False)
+    log.bind_chat(reset, chat, access_key, has_history=False)
     assert log.query(grouped=True)['total'] == 4
     log._remove(first[1])
     old = next(row for row in log.query(grouped=True)['entries'] if row['id'] == first[1])
@@ -842,28 +842,28 @@ def test_explicit_chat_groups_are_oldest_first_and_sessions_stay_separate(conver
 @pytest.mark.asyncio
 async def test_chat_grouping_restart_privacy_and_clear(conversation_data):
     from uuid import uuid4
-    data, token = conversation_data
+    data, access_key = conversation_data
     log = history.recorder(data)
     chat = str(uuid4())
     first = log.begin('agentcli', prompt='one')
-    log.bind_chat(first, chat, token, has_history=False)
+    log.bind_chat(first, chat, access_key, has_history=False)
     log.finish(first, response='done')
     saved = deepcopy(list(log._entries.values()))
     log._store = SimpleNamespace(async_load=AsyncMock(return_value={'entries': saved}), async_save=AsyncMock())
     await log.async_load()
     follow = log.begin('agentcli', prompt='two')
-    log.bind_chat(follow, chat, token, has_history=True)
+    log.bind_chat(follow, chat, access_key, has_history=True)
     assert log.query(grouped=True)['total'] == 1
     await log.async_clear()
-    log.bind_chat(follow, chat, token, has_history=True)
+    log.bind_chat(follow, chat, access_key, has_history=True)
     assert log.query(grouped=True)['total'] == 0
     fresh = log.begin('agentcli', prompt='after clear')
-    log.bind_chat(fresh, chat, token, has_history=True)
+    log.bind_chat(fresh, chat, access_key, has_history=True)
     assert log.query(grouped=True)['entries'][0]['history_missing']
     assert chat not in json.dumps(log.detail(fresh[1]))
-    token.persona = 'home_companion'
+    access_key.persona = 'home_companion'
     companion = log.begin('agentcli', prompt='stateless')
-    log.bind_chat(companion, chat, token, has_history=True)
+    log.bind_chat(companion, chat, access_key, has_history=True)
     assert 'thread_id' not in log.detail(companion[1])
 
 
@@ -893,13 +893,13 @@ async def test_routing_receipt_completes_in_place_and_cannot_recreate_cleared_hi
 
 @pytest.mark.asyncio
 async def test_nested_dispatch_records_parent_operation(conversation_data):
-    data, token = conversation_data
+    data, access_key = conversation_data
     @history.recorded_exchange
-    async def dispatch(method, rpc_id, params, token, hass, data, client_ip, base_url, request_id=None):
+    async def dispatch(method, rpc_id, params, access_key, hass, data, client_ip, base_url, request_id=None):
         if params['name'] == 'home_request':
-            await dispatch(method, rpc_id, {'name': 'get_state'}, token, hass, data, client_ip, base_url)
+            await dispatch(method, rpc_id, {'name': 'get_state'}, access_key, hass, data, client_ip, base_url)
         return {}, '', '', 'allowed'
-    await dispatch('tools/call', 1, {'name': 'home_request'}, token, None, data, 'mcp', '')
+    await dispatch('tools/call', 1, {'name': 'home_request'}, access_key, None, data, 'mcp', '')
     events = only(data.conversations)['events']
     assert events[0]['parent_tool_id'] is None
     assert events[1]['parent_tool_id'] == events[0]['tool_id']
@@ -942,7 +942,7 @@ async def test_provider_receipts_explain_each_round_without_copying_envelopes(co
 @pytest.mark.parametrize('private', [False, True])
 async def test_assist_records_actual_trimmed_input_under_privacy_controls(hass, conversation_data, monkeypatch, private):
     from custom_components.phoenix_mcp import command_routing
-    data, token = conversation_data
+    data, access_key = conversation_data
     data.store.get_settings().log_entity_names = not private
     recognize = AsyncMock(return_value=None)
     monkeypatch.setattr(command_routing, '_recognize_command', recognize)
@@ -950,7 +950,7 @@ async def test_assist_records_actual_trimmed_input_under_privacy_controls(hass, 
     handle = log.begin('agentcli', prompt='test')
     ctx = history._current.set(handle)
     try:
-        await command_routing.async_evaluate_command(hass, data, token, '  my password is canary-private  ', 'en')
+        await command_routing.async_evaluate_command(hass, data, access_key, '  my password is canary-private  ', 'en')
         assert recognize.call_args.args[2] == 'my password is canary-private'
         events = log.detail(handle[1])['events']
         assert 'canary-private' not in json.dumps(events)
@@ -998,12 +998,12 @@ async def test_decision_input_is_sanitized_projection_of_actual_http_payload(con
 @pytest.mark.asyncio
 async def test_context_review_records_why_no_decision_request_was_made(hass, conversation_data):
     from custom_components.phoenix_mcp.decision_context import async_prepare_chat_context
-    data, token = conversation_data
+    data, access_key = conversation_data
     log = history.recorder(data)
     handle = log.begin('agentcli', prompt='follow up')
     ctx = history._current.set(handle)
     try:
-        result = await async_prepare_chat_context(hass, data, token, 'follow up', 'en', [],
+        result = await async_prepare_chat_context(hass, data, access_key, 'follow up', 'en', [],
                                                   {'proposal': None, 'reason': 'no_match'}, asyncio.Event())
         assert result['reason'] == 'invalid_context'
         assert log.detail(handle[1])['events'][-1]['payload'] == {
@@ -1039,23 +1039,23 @@ def test_access_key_metadata_does_not_exempt_credential_values():
 
 @pytest.mark.asyncio
 async def test_access_key_name_survives_dispatch_recording_and_reload(hass, conversation_data):
-    data, token = conversation_data
+    data, access_key = conversation_data
     result = await _dispatch_mcp("tools/call", 1, {"name": "get_capability_summary", "arguments": {}},
-                                 token, hass, data, "127.0.0.1", "")
+                                 access_key, hass, data, "127.0.0.1", "")
     body = json.loads(result[0]["result"]["content"][0]["text"])
     assert result[3] == "allowed"
-    assert body["access_key_name"] == token.name
+    assert body["access_key_name"] == access_key.name
     assert "token_name" not in body
     entry = only(data.conversations)
-    assert entry["metadata"]["access_key_name"] == token.name
-    assert entry["metadata"]["access_key_id"] == token.id
+    assert entry["metadata"]["access_key_name"] == access_key.name
+    assert entry["metadata"]["access_key_id"] == access_key.id
     recorded = json.loads(entry["events"][1]["payload"]["result"]["content"][0]["text"])
-    assert recorded["access_key_name"] == token.name
+    assert recorded["access_key_name"] == access_key.name
     # Re-sanitization on startup must retain the canonical identity too.
     saved = SimpleNamespace(async_load=AsyncMock(return_value={"entries": [entry]}))
     log = history.ConversationLog(saved)
     log.configure(data.store.get_settings())
     await log.async_load()
     loaded = only(log)
-    assert loaded["metadata"]["access_key_name"] == token.name
-    assert token.name in loaded["events"][1]["payload"]["result"]["content"][0]["text"]
+    assert loaded["metadata"]["access_key_name"] == access_key.name
+    assert access_key.name in loaded["events"][1]["payload"]["result"]["content"][0]["text"]

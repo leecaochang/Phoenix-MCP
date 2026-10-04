@@ -5,9 +5,9 @@ vi.mock("../api", () => ({ api: {} }));
 
 import { CapabilityMatrix } from "../components/CapabilityMatrix";
 import { PersonaPicker } from "../components/PersonaPicker";
-import type { TokenRecord } from "../types";
+import type { AccessKeyRecord } from "../types";
 
-function token(over: Partial<TokenRecord> = {}): TokenRecord {
+function accessKey(over: Partial<AccessKeyRecord> = {}): AccessKeyRecord {
   return {
     id: "tok-1",
     name: "t",
@@ -16,7 +16,7 @@ function token(over: Partial<TokenRecord> = {}): TokenRecord {
     cap_esphome_yaml: "deny",
     cap_esphome_flash: "deny",
     ...(over as object),
-  } as unknown as TokenRecord;
+  } as unknown as AccessKeyRecord;
 }
 
 // Both ESPHome capabilities carry the badge, so each message appears once per row.
@@ -26,7 +26,7 @@ describe("ESPHome availability in the panel", () => {
   it("marks the capabilities when neither ESPHome nor the add-on is present", () => {
     render(
       <CapabilityMatrix
-        token={token()}
+        accessKey={accessKey()}
         onUpdate={vi.fn()}
         esphome={{ integration: false, builder: false }}
       />,
@@ -37,7 +37,7 @@ describe("ESPHome availability in the panel", () => {
   it("names the add-on specifically when ESPHome itself is present", () => {
     render(
       <CapabilityMatrix
-        token={token()}
+        accessKey={accessKey()}
         onUpdate={vi.fn()}
         esphome={{ integration: true, builder: false }}
       />,
@@ -49,7 +49,7 @@ describe("ESPHome availability in the panel", () => {
   it("shows nothing when the Device Builder is available", () => {
     render(
       <CapabilityMatrix
-        token={token()}
+        accessKey={accessKey()}
         onUpdate={vi.fn()}
         esphome={{ integration: true, builder: true }}
       />,
@@ -58,14 +58,14 @@ describe("ESPHome availability in the panel", () => {
   });
 
   it("shows nothing while settings are still loading", () => {
-    render(<CapabilityMatrix token={token()} onUpdate={vi.fn()} esphome={null} />);
+    render(<CapabilityMatrix accessKey={accessKey()} onUpdate={vi.fn()} esphome={null} />);
     expect(screen.queryByText(/not detected/)).toBeNull();
   });
 
   it("keeps the capability settable so a token can be prepared in advance", () => {
     render(
       <CapabilityMatrix
-        token={token()}
+        accessKey={accessKey()}
         onUpdate={vi.fn()}
         esphome={{ integration: false, builder: false }}
       />,
@@ -81,7 +81,7 @@ describe("ESPHome availability in the panel", () => {
   it("notes the missing system on the esphome persona card", () => {
     render(
       <PersonaPicker
-        token={token()}
+        accessKey={accessKey()}
         onUpdate={vi.fn()}
         esphome={{ integration: false, builder: false }}
       />,
@@ -92,7 +92,7 @@ describe("ESPHome availability in the panel", () => {
   it("leaves the persona card unannotated when ESPHome is present", () => {
     render(
       <PersonaPicker
-        token={token()}
+        accessKey={accessKey()}
         onUpdate={vi.fn()}
         esphome={{ integration: true, builder: true }}
       />,

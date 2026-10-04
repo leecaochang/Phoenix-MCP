@@ -28,7 +28,7 @@ from homeassistant.util.dt import utcnow
 from custom_components.phoenix_mcp.const import CAP_ALLOW, CAP_DENY
 from custom_components.phoenix_mcp.mcp_view import _call_tool
 from custom_components.phoenix_mcp.policy_engine import Permission, normalize_intent_selectors
-from custom_components.phoenix_mcp.token_store import PermissionTree, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import PermissionTree, AccessKeyRecord
 from custom_components.phoenix_mcp.tools.native import (
     _NO_SELECTOR_MESSAGE,
     _with_declined_targets,
@@ -56,8 +56,8 @@ NATIVE = "custom_components.phoenix_mcp.tools.native"
 COLLAPSED = "No accessible entities matched your request."
 
 
-def _token(**caps) -> TokenRecord:
-    return TokenRecord(
+def _access_key(**caps) -> AccessKeyRecord:
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x", created_at=utcnow(),
         created_by="u", permissions=PermissionTree(), **caps,
     )
@@ -88,7 +88,7 @@ _TARGETED_NATIVE_ACTIONS = (
 
 
 async def _call_targeted_action(handler, args: dict, needs_data: bool):
-    call_args = (args, _token(), MagicMock())
+    call_args = (args, _access_key(), MagicMock())
     if needs_data:
         call_args += (MagicMock(),)
     return await handler(*call_args)
@@ -140,7 +140,7 @@ def test_normalizer_never_stringifies_a_wrong_shape():
     ],
 )
 async def test_no_usable_selector_is_reported_as_a_bad_argument(handler, args):
-    response, outcome, _resource = await handler(args, _token(), MagicMock(), MagicMock())
+    response, outcome, _resource = await handler(args, _access_key(), MagicMock(), MagicMock())
     assert outcome == "invalid_request"
     assert _text(response) == _NO_SELECTOR_MESSAGE
     # It must name the parameters and their shapes: the commonest way to land
@@ -159,7 +159,7 @@ async def test_a_real_selector_that_matches_nothing_stays_collapsed(handler):
     """
     with patch(f"{NATIVE}.resolve_intent_entities", MagicMock(return_value=[])):
         response, outcome, _resource = await handler(
-            {"area": "Kitchen"}, _token(), MagicMock(), MagicMock())
+            {"area": "Kitchen"}, _access_key(), MagicMock(), MagicMock())
     assert outcome == "denied"
     assert _text(response) == COLLAPSED
     assert _NO_SELECTOR_MESSAGE not in _text(response)
@@ -170,7 +170,7 @@ async def test_one_real_selector_is_enough_to_proceed(handler):
     action = AsyncMock(return_value=({}, "allowed", "x"))
     with patch(f"{NATIVE}.resolve_intent_entities", MagicMock(return_value=["light.k"])), \
             patch(f"{NATIVE}._tool_intent_action", action):
-        await handler({"domain": ["light"]}, _token(), MagicMock(), MagicMock())
+        await handler({"domain": ["light"]}, _access_key(), MagicMock(), MagicMock())
     assert action.await_count == 1
 
 
@@ -229,7 +229,7 @@ async def test_public_dispatcher_rejects_wrong_fixed_domain_before_resolution(
         response, outcome, _resource = await _call_tool(
             tool_name,
             {"domain": ["light"], **operation},
-            _token(),
+            _access_key(),
             MagicMock(),
             MagicMock(),
         )
@@ -276,7 +276,7 @@ async def test_invalid_position_is_refused_before_the_confirmation_gate(position
     gate = AsyncMock(return_value=None)
     with patch(f"{NATIVE}._gate", gate):
         response, outcome, _resource = await _tool_hass_set_position(
-            args, _token(), MagicMock(), MagicMock(),
+            args, _access_key(), MagicMock(), MagicMock(),
         )
     assert outcome == "invalid_request"
     assert _text(response)
@@ -304,7 +304,7 @@ async def test_numeric_relative_volume_preserves_magnitude_and_clamps(step, expe
     with patch(f"{NATIVE}.resolve_intent_entities", return_value=entities), \
             patch(f"{NATIVE}.resolve", return_value=Permission.WRITE):
         _response, outcome, _resource = await _tool_hass_set_volume_relative(
-            {"name": "Speakers", "volume_step": step}, _token(), hass, data,
+            {"name": "Speakers", "volume_step": step}, _access_key(), hass, data,
         )
     assert outcome == "allowed"
     assert [
@@ -330,7 +330,7 @@ def _action_result(entity_ids: list[str]):
     return ({"content": [{"type": "text", "text": json.dumps(payload)}]}, "allowed", "HassTurnOff")
 
 
-async def _turn_off_mixed(token: TokenRecord) -> dict:
+async def _turn_off_mixed(access_key: AccessKeyRecord) -> dict:
     hass = MagicMock()
     hass.states.get.return_value = None
     resolved = ["light.hall", "lock.front_door"]
@@ -338,13 +338,13 @@ async def _turn_off_mixed(token: TokenRecord) -> dict:
             patch(f"{NATIVE}._tool_intent_action",
                   AsyncMock(return_value=_action_result(["light.hall"]))):
         response, outcome, _resource = await _tool_hass_turn_off(
-            {"area": "Hall"}, token, hass, MagicMock())
+            {"area": "Hall"}, access_key, hass, MagicMock())
     assert outcome == "allowed"
     return json.loads(_text(response))
 
 
 async def test_a_dropped_physical_target_is_named_with_its_reason():
-    payload = await _turn_off_mixed(_token(cap_physical_control=CAP_DENY))
+    payload = await _turn_off_mixed(_access_key(cap_physical_control=CAP_DENY))
     assert [e["id"] for e in payload["data"]["success"]] == ["light.hall"]
     assert payload["not_permitted"] == [
         {"name": "lock.front_door", "type": "entity", "id": "lock.front_door",
@@ -355,7 +355,7 @@ async def test_a_dropped_physical_target_is_named_with_its_reason():
 async def test_nothing_is_added_when_the_capability_permits():
     # The field is conditional, the mesa_advisory convention: a caller must not
     # have to distinguish an empty list from an absent one.
-    payload = await _turn_off_mixed(_token(cap_physical_control=CAP_ALLOW))
+    payload = await _turn_off_mixed(_access_key(cap_physical_control=CAP_ALLOW))
     assert "not_permitted" not in payload
 
 
@@ -370,7 +370,7 @@ async def test_the_declined_list_never_rides_on_a_refusal():
     hass.states.get.return_value = None
     with patch(f"{NATIVE}.resolve_intent_entities", MagicMock(return_value=["lock.front_door"])):
         response, outcome, _resource = await _tool_hass_turn_off(
-            {"area": "Hall"}, _token(cap_physical_control=CAP_DENY), hass, MagicMock())
+            {"area": "Hall"}, _access_key(cap_physical_control=CAP_DENY), hass, MagicMock())
     assert outcome == "denied"
     assert _text(response) == COLLAPSED
     assert "lock.front_door" not in _text(response)
@@ -399,7 +399,7 @@ async def test_light_set_empty_domain_preserves_explicit_name_selection(domain):
     with patch(f"{NATIVE}.resolve_intent_entities", resolver), patch(f"{NATIVE}._tool_intent_action", action):
         _, outcome, _ = await _call_tool(
             "light__HassLightSet", {"domain": domain, "name": "Fixture", "brightness": 50},
-            _token(), MagicMock(), MagicMock(),
+            _access_key(), MagicMock(), MagicMock(),
         )
     assert outcome == "allowed"
     assert resolver.call_args.kwargs["name"] == "Fixture"
@@ -412,7 +412,7 @@ async def test_light_set_empty_or_wrong_domain_cannot_expand_implicit_selection(
     with patch(f"{NATIVE}.resolve_intent_entities") as resolver:
         response, outcome, _ = await _call_tool(
             "light__HassLightSet", {"domain": domain, "brightness": 50},
-            _token(), MagicMock(), MagicMock(),
+            _access_key(), MagicMock(), MagicMock(),
         )
     assert outcome == "invalid_request"
     assert response["isError"]

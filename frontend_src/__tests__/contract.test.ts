@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { AgentCliProviderKind, MesaProfileScope, TokenRecord, VersionResourceType } from "../types";
+import type { AgentCliProviderKind, MesaProfileScope, AccessKeyRecord, VersionResourceType } from "../types";
 import { CASCADING_SCOPES, EDITOR_SCOPES } from "../views/MesaView";
 import { QUICK_ADD_SCOPES } from "../inject/QuickAdd";
 import { SUBPAGE_SURFACES } from "../inject/dom";
@@ -9,10 +9,10 @@ import versionContract from "../../tests/contract/version_resource_types.json";
 import providerContract from "../../tests/contract/agentcli_provider_kinds.json";
 import mesaContract from "../../tests/contract/mesa_scopes.json";
 
-// Contract drift guard between the frontend TokenRecord type and the Python
-// serializer. The shared fixture is generated from TokenRecord.to_dict by a
+// Contract drift guard between the frontend AccessKeyRecord type and the Python
+// serializer. The shared fixture is generated from AccessKeyRecord.to_dict by a
 // backend contract test. This map is typed `satisfies
-// Record<keyof TokenRecord, true>`, so tsc fails if a TokenRecord field is added
+// Record<keyof AccessKeyRecord, true>`, so tsc fails if a AccessKeyRecord field is added
 // or removed without updating it; the runtime assertion then checks those keys
 // equal the Python-generated fixture, catching drift on either side.
 const TOKEN_RECORD_KEYS = {
@@ -64,9 +64,9 @@ const TOKEN_RECORD_KEYS = {
   cap_yaml_edit: true,
   cap_esphome_yaml: true,
   cap_esphome_flash: true,
-} satisfies Record<keyof TokenRecord, true>;
+} satisfies Record<keyof AccessKeyRecord, true>;
 
-describe("frontend/backend TokenRecord contract", () => {
+describe("frontend/backend AccessKeyRecord contract", () => {
   it("the TS type's keys match the Python serializer fixture", () => {
     expect(Object.keys(TOKEN_RECORD_KEYS).sort()).toEqual(
       [...contract.token_record_keys].sort(),

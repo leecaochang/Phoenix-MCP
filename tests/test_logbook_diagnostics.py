@@ -16,11 +16,11 @@ from tests.test_mcp_view import _make_data, _make_hass, _make_token
 _CONTEXT_ID = "01ARZ3NDEKTSV4RRFFQ69G5FAV"
 
 
-async def _call(args: dict, *, token=None, hass=None, data=None):
-    if token is None:
-        token, _ = _make_token(cap_log_read="allow")
+async def _call(args: dict, *, access_key=None, hass=None, data=None):
+    if access_key is None:
+        access_key, _ = _make_token(cap_log_read="allow")
     if data is None:
-        data = _make_data(token)
+        data = _make_data(access_key)
     if hass is None:
         hass = _make_hass(data)
     args = dict(args)
@@ -36,7 +36,7 @@ async def _call(args: dict, *, token=None, hass=None, data=None):
         "tools/call",
         3,
         {"name": "get_logbook", "arguments": args},
-        token,
+        access_key,
         hass,
         data,
         "127.0.0.1",
@@ -68,7 +68,7 @@ def test_installed_logbook_command_keeps_the_filters_phoenix_relies_on():
 
 @pytest.mark.asyncio
 async def test_capability_denial_runs_before_hostile_argument_validation():
-    token, _ = _make_token(cap_log_read="deny")
+    access_key, _ = _make_token(cap_log_read="deny")
     body, result, outcome = await _call(
         {
             "target": {
@@ -77,7 +77,7 @@ async def test_capability_denial_runs_before_hostile_argument_validation():
                 "device_ids": ["marker-device"],
             },
         },
-        token=token,
+        access_key=access_key,
     )
     assert outcome == "denied"
     assert result["isError"] is True
@@ -122,7 +122,7 @@ async def test_resource_lists_are_deduplicated_and_capped_at_100_unique_values()
         return_value=Permission.READ,
     ), patch(
         "custom_components.phoenix_mcp.mcp_view.filter_service_response",
-        side_effect=lambda value, _token, _hass: value,
+        side_effect=lambda value, _access_key, _hass: value,
     ), patch(
         "custom_components.phoenix_mcp.mcp_view.async_ws_command",
         new=command,
@@ -273,7 +273,7 @@ async def test_inaccessible_and_missing_requested_devices_are_identical():
 
 @pytest.mark.asyncio
 async def test_any_inaccessible_resource_rejects_the_whole_combined_request():
-    def entity_permission(entity_id, _token, _hass):
+    def entity_permission(entity_id, _access_key, _hass):
         return Permission.READ if entity_id == "light.ok" else Permission.NO_ACCESS
 
     with patch(
@@ -317,10 +317,10 @@ async def test_entity_permission_takes_precedence_and_device_only_rows_use_devic
         {"name": "unscoped", "message": "no resource", "when": 5.0},
     ]
 
-    def entity_permission(entity_id, _token, _hass):
+    def entity_permission(entity_id, _access_key, _hass):
         return Permission.READ if entity_id == "light.ok" else Permission.NO_ACCESS
 
-    def device_permission(device_id, _token, _hass):
+    def device_permission(device_id, _access_key, _hass):
         return Permission.READ if device_id == "device-ok" else Permission.NO_ACCESS
 
     with patch(
@@ -331,7 +331,7 @@ async def test_entity_permission_takes_precedence_and_device_only_rows_use_devic
         side_effect=device_permission,
     ), patch(
         "custom_components.phoenix_mcp.mcp_view.filter_service_response",
-        side_effect=lambda value, _token, _hass: value,
+        side_effect=lambda value, _access_key, _hass: value,
     ), patch(
         "custom_components.phoenix_mcp.mcp_view.async_ws_command",
         new=AsyncMock(return_value=entries),
@@ -355,7 +355,7 @@ async def test_redaction_precedes_search_and_only_safe_fields_are_searchable():
         }
     ]
 
-    def redact(value, _token, _hass):
+    def redact(value, _access_key, _hass):
         value[0]["message"] = "<redacted>"
         return value
 
@@ -392,7 +392,7 @@ async def test_total_and_truncated_are_computed_before_most_recent_limit():
         return_value=Permission.READ,
     ), patch(
         "custom_components.phoenix_mcp.mcp_view.filter_service_response",
-        side_effect=lambda value, _token, _hass: value,
+        side_effect=lambda value, _access_key, _hass: value,
     ), patch(
         "custom_components.phoenix_mcp.mcp_view.async_ws_command",
         new=AsyncMock(return_value=entries),
@@ -441,7 +441,7 @@ async def test_visible_entry_shape_drift_is_an_error_not_false_chronology():
         return_value=Permission.READ,
     ), patch(
         "custom_components.phoenix_mcp.mcp_view.filter_service_response",
-        side_effect=lambda value, _token, _hass: value,
+        side_effect=lambda value, _access_key, _hass: value,
     ), patch(
         "custom_components.phoenix_mcp.mcp_view.async_ws_command",
         new=AsyncMock(

@@ -13,7 +13,7 @@ from custom_components.phoenix_mcp import yaml_includes as yi
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.helpers import content_hash
 from custom_components.phoenix_mcp.mcp_view import _call_tool, async_execute_approved_tool, async_restore_version
-from custom_components.phoenix_mcp.token_store import TokenRecord
+from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord
 from custom_components.phoenix_mcp.tools import authoring
 from custom_components.phoenix_mcp.version_store import VersionStore
 
@@ -29,9 +29,9 @@ async def identity_env(hass, tmp_path):
     (tmp_path / "configuration.yaml").write_text("automation: !include automations.yaml\n")
     reload = MagicMock()
     hass.services.async_register("automation", "reload", reload)
-    token = TokenRecord(id="identity", name="identity", token_hash="x", created_at=utcnow(), created_by="u", cap_automation_write="allow")
+    access_key = AccessKeyRecord(id="identity", name="identity", token_hash="x", created_at=utcnow(), created_by="u", cap_automation_write="allow")
     data = PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=VersionStore())
-    return token, data, reload
+    return access_key, data, reload
 
 
 def seed(path, alias="Original"):
@@ -121,13 +121,13 @@ def test_custom_id_requires_proven_absence(tmp_path, extra):
     ("edit_automation", {"automation_id": "chosen", "expected_hash": False}),
 ])
 async def test_invalid_identity_never_reaches_gate(hass, identity_env, tmp_path, tool, args):
-    token, data, reload = identity_env
+    access_key, data, reload = identity_env
     path = tmp_path / "automations.yaml"
     seed(path)
     before = path.read_bytes()
     payload = {"config": config(), **args}
     with patch.object(authoring, "_gate", new_callable=AsyncMock) as gate:
-        result = await _call_tool(tool, payload, token, hass, data)
+        result = await _call_tool(tool, payload, access_key, hass, data)
     assert result[1] == "invalid_request"
     gate.assert_not_called()
     reload.assert_not_called()
@@ -136,13 +136,13 @@ async def test_invalid_identity_never_reaches_gate(hass, identity_env, tmp_path,
 
 @pytest.mark.parametrize("tool", ["create_automation", "edit_automation"])
 async def test_refused_identity_has_no_effect_or_approval(hass, identity_env, tmp_path, tool):
-    token, data, reload = identity_env
-    token.cap_automation_write = "confirm"
+    access_key, data, reload = identity_env
+    access_key.cap_automation_write = "confirm"
     path = tmp_path / "automations.yaml"
     seed(path)
     before = path.read_bytes()
     with patch.object(authoring, "_gate", new_callable=AsyncMock) as gate, patch.object(authoring, "_record_version", new_callable=AsyncMock) as record:
-        result = await _call_tool(tool, {"automation_id": "chosen", "config": config("Changed")}, token, hass, data)
+        result = await _call_tool(tool, {"automation_id": "chosen", "config": config("Changed")}, access_key, hass, data)
     assert result[1] != "allowed"
     gate.assert_not_called()
     record.assert_not_called()
@@ -151,9 +151,9 @@ async def test_refused_identity_has_no_effect_or_approval(hass, identity_env, tm
 
 
 async def test_two_creates_of_same_id_have_one_winner(hass, identity_env, tmp_path):
-    token, data, reload = identity_env
+    access_key, data, reload = identity_env
     results = await asyncio.gather(*[
-        authoring._execute_create_automation({"automation_id": "chosen", "config": config(alias)}, token, hass, data)
+        authoring._execute_create_automation({"automation_id": "chosen", "config": config(alias)}, access_key, hass, data)
         for alias in ("First", "Second")
     ])
     assert sorted(r[1] for r in results) == ["allowed", "denied"]
@@ -163,7 +163,7 @@ async def test_two_creates_of_same_id_have_one_winner(hass, identity_env, tmp_pa
 
 @pytest.mark.parametrize("fallback", [True, False])
 async def test_hash_rechecked_after_waiting_for_lock(hass, identity_env, tmp_path, fallback):
-    token, data, reload = identity_env
+    access_key, data, reload = identity_env
     if fallback:
         (tmp_path / "configuration.yaml").unlink()
     path = tmp_path / "automations.yaml"
@@ -180,7 +180,7 @@ async def test_hash_rechecked_after_waiting_for_lock(hass, identity_env, tmp_pat
     with patch.object(authoring, "_config_validation_error", side_effect=validate):
         async with lock:
             task = asyncio.create_task(authoring._execute_edit_automation(
-                {"automation_id": "chosen", "config": config("Proposed"), "expected_hash": expected}, token, hass, data,
+                {"automation_id": "chosen", "config": config("Proposed"), "expected_hash": expected}, access_key, hass, data,
             ))
             await reached_validation.wait()
             seed(path, "Concurrent")
@@ -192,25 +192,25 @@ async def test_hash_rechecked_after_waiting_for_lock(hass, identity_env, tmp_pat
 
 
 async def test_approval_replay_rechecks_create_and_rename(hass, identity_env, tmp_path):
-    token, data, reload = identity_env
+    access_key, data, reload = identity_env
     path = tmp_path / "automations.yaml"
     expected = seed(path)
     seed(path, "Intervening")
     before = path.read_bytes()
     for tool in ("create_automation", "edit_automation"):
-        result = await async_execute_approved_tool(tool, {"automation_id": "chosen", "config": config("Proposed"), "expected_hash": expected}, token, hass, data)
+        result = await async_execute_approved_tool(tool, {"automation_id": "chosen", "config": config("Proposed"), "expected_hash": expected}, access_key, hass, data)
         assert result[1] != "allowed"
     assert path.read_bytes() == before
     reload.assert_not_called()
 
 
 async def test_entity_id_is_not_a_create_on_lookup_failure(hass, identity_env, tmp_path):
-    token, data, reload = identity_env
+    access_key, data, reload = identity_env
     path = tmp_path / "automations.yaml"
     seed(path)
     hass.states.async_set("automation.example", "off", {"id": "chosen"})
     before = path.read_bytes()
-    result = await _call_tool("edit_automation", {"automation_id": "automation.example", "config": config("Proposed")}, token, hass, data)
+    result = await _call_tool("edit_automation", {"automation_id": "automation.example", "config": config("Proposed")}, access_key, hass, data)
     assert result[1] != "allowed"
     assert path.read_bytes() == before
     reload.assert_not_called()
@@ -231,15 +231,15 @@ async def test_restore_rename_then_recreate_and_restore_again(hass, identity_env
 
 
 async def test_reload_failure_retry_cannot_duplicate(hass, identity_env, tmp_path):
-    token, data, _ = identity_env
+    access_key, data, _ = identity_env
     async def fail_reload(call):
         raise RuntimeError("reload failed")
     hass.services.async_register("automation", "reload", fail_reload)
     args = {"automation_id": "chosen", "config": config()}
-    first = await _call_tool("create_automation", deepcopy(args), token, hass, data)
+    first = await _call_tool("create_automation", deepcopy(args), access_key, hass, data)
     assert first[1] == "invalid_request"
     before = (tmp_path / "automations.yaml").read_bytes()
-    second = await _call_tool("create_automation", deepcopy(args), token, hass, data)
+    second = await _call_tool("create_automation", deepcopy(args), access_key, hass, data)
     assert second[1] == "denied"
     assert (tmp_path / "automations.yaml").read_bytes() == before
 
@@ -247,26 +247,26 @@ async def test_reload_failure_retry_cannot_duplicate(hass, identity_env, tmp_pat
 @pytest.mark.parametrize("contents", ["[broken", "not a list", "id: chosen\n", "- invalid\n"])
 @pytest.mark.parametrize("fallback", [True, False])
 async def test_unreadable_identity_is_never_absence(hass, identity_env, tmp_path, contents, fallback):
-    token, data, reload = identity_env
+    access_key, data, reload = identity_env
     if fallback:
         (tmp_path / "configuration.yaml").unlink()
     path = tmp_path / "automations.yaml"
     path.write_text(contents)
     for tool in ("create_automation", "edit_automation"):
-        result = await _call_tool(tool, {"automation_id": "chosen", "config": config("Proposed")}, token, hass, data)
+        result = await _call_tool(tool, {"automation_id": "chosen", "config": config("Proposed")}, access_key, hass, data)
         assert result[1] != "allowed"
     assert path.read_text() == contents
     reload.assert_not_called()
 
 
 async def test_generated_id_collision_is_refused(hass, identity_env, tmp_path):
-    token, data, reload = identity_env
+    access_key, data, reload = identity_env
     path = tmp_path / "automations.yaml"
     existing = dict(config(), id="phoenix_mcp_0123456789abcdef")
     path.write_text(yi.dump_tagged([existing]))
     before = path.read_bytes()
     with patch.object(authoring.uuid, "uuid4", return_value=MagicMock(hex="0123456789abcdef")):
-        result = await authoring._execute_create_automation({"config": config("Other")}, token, hass, data)
+        result = await authoring._execute_create_automation({"config": config("Other")}, access_key, hass, data)
     assert result[1] == "denied"
     assert path.read_bytes() == before
     reload.assert_not_called()
@@ -306,12 +306,12 @@ def test_alias_addition_requires_hash(tmp_path):
 
 
 async def test_executor_rechecks_authority(hass, identity_env, tmp_path):
-    token, data, reload = identity_env
+    access_key, data, reload = identity_env
     path = tmp_path / "automations.yaml"
     expected = seed(path)
     before = path.read_bytes()
     with patch.object(authoring, "check_request_authority", side_effect=authoring.AuthorityChangedError("changed")):
         with pytest.raises(authoring.AuthorityChangedError):
-            await authoring._execute_edit_automation({"automation_id": "chosen", "config": config("Other"), "expected_hash": expected}, token, hass, data)
+            await authoring._execute_edit_automation({"automation_id": "chosen", "config": config("Other"), "expected_hash": expected}, access_key, hass, data)
     assert path.read_bytes() == before
     reload.assert_not_called()

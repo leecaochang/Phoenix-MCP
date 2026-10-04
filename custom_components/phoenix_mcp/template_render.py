@@ -26,11 +26,11 @@ class TemplateRenderError(ValueError):
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
     from .data import PhoenixData
-    from .token_store import TokenRecord
+    from .access_key_store import AccessKeyRecord
 
 
-async def async_render_template_for_token(
-    template: str, token: TokenRecord, hass: HomeAssistant, data: PhoenixData,
+async def async_render_template_for_access_key(
+    template: str, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData,
 ) -> str:
     """Render a template in a disposable subprocess over this token's permitted states.
 
@@ -49,7 +49,7 @@ async def async_render_template_for_token(
         snapshot = {
             "template": template,
             "time_zone": hass.config.time_zone,
-            "states": [state.as_dict() for state in build_permitted_states(token, hass).values()],
+            "states": [state.as_dict() for state in build_permitted_states(access_key, hass).values()],
         }
         payload = json.dumps(snapshot, default=str).encode()
         if len(payload) > TEMPLATE_WORKER_INPUT_BYTES:

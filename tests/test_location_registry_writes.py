@@ -23,8 +23,8 @@ from custom_components.phoenix_mcp.mesa_core import MetadataOrigin, SemanticProf
 from custom_components.phoenix_mcp.request_authority import (
     AuthorityChangedError, RequestAuthority, policy_version, request_authority,
 )
-from custom_components.phoenix_mcp.token_store import (
-    GlobalSettings, PermissionNode, PermissionTree, TokenRecord, TokenStore,
+from custom_components.phoenix_mcp.access_key_store import (
+    GlobalSettings, PermissionNode, PermissionTree, AccessKeyRecord, AccessKeyStore,
 )
 from custom_components.phoenix_mcp.tools import locations
 
@@ -44,34 +44,34 @@ def location_env(hass):
     )
     hass.states.async_set(entity.entity_id, "off")
     labels = [lr.async_get(hass).async_create(name).label_id for name in ("first", "second")]
-    token = TokenRecord(
+    access_key = AccessKeyRecord(
         id="location-token", name="Location test", token_hash="hash", created_at=utcnow(),
         created_by="test", cap_registry_write="allow", cap_registry_read="allow",
         permissions=PermissionTree(devices={device.id: PermissionNode(state="GREEN")}),
     )
-    store = MagicMock(spec=TokenStore)
+    store = MagicMock(spec=AccessKeyStore)
     store.async_lock = asyncio.Lock()
     store.async_save = AsyncMock()
     store.get_settings.return_value = GlobalSettings(mesa_mode="off")
     store.get_pending_approvals.return_value = []
-    store.list_tokens.return_value = []
-    store.get_token_by_hash.return_value = token
+    store.list_access_keys.return_value = []
+    store.get_access_key_by_hash.return_value = access_key
     store.get_entity_hints.return_value = {}
     data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), hass=hass)
     hass.data[DOMAIN] = data
-    yield token, data, floor.floor_id, area.id, device.id, entity.entity_id, labels
+    yield access_key, data, floor.floor_id, area.id, device.id, entity.entity_id, labels
     if data.sensor_flush_cancel is not None:
         data.sensor_flush_cancel()
 
 
 async def _call(hass, env, *, kind="area", operation="update", changes=None, location_id=None):
-    token, data, floor_id, area_id, *_ = env
+    access_key, data, floor_id, area_id, *_ = env
     args = {"kind": kind, "operation": operation}
     if operation != "create":
         args["location_id"] = location_id or (area_id if kind == "area" else floor_id)
     if changes is not None:
         args["changes"] = changes
-    return await view._call_tool("set_area_or_floor", args, token, hass, data)
+    return await view._call_tool("set_area_or_floor", args, access_key, hass, data)
 
 
 def _body(result):
@@ -80,7 +80,7 @@ def _body(result):
 
 
 async def test_area_labels_patch_replace_clear_and_restore(hass, location_env):
-    token, data, _, area_id, _, _, labels = location_env
+    access_key, data, _, area_id, _, _, labels = location_env
     _body(await _call(hass, location_env, changes={"add_labels": [labels[0]]}))
     original = data.versions.list_for("area", area_id)[0]
     _body(await _call(hass, location_env, changes={"add_labels": [labels[1]]}))
@@ -128,22 +128,22 @@ async def test_floor_metadata_and_area_floor_assignment(hass, location_env):
         "name": "Renamed floor", "icon": "mdi:home", "aliases": ["Upper"], "level": None,
     }))
     _body(await _call(hass, location_env, changes={"floor_id": None, "aliases": ["Office"], "icon": None}))
-    token, _, floor_id, area_id, *_ = location_env
+    access_key, _, floor_id, area_id, *_ = location_env
     assert ar.async_get(hass).async_get_area(area_id).floor_id is None
     # An empty destination floor has no scoped grant.
     assert (await _call(hass, location_env, changes={"floor_id": floor_id}))[1] == "denied"
-    token.pass_through = True
+    access_key.pass_through = True
     _body(await _call(hass, location_env, changes={"floor_id": floor_id}))
 
 
 @pytest.mark.parametrize("kind", ["area", "floor"])
 async def test_create_empty_discovery_duplicate_delete_and_no_recreation(hass, location_env, kind):
-    token, data, *_ = location_env
+    access_key, data, *_ = location_env
     assert (await _call(hass, location_env, kind=kind, operation="create", changes={"name": "New"}))[1] == "denied"
-    token.pass_through = True
+    access_key.pass_through = True
     created = _body(await _call(hass, location_env, kind=kind, operation="create", changes={"name": "New"}))
     location_id = created["location_id"]
-    listed = _body(await view._call_tool(f"list_{kind}s", {}, token, hass, data))
+    listed = _body(await view._call_tool(f"list_{kind}s", {}, access_key, hass, data))
     assert any(row[f"{kind}_id"] == location_id for row in listed[f"{kind}s"])
     assert (await _call(hass, location_env, kind=kind, operation="create", changes={"name": " new "}))[1] == "invalid_request"
     _body(await _call(hass, location_env, kind=kind, operation="delete", location_id=location_id))
@@ -155,14 +155,14 @@ async def test_create_empty_discovery_duplicate_delete_and_no_recreation(hass, l
 @pytest.mark.parametrize("kind", ["area", "floor"])
 @pytest.mark.parametrize("obstruction", ["entity_red", "device_red", "entity_only", "empty_device", "disabled", "empty_area"])
 async def test_whole_membership_authority(hass, location_env, kind, obstruction):
-    token, _, floor_id, area_id, device_id, entity_id, _ = location_env
+    access_key, _, floor_id, area_id, device_id, entity_id, _ = location_env
     if obstruction == "entity_red":
-        token.permissions.entities[entity_id] = PermissionNode(state="RED")
+        access_key.permissions.entities[entity_id] = PermissionNode(state="RED")
     elif obstruction == "device_red":
-        token.permissions.devices[device_id] = PermissionNode(state="RED")
+        access_key.permissions.devices[device_id] = PermissionNode(state="RED")
     elif obstruction == "entity_only":
-        token.permissions.devices.clear()
-        token.permissions.entities[entity_id] = PermissionNode(state="GREEN")
+        access_key.permissions.devices.clear()
+        access_key.permissions.entities[entity_id] = PermissionNode(state="GREEN")
     elif obstruction == "empty_device":
         owner = MockConfigEntry(domain="test_integration", entry_id="ungranted-owner")
         owner.add_to_hass(hass)
@@ -171,8 +171,8 @@ async def test_whole_membership_authority(hass, location_env, kind, obstruction)
         )
         dr.async_get(hass).async_update_device(ungranted.id, area_id=area_id)
     elif obstruction == "disabled":
-        token.permissions.devices.clear()
-        token.permissions.entities[entity_id] = PermissionNode(state="GREEN")
+        access_key.permissions.devices.clear()
+        access_key.permissions.entities[entity_id] = PermissionNode(state="GREEN")
         er.async_get(hass).async_update_entity(entity_id, disabled_by=er.RegistryEntryDisabler.USER)
         hass.states.async_remove(entity_id)
     elif obstruction == "empty_area":
@@ -187,21 +187,21 @@ async def test_whole_membership_authority(hass, location_env, kind, obstruction)
 
 
 async def test_capability_denial_before_validation_and_private_binding_rejected(hass, location_env):
-    token, data, *_ = location_env
-    token.cap_registry_write = "deny"
-    assert (await view._call_tool("set_area_or_floor", {"kind": []}, token, hass, data))[1] == "denied"
-    token.cap_registry_write = "allow"
+    access_key, data, *_ = location_env
+    access_key.cap_registry_write = "deny"
+    assert (await view._call_tool("set_area_or_floor", {"kind": []}, access_key, hass, data))[1] == "denied"
+    access_key.cap_registry_write = "allow"
     result = await view._call_tool("set_area_or_floor", {
         "kind": "area", "operation": "update", "location_id": location_env[3],
         "changes": {"icon": "mdi:home"}, LOCATION_REGISTRY_BINDING: "forged",
-    }, token, hass, data)
+    }, access_key, hass, data)
     assert result[1] == "invalid_request"
 
 
 @pytest.mark.parametrize("drift", [None, "membership", "metadata", "permission", "recreated", "label_removed"])
 async def test_confirm_binds_identity_membership_metadata_and_references(hass, location_env, drift):
-    token, data, _, area_id, _, entity_id, labels = location_env
-    token.cap_registry_write = "confirm"
+    access_key, data, _, area_id, _, entity_id, labels = location_env
+    access_key.cap_registry_write = "confirm"
     pending = await _call(hass, location_env, changes={"add_labels": [labels[0]]})
     assert pending[1] == "pending_approval", pending
     saved = data.store.get_pending_approvals()[0]["args"]
@@ -212,21 +212,21 @@ async def test_confirm_binds_identity_membership_metadata_and_references(hass, l
     elif drift == "metadata":
         ar.async_get(hass).async_update(area_id, icon="mdi:office-building")
     elif drift == "permission":
-        token.permissions.entities[entity_id] = PermissionNode(state="RED")
+        access_key.permissions.entities[entity_id] = PermissionNode(state="RED")
     elif drift == "recreated":
         ar.async_get(hass).async_delete(area_id)
         new = ar.async_get(hass).async_create("Location area")
         assert new.id == area_id
     elif drift == "label_removed":
         lr.async_get(hass).async_delete(labels[0])
-    result = await view.async_execute_approved_tool("set_area_or_floor", saved, token, hass, data)
+    result = await view.async_execute_approved_tool("set_area_or_floor", saved, access_key, hass, data)
     assert result[1] == ("allowed" if drift is None else ("invalid_request" if drift == "label_removed" else "denied")), result
     if drift:
         assert not data.versions.list_for("area", area_id)
 
 
 async def test_concurrent_labels_commit_and_capture_before_history_wait(hass, location_env):
-    token, data, _, area_id, _, _, labels = location_env
+    access_key, data, _, area_id, _, _, labels = location_env
     entered, release = asyncio.Event(), asyncio.Event()
     captures = []
 
@@ -267,7 +267,7 @@ async def test_delete_clears_reviewed_placement(hass, location_env, kind):
 
 
 async def test_dispatch_readback_failure_is_uncertain_without_retry(hass, location_env):
-    token, data, _, area_id, *_ = location_env
+    access_key, data, _, area_id, *_ = location_env
     registry = ar.async_get(hass)
     original = registry.async_update
     effects = []
@@ -287,14 +287,14 @@ async def test_dispatch_readback_failure_is_uncertain_without_retry(hass, locati
 
 
 async def test_authority_loss_during_history_does_not_undo_commit(hass, location_env):
-    token, data, _, area_id, *_ = location_env
-    authority = RequestAuthority(hass=hass, data=data, token_id=token.id,
-                                 token_hash=token.token_hash)
+    access_key, data, _, area_id, *_ = location_env
+    authority = RequestAuthority(hass=hass, data=data, token_id=access_key.id,
+                                 token_hash=access_key.token_hash)
     ctx = request_authority.set(authority)
-    policy_ctx = policy_version.set(token.settings_version)
+    policy_ctx = policy_version.set(access_key.settings_version)
 
     async def revoke(*args, **kwargs):
-        data.store.get_token_by_hash.return_value = None
+        data.store.get_access_key_by_hash.return_value = None
 
     try:
         with patch.object(locations, "_record_version", side_effect=revoke):
@@ -302,7 +302,7 @@ async def test_authority_loss_during_history_does_not_undo_commit(hass, location
                 await locations._execute_set_area_or_floor({
                     "kind": "area", "operation": "update", "location_id": area_id,
                     "changes": {"icon": "mdi:home"},
-                }, token, hass, data)
+                }, access_key, hass, data)
     finally:
         request_authority.reset(ctx)
         policy_version.reset(policy_ctx)
@@ -311,7 +311,7 @@ async def test_authority_loss_during_history_does_not_undo_commit(hass, location
 
 @pytest.mark.parametrize("mode", ["prohibited", "read_only", "confirm"])
 async def test_inherited_area_mesa_identity_actions(hass, location_env, mode):
-    token, data, _, area_id, *_ = location_env
+    access_key, data, _, area_id, *_ = location_env
     data.store.get_settings.return_value.mesa_mode = "enforced"
     data.mesa = await async_setup_mesa(hass, "enforced")
     profile = SemanticProfile.from_dict(area_id, {"semantic_profile": {
@@ -322,12 +322,12 @@ async def test_inherited_area_mesa_identity_actions(hass, location_env, mode):
     assert result[1] == ("pending_approval" if mode == "confirm" else "denied"), result
     if mode == "confirm":
         saved = data.store.get_pending_approvals()[0]["args"]
-        _body(await view.async_execute_approved_tool("set_area_or_floor", saved, token, hass, data))
+        _body(await view.async_execute_approved_tool("set_area_or_floor", saved, access_key, hass, data))
     assert ar.async_get(hass).async_get_area(area_id).name == ("Renamed area" if mode == "confirm" else "Location area")
 
 
 async def test_location_write_refuses_failed_mesa_runtime(hass, location_env):
-    _token, data, _floor_id, area_id, *_ = location_env
+    _access_key, data, _floor_id, area_id, *_ = location_env
     data.store.get_settings.return_value.mesa_mode = "advisory"
     data.mesa = None
     data.mesa_setup_failed = True

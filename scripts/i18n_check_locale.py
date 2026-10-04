@@ -140,7 +140,7 @@ LITERALS: dict[str, tuple[str, ...]] = {
     "panel.adminError.badExpiresAt": ("expires_at",),
     "panel.adminError.nameRequired": ("name",),
     "panel.perms.simEntityPlaceholder": ("entity_id", "light.kitchen"),
-    "panel.tokens.namePlaceholder": ("my_token",),
+    "panel.tokens.namePlaceholder": ("my_access_key",),
     # ai_task.py hardcodes _attr_name = "Phoenix MCP AI Task"; the entity is not
     # localized, so a translated mention would name something the operator
     # cannot find in Home Assistant.
@@ -152,7 +152,7 @@ LITERALS: dict[str, tuple[str, ...]] = {
 # translated, which nothing at runtime would ever report.
 ALLOW_IDENTICAL = frozenset({
     "panel.perms.colId",              # "ID"
-    "panel.tokens.namePlaceholder",   # "my_token", a literal example value
+    "panel.tokens.namePlaceholder",   # "my_access_key", a literal example value
     "panel.changes.typeEsphomeYaml",  # "ESPHome YAML": a product name plus a format name
     # Product and plan names are proper nouns rather than translatable prose.
     "panel.settings.agentcliZaiCoding",

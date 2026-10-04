@@ -49,7 +49,7 @@ from ..request_authority import check_request_authority
 from ..helpers import diff_summary_fields as _summary, effective_cap, str_arg, validation_error_message as _validation_error_message
 from ..tool_common import _approved_exec_ctx, _gate, _mesa_advisory_ctx, _mesa_confirm_annotation, _pending_or_inline, _tool_error, _tool_success
 from ..policy_engine import Permission, normalize_intent_selectors, resolve, resolve_intent_entities
-from ..token_store import TokenRecord
+from ..access_key_store import AccessKeyRecord
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -179,7 +179,7 @@ def _yaml_scalar(value: Any) -> str:
     return s
 
 
-def _build_live_context(token: TokenRecord, hass: HomeAssistant) -> str:
+def _build_live_context(access_key: AccessKeyRecord, hass: HomeAssistant) -> str:
     """Build a GetLiveContext-format YAML-like summary of accessible entities."""
     registry = er.async_get(hass)
     device_snapshot = device_registry_snapshot(hass)
@@ -187,8 +187,8 @@ def _build_live_context(token: TokenRecord, hass: HomeAssistant) -> str:
     area_names: dict[str, str] = {a.id: a.name for a in ar_inst.async_list_areas()}
 
     states = hass.states.async_all()
-    if token.pass_through:
-        if token.use_assist_exposure:
+    if access_key.pass_through:
+        if access_key.use_assist_exposure:
             from homeassistant.components.homeassistant.exposed_entities import (  # noqa: PLC0415
                 async_should_expose as _should_expose,
             )
@@ -213,7 +213,7 @@ def _build_live_context(token: TokenRecord, hass: HomeAssistant) -> str:
     else:
         accessible = [
             s for s in states
-            if resolve(s.entity_id, token, hass) in (Permission.READ, Permission.WRITE)
+            if resolve(s.entity_id, access_key, hass) in (Permission.READ, Permission.WRITE)
         ]
 
     accessible.sort(key=lambda s: str_arg(s.attributes.get("friendly_name")) or s.entity_id)
@@ -247,15 +247,15 @@ def _build_live_context(token: TokenRecord, hass: HomeAssistant) -> str:
 
 
 async def _tool_get_live_context(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: GetLiveContext - return a human-readable summary of accessible entities."""
-    text = _build_live_context(token, hass)
+    text = _build_live_context(access_key, hass)
     return _tool_success(text), "allowed", "GetLiveContext"
 
 
 async def _tool_get_date_time(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: GetDateTime - return the current local date and time."""
     from homeassistant.util.dt import now as ha_now
@@ -313,7 +313,7 @@ async def _mesa_gate_native(
     service_data: dict,
     entities: list[str],
     hass: HomeAssistant,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     *,
     data: PhoenixData | None = None,
     request_id: str = "",
@@ -354,7 +354,7 @@ async def _mesa_gate_native(
     if approval_args is not None:
         mesa_kwargs["approval_args"] = approval_args
     outcome = await async_apply_mesa_to_call(
-        hass, data, token,
+        hass, data, access_key,
         domain=service_domain, service=service_name, service_data=service_data,
         entities=entities, request_id=request_id, client_ip=client_ip,
         session_id=request_id,
@@ -364,14 +364,14 @@ async def _mesa_gate_native(
         **mesa_kwargs,
     )
     if outcome.blocked:
-        fire_mesa_blocked_event(hass, token, outcome.blocked)
+        fire_mesa_blocked_event(hass, access_key, outcome.blocked)
     if outcome.decision == "pending":
         # Held inline when the token asks for it, exactly as a capability confirm
         # is (tool_common._pending_or_inline); otherwise a MESA confirm on a
         # native tool would return immediately and never deliver the
         # operator-accepted note, which only the inline path appends.
         return _MesaGate(
-            await _pending_or_inline(hass, data, token, outcome.approval), [], [])
+            await _pending_or_inline(hass, data, access_key, outcome.approval), [], [])
     if outcome.decision == "deny":
         return _MesaGate(
             (_tool_error("No accessible entities matched your request."), "denied", tool_name),
@@ -388,7 +388,7 @@ async def _tool_intent_action(
     service_data: dict,
     entities: list[str],
     hass: HomeAssistant,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     args: dict | None = None,
 ) -> tuple[dict, str, str]:
     """Execute a service call on pre-resolved, permission-filtered entity list.
@@ -402,13 +402,13 @@ async def _tool_intent_action(
 
     from ..const import APPROVAL_TARGETS_KEY
     exact = args is not None and APPROVAL_TARGETS_KEY in args
-    if exact and args is not None and not _native_targets_current(tool_name, args, token, hass):
+    if exact and args is not None and not _native_targets_current(tool_name, args, access_key, hass):
         from ..approval_targets import TARGETS_CHANGED
         return _tool_error(TARGETS_CHANGED), "denied", tool_name
     gate = await _mesa_gate_native(
-        tool_name, service_domain, service_name, service_data, entities, hass, token,
+        tool_name, service_domain, service_name, service_data, entities, hass, access_key,
         require_all=exact)
-    if exact and args is not None and not _native_targets_current(tool_name, args, token, hass):
+    if exact and args is not None and not _native_targets_current(tool_name, args, access_key, hass):
         from ..approval_targets import TARGETS_CHANGED
         return _tool_error(TARGETS_CHANGED), "denied", tool_name
     if gate.response is not None:
@@ -467,9 +467,9 @@ async def _tool_intent_action(
     })), "allowed", tool_name
 
 
-def _resolve_turn_entities(args: dict, token: TokenRecord, hass: HomeAssistant) -> list[str]:
+def _resolve_turn_entities(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> list[str]:
     return resolve_intent_entities(
-        hass, token,
+        hass, access_key,
         domains=args.get("domain"),
         device_classes=args.get("device_class"),
         name=args.get("name"),
@@ -478,16 +478,16 @@ def _resolve_turn_entities(args: dict, token: TokenRecord, hass: HomeAssistant) 
     )
 
 
-def _native_targets_current(tool_name: str, args: dict, token: TokenRecord, hass: HomeAssistant) -> bool:
+def _native_targets_current(tool_name: str, args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> bool:
     """Re-resolve the complete reviewed selection before every native service subgroup."""
     from ..approval_targets import targets_current
 
     if tool_name in ("HassTurnOn", "HassTurnOff"):
-        entities = _resolve_turn_entities(args, token, hass)
+        entities = _resolve_turn_entities(args, access_key, hass)
     else:
         defaults = list(_POSITION_DOMAIN_SERVICES) if tool_name == "HassSetPosition" else ["cover"]
         entities = resolve_intent_entities(
-            hass, token, domains=args.get("domain") or defaults,
+            hass, access_key, domains=args.get("domain") or defaults,
             device_classes=args.get("device_class"), name=args.get("name"),
             area=args.get("area"), floor=args.get("floor"),
         )
@@ -594,7 +594,7 @@ async def _hass_turn_gate(
     tool_name: str,
     service: str,
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str,
@@ -613,18 +613,18 @@ async def _hass_turn_gate(
     refusal = _no_selector_refusal(args, tool_name)
     if refusal is not None:
         return refusal
-    entities = _resolve_turn_entities(args, token, hass)
+    entities = _resolve_turn_entities(args, access_key, hass)
     physical = [e for e in entities if e.split(".")[0] in PHYSICAL_GATE_DOMAINS]
-    if physical and effective_cap(token, "cap_physical_control") == CAP_CONFIRM:
+    if physical and effective_cap(access_key, "cap_physical_control") == CAP_CONFIRM:
         blocked = await _gate(
-            "cap_physical_control", token, hass, data,
+            "cap_physical_control", access_key, hass, data,
             tool_name=tool_name, args=args, request_id=request_id,
-            client_ip=client_ip, diff=lambda: _build_diff_hass_turn(service, physical, args, token, hass),
+            client_ip=client_ip, diff=lambda: _build_diff_hass_turn(service, physical, args, access_key, hass),
             target_entities=entities,
         )
         if blocked is not None:
             return blocked
-    return await _hass_turn_execute(tool_name, service, args, token, hass, data)
+    return await _hass_turn_execute(tool_name, service, args, access_key, hass, data)
 
 
 # homeassistant.turn_on/off does not operate these domains on current HA (it logs
@@ -662,27 +662,27 @@ def _turn_service_groups(service: str, entities: list[str]) -> list[tuple[str, s
 
 
 async def _hass_turn_execute(
-    tool_name: str, service: str, args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    tool_name: str, service: str, args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     refusal = _no_selector_refusal(args, tool_name)
     if refusal is not None:
         return refusal
-    entities = _resolve_turn_entities(args, token, hass)
+    entities = _resolve_turn_entities(args, access_key, hass)
     from ..approval_targets import TARGETS_CHANGED, targets_current
     if not targets_current(args, entities, hass):
         return _tool_error(TARGETS_CHANGED), "denied", tool_name
     # Drop physical entities only when cap_physical_control is deny. Under allow
     # (direct) or confirm (reached here only after admin approval) they are kept.
     declined: list[str] = []
-    if effective_cap(token, "cap_physical_control") == CAP_DENY:
+    if effective_cap(access_key, "cap_physical_control") == CAP_DENY:
         declined = [e for e in entities if e.split(".")[0] in PHYSICAL_GATE_DOMAINS]
         entities = [e for e in entities if e.split(".")[0] not in PHYSICAL_GATE_DOMAINS]
     groups = _turn_service_groups(service, entities)
     if len(groups) <= 1:
         domain, svc, ents = groups[0] if groups else ("homeassistant", service, [])
-        result = await _tool_intent_action(tool_name, domain, svc, {}, ents, hass, token, args=args)
+        result = await _tool_intent_action(tool_name, domain, svc, {}, ents, hass, access_key, args=args)
     else:
-        result = await _merge_action_groups(tool_name, groups, args, hass, token)
+        result = await _merge_action_groups(tool_name, groups, args, hass, access_key)
     return _with_declined_targets(result, declined, hass)
 
 
@@ -727,7 +727,7 @@ async def _merge_action_calls(
     calls: list[tuple[str, str, dict[str, Any], list[str]]],
     args: dict,
     hass: HomeAssistant,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
 ) -> tuple[dict, str, str]:
     """Run native service calls and merge their action_done responses."""
     from ..const import APPROVAL_TARGETS_KEY
@@ -737,7 +737,7 @@ async def _merge_action_calls(
         # repeats this gate before each subgroup, since earlier calls can suspend.
         for domain, svc, service_data, ents in calls:
             gate = await _mesa_gate_native(
-                tool_name, domain, svc, service_data, ents, hass, token, require_all=True)
+                tool_name, domain, svc, service_data, ents, hass, access_key, require_all=True)
             if gate.response is not None:
                 return gate.response
     success: list[dict] = []
@@ -746,7 +746,7 @@ async def _merge_action_calls(
     any_ok = False
     for domain, svc, service_data, ents in calls:
         resp, outcome, resource = await _tool_intent_action(
-            tool_name, domain, svc, service_data, ents, hass, token, args=args
+            tool_name, domain, svc, service_data, ents, hass, access_key, args=args
         )
         if outcome == "pending_approval":
             return resp, outcome, resource
@@ -785,7 +785,7 @@ async def _merge_action_groups(
     groups: list[tuple[str, str, list[str]]],
     args: dict,
     hass: HomeAssistant,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     service_data: dict[str, Any] | None = None,
 ) -> tuple[dict, str, str]:
     """Run a mixed-domain action as one service call per domain.
@@ -801,46 +801,46 @@ async def _merge_action_groups(
         ],
         args,
         hass,
-        token,
+        access_key,
     )
 
 
 async def _tool_hass_turn_on(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
-    return await _hass_turn_gate("HassTurnOn", "turn_on", args, token, hass, data, request_id, client_ip)
+    return await _hass_turn_gate("HassTurnOn", "turn_on", args, access_key, hass, data, request_id, client_ip)
 
 
 async def _execute_hass_turn_on(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    return await _hass_turn_execute("HassTurnOn", "turn_on", args, token, hass, data)
+    return await _hass_turn_execute("HassTurnOn", "turn_on", args, access_key, hass, data)
 
 
 async def _tool_hass_turn_off(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
     client_ip: str | None = None,
 ) -> tuple[dict, str, str]:
-    return await _hass_turn_gate("HassTurnOff", "turn_off", args, token, hass, data, request_id, client_ip)
+    return await _hass_turn_gate("HassTurnOff", "turn_off", args, access_key, hass, data, request_id, client_ip)
 
 
 async def _execute_hass_turn_off(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
-    return await _hass_turn_execute("HassTurnOff", "turn_off", args, token, hass, data)
+    return await _hass_turn_execute("HassTurnOff", "turn_off", args, access_key, hass, data)
 
 
 async def _tool_hass_light_set(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     refusal = _validate_hass_light_set_args(args)
     if refusal is not None:
@@ -848,7 +848,7 @@ async def _tool_hass_light_set(
 
     domains = ["light"]
     entities = resolve_intent_entities(
-        hass, token,
+        hass, access_key,
         domains=domains,
         name=args.get("name"),
         area=args.get("area"),
@@ -861,7 +861,7 @@ async def _tool_hass_light_set(
         service_data["color_name"] = args["color"]
     if "temperature" in args and args["temperature"] is not None:
         service_data["color_temp_kelvin"] = args["temperature"]
-    return await _tool_intent_action("HassLightSet", "light", "turn_on", service_data, entities, hass, token, args=args)
+    return await _tool_intent_action("HassLightSet", "light", "turn_on", service_data, entities, hass, access_key, args=args)
 
 
 def _validate_hass_light_set_args(args: dict) -> tuple[dict, str, str] | None:
@@ -890,14 +890,14 @@ def _validate_hass_light_set_args(args: dict) -> tuple[dict, str, str] | None:
 
 
 async def _tool_hass_fan_set_speed(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     refusal = _validate_hass_fan_set_speed_args(args)
     if refusal is not None:
         return refusal
 
     entities = resolve_intent_entities(
-        hass, token,
+        hass, access_key,
         domains=["fan"],
         name=args.get("name"),
         area=args.get("area"),
@@ -906,7 +906,7 @@ async def _tool_hass_fan_set_speed(
     service_data: dict[str, Any] = {}
     if "percentage" in args and args["percentage"] is not None:
         service_data["percentage"] = args["percentage"]
-    return await _tool_intent_action("HassFanSetSpeed", "fan", "set_percentage", service_data, entities, hass, token, args=args)
+    return await _tool_intent_action("HassFanSetSpeed", "fan", "set_percentage", service_data, entities, hass, access_key, args=args)
 
 
 def _validate_hass_fan_set_speed_args(args: dict) -> tuple[dict, str, str] | None:
@@ -1017,14 +1017,14 @@ def validate_native_control_args(tool_name: str, args: dict) -> tuple[dict, str,
 
 
 async def _tool_hass_climate_set_temperature(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     refusal = _validate_hass_climate_temperature_args(args)
     if refusal is not None:
         return refusal
 
     entities = resolve_intent_entities(
-        hass, token,
+        hass, access_key,
         domains=["climate"],
         name=args.get("name"),
         area=args.get("area"),
@@ -1033,12 +1033,12 @@ async def _tool_hass_climate_set_temperature(
     service_data: dict[str, Any] = {}
     if "temperature" in args and args["temperature"] is not None:
         service_data["temperature"] = args["temperature"]
-    return await _tool_intent_action("HassClimateSetTemperature", "climate", "set_temperature", service_data, entities, hass, token, args=args)
+    return await _tool_intent_action("HassClimateSetTemperature", "climate", "set_temperature", service_data, entities, hass, access_key, args=args)
 
 
 async def _tool_hass_set_position(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
@@ -1048,18 +1048,18 @@ async def _tool_hass_set_position(
     if refusal is not None:
         return refusal
     blocked = await _gate(
-        "cap_physical_control", token, hass, data,
+        "cap_physical_control", access_key, hass, data,
         tool_name="HassSetPosition", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_hass_set_position(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_hass_set_position(args, access_key, hass),
         target_entities=(resolve_intent_entities(
-            hass, token, domains=args.get("domain") or list(_POSITION_DOMAIN_SERVICES),
+            hass, access_key, domains=args.get("domain") or list(_POSITION_DOMAIN_SERVICES),
             device_classes=args.get("device_class"), name=args.get("name"),
             area=args.get("area"), floor=args.get("floor"))
-            if effective_cap(token, "cap_physical_control") == CAP_CONFIRM else None),
+            if effective_cap(access_key, "cap_physical_control") == CAP_CONFIRM else None),
     )
     if blocked is not None:
         return blocked
-    return await _execute_hass_set_position(args, token, hass, data)
+    return await _execute_hass_set_position(args, access_key, hass, data)
 
 
 # Position-capable domains and the service that positions them. HassSetPosition
@@ -1089,14 +1089,14 @@ def _validate_hass_set_position_args(args: dict) -> tuple[dict, str, str] | None
 
 
 async def _execute_hass_set_position(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     refusal = _validate_hass_set_position_args(args)
     if refusal is not None:
         return refusal
 
     entities = resolve_intent_entities(
-        hass, token,
+        hass, access_key,
         domains=args.get("domain") or list(_POSITION_DOMAIN_SERVICES),
         device_classes=args.get("device_class"),
         name=args.get("name"),
@@ -1117,19 +1117,19 @@ async def _execute_hass_set_position(
     groups = [(domain, svc, ents) for (domain, svc), ents in grouped.items()]
     if len(groups) <= 1:
         domain, svc, ents = groups[0] if groups else ("cover", "set_cover_position", [])
-        return await _tool_intent_action("HassSetPosition", domain, svc, service_data, ents, hass, token, args=args)
-    return await _merge_action_groups("HassSetPosition", groups, args, hass, token, service_data=service_data)
+        return await _tool_intent_action("HassSetPosition", domain, svc, service_data, ents, hass, access_key, args=args)
+    return await _merge_action_groups("HassSetPosition", groups, args, hass, access_key, service_data=service_data)
 
 
 async def _tool_hass_set_volume(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     refusal = _validate_hass_volume_args(args)
     if refusal is not None:
         return refusal
 
     entities = resolve_intent_entities(
-        hass, token,
+        hass, access_key,
         domains=["media_player"],
         device_classes=args.get("device_class"),
         name=args.get("name"),
@@ -1139,7 +1139,7 @@ async def _tool_hass_set_volume(
     service_data: dict[str, Any] = {}
     if "volume_level" in args and args["volume_level"] is not None:
         service_data["volume_level"] = args["volume_level"] / 100.0
-    return await _tool_intent_action("HassSetVolume", "media_player", "volume_set", service_data, entities, hass, token, args=args)
+    return await _tool_intent_action("HassSetVolume", "media_player", "volume_set", service_data, entities, hass, access_key, args=args)
 
 
 def _relative_volume_plan(
@@ -1206,7 +1206,7 @@ def _native_entity_entry(entity_id: str, hass: HomeAssistant) -> dict[str, str]:
 
 async def _execute_hass_set_volume_relative(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
@@ -1221,7 +1221,7 @@ async def _execute_hass_set_volume_relative(
             "HassSetVolumeRelative",
         )
     entities = [entity_id for entity_id, _level in plan]
-    if any(resolve(entity_id, token, hass) != Permission.WRITE for entity_id in entities):
+    if any(resolve(entity_id, access_key, hass) != Permission.WRITE for entity_id in entities):
         return (
             _tool_error("No accessible entities matched your request."),
             "denied",
@@ -1241,7 +1241,7 @@ async def _execute_hass_set_volume_relative(
         {},
         entities,
         hass,
-        token,
+        access_key,
         data=data,
         request_id=request_id,
         client_ip=client_ip,
@@ -1281,7 +1281,7 @@ async def _execute_hass_set_volume_relative(
             try:
                 check_request_authority()
                 if (not targets_current(args, entities, hass)
-                        or any(resolve(entity, token, hass) != Permission.WRITE for entity in entities)):
+                        or any(resolve(entity, access_key, hass) != Permission.WRITE for entity in entities)):
                     raise HomeAssistantError(TARGETS_CHANGED)
                 await hass.services.async_call(
                     "media_player",
@@ -1401,7 +1401,7 @@ async def _execute_hass_set_volume_relative(
 
 async def _tool_hass_set_volume_relative(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
@@ -1412,7 +1412,7 @@ async def _tool_hass_set_volume_relative(
         return refusal
 
     entities = resolve_intent_entities(
-        hass, token,
+        hass, access_key,
         domains=["media_player"],
         name=args.get("name"),
         area=args.get("area"),
@@ -1423,7 +1423,7 @@ async def _tool_hass_set_volume_relative(
         service = "volume_down" if step == "down" else "volume_up"
         return await _tool_intent_action(
             "HassSetVolumeRelative", "media_player", service, {},
-            entities, hass, token, args=args,
+            entities, hass, access_key, args=args,
         )
     if not isinstance(step, int) or isinstance(step, bool):
         return (
@@ -1461,7 +1461,7 @@ async def _tool_hass_set_volume_relative(
         plan_args["floor"] = args["floor"]
     return await _execute_hass_set_volume_relative(
         plan_args,
-        token,
+        access_key,
         hass,
         data,
         request_id=request_id,
@@ -1470,13 +1470,13 @@ async def _tool_hass_set_volume_relative(
 
 
 async def _tool_hass_media_pause(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     refusal = _fixed_domain_refusal(args, "HassMediaPause", "media_player")
     if refusal is not None:
         return refusal
     entities = resolve_intent_entities(
-        hass, token,
+        hass, access_key,
         domains=["media_player"],
         device_classes=args.get("device_class"),
         name=args.get("name"),
@@ -1484,17 +1484,17 @@ async def _tool_hass_media_pause(
         floor=args.get("floor"),
     )
     entities = [e for e in entities if (s := hass.states.get(e)) and s.state == "playing"]
-    return await _tool_intent_action("HassMediaPause", "media_player", "media_pause", {}, entities, hass, token, args=args)
+    return await _tool_intent_action("HassMediaPause", "media_player", "media_pause", {}, entities, hass, access_key, args=args)
 
 
 async def _tool_hass_media_unpause(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     refusal = _fixed_domain_refusal(args, "HassMediaUnpause", "media_player")
     if refusal is not None:
         return refusal
     entities = resolve_intent_entities(
-        hass, token,
+        hass, access_key,
         domains=["media_player"],
         device_classes=args.get("device_class"),
         name=args.get("name"),
@@ -1502,17 +1502,17 @@ async def _tool_hass_media_unpause(
         floor=args.get("floor"),
     )
     entities = [e for e in entities if (s := hass.states.get(e)) and s.state == "paused"]
-    return await _tool_intent_action("HassMediaUnpause", "media_player", "media_play", {}, entities, hass, token, args=args)
+    return await _tool_intent_action("HassMediaUnpause", "media_player", "media_play", {}, entities, hass, access_key, args=args)
 
 
 async def _tool_hass_media_next(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     refusal = _fixed_domain_refusal(args, "HassMediaNext", "media_player")
     if refusal is not None:
         return refusal
     entities = resolve_intent_entities(
-        hass, token,
+        hass, access_key,
         domains=["media_player"],
         device_classes=args.get("device_class"),
         name=args.get("name"),
@@ -1520,17 +1520,17 @@ async def _tool_hass_media_next(
         floor=args.get("floor"),
     )
     entities = [e for e in entities if (s := hass.states.get(e)) and s.state == "playing"]
-    return await _tool_intent_action("HassMediaNext", "media_player", "media_next_track", {}, entities, hass, token, args=args)
+    return await _tool_intent_action("HassMediaNext", "media_player", "media_next_track", {}, entities, hass, access_key, args=args)
 
 
 async def _tool_hass_media_previous(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     refusal = _fixed_domain_refusal(args, "HassMediaPrevious", "media_player")
     if refusal is not None:
         return refusal
     entities = resolve_intent_entities(
-        hass, token,
+        hass, access_key,
         domains=["media_player"],
         device_classes=args.get("device_class"),
         name=args.get("name"),
@@ -1538,11 +1538,11 @@ async def _tool_hass_media_previous(
         floor=args.get("floor"),
     )
     entities = [e for e in entities if (s := hass.states.get(e)) and s.state in ("playing", "paused")]
-    return await _tool_intent_action("HassMediaPrevious", "media_player", "media_previous_track", {}, entities, hass, token, args=args)
+    return await _tool_intent_action("HassMediaPrevious", "media_player", "media_previous_track", {}, entities, hass, access_key, args=args)
 
 
 async def _tool_hass_media_search_and_play(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     refusal = _no_selector_refusal(args, "HassMediaSearchAndPlay", _BASIC_TARGET_SELECTORS)
     if refusal is not None:
@@ -1555,7 +1555,7 @@ async def _tool_hass_media_search_and_play(
             "HassMediaSearchAndPlay",
         )
     entities = resolve_intent_entities(
-        hass, token,
+        hass, access_key,
         domains=["media_player"],
         name=args.get("name"),
         area=args.get("area"),
@@ -1566,48 +1566,48 @@ async def _tool_hass_media_search_and_play(
         "media_content_id": search_query,
         "media_content_type": media_class,
     }
-    return await _tool_intent_action("HassMediaSearchAndPlay", "media_player", "play_media", service_data, entities, hass, token, args=args)
+    return await _tool_intent_action("HassMediaSearchAndPlay", "media_player", "play_media", service_data, entities, hass, access_key, args=args)
 
 
 async def _tool_hass_media_player_mute(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     refusal = _fixed_domain_refusal(args, "HassMediaPlayerMute", "media_player")
     if refusal is not None:
         return refusal
     entities = resolve_intent_entities(
-        hass, token,
+        hass, access_key,
         domains=["media_player"],
         device_classes=args.get("device_class"),
         name=args.get("name"),
         area=args.get("area"),
         floor=args.get("floor"),
     )
-    return await _tool_intent_action("HassMediaPlayerMute", "media_player", "volume_mute", {"is_volume_muted": True}, entities, hass, token, args=args)
+    return await _tool_intent_action("HassMediaPlayerMute", "media_player", "volume_mute", {"is_volume_muted": True}, entities, hass, access_key, args=args)
 
 
 async def _tool_hass_media_player_unmute(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     refusal = _fixed_domain_refusal(args, "HassMediaPlayerUnmute", "media_player")
     if refusal is not None:
         return refusal
     entities = resolve_intent_entities(
-        hass, token,
+        hass, access_key,
         domains=["media_player"],
         device_classes=args.get("device_class"),
         name=args.get("name"),
         area=args.get("area"),
         floor=args.get("floor"),
     )
-    return await _tool_intent_action("HassMediaPlayerUnmute", "media_player", "volume_mute", {"is_volume_muted": False}, entities, hass, token, args=args)
+    return await _tool_intent_action("HassMediaPlayerUnmute", "media_player", "volume_mute", {"is_volume_muted": False}, entities, hass, access_key, args=args)
 
 
 async def _tool_hass_cancel_all_timers(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     entities = resolve_intent_entities(
-        hass, token,
+        hass, access_key,
         domains=["timer"],
         area=args.get("area"),
     )
@@ -1619,7 +1619,7 @@ async def _tool_hass_cancel_all_timers(
         # allowed, not what was resolved: "canceled: 3" after cancelling one
         # would misstate state the caller will act on.
         gate = await _mesa_gate_native(
-            "HassCancelAllTimers", "timer", "cancel", {}, entities, hass, token)
+            "HassCancelAllTimers", "timer", "cancel", {}, entities, hass, access_key)
         if gate.response is not None:
             return gate.response
         entities = gate.entities
@@ -1649,7 +1649,7 @@ async def _tool_hass_cancel_all_timers(
 
 async def _tool_hass_stop_moving(
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
     data: PhoenixData,
     request_id: str = "",
@@ -1659,28 +1659,28 @@ async def _tool_hass_stop_moving(
     if refusal is not None:
         return refusal
     blocked = await _gate(
-        "cap_physical_control", token, hass, data,
+        "cap_physical_control", access_key, hass, data,
         tool_name="HassStopMoving", args=args, request_id=request_id,
-        client_ip=client_ip, diff=lambda: _build_diff_hass_stop_moving(args, token, hass),
+        client_ip=client_ip, diff=lambda: _build_diff_hass_stop_moving(args, access_key, hass),
         target_entities=(resolve_intent_entities(
-            hass, token, domains=args.get("domain") or ["cover"],
+            hass, access_key, domains=args.get("domain") or ["cover"],
             device_classes=args.get("device_class"), name=args.get("name"),
             area=args.get("area"), floor=args.get("floor"))
-            if effective_cap(token, "cap_physical_control") == CAP_CONFIRM else None),
+            if effective_cap(access_key, "cap_physical_control") == CAP_CONFIRM else None),
     )
     if blocked is not None:
         return blocked
-    return await _execute_hass_stop_moving(args, token, hass, data)
+    return await _execute_hass_stop_moving(args, access_key, hass, data)
 
 
 async def _execute_hass_stop_moving(
-    args: dict, token: TokenRecord, hass: HomeAssistant, data: PhoenixData
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, data: PhoenixData
 ) -> tuple[dict, str, str]:
     refusal = _no_selector_refusal(args, "HassStopMoving")
     if refusal is not None:
         return refusal
     entities = resolve_intent_entities(
-        hass, token,
+        hass, access_key,
         domains=args.get("domain") or ["cover"],
         device_classes=args.get("device_class"),
         name=args.get("name"),
@@ -1690,7 +1690,7 @@ async def _execute_hass_stop_moving(
     from ..approval_targets import TARGETS_CHANGED, targets_current
     if not targets_current(args, entities, hass):
         return _tool_error(TARGETS_CHANGED), "denied", "HassStopMoving"
-    return await _tool_intent_action("HassStopMoving", "cover", "stop_cover", {}, entities, hass, token, args=args)
+    return await _tool_intent_action("HassStopMoving", "cover", "stop_cover", {}, entities, hass, access_key, args=args)
 
 
 def _vacuums_supporting(entities: list[str], hass: HomeAssistant, feature_bit: int) -> list[str]:
@@ -1715,7 +1715,7 @@ async def _vacuum_action(
     service: str,
     feature_bit: int,
     args: dict,
-    token: TokenRecord,
+    access_key: AccessKeyRecord,
     hass: HomeAssistant,
 ) -> tuple[dict, str, str]:
     """Shared body for HassVacuumStart and HassVacuumReturnToBase.
@@ -1731,27 +1731,27 @@ async def _vacuum_action(
     if refusal is not None:
         return refusal
     entities = resolve_intent_entities(
-        hass, token,
+        hass, access_key,
         domains=["vacuum"],
         name=args.get("name"),
         area=args.get("area"),
         floor=args.get("floor"),
     )
     entities = _vacuums_supporting(entities, hass, feature_bit)
-    return await _tool_intent_action(tool_name, "vacuum", service, {}, entities, hass, token, args=args)
+    return await _tool_intent_action(tool_name, "vacuum", service, {}, entities, hass, access_key, args=args)
 
 
 async def _tool_hass_vacuum_start(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
-    return await _vacuum_action("HassVacuumStart", "start", VACUUM_START_BIT, args, token, hass)
+    return await _vacuum_action("HassVacuumStart", "start", VACUUM_START_BIT, args, access_key, hass)
 
 
 async def _tool_hass_vacuum_return_to_base(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     return await _vacuum_action(
-        "HassVacuumReturnToBase", "return_to_base", VACUUM_RETURN_HOME_BIT, args, token, hass)
+        "HassVacuumReturnToBase", "return_to_base", VACUUM_RETURN_HOME_BIT, args, access_key, hass)
 
 
 def _areas_matching(hass: HomeAssistant, area_name: str) -> list[ar.AreaEntry]:
@@ -1773,7 +1773,7 @@ def _areas_matching(hass: HomeAssistant, area_name: str) -> list[ar.AreaEntry]:
 
 
 async def _tool_hass_vacuum_clean_area(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: HassVacuumCleanArea - send a vacuum to clean a named area.
 
@@ -1796,20 +1796,20 @@ async def _tool_hass_vacuum_clean_area(
         # treats an area name that resolves to nothing.
         return _tool_error("No accessible entities matched your request."), "denied", "HassVacuumCleanArea"
 
-    entities = resolve_intent_entities(hass, token, domains=["vacuum"], name=args.get("name"))
+    entities = resolve_intent_entities(hass, access_key, domains=["vacuum"], name=args.get("name"))
     entities = _vacuums_supporting(entities, hass, VACUUM_CLEAN_AREA_BIT)
     return await _tool_intent_action(
         "HassVacuumCleanArea", "vacuum", "clean_area",
         {"cleaning_area_id": [area.id for area in matched_areas]},
-        entities, hass, token, args=args,
+        entities, hass, access_key, args=args,
     )
 
 
 async def _tool_hass_broadcast(
-    args: dict, token: TokenRecord, hass: HomeAssistant
+    args: dict, access_key: AccessKeyRecord, hass: HomeAssistant
 ) -> tuple[dict, str, str]:
     """MCP tool: HassBroadcast - announce a message via assist satellite devices."""
-    if effective_cap(token, "cap_broadcast") == CAP_DENY:
+    if effective_cap(access_key, "cap_broadcast") == CAP_DENY:
         return _tool_error("Forbidden."), "denied", "HassBroadcast"
 
     message = args.get("message", "")
@@ -1822,7 +1822,7 @@ async def _tool_hass_broadcast(
             continue
         features = state.attributes.get("supported_features", 0)
         if isinstance(features, int) and (features & ANNOUNCE_BIT):
-            if token.pass_through or resolve(state.entity_id, token, hass) == Permission.WRITE:
+            if access_key.pass_through or resolve(state.entity_id, access_key, hass) == Permission.WRITE:
                 targets.append(state.entity_id)
 
     if not targets:
@@ -1834,7 +1834,7 @@ async def _tool_hass_broadcast(
     # gate directly.
     gate = await _mesa_gate_native(
         "HassBroadcast", "assist_satellite", "announce",
-        {"message": message}, targets, hass, token)
+        {"message": message}, targets, hass, access_key)
     if gate.response is not None:
         return gate.response
     targets = gate.entities
@@ -1866,7 +1866,7 @@ async def _tool_hass_broadcast(
     return _tool_success(json.dumps({"success": True})), "allowed", "HassBroadcast"
 
 
-def _build_diff_hass_turn(service: str, physical: list[str], args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _build_diff_hass_turn(service: str, physical: list[str], args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     """Diff payload for a HassTurnOn/Off approval triggered by physical entities.
 
     Only the physical (lock/alarm/cover/valve) targets are listed, since those
@@ -1890,7 +1890,7 @@ def _build_diff_hass_turn(service: str, physical: list[str], args: dict, token: 
     }
     # Evaluate MESA per actuating service (lock.lock vs homeassistant.turn_on
     # etc.), the same grouping the executor will dispatch with.
-    mesa_note = _mesa_confirm_annotation(token, hass, _turn_service_groups(service, physical))
+    mesa_note = _mesa_confirm_annotation(access_key, hass, _turn_service_groups(service, physical))
     if mesa_note:
         preview["mesa"] = mesa_note
     return {
@@ -1902,7 +1902,7 @@ def _build_diff_hass_turn(service: str, physical: list[str], args: dict, token: 
     }
 
 
-def _intent_diff_groups(args: dict, token: TokenRecord, hass: HomeAssistant, domain_services: dict[str, str], default_domains: list[str]) -> list[tuple[str, str, list[str]]]:
+def _intent_diff_groups(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant, domain_services: dict[str, str], default_domains: list[str]) -> list[tuple[str, str, list[str]]]:
     """Resolve an intent-tool diff's targets read-only and group per actuating service.
 
     Mirrors the executor's own resolution (which re-runs at approve time) just
@@ -1910,7 +1910,7 @@ def _intent_diff_groups(args: dict, token: TokenRecord, hass: HomeAssistant, dom
     """
     try:
         entities = resolve_intent_entities(
-            hass, token,
+            hass, access_key,
             domains=args.get("domain") or default_domains,
             device_classes=args.get("device_class"),
             name=args.get("name"),
@@ -1927,7 +1927,7 @@ def _intent_diff_groups(args: dict, token: TokenRecord, hass: HomeAssistant, dom
         return []
 
 
-def _build_diff_hass_set_position(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _build_diff_hass_set_position(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     preview = {
         "position": args.get("position"),
         "name": args.get("name"),
@@ -1936,8 +1936,8 @@ def _build_diff_hass_set_position(args: dict, token: TokenRecord, hass: HomeAssi
         "domain": args.get("domain"),
         "device_class": args.get("device_class"),
     }
-    mesa_note = _mesa_confirm_annotation(token, hass, _intent_diff_groups(
-        args, token, hass,
+    mesa_note = _mesa_confirm_annotation(access_key, hass, _intent_diff_groups(
+        args, access_key, hass,
         {dom: svc for dom, (_, svc) in _POSITION_DOMAIN_SERVICES.items()},
         list(_POSITION_DOMAIN_SERVICES),
     ))
@@ -1951,7 +1951,7 @@ def _build_diff_hass_set_position(args: dict, token: TokenRecord, hass: HomeAssi
     }
 
 
-def _build_diff_hass_stop_moving(args: dict, token: TokenRecord, hass: HomeAssistant) -> dict:
+def _build_diff_hass_stop_moving(args: dict, access_key: AccessKeyRecord, hass: HomeAssistant) -> dict:
     preview = {
         "name": args.get("name"),
         "area": args.get("area"),
@@ -1959,8 +1959,8 @@ def _build_diff_hass_stop_moving(args: dict, token: TokenRecord, hass: HomeAssis
         "domain": args.get("domain"),
         "device_class": args.get("device_class"),
     }
-    mesa_note = _mesa_confirm_annotation(token, hass, _intent_diff_groups(
-        args, token, hass, {"cover": "stop_cover"}, ["cover"],
+    mesa_note = _mesa_confirm_annotation(access_key, hass, _intent_diff_groups(
+        args, access_key, hass, {"cover": "stop_cover"}, ["cover"],
     ))
     if mesa_note:
         preview["mesa"] = mesa_note

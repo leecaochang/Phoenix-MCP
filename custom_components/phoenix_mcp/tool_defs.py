@@ -436,7 +436,7 @@ _ENTITY_TOOL_DEFS: list[dict] = [
             "or to resume polling. Also returns agent_recovery records for this access key's interrupted "
             "Phoenix-owned provider turns. outcome_unknown blocks further writes until an administrator "
             "checks Home Assistant and reviews it in Phoenix MCP > Needs attention. dispatch_result is a receipt, not "
-            "proof of physical completion. Never replay an uncertain action. Access Keys only see their own records."
+            "proof of physical completion. Never replay an uncertain action. Access keys only see their own records."
         ),
         "inputSchema": {
             "type": "object",

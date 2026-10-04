@@ -16,8 +16,8 @@ import type {
   AuditListResponse,
   AuditQueryParams,
   CardCatalogResponse,
-  ArchivedTokenRecord,
-  CreateTokenBody,
+  ArchivedAccessKeyRecord,
+  CreateAccessKeyBody,
   DeclaredModelCaps,
   EntityTree,
   GlobalSettings,
@@ -30,15 +30,15 @@ import type {
   MesaProfileDocument,
   MesaProfilesResponse,
   MesaPutResponse,
-  PatchTokenBody,
+  PatchAccessKeyBody,
   PermissionPatchBody,
   PermissionTree,
   ResolveResult,
   ScopeResult,
-  TokenConnection,
-  TokenCreateResponse,
-  TokenRecord,
-  TokenStats,
+  AccessKeyConnection,
+  AccessKeyCreateResponse,
+  AccessKeyRecord,
+  AccessKeyStats,
   VersionListResponse,
   VersionRecord,
   VersionRestoreResponse,
@@ -135,20 +135,20 @@ async function _doReq<T>(method: string, path: string, body?: unknown, extraHead
   return json as T;
 }
 
-const tokenMutations = new Map<string, Promise<unknown>>();
+const accessKeyMutations = new Map<string, Promise<unknown>>();
 
 async function req<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
-  const token = method === "GET" ? undefined : /^\/tokens\/([^/]+)(?:\/|$)/.exec(path)?.[1];
-  if (!token) return _doReq<T>(method, path, body, extraHeaders);
+  const accessKey = method === "GET" ? undefined : /^\/tokens\/([^/]+)(?:\/|$)/.exec(path)?.[1];
+  if (!accessKey) return _doReq<T>(method, path, body, extraHeaders);
   const owner = authHass()?.user?.id;
-  const previous = tokenMutations.get(token);
+  const previous = accessKeyMutations.get(accessKey);
   const result = (previous ?? Promise.resolve()).catch(() => {}).then(() => {
     if (authHass()?.user?.id !== owner) throw new ApiError(401, "unauthorized", t("common.noSession"));
     return _doReq<T>(method, path, body, extraHeaders);
   });
-  tokenMutations.set(token, result);
+  accessKeyMutations.set(accessKey, result);
   try { return await result; }
-  finally { if (tokenMutations.get(token) === result) tokenMutations.delete(token); }
+  finally { if (accessKeyMutations.get(accessKey) === result) accessKeyMutations.delete(accessKey); }
 }
 
 function buildQuery(params?: AuditQueryParams): string {
@@ -170,30 +170,30 @@ export const api = {
   listAttention: () => req<{ items: AttentionItem[] }>("GET", "/attention"),
   reviewAttention: (kind: "agent" | "calendar", id: string) =>
     req<{ reviewed: boolean }>("POST", `/attention/${kind}/${encodeURIComponent(id)}`, { checked_outcome: true }),
-  listTokens: () => req<TokenRecord[]>("GET", "/tokens"),
-  getToken: (id: string) => req<TokenRecord>("GET", `/tokens/${id}`),
-  createToken: (body: CreateTokenBody) =>
-    req<TokenCreateResponse>("POST", "/tokens", body),
-  patchToken: (id: string, body: PatchTokenBody) =>
-    req<TokenRecord>("PATCH", `/tokens/${id}`, body),
-  revokeToken: (id: string) => req<void>("DELETE", `/tokens/${id}`),
-  rotateToken: (id: string) => req<TokenCreateResponse>("POST", `/tokens/${id}/rotate`),
+  listAccessKeys: () => req<AccessKeyRecord[]>("GET", "/tokens"),
+  getAccessKey: (id: string) => req<AccessKeyRecord>("GET", `/tokens/${id}`),
+  createAccessKey: (body: CreateAccessKeyBody) =>
+    req<AccessKeyCreateResponse>("POST", "/tokens", body),
+  patchAccessKey: (id: string, body: PatchAccessKeyBody) =>
+    req<AccessKeyRecord>("PATCH", `/tokens/${id}`, body),
+  revokeAccessKey: (id: string) => req<void>("DELETE", `/tokens/${id}`),
+  rotateAccessKey: (id: string) => req<AccessKeyCreateResponse>("POST", `/tokens/${id}/rotate`),
 
   createPreset: (tokenId: string, name: string) =>
-    req<TokenRecord>("POST", `/tokens/${tokenId}/presets`, { name }),
+    req<AccessKeyRecord>("POST", `/tokens/${tokenId}/presets`, { name }),
   renamePreset: (tokenId: string, presetId: string, name: string) =>
-    req<TokenRecord>("PATCH", `/tokens/${tokenId}/presets/${presetId}`, { name }),
+    req<AccessKeyRecord>("PATCH", `/tokens/${tokenId}/presets/${presetId}`, { name }),
   deletePreset: (tokenId: string, presetId: string) =>
-    req<TokenRecord>("DELETE", `/tokens/${tokenId}/presets/${presetId}`),
+    req<AccessKeyRecord>("DELETE", `/tokens/${tokenId}/presets/${presetId}`),
   applyPreset: (tokenId: string, presetId: string, confirmPassThrough = false) =>
-    req<TokenRecord>(
+    req<AccessKeyRecord>(
       "POST",
       `/tokens/${tokenId}/presets/${presetId}/apply`,
       confirmPassThrough ? { confirm_pass_through: true } : {},
     ),
 
-  listArchivedTokens: () => req<ArchivedTokenRecord[]>("GET", "/tokens/archived"),
-  deleteArchivedToken: (id: string) => req<void>("DELETE", `/tokens/archived/${id}`),
+  listArchivedAccessKeys: () => req<ArchivedAccessKeyRecord[]>("GET", "/tokens/archived"),
+  deleteArchivedAccessKey: (id: string) => req<void>("DELETE", `/tokens/archived/${id}`),
 
   getPermissions: (id: string) => req<PermissionTree>("GET", `/tokens/${id}/permissions`),
   setPermissions: (id: string, tree: PermissionTree) =>
@@ -231,9 +231,9 @@ export const api = {
   setEntityHint: (entityId: string, hint: string | null) =>
     req<{ entity_hints: Record<string, string> }>("PUT", `/entity-hints/${encodeURIComponent(entityId)}`, { hint }),
 
-  getTokenStats: (tokenId: string) => req<TokenStats>("GET", `/tokens/${tokenId}/stats`),
-  getTokenConnection: (tokenId: string) => req<TokenConnection>("GET", `/tokens/${tokenId}/connection`),
-  getTokenAudit: (tokenId: string, params?: AuditQueryParams) =>
+  getAccessKeyStats: (tokenId: string) => req<AccessKeyStats>("GET", `/tokens/${tokenId}/stats`),
+  getAccessKeyConnection: (tokenId: string) => req<AccessKeyConnection>("GET", `/tokens/${tokenId}/connection`),
+  getAccessKeyAudit: (tokenId: string, params?: AuditQueryParams) =>
     req<AuditEntry[]>("GET", `/tokens/${tokenId}/audit${buildQuery(params)}`),
   getAudit: (params?: AuditQueryParams) =>
     req<AuditListResponse>("GET", `/audit${buildQuery(params)}`),

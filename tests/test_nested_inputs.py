@@ -7,7 +7,7 @@ from homeassistant.util.dt import utcnow
 
 from custom_components.phoenix_mcp import mcp_view
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.token_store import GlobalSettings, TokenRecord
+from custom_components.phoenix_mcp.access_key_store import GlobalSettings, AccessKeyRecord
 from custom_components.phoenix_mcp.tool_contracts import normalize_tool_args
 from custom_components.phoenix_mcp.tools import energy, helper, lovelace, radio
 from custom_components.phoenix_mcp.const import (
@@ -56,10 +56,10 @@ def test_group_members_are_validated_as_a_whole():
 
 
 def _environment(cap, mode):
-    token = TokenRecord(id="nested", name="nested", token_hash="x", created_at=utcnow(), created_by="admin", **{cap: mode})
+    access_key = AccessKeyRecord(id="nested", name="nested", token_hash="x", created_at=utcnow(), created_by="admin", **{cap: mode})
     store = MagicMock()
     store.get_settings.return_value = GlobalSettings()
-    return token, PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock())
+    return access_key, PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock())
 
 
 @pytest.mark.parametrize("tool,args", [
@@ -68,9 +68,9 @@ def _environment(cap, mode):
     ("edit_dashboard", {"dashboard_id": "reviewed-dashboard", "config": {"show_in_sidebar": "false"}}),
 ])
 async def test_dashboard_metadata_refuses_before_gate(hass, tool, args):
-    token, data = _environment("cap_lovelace_write", "confirm")
+    access_key, data = _environment("cap_lovelace_write", "confirm")
     with patch.object(lovelace, "_gate", AsyncMock(return_value=({}, "pending_approval", tool))) as gate:
-        result, outcome, _ = await mcp_view._call_tool(tool, args, token, hass, data)
+        result, outcome, _ = await mcp_view._call_tool(tool, args, access_key, hass, data)
     assert outcome == "invalid_request"
     assert result["isError"]
     gate.assert_not_called()
@@ -88,8 +88,8 @@ async def test_dashboard_metadata_refuses_before_gate(hass, tool, args):
     ("cap_radio_write", "create_zigbee_group", {"name": "Review", "members": [{"device_id": "reviewed", "endpoint": True}]}),
 ])
 async def test_denial_precedes_nested_diagnostics(hass, cap, tool, args):
-    token, data = _environment(cap, "deny")
-    result, outcome, _ = await mcp_view._call_tool(tool, args, token, hass, data)
+    access_key, data = _environment(cap, "deny")
+    result, outcome, _ = await mcp_view._call_tool(tool, args, access_key, hass, data)
     assert outcome == "denied"
     assert "unsupported" not in result["content"][0]["text"].lower()
 
@@ -135,17 +135,17 @@ def _deep_value():
 ])
 @pytest.mark.parametrize("approved", [False, True])
 async def test_malformed_json_never_reaches_handler_or_executor(hass, value, approved):
-    token, data = _environment("cap_lovelace_write", "allow")
-    token.pass_through = True
+    access_key, data = _environment("cap_lovelace_write", "allow")
+    access_key.pass_through = True
     args = {"config": {"nested": value}}
     handler = AsyncMock()
     with patch.dict(mcp_view._TOOL_HANDLERS, {"edit_dashboard": (handler, (), {})}), patch.dict(
         mcp_view._EXECUTOR_REGISTRY, {"edit_dashboard": handler}
     ):
         if approved:
-            result, outcome, _ = await mcp_view.async_execute_approved_tool("edit_dashboard", args, token, hass, data)
+            result, outcome, _ = await mcp_view.async_execute_approved_tool("edit_dashboard", args, access_key, hass, data)
         else:
-            result, outcome, _ = await mcp_view._call_tool("edit_dashboard", args, token, hass, data)
+            result, outcome, _ = await mcp_view._call_tool("edit_dashboard", args, access_key, hass, data)
     assert outcome == "invalid_request"
     assert result["isError"]
     handler.assert_not_called()
@@ -161,16 +161,16 @@ def test_cycles_are_bounded_and_shared_references_are_permitted():
 
 @pytest.mark.parametrize("value", [True, "1.2", float("inf"), 10**1000])
 def test_energy_executor_refuses_invalid_numeric_values(hass, value):
-    token, _ = _environment("cap_energy_write", "allow")
+    access_key, _ = _environment("cap_energy_write", "allow")
     with pytest.raises(energy._OpError):
-        energy._source_fields_arg({"number_energy_price": value}, "grid", token, hass)
+        energy._source_fields_arg({"number_energy_price": value}, "grid", access_key, hass)
 
 
 async def test_dashboard_executor_rechecks_metadata_shape(hass):
-    token, data = _environment("cap_lovelace_write", "allow")
+    access_key, data = _environment("cap_lovelace_write", "allow")
     with patch.object(lovelace, "_dashboard_registry_snapshot", AsyncMock()) as snapshot:
         result, outcome, _ = await mcp_view.async_execute_approved_tool(
-            "edit_dashboard", {"dashboard_id": "reviewed", "config": {"dashboard_id": "other"}}, token, hass, data,
+            "edit_dashboard", {"dashboard_id": "reviewed", "config": {"dashboard_id": "other"}}, access_key, hass, data,
         )
     assert outcome == "invalid_request"
     assert result["isError"]

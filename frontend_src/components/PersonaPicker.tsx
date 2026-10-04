@@ -1,6 +1,6 @@
 import { BusyButton } from "./BusyButton";
 import React from "react";
-import type { Persona, TokenRecord } from "../types";
+import type { Persona, AccessKeyRecord } from "../types";
 import { api } from "../api";
 import { PERSONAS, PERSONA_CAP_DEFAULTS } from "../personas";
 import type { EsphomeAvailability } from "./CapabilityMatrix";
@@ -10,8 +10,8 @@ import { t } from "../i18n";
 // Select mode: no token yet (onboarding wizard); reports the chosen persona to
 // the parent, which applies it after the token is created.
 interface PatchProps {
-  token: TokenRecord;
-  onUpdate: (updated: TokenRecord) => void;
+  accessKey: AccessKeyRecord;
+  onUpdate: (updated: AccessKeyRecord) => void;
   selected?: undefined;
   onSelect?: undefined;
   // Only the Token Detail view has settings in hand. The wizard leaves this
@@ -19,7 +19,7 @@ interface PatchProps {
   esphome?: EsphomeAvailability | null;
 }
 interface SelectProps {
-  token?: undefined;
+  accessKey?: undefined;
   onUpdate?: undefined;
   selected: Persona | null;
   onSelect: (persona: Persona) => void;
@@ -32,7 +32,7 @@ export function PersonaPicker(props: Props) {
 
   const isSelectMode = props.onSelect !== undefined;
   const esphome = isSelectMode ? null : props.esphome;
-  const activeKey = isSelectMode ? props.selected : props.token.persona;
+  const activeKey = isSelectMode ? props.selected : props.accessKey.persona;
 
   async function choose(persona: Persona) {
     if (isSelectMode) {
@@ -49,7 +49,7 @@ export function PersonaPicker(props: Props) {
       if (caps) {
         Object.assign(body, caps);
       }
-      const updated = await api.patchToken(props.token.id, body);
+      const updated = await api.patchAccessKey(props.accessKey.id, body);
       props.onUpdate(updated);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("tokens.personaApplyFailed"));

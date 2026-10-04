@@ -12,7 +12,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.phoenix_mcp.agentcli import _get_secret_store
 from custom_components.phoenix_mcp.const import DOMAIN
-from custom_components.phoenix_mcp.token_store import TokenStore
+from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
 
 
 @pytest.mark.parametrize("stored", [
@@ -116,16 +116,16 @@ async def test_unload_persists_dirty_routing_statistics(hass, hass_storage, enab
 
 async def test_startup_archives_expired_tokens_and_schedules_future_expiry(hass, enable_custom_integrations):
     """Startup enforces expiry without waiting for a request or interval sweep."""
-    store = await TokenStore.async_create(hass)
-    expired, _ = await store.async_create_token('expired', 'admin',
+    store = await AccessKeyStore.async_create(hass)
+    expired, _ = await store.async_create_access_key('expired', 'admin',
                                                expires_at=utcnow() - timedelta(minutes=1))
-    future, _ = await store.async_create_token('future', 'admin',
+    future, _ = await store.async_create_access_key('future', 'admin',
                                               expires_at=utcnow() + timedelta(minutes=5))
     entry, data = await _setup_runtime(hass)
     try:
-        assert data.store.get_token_by_id(expired.id) is None
-        assert any(token.id == expired.id for token in data.store.list_archived())
-        assert data.store.get_token_by_id(future.id) is not None
+        assert data.store.get_access_key_by_id(expired.id) is None
+        assert any(access_key.id == expired.id for access_key in data.store.list_archived())
+        assert data.store.get_access_key_by_id(future.id) is not None
         assert set(data.expiry_timers) == {future.id}
     finally:
         assert await hass.config_entries.async_unload(entry.entry_id)
@@ -137,15 +137,15 @@ async def test_real_entry_reload_has_stable_routes_and_deletion_retires_credenti
 
     entry, data = await _setup_runtime(hass)
     assert data.ready and not data.mesa_setup_failed and data.enforce_mcp_lifecycle
-    token, _ = await data.store.async_create_token("lifecycle", "admin")
+    access_key, _ = await data.store.async_create_access_key("lifecycle", "admin")
     secrets = await _get_secret_store(hass)
     account = await secrets.add("chatgpt", {"api_key": "synthetic-example-key", "model": "example"})
     assert len(secrets.list_instances()) == 1
     assert secrets.resolve(account).api_key == "synthetic-example-key"
-    await data.store.async_patch_settings(assist_bound_token_id=token.id,
-        voice_agent_enabled=True, voice_agent_token_id=token.id,
+    await data.store.async_patch_settings(assist_bound_token_id=access_key.id,
+        voice_agent_enabled=True, voice_agent_token_id=access_key.id,
         voice_agent_provider_id=account, voice_agent_model="example",
-        ai_task_enabled=True, ai_task_token_id=token.id,
+        ai_task_enabled=True, ai_task_token_id=access_key.id,
         ai_task_provider_id=account, ai_task_model="example")
     resources = len(list(hass.http.app.router.resources()))
     watched = ("entity_registry_updated", "device_registry_updated", "area_registry_updated", "automation_reloaded", "homeassistant_stop")
@@ -156,7 +156,7 @@ async def test_real_entry_reload_has_stable_routes_and_deletion_retires_credenti
         await hass.async_block_till_done()
         assert len(list(hass.http.app.router.resources())) == resources
         assert hass.data[DOMAIN] is not previous
-        assert hass.data[DOMAIN].store.get_token_by_id(token.id) is not None
+        assert hass.data[DOMAIN].store.get_access_key_by_id(access_key.id) is not None
         assert any(api.id == DOMAIN for api in llm.async_get_apis(hass))
         assert conversation.async_get_agent(hass, entry.entry_id) is not None
         counts = {event: hass.bus.async_listeners().get(event, 0) for event in watched}
@@ -170,8 +170,8 @@ async def test_real_entry_reload_has_stable_routes_and_deletion_retires_credenti
     assert conversation.async_get_agent(hass, entry.entry_id) is None
     assert not any("UrlManager" in record.message or "setup rollback" in record.message or "Setup failed" in record.message for record in caplog.records if record.levelno >= 40)
     assert (await hass.config_entries.async_remove(entry.entry_id))["require_restart"] is False
-    restored = await TokenStore.async_create(hass)
-    assert restored.get_token_by_id(token.id) is None
+    restored = await AccessKeyStore.async_create(hass)
+    assert restored.get_access_key_by_id(access_key.id) is None
     assert restored.list_archived()[0].revoked
     settings = restored.get_settings()
     assert settings.assist_bound_token_id is None
@@ -187,7 +187,7 @@ async def test_idle_usage_ticks_do_not_write_and_changed_usage_flushes_once(hass
     from custom_components.phoenix_mcp.const import FLUSH_INTERVAL
 
     entry, data = await _setup_runtime(hass)
-    token, _ = await data.store.async_create_token("flush", "admin")
+    access_key, _ = await data.store.async_create_access_key("flush", "admin")
     saves = []
     original = data.store.async_save
 
@@ -201,7 +201,7 @@ async def test_idle_usage_ticks_do_not_write_and_changed_usage_flushes_once(hass
         async_fire_time_changed(hass, now + FLUSH_INTERVAL * index + timedelta(seconds=1))
         await hass.async_block_till_done()
     assert saves == []
-    data.store.update_last_used(token.id, now)
+    data.store.update_last_used(access_key.id, now)
     async_fire_time_changed(hass, now + FLUSH_INTERVAL * 3 + timedelta(seconds=1))
     await hass.async_block_till_done()
     assert saves == [1]
@@ -213,20 +213,20 @@ async def test_idle_usage_ticks_do_not_write_and_changed_usage_flushes_once(hass
 
 async def test_unload_flushes_usage_and_audit_added_during_platform_unload(hass, hass_storage, enable_custom_integrations, monkeypatch):
     entry, data = await _setup_runtime(hass)
-    token, _ = await data.store.async_create_token("unload", "admin")
+    access_key, _ = await data.store.async_create_access_key("unload", "admin")
     original = hass.config_entries.async_unload_platforms
     stamp = utcnow() + timedelta(seconds=1)
 
     async def unload(*args, **kwargs):
         result = await original(*args, **kwargs)
-        data.store.update_last_used(token.id, stamp)
-        data.audit.record(request_id="last-unload-row", token_id=token.id, token_name=token.name,
+        data.store.update_last_used(access_key.id, stamp)
+        data.audit.record(request_id="last-unload-row", token_id=access_key.id, token_name=access_key.name,
             method="get_state", resource="fixture", outcome="allowed", client_ip="", settings=data.store.get_settings())
         return result
 
     monkeypatch.setattr(hass.config_entries, "async_unload_platforms", unload)
     assert await hass.config_entries.async_unload(entry.entry_id)
-    persisted = next(row for row in hass_storage[DOMAIN]["data"]["tokens"] if row["id"] == token.id)
+    persisted = next(row for row in hass_storage[DOMAIN]["data"]["tokens"] if row["id"] == access_key.id)
     assert persisted["last_used_at"] == stamp.isoformat()
     assert any(row["request_id"] == "last-unload-row" for row in hass_storage["phoenix_mcp_audit"]["data"]["entries"])
 
@@ -260,7 +260,7 @@ async def test_stop_gates_real_http_admission_before_persistence(hass, enable_cu
     from homeassistant.const import EVENT_HOMEASSISTANT_STOP
 
     entry, data = await _setup_runtime(hass)
-    _, raw = await data.store.async_create_token("stop", "admin")
+    _, raw = await data.store.async_create_access_key("stop", "admin")
     client = await hass_client_no_auth()
     headers = {"Authorization": "Bearer " + raw}
     assert (await client.get("/api/phoenix-mcp/context", headers=headers)).status == 200
@@ -272,14 +272,14 @@ async def test_stop_gates_real_http_admission_before_persistence(hass, enable_cu
 
 
 async def test_unload_releases_real_expiry_and_sensor_flush_timers(hass, enable_custom_integrations):
-    from custom_components.phoenix_mcp.helpers import update_token_counter
+    from custom_components.phoenix_mcp.helpers import update_access_key_counter
 
     entry, data = await _setup_runtime(hass)
-    token, _ = await data.store.async_create_token("timers", "admin", expires_at=utcnow() + timedelta(hours=1))
-    await data.async_on_token_created(token)
+    access_key, _ = await data.store.async_create_access_key("timers", "admin", expires_at=utcnow() + timedelta(hours=1))
+    await data.async_on_access_key_created(access_key)
     await hass.async_block_till_done()
-    assert token.id in data.expiry_timers
-    update_token_counter(data, token.id, "allowed")
+    assert access_key.id in data.expiry_timers
+    update_access_key_counter(data, access_key.id, "allowed")
     assert data.sensor_flush_cancel is not None
     assert await hass.config_entries.async_unload(entry.entry_id)
     assert data.expiry_timers == {}
@@ -289,7 +289,7 @@ async def test_unload_releases_real_expiry_and_sensor_flush_timers(hass, enable_
 async def test_startup_prunes_terminal_history_and_payloads(hass, enable_custom_integrations):
     from custom_components.phoenix_mcp.const import APPROVAL_HISTORY_LIMIT
 
-    store = await TokenStore.async_create(hass)
+    store = await AccessKeyStore.async_create(hass)
     old = (utcnow() - timedelta(hours=2)).isoformat()
     store.set_pending_approvals([
         {"id": str(index), "status": "approved", "resolved_at": old,

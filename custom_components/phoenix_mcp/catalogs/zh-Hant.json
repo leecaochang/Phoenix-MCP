@@ -1,7 +1,7 @@
 {
   "notification": {
-    "approval.message": "存取金鑰「{token}」請求核准。\n\n[在 Phoenix MCP 中檢視]({url})",
-    "rate_limit.message": "Phoenix MCP：存取金鑰「{token}」已達到速率限制。",
+    "approval.message": "存取金鑰「{access_key}」請求核准。\n\n[在 Phoenix MCP 中檢視]({url})",
+    "rate_limit.message": "Phoenix MCP：存取金鑰「{access_key}」已達到速率限制。",
     "rate_limit.title": "Phoenix MCP 警告"
   },
   "panel": {
@@ -1821,7 +1821,7 @@
       "nameDuplicateError": "已存在同名（或等價 slug）的存取金鑰。",
       "nameFormatError": "名稱必須為 3-32 個字元：字母、數字、_ 或 -。",
       "nameLabel": "名稱（必填）",
-      "namePlaceholder": "my_token",
+      "namePlaceholder": "my_access_key",
       "nameRuleError": "3-32 個字元：字母、數字、連字元或下劃線。",
       "off": "關",
       "on": "開",
@@ -1978,7 +1978,7 @@
       "codexHeaderValueLabel": "請求頭值",
       "codexServerNameLabel": "伺服器名稱",
       "connectAgentTitle": "把 Phoenix MCP 連線到您的 AI 智慧體",
-      "connectIntro": "在您的智慧體中把 Phoenix MCP 新增為 MCP 伺服器。它使用 <code>Authorization: Bearer <token></code> 進行認證，而不是 Home Assistant 登入或 OAuth。 透過不可信任網路連線時請使用 HTTPS。不要將持有者存取金鑰寫入命令列歷史、共用檔案、螢幕擷取畫面或版本控制。存取金鑰洩漏後請輪替。",
+      "connectIntro": "在您的智慧體中把 Phoenix MCP 新增為 MCP 伺服器。它使用 <code>Authorization: Bearer phx_...</code> 進行認證，而不是 Home Assistant 登入或 OAuth。 透過不可信任網路連線時請使用 HTTPS。不要將持有者存取金鑰寫入命令列歷史、共用檔案、螢幕擷取畫面或版本控制。存取金鑰洩漏後請輪替。",
       "connectLater": "稍後連線",
       "connectTitle": "連線您的第一個 AI 智慧體",
       "connected": "已連線！您的智慧體已成功連線到 Phoenix MCP。",

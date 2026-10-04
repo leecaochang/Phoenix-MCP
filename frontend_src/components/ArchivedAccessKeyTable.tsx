@@ -1,14 +1,14 @@
 import { useState } from "react";
-import type { ArchivedTokenRecord } from "../types";
+import type { ArchivedAccessKeyRecord } from "../types";
 import { api } from "../api";
-import { formatDate, tokenStatusLabel } from "../utils";
+import { formatDate, accessKeyStatusLabel } from "../utils";
 import { t } from "../i18n";
 
 type SortKey = "name" | "status" | "created" | "archived" | "last_used";
 type SortDir = "asc" | "desc";
 
 interface Props {
-  tokens: ArchivedTokenRecord[];
+  accessKeys: ArchivedAccessKeyRecord[];
   onDeleted: (id: string) => void;
 }
 
@@ -17,7 +17,7 @@ function SortArrow({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; 
   return <span className={`sort-arrow${active ? " active" : ""}`}>{active ? (sortDir === "asc" ? "↑" : "↓") : "↕"}</span>;
 }
 
-export function ArchivedTokenTable({ tokens, onDeleted }: Props) {
+export function ArchivedAccessKeyTable({ accessKeys, onDeleted }: Props) {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -34,7 +34,7 @@ export function ArchivedTokenTable({ tokens, onDeleted }: Props) {
     return sortDir === "asc" ? "ascending" : "descending";
   }
 
-  const sorted = [...tokens].sort((a, b) => {
+  const sorted = [...accessKeys].sort((a, b) => {
     let va: string = "";
     let vb: string = "";
     switch (sortKey) {
@@ -53,7 +53,7 @@ export function ArchivedTokenTable({ tokens, onDeleted }: Props) {
     setDeleting(id);
     setError(null);
     try {
-      await api.deleteArchivedToken(id);
+      await api.deleteArchivedAccessKey(id);
       onDeleted(id);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : t("tokens.archivedDeleteFailed"));
@@ -63,7 +63,7 @@ export function ArchivedTokenTable({ tokens, onDeleted }: Props) {
     }
   }
 
-  if (tokens.length === 0) {
+  if (accessKeys.length === 0) {
     return <p className="archived-empty">{t("tokens.archivedEmpty")}</p>;
   }
 
@@ -99,7 +99,7 @@ export function ArchivedTokenTable({ tokens, onDeleted }: Props) {
                 <td>{tok.name}</td>
                 <td>
                   <span className={`badge ${status === "Revoked" ? "badge-red" : "badge-grey"}`}>
-                    {tokenStatusLabel(status)}
+                    {accessKeyStatusLabel(status)}
                   </span>
                 </td>
                 <td>{formatDate(tok.created_at)}</td>

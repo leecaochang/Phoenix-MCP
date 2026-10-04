@@ -20,10 +20,10 @@ from custom_components.phoenix_mcp.mcp_view import (
     _execute_patch_yaml_config,
     _execute_set_yaml_config,
 )
-from custom_components.phoenix_mcp.token_store import (
+from custom_components.phoenix_mcp.access_key_store import (
     PermissionNode,
     PermissionTree,
-    TokenRecord,
+    AccessKeyRecord,
 )
 
 
@@ -37,10 +37,10 @@ def isolated_config_dir(hass, tmp_path):
     return tmp_path
 
 
-def _token(**caps) -> TokenRecord:
+def _access_key(**caps) -> AccessKeyRecord:
     base = {"cap_yaml_edit": "allow", "cap_integration_write": "allow"}
     base.update(caps)
-    return TokenRecord(
+    return AccessKeyRecord(
         id=str(uuid.uuid4()), name="t", token_hash="x",
         created_at=utcnow(), created_by="u", permissions=PermissionTree(), **base,
     )
@@ -50,7 +50,7 @@ def _json(content: dict) -> dict:
     return json.loads(content["content"][0]["text"])
 
 
-async def _call(name, args, token, hass, data=None):
+async def _call(name, args, access_key, hass, data=None):
     args = dict(args)
     if name == "patch_yaml_config" and "address" not in args:
         if "key" in args:
@@ -61,7 +61,7 @@ async def _call(name, args, token, hass, data=None):
         if "content" in args:
             change["content"] = args.pop("content")
         args.update({"address": address, "change": change})
-    return await _call_tool(name, args, token, hass, data or _data())
+    return await _call_tool(name, args, access_key, hass, data or _data())
 
 
 def _data():
@@ -92,7 +92,7 @@ class TestYamlConfig:
             "key": "sensor", "content": "name: After\n" if existing_secret else "password: proposed-secret\n",
         }
         with patch.object(config_files, "_gate", new_callable=AsyncMock) as gate:
-            result, outcome, _ = await _call(tool, args, _token(cap_yaml_edit="confirm"), hass)
+            result, outcome, _ = await _call(tool, args, _access_key(cap_yaml_edit="confirm"), hass)
         assert outcome == "invalid_request"
         gate.assert_not_awaited()
         assert "cannot be snapshotted safely" in result["content"][0]["text"]
@@ -102,25 +102,25 @@ class TestYamlConfig:
             assert stream.read() == previous
 
     async def test_get_deny(self, hass):
-        _, outcome, _ = await _call("get_yaml_config", {}, _token(cap_yaml_edit="deny"), hass)
+        _, outcome, _ = await _call("get_yaml_config", {}, _access_key(cap_yaml_edit="deny"), hass)
         assert outcome == "denied"
 
     async def test_get_and_set(self, hass):
         path = hass.config.path("configuration.yaml")
         with open(path, "w", encoding="utf-8") as f:
             f.write("default_config:\n")
-        content, outcome, _ = await _call("get_yaml_config", {}, _token(), hass)
+        content, outcome, _ = await _call("get_yaml_config", {}, _access_key(), hass)
         assert outcome == "allowed"
         assert _json(content)["content"] == "default_config:\n"
 
-        content, outcome, _ = await _call("set_yaml_config", {"content": "default_config:\nfrontend:\n"}, _token(), hass)
+        content, outcome, _ = await _call("set_yaml_config", {"content": "default_config:\nfrontend:\n"}, _access_key(), hass)
         assert outcome == "allowed"
         assert isinstance(_json(content).get("recovery_id"), str)
         with open(path, encoding="utf-8") as f:
             assert f.read() == "default_config:\nfrontend:\n"
 
     async def test_set_non_string(self, hass):
-        _, outcome, _ = await _call("set_yaml_config", {"content": {"a": 1}}, _token(), hass)
+        _, outcome, _ = await _call("set_yaml_config", {"content": {"a": 1}}, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_set_non_string_confirm_mode_rejected_before_pending(self, hass):
@@ -129,7 +129,7 @@ class TestYamlConfig:
         only fail once an admin approves it.
         """
         _, outcome, _ = await _call(
-            "set_yaml_config", {"content": {"a": 1}}, _token(cap_yaml_edit="confirm"), hass)
+            "set_yaml_config", {"content": {"a": 1}}, _access_key(cap_yaml_edit="confirm"), hass)
         assert outcome == "invalid_request"
 
 
@@ -142,7 +142,7 @@ class TestGetYamlConfigFileArg:
         path = hass.config.path("configuration.yaml")
         with open(path, "w", encoding="utf-8") as f:
             f.write("default_config:\n")
-        content, _, _ = await _call("get_yaml_config", {}, _token(), hass)
+        content, _, _ = await _call("get_yaml_config", {}, _access_key(), hass)
         body = _json(content)
         assert list(body) == ["path", "exists", "content", "content_hash"]
         assert body["path"] == "configuration.yaml"
@@ -151,7 +151,7 @@ class TestGetYamlConfigFileArg:
         with open(hass.config.path("automations.yaml"), "w", encoding="utf-8") as f:
             f.write("- id: '1'\n  alias: A\n")
         content, outcome, _ = await _call(
-            "get_yaml_config", {"file": "automations.yaml"}, _token(), hass)
+            "get_yaml_config", {"file": "automations.yaml"}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["path"] == "automations.yaml"
@@ -163,13 +163,13 @@ class TestGetYamlConfigFileArg:
         with open(hass.config.path("packages/kitchen.yaml"), "w", encoding="utf-8") as f:
             f.write("sensor: []\n")
         content, outcome, _ = await _call(
-            "get_yaml_config", {"file": "packages/kitchen.yaml"}, _token(), hass)
+            "get_yaml_config", {"file": "packages/kitchen.yaml"}, _access_key(), hass)
         assert outcome == "allowed"
         assert _json(content)["content"] == "sensor: []\n"
 
     async def test_absent_file_reads_as_empty(self, hass):
         content, outcome, _ = await _call(
-            "get_yaml_config", {"file": "nope.yaml"}, _token(), hass)
+            "get_yaml_config", {"file": "nope.yaml"}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["exists"] is False
@@ -193,7 +193,7 @@ class TestGetYamlConfigFileArg:
         ],
     )
     async def test_refused_paths(self, hass, bad):
-        content, outcome, _ = await _call("get_yaml_config", {"file": bad}, _token(), hass)
+        content, outcome, _ = await _call("get_yaml_config", {"file": bad}, _access_key(), hass)
         assert outcome == "invalid_request"
         assert "configuration directory" in content["content"][0]["text"]
 
@@ -203,12 +203,12 @@ class TestGetYamlConfigFileArg:
         # value as unset rather than refusing it.
         with open(hass.config.path("configuration.yaml"), "w", encoding="utf-8") as f:
             f.write("default_config:\n")
-        content, outcome, _ = await _call("get_yaml_config", {"file": blank}, _token(), hass)
+        content, outcome, _ = await _call("get_yaml_config", {"file": blank}, _access_key(), hass)
         assert outcome == "allowed"
         assert _json(content)["path"] == "configuration.yaml"
 
     async def test_non_string_file_arg_refused(self, hass):
-        _, outcome, _ = await _call("get_yaml_config", {"file": ["a.yaml"]}, _token(), hass)
+        _, outcome, _ = await _call("get_yaml_config", {"file": ["a.yaml"]}, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_symlink_out_of_config_dir_refused(self, hass, tmp_path):
@@ -216,7 +216,7 @@ class TestGetYamlConfigFileArg:
         outside = tmp_path.parent / "outside_secret.yaml"
         outside.write_text("secret: 1\n", encoding="utf-8")
         os.symlink(outside, hass.config.path("link.yaml"))
-        _, outcome, _ = await _call("get_yaml_config", {"file": "link.yaml"}, _token(), hass)
+        _, outcome, _ = await _call("get_yaml_config", {"file": "link.yaml"}, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_symlink_renaming_secrets_refused(self, hass):
@@ -227,7 +227,7 @@ class TestGetYamlConfigFileArg:
             f.write("db_pass: hunter2\n")
         os.symlink(hass.config.path("secrets.yaml"), hass.config.path("innocent.yaml"))
         content, outcome, _ = await _call(
-            "get_yaml_config", {"file": "innocent.yaml"}, _token(), hass)
+            "get_yaml_config", {"file": "innocent.yaml"}, _access_key(), hass)
         assert outcome == "invalid_request"
         assert "hunter2" not in content["content"][0]["text"]
 
@@ -238,13 +238,13 @@ class TestGetYamlConfigFileArg:
             f.write("wifi:\n  password: house-password\n")
         os.symlink(hass.config.path("esphome/device.yaml"), hass.config.path("innocent.yaml"))
         content, outcome, _ = await _call(
-            "get_yaml_config", {"file": "innocent.yaml"}, _token(), hass)
+            "get_yaml_config", {"file": "innocent.yaml"}, _access_key(), hass)
         assert outcome == "invalid_request"
         assert "house-password" not in content["content"][0]["text"]
 
     async def test_deny_applies_to_file_reads(self, hass):
         _, outcome, _ = await _call(
-            "get_yaml_config", {"file": "automations.yaml"}, _token(cap_yaml_edit="deny"), hass)
+            "get_yaml_config", {"file": "automations.yaml"}, _access_key(cap_yaml_edit="deny"), hass)
         assert outcome == "denied"
 
 
@@ -257,7 +257,7 @@ class TestGetYamlConfigKeyArg:
 
     async def test_returns_the_fragment_only(self, hass):
         self._write(hass, "http:\n  server_port: 8123\nfrontend:\n  themes: {}\n")
-        content, outcome, _ = await _call("get_yaml_config", {"key": "http"}, _token(), hass)
+        content, outcome, _ = await _call("get_yaml_config", {"key": "http"}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["key_found"] is True
@@ -267,7 +267,7 @@ class TestGetYamlConfigKeyArg:
     async def test_nested_dotted_key(self, hass):
         self._write(hass, "homeassistant:\n  packages: !include_dir_named integrations\n")
         content, _, _ = await _call(
-            "get_yaml_config", {"key": "homeassistant.packages"}, _token(), hass)
+            "get_yaml_config", {"key": "homeassistant.packages"}, _access_key(), hass)
         body = _json(content)
         assert body["key_found"] is True
         assert body["defined_via_include"] == "integrations"
@@ -275,7 +275,7 @@ class TestGetYamlConfigKeyArg:
 
     async def test_missing_key(self, hass):
         self._write(hass, "http:\n  server_port: 8123\n")
-        content, outcome, _ = await _call("get_yaml_config", {"key": "lovelace"}, _token(), hass)
+        content, outcome, _ = await _call("get_yaml_config", {"key": "lovelace"}, _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["key_found"] is False
@@ -283,7 +283,7 @@ class TestGetYamlConfigKeyArg:
 
     async def test_key_through_a_non_mapping_is_not_found(self, hass):
         self._write(hass, "http: 5\n")
-        body = _json((await _call("get_yaml_config", {"key": "http.port"}, _token(), hass))[0])
+        body = _json((await _call("get_yaml_config", {"key": "http.port"}, _access_key(), hass))[0])
         assert body["key_found"] is False
 
     async def test_labeled_top_level_key(self, hass):
@@ -291,54 +291,54 @@ class TestGetYamlConfigKeyArg:
         # so the walker finds them whole.
         self._write(hass, "automation manual:\n  - alias: A\n")
         body = _json((await _call(
-            "get_yaml_config", {"key": "automation manual"}, _token(), hass))[0])
+            "get_yaml_config", {"key": "automation manual"}, _access_key(), hass))[0])
         assert body["key_found"] is True
 
     async def test_secret_tag_survives_as_source_text(self, hass):
         self._write(hass, "http:\n  api_password: !secret pw\n")
-        body = _json((await _call("get_yaml_config", {"key": "http"}, _token(), hass))[0])
+        body = _json((await _call("get_yaml_config", {"key": "http"}, _access_key(), hass))[0])
         assert "!secret pw" in body["content"]
 
     async def test_unknown_custom_tag_does_not_break_the_read(self, hass):
         # A third-party tag must not make the file unreadable.
         self._write(hass, "http:\n  server_port: 8123\ncustom: !my_vendor_tag thing\n")
-        body = _json((await _call("get_yaml_config", {"key": "http"}, _token(), hass))[0])
+        body = _json((await _call("get_yaml_config", {"key": "http"}, _access_key(), hass))[0])
         assert body["key_found"] is True
 
     async def test_invalid_yaml_with_key_errors(self, hass):
         self._write(hass, "http:\n  - [unclosed\n")
-        content, outcome, _ = await _call("get_yaml_config", {"key": "http"}, _token(), hass)
+        content, outcome, _ = await _call("get_yaml_config", {"key": "http"}, _access_key(), hass)
         assert outcome == "invalid_request"
         assert "not valid YAML" in content["content"][0]["text"]
 
     async def test_invalid_yaml_without_key_still_returns_raw_text(self, hass):
         # No key means no parse, so a broken file is still readable for repair.
         self._write(hass, "http:\n  - [unclosed\n")
-        content, outcome, _ = await _call("get_yaml_config", {}, _token(), hass)
+        content, outcome, _ = await _call("get_yaml_config", {}, _access_key(), hass)
         assert outcome == "allowed"
         assert "unclosed" in _json(content)["content"]
 
     async def test_content_hash_is_the_whole_file_even_with_key(self, hass):
         text = "http:\n  server_port: 8123\nfrontend:\n"
         self._write(hass, text)
-        body = _json((await _call("get_yaml_config", {"key": "http"}, _token(), hass))[0])
+        body = _json((await _call("get_yaml_config", {"key": "http"}, _access_key(), hass))[0])
         assert body["content_hash"] == content_hash(text)
 
     async def test_key_from_another_file(self, hass):
         with open(hass.config.path("extra.yaml"), "w", encoding="utf-8") as f:
             f.write("outer:\n  inner: 7\n")
         body = _json((await _call(
-            "get_yaml_config", {"file": "extra.yaml", "key": "outer.inner"}, _token(), hass))[0])
+            "get_yaml_config", {"file": "extra.yaml", "key": "outer.inner"}, _access_key(), hass))[0])
         assert body["key_found"] is True
         assert body["content"].strip() == "7"
 
     async def test_empty_key_rejected(self, hass):
-        _, outcome, _ = await _call("get_yaml_config", {"key": "  "}, _token(), hass)
+        _, outcome, _ = await _call("get_yaml_config", {"key": "  "}, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_absent_file_with_key_reports_not_found(self, hass):
         body = _json((await _call(
-            "get_yaml_config", {"file": "gone.yaml", "key": "http"}, _token(), hass))[0])
+            "get_yaml_config", {"file": "gone.yaml", "key": "http"}, _access_key(), hass))[0])
         assert body["exists"] is False
         assert body["key_found"] is False
 
@@ -380,7 +380,7 @@ class TestYamlProtectedSubtrees:
     )
     async def test_protected_change_refused(self, hass, before, after, path):
         self._write(hass, before)
-        content, outcome, _ = await _call("set_yaml_config", {"content": after}, _token(), hass)
+        content, outcome, _ = await _call("set_yaml_config", {"content": after}, _access_key(), hass)
         assert outcome == "invalid_request"
         assert path in content["content"][0]["text"]
         assert self._read(hass) == before  # untouched
@@ -389,7 +389,7 @@ class TestYamlProtectedSubtrees:
         before = "http:\n  trusted_proxies:\n    - 10.0.0.1\n  server_port: 8123\n"
         after = "http:\n  trusted_proxies:\n    - 10.0.0.1\n  server_port: 8124\n"
         self._write(hass, before)
-        _, outcome, _ = await _call("set_yaml_config", {"content": after}, _token(), hass)
+        _, outcome, _ = await _call("set_yaml_config", {"content": after}, _access_key(), hass)
         assert outcome == "allowed"
         assert self._read(hass) == after
 
@@ -399,7 +399,7 @@ class TestYamlProtectedSubtrees:
         before = "homeassistant:\n  packages: !include_dir_named pkg\n"
         after = "homeassistant:\n  packages: !include_dir_named pkg\nfrontend:\n"
         self._write(hass, before)
-        _, outcome, _ = await _call("set_yaml_config", {"content": after}, _token(), hass)
+        _, outcome, _ = await _call("set_yaml_config", {"content": after}, _access_key(), hass)
         assert outcome == "allowed"
 
     async def test_changed_include_tag_value_refused(self, hass):
@@ -407,7 +407,7 @@ class TestYamlProtectedSubtrees:
         _, outcome, _ = await _call(
             "set_yaml_config",
             {"content": "homeassistant:\n  packages: !include_dir_named attacker\n"},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_unrelated_powerful_keys_still_writable(self, hass):
@@ -416,13 +416,13 @@ class TestYamlProtectedSubtrees:
         self._write(hass, "default_config:\n")
         _, outcome, _ = await _call(
             "set_yaml_config",
-            {"content": "default_config:\nshell_command:\n  ls: ls -la\n"}, _token(), hass)
+            {"content": "default_config:\nshell_command:\n  ls: ls -la\n"}, _access_key(), hass)
         assert outcome == "allowed"
 
     async def test_unparseable_new_content_refused(self, hass):
         self._write(hass, "default_config:\n")
         content, outcome, _ = await _call(
-            "set_yaml_config", {"content": "http:\n  - [unclosed\n"}, _token(), hass)
+            "set_yaml_config", {"content": "http:\n  - [unclosed\n"}, _access_key(), hass)
         assert outcome == "invalid_request"
         assert "not valid YAML" in content["content"][0]["text"]
         assert self._read(hass) == "default_config:\n"
@@ -432,7 +432,7 @@ class TestYamlProtectedSubtrees:
         self._write(hass, "default_config:\n")
         _, outcome, _ = await _call(
             "set_yaml_config",
-            {"content": "default_config:\nvendor: !my_vendor_tag thing\n"}, _token(), hass)
+            {"content": "default_config:\nvendor: !my_vendor_tag thing\n"}, _access_key(), hass)
         assert outcome == "allowed"
 
     async def test_unparseable_old_content_fails_closed(self, hass):
@@ -441,7 +441,7 @@ class TestYamlProtectedSubtrees:
         self._write(hass, "http:\n  - [unclosed\n")
         _, outcome, _ = await _call(
             "set_yaml_config",
-            {"content": "http:\n  trusted_proxies:\n    - 10.0.0.1\n"}, _token(), hass)
+            {"content": "http:\n  trusted_proxies:\n    - 10.0.0.1\n"}, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_unparseable_old_content_allows_a_clean_rewrite(self, hass):
@@ -449,7 +449,7 @@ class TestYamlProtectedSubtrees:
         # keys are blocked.
         self._write(hass, "http:\n  - [unclosed\n")
         _, outcome, _ = await _call(
-            "set_yaml_config", {"content": "http:\n  server_port: 8123\n"}, _token(), hass)
+            "set_yaml_config", {"content": "http:\n  server_port: 8123\n"}, _access_key(), hass)
         assert outcome == "allowed"
 
     async def test_confirm_mode_refuses_before_creating_an_approval(self, hass):
@@ -460,7 +460,7 @@ class TestYamlProtectedSubtrees:
         _, outcome, _ = await _call_tool(
             "set_yaml_config",
             {"content": "http:\n  trusted_proxies:\n    - 0.0.0.0/0\n"},
-            _token(cap_yaml_edit="confirm"), hass, data)
+            _access_key(cap_yaml_edit="confirm"), hass, data)
         assert outcome == "invalid_request"
         # create_approval persists through set_pending_approvals + async_save.
         data.store.set_pending_approvals.assert_not_called()
@@ -472,7 +472,7 @@ class TestYamlProtectedSubtrees:
         content, outcome, _ = await _call(
             "set_yaml_config",
             {"content": "http:\n  trusted_proxies:\n    - 0.0.0.0/0\n"},
-            _token(cap_yaml_edit="deny"), hass)
+            _access_key(cap_yaml_edit="deny"), hass)
         assert outcome == "denied"
         text = content["content"][0]["text"]
         assert "trusted_proxies" not in text and "protected" not in text.lower()
@@ -483,21 +483,21 @@ class TestYamlProtectedSubtrees:
         # The admin approves a write that was clean when it was queued...
         self._write(hass, "http:\n  trusted_proxies:\n    - 10.0.0.1\n")
         _, outcome, _ = await _execute_set_yaml_config(
-            {"content": "default_config:\n"}, _token(), hass, _data())
+            {"content": "default_config:\n"}, _access_key(), hass, _data())
         assert outcome == "invalid_request"
         assert "trusted_proxies" in self._read(hass)
 
     async def test_absent_file_with_protected_key_refused(self, hass):
         _, outcome, _ = await _call(
             "set_yaml_config",
-            {"content": "http:\n  cors_allowed_origins:\n    - '*'\n"}, _token(), hass)
+            {"content": "http:\n  cors_allowed_origins:\n    - '*'\n"}, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_protected_key_under_a_non_mapping_parent_is_handled(self, hass):
         # "http: 5" is not a mapping; the walk must not raise.
         self._write(hass, "http: 5\n")
         _, outcome, _ = await _call(
-            "set_yaml_config", {"content": "http: 6\n"}, _token(), hass)
+            "set_yaml_config", {"content": "http: 6\n"}, _access_key(), hass)
         assert outcome == "allowed"
 
 
@@ -524,7 +524,7 @@ class TestYamlTopLevelKeyRemoval:
         content, outcome, _ = await _call(
             "set_yaml_config",
             {"content": "default_config:\nrecorder:\n  purge_keep_days: 10\n"},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
         assert "automation" in content["content"][0]["text"]
         assert self._read(hass) == before  # untouched
@@ -536,7 +536,7 @@ class TestYamlTopLevelKeyRemoval:
             "default_config:\nautomation: !include automations.yaml\nrecorder:\n  purge_keep_days: 10\n")
         _, outcome, _ = await _call(
             "set_yaml_config",
-            {"content": after, "remove_keys": ["automation"]}, _token(), hass)
+            {"content": after, "remove_keys": ["automation"]}, _access_key(), hass)
         assert outcome == "allowed"
         assert self._read(hass) == after
 
@@ -546,7 +546,7 @@ class TestYamlTopLevelKeyRemoval:
         content, outcome, _ = await _call(
             "set_yaml_config",
             {"content": "default_config:\n", "remove_keys": ["automation"]},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
         text = content["content"][0]["text"]
         assert "recorder" in text and "automation" not in text
@@ -554,14 +554,14 @@ class TestYamlTopLevelKeyRemoval:
     async def test_addition_and_modification_pass(self, hass):
         self._write(hass, "default_config:\nrecorder:\n  purge_keep_days: 10\n")
         after = "default_config:\nrecorder:\n  purge_keep_days: 30\nfrontend:\n"
-        _, outcome, _ = await _call("set_yaml_config", {"content": after}, _token(), hass)
+        _, outcome, _ = await _call("set_yaml_config", {"content": after}, _access_key(), hass)
         assert outcome == "allowed"
         assert self._read(hass) == after
 
     async def test_byte_identical_content_passes(self, hass):
         same = "default_config:\nautomation: !include automations.yaml\n"
         self._write(hass, same)
-        _, outcome, _ = await _call("set_yaml_config", {"content": same}, _token(), hass)
+        _, outcome, _ = await _call("set_yaml_config", {"content": same}, _access_key(), hass)
         assert outcome == "allowed"
 
     async def test_unparseable_prior_content_abstains(self, hass):
@@ -569,13 +569,13 @@ class TestYamlTopLevelKeyRemoval:
         for, so an unreadable prior file abstains rather than refusing."""
         self._write(hass, "default_config:\n  bad: [unclosed\nautomation: x\n")
         after = "default_config:\n"
-        _, outcome, _ = await _call("set_yaml_config", {"content": after}, _token(), hass)
+        _, outcome, _ = await _call("set_yaml_config", {"content": after}, _access_key(), hass)
         assert outcome == "allowed"
         assert self._read(hass) == after
 
     async def test_absent_prior_file_abstains(self, hass):
         _, outcome, _ = await _call(
-            "set_yaml_config", {"content": "default_config:\n"}, _token(), hass)
+            "set_yaml_config", {"content": "default_config:\n"}, _access_key(), hass)
         assert outcome == "allowed"
 
     async def test_wrong_shaped_remove_keys_declares_nothing(self, hass):
@@ -585,7 +585,7 @@ class TestYamlTopLevelKeyRemoval:
         _, outcome, _ = await _call(
             "set_yaml_config",
             {"content": "default_config:\n", "remove_keys": {"recorder": True}},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_remove_keys_as_bare_string_is_accepted(self, hass):
@@ -594,7 +594,7 @@ class TestYamlTopLevelKeyRemoval:
         _, outcome, _ = await _call(
             "set_yaml_config",
             {"content": "default_config:\n", "remove_keys": "recorder"},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "allowed"
 
     async def test_executor_recheck_catches_approval_window_drift(self, hass):
@@ -603,7 +603,7 @@ class TestYamlTopLevelKeyRemoval:
         self._write(hass, "default_config:\n")
         self._write(hass, "default_config:\nrecorder:\n")
         _, outcome, _ = await _execute_set_yaml_config(
-            {"content": "default_config:\n"}, _token(), hass, _data())
+            {"content": "default_config:\n"}, _access_key(), hass, _data())
         assert outcome == "invalid_request"
         assert "recorder" in self._read(hass)
 
@@ -614,7 +614,7 @@ class TestYamlTopLevelKeyRemoval:
         self._write(hass, "default_config:\nrecorder:\n")
         content, outcome, _ = await _call(
             "set_yaml_config", {"content": "default_config:\n"},
-            _token(cap_yaml_edit="deny"), hass)
+            _access_key(cap_yaml_edit="deny"), hass)
         assert outcome == "denied"
         text = content["content"][0]["text"]
         assert "recorder" not in text and "remove_keys" not in text
@@ -629,7 +629,7 @@ class TestYamlTopLevelKeyRemoval:
         self._write(hass, "default_config:\nrecorder:\nautomation: !include a.yaml\n")
         diff = await _build_diff_set_yaml_config(
             {"content": "default_config:\n", "remove_keys": ["recorder"]},
-            _token(), hass)
+            _access_key(), hass)
         assert diff["summary_key"] == "diff.set_yaml_config.removing"
         assert diff["summary_params"]["keys"] == "automation, recorder"
 
@@ -642,7 +642,7 @@ class TestYamlTopLevelKeyRemoval:
         ctx = _restore_ctx.set({"user_id": "admin-1"})
         try:
             _, outcome, _ = await _execute_set_yaml_config(
-                {"content": "default_config:\n"}, _token(), hass, _data())
+                {"content": "default_config:\n"}, _access_key(), hass, _data())
         finally:
             _restore_ctx.reset(ctx)
         assert outcome == "allowed"
@@ -654,7 +654,7 @@ class TestYamlTopLevelKeyRemoval:
         )
         self._write(hass, "default_config:\n")
         diff = await _build_diff_set_yaml_config(
-            {"content": "default_config:\nfrontend:\n"}, _token(), hass)
+            {"content": "default_config:\nfrontend:\n"}, _access_key(), hass)
         assert diff["summary_key"] == "diff.set_yaml_config"
 
 
@@ -665,11 +665,11 @@ class TestYamlConfigContentHash:
         path = hass.config.path("configuration.yaml")
         with open(path, "w", encoding="utf-8") as f:
             f.write("default_config:\n")
-        content, _, _ = await _call("get_yaml_config", {}, _token(), hass)
+        content, _, _ = await _call("get_yaml_config", {}, _access_key(), hass)
         assert _json(content)["content_hash"] == content_hash("default_config:\n")
 
     async def test_get_absent_reports_hash_of_empty(self, hass):
-        content, _, _ = await _call("get_yaml_config", {}, _token(), hass)
+        content, _, _ = await _call("get_yaml_config", {}, _access_key(), hass)
         body = _json(content)
         assert body["exists"] is False
         assert body["content_hash"] == content_hash("")
@@ -678,9 +678,9 @@ class TestYamlConfigContentHash:
         path = hass.config.path("configuration.yaml")
         with open(path, "w", encoding="utf-8") as f:
             f.write("default_config:\n")
-        h = _json((await _call("get_yaml_config", {}, _token(), hass))[0])["content_hash"]
+        h = _json((await _call("get_yaml_config", {}, _access_key(), hass))[0])["content_hash"]
         _, outcome, _ = await _call(
-            "set_yaml_config", {"content": "default_config:\nfrontend:\n", "expected_hash": h}, _token(), hass)
+            "set_yaml_config", {"content": "default_config:\nfrontend:\n", "expected_hash": h}, _access_key(), hass)
         assert outcome == "allowed"
         with open(path, encoding="utf-8") as f:
             assert f.read() == "default_config:\nfrontend:\n"
@@ -691,7 +691,7 @@ class TestYamlConfigContentHash:
             f.write("original:\n")
         stale = content_hash("what the agent read earlier")
         _, outcome, _ = await _call(
-            "set_yaml_config", {"content": "clobber:\n", "expected_hash": stale}, _token(), hass)
+            "set_yaml_config", {"content": "clobber:\n", "expected_hash": stale}, _access_key(), hass)
         assert outcome == "invalid_request"
         with open(path, encoding="utf-8") as f:
             assert f.read() == "original:\n"  # untouched
@@ -705,7 +705,7 @@ class TestYamlConfigContentHash:
         _, outcome, _ = await _call(
             "set_yaml_config",
             {"content": "clobber:\n", "expected_hash": content_hash("stale")},
-            _token(cap_yaml_edit="confirm"), hass)
+            _access_key(cap_yaml_edit="confirm"), hass)
         assert outcome == "invalid_request"
 
     async def test_executor_stale_hash_conflict_at_apply_time(self, hass):
@@ -717,7 +717,7 @@ class TestYamlConfigContentHash:
             f.write("current:\n")
         _, outcome, _ = await _execute_set_yaml_config(
             {"content": "new:\n", "expected_hash": content_hash("stale content")},
-            _token(), hass, _data())
+            _access_key(), hass, _data())
         assert outcome == "invalid_request"
         with open(path, encoding="utf-8") as f:
             assert f.read() == "current:\n"
@@ -728,7 +728,7 @@ class TestYamlConfigContentHash:
         path = hass.config.path("configuration.yaml")
         with open(path, "w", encoding="utf-8") as f:
             f.write("x:\n")
-        _, outcome, _ = await _call("set_yaml_config", {"content": "x:\ny:\n"}, _token(), hass)
+        _, outcome, _ = await _call("set_yaml_config", {"content": "x:\ny:\n"}, _access_key(), hass)
         assert outcome == "allowed"
 
     async def test_absent_file_hashes_as_empty(self, hass):
@@ -738,28 +738,28 @@ class TestYamlConfigContentHash:
         path = hass.config.path("configuration.yaml")
         assert not __import__("os").path.isfile(path)
         _, outcome, _ = await _call(
-            "set_yaml_config", {"content": "created:\n", "expected_hash": content_hash("")}, _token(), hass)
+            "set_yaml_config", {"content": "created:\n", "expected_hash": content_hash("")}, _access_key(), hass)
         assert outcome == "allowed"
 
     async def test_absent_file_with_nonempty_hash_conflicts(self, hass):
         path = hass.config.path("configuration.yaml")
         assert not __import__("os").path.isfile(path)
         _, outcome, _ = await _call(
-            "set_yaml_config", {"content": "x:\n", "expected_hash": content_hash("stale")}, _token(), hass)
+            "set_yaml_config", {"content": "x:\n", "expected_hash": content_hash("stale")}, _access_key(), hass)
         assert outcome == "invalid_request"
         assert not __import__("os").path.isfile(path)  # not created
 
 
 class TestIntegrations:
     async def test_list_deny(self, hass):
-        _, outcome, _ = await _call("list_integrations", {}, _token(cap_integration_write="deny"), hass)
+        _, outcome, _ = await _call("list_integrations", {}, _access_key(cap_integration_write="deny"), hass)
         assert outcome == "denied"
 
     async def test_list_excludes_phoenix(self, hass):
         MockConfigEntry(domain="test_integration", title="Test", entry_id="e1").add_to_hass(hass)
         MockConfigEntry(domain="phoenix_mcp", title="Phoenix MCP", entry_id="phoenix_mcp1").add_to_hass(hass)
         content, outcome, _ = await _call(
-            "list_integrations", {}, _token(pass_through=True), hass
+            "list_integrations", {}, _access_key(pass_through=True), hass
         )
         assert outcome == "allowed"
         domains = {i["domain"] for i in _json(content)["integrations"]}
@@ -786,10 +786,10 @@ class TestIntegrations:
             config_entry=visible,
         )
         hass.states.async_set(entity.entity_id, "on")
-        token = _token()
-        token.permissions.entities[entity.entity_id] = PermissionNode(state="YELLOW")
+        access_key = _access_key()
+        access_key.permissions.entities[entity.entity_id] = PermissionNode(state="YELLOW")
 
-        content, outcome, _ = await _call("list_integrations", {}, token, hass)
+        content, outcome, _ = await _call("list_integrations", {}, access_key, hass)
 
         assert outcome == "allowed"
         result = _json(content)
@@ -825,23 +825,23 @@ class TestIntegrations:
             config_entry=entry,
             disabled_by=er.RegistryEntryDisabler.USER,
         )
-        token = _token()
-        token.permissions.entities[entity.entity_id] = PermissionNode(state="GREEN")
-        content, outcome, _ = await _call("list_integrations", {}, token, hass)
+        access_key = _access_key()
+        access_key.permissions.entities[entity.entity_id] = PermissionNode(state="GREEN")
+        content, outcome, _ = await _call("list_integrations", {}, access_key, hass)
         assert outcome == "allowed"
         assert _json(content)["integrations"] == []
 
     async def test_disable_calls_ha(self, hass):
         entry = MockConfigEntry(domain="test_integration", entry_id="e2")
         entry.add_to_hass(hass)
-        token = _token()
-        token.pass_through = True
+        access_key = _access_key()
+        access_key.pass_through = True
         data = _data()
         data.mesa = None
         data.store.get_settings.return_value.mesa_mode = "off"
         with patch_set_disabled(hass) as mock:
             content, outcome, _ = await _call(
-                "set_integration_enabled", {"entry_id": "e2", "enabled": False}, token, hass, data)
+                "set_integration_enabled", {"entry_id": "e2", "enabled": False}, access_key, hass, data)
         assert outcome == "allowed"
         mock.assert_awaited_once()
         assert mock.await_args.args[1] == ConfigEntryDisabler.USER
@@ -853,29 +853,29 @@ class TestIntegrations:
             disabled_by=ConfigEntryDisabler.USER,
         )
         entry.add_to_hass(hass)
-        token = _token()
-        token.pass_through = True
+        access_key = _access_key()
+        access_key.pass_through = True
         data = _data()
         data.mesa = None
         data.store.get_settings.return_value.mesa_mode = "off"
         with patch_set_disabled(hass) as mock:
             _, outcome, _ = await _call(
-                "set_integration_enabled", {"entry_id": "e3", "enabled": True}, token, hass, data)
+                "set_integration_enabled", {"entry_id": "e3", "enabled": True}, access_key, hass, data)
         assert outcome == "allowed"
         assert mock.await_args.args[1] is None
 
     async def test_unknown_entry(self, hass):
-        _, outcome, _ = await _call("set_integration_enabled", {"entry_id": "nope", "enabled": True}, _token(), hass)
+        _, outcome, _ = await _call("set_integration_enabled", {"entry_id": "nope", "enabled": True}, _access_key(), hass)
         assert outcome == "not_found"
 
     async def test_phoenix_entry_refused(self, hass):
         MockConfigEntry(domain="phoenix_mcp", entry_id="phoenix_mcp2").add_to_hass(hass)
-        _, outcome, _ = await _call("set_integration_enabled", {"entry_id": "phoenix_mcp2", "enabled": False}, _token(), hass)
+        _, outcome, _ = await _call("set_integration_enabled", {"entry_id": "phoenix_mcp2", "enabled": False}, _access_key(), hass)
         assert outcome == "not_found"
 
     async def test_non_bool(self, hass):
         MockConfigEntry(domain="test_integration", entry_id="e4").add_to_hass(hass)
-        _, outcome, _ = await _call("set_integration_enabled", {"entry_id": "e4", "enabled": "yes"}, _token(), hass)
+        _, outcome, _ = await _call("set_integration_enabled", {"entry_id": "e4", "enabled": "yes"}, _access_key(), hass)
         assert outcome == "invalid_request"
 
 
@@ -905,7 +905,7 @@ class TestConfigYamlSerialization:
         await lock.acquire()
         task = asyncio.create_task(
             _execute_set_yaml_config(
-                {"content": "default_config:\nfrontend:\n"}, _token(), hass, _data(),
+                {"content": "default_config:\nfrontend:\n"}, _access_key(), hass, _data(),
             )
         )
         try:
@@ -955,8 +955,8 @@ class TestConfigYamlSerialization:
         # key and be refused by the removal guard, which is a real refusal but
         # not what this test is about.
         await asyncio.gather(
-            _execute_set_yaml_config({"content": "a: 1\n"}, _token(), hass, _data()),
-            _execute_set_yaml_config({"content": "a: 2\n"}, _token(), hass, _data()),
+            _execute_set_yaml_config({"content": "a: 1\n"}, _access_key(), hass, _data()),
+            _execute_set_yaml_config({"content": "a: 2\n"}, _access_key(), hass, _data()),
         )
 
         assert seen == [True, True]
@@ -992,7 +992,7 @@ class TestSetYamlConfigTargetsIncludeFiles:
         (tmp_path / "templates.yaml").write_text("- binary_sensor: []\n", encoding="utf-8")
         new = "- binary_sensor:\n    - name: Dark\n      state: 'on'\n"
         content, outcome, _ = await _call(
-            "set_yaml_config", {"file": "templates.yaml", "content": new}, _token(), hass)
+            "set_yaml_config", {"file": "templates.yaml", "content": new}, _access_key(), hass)
         assert outcome == "allowed"
         assert _json(content)["path"] == "templates.yaml"
         assert (tmp_path / "templates.yaml").read_text(encoding="utf-8") == new
@@ -1006,13 +1006,13 @@ class TestSetYamlConfigTargetsIncludeFiles:
         self._seed(tmp_path)
         (tmp_path / rel).write_text("[]\n", encoding="utf-8")
         _, outcome, _ = await _call(
-            "set_yaml_config", {"file": rel, "content": "[]\n"}, _token(), hass)
+            "set_yaml_config", {"file": rel, "content": "[]\n"}, _access_key(), hass)
         assert outcome == "allowed"
 
     async def test_default_still_writes_configuration_yaml(self, hass, tmp_path):
         self._seed(tmp_path, "default_config:\n")
         content, outcome, _ = await _call(
-            "set_yaml_config", {"content": "default_config:\nfrontend:\n"}, _token(), hass)
+            "set_yaml_config", {"content": "default_config:\nfrontend:\n"}, _access_key(), hass)
         assert outcome == "allowed"
         assert _json(content)["path"] == "configuration.yaml"
 
@@ -1020,7 +1020,7 @@ class TestSetYamlConfigTargetsIncludeFiles:
         self._seed(tmp_path)
         (tmp_path / "notes.yaml").write_text("a: 1\n", encoding="utf-8")
         content, outcome, _ = await _call(
-            "set_yaml_config", {"file": "notes.yaml", "content": "a: 2\n"}, _token(), hass)
+            "set_yaml_config", {"file": "notes.yaml", "content": "a: 2\n"}, _access_key(), hass)
         assert outcome == "invalid_request"
         assert "does not load notes.yaml" in content["content"][0]["text"]
         assert (tmp_path / "notes.yaml").read_text(encoding="utf-8") == "a: 1\n"
@@ -1037,7 +1037,7 @@ class TestSetYamlConfigTargetsIncludeFiles:
         content, outcome, _ = await _call(
             "set_yaml_config",
             {"file": "http.yaml", "content": "trusted_proxies:\n  - 0.0.0.0/0\n"},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
         assert "under http" in content["content"][0]["text"]
         assert "0.0.0.0/0" not in (tmp_path / "http.yaml").read_text(encoding="utf-8")
@@ -1049,7 +1049,7 @@ class TestSetYamlConfigTargetsIncludeFiles:
         content, outcome, _ = await _call(
             "set_yaml_config",
             {"file": "packages/kitchen.yaml", "content": "frontend:\n  extra_module_url:\n    - /local/x.js\n"},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
         assert "under homeassistant" in content["content"][0]["text"]
 
@@ -1059,7 +1059,7 @@ class TestSetYamlConfigTargetsIncludeFiles:
         (tmp_path / "packages").mkdir()
         _, outcome, _ = await _call(
             "set_yaml_config",
-            {"file": "packages/new.yaml", "content": "light: []\n"}, _token(), hass)
+            {"file": "packages/new.yaml", "content": "light: []\n"}, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_refuses_when_a_protected_branch_cannot_be_read(self, hass, tmp_path):
@@ -1067,7 +1067,7 @@ class TestSetYamlConfigTargetsIncludeFiles:
         (tmp_path / "http.yaml").write_text("{{{ not yaml", encoding="utf-8")
         (tmp_path / "templates.yaml").write_text("[]\n", encoding="utf-8")
         content, outcome, _ = await _call(
-            "set_yaml_config", {"file": "templates.yaml", "content": "[]\n"}, _token(), hass)
+            "set_yaml_config", {"file": "templates.yaml", "content": "[]\n"}, _access_key(), hass)
         assert outcome == "invalid_request"
         assert "could not be read" in content["content"][0]["text"]
 
@@ -1075,7 +1075,7 @@ class TestSetYamlConfigTargetsIncludeFiles:
         self._seed(tmp_path, "{{{ not yaml")
         (tmp_path / "templates.yaml").write_text("[]\n", encoding="utf-8")
         content, outcome, _ = await _call(
-            "set_yaml_config", {"file": "templates.yaml", "content": "[]\n"}, _token(), hass)
+            "set_yaml_config", {"file": "templates.yaml", "content": "[]\n"}, _access_key(), hass)
         assert outcome == "invalid_request"
         assert "cannot tell where templates.yaml is loaded" in content["content"][0]["text"]
 
@@ -1086,7 +1086,7 @@ class TestSetYamlConfigTargetsIncludeFiles:
     async def test_path_jail(self, hass, tmp_path, bad):
         self._seed(tmp_path)
         content, outcome, _ = await _call(
-            "set_yaml_config", {"file": bad, "content": "x\n"}, _token(), hass)
+            "set_yaml_config", {"file": bad, "content": "x\n"}, _access_key(), hass)
         assert outcome == "invalid_request"
         assert "can be written" in content["content"][0]["text"]
 
@@ -1095,7 +1095,7 @@ class TestSetYamlConfigTargetsIncludeFiles:
         self._seed(tmp_path)
         content, outcome, _ = await _call(
             "set_yaml_config", {"file": "../escape.yaml", "content": "x\n"},
-            _token(cap_yaml_edit="deny"), hass)
+            _access_key(cap_yaml_edit="deny"), hass)
         assert outcome == "denied"
         assert "escape.yaml" not in content["content"][0]["text"]
 
@@ -1107,7 +1107,7 @@ class TestSetYamlConfigTargetsIncludeFiles:
         self._seed(tmp_path, "http: !include templates.yaml\n")
         content, outcome, _ = await _execute_set_yaml_config(
             {"file": "templates.yaml", "content": "trusted_proxies: []\n"},
-            _token(), hass, _data())
+            _access_key(), hass, _data())
         assert outcome == "invalid_request"
         assert "under http" in content["content"][0]["text"]
         assert (tmp_path / "templates.yaml").read_text(encoding="utf-8") == "[]\n"
@@ -1118,7 +1118,7 @@ class TestSetYamlConfigTargetsIncludeFiles:
         data = _data()
         data.versions.record = AsyncMock()
         _, outcome, _ = await _execute_set_yaml_config(
-            {"file": "templates.yaml", "content": "- a\n"}, _token(), hass, data)
+            {"file": "templates.yaml", "content": "- a\n"}, _access_key(), hass, data)
         assert outcome == "allowed"
         record = data.versions.record.await_args.kwargs
         assert record["resource_type"] == "yaml_config"
@@ -1130,7 +1130,7 @@ class TestSetYamlConfigTargetsIncludeFiles:
         _, outcome, _ = await _call(
             "set_yaml_config",
             {"file": "templates.yaml", "content": "- b\n", "expected_hash": content_hash("- stale\n")},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
         assert (tmp_path / "templates.yaml").read_text(encoding="utf-8") == "- a\n"
 
@@ -1152,7 +1152,7 @@ class TestPatchYamlConfigTargetsIncludeFiles:
             "patch_yaml_config",
             {"file": "templates.yaml", "path": [0, "binary_sensor", 0, "state"],
              "content": "'on'"},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "allowed"
         body = _json(content)
         assert body["path"] == "templates.yaml"
@@ -1168,7 +1168,7 @@ class TestPatchYamlConfigTargetsIncludeFiles:
         (tmp_path / "http.yaml").write_text("server_port: 8123\n", encoding="utf-8")
         content, outcome, _ = await _call(
             "patch_yaml_config",
-            {"file": "http.yaml", "key": "server_port", "content": "80"}, _token(), hass)
+            {"file": "http.yaml", "key": "server_port", "content": "80"}, _access_key(), hass)
         assert outcome == "invalid_request"
         assert "under http" in content["content"][0]["text"]
         assert "8123" in (tmp_path / "http.yaml").read_text(encoding="utf-8")
@@ -1178,7 +1178,7 @@ class TestPatchYamlConfigTargetsIncludeFiles:
         (tmp_path / "notes.yaml").write_text("a: 1\n", encoding="utf-8")
         _, outcome, _ = await _call(
             "patch_yaml_config",
-            {"file": "notes.yaml", "key": "a", "content": "2"}, _token(), hass)
+            {"file": "notes.yaml", "key": "a", "content": "2"}, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_executor_rechecks_the_mount_at_apply_time(self, hass, tmp_path):
@@ -1187,7 +1187,7 @@ class TestPatchYamlConfigTargetsIncludeFiles:
             "http: !include templates.yaml\n", encoding="utf-8")
         content, outcome, _ = await _execute_patch_yaml_config(
             {"file": "templates.yaml", "key": "a", "content": "2"},
-            _token(), hass, _data())
+            _access_key(), hass, _data())
         assert outcome == "invalid_request"
         assert "under http" in content["content"][0]["text"]
         assert (tmp_path / "templates.yaml").read_text(encoding="utf-8") == "a: 1\n"
@@ -1200,14 +1200,14 @@ class TestPatchYamlConfigTargetsIncludeFiles:
         data.versions.record = AsyncMock()
         _, outcome, _ = await _execute_patch_yaml_config(
             {"file": "templates.yaml", "path": [0, "a"], "content": "2"},
-            _token(), hass, data)
+            _access_key(), hass, data)
         assert outcome == "allowed"
         assert data.versions.record.await_args.kwargs["resource_id"] == "templates.yaml"
 
     async def test_denied_token_learns_nothing_about_its_payload(self, hass, tmp_path):
         content, outcome, _ = await _call(
             "patch_yaml_config", {"file": "../escape.yaml", "key": "x", "content": "1"},
-            _token(cap_yaml_edit="deny"), hass)
+            _access_key(cap_yaml_edit="deny"), hass)
         assert outcome == "denied"
         assert "escape.yaml" not in content["content"][0]["text"]
 
@@ -1241,10 +1241,10 @@ class TestIncludeTargetRoundTrip:
         (tmp_path / "configuration.yaml").write_text(
             "template: !include templates.yaml\n", encoding="utf-8")
         (tmp_path / "templates.yaml").write_text(self.BEFORE, encoding="utf-8")
-        token = _token()
+        access_key = _access_key()
 
         content, outcome, _ = await _call(
-            "get_yaml_config", {"file": "templates.yaml"}, token, hass)
+            "get_yaml_config", {"file": "templates.yaml"}, access_key, hass)
         assert outcome == "allowed"
         read = _json(content)
         assert read["content"] == self.BEFORE
@@ -1253,7 +1253,7 @@ class TestIncludeTargetRoundTrip:
             "set_yaml_config",
             {"file": "templates.yaml", "content": self.AFTER,
              "expected_hash": read["content_hash"]},
-            token, hass)
+            access_key, hass)
         assert outcome == "allowed"
         assert (tmp_path / "templates.yaml").read_text(encoding="utf-8") == self.AFTER
 
@@ -1278,7 +1278,7 @@ class TestListEntryRemovalGuard:
         self._seed(tmp_path)
         content, outcome, _ = await _call(
             "set_yaml_config", {"file": "templates.yaml", "content": "- a: 1\n"},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "invalid_request"
         text = content["content"][0]["text"]
         assert "removes 2 top-level entries" in text
@@ -1291,7 +1291,7 @@ class TestListEntryRemovalGuard:
         _, outcome, _ = await _call(
             "set_yaml_config",
             {"file": "templates.yaml", "content": "- a: 1\n", "remove_entries": 2},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "allowed"
         assert (tmp_path / "templates.yaml").read_text(encoding="utf-8") == "- a: 1\n"
 
@@ -1304,7 +1304,7 @@ class TestListEntryRemovalGuard:
         args = {"file": "templates.yaml", "content": "- a: 1\n"}
         if declared is not None:
             args["remove_entries"] = declared
-        _, outcome, _ = await _call("set_yaml_config", args, _token(), hass)
+        _, outcome, _ = await _call("set_yaml_config", args, _access_key(), hass)
         assert outcome == "invalid_request"
 
     async def test_an_edit_that_keeps_the_count_needs_no_declaration(self, hass, tmp_path):
@@ -1312,7 +1312,7 @@ class TestListEntryRemovalGuard:
         _, outcome, _ = await _call(
             "set_yaml_config",
             {"file": "templates.yaml", "content": "- a: 9\n- b: 2\n- c: 3\n"},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "allowed"
 
     async def test_growing_the_file_needs_no_declaration(self, hass, tmp_path):
@@ -1320,7 +1320,7 @@ class TestListEntryRemovalGuard:
         _, outcome, _ = await _call(
             "set_yaml_config",
             {"file": "templates.yaml", "content": self.THREE + "- d: 4\n"},
-            _token(), hass)
+            _access_key(), hass)
         assert outcome == "allowed"
 
     async def test_a_restore_is_exempt(self, hass, tmp_path):
@@ -1328,11 +1328,11 @@ class TestListEntryRemovalGuard:
         from custom_components.phoenix_mcp.tool_common import _restore_ctx
 
         self._seed(tmp_path)
-        token = _token()
+        access_key = _access_key()
         marker = _restore_ctx.set({"user_id": "admin"})
         try:
             _, outcome, _ = await _execute_set_yaml_config(
-                {"file": "templates.yaml", "content": "- a: 1\n"}, token, hass, _data())
+                {"file": "templates.yaml", "content": "- a: 1\n"}, access_key, hass, _data())
         finally:
             _restore_ctx.reset(marker)
         assert outcome == "allowed"
@@ -1347,7 +1347,7 @@ class TestListEntryRemovalGuard:
         self._seed(tmp_path)
         kept = "".join(f"- {name}: {n}\n" for n, name in list(enumerate("abc", 1))[: 3 - count])
         diff = await _build_diff_set_yaml_config(
-            {"file": "templates.yaml", "content": kept}, _token(), hass)
+            {"file": "templates.yaml", "content": kept}, _access_key(), hass)
         assert diff["summary_key"] == f"diff.set_yaml_config.{fragment}"
         assert diff["summary_params"]["file"] == "templates.yaml"
         assert diff["target"]["id"] == "templates.yaml"

@@ -17,13 +17,13 @@ from custom_components.phoenix_mcp.config_reconciliation import (
 )
 from custom_components.phoenix_mcp.const import DOMAIN, CONFIG_RECOVERY_UNRESOLVED
 from custom_components.phoenix_mcp.data import PhoenixData
-from custom_components.phoenix_mcp.token_store import TokenStore
+from custom_components.phoenix_mcp.access_key_store import AccessKeyStore
 from custom_components.phoenix_mcp.tools.config_files import _authored_file_snapshot
 
 
 @pytest.fixture
 def runtime(hass):
-    store = TokenStore(hass, MagicMock(async_save=AsyncMock()))
+    store = AccessKeyStore(hass, MagicMock(async_save=AsyncMock()))
     store.get_settings().mesa_mode = "off"
     value = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = value
@@ -283,7 +283,7 @@ async def test_completed_same_resource_can_rotate_inside_write_lock(runtime, mon
 async def test_template_settings_expected_snapshot_matches_real_optional_clear(hass, runtime):
     from homeassistant.config_entries import SOURCE_USER
     from homeassistant.setup import async_setup_component
-    from custom_components.phoenix_mcp.mcp_view import _restore_token
+    from custom_components.phoenix_mcp.mcp_view import _restore_access_key
     from custom_components.phoenix_mcp.tools.helper import _execute_set_config_entry_options
     from custom_components.phoenix_mcp.template_recovery import template_snapshot
     assert await async_setup_component(hass, "homeassistant", {})
@@ -294,7 +294,7 @@ async def test_template_settings_expected_snapshot_matches_real_optional_clear(h
     entry = result["result"]
     await hass.async_block_till_done()
     response = await _execute_set_config_entry_options({"entry_id": entry.entry_id,
-        "settings": {"state": "{{ 8 }}", "unit_of_measurement": None}}, _restore_token("admin"), hass, runtime)
+        "settings": {"state": "{{ 8 }}", "unit_of_measurement": None}}, _restore_access_key("admin"), hass, runtime)
     assert not response[0].get("isError"), response
     record = runtime.config_recovery.records()[0]
     assert record["expected"] == template_snapshot(hass, entry)

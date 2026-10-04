@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
 import {
-  formatDate, formatDateTime, tokenStatus, copyToClipboard, HIGH_RISK_DOMAINS,
+  formatDate, formatDateTime, accessKeyStatus, copyToClipboard, HIGH_RISK_DOMAINS,
   friendlyToolName, friendlyResource,
 } from "../utils";
-import type { TokenRecord } from "../types";
+import type { AccessKeyRecord } from "../types";
 
-function makeToken(overrides: Partial<TokenRecord> = {}): TokenRecord {
+function makeAccessKey(overrides: Partial<AccessKeyRecord> = {}): AccessKeyRecord {
   return {
     id: "tok-1",
     name: "test-token",
@@ -81,25 +81,25 @@ describe("formatDateTime", () => {
   });
 });
 
-describe("tokenStatus", () => {
+describe("accessKeyStatus", () => {
   it("returns 'Active' for a valid non-revoked token without expiry", () => {
-    expect(tokenStatus(makeToken())).toBe("Active");
+    expect(accessKeyStatus(makeAccessKey())).toBe("Active");
   });
 
   it("returns 'Revoked' for a revoked token", () => {
-    expect(tokenStatus(makeToken({ revoked: true }))).toBe("Revoked");
+    expect(accessKeyStatus(makeAccessKey({ revoked: true }))).toBe("Revoked");
   });
 
   it("returns 'Expired' for a token with a past expiry date", () => {
-    expect(tokenStatus(makeToken({ expires_at: "2020-01-01T00:00:00Z" }))).toBe("Expired");
+    expect(accessKeyStatus(makeAccessKey({ expires_at: "2020-01-01T00:00:00Z" }))).toBe("Expired");
   });
 
   it("returns 'Active' for a token with a future expiry date", () => {
-    expect(tokenStatus(makeToken({ expires_at: "2099-12-31T23:59:59Z" }))).toBe("Active");
+    expect(accessKeyStatus(makeAccessKey({ expires_at: "2099-12-31T23:59:59Z" }))).toBe("Active");
   });
 
   it("returns 'Revoked' even if also expired (revoked takes priority)", () => {
-    expect(tokenStatus(makeToken({ revoked: true, expires_at: "2020-01-01T00:00:00Z" }))).toBe("Revoked");
+    expect(accessKeyStatus(makeAccessKey({ revoked: true, expires_at: "2020-01-01T00:00:00Z" }))).toBe("Revoked");
   });
 });
 

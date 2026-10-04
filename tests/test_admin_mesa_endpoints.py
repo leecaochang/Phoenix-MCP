@@ -32,7 +32,7 @@ from custom_components.phoenix_mcp.const import DOMAIN
 from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.mesa import async_setup_mesa
 from custom_components.phoenix_mcp.rate_limiter import RateLimiter
-from custom_components.phoenix_mcp.token_store import GlobalSettings, TokenStore
+from custom_components.phoenix_mcp.access_key_store import GlobalSettings, AccessKeyStore
 
 
 def _admin_request(body: bytes = b"", query: dict | None = None) -> MagicMock:
@@ -66,7 +66,7 @@ def _admin_request(body: bytes = b"", query: dict | None = None) -> MagicMock:
 
 async def _setup(hass: HomeAssistant, mesa_mode: str = "advisory") -> PhoenixData:
     runtime = await async_setup_mesa(hass, mesa_mode)
-    store = MagicMock(spec=TokenStore)
+    store = MagicMock(spec=AccessKeyStore)
     store.get_settings = MagicMock(return_value=GlobalSettings(mesa_mode=mesa_mode))
     audit = MagicMock(spec=AuditLog)
     audit.record = MagicMock()

@@ -12,7 +12,7 @@ function rec(over: Partial<ApprovalRecord>): ApprovalRecord {
   return {
     id: "appr_1",
     token_id: "t1",
-    token_name: "my_token",
+    token_name: "my_access_key",
     tool_name: "call_service_mesa_approved",
     cap_name: "mesa_control_mode",
     args: {},

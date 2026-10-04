@@ -21,8 +21,8 @@ from custom_components.phoenix_mcp.data import PhoenixData
 from custom_components.phoenix_mcp.request_authority import (
     AuthorityChangedError, RequestAuthority, policy_version, request_authority,
 )
-from custom_components.phoenix_mcp.token_store import (
-    GlobalSettings, PermissionNode, PermissionTree, TokenRecord, TokenStore,
+from custom_components.phoenix_mcp.access_key_store import (
+    GlobalSettings, PermissionNode, PermissionTree, AccessKeyRecord, AccessKeyStore,
 )
 from custom_components.phoenix_mcp.version_store import VersionRecord
 
@@ -42,7 +42,7 @@ def commit_env(hass: HomeAssistant):
     for entity_id in entities:
         hass.states.async_set(entity_id, "off")
     labels = [lr.async_get(hass).async_create(name).label_id for name in ("one", "two")]
-    token = TokenRecord(
+    access_key = AccessKeyRecord(
         id="commit-token", name="Commit test", token_hash="test-hash",
         created_at=utcnow(), created_by="test", cap_registry_write="allow",
         permissions=PermissionTree(
@@ -50,14 +50,14 @@ def commit_env(hass: HomeAssistant):
             devices={device.id: PermissionNode(state="GREEN")},
         ),
     )
-    store = MagicMock(spec=TokenStore)
+    store = MagicMock(spec=AccessKeyStore)
     store.get_settings.return_value = GlobalSettings(mesa_mode="off")
-    store.get_token_by_hash.return_value = token
-    store.list_tokens.return_value = []
+    store.get_access_key_by_hash.return_value = access_key
+    store.list_access_keys.return_value = []
     store.get_entity_hints.return_value = {}
     data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock(), hass=hass)
     hass.data[DOMAIN] = data
-    yield token, data, device.id, entities, labels
+    yield access_key, data, device.id, entities, labels
     if data.sensor_flush_cancel is not None:
         data.sensor_flush_cancel()
 
@@ -72,7 +72,7 @@ def _body(result):
 async def test_overlapping_writes_capture_their_own_results(
     hass, commit_env, kind, second_operation
 ):
-    token, data, device_id, entities, labels = commit_env
+    access_key, data, device_id, entities, labels = commit_env
     target = entities[0] if kind == "entity" else device_id
     execute = getattr(view, f"_execute_set_{kind}")
     entered, release = asyncio.Event(), asyncio.Event()
@@ -86,7 +86,7 @@ async def test_overlapping_writes_capture_their_own_results(
 
     with patch.object(view, "_record_version", side_effect=record):
         first = asyncio.create_task(execute(
-            {f"{kind}_id": target, "add_labels": [labels[0]]}, token, hass, data
+            {f"{kind}_id": target, "add_labels": [labels[0]]}, access_key, hass, data
         ))
         try:
             await asyncio.wait_for(entered.wait(), 1)
@@ -104,7 +104,7 @@ async def test_overlapping_writes_capture_their_own_results(
                     {f"{kind}_id": target,
                      "add_labels" if second_operation == "add" else "remove_labels":
                          [labels[1] if second_operation == "add" else labels[0]]},
-                    token, hass, data,
+                    access_key, hass, data,
                 )
             _body(second)
             expected = sorted(labels) if second_operation == "add" else (
@@ -123,7 +123,7 @@ async def test_overlapping_writes_capture_their_own_results(
 
 
 async def test_aliases_and_category_scopes_merge_during_history_wait(hass, commit_env):
-    token, data, _, entities, _ = commit_env
+    access_key, data, _, entities, _ = commit_env
     categories = {
         scope: cr.async_get(hass).async_create(scope=scope, name=scope).category_id
         for scope in ("first", "second")
@@ -141,13 +141,13 @@ async def test_aliases_and_category_scopes_merge_during_history_wait(hass, commi
     with patch.object(view, "_record_version", side_effect=record):
         task = asyncio.create_task(view._execute_set_entity(
             {"entity_id": entities[0], "add_aliases": ["first alias"],
-             "categories": {"first": categories["first"]}}, token, hass, data,
+             "categories": {"first": categories["first"]}}, access_key, hass, data,
         ))
         try:
             await asyncio.wait_for(entered.wait(), 1)
             second = await view._execute_set_entity(
                 {"entity_id": entities[0], "add_aliases": ["second alias"],
-                 "categories": {"second": categories["second"]}}, token, hass, data,
+                 "categories": {"second": categories["second"]}}, access_key, hass, data,
             )
             _body(second)
         finally:
@@ -160,7 +160,7 @@ async def test_aliases_and_category_scopes_merge_during_history_wait(hass, commi
 
 
 async def test_rename_then_delete_does_not_reopen_first_commit(hass, commit_env):
-    token, data, _, entities, _ = commit_env
+    access_key, data, _, entities, _ = commit_env
     entered, release = asyncio.Event(), asyncio.Event()
     calls = 0
 
@@ -174,14 +174,14 @@ async def test_rename_then_delete_does_not_reopen_first_commit(hass, commit_env)
     renamed = "light.renamed"
     with patch.object(view, "_record_version", side_effect=record):
         task = asyncio.create_task(view._execute_set_entity(
-            {"entity_id": entities[0], "new_entity_id": renamed}, token, hass, data
+            {"entity_id": entities[0], "new_entity_id": renamed}, access_key, hass, data
         ))
         try:
             await asyncio.wait_for(entered.wait(), 1)
-            _body(await view._execute_delete_entity({"entity_id": renamed}, token, hass, data))
+            _body(await view._execute_delete_entity({"entity_id": renamed}, access_key, hass, data))
             # Independent resources can finish while the first history save is blocked.
             _body(await view._execute_set_entity(
-                {"entity_id": entities[1], "name": "Independent"}, token, hass, data
+                {"entity_id": entities[1], "name": "Independent"}, access_key, hass, data
             ))
         finally:
             release.set()
@@ -192,7 +192,7 @@ async def test_rename_then_delete_does_not_reopen_first_commit(hass, commit_env)
 
 @pytest.mark.parametrize("change", ["label", "category", "scope", "authority"])
 async def test_commit_revalidates_after_preparation_wait(hass, commit_env, change):
-    token, data, _, entities, labels = commit_env
+    access_key, data, _, entities, labels = commit_env
     category = cr.async_get(hass).async_create(scope="test", name="test")
     entered, release = asyncio.Event(), asyncio.Event()
 
@@ -203,20 +203,20 @@ async def test_commit_revalidates_after_preparation_wait(hass, commit_env, chang
     args = {"entity_id": entities[0], "changes": {
         "add_labels": [labels[0]], "categories": {"test": category.category_id},
     }}
-    authority_ctx = request_authority.set(RequestAuthority(hass, data, token.id, token.token_hash))
-    version_ctx = policy_version.set(token.settings_version)
+    authority_ctx = request_authority.set(RequestAuthority(hass, data, access_key.id, access_key.token_hash))
+    version_ctx = policy_version.set(access_key.settings_version)
     try:
         with patch.object(view, "_gate", side_effect=gate):
-            task = asyncio.create_task(view._tool_set_entity(args, token, hass, data))
+            task = asyncio.create_task(view._tool_set_entity(args, access_key, hass, data))
             await asyncio.wait_for(entered.wait(), 1)
             if change == "label":
                 lr.async_get(hass).async_delete(labels[0])
             elif change == "category":
                 cr.async_get(hass).async_delete(scope="test", category_id=category.category_id)
             elif change == "scope":
-                token.permissions.domains["light"].state = "RED"
+                access_key.permissions.domains["light"].state = "RED"
             else:
-                data.store.get_token_by_hash.return_value = None
+                data.store.get_access_key_by_hash.return_value = None
             release.set()
             if change == "authority":
                 with pytest.raises(AuthorityChangedError):
@@ -232,7 +232,7 @@ async def test_commit_revalidates_after_preparation_wait(hass, commit_env, chang
 
 
 async def test_cancellation_after_commit_keeps_write_and_allows_next_write(hass, commit_env):
-    token, data, _, entities, labels = commit_env
+    access_key, data, _, entities, labels = commit_env
     entered = asyncio.Event()
 
     async def record(*args, **kwargs):
@@ -241,20 +241,20 @@ async def test_cancellation_after_commit_keeps_write_and_allows_next_write(hass,
 
     with patch.object(view, "_record_version", side_effect=record):
         task = asyncio.create_task(view._execute_set_entity(
-            {"entity_id": entities[0], "add_labels": [labels[0]]}, token, hass, data
+            {"entity_id": entities[0], "add_labels": [labels[0]]}, access_key, hass, data
         ))
         await asyncio.wait_for(entered.wait(), 1)
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
             await task
     _body(await view._execute_set_entity(
-        {"entity_id": entities[0], "add_labels": [labels[1]]}, token, hass, data
+        {"entity_id": entities[0], "add_labels": [labels[1]]}, access_key, hass, data
     ))
     assert er.async_get(hass).async_get(entities[0]).labels == set(labels)
 
 
 async def test_cancelled_preparation_does_not_commit(hass, commit_env):
-    token, data, _, entities, labels = commit_env
+    access_key, data, _, entities, labels = commit_env
     entered = asyncio.Event()
 
     async def gate(*args, **kwargs):
@@ -263,7 +263,7 @@ async def test_cancelled_preparation_does_not_commit(hass, commit_env):
 
     with patch.object(view, "_gate", side_effect=gate), patch.object(view, "_record_version", AsyncMock()) as record:
         task = asyncio.create_task(view._tool_set_entity(
-            {"entity_id": entities[0], "changes": {"add_labels": [labels[0]]}}, token, hass, data
+            {"entity_id": entities[0], "changes": {"add_labels": [labels[0]]}}, access_key, hass, data
         ))
         await asyncio.wait_for(entered.wait(), 1)
         task.cancel()
@@ -274,7 +274,7 @@ async def test_cancelled_preparation_does_not_commit(hass, commit_env):
 
 
 async def test_batch_keeps_successful_registry_progress_when_later_item_fails(hass, commit_env):
-    token, data, _, entities, labels = commit_env
+    access_key, data, _, entities, labels = commit_env
     items = [
         {"jsonrpc": "2.0", "id": index, "method": "tools/call", "params": {
             "name": "set_entity", "arguments": {"entity_id": entities[0],
@@ -283,7 +283,7 @@ async def test_batch_keeps_successful_registry_progress_when_later_item_fails(ha
         for index, label in enumerate([labels[0], "missing-label", labels[1]], 1)
     ]
     results = await view._dispatch_streamable_batch(
-        items, token, hass, data, "test", base_url="http://test"
+        items, access_key, hass, data, "test", base_url="http://test"
     )
     assert [item["id"] for item in results] == [1, 2, 3]
     assert not results[0]["result"].get("isError")

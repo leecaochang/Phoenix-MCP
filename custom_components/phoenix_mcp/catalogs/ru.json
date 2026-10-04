@@ -1,7 +1,7 @@
 {
   "notification": {
-    "approval.message": "Ключ доступа «{token}» запросил одобрение.\n\n[Просмотреть в Phoenix MCP]({url})",
-    "rate_limit.message": "Phoenix MCP: ключ доступа «{token}» достиг ограничения частоты запросов.",
+    "approval.message": "Ключ доступа «{access_key}» запросил одобрение.\n\n[Просмотреть в Phoenix MCP]({url})",
+    "rate_limit.message": "Phoenix MCP: ключ доступа «{access_key}» достиг ограничения частоты запросов.",
     "rate_limit.title": "Предупреждение Phoenix MCP"
   },
   "voice": {
@@ -1884,7 +1884,7 @@
       "codexHeaderValueLabel": "Значение заголовка",
       "codexServerNameLabel": "Имя сервера",
       "connectAgentTitle": "Подключите Phoenix MCP к вашему ИИ-агенту",
-      "connectIntro": "Добавьте Phoenix MCP как сервер MCP в вашем агенте. Он аутентифицируется с помощью <code>Authorization: Bearer <token></code>, а не через вход в Home Assistant или OAuth. Используйте HTTPS в недоверенных сетях. Не сохраняйте bearer-ключи доступа в истории оболочки, общих файлах, снимках экрана и системе контроля версий. Замените раскрытый ключ доступа.",
+      "connectIntro": "Добавьте Phoenix MCP как сервер MCP в вашем агенте. Он аутентифицируется с помощью <code>Authorization: Bearer phx_...</code>, а не через вход в Home Assistant или OAuth. Используйте HTTPS в недоверенных сетях. Не сохраняйте bearer-ключи доступа в истории оболочки, общих файлах, снимках экрана и системе контроля версий. Замените раскрытый ключ доступа.",
       "connectLater": "Подключить позже",
       "connectTitle": "Подключите вашего первого ИИ-агента",
       "connected": "Подключено! Ваш агент связался с Phoenix MCP.",
@@ -2050,7 +2050,7 @@
       "nameDuplicateError": "Ключ доступа с таким именем (или эквивалентным slug) уже существует.",
       "nameFormatError": "Имя должно содержать 3-32 символа: буквы, цифры, _ или -.",
       "nameLabel": "Имя (обязательно)",
-      "namePlaceholder": "my_token",
+      "namePlaceholder": "my_access_key",
       "nameRuleError": "3-32 символа: буквы, цифры, дефисы или подчёркивания.",
       "off": "выкл",
       "on": "вкл",
