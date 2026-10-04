@@ -1,6 +1,6 @@
 // The "connect Phoenix MCP to your agent" UI: editable URL, token, per-agent tabs with
 // prefilled commands/configs. Shared by the onboarding wizard's Connect step and
-// the standard token-created modal so both show identical, copy-ready instructions.
+// the standard access-key-created modal so both show identical, copy-ready instructions.
 import React, { useState } from "react";
 import { copyToClipboard } from "../utils";
 import { buildAgentTabs, buildMcpUrl, buildSkillInstall, skillUrlFromMcp } from "../wizard_helpers";
@@ -84,7 +84,7 @@ export function ConnectInstructions({ accessKey, accessKeyName }: { accessKey: s
       </p>
       <CopyCodeBox label={t("wizard.mcpServerUrl")} value={mcpUrl} onChange={setMcpUrl} />
       <small className="wizard-hint">{t("wizard.urlHint")}</small>
-      <CopyCodeBox label={t("wizard.tokenLabel")} value={accessKey} />
+      <CopyCodeBox label={t("wizard.accessKeyLabel")} value={accessKey} />
       <small className="wizard-hint">
         {tRich("wizard.serverNameHint", { code: (c) => <code>{c}</code> })}
       </small>

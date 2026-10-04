@@ -3,11 +3,11 @@
 The frontend's AccessKeyRecord type (frontend_src/types.ts) is hand-mirrored from the
 Python AccessKeyRecord serializer, so they could drift silently. This test pins the
 serialized key set against a shared committed fixture
-(tests/contract/token_record_keys.json); the matching frontend test asserts the
+(tests/contract/access_key_record_keys.json); the matching frontend test asserts the
 TS type covers the same keys.
 
 If AccessKeyRecord.to_dict gains or loses a field, this test fails. To resolve:
-  1. regenerate tests/contract/token_record_keys.json from the serializer, and
+  1. regenerate tests/contract/access_key_record_keys.json from the serializer, and
   2. update frontend_src/types.ts + contract.test.ts to match.
 """
 
@@ -20,14 +20,14 @@ from datetime import datetime, timezone
 
 from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord
 
-_CONTRACT = os.path.join(os.path.dirname(__file__), "contract", "token_record_keys.json")
+_CONTRACT = os.path.join(os.path.dirname(__file__), "contract", "access_key_record_keys.json")
 
 
 def _sample_token() -> AccessKeyRecord:
     # pass_through=True emits the conditional use_assist_exposure field, giving
     # the full superset of serialized keys.
     return AccessKeyRecord(
-        id="x", name="n", token_hash="h",
+        id="x", name="n", access_key_hash="h",
         created_at=datetime.now(timezone.utc), created_by="u", pass_through=True,
     )
 
@@ -35,10 +35,10 @@ def _sample_token() -> AccessKeyRecord:
 def test_token_record_serializer_matches_contract_fixture():
     live_keys = sorted(_sample_token().to_dict().keys())
     with open(_CONTRACT, encoding="utf-8") as f:
-        expected = sorted(json.load(f)["token_record_keys"])
+        expected = sorted(json.load(f)["access_key_record_keys"])
     assert live_keys == expected, (
         "AccessKeyRecord.to_dict shape drifted from the frontend contract fixture. "
-        "Regenerate tests/contract/token_record_keys.json and update "
+        "Regenerate tests/contract/access_key_record_keys.json and update "
         "frontend_src/types.ts + contract.test.ts."
     )
 
@@ -151,7 +151,7 @@ def test_contract_fixture_covers_every_capability():
     from custom_components.phoenix_mcp.const import CAPABILITY_NAMES
 
     with open(_CONTRACT, encoding="utf-8") as f:
-        keys = set(json.load(f)["token_record_keys"])
+        keys = set(json.load(f)["access_key_record_keys"])
     assert set(CAPABILITY_NAMES) <= keys
 
 

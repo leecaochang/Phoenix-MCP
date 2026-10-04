@@ -138,7 +138,7 @@ async function _doReq<T>(method: string, path: string, body?: unknown, extraHead
 const accessKeyMutations = new Map<string, Promise<unknown>>();
 
 async function req<T>(method: string, path: string, body?: unknown, extraHeaders?: Record<string, string>): Promise<T> {
-  const accessKey = method === "GET" ? undefined : /^\/tokens\/([^/]+)(?:\/|$)/.exec(path)?.[1];
+  const accessKey = method === "GET" ? undefined : /^\/access-keys\/([^/]+)(?:\/|$)/.exec(path)?.[1];
   if (!accessKey) return _doReq<T>(method, path, body, extraHeaders);
   const owner = authHass()?.user?.id;
   const previous = accessKeyMutations.get(accessKey);
@@ -156,7 +156,7 @@ function buildQuery(params?: AuditQueryParams): string {
   const p = new URLSearchParams();
   if (params.limit !== undefined) p.set("limit", String(params.limit));
   if (params.offset !== undefined) p.set("offset", String(params.offset));
-  if (params.token_id) p.set("token_id", params.token_id);
+  if (params.access_key_id) p.set("access_key_id", params.access_key_id);
   if (params.outcome) p.set("outcome", params.outcome);
   if (params.ip) p.set("ip", params.ip);
   if (params.method) p.set("method", params.method);
@@ -170,58 +170,58 @@ export const api = {
   listAttention: () => req<{ items: AttentionItem[] }>("GET", "/attention"),
   reviewAttention: (kind: "agent" | "calendar", id: string) =>
     req<{ reviewed: boolean }>("POST", `/attention/${kind}/${encodeURIComponent(id)}`, { checked_outcome: true }),
-  listAccessKeys: () => req<AccessKeyRecord[]>("GET", "/tokens"),
-  getAccessKey: (id: string) => req<AccessKeyRecord>("GET", `/tokens/${id}`),
+  listAccessKeys: () => req<AccessKeyRecord[]>("GET", "/access-keys"),
+  getAccessKey: (id: string) => req<AccessKeyRecord>("GET", `/access-keys/${id}`),
   createAccessKey: (body: CreateAccessKeyBody) =>
-    req<AccessKeyCreateResponse>("POST", "/tokens", body),
+    req<AccessKeyCreateResponse>("POST", "/access-keys", body),
   patchAccessKey: (id: string, body: PatchAccessKeyBody) =>
-    req<AccessKeyRecord>("PATCH", `/tokens/${id}`, body),
-  revokeAccessKey: (id: string) => req<void>("DELETE", `/tokens/${id}`),
-  rotateAccessKey: (id: string) => req<AccessKeyCreateResponse>("POST", `/tokens/${id}/rotate`),
+    req<AccessKeyRecord>("PATCH", `/access-keys/${id}`, body),
+  revokeAccessKey: (id: string) => req<void>("DELETE", `/access-keys/${id}`),
+  rotateAccessKey: (id: string) => req<AccessKeyCreateResponse>("POST", `/access-keys/${id}/rotate`),
 
-  createPreset: (tokenId: string, name: string) =>
-    req<AccessKeyRecord>("POST", `/tokens/${tokenId}/presets`, { name }),
-  renamePreset: (tokenId: string, presetId: string, name: string) =>
-    req<AccessKeyRecord>("PATCH", `/tokens/${tokenId}/presets/${presetId}`, { name }),
-  deletePreset: (tokenId: string, presetId: string) =>
-    req<AccessKeyRecord>("DELETE", `/tokens/${tokenId}/presets/${presetId}`),
-  applyPreset: (tokenId: string, presetId: string, confirmPassThrough = false) =>
+  createPreset: (accessKeyId: string, name: string) =>
+    req<AccessKeyRecord>("POST", `/access-keys/${accessKeyId}/presets`, { name }),
+  renamePreset: (accessKeyId: string, presetId: string, name: string) =>
+    req<AccessKeyRecord>("PATCH", `/access-keys/${accessKeyId}/presets/${presetId}`, { name }),
+  deletePreset: (accessKeyId: string, presetId: string) =>
+    req<AccessKeyRecord>("DELETE", `/access-keys/${accessKeyId}/presets/${presetId}`),
+  applyPreset: (accessKeyId: string, presetId: string, confirmPassThrough = false) =>
     req<AccessKeyRecord>(
       "POST",
-      `/tokens/${tokenId}/presets/${presetId}/apply`,
+      `/access-keys/${accessKeyId}/presets/${presetId}/apply`,
       confirmPassThrough ? { confirm_pass_through: true } : {},
     ),
 
-  listArchivedAccessKeys: () => req<ArchivedAccessKeyRecord[]>("GET", "/tokens/archived"),
-  deleteArchivedAccessKey: (id: string) => req<void>("DELETE", `/tokens/archived/${id}`),
+  listArchivedAccessKeys: () => req<ArchivedAccessKeyRecord[]>("GET", "/access-keys/archived"),
+  deleteArchivedAccessKey: (id: string) => req<void>("DELETE", `/access-keys/archived/${id}`),
 
-  getPermissions: (id: string) => req<PermissionTree>("GET", `/tokens/${id}/permissions`),
+  getPermissions: (id: string) => req<PermissionTree>("GET", `/access-keys/${id}/permissions`),
   setPermissions: (id: string, tree: PermissionTree) =>
-    req<PermissionTree>("PUT", `/tokens/${id}/permissions`, tree),
-  patchDomainPermission: (tokenId: string, domain: string, body: PermissionPatchBody) =>
-    req<PermissionTree>("PATCH", `/tokens/${tokenId}/permissions/domains/${encodeURIComponent(domain)}`, body),
-  patchDevicePermission: (tokenId: string, deviceId: string, body: PermissionPatchBody) =>
-    req<PermissionTree>("PATCH", `/tokens/${tokenId}/permissions/devices/${encodeURIComponent(deviceId)}`, body),
-  patchEntityPermission: (tokenId: string, entityId: string, body: PermissionPatchBody) =>
-    req<PermissionTree>("PATCH", `/tokens/${tokenId}/permissions/entities/${encodeURIComponent(entityId)}`, body),
-  getPermissionIntegrationOptions: (tokenId: string) =>
+    req<PermissionTree>("PUT", `/access-keys/${id}/permissions`, tree),
+  patchDomainPermission: (accessKeyId: string, domain: string, body: PermissionPatchBody) =>
+    req<PermissionTree>("PATCH", `/access-keys/${accessKeyId}/permissions/domains/${encodeURIComponent(domain)}`, body),
+  patchDevicePermission: (accessKeyId: string, deviceId: string, body: PermissionPatchBody) =>
+    req<PermissionTree>("PATCH", `/access-keys/${accessKeyId}/permissions/devices/${encodeURIComponent(deviceId)}`, body),
+  patchEntityPermission: (accessKeyId: string, entityId: string, body: PermissionPatchBody) =>
+    req<PermissionTree>("PATCH", `/access-keys/${accessKeyId}/permissions/entities/${encodeURIComponent(entityId)}`, body),
+  getPermissionIntegrationOptions: (accessKeyId: string) =>
     req<{ integrations: IntegrationPermissionOption[] }>(
-      "GET", `/tokens/${tokenId}/permissions/integration-options`,
+      "GET", `/access-keys/${accessKeyId}/permissions/integration-options`,
     ),
   bulkSelectPermissions: (
-    tokenId: string,
+    accessKeyId: string,
     selectorType: "area" | "label" | "integration",
     selectorId: string,
     state: PermissionPatchBody["state"],
   ) => req<BulkPermissionResult>(
     "POST",
-    `/tokens/${tokenId}/permissions/bulk-select`,
+    `/access-keys/${accessKeyId}/permissions/bulk-select`,
     { selector_type: selectorType, selector_id: selectorId, state },
   ),
 
-  resolve: (tokenId: string, entityId: string) =>
-    req<ResolveResult>("GET", `/tokens/${tokenId}/resolve/${encodeURIComponent(entityId)}`),
-  getScope: (tokenId: string) => req<ScopeResult>("GET", `/tokens/${tokenId}/scope`),
+  resolve: (accessKeyId: string, entityId: string) =>
+    req<ResolveResult>("GET", `/access-keys/${accessKeyId}/resolve/${encodeURIComponent(entityId)}`),
+  getScope: (accessKeyId: string) => req<ScopeResult>("GET", `/access-keys/${accessKeyId}/scope`),
 
   getEntityTree: (forceReload = false) =>
     req<EntityTree>("GET", `/entities${forceReload ? "?force_reload=1" : ""}`),
@@ -231,10 +231,10 @@ export const api = {
   setEntityHint: (entityId: string, hint: string | null) =>
     req<{ entity_hints: Record<string, string> }>("PUT", `/entity-hints/${encodeURIComponent(entityId)}`, { hint }),
 
-  getAccessKeyStats: (tokenId: string) => req<AccessKeyStats>("GET", `/tokens/${tokenId}/stats`),
-  getAccessKeyConnection: (tokenId: string) => req<AccessKeyConnection>("GET", `/tokens/${tokenId}/connection`),
-  getAccessKeyAudit: (tokenId: string, params?: AuditQueryParams) =>
-    req<AuditEntry[]>("GET", `/tokens/${tokenId}/audit${buildQuery(params)}`),
+  getAccessKeyStats: (accessKeyId: string) => req<AccessKeyStats>("GET", `/access-keys/${accessKeyId}/stats`),
+  getAccessKeyConnection: (accessKeyId: string) => req<AccessKeyConnection>("GET", `/access-keys/${accessKeyId}/connection`),
+  getAccessKeyAudit: (accessKeyId: string, params?: AuditQueryParams) =>
+    req<AuditEntry[]>("GET", `/access-keys/${accessKeyId}/audit${buildQuery(params)}`),
   getAudit: (params?: AuditQueryParams) =>
     req<AuditListResponse>("GET", `/audit${buildQuery(params)}`),
 
@@ -250,8 +250,8 @@ export const api = {
 
   getRoutingStatistics: () => req<RoutingStatisticsResponse>("GET", "/command-routing/statistics"),
   resetRoutingStatistics: (surface: "voice" | "chat") => req<RoutingStatisticsResponse>("DELETE", "/command-routing/statistics", { surface, confirm: true }),
-  previewCommandRoute: (tokenId: string, sentence: string, decision = false, targets = false, language = "en") =>
-    req<CommandRoutePreview>("POST", "/command-routing/preview", { token_id: tokenId, sentence, language, ...(decision ? { decision: true, ...(targets ? { targets: true } : {}) } : {}) }),
+  previewCommandRoute: (accessKeyId: string, sentence: string, decision = false, targets = false, language = "en") =>
+    req<CommandRoutePreview>("POST", "/command-routing/preview", { access_key_id: accessKeyId, sentence, language, ...(decision ? { decision: true, ...(targets ? { targets: true } : {}) } : {}) }),
 
   getSettings: () => req<GlobalSettings>("GET", "/settings"),
   patchSettings: (body: Partial<GlobalSettings>) =>
@@ -279,7 +279,7 @@ export const api = {
   listApprovals: (params?: ApprovalListParams) => {
     const p = new URLSearchParams();
     if (params?.status) p.set("status", params.status);
-    if (params?.token_id) p.set("token_id", params.token_id);
+    if (params?.access_key_id) p.set("access_key_id", params.access_key_id);
     if (params?.limit !== undefined) p.set("limit", String(params.limit));
     if (params?.offset !== undefined) p.set("offset", String(params.offset));
     const q = p.toString();
@@ -475,7 +475,7 @@ export const api = {
 // ends (the server's final `done` event) or is aborted.
 export interface AgentCliChatBody {
   log_conversation_id?: string;
-  token_id: string;
+  access_key_id: string;
   instance_id: string;
   model?: string;
   messages: unknown[];

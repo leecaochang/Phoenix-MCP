@@ -124,8 +124,8 @@ def esphome_dir(hass, tmp_path):
 def mock_store_data():
     return {
         "version": 1,
-        "tokens": [],
-        "archived_tokens": [],
+        "access_keys": [],
+        "archived_access_keys": [],
         "settings": {},
     }
 

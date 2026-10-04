@@ -22,7 +22,7 @@ def _access_key(**caps) -> AccessKeyRecord:
     base = {"cap_config_read": "allow"}
     base.update(caps)
     return AccessKeyRecord(
-        id=str(uuid.uuid4()), name="t", token_hash="x",
+        id=str(uuid.uuid4()), name="t", access_key_hash="x",
         created_at=utcnow(), created_by="u", permissions=tree, **base,
     )
 

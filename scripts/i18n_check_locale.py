@@ -140,7 +140,7 @@ LITERALS: dict[str, tuple[str, ...]] = {
     "panel.adminError.badExpiresAt": ("expires_at",),
     "panel.adminError.nameRequired": ("name",),
     "panel.perms.simEntityPlaceholder": ("entity_id", "light.kitchen"),
-    "panel.tokens.namePlaceholder": ("my_access_key",),
+    "panel.accessKeys.namePlaceholder": ("my_access_key",),
     # ai_task.py hardcodes _attr_name = "Phoenix MCP AI Task"; the entity is not
     # localized, so a translated mention would name something the operator
     # cannot find in Home Assistant.
@@ -152,7 +152,7 @@ LITERALS: dict[str, tuple[str, ...]] = {
 # translated, which nothing at runtime would ever report.
 ALLOW_IDENTICAL = frozenset({
     "panel.perms.colId",              # "ID"
-    "panel.tokens.namePlaceholder",   # "my_access_key", a literal example value
+    "panel.accessKeys.namePlaceholder",   # "my_access_key", a literal example value
     "panel.changes.typeEsphomeYaml",  # "ESPHome YAML": a product name plus a format name
     # Product and plan names are proper nouns rather than translatable prose.
     "panel.settings.agentcliZaiCoding",
@@ -214,10 +214,10 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.perms.colName",                 # "Name"
         "panel.selectBy.integration",          # "Integration"
         "panel.selectBy.label",                # "Label"
-        "panel.tokens.cardPersona",            # "Persona"
-        "panel.tokens.colName",                # "Name"
-        "panel.tokens.colStatus",              # "Status"
-        "panel.tokens.secondsShort",           # "{n}s", the seconds unit is "s" in German
+        "panel.accessKeys.cardPersona",            # "Persona"
+        "panel.accessKeys.colName",                # "Name"
+        "panel.accessKeys.colStatus",              # "Status"
+        "panel.accessKeys.secondsShort",           # "{n}s", the seconds unit is "s" in German
         "panel.wizard.agentTablist",           # "Agent"
         "panel.wizard.nameLabel",              # "Name"
         "panel.wizard.stepPersona",            # "Persona"
@@ -235,7 +235,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.mesaSuggestion.noun.script",         # "script"
         "panel.settings.notificationsCard",         # "Notifications"
         "panel.shell.documentation",                # "Documentation"
-        "panel.tokens.expiryMinutes",               # "Minutes"
+        "panel.accessKeys.expiryMinutes",               # "Minutes"
         "panel.version.loc.section",                # "section {index}"
         "panel.wizard.agentTablist",                # "Agent"
         "panel.wizard.expiryMinutes",               # "Minutes"
@@ -257,7 +257,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.mesaSuggestion.noun.script",
         "panel.settings.experimentalCard",
         "panel.settings.providerOllamaLocal",
-        "panel.tokens.cardPersona",
+        "panel.accessKeys.cardPersona",
         "panel.wizard.stepPersona",
     }),
     "it": frozenset({
@@ -286,7 +286,7 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.settings.providerOllamaCloud",  # "Ollama (cloud)", "cloud" is a cognate
         "panel.settings.themeAuto",            # "Auto"
         "panel.shell.agentChat",               # "Agent Chat", a product name
-        "panel.tokens.cardPersona",            # "Persona"
+        "panel.accessKeys.cardPersona",            # "Persona"
         "panel.wizard.stepPersona",            # "Persona"
         "panel.wizard.stepTest",               # "Test"
     }),
@@ -331,11 +331,11 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.settings.model",                # "Model"
         "panel.settings.providerOllamaCloud",  # "Ollama (cloud)", "cloud" is a cognate
         "panel.shell.agentChat",               # "Agent Chat", a product name
-        "panel.tokens.cardPersona",            # "Persona"
-        "panel.tokens.colStatus",              # "Status"
-        "panel.tokens.diffPassThrough",        # "Pass-through: {from} -> {to}", a technical template
-        "panel.tokens.rateSummary",            # "{requests}/min · burst {burst}", a technical template
-        "panel.tokens.secondsShort",           # "{n}s", the seconds unit is "s" in Dutch
+        "panel.accessKeys.cardPersona",            # "Persona"
+        "panel.accessKeys.colStatus",              # "Status"
+        "panel.accessKeys.diffPassThrough",        # "Pass-through: {from} -> {to}", a technical template
+        "panel.accessKeys.rateSummary",            # "{requests}/min · burst {burst}", a technical template
+        "panel.accessKeys.secondsShort",           # "{n}s", the seconds unit is "s" in Dutch
         "panel.version.size.was",              # "{size} (was {before})", "was" is a cognate
         "panel.wizard.agentTablist",           # "Agent"
         "panel.wizard.stepPersona",            # "Persona"
@@ -358,10 +358,10 @@ ALLOW_IDENTICAL_BY_LANGUAGE: dict[str, frozenset[str]] = {
         "panel.settings.languageAuto",         # "Auto"
         "panel.settings.model",                # "Model"
         "panel.settings.themeAuto",            # "Auto"
-        "panel.tokens.cardPersona",            # "Persona"
-        "panel.tokens.colStatus",              # "Status"
-        "panel.tokens.diffPassThrough",        # "Pass-through: {from} -> {to}", a technical template
-        "panel.tokens.rateSummary",            # "{requests}/min · burst {burst}", a technical template
+        "panel.accessKeys.cardPersona",            # "Persona"
+        "panel.accessKeys.colStatus",              # "Status"
+        "panel.accessKeys.diffPassThrough",        # "Pass-through: {from} -> {to}", a technical template
+        "panel.accessKeys.rateSummary",            # "{requests}/min · burst {burst}", a technical template
         "panel.wizard.agentTablist",           # "Agent"
         "panel.wizard.stepPersona",            # "Persona"
         "panel.wizard.stepTest",               # "Test"

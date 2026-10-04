@@ -39,8 +39,8 @@ def _record(
     log: AuditLog,
     *,
     outcome: str = "allowed",
-    token_id: str = "tok-1",
-    token_name: str = "mytoken",
+    access_key_id: str = "tok-1",
+    access_key_name: str = "mytoken",
     method: str = "GET",
     resource: str = "light.kitchen",
     client_ip: str = "192.168.1.1",
@@ -50,8 +50,8 @@ def _record(
 ) -> None:
     log.record(
         request_id=generate_request_id(),
-        token_id=token_id,
-        token_name=token_name,
+        access_key_id=access_key_id,
+        access_key_name=access_key_name,
         method=method,
         resource=resource,
         outcome=outcome,
@@ -91,8 +91,8 @@ class TestAuditEntry:
         defaults = dict(
             request_id="req-1",
             timestamp=utcnow(),
-            token_id="tok-1",
-            token_name="mytoken",
+            access_key_id="tok-1",
+            access_key_name="mytoken",
             method="GET",
             resource="light.kitchen",
             outcome="allowed",
@@ -107,8 +107,8 @@ class TestAuditEntry:
         d = entry.to_dict()
         assert "request_id" in d
         assert "timestamp" in d
-        assert "token_id" in d
-        assert "token_name" in d
+        assert "access_key_id" in d
+        assert "access_key_name" in d
         assert "method" in d
         assert "resource" in d
         assert "outcome" in d
@@ -123,8 +123,8 @@ class TestAuditEntry:
         ts = utcnow()
         entry = self._entry(
             request_id="req-x",
-            token_id="tok-x",
-            token_name="token_x",
+            access_key_id="tok-x",
+            access_key_name="token_x",
             method="POST",
             resource="light.living",
             outcome="denied",
@@ -134,21 +134,21 @@ class TestAuditEntry:
         )
         d = entry.to_dict()
         assert d["request_id"] == "req-x"
-        assert d["token_id"] == "tok-x"
+        assert d["access_key_id"] == "tok-x"
         assert d["outcome"] == "denied"
         assert d["pass_through"] is True
         assert d["timestamp"] == ts.isoformat()
 
     def test_pass_through_defaults_to_false(self):
         entry = AuditEntry(
-            request_id="r", timestamp=utcnow(), token_id="t", token_name="n",
+            request_id="r", timestamp=utcnow(), access_key_id="t", access_key_name="n",
             method="GET", resource="x", outcome="allowed", client_ip="1.1.1.1"
         )
         assert entry.pass_through is False
 
     def test_mesa_advisory_defaults_false_and_omitted(self):
         entry = AuditEntry(
-            request_id="r", timestamp=utcnow(), token_id="t", token_name="n",
+            request_id="r", timestamp=utcnow(), access_key_id="t", access_key_name="n",
             method="GET", resource="x", outcome="allowed", client_ip="1.1.1.1"
         )
         assert entry.mesa_advisory is False
@@ -157,7 +157,7 @@ class TestAuditEntry:
     def test_mesa_advisory_recorded_and_serialized(self):
         log = AuditLog()
         log.record(
-            request_id="r", token_id="t", token_name="n", method="call_service",
+            request_id="r", access_key_id="t", access_key_name="n", method="call_service",
             resource="light.kitchen", outcome="allowed", client_ip="1.1.1.1",
             settings=_settings(), mesa_advisory=True,
         )
@@ -167,7 +167,7 @@ class TestAuditEntry:
 
     def test_preset_and_stale_advisory_default_omitted(self):
         entry = AuditEntry(
-            request_id="r", timestamp=utcnow(), token_id="t", token_name="n",
+            request_id="r", timestamp=utcnow(), access_key_id="t", access_key_name="n",
             method="GET", resource="x", outcome="allowed", client_ip="1.1.1.1"
         )
         assert entry.preset is None and entry.stale_tools_advisory is False
@@ -177,7 +177,7 @@ class TestAuditEntry:
     def test_preset_and_stale_advisory_recorded_and_serialized(self):
         log = AuditLog()
         log.record(
-            request_id="r", token_id="t", token_name="n", method="get_state",
+            request_id="r", access_key_id="t", access_key_name="n", method="get_state",
             resource="light.kitchen", outcome="allowed", client_ip="1.1.1.1",
             settings=_settings(), preset="Power", stale_tools_advisory=True,
         )
@@ -193,7 +193,7 @@ class TestAuditEntry:
         store.async_save = AsyncMock()
         log = AuditLog(store=store)
         log.record(
-            request_id="r", token_id="t", token_name="n", method="get_state",
+            request_id="r", access_key_id="t", access_key_name="n", method="get_state",
             resource="light.kitchen", outcome="allowed", client_ip="1.1.1.1",
             settings=_settings(), preset="Power", stale_tools_advisory=True,
         )
@@ -227,8 +227,8 @@ class TestAuditLogRecord:
         log = AuditLog()
         log.record(
             request_id="req-1",
-            token_id="tok-1",
-            token_name="mytoken",
+            access_key_id="tok-1",
+            access_key_name="mytoken",
             method=["resources/read"],          # non-string (poisoned)
             resource=["poison"] * 1000,          # non-string AND oversized
             outcome="denied",
@@ -247,8 +247,8 @@ class TestAuditLogRecord:
         ts = utcnow()
         log.record(
             request_id="req-1",
-            token_id="tok-1",
-            token_name="mytoken",
+            access_key_id="tok-1",
+            access_key_name="mytoken",
             method="GET",
             resource="light.kitchen",
             outcome="allowed",
@@ -259,8 +259,8 @@ class TestAuditLogRecord:
         )
         entry = list(log._log)[0]
         assert entry.request_id == "req-1"
-        assert entry.token_id == "tok-1"
-        assert entry.token_name == "mytoken"
+        assert entry.access_key_id == "tok-1"
+        assert entry.access_key_name == "mytoken"
         assert entry.method == "GET"
         assert entry.resource == "light.kitchen"
         assert entry.outcome == "allowed"
@@ -453,8 +453,8 @@ class TestCircularBuffer:
         for i in range(5):
             log.record(
                 request_id=f"req-{i}",
-                token_id="tok",
-                token_name="t",
+                access_key_id="tok",
+                access_key_name="t",
                 method="GET",
                 resource=f"entity.{i}",
                 outcome="allowed",
@@ -500,11 +500,11 @@ class TestCircularBuffer:
 class TestQuery:
     def _populate(self, log: AuditLog) -> None:
         entries = [
-            {"token_id": "tok-a", "outcome": "allowed",      "client_ip": "10.0.0.1"},
-            {"token_id": "tok-a", "outcome": "denied",       "client_ip": "10.0.0.1"},
-            {"token_id": "tok-b", "outcome": "allowed",      "client_ip": "10.0.0.2"},
-            {"token_id": "tok-b", "outcome": "rate_limited", "client_ip": "10.0.0.2"},
-            {"token_id": "tok-a", "outcome": "not_found",    "client_ip": "10.0.0.3"},
+            {"access_key_id": "tok-a", "outcome": "allowed",      "client_ip": "10.0.0.1"},
+            {"access_key_id": "tok-a", "outcome": "denied",       "client_ip": "10.0.0.1"},
+            {"access_key_id": "tok-b", "outcome": "allowed",      "client_ip": "10.0.0.2"},
+            {"access_key_id": "tok-b", "outcome": "rate_limited", "client_ip": "10.0.0.2"},
+            {"access_key_id": "tok-a", "outcome": "not_found",    "client_ip": "10.0.0.3"},
         ]
         for kwargs in entries:
             _record(log, **kwargs)
@@ -521,9 +521,9 @@ class TestQuery:
     def test_filter_by_token_id(self):
         log = AuditLog()
         self._populate(log)
-        results = log.query(token_id="tok-a")
+        results = log.query(access_key_id="tok-a")
         assert len(results) == 3
-        assert all(e.token_id == "tok-a" for e in results)
+        assert all(e.access_key_id == "tok-a" for e in results)
 
     def test_filter_by_outcome(self):
         log = AuditLog()
@@ -589,15 +589,15 @@ class TestQuery:
     def test_combined_filters(self):
         log = AuditLog()
         self._populate(log)
-        results = log.query(token_id="tok-a", outcome="allowed")
+        results = log.query(access_key_id="tok-a", outcome="allowed")
         assert len(results) == 1
-        assert results[0].token_id == "tok-a"
+        assert results[0].access_key_id == "tok-a"
         assert results[0].outcome == "allowed"
 
     def test_filter_with_no_matches_returns_empty(self):
         log = AuditLog()
         self._populate(log)
-        results = log.query(token_id="tok-z")
+        results = log.query(access_key_id="tok-z")
         assert results == []
 
     def test_pagination_limit(self):
@@ -630,7 +630,7 @@ class TestQuery:
         log = AuditLog()
         for _ in range(5):
             _record(log)
-        log.query(token_id="tok-1", outcome="allowed")
+        log.query(access_key_id="tok-1", outcome="allowed")
         assert len(log) == 5
 
     def test_results_are_newest_first(self):
@@ -662,13 +662,13 @@ class TestCount:
     def test_matches_filtered_length_ignoring_pagination(self):
         log = AuditLog()
         for _ in range(7):
-            _record(log, token_id="tok-a")
+            _record(log, access_key_id="tok-a")
         for _ in range(3):
-            _record(log, token_id="tok-b")
-        assert log.count(token_id="tok-a") == 7
+            _record(log, access_key_id="tok-b")
+        assert log.count(access_key_id="tok-a") == 7
         # A tiny limit/offset on query() must not affect count().
-        assert len(log.query(token_id="tok-a", limit=2, offset=5)) == 2
-        assert log.count(token_id="tok-a") == 7
+        assert len(log.query(access_key_id="tok-a", limit=2, offset=5)) == 2
+        assert log.count(access_key_id="tok-a") == 7
 
     def test_unknown_outcome_returns_none_like_query(self):
         log = AuditLog()
@@ -685,7 +685,7 @@ class TestPayloadRedaction:
     def test_sensitive_key_value_redacted(self):
         log = AuditLog()
         log.record(
-            request_id=generate_request_id(), token_id="t", token_name="n",
+            request_id=generate_request_id(), access_key_id="t", access_key_name="n",
             method="create_helper", resource="helper", outcome="allowed",
             client_ip="1.2.3.4", settings=_settings(),
             payload={"name": "create_helper", "arguments": {"api_key": "supersecret123"}},
@@ -697,7 +697,7 @@ class TestPayloadRedaction:
     def test_embedded_secret_line_scrubbed(self):
         log = AuditLog()
         log.record(
-            request_id=generate_request_id(), token_id="t", token_name="n",
+            request_id=generate_request_id(), access_key_id="t", access_key_name="n",
             method="set_yaml_config", resource="yaml", outcome="allowed",
             client_ip="1.2.3.4", settings=_settings(),
             payload={"name": "set_yaml_config", "arguments": {"content": "password: hunter2"}},
@@ -708,7 +708,7 @@ class TestPayloadRedaction:
     def test_innocuous_payload_preserved(self):
         log = AuditLog()
         log.record(
-            request_id=generate_request_id(), token_id="t", token_name="n",
+            request_id=generate_request_id(), access_key_id="t", access_key_name="n",
             method="HassTurnOn", resource="light", outcome="allowed",
             client_ip="1.2.3.4", settings=_settings(),
             payload={"name": "HassTurnOn", "arguments": {"entity_id": "light.kitchen", "brightness": 50}},
@@ -724,17 +724,17 @@ async def test_restore_origin_survives_persistence_without_relaxing_payload_scru
     backing = Store(hass, 1, "phoenix_test_restore_audit")
     audit = AuditLog(store=backing)
     audit.record(
-        request_id="restore", token_id="admin", token_name="admin:owner",
+        request_id="restore", access_key_id="admin", access_key_name="admin:owner",
         method="version/restore", resource="version:fixture", outcome="allowed",
-        client_ip="", settings=_settings(), originating_token_id="source-identity",
+        client_ip="", settings=_settings(), originating_access_key_id="source-identity",
         payload={"originating_token_id": "private-payload", "api_key": "private-key"},
     )
     await audit.async_save()
     loaded = AuditLog(store=backing)
     await loaded.async_load()
     entry = loaded.query(limit=1)[0].to_dict()
-    assert entry["token_id"] == "admin"
+    assert entry["access_key_id"] == "admin"
     assert entry["ha_user_id"] == "owner"
-    assert entry["originating_token_id"] == "source-identity"
+    assert entry["originating_access_key_id"] == "source-identity"
     assert "private-payload" not in entry["payload"]
     assert "private-key" not in entry["payload"]

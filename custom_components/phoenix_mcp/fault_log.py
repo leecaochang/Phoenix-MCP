@@ -119,7 +119,7 @@ def _decode_cursor(cursor, access_key):
     """Authenticate and validate cursor shape before any file I/O."""
     try:
         payload, signature = cursor.split(".")
-        expected = hmac.new(access_key.token_hash.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        expected = hmac.new(access_key.access_key_hash.encode(), payload.encode(), hashlib.sha256).hexdigest()
         if not hmac.compare_digest(signature, expected):
             raise ValueError
         value = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))
@@ -213,7 +213,7 @@ def fault_log_page(snapshot, access_key, hass, *, search, order, limit, cursor):
         payload = base64.urlsafe_b64encode(json.dumps(
             {"offset": next_offset, "view": fingerprint}, separators=(",", ":")
         ).encode()).decode().rstrip("=")
-        signature = hmac.new(access_key.token_hash.encode(), payload.encode(), hashlib.sha256).hexdigest()
+        signature = hmac.new(access_key.access_key_hash.encode(), payload.encode(), hashlib.sha256).hexdigest()
         body["next_cursor"] = payload + "." + signature
     if body["crash_recorded"] is False:
         body["message"] = "No fault dump is recorded in this source. This does not prove Home Assistant has never crashed."

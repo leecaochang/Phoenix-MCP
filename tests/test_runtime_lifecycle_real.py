@@ -142,10 +142,10 @@ async def test_real_entry_reload_has_stable_routes_and_deletion_retires_credenti
     account = await secrets.add("chatgpt", {"api_key": "synthetic-example-key", "model": "example"})
     assert len(secrets.list_instances()) == 1
     assert secrets.resolve(account).api_key == "synthetic-example-key"
-    await data.store.async_patch_settings(assist_bound_token_id=access_key.id,
-        voice_agent_enabled=True, voice_agent_token_id=access_key.id,
+    await data.store.async_patch_settings(assist_bound_access_key_id=access_key.id,
+        voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
         voice_agent_provider_id=account, voice_agent_model="example",
-        ai_task_enabled=True, ai_task_token_id=access_key.id,
+        ai_task_enabled=True, ai_task_access_key_id=access_key.id,
         ai_task_provider_id=account, ai_task_model="example")
     resources = len(list(hass.http.app.router.resources()))
     watched = ("entity_registry_updated", "device_registry_updated", "area_registry_updated", "automation_reloaded", "homeassistant_stop")
@@ -174,9 +174,9 @@ async def test_real_entry_reload_has_stable_routes_and_deletion_retires_credenti
     assert restored.get_access_key_by_id(access_key.id) is None
     assert restored.list_archived()[0].revoked
     settings = restored.get_settings()
-    assert settings.assist_bound_token_id is None
-    assert settings.voice_agent_token_id is None and not settings.voice_agent_enabled
-    assert settings.ai_task_token_id is None and not settings.ai_task_enabled
+    assert settings.assist_bound_access_key_id is None
+    assert settings.voice_agent_access_key_id is None and not settings.voice_agent_enabled
+    assert settings.ai_task_access_key_id is None and not settings.ai_task_enabled
     secrets = await _get_secret_store(hass)
     assert secrets.list_instances() == []
     assert secrets.resolve(account) is None
@@ -220,13 +220,13 @@ async def test_unload_flushes_usage_and_audit_added_during_platform_unload(hass,
     async def unload(*args, **kwargs):
         result = await original(*args, **kwargs)
         data.store.update_last_used(access_key.id, stamp)
-        data.audit.record(request_id="last-unload-row", token_id=access_key.id, token_name=access_key.name,
+        data.audit.record(request_id="last-unload-row", access_key_id=access_key.id, access_key_name=access_key.name,
             method="get_state", resource="fixture", outcome="allowed", client_ip="", settings=data.store.get_settings())
         return result
 
     monkeypatch.setattr(hass.config_entries, "async_unload_platforms", unload)
     assert await hass.config_entries.async_unload(entry.entry_id)
-    persisted = next(row for row in hass_storage[DOMAIN]["data"]["tokens"] if row["id"] == access_key.id)
+    persisted = next(row for row in hass_storage[DOMAIN]["data"]["access_keys"] if row["id"] == access_key.id)
     assert persisted["last_used_at"] == stamp.isoformat()
     assert any(row["request_id"] == "last-unload-row" for row in hass_storage["phoenix_mcp_audit"]["data"]["entries"])
 
@@ -234,7 +234,7 @@ async def test_unload_flushes_usage_and_audit_added_during_platform_unload(hass,
 async def test_failed_platform_unload_persists_audit_and_keeps_runtime_available(hass, hass_storage, enable_custom_integrations, monkeypatch):
     """A refused platform unload still persists the audit log and leaves the runtime available."""
     entry, data = await _setup_runtime(hass)
-    data.audit.record(request_id='failed-unload-row', token_id='fixture', token_name='fixture',
+    data.audit.record(request_id='failed-unload-row', access_key_id='fixture', access_key_name='fixture',
                       method='get_state', resource='fixture', outcome='allowed', client_ip='',
                       settings=data.store.get_settings())
     original = hass.config_entries.async_unload_platforms

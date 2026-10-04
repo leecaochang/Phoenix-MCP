@@ -53,7 +53,7 @@ def _make_admin_request(body: dict | None = None) -> MagicMock:
     request.__getitem__ = MagicMock(side_effect=lambda k: user if k == KEY_HASS_USER else None)
     request.get = MagicMock(side_effect=_get)
     request.method = "POST"
-    request.path = "/api/phoenix-mcp/admin/tokens/x/presets"
+    request.path = "/api/phoenix-mcp/admin/access-keys/x/presets"
     request.remote = "127.0.0.1"
     return request
 
@@ -71,7 +71,7 @@ def _view(cls, hass):
 
 
 async def _enable_presets(access_key_store):
-    await access_key_store.async_patch_settings(token_presets_enabled=True)
+    await access_key_store.async_patch_settings(access_key_presets_enabled=True)
 
 
 @pytest.mark.asyncio
@@ -81,16 +81,16 @@ async def test_all_preset_endpoints_403_when_disabled(access_key_store):
     record, _ = await access_key_store.async_create_access_key("t1", "u")
 
     resp = await _view(PhoenixAdminAccessKeyPresetsView, hass).post(
-        _make_admin_request({"name": "A"}), token_id=record.id)
+        _make_admin_request({"name": "A"}), access_key_id=record.id)
     assert resp.status == 403
     resp = await _view(PhoenixAdminAccessKeyPresetView, hass).patch(
-        _make_admin_request({"name": "B"}), token_id=record.id, preset_id="x")
+        _make_admin_request({"name": "B"}), access_key_id=record.id, preset_id="x")
     assert resp.status == 403
     resp = await _view(PhoenixAdminAccessKeyPresetView, hass).delete(
-        _make_admin_request(), token_id=record.id, preset_id="x")
+        _make_admin_request(), access_key_id=record.id, preset_id="x")
     assert resp.status == 403
     resp = await _view(PhoenixAdminAccessKeyPresetApplyView, hass).post(
-        _make_admin_request(), token_id=record.id, preset_id="x")
+        _make_admin_request(), access_key_id=record.id, preset_id="x")
     assert resp.status == 403
     for r in (resp,):
         assert json.loads(r.text)["error"] == "forbidden"
@@ -109,7 +109,7 @@ async def test_create_preset_snapshots_current_settings(access_key_store):
         record.id, PermissionTree(entities={"light.a": PermissionNode(state="GREEN")}))
 
     resp = await _view(PhoenixAdminAccessKeyPresetsView, hass).post(
-        _make_admin_request({"name": "Power"}), token_id=record.id)
+        _make_admin_request({"name": "Power"}), access_key_id=record.id)
     assert resp.status == 201
     body = json.loads(resp.text)
     preset = next(p for p in body["presets"] if p["name"] == "Power")
@@ -129,7 +129,7 @@ async def test_create_preset_name_validation(access_key_store, name, expected):
     await _enable_presets(access_key_store)
     record, _ = await access_key_store.async_create_access_key("t1", "u")
     resp = await _view(PhoenixAdminAccessKeyPresetsView, hass).post(
-        _make_admin_request({"name": name}), token_id=record.id)
+        _make_admin_request({"name": name}), access_key_id=record.id)
     assert resp.status == expected
 
 
@@ -143,13 +143,13 @@ async def test_create_preset_duplicate_and_cap(access_key_store):
     record, _ = await access_key_store.async_create_access_key("t1", "u")
     view = _view(PhoenixAdminAccessKeyPresetsView, hass)
 
-    resp = await view.post(_make_admin_request({"name": "default PRESET"}), token_id=record.id)
+    resp = await view.post(_make_admin_request({"name": "default PRESET"}), access_key_id=record.id)
     assert resp.status == 400  # case-insensitive clash with the seeded default
 
     for i in range(MAX_PRESETS_PER_ACCESS_KEY - 1):
-        resp = await view.post(_make_admin_request({"name": f"p{i}"}), token_id=record.id)
+        resp = await view.post(_make_admin_request({"name": f"p{i}"}), access_key_id=record.id)
         assert resp.status == 201
-    resp = await view.post(_make_admin_request({"name": "overflow"}), token_id=record.id)
+    resp = await view.post(_make_admin_request({"name": "overflow"}), access_key_id=record.id)
     assert resp.status == 400
     assert "at most" in json.loads(resp.text)["message"]
 
@@ -169,7 +169,7 @@ async def test_switch_auto_saves_outgoing_then_applies_target(access_key_store):
     await access_key_store.async_patch_access_key(record.id, cap_search=CAP_ALLOW)  # unsaved change on B
 
     resp = await _view(PhoenixAdminAccessKeyPresetApplyView, hass).post(
-        _make_admin_request(), token_id=record.id, preset_id=default_id)
+        _make_admin_request(), access_key_id=record.id, preset_id=default_id)
     assert resp.status == 200
     body = json.loads(resp.text)
     # Live state matches the default preset (both changes rolled back)...
@@ -193,7 +193,7 @@ async def test_apply_active_preset_reverts_unsaved_changes(access_key_store):
     await access_key_store.async_patch_access_key(record.id, cap_restart=CAP_ALLOW)  # dirty
 
     resp = await _view(PhoenixAdminAccessKeyPresetApplyView, hass).post(
-        _make_admin_request(), token_id=record.id, preset_id=default_id)
+        _make_admin_request(), access_key_id=record.id, preset_id=default_id)
     assert resp.status == 200
     body = json.loads(resp.text)
     # Revert: the unsaved change is discarded, NOT saved back into the preset.
@@ -216,12 +216,12 @@ async def test_apply_pass_through_preset_requires_confirm(access_key_store):
     await access_key_store.async_patch_access_key(record.id, pass_through=False)
     view = _view(PhoenixAdminAccessKeyPresetApplyView, hass)
 
-    resp = await view.post(_make_admin_request(), token_id=record.id, preset_id=pt_id)
+    resp = await view.post(_make_admin_request(), access_key_id=record.id, preset_id=pt_id)
     assert resp.status == 400
     assert "confirm_pass_through" in json.loads(resp.text)["message"]
 
     resp = await view.post(
-        _make_admin_request({"confirm_pass_through": True}), token_id=record.id, preset_id=pt_id)
+        _make_admin_request({"confirm_pass_through": True}), access_key_id=record.id, preset_id=pt_id)
     assert resp.status == 200
     assert json.loads(resp.text)["pass_through"] is True
 
@@ -237,14 +237,14 @@ async def test_delete_active_preset_rejected_other_deleted(access_key_store):
     b_id = updated.active_preset_id
     view = _view(PhoenixAdminAccessKeyPresetView, hass)
 
-    resp = await view.delete(_make_admin_request(), token_id=record.id, preset_id=b_id)
+    resp = await view.delete(_make_admin_request(), access_key_id=record.id, preset_id=b_id)
     assert resp.status == 400  # B is active
 
-    resp = await view.delete(_make_admin_request(), token_id=record.id, preset_id=default_id)
+    resp = await view.delete(_make_admin_request(), access_key_id=record.id, preset_id=default_id)
     assert resp.status == 200
     assert [p["id"] for p in json.loads(resp.text)["presets"]] == [b_id]
 
-    resp = await view.delete(_make_admin_request(), token_id=record.id, preset_id="ghost")
+    resp = await view.delete(_make_admin_request(), access_key_id=record.id, preset_id="ghost")
     assert resp.status == 404
 
 
@@ -257,11 +257,11 @@ async def test_rename_preset_endpoint(access_key_store):
     pid = record.presets[0].id
     view = _view(PhoenixAdminAccessKeyPresetView, hass)
 
-    resp = await view.patch(_make_admin_request({"name": "Renamed"}), token_id=record.id, preset_id=pid)
+    resp = await view.patch(_make_admin_request({"name": "Renamed"}), access_key_id=record.id, preset_id=pid)
     assert resp.status == 200
     assert json.loads(resp.text)["presets"][0]["name"] == "Renamed"
 
-    resp = await view.patch(_make_admin_request({"name": "X"}), token_id=record.id, preset_id="ghost")
+    resp = await view.patch(_make_admin_request({"name": "X"}), access_key_id=record.id, preset_id="ghost")
     assert resp.status == 404
 
 
@@ -282,7 +282,7 @@ async def test_apply_holds_async_lock(access_key_store):
 
     access_key_store.async_lock.acquire = tracking_acquire
     resp = await _view(PhoenixAdminAccessKeyPresetApplyView, hass).post(
-        _make_admin_request(), token_id=record.id, preset_id=pid)
+        _make_admin_request(), access_key_id=record.id, preset_id=pid)
     assert resp.status == 200
     assert len(lock_acquired) == 1
 
@@ -294,7 +294,7 @@ async def test_settings_enable_seeds_existing_tokens(access_key_store):
     record, _ = await access_key_store.async_create_access_key("t1", "u")
     assert record.presets == []  # created while the feature was off
 
-    request = _make_admin_request({"token_presets_enabled": True})
+    request = _make_admin_request({"access_key_presets_enabled": True})
     request.method = "PATCH"
     request.path = "/api/phoenix-mcp/admin/settings"
     resp = await _view(PhoenixAdminSettingsView, hass).patch(request)
@@ -309,7 +309,7 @@ async def test_settings_enable_seeds_existing_tokens(access_key_store):
 async def test_settings_toggle_rejects_non_bool(access_key_store):
     data = _make_data(access_key_store)
     hass = _make_hass(data)
-    request = _make_admin_request({"token_presets_enabled": "yes"})
+    request = _make_admin_request({"access_key_presets_enabled": "yes"})
     request.method = "PATCH"
     resp = await _view(PhoenixAdminSettingsView, hass).patch(request)
     assert resp.status == 400

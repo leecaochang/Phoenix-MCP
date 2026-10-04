@@ -74,7 +74,7 @@ def _make_data(**settings_over):
 
 
 _FULL = dict(
-    ai_task_enabled=True, ai_task_token_id="tok-1",
+    ai_task_enabled=True, ai_task_access_key_id="tok-1",
     ai_task_provider_id="i1", ai_task_model="m",
 )
 
@@ -665,7 +665,7 @@ async def test_run_ai_task_pending_becomes_queued_without_blocking():
     provider = _MockProvider()
     record = SimpleNamespace(
         id="ap1", status="pending", expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
-        token_id=access_key.id, tool_name="call_service", request_id="",
+        access_key_id=access_key.id, tool_name="call_service", request_id="",
     )
 
     async def dispatch_pending(method, msg_id, params, *a, **k):

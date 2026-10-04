@@ -66,7 +66,7 @@ def _data() -> tuple[PhoenixData, VersionStore]:
 
 def _access_key(tree: PermissionTree | None = None, **caps) -> AccessKeyRecord:
     return AccessKeyRecord(
-        id=str(uuid.uuid4()), name="t", token_hash="x", created_at=utcnow(),
+        id=str(uuid.uuid4()), name="t", access_key_hash="x", created_at=utcnow(),
         created_by="u", permissions=tree or PermissionTree(domains={}), **caps,
     )
 
@@ -116,7 +116,7 @@ class TestAutomationCapture:
         assert [v.action for v in history] == ["delete", "edit", "create"]  # newest first
         delete_rec, edit_rec, create_rec = history
         assert create_rec.before is None and create_rec.after.get("alias") == "A"
-        assert create_rec.token_name == access_key.name
+        assert create_rec.access_key_name == access_key.name
         assert edit_rec.before.get("alias") == "A" and edit_rec.after.get("alias") == "A2"
         assert delete_rec.before.get("alias") == "A2" and delete_rec.after is None
 

@@ -38,13 +38,13 @@ export function VoiceAgentSettings({
 
   const enabled = !!settings.voice_agent_enabled;
   const providerId = settings.voice_agent_provider_id ?? "";
-  const tokenId = settings.voice_agent_token_id ?? "";
+  const accessKeyId = settings.voice_agent_access_key_id ?? "";
   const model = settings.voice_agent_model ?? "";
   const pipelineId = settings.voice_agent_pipeline_id ?? "";
   const pipelineSupported = settings.voice_agent_pipeline_supported ?? true;
   const noProviders = instances.length === 0;
-  const fullyConfigured = !!(enabled && tokenId && providerId && model);
-  const companion = accessKeys.some(accessKey => accessKey.id === tokenId && accessKey.persona === "home_companion");
+  const fullyConfigured = !!(enabled && accessKeyId && providerId && model);
+  const companion = accessKeys.some(accessKey => accessKey.id === accessKeyId && accessKey.persona === "home_companion");
 
   useEffect(() => {
     api.listAccessKeys().then(setAccessKeys).catch(() => setAccessKeys([]));
@@ -120,17 +120,17 @@ export function VoiceAgentSettings({
 
       <div className="toggle-row toggle-row-stacked-control">
         <div className="toggle-label">
-          <span>{t("settings.token")}</span>
-          <small>{t("settings.voiceTokenHelp")}</small>
+          <span>{t("settings.accessKey")}</span>
+          <small>{t("settings.voiceAccessKeyHelp")}</small>
         </div>
         <BusySelect
-          aria-label={t("settings.voiceTokenAria")}
+          aria-label={t("settings.voiceAccessKeyAria")}
           className="input input-auto"
-          value={tokenId}
+          value={accessKeyId}
           busy={saving}
-          onChange={(e) => onChange("voice_agent_token_id", e.target.value)}
+          onChange={(e) => onChange("voice_agent_access_key_id", e.target.value)}
         >
-          <option value="">{t("settings.selectToken")}</option>
+          <option value="">{t("settings.selectAccessKey")}</option>
           {accessKeys.map((tok) => (
             <option key={tok.id} value={tok.id}>{tok.name}</option>
           ))}

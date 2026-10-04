@@ -60,8 +60,8 @@ _METHOD_PREFIX = "mesa:"
 class MesaAuditContext:
     """The request a mesa-core event should be attributed to."""
 
-    token_id: str
-    token_name: str
+    access_key_id: str
+    access_key_name: str
     request_id: str
     client_ip: str
     pass_through: bool
@@ -83,8 +83,8 @@ def request_context(
     if active:
         preset = next((p.name for p in getattr(access_key, "presets", []) if p.id == active), None)
     reset = _context.set(MesaAuditContext(
-        token_id=access_key.id,
-        token_name=access_key.name,
+        access_key_id=access_key.id,
+        access_key_name=access_key.name,
         request_id=request_id,
         client_ip=client_ip or "",
         pass_through=bool(getattr(access_key, "pass_through", False)),
@@ -152,8 +152,8 @@ class MesaAuditBridge(logging.Handler):
                 return
             self._data.audit.record(
                 request_id=ctx.request_id,
-                token_id=ctx.token_id,
-                token_name=ctx.token_name,
+                access_key_id=ctx.access_key_id,
+                access_key_name=ctx.access_key_name,
                 method=_METHOD_PREFIX + str(event.get("event_type") or "event"),
                 resource=_resource(event),
                 outcome="denied",

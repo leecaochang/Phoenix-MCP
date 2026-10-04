@@ -35,14 +35,14 @@ _SENSOR_TYPES = (
 )
 
 
-def _unique_id(token_id: str, sensor_type: str) -> str:
+def _unique_id(access_key_id: str, sensor_type: str) -> str:
     """Key sensor identity on the token UUID so renames preserve entity IDs."""
-    return f"phoenix_mcp_{token_id}_{sensor_type}"
+    return f"phoenix_mcp_{access_key_id}_{sensor_type}"
 
 
-def _device_name(token_name: str) -> str:
+def _device_name(access_key_name: str) -> str:
     """The device's display name. Sensors inherit it via has_entity_name."""
-    return f"Phoenix MCP Access key: {token_name}"
+    return f"Phoenix MCP Access key: {access_key_name}"
 
 
 def _make_sensors(
@@ -130,7 +130,7 @@ class PhoenixAccessKeySensor(SensorEntity):
         return None
 
     @property
-    def token_id(self) -> str:
+    def access_key_id(self) -> str:
         return self._access_key.id
 
     @property
@@ -294,7 +294,7 @@ async def async_remove_access_key_sensors(
     data: PhoenixData = hass.data[DOMAIN]
     sensors = data.platform_entities.pop(access_key_slug, [])
     if sensors:
-        data.access_key_id_sensors.pop(sensors[0].token_id, None)
+        data.access_key_id_sensors.pop(sensors[0].access_key_id, None)
     entity_reg = er.async_get(hass)
     device_reg = dr.async_get(hass)
 

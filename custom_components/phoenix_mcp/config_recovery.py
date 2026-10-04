@@ -85,13 +85,18 @@ class ConfigurationRecovery:
         try:
             raw = await self._store.async_load()
             records = {} if raw is None else raw["records"]
+            from .access_key_schema import normalize_access_key_fields
+
+            if isinstance(records, dict):
+                records = {rid: normalize_access_key_fields(row) if isinstance(row, dict) else row
+                           for rid, row in records.items()}
             if not isinstance(records, dict) or len(records) > CONFIG_RECOVERY_MAX_RECORDS:
                 raise ValueError
             for key, record in records.items():
                 if (not isinstance(key, str) or not isinstance(record, dict)
                         or record.get("id") != key
                         or not all(isinstance(record.get(field), str) for field in (
-                            "resource", "operation", "phase", "created_at", "token_id"
+                            "resource", "operation", "phase", "created_at", "access_key_id"
                         )) or record["phase"] not in (
                             "prepared", "dispatching", "verified", "partial", "unknown", "reviewed", "not_applied"
                         )):
@@ -185,7 +190,7 @@ class ConfigurationRecovery:
         finally:
             self._resources.discard(key)
 
-    async def begin(self, resource: str, operation: str, token_id: str,
+    async def begin(self, resource: str, operation: str, access_key_id: str,
                     before: dict | None, *, source: dict | None = None,
                     expected: dict | None = None) -> str:
         """Persist before dispatch; storage failure always prevents the mutation."""
@@ -204,7 +209,7 @@ class ConfigurationRecovery:
             rid = uuid.uuid4().hex
             records[rid] = {
                 "id": rid, "resource": resource, "operation": operation,
-                "token_id": token_id, "created_at": utcnow().isoformat(),
+                "access_key_id": access_key_id, "created_at": utcnow().isoformat(),
                 "phase": "prepared", "before": before, "source": source,
                 "expected": expected,
             }

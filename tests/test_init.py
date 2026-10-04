@@ -163,7 +163,7 @@ async def test_setup_publishes_ai_task_availability_after_ready(hass, phoenix_ai
     platform, _ = phoenix_ai_task_platform
     store = _mock_store()
     store.get_settings.return_value = GlobalSettings(
-        ai_task_enabled=True, ai_task_token_id="t", ai_task_provider_id="p", ai_task_model="m",
+        ai_task_enabled=True, ai_task_access_key_id="t", ai_task_provider_id="p", ai_task_model="m",
     )
 
     async def forward(entry, platforms):

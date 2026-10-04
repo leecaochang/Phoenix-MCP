@@ -57,7 +57,7 @@ def registry_with_a_phoenix_sensor(hass: HomeAssistant):
 
 def _access_key(**kw) -> AccessKeyRecord:
     return AccessKeyRecord(
-        id="tok", name="t", token_hash="x", created_at=utcnow(), created_by="admin",
+        id="tok", name="t", access_key_hash="x", created_at=utcnow(), created_by="admin",
         permissions=kw.pop("permissions", PermissionTree()), **kw)
 
 

@@ -27,7 +27,7 @@ async def local_home(hass, access_key_store, immediate_command_observation):
     access_key.cap_physical_control = "allow"
     data = PhoenixData(store=access_key_store, rate_limiter=RateLimiter(), audit=AuditLog())
     hass.data[DOMAIN] = data
-    await access_key_store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=access_key.id,
+    await access_key_store.async_patch_settings(voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
         voice_agent_provider_id="p", voice_agent_model="model", voice_agent_routing_mode="local", mesa_mode="off")
     registry = er.async_get(hass)
     entry = registry.async_get_or_create("light", "test", "desk", original_name="Desk lamp")
@@ -484,7 +484,7 @@ async def test_localized_read_rechecks_authority_after_translation_wait(hass, lo
         if change == 'scope':
             access_key.permissions = PermissionTree()
         elif change == 'rotation':
-            access_key.token_hash = 'rotated'
+            access_key.access_key_hash = 'rotated'
         elif change == 'settings':
             await data.store.async_patch_settings(kill_switch=True)
         else:

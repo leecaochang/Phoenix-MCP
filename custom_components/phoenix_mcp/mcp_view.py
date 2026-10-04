@@ -1593,7 +1593,7 @@ async def _execute_call_service(
             hass, data, access_key, args[COMMAND_ROUTING_PLAN_KEY],
         )
         check_request_authority()
-        access_key = RequestAuthority(hass, data, access_key.id, access_key.token_hash).current_access_key()
+        access_key = RequestAuthority(hass, data, access_key.id, access_key.access_key_hash).current_access_key()
     filtered_response = filter_service_response(svc_response, access_key, hass) if svc_response is not None else None
     if filtered_response is not None:
         body["service_response"] = filtered_response
@@ -2313,7 +2313,7 @@ async def _execute_set_integration_log_level(
             desired=after,
             prior=before,
             loggers=loggers,
-            owner_token_id=access_key.id,
+            owner_access_key_id=access_key.id,
             duration_minutes=duration,
         )
         effective = manager.adapter.effective_levels(loggers)
@@ -2695,8 +2695,8 @@ def _entity_identity_references(
             references.append(
                 {
                     "kind": "token_permission",
-                    "token_id": record.id,
-                    "token_name": record.name,
+                    "access_key_id": record.id,
+                    "access_key_name": record.name,
                 }
             )
         for preset in record.presets:
@@ -2704,8 +2704,8 @@ def _entity_identity_references(
                 references.append(
                     {
                         "kind": "preset_permission",
-                        "token_id": record.id,
-                        "token_name": record.name,
+                        "access_key_id": record.id,
+                        "access_key_name": record.name,
                         "preset_id": preset.id,
                         "preset_name": preset.name,
                     }
@@ -3713,15 +3713,15 @@ def _device_permission_references(
         if device_id in record.permissions.devices:
             references.append({
                 "kind": "token_permission",
-                "token_id": record.id,
-                "token_name": record.name,
+                "access_key_id": record.id,
+                "access_key_name": record.name,
             })
         for preset in record.presets:
             if device_id in preset.permissions.devices:
                 references.append({
                     "kind": "preset_permission",
-                    "token_id": record.id,
-                    "token_name": record.name,
+                    "access_key_id": record.id,
+                    "access_key_name": record.name,
                     "preset_id": preset.id,
                     "preset_name": preset.name,
                 })
@@ -4915,7 +4915,7 @@ async def _tool_get_approval_status(
     approval_id = args.get("approval_id")
     if approval_id is None:
         # No id: enumerate this token's own pending approvals (own data only).
-        pending = list_approvals(data.store, status=STATUS_PENDING, token_id=access_key.id)
+        pending = list_approvals(data.store, status=STATUS_PENDING, access_key_id=access_key.id)
         items = [
             {
                 "approval_id": a.id,
@@ -4933,7 +4933,7 @@ async def _tool_get_approval_status(
     if not isinstance(approval_id, str) or not approval_id:
         return _tool_error("Missing approval_id."), "invalid_request", "get_approval_status"
     record = get_approval(data.store, approval_id)
-    if record is None or record.token_id != access_key.id:
+    if record is None or record.access_key_id != access_key.id:
         return _tool_error("Approval not found."), "not_found", "get_approval_status"
     payload = {
         "approval_id": record.id,
@@ -5063,7 +5063,7 @@ async def _wait_for_many_approvals(
         record = get_approval(data.store, approval_id)
         # Unknown and belonging-to-another-token answer identically, so a refusal
         # is not an existence oracle for another token's queue.
-        if record is None or record.token_id != access_key.id:
+        if record is None or record.access_key_id != access_key.id:
             return _tool_error("Approval not found."), "not_found", "wait_for_approval"
         records[approval_id] = record
 
@@ -5202,7 +5202,7 @@ def _restore_access_key(user_id: str) -> AccessKeyRecord:
     return AccessKeyRecord(
         id=f"__restore__:{user_id}",
         name="(admin restore)",
-        token_hash="",
+        access_key_hash="",
         created_at=utcnow(),
         created_by=user_id,
         pass_through=True,
@@ -7088,23 +7088,23 @@ def _config_entry_permission_references(
             entity_references.append({
                 "entity_id": entity_id,
                 "kind": "token_permission",
-                "token_id": record.id,
-                "token_name": record.name,
+                "access_key_id": record.id,
+                "access_key_name": record.name,
             })
         for device_id in sorted(device_set.intersection(record.permissions.devices)):
             device_references.append({
                 "device_id": device_id,
                 "kind": "token_permission",
-                "token_id": record.id,
-                "token_name": record.name,
+                "access_key_id": record.id,
+                "access_key_name": record.name,
             })
         for preset in record.presets:
             for entity_id in sorted(entity_set.intersection(preset.permissions.entities)):
                 entity_references.append({
                     "entity_id": entity_id,
                     "kind": "preset_permission",
-                    "token_id": record.id,
-                    "token_name": record.name,
+                    "access_key_id": record.id,
+                    "access_key_name": record.name,
                     "preset_id": preset.id,
                     "preset_name": preset.name,
                 })
@@ -7112,8 +7112,8 @@ def _config_entry_permission_references(
                 device_references.append({
                     "device_id": device_id,
                     "kind": "preset_permission",
-                    "token_id": record.id,
-                    "token_name": record.name,
+                    "access_key_id": record.id,
+                    "access_key_name": record.name,
                     "preset_id": preset.id,
                     "preset_name": preset.name,
                 })
@@ -7753,11 +7753,11 @@ async def _call_tool(
 
                 saved = get_approval(data.store, result[2].rsplit(":", 1)[-1])
                 exc.not_dispatched = exc.not_dispatched and (
-                    saved is not None and saved.token_id == access_key.id and saved.request_id == request_id
+                    saved is not None and saved.access_key_id == access_key.id and saved.request_id == request_id
                     and saved.status in {"pending", "rejected", "cancelled", "expired"}
                     and not saved.execution_started_at
                 )
-                if (saved is not None and saved.token_id == access_key.id
+                if (saved is not None and saved.access_key_id == access_key.id
                         and saved.request_id == request_id and saved.status == STATUS_APPROVED
                         and isinstance(saved.result, dict) and saved.result.get("outcome") == "allowed"):
                     exc.receipt = ("allowed", result[2])
@@ -8183,7 +8183,7 @@ async def _dispatch_mcp(
     authority = request_authority.get()
     admitted_context = None
     if authority is None:
-        authority = RequestAuthority(hass, data, access_key.id, access_key.token_hash)
+        authority = RequestAuthority(hass, data, access_key.id, access_key.access_key_hash)
         admitted_context = request_authority.set(authority)
     context = None
     write_entered = False
@@ -8980,12 +8980,12 @@ def _validate_legacy_initialize(params: dict) -> tuple[int, str] | None:
 def _open_legacy_session(data: PhoenixData, access_key: AccessKeyRecord) -> str | None:
     """Allocate within both quotas without evicting another active session."""
     _prune_legacy_sessions(data)
-    owned = sum(state.get("token_id") == access_key.id for state in data.mcp_sessions.values())
+    owned = sum(state.get("access_key_id") == access_key.id for state in data.mcp_sessions.values())
     if owned >= _MCP_LEGACY_SESSION_ACCESS_KEY_LIMIT or len(data.mcp_sessions) >= _MCP_LEGACY_SESSION_LIMIT:
         return None
     session_id = secrets.token_urlsafe(32)
     data.mcp_sessions[session_id] = {
-        "token_id": access_key.id,
+        "access_key_id": access_key.id,
         "initialized": False,
         "last_seen": time.monotonic(),
         "protocol_version": MCP_LEGACY_PROTOCOL_VERSION_PREFERRED,
@@ -8999,7 +8999,7 @@ def _legacy_session(
     _prune_legacy_sessions(data)
     session_id = request.headers.get("Mcp-Session-Id")
     state = data.mcp_sessions.get(session_id) if isinstance(session_id, str) else None
-    if state is None or state.get("token_id") != access_key.id:
+    if state is None or state.get("access_key_id") != access_key.id:
         return None
     state["last_seen"] = time.monotonic()
     return state
@@ -9074,7 +9074,7 @@ class PhoenixMcpView(PhoenixView):
         if isinstance(result, web.Response):
             return result
         access_key, _rl_result = result
-        authority = RequestAuthority(hass, data, access_key.id, access_key.token_hash)
+        authority = RequestAuthority(hass, data, access_key.id, access_key.access_key_hash)
         request_authority.set(authority)
         try:
             access_key = authority.current_access_key()
@@ -9112,7 +9112,7 @@ class PhoenixMcpView(PhoenixView):
 
         _prune_legacy_sessions(data)
         session = data.mcp_sessions.get(session_id)
-        if session is None or session.get("token_id") != access_key.id:
+        if session is None or session.get("access_key_id") != access_key.id:
             _log(
                 data,
                 access_key,
@@ -9157,7 +9157,7 @@ class PhoenixMcpView(PhoenixView):
         if isinstance(result, web.Response):
             return result
         access_key, rl_result = result
-        authority = RequestAuthority(hass, data, access_key.id, access_key.token_hash)
+        authority = RequestAuthority(hass, data, access_key.id, access_key.access_key_hash)
         request_authority.set(authority)
 
         def audited_transport_response(

@@ -97,9 +97,9 @@ export const PERMISSION_LABEL_KEYS: Record<string, string> = {
 
 /** Display labels for accessKeyStatus()'s stable internal values. */
 export const ACCESS_KEY_STATUS_KEYS: Record<string, string> = {
-  Active: "tokens.statusActive",
-  Expired: "tokens.statusExpired",
-  Revoked: "tokens.statusRevoked",
+  Active: "accessKeys.statusActive",
+  Expired: "accessKeys.statusExpired",
+  Revoked: "accessKeys.statusRevoked",
 };
 
 export function accessKeyStatusLabel(status: string): string {

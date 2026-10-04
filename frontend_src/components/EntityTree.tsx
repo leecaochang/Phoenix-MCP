@@ -88,7 +88,7 @@ function useTemporarySearchExpansion(
 }
 
 interface Props {
-  tokenId: string;
+  accessKeyId: string;
   permissions: PermissionTree;
   onPermissionsChange: (tree: PermissionTree) => void;
   onEntityClick?: (entityId: string, depth?: "entity" | "device" | "domain", opts?: { reveal?: boolean }) => void;
@@ -158,7 +158,7 @@ function effectiveForNode(
 }
 
 interface HintInputProps {
-  tokenId: string;
+  accessKeyId: string;
   entityId: string;
   currentHint: string | null;
   globalHint: string | null;
@@ -167,7 +167,7 @@ interface HintInputProps {
   onGlobalHintsChange: (hints: Record<string, string>) => void;
 }
 
-function HintInput({ tokenId, entityId, currentHint, globalHint, currentState, onSaved, onGlobalHintsChange }: HintInputProps) {
+function HintInput({ accessKeyId, entityId, currentHint, globalHint, currentState, onSaved, onGlobalHintsChange }: HintInputProps) {
   const [open, setOpen] = useState(false);
   const [allAccessKeys, setAllAccessKeys] = useState(true);
   const [value, setValue] = useState("");
@@ -196,7 +196,7 @@ function HintInput({ tokenId, entityId, currentHint, globalHint, currentState, o
         const r = await api.setEntityHint(entityId, value.trim() || null);
         onGlobalHintsChange(r.entity_hints);
       } else {
-        const tree = await api.patchEntityPermission(tokenId, entityId, {
+        const tree = await api.patchEntityPermission(accessKeyId, entityId, {
           state: currentState,
           hint: value.trim() || null,
         });
@@ -234,7 +234,7 @@ function HintInput({ tokenId, entityId, currentHint, globalHint, currentState, o
         autoFocus
       />
       <div className="hint-scope">
-        <span className={allAccessKeys ? "" : "hint-scope-active"}>{t("perms.hintThisToken")}</span>
+        <span className={allAccessKeys ? "" : "hint-scope-active"}>{t("perms.hintThisAccessKey")}</span>
         <label className={`toggle-switch${saving ? " disabled" : ""}`}>
           <BusyInput
             type="checkbox"
@@ -245,7 +245,7 @@ function HintInput({ tokenId, entityId, currentHint, globalHint, currentState, o
           />
           <span className="toggle-switch-track" />
         </label>
-        <span className={allAccessKeys ? "hint-scope-active" : ""}>{t("perms.hintAllTokens")}</span>
+        <span className={allAccessKeys ? "hint-scope-active" : ""}>{t("perms.hintAllAccessKeys")}</span>
       </div>
       <p className="hint-scope-note">
         {allAccessKeys
@@ -269,7 +269,7 @@ interface EntityRowProps {
   deviceId: string | null;
   domainKey: string;
   permissions: PermissionTree;
-  tokenId: string;
+  accessKeyId: string;
   filterText: string;
   isGhost: boolean;
   onPermChange: (tree: PermissionTree) => void;
@@ -285,7 +285,7 @@ interface EntityRowProps {
 
 function EntityRow({
   entityId, friendlyName, deviceId, domainKey, permissions,
-  tokenId, filterText, isGhost, onPermChange, onEntityClick, revealEntity, revealDepth, revealNonce, mesaProfileEntities, onOpenMesa, globalHints, onGlobalHintsChange,
+  accessKeyId, filterText, isGhost, onPermChange, onEntityClick, revealEntity, revealDepth, revealNonce, mesaProfileEntities, onOpenMesa, globalHints, onGlobalHintsChange,
 }: EntityRowProps) {
   const entityNode = permissions.entities[entityId];
   const state: NodeState = entityNode?.state ?? "GREY";
@@ -313,7 +313,7 @@ function EntityRow({
   async function setEntityState(newState: NodeState) {
     setPermError(null);
     try {
-      const tree = await api.patchEntityPermission(tokenId, entityId, {
+      const tree = await api.patchEntityPermission(accessKeyId, entityId, {
         state: newState,
         hint: entityNode?.hint ?? null,
       });
@@ -363,7 +363,7 @@ function EntityRow({
       <span className="tree-effective" title={t("perms.effectiveTitle", { state: effectiveLabel(effective) })}>({effectiveLabel(effective)})</span>
       {state !== "GREY" && (
         <HintInput
-          tokenId={tokenId}
+          accessKeyId={accessKeyId}
           entityId={entityId}
           currentHint={entityNode?.hint ?? null}
           globalHint={globalHints[entityId] ?? null}
@@ -385,7 +385,7 @@ interface DeviceGroupProps {
   entityIds: string[];
   domainData: DomainTree;
   permissions: PermissionTree;
-  tokenId: string;
+  accessKeyId: string;
   filterText: string;
   allEntityIds: Set<string>;
   onPermChange: (tree: PermissionTree) => void;
@@ -430,7 +430,7 @@ function DeviceIdentity({ deviceId, deviceName, expanded, onToggle }: DeviceIden
 
 function DeviceGroup({
   deviceId, deviceName, domainKey, entityIds, domainData,
-  permissions, tokenId, filterText, allEntityIds, onPermChange, onEntityClick, collapseKey, revealEntity, revealDepth, revealNonce, mesaProfileEntities, mesaProfileDevices, onOpenMesa, globalHints, onGlobalHintsChange,
+  permissions, accessKeyId, filterText, allEntityIds, onPermChange, onEntityClick, collapseKey, revealEntity, revealDepth, revealNonce, mesaProfileEntities, mesaProfileDevices, onOpenMesa, globalHints, onGlobalHintsChange,
 }: DeviceGroupProps) {
   const [expanded, setExpanded] = useState(false);
   const [permError, setPermError] = useState<string | null>(null);
@@ -482,7 +482,7 @@ function DeviceGroup({
   async function setDeviceState(newState: NodeState) {
     setPermError(null);
     try {
-      const tree = await api.patchDevicePermission(tokenId, deviceId, { state: newState });
+      const tree = await api.patchDevicePermission(accessKeyId, deviceId, { state: newState });
       onPermChange(tree);
       if (entityIds[0]) onEntityClick?.(entityIds[0], "device", { reveal: false });
     } catch (e: unknown) {
@@ -545,7 +545,7 @@ function DeviceGroup({
                 deviceId={deviceId}
                 domainKey={domainKey}
                 permissions={permissions}
-                tokenId={tokenId}
+                accessKeyId={accessKeyId}
                 filterText={filterText}
                 isGhost={!allEntityIds.has(eid)}
                 onPermChange={onPermChange}
@@ -569,12 +569,12 @@ function DeviceGroup({
 interface GhostDevicePermissionsProps {
   deviceIds: string[];
   permissions: PermissionTree;
-  tokenId: string;
+  accessKeyId: string;
   onPermChange: (tree: PermissionTree) => void;
 }
 
 function GhostDevicePermissions({
-  deviceIds, permissions, tokenId, onPermChange,
+  deviceIds, permissions, accessKeyId, onPermChange,
 }: GhostDevicePermissionsProps) {
   return (
     <section className="tree-stale-devices" aria-labelledby="tree-stale-devices-title">
@@ -587,7 +587,7 @@ function GhostDevicePermissions({
           key={deviceId}
           deviceId={deviceId}
           permissions={permissions}
-          tokenId={tokenId}
+          accessKeyId={accessKeyId}
           onPermChange={onPermChange}
         />
       ))}
@@ -596,7 +596,7 @@ function GhostDevicePermissions({
 }
 
 function GhostDeviceRow({
-  deviceId, permissions, tokenId, onPermChange,
+  deviceId, permissions, accessKeyId, onPermChange,
 }: Omit<GhostDevicePermissionsProps, "deviceIds"> & { deviceId: string }) {
   const [permError, setPermError] = useState<string | null>(null);
   const state: NodeState = permissions.devices[deviceId]?.state ?? "GREY";
@@ -604,7 +604,7 @@ function GhostDeviceRow({
   async function setDeviceState(newState: NodeState) {
     setPermError(null);
     try {
-      const next = await api.patchDevicePermission(tokenId, deviceId, { state: newState });
+      const next = await api.patchDevicePermission(accessKeyId, deviceId, { state: newState });
       onPermChange(next);
     } catch (e: unknown) {
       setPermError(e instanceof Error ? e.message : t("perms.permSaveFailed"));
@@ -635,7 +635,7 @@ interface DomainGroupProps {
   domainKey: string;
   domainData: DomainTree;
   permissions: PermissionTree;
-  tokenId: string;
+  accessKeyId: string;
   filterText: string;
   allEntityIds: Set<string>;
   onPermChange: (tree: PermissionTree) => void;
@@ -653,7 +653,7 @@ interface DomainGroupProps {
 }
 
 function DomainGroup({
-  domainKey, domainData, permissions, tokenId, filterText, allEntityIds, onPermChange, onEntityClick, collapseKey, revealEntity, revealDepth, revealNonce, mesaProfileEntities, mesaProfileDevices, mesaProfileDomains, onOpenMesa, globalHints, onGlobalHintsChange,
+  domainKey, domainData, permissions, accessKeyId, filterText, allEntityIds, onPermChange, onEntityClick, collapseKey, revealEntity, revealDepth, revealNonce, mesaProfileEntities, mesaProfileDevices, mesaProfileDomains, onOpenMesa, globalHints, onGlobalHintsChange,
 }: DomainGroupProps) {
   const [expanded, setExpanded] = useState(false);
   const [permError, setPermError] = useState<string | null>(null);
@@ -696,7 +696,7 @@ function DomainGroup({
   async function setDomainState(newState: NodeState) {
     setPermError(null);
     try {
-      const tree = await api.patchDomainPermission(tokenId, domainKey, { state: newState });
+      const tree = await api.patchDomainPermission(accessKeyId, domainKey, { state: newState });
       onPermChange(tree);
       const firstEntity = domainData.deviceless_entities[0]
         ?? Object.values(domainData.devices)[0]?.entities[0];
@@ -782,7 +782,7 @@ function DomainGroup({
                       deviceId={null}
                       domainKey={domainKey}
                       permissions={permissions}
-                      tokenId={tokenId}
+                      accessKeyId={accessKeyId}
                       filterText={filterText}
                       isGhost={!allEntityIds.has(eid)}
                       onPermChange={onPermChange}
@@ -810,7 +810,7 @@ function DomainGroup({
                 entityIds={device.entities}
                 domainData={domainData}
                 permissions={permissions}
-                tokenId={tokenId}
+                accessKeyId={accessKeyId}
                 filterText={filterText}
                 allEntityIds={allEntityIds}
                 onPermChange={onPermChange}
@@ -834,7 +834,7 @@ function DomainGroup({
               deviceId={null}
               domainKey={domainKey}
               permissions={permissions}
-              tokenId={tokenId}
+              accessKeyId={accessKeyId}
               filterText={filterText}
               isGhost={true}
               onPermChange={onPermChange}
@@ -860,7 +860,7 @@ function effectiveLabel(effective: string): string {
   return key ? t(key) : effective;
 }
 
-export function EntityTree({ tokenId, permissions, onPermissionsChange, onEntityClick, collapseKey, domainAllowlist, revealEntity, revealDepth, revealNonce, mesaProfileEntities, mesaProfileDevices, mesaProfileDomains, onOpenMesa }: Props) {
+export function EntityTree({ accessKeyId, permissions, onPermissionsChange, onEntityClick, collapseKey, domainAllowlist, revealEntity, revealDepth, revealNonce, mesaProfileEntities, mesaProfileDevices, mesaProfileDomains, onOpenMesa }: Props) {
   const [tree, setTree] = useState<EntityTree | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -941,7 +941,7 @@ export function EntityTree({ tokenId, permissions, onPermissionsChange, onEntity
             domainKey={domain}
             domainData={tree[domain]}
             permissions={permissions}
-            tokenId={tokenId}
+            accessKeyId={accessKeyId}
             filterText={filter}
             allEntityIds={allEntityIds}
             onPermChange={onPermissionsChange}
@@ -962,7 +962,7 @@ export function EntityTree({ tokenId, permissions, onPermissionsChange, onEntity
           <GhostDevicePermissions
             deviceIds={visibleUnmatchedDeviceIds}
             permissions={permissions}
-            tokenId={tokenId}
+            accessKeyId={accessKeyId}
             onPermChange={onPermissionsChange}
           />
         )}

@@ -49,16 +49,16 @@ class RequestAuthority:
 
     hass: HomeAssistant
     data: PhoenixData
-    token_id: str
-    token_hash: str
+    access_key_id: str
+    access_key_hash: str
 
     def current_access_key(self) -> AccessKeyRecord:
         data = self.data
         if (self.hass.data.get(DOMAIN) is not data or not data.ready
                 or data.shutting_down or data.store.get_settings().kill_switch):
             raise AuthorityChangedError("Service unavailable.")
-        access_key = data.store.get_access_key_by_hash(self.token_hash)
-        if access_key is None or access_key.id != self.token_id or not access_key.is_valid():
+        access_key = data.store.get_access_key_by_hash(self.access_key_hash)
+        if access_key is None or access_key.id != self.access_key_id or not access_key.is_valid():
             raise AuthorityChangedError("Unauthorized.")
         return access_key
 

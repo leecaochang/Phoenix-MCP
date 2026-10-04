@@ -36,7 +36,7 @@ PKG = REPO / "custom_components" / "phoenix_mcp"
 
 def _access_key() -> AccessKeyRecord:
     return AccessKeyRecord(
-        id="tok", name="t", token_hash="x", created_at=utcnow(), created_by="admin",
+        id="tok", name="t", access_key_hash="x", created_at=utcnow(), created_by="admin",
         persona="power_user", permissions=PermissionTree(), cap_broadcast="allow",
     )
 

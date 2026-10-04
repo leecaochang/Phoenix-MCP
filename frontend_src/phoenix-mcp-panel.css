@@ -925,12 +925,12 @@ select.input {
   .tree-children { margin-left: 9px; padding-left: 6px; }
   .tree-node { gap: 6px; }
 
-  .token-table th:nth-child(4), .token-table th:nth-child(5),
-  .token-table th:nth-child(6), .token-table th:nth-child(7),
-  .token-table td:nth-child(4), .token-table td:nth-child(5),
-  .token-table td:nth-child(6), .token-table td:nth-child(7) { display: none; }
-  .token-table th, .token-table td { padding: 6px 4px; }
-  .token-table td:nth-child(1) { word-break: break-all; }
+  .access-key-table th:nth-child(4), .access-key-table th:nth-child(5),
+  .access-key-table th:nth-child(6), .access-key-table th:nth-child(7),
+  .access-key-table td:nth-child(4), .access-key-table td:nth-child(5),
+  .access-key-table td:nth-child(6), .access-key-table td:nth-child(7) { display: none; }
+  .access-key-table th, .access-key-table td { padding: 6px 4px; }
+  .access-key-table td:nth-child(1) { word-break: break-all; }
 
   .archived-table th:nth-child(4), .archived-table th:nth-child(5), .archived-table th:nth-child(7),
   .archived-table td:nth-child(4), .archived-table td:nth-child(5), .archived-table td:nth-child(7) { display: none; }
@@ -953,10 +953,10 @@ select.input {
   .audit-time-full { display: none; }
   .audit-time-short { display: inline; white-space: nowrap; }
 
-  .token-detail-sticky { margin: 0 -10px; padding: 12px 10px 10px; }
-  .token-card-body { flex-direction: column; }
-  .token-card-actions { min-width: auto; width: 100%; flex-direction: row; flex-wrap: wrap; }
-  .token-action-btn { flex: 1; min-width: 120px; }
+  .access-key-detail-sticky { margin: 0 -10px; padding: 12px 10px 10px; }
+  .access-key-card-body { flex-direction: column; }
+  .access-key-card-actions { min-width: auto; width: 100%; flex-direction: row; flex-wrap: wrap; }
+  .access-key-action-btn { flex: 1; min-width: 120px; }
   .btn, .phx-tab, .reload-btn, .perm-btn, .tree-expand, .theme-toggle-btn { min-height: 44px; }
   .perm-btn { min-width: 36px; }
 }
@@ -1106,7 +1106,7 @@ select.input {
 /* ============================================================
    Token display (rotated modal)
    ============================================================ */
-.token-display {
+.access-key-display {
   font-family: "Roboto Mono", monospace; font-size: 13px;
   background: var(--phx-surface-2); border: 1.5px solid var(--phx-border);
   border-radius: var(--phx-radius-sm); padding: 14px; word-break: break-all;
@@ -1227,9 +1227,9 @@ select.input {
 /* ============================================================
    Token list
    ============================================================ */
-.token-list-actions { display: flex; gap: 8px; }
-.token-table-empty { text-align: center; color: var(--phx-text-2); padding: 24px; }
-.token-name { font-weight: 600; }
+.access-key-list-actions { display: flex; gap: 8px; }
+.access-key-table-empty { text-align: center; color: var(--phx-text-2); padding: 24px; }
+.access-key-name { font-weight: 600; }
 .row-actions { display: flex; gap: 4px; }
 
 /* Whole-row click for the token and audit tables, kept accessible. The Name/
@@ -1267,17 +1267,17 @@ select.input {
 /* ============================================================
    Token create modal
    ============================================================ */
-.token-create-expiry-row { display: flex; gap: 8px; }
-.token-create-expiry-value { width: 80px; }
-.token-create-rate-section { margin-top: 14px; }
-.token-create-rate-fields { display: flex; gap: 12px; flex-wrap: wrap; }
-.token-create-rate-field { margin: 0; flex: 1; }
+.access-key-create-expiry-row { display: flex; gap: 8px; }
+.access-key-create-expiry-value { width: 80px; }
+.access-key-create-rate-section { margin-top: 14px; }
+.access-key-create-rate-fields { display: flex; gap: 12px; flex-wrap: wrap; }
+.access-key-create-rate-field { margin: 0; flex: 1; }
 
 /* ============================================================
    Token detail - sticky layout
    ============================================================ */
-.token-detail-wrap { display: flex; flex-direction: column; }
-.token-detail-sticky {
+.access-key-detail-wrap { display: flex; flex-direction: column; }
+.access-key-detail-sticky {
   position: sticky;
   top: 0;
   z-index: var(--phx-z-sticky);
@@ -1287,11 +1287,11 @@ select.input {
   border-bottom: 1px solid var(--phx-border);
   box-shadow: 0 2px 8px rgba(24,24,27,0.07);
 }
-.token-detail-body { padding-top: 16px; }
+.access-key-detail-body { padding-top: 16px; }
 @media (max-width: 900px) {
-  .token-detail-sticky { position: static; box-shadow: none; border-bottom: none; }
-  .token-detail-sticky .two-col > *:first-child { order: 1; }
-  .token-detail-sticky .two-col > *:last-child  { order: 2; }
+  .access-key-detail-sticky { position: static; box-shadow: none; border-bottom: none; }
+  .access-key-detail-sticky .two-col > *:first-child { order: 1; }
+  .access-key-detail-sticky .two-col > *:last-child  { order: 2; }
   /* min-height, not height: the simulator's own result grows with a
      genuinely different entity, that is fine; this only stops a same-entity
      re-simulation (every NRWD tap re-runs it via triggerVersion) from
@@ -1300,8 +1300,8 @@ select.input {
 }
 
 /* Token info card - colored header */
-.token-info-card { overflow: hidden; }
-.token-card-header {
+.access-key-info-card { overflow: hidden; }
+.access-key-card-header {
   background: var(--phx-surface-2);
   border-radius: var(--phx-radius) var(--phx-radius) 0 0;
   border-bottom: 1px solid var(--phx-border);
@@ -1312,9 +1312,9 @@ select.input {
   justify-content: space-between;
   gap: 12px;
 }
-.token-card-name-row { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
-.token-card-icon { width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0; }
-.token-card-name {
+.access-key-card-name-row { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+.access-key-card-icon { width: 28px; height: 28px; border-radius: 6px; flex-shrink: 0; }
+.access-key-card-name {
   font-size: 18px;
   font-weight: 700;
   color: var(--phx-accent-hov);
@@ -1324,8 +1324,8 @@ select.input {
   word-break: break-word;
   line-height: 1.3;
 }
-.token-name-edit { display: inline-flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
-.token-name-input {
+.access-key-name-edit { display: inline-flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.access-key-name-input {
   width: 100%;
   background: transparent;
   border: 1px solid transparent;
@@ -1334,10 +1334,10 @@ select.input {
   font-family: inherit;
   cursor: text;
 }
-.token-name-input:hover:not(:disabled):not([aria-disabled="true"]):not(:focus) { border-color: var(--phx-border); }
-.token-name-input:focus { outline: none; border-color: var(--phx-accent); background: var(--phx-surface); }
-.token-name-input:disabled, .token-name-input[aria-disabled="true"] { opacity: 0.65; cursor: default; }
-.token-name-error { font-size: 11px; font-weight: 400; color: var(--phx-error); padding: 0 6px; }
+.access-key-name-input:hover:not(:disabled):not([aria-disabled="true"]):not(:focus) { border-color: var(--phx-border); }
+.access-key-name-input:focus { outline: none; border-color: var(--phx-accent); background: var(--phx-surface); }
+.access-key-name-input:disabled, .access-key-name-input[aria-disabled="true"] { opacity: 0.65; cursor: default; }
+.access-key-name-error { font-size: 11px; font-weight: 400; color: var(--phx-error); padding: 0 6px; }
 
 /* Token settings presets (workspace model) */
 .preset-list { display: flex; flex-direction: column; gap: 8px; }
@@ -1422,7 +1422,7 @@ select.input {
      the fixed-width button group and the shrunk text sat on top of each
      other. Stacked instead: id, then its badges, then the reason, then the
      buttons on their own row, right-aligned. Scoped to .mesa-suggest-row so
-     the unrelated token-settings-presets rows (also .preset-row) are
+     the unrelated access-key-settings-presets rows (also .preset-row) are
      untouched. Placed here, after the base rules above, because the base
      .mesa-suggest-row/-head align-items rules are equal specificity and
      would otherwise win the cascade tie by winning on source order (the
@@ -1431,7 +1431,7 @@ select.input {
   .mesa-suggest-head { flex-direction: column; align-items: flex-start; gap: 6px; }
   .mesa-suggest-row .preset-row-actions { align-self: flex-end; margin-left: 0; }
 }
-.token-card-badges {
+.access-key-card-badges {
   display: flex;
   gap: 6px;
   flex-shrink: 0;
@@ -1441,19 +1441,19 @@ select.input {
 }
 
 /* Body: left meta + right actions */
-.token-card-body {
+.access-key-card-body {
   display: flex;
   gap: 20px;
   align-items: flex-start;
 }
-.token-card-meta { flex: 1; min-width: 0; }
-.token-meta-table {
+.access-key-card-meta { flex: 1; min-width: 0; }
+.access-key-meta-table {
   display: grid;
   grid-template-columns: auto 1fr;
   gap: 7px 14px;
   align-items: baseline;
 }
-.token-meta-label {
+.access-key-meta-label {
   font-size: 11px;
   font-weight: 700;
   color: var(--phx-text-2);
@@ -1461,25 +1461,25 @@ select.input {
   letter-spacing: 0.08em;
   white-space: nowrap;
 }
-.token-meta-value { font-size: 13px; color: var(--phx-text); }
+.access-key-meta-value { font-size: 13px; color: var(--phx-text); }
 
 /* Right action buttons column */
-.token-card-actions {
+.access-key-card-actions {
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-width: 160px;
   flex-shrink: 0;
 }
-.token-action-btn { width: 100%; }
-.token-confirm-inline { }
-.token-confirm-text { font-size: 11px; color: var(--phx-text-2); margin: 0 0 5px; }
-.token-confirm-btns { display: flex; gap: 4px; }
+.access-key-action-btn { width: 100%; }
+.access-key-confirm-inline { }
+.access-key-confirm-text { font-size: 11px; color: var(--phx-text-2); margin: 0 0 5px; }
+.access-key-confirm-btns { display: flex; gap: 4px; }
 
 /* Pass-through confirmation section */
-.token-card-pt-section { margin-top: 16px; border-top: 1px solid var(--phx-border); padding-top: 4px; }
+.access-key-card-pt-section { margin-top: 16px; border-top: 1px solid var(--phx-border); padding-top: 4px; }
 
-.token-header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.access-key-header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .inline-confirm { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 .inline-confirm-text { font-size: 13px; }
 .pt-enable-actions { margin-top: 10px; display: flex; gap: 8px; }
@@ -1715,7 +1715,7 @@ select.input {
 .approval-card:hover { background: var(--phx-surface-2); border-color: var(--phx-accent); }
 .approval-card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .approval-card-title { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
-.approval-card-token { font-weight: 600; font-size: 13px; }
+.approval-card-access-key { font-weight: 600; font-size: 13px; }
 .approval-card-tool { font-family: monospace; font-size: 12px; color: var(--phx-text-2); }
 .approval-card-meta { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--phx-text-2); flex-shrink: 0; }
 .approval-card-summary { font-size: 13px; color: var(--phx-text); margin-top: 6px; }
@@ -1735,7 +1735,7 @@ select.input {
 .approval-history-row:hover { background: var(--phx-surface-2); }
 .approval-history-row > .badge { justify-self: start; }
 .approval-history-tool { font-size: 12px; color: var(--phx-text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.approval-history-token { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.approval-history-access-key { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .approval-history-note { color: var(--phx-text-2); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .approval-history-time { font-size: 11px; color: var(--phx-text-2); white-space: nowrap; }
 .approval-history-more { display: flex; justify-content: center; margin-top: 10px; }
@@ -1745,7 +1745,7 @@ select.input {
 }
 @media (max-width: 600px) {
   .approval-history-row { grid-template-columns: max-content minmax(0, 1fr) max-content; }
-  .approval-history-token, .approval-history-tool { display: none; }
+  .approval-history-access-key, .approval-history-tool { display: none; }
 }
 
 .approval-detail-meta {

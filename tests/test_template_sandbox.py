@@ -22,7 +22,7 @@ def _scoped_token() -> AccessKeyRecord:
     return AccessKeyRecord(
         id="t1",
         name="scoped",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="admin",
         cap_template_render="allow",

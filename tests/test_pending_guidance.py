@@ -84,7 +84,7 @@ class TestSurfacesAgree:
         from homeassistant.util.dt import utcnow
 
         access_key = AccessKeyRecord(
-            id="t", name="t", token_hash="x", created_at=utcnow(),
+            id="t", name="t", access_key_hash="x", created_at=utcnow(),
             created_by="u", permissions=PermissionTree(),
         )
         data = MagicMock()

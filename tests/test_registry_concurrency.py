@@ -43,7 +43,7 @@ def commit_env(hass: HomeAssistant):
         hass.states.async_set(entity_id, "off")
     labels = [lr.async_get(hass).async_create(name).label_id for name in ("one", "two")]
     access_key = AccessKeyRecord(
-        id="commit-token", name="Commit test", token_hash="test-hash",
+        id="commit-token", name="Commit test", access_key_hash="test-hash",
         created_at=utcnow(), created_by="test", cap_registry_write="allow",
         permissions=PermissionTree(
             domains={"light": PermissionNode(state="GREEN")},
@@ -95,8 +95,8 @@ async def test_overlapping_writes_capture_their_own_results(
                 snapshot = VersionRecord(
                     id="restore-test", resource_type=kind, resource_id=target,
                     action="edit", before={"labels": [labels[1]]}, after={"labels": []},
-                    timestamp=utcnow().isoformat(), alias=None, token_id=None,
-                    token_name=None, request_id=None, approved_by_user_id=None,
+                    timestamp=utcnow().isoformat(), alias=None, access_key_id=None,
+                    access_key_name=None, request_id=None, approved_by_user_id=None,
                 )
                 second = await view.async_restore_version(snapshot, "admin", hass, data, side="before")
             else:
@@ -203,7 +203,7 @@ async def test_commit_revalidates_after_preparation_wait(hass, commit_env, chang
     args = {"entity_id": entities[0], "changes": {
         "add_labels": [labels[0]], "categories": {"test": category.category_id},
     }}
-    authority_ctx = request_authority.set(RequestAuthority(hass, data, access_key.id, access_key.token_hash))
+    authority_ctx = request_authority.set(RequestAuthority(hass, data, access_key.id, access_key.access_key_hash))
     version_ctx = policy_version.set(access_key.settings_version)
     try:
         with patch.object(view, "_gate", side_effect=gate):

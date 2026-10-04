@@ -43,10 +43,10 @@ function toolGatingChanged(a: AccessKeyRecord, b: AccessKeyRecord): boolean {
 type AccessKeyAction = "revoke" | "rotate" | "passThrough" | "clearPerms";
 
 interface Props {
-  tokenId: string;
+  accessKeyId: string;
   onBack: () => void;
   onRefresh?: () => void;
-  // settings.token_presets_enabled, threaded from the panel shell; the Presets
+  // settings.access_key_presets_enabled, threaded from the panel shell; the Presets
   // card renders only while the feature toggle is on.
   presetsEnabled?: boolean;
   // Which ESPHome surfaces exist on this system, threaded from the panel shell.
@@ -88,9 +88,9 @@ function ConfirmModal({ title, body, checkLabel, confirmLabel, confirmClass, loa
       </div>
       <div className="modal-actions">
         <BusyButton className={`btn ${confirmClass}`} onClick={onConfirm} busy={loading} disabled={!checked}>
-          {loading ? t("tokens.pleaseWait") : confirmLabel}
+          {loading ? t("accessKeys.pleaseWait") : confirmLabel}
         </BusyButton>
-        <BusyButton className="btn btn-text" onClick={onClose} busy={loading}>{t("tokens.cancel")}</BusyButton>
+        <BusyButton className="btn btn-text" onClick={onClose} busy={loading}>{t("accessKeys.cancel")}</BusyButton>
       </div>
     </Modal>
   );
@@ -106,17 +106,17 @@ function RotatedAccessKeyModal({ rawAccessKey, accessKeyName, onClose }: { rawAc
   }, []);
 
   return (
-    <Modal titleId="rotated-token-title" onClose={closeEnabled ? onClose : undefined}>
-      <h3 className="modal-title" id="rotated-token-title">{t("tokens.tokenRotatedTitle", { name: accessKeyName })}</h3>
+    <Modal titleId="rotated-access-key-title" onClose={closeEnabled ? onClose : undefined}>
+      <h3 className="modal-title" id="rotated-access-key-title">{t("accessKeys.accessKeyRotatedTitle", { name: accessKeyName })}</h3>
       <RawAccessKeyDisplay
         rawAccessKey={rawAccessKey}
-        note={<p>{tRich("tokens.rotatedNote", { strong: (c) => <strong>{c}</strong> })}</p>}
+        note={<p>{tRich("accessKeys.rotatedNote", { strong: (c) => <strong>{c}</strong> })}</p>}
       />
       <div className="banner banner-info">
-        {t("tokens.rotatedBanner")}
+        {t("accessKeys.rotatedBanner")}
       </div>
       <details className="connect-details">
-        <summary>{t("tokens.helpConnect")}</summary>
+        <summary>{t("accessKeys.helpConnect")}</summary>
         <ConnectInstructions accessKey={rawAccessKey} accessKeyName={accessKeyName} />
       </details>
       <div className="modal-actions">
@@ -124,9 +124,9 @@ function RotatedAccessKeyModal({ rawAccessKey, accessKeyName, onClose }: { rawAc
           className="btn btn-text"
           onClick={onClose}
           disabled={!closeEnabled}
-          title={closeEnabled ? undefined : t("tokens.waitBeforeClose")}
+          title={closeEnabled ? undefined : t("accessKeys.waitBeforeClose")}
         >
-          {closeEnabled ? t("common.close") : t("tokens.closeCountdown")}
+          {closeEnabled ? t("common.close") : t("accessKeys.closeCountdown")}
         </button>
       </div>
     </Modal>
@@ -143,7 +143,7 @@ export function ToolAnnouncementToggle({ accessKey, onUpdate }: { accessKey: Acc
       const updated = await api.patchAccessKey(accessKey.id, body);
       onUpdate(updated);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t("tokens.updateFailed"));
+      setError(e instanceof Error ? e.message : t("accessKeys.updateFailed"));
     } finally {
       setSaving(false);
     }
@@ -154,13 +154,13 @@ export function ToolAnnouncementToggle({ accessKey, onUpdate }: { accessKey: Acc
       {error && <div className="banner banner-error mb-8">{error}</div>}
       <div className="toggle-row">
         <div className="toggle-label">
-          <span>{t("tokens.announceAllLabel")}</span>
-          <small>{t("tokens.announceAllHelp")}</small>
+          <span>{t("accessKeys.announceAllLabel")}</span>
+          <small>{t("accessKeys.announceAllHelp")}</small>
         </div>
         <label className="toggle-switch">
           <BusyInput
             type="checkbox"
-            aria-label={t("tokens.announceAllLabel")}
+            aria-label={t("accessKeys.announceAllLabel")}
             checked={!!accessKey.announce_all_tools}
             busy={saving}
             onChange={(e) => patch({ announce_all_tools: e.target.checked })}
@@ -170,13 +170,13 @@ export function ToolAnnouncementToggle({ accessKey, onUpdate }: { accessKey: Acc
       </div>
       <div className="toggle-row">
         <div className="toggle-label">
-          <span>{t("tokens.assistExposureLabel")}</span>
-          <small>{t("tokens.assistExposureHelp")}</small>
+          <span>{t("accessKeys.assistExposureLabel")}</span>
+          <small>{t("accessKeys.assistExposureHelp")}</small>
         </div>
         <label className="toggle-switch">
           <BusyInput
             type="checkbox"
-            aria-label={t("tokens.assistExposureLabel")}
+            aria-label={t("accessKeys.assistExposureLabel")}
             checked={!!accessKey.use_assist_exposure}
             busy={saving} disabled={!accessKey.pass_through}
             onChange={(e) => patch({ use_assist_exposure: e.target.checked })}
@@ -186,24 +186,24 @@ export function ToolAnnouncementToggle({ accessKey, onUpdate }: { accessKey: Acc
       </div>
       <div className="toggle-row toggle-row-stacked-control">
         <div className="toggle-label">
-          <span>{t("tokens.inlineWaitLabel")}</span>
+          <span>{t("accessKeys.inlineWaitLabel")}</span>
           <small>
-            {t("tokens.inlineWaitHelp")}
+            {t("accessKeys.inlineWaitHelp")}
             {(accessKey.confirm_inline_wait_seconds ?? 0) === 0 && (
-              <> <em> {t("tokens.inlineWaitDisabled")}</em></>
+              <> <em> {t("accessKeys.inlineWaitDisabled")}</em></>
             )}
           </small>
         </div>
         <BusySelect
           className="input input-auto"
-          aria-label={t("tokens.inlineWaitAria")}
+          aria-label={t("accessKeys.inlineWaitAria")}
           value={accessKey.confirm_inline_wait_seconds ?? 0}
           busy={saving}
           onChange={(e) => patch({ confirm_inline_wait_seconds: Number(e.target.value) })}
         >
-          <option value={0}>{t("tokens.inlineWaitOff")}</option>
+          <option value={0}>{t("accessKeys.inlineWaitOff")}</option>
           {inlineWaitOptions(accessKey.confirm_inline_wait_seconds ?? 0).map((s) => (
-            <option key={s} value={s}>{t("tokens.secondsOption", { s })}</option>
+            <option key={s} value={s}>{t("accessKeys.secondsOption", { s })}</option>
           ))}
         </BusySelect>
       </div>
@@ -286,35 +286,35 @@ function snapDiffLines(from: SettingsSnap, to: SettingsSnap): string[] {
     if (from.caps[c] !== to.caps[c]) lines.push(`${c}: ${from.caps[c]} -> ${to.caps[c]}`);
   }
   if (from.pass_through !== to.pass_through) {
-    lines.push(t("tokens.diffPassThrough", {
-      from: from.pass_through ? t("tokens.on") : t("tokens.off"),
-      to: to.pass_through ? t("tokens.on") : t("tokens.off"),
+    lines.push(t("accessKeys.diffPassThrough", {
+      from: from.pass_through ? t("accessKeys.on") : t("accessKeys.off"),
+      to: to.pass_through ? t("accessKeys.on") : t("accessKeys.off"),
     }));
   }
   if (from.use_assist_exposure !== to.use_assist_exposure) {
-    lines.push(t("tokens.diffAssistExposure", {
-      from: from.use_assist_exposure ? t("tokens.on") : t("tokens.off"),
-      to: to.use_assist_exposure ? t("tokens.on") : t("tokens.off"),
+    lines.push(t("accessKeys.diffAssistExposure", {
+      from: from.use_assist_exposure ? t("accessKeys.on") : t("accessKeys.off"),
+      to: to.use_assist_exposure ? t("accessKeys.on") : t("accessKeys.off"),
     }));
   }
   if (from.announce_all_tools !== to.announce_all_tools) {
-    lines.push(t("tokens.diffAnnounceAll", {
-      from: from.announce_all_tools ? t("tokens.on") : t("tokens.off"),
-      to: to.announce_all_tools ? t("tokens.on") : t("tokens.off"),
+    lines.push(t("accessKeys.diffAnnounceAll", {
+      from: from.announce_all_tools ? t("accessKeys.on") : t("accessKeys.off"),
+      to: to.announce_all_tools ? t("accessKeys.on") : t("accessKeys.off"),
     }));
   }
   if (from.confirm_inline_wait_seconds !== to.confirm_inline_wait_seconds) {
-    lines.push(t("tokens.diffInlineWait", {
+    lines.push(t("accessKeys.diffInlineWait", {
       from: from.confirm_inline_wait_seconds
-        ? t("tokens.secondsShort", { n: from.confirm_inline_wait_seconds })
-        : t("tokens.off"),
+        ? t("accessKeys.secondsShort", { n: from.confirm_inline_wait_seconds })
+        : t("accessKeys.off"),
       to: to.confirm_inline_wait_seconds
-        ? t("tokens.secondsShort", { n: to.confirm_inline_wait_seconds })
-        : t("tokens.off"),
+        ? t("accessKeys.secondsShort", { n: to.confirm_inline_wait_seconds })
+        : t("accessKeys.off"),
     }));
   }
   if (from.rate_limit_requests !== to.rate_limit_requests || from.rate_limit_burst !== to.rate_limit_burst) {
-    lines.push(t("tokens.diffRateLimit", {
+    lines.push(t("accessKeys.diffRateLimit", {
       fromRequests: from.rate_limit_requests,
       fromBurst: from.rate_limit_burst,
       toRequests: to.rate_limit_requests,
@@ -328,14 +328,14 @@ function snapDiffLines(from: SettingsSnap, to: SettingsSnap): string[] {
       if (nodeSig(from.permissions[level][k]) !== nodeSig(to.permissions[level][k])) permDiff++;
     }
   }
-  if (permDiff > 0) lines.push(t("tokens.diffPermissionTree", { count: permDiff }));
+  if (permDiff > 0) lines.push(t("accessKeys.diffPermissionTree", { count: permDiff }));
   return lines;
 }
 
 // Inline-editable preset name: same onblur-save pattern as EditableAccessKeyName.
 function EditablePresetName(
-  { tokenId, preset, onUpdate }:
-  { tokenId: string; preset: import("../types").AccessKeyPreset; onUpdate: (t: AccessKeyRecord) => void },
+  { accessKeyId, preset, onUpdate }:
+  { accessKeyId: string; preset: import("../types").AccessKeyPreset; onUpdate: (t: AccessKeyRecord) => void },
 ) {
   const [value, setValue] = useState(preset.name);
   const [saving, setSaving] = useState(false);
@@ -347,16 +347,16 @@ function EditablePresetName(
     const next = value.trim();
     if (next === preset.name) { setValue(preset.name); setErr(null); return; }
     if (!next || next.length > 40) {
-      setErr(t("tokens.presetNameError"));
+      setErr(t("accessKeys.presetNameError"));
       setValue(preset.name);
       return;
     }
     setSaving(true);
     setErr(null);
     try {
-      onUpdate(await api.renamePreset(tokenId, preset.id, next));
+      onUpdate(await api.renamePreset(accessKeyId, preset.id, next));
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : t("tokens.renameFailed"));
+      setErr(e instanceof Error ? e.message : t("accessKeys.renameFailed"));
       setValue(preset.name);
     } finally {
       setSaving(false);
@@ -371,8 +371,8 @@ function EditablePresetName(
         busy={saving}
         spellCheck={false}
         maxLength={40}
-        aria-label={t("tokens.presetNameAria", { name: preset.name })}
-        title={t("tokens.presetRenameTitle")}
+        aria-label={t("accessKeys.presetNameAria", { name: preset.name })}
+        title={t("accessKeys.presetRenameTitle")}
         onChange={(e) => setValue(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
@@ -380,7 +380,7 @@ function EditablePresetName(
           else if (e.key === "Escape") { setValue(preset.name); setErr(null); (e.target as HTMLInputElement).blur(); }
         }}
       />
-      {err && <span className="token-name-error" role="alert">{err}</span>}
+      {err && <span className="access-key-name-error" role="alert">{err}</span>}
     </span>
   );
 }
@@ -415,7 +415,7 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
       setAction(null);
       setPtConfirmed(false);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t("tokens.presetActionFailed"));
+      setError(e instanceof Error ? e.message : t("accessKeys.presetActionFailed"));
     } finally {
       setBusy(false);
     }
@@ -430,7 +430,7 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
       onUpdate(await api.createPreset(accessKey.id, name));
       setNewName("");
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t("tokens.presetCreateFailed"));
+      setError(e instanceof Error ? e.message : t("accessKeys.presetCreateFailed"));
     } finally {
       setBusy(false);
     }
@@ -447,15 +447,15 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
       {action && (
         <Modal titleId="preset-action-title" onClose={busy ? undefined : () => { setAction(null); setPtConfirmed(false); setError(null); }}>
           <h3 className="modal-title" id="preset-action-title">
-            {action.kind === "switch" && t("tokens.presetSwitchTitle", { name: action.preset.name })}
-            {action.kind === "revert" && t("tokens.presetRevertTitle", { name: action.preset.name })}
-            {action.kind === "delete" && t("tokens.presetDeleteTitle", { name: action.preset.name })}
+            {action.kind === "switch" && t("accessKeys.presetSwitchTitle", { name: action.preset.name })}
+            {action.kind === "revert" && t("accessKeys.presetRevertTitle", { name: action.preset.name })}
+            {action.kind === "delete" && t("accessKeys.presetDeleteTitle", { name: action.preset.name })}
           </h3>
           {action.kind === "switch" && (
             <>
               {dirty && active && (
                 <div className="preset-modal-section">
-                  <p>{tRich("tokens.presetSwitchSaveInto", { strong: (c) => <strong>{c}</strong> }, { name: active.name })}</p>
+                  <p>{tRich("accessKeys.presetSwitchSaveInto", { strong: (c) => <strong>{c}</strong> }, { name: active.name })}</p>
                   <ul className="preset-diff-list">{dirtyLines.map((l) => <li key={l}>{l}</li>)}</ul>
                 </div>
               )}
@@ -463,43 +463,43 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
                 {applyLines.length > 0
                   ? (
                     <>
-                      <p>{tRich("tokens.presetApplying", { strong: (c) => <strong>{c}</strong> }, { name: action.preset.name })}</p>
+                      <p>{tRich("accessKeys.presetApplying", { strong: (c) => <strong>{c}</strong> }, { name: action.preset.name })}</p>
                       <ul className="preset-diff-list">{applyLines.map((l) => <li key={l}>{l}</li>)}</ul>
                     </>
                   )
-                  : <p>{t("tokens.presetNoChange")}</p>}
+                  : <p>{t("accessKeys.presetNoChange")}</p>}
               </div>
             </>
           )}
           {action.kind === "revert" && (
             <div className="preset-modal-section">
-              <p>{tRich("tokens.presetRevertBody", { strong: (c) => <strong>{c}</strong> }, { name: action.preset.name })}</p>
+              <p>{tRich("accessKeys.presetRevertBody", { strong: (c) => <strong>{c}</strong> }, { name: action.preset.name })}</p>
               <ul className="preset-diff-list">{dirtyLines.map((l) => <li key={l}>{l}</li>)}</ul>
             </div>
           )}
           {action.kind === "delete" && (
-            <p>{tRich("tokens.presetDeleteBody", { strong: (c) => <strong>{c}</strong> }, { name: action.preset.name })}</p>
+            <p>{tRich("accessKeys.presetDeleteBody", { strong: (c) => <strong>{c}</strong> }, { name: action.preset.name })}</p>
           )}
           {needsPtConfirm && (
             <>
               <div className="amber-block">
-                <p>{tRich("tokens.presetPtWarning", { strong: (c) => <strong>{c}</strong> })}</p>
+                <p>{tRich("accessKeys.presetPtWarning", { strong: (c) => <strong>{c}</strong> })}</p>
               </div>
               <label className="modal-check">
                 <input type="checkbox" checked={ptConfirmed} onChange={(e) => setPtConfirmed(e.target.checked)} />
-                {t("tokens.presetPtUnderstand")}
+                {t("accessKeys.presetPtUnderstand")}
               </label>
             </>
           )}
           {error && <ErrorMsg msg={error} />}
           <div className="modal-actions">
-            <BusyButton className="btn btn-text" onClick={() => { setAction(null); setPtConfirmed(false); setError(null); }} busy={busy}>{t("tokens.cancel")}</BusyButton>
+            <BusyButton className="btn btn-text" onClick={() => { setAction(null); setPtConfirmed(false); setError(null); }} busy={busy}>{t("accessKeys.cancel")}</BusyButton>
             <BusyButton
               className={`btn ${action.kind === "delete" ? "btn-danger" : action.kind === "revert" ? "btn-warning" : "btn-primary"}`}
               onClick={runAction}
               busy={busy} disabled={(needsPtConfirm && !ptConfirmed)}
             >
-              {busy ? t("tokens.working") : action.kind === "switch" ? t("tokens.presetSwitch") : action.kind === "revert" ? t("tokens.presetRevert") : t("tokens.delete")}
+              {busy ? t("accessKeys.working") : action.kind === "switch" ? t("accessKeys.presetSwitch") : action.kind === "revert" ? t("accessKeys.presetRevert") : t("accessKeys.delete")}
             </BusyButton>
           </div>
         </Modal>
@@ -509,23 +509,23 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
         const isActive = p.id === accessKey.active_preset_id;
         return (
           <div key={p.id} className={`preset-row${isActive ? " preset-row-active" : ""}`}>
-            <EditablePresetName tokenId={accessKey.id} preset={p} onUpdate={onUpdate} />
-            {isActive && <span className="badge badge-green">{t("tokens.presetActive")}</span>}
-            {isActive && dirty && <span className="badge badge-amber" title={t("tokens.presetModifiedTitle")}>{t("tokens.presetModified")}</span>}
+            <EditablePresetName accessKeyId={accessKey.id} preset={p} onUpdate={onUpdate} />
+            {isActive && <span className="badge badge-green">{t("accessKeys.presetActive")}</span>}
+            {isActive && dirty && <span className="badge badge-amber" title={t("accessKeys.presetModifiedTitle")}>{t("accessKeys.presetModified")}</span>}
             <span className="preset-row-actions">
               {!isActive && (
                 <BusyButton className="btn btn-outline btn-sm" busy={busy} onClick={() => setAction({ kind: "switch", preset: p })}>
-                  {t("tokens.presetSwitchTo")}
+                  {t("accessKeys.presetSwitchTo")}
                 </BusyButton>
               )}
               {isActive && dirty && (
                 <BusyButton className="btn btn-outline btn-sm" busy={busy} onClick={() => setAction({ kind: "revert", preset: p })}>
-                  {t("tokens.presetRevertToSaved")}
+                  {t("accessKeys.presetRevertToSaved")}
                 </BusyButton>
               )}
               {!isActive && (
-                <BusyButton className="btn btn-ghost btn-sm" busy={busy} onClick={() => setAction({ kind: "delete", preset: p })} aria-label={t("tokens.presetDeleteAria", { name: p.name })}>
-                  {t("tokens.delete")}
+                <BusyButton className="btn btn-ghost btn-sm" busy={busy} onClick={() => setAction({ kind: "delete", preset: p })} aria-label={t("accessKeys.presetDeleteAria", { name: p.name })}>
+                  {t("accessKeys.delete")}
                 </BusyButton>
               )}
             </span>
@@ -533,34 +533,34 @@ function PresetsCard({ accessKey, onUpdate }: { accessKey: AccessKeyRecord; onUp
         );
       })}
       {accessKey.presets.length === 0 && (
-        <p className="preset-empty">{t("tokens.presetEmpty")}</p>
+        <p className="preset-empty">{t("accessKeys.presetEmpty")}</p>
       )}
 
       <div className="preset-create-row">
         <BusyInput
           className="input"
-          placeholder={t("tokens.presetNewName")}
+          placeholder={t("accessKeys.presetNewName")}
           value={newName}
           maxLength={40}
           busy={busy} disabled={accessKey.presets.length >= MAX_PRESETS}
           onChange={(e) => setNewName(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") createPreset(); }}
-          aria-label={t("tokens.presetNewName")}
+          aria-label={t("accessKeys.presetNewName")}
         />
         <BusyButton
           className="btn btn-outline btn-sm"
           busy={busy} disabled={!newName.trim() || accessKey.presets.length >= MAX_PRESETS}
           onClick={createPreset}
         >
-          {t("tokens.presetSaveCurrent")}
+          {t("accessKeys.presetSaveCurrent")}
         </BusyButton>
       </div>
       {accessKey.presets.length >= MAX_PRESETS && (
-        <small className="preset-hint">{t("tokens.presetMax", { max: MAX_PRESETS })}</small>
+        <small className="preset-hint">{t("accessKeys.presetMax", { max: MAX_PRESETS })}</small>
       )}
       {!action && error && <ErrorMsg msg={error} />}
       <small className="preset-hint">
-        {t("tokens.presetHint")}
+        {t("accessKeys.presetHint")}
       </small>
     </div>
   );
@@ -582,7 +582,7 @@ function EditableAccessKeyName({ accessKey, onRenamed }: { accessKey: AccessKeyR
     const next = value.trim();
     if (next === accessKey.name) { setValue(accessKey.name); setErr(null); return; }
     if (!TOKEN_NAME_RE.test(next)) {
-      setErr(t("tokens.nameRuleError"));
+      setErr(t("accessKeys.nameRuleError"));
       setValue(accessKey.name);
       return;
     }
@@ -592,7 +592,7 @@ function EditableAccessKeyName({ accessKey, onRenamed }: { accessKey: AccessKeyR
       const updated = await api.patchAccessKey(accessKey.id, { name: next });
       onRenamed(updated);
     } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : t("tokens.renameFailed"));
+      setErr(e instanceof Error ? e.message : t("accessKeys.renameFailed"));
       setValue(accessKey.name);
     } finally {
       setSaving(false);
@@ -600,15 +600,15 @@ function EditableAccessKeyName({ accessKey, onRenamed }: { accessKey: AccessKeyR
   }
 
   return (
-    <span className="token-name-edit">
+    <span className="access-key-name-edit">
       <BusyInput
-        className="token-card-name token-name-input"
+        className="access-key-card-name access-key-name-input"
         value={value}
         busy={saving}
         spellCheck={false}
         maxLength={32}
-        aria-label={t("tokens.tokenNameAria")}
-        title={t("tokens.tokenRenameTitle")}
+        aria-label={t("accessKeys.accessKeyNameAria")}
+        title={t("accessKeys.accessKeyRenameTitle")}
         onChange={(e) => setValue(e.target.value)}
         onFocus={(e) => e.target.select()}
         onBlur={commit}
@@ -617,12 +617,12 @@ function EditableAccessKeyName({ accessKey, onRenamed }: { accessKey: AccessKeyR
           else if (e.key === "Escape") { setValue(accessKey.name); setErr(null); (e.target as HTMLInputElement).blur(); }
         }}
       />
-      {err && <span className="token-name-error" role="alert">{err}</span>}
+      {err && <span className="access-key-name-error" role="alert">{err}</span>}
     </span>
   );
 }
 
-export function AccessKeyDetailView({ tokenId, onBack, onRefresh, presetsEnabled = false, esphome = null }: Props) {
+export function AccessKeyDetailView({ accessKeyId, onBack, onRefresh, presetsEnabled = false, esphome = null }: Props) {
   const [accessKey, setAccessKey] = useState<AccessKeyRecord | null>(null);
   const [mesaProfileEntities, setMesaProfileEntities] = useState<Set<string>>(new Set());
   const [mesaProfileDevices, setMesaProfileDevices] = useState<Set<string>>(new Set());
@@ -671,14 +671,14 @@ export function AccessKeyDetailView({ tokenId, onBack, onRefresh, presetsEnabled
     setLoading(true);
     setError(null);
     try {
-      const data = await api.getAccessKey(tokenId);
+      const data = await api.getAccessKey(accessKeyId);
       setAccessKey(data);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t("tokens.loadFailed"));
+      setError(e instanceof Error ? e.message : t("accessKeys.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [tokenId]);
+  }, [accessKeyId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -732,14 +732,14 @@ export function AccessKeyDetailView({ tokenId, onBack, onRefresh, presetsEnabled
   async function revoke() {
     setActionBusy(true);
     try {
-      await api.revokeAccessKey(tokenId);
+      await api.revokeAccessKey(accessKeyId);
       // Any open Agent Chat window (panel or floating) drops the revoked token
       // from its own list and reselects/clears, instead of continuing to show
       // (and let the user submit against) a token that no longer works.
       window.dispatchEvent(new CustomEvent("phx-access-keys-changed"));
       onBack();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t("tokens.revokeFailed"));
+      setError(e instanceof Error ? e.message : t("accessKeys.revokeFailed"));
       closeAction();
     }
   }
@@ -747,12 +747,12 @@ export function AccessKeyDetailView({ tokenId, onBack, onRefresh, presetsEnabled
   async function rotate() {
     setActionBusy(true);
     try {
-      const resp = await api.rotateAccessKey(tokenId);
-      const { token: rawAccessKey } = resp;
+      const resp = await api.rotateAccessKey(accessKeyId);
+      const { access_key: rawAccessKey } = resp;
       setRotatedRawAccessKey(rawAccessKey);
       onRefresh?.();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t("tokens.rotateFailed"));
+      setError(e instanceof Error ? e.message : t("accessKeys.rotateFailed"));
     } finally {
       // Closed on success and on failure alike.
       closeAction();
@@ -762,13 +762,13 @@ export function AccessKeyDetailView({ tokenId, onBack, onRefresh, presetsEnabled
   async function clearPermissions() {
     setActionBusy(true);
     try {
-      const updatedTree = await api.setPermissions(tokenId, { domains: {}, devices: {}, entities: {} });
+      const updatedTree = await api.setPermissions(accessKeyId, { domains: {}, devices: {}, entities: {} });
       setAccessKey((prev) => prev ? { ...prev, permissions: updatedTree } : prev);
       setPermissionsVersion((v) => v + 1);
       setCollapseTreeKey((k) => k + 1);
       closeAction();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t("tokens.clearPermsFailed"));
+      setError(e instanceof Error ? e.message : t("accessKeys.clearPermsFailed"));
       // Unlike the others, this modal stays open on failure so the operator can
       // retry without reopening it.
       setActionBusy(false);
@@ -779,17 +779,17 @@ export function AccessKeyDetailView({ tokenId, onBack, onRefresh, presetsEnabled
     setActionBusy(true);
     try {
       const body: PatchAccessKeyBody = { pass_through: true, confirm_pass_through: true };
-      const updated = await api.patchAccessKey(tokenId, body);
+      const updated = await api.patchAccessKey(accessKeyId, body);
       applyAccessKeyUpdate(updated);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t("tokens.enablePtFailed"));
+      setError(e instanceof Error ? e.message : t("accessKeys.enablePtFailed"));
     } finally {
       closeAction();
     }
   }
 
   if (loading) return <Loading />;
-  if (error && !accessKey) return <div><button className="btn btn-text" onClick={onBack}>{t("tokens.back")}</button><ErrorMsg msg={error} /></div>;
+  if (error && !accessKey) return <div><button className="btn btn-text" onClick={onBack}>{t("accessKeys.back")}</button><ErrorMsg msg={error} /></div>;
   if (!accessKey) return null;
 
   if (rotatedRawAccessKey) {
@@ -806,39 +806,39 @@ export function AccessKeyDetailView({ tokenId, onBack, onRefresh, presetsEnabled
     (acc, k) => { acc[accessKey[k]] = (acc[accessKey[k]] ?? 0) + 1; return acc; },
     { allow: 0, confirm: 0, deny: 0 } as Record<string, number>,
   );
-  const capsSummary = t("tokens.capsSummary", {
+  const capsSummary = t("accessKeys.capsSummary", {
     persona: personaLabel,
     allow: capCounts.allow,
     confirm: capCounts.confirm,
     deny: capCounts.deny,
   });
   const announceSummary = accessKey.announce_all_tools
-    ? t("tokens.announceSummaryAll")
-    : t("tokens.announceSummaryScoped");
+    ? t("accessKeys.announceSummaryAll")
+    : t("accessKeys.announceSummaryScoped");
   const rateSummary = accessKey.rate_limit_requests > 0
-    ? t("tokens.rateSummary", { requests: accessKey.rate_limit_requests, burst: accessKey.rate_limit_burst })
-    : t("tokens.rateSummaryNone");
+    ? t("accessKeys.rateSummary", { requests: accessKey.rate_limit_requests, burst: accessKey.rate_limit_burst })
+    : t("accessKeys.rateSummaryNone");
   const activePreset = accessKey.presets.find((p) => p.id === accessKey.active_preset_id) ?? null;
   const presetsSummary = activePreset
     ? (snapDiffLines(snapOfPreset(activePreset), snapOfAccessKey(accessKey)).length > 0
-      ? t("tokens.presetsSummaryModified", { name: activePreset.name })
+      ? t("accessKeys.presetsSummaryModified", { name: activePreset.name })
       : activePreset.name)
-    : t("tokens.presetsSummarySaved", { count: accessKey.presets.length });
+    : t("accessKeys.presetsSummarySaved", { count: accessKey.presets.length });
 
   return (
-    <div className="token-detail-wrap">
+    <div className="access-key-detail-wrap">
 
       {/* Modals */}
       {isOpen("rotate") && (
         <ConfirmModal
-          title={t("tokens.rotateTokenTitle")}
+          title={t("accessKeys.rotateAccessKeyTitle")}
           body={
             <div className="amber-block">
-              <p>{t("tokens.rotateBody")}</p>
+              <p>{t("accessKeys.rotateBody")}</p>
             </div>
           }
-          checkLabel={t("tokens.rotateCheck")}
-          confirmLabel={t("tokens.rotateTokenTitle")}
+          checkLabel={t("accessKeys.rotateCheck")}
+          confirmLabel={t("accessKeys.rotateAccessKeyTitle")}
           confirmClass="btn-primary"
           loading={isBusy("rotate")}
           onConfirm={rotate}
@@ -848,14 +848,14 @@ export function AccessKeyDetailView({ tokenId, onBack, onRefresh, presetsEnabled
 
       {isOpen("revoke") && (
         <ConfirmModal
-          title={t("tokens.revokeTokenTitle")}
+          title={t("accessKeys.revokeAccessKeyTitle")}
           body={
             <div className="amber-block">
-              <p>{t("tokens.revokeBody")}</p>
+              <p>{t("accessKeys.revokeBody")}</p>
             </div>
           }
-          checkLabel={t("tokens.revokeCheck")}
-          confirmLabel={t("tokens.revokeTokenTitle")}
+          checkLabel={t("accessKeys.revokeCheck")}
+          confirmLabel={t("accessKeys.revokeAccessKeyTitle")}
           confirmClass="btn-danger"
           loading={isBusy("revoke")}
           onConfirm={revoke}
@@ -865,14 +865,14 @@ export function AccessKeyDetailView({ tokenId, onBack, onRefresh, presetsEnabled
 
       {isOpen("passThrough") && (
         <ConfirmModal
-          title={t("tokens.enablePtTitle")}
+          title={t("accessKeys.enablePtTitle")}
           body={
             <div className="amber-block">
-              <p>{tRich("tokens.enablePtBody", { strong: (c) => <strong>{c}</strong> })}</p>
+              <p>{tRich("accessKeys.enablePtBody", { strong: (c) => <strong>{c}</strong> })}</p>
             </div>
           }
-          checkLabel={t("tokens.enablePtCheck")}
-          confirmLabel={t("tokens.enablePtLabel")}
+          checkLabel={t("accessKeys.enablePtCheck")}
+          confirmLabel={t("accessKeys.enablePtLabel")}
           confirmClass="btn-warning"
           loading={isBusy("passThrough")}
           onConfirm={enablePassThrough}
@@ -881,18 +881,18 @@ export function AccessKeyDetailView({ tokenId, onBack, onRefresh, presetsEnabled
       )}
 
       {/* Sticky top section */}
-      <div className="token-detail-sticky">
+      <div className="access-key-detail-sticky">
         {error && <ErrorMsg msg={error} />}
 
         {reconnectNeeded && (
           <div className="banner banner-info reconnect-banner" role="status">
             <span className="reconnect-banner-text">
-              {tRich("tokens.reconnectBanner", { strong: (c) => <strong>{c}</strong> })}
+              {tRich("accessKeys.reconnectBanner", { strong: (c) => <strong>{c}</strong> })}
             </span>
             <button
               className="reconnect-banner-dismiss"
               onClick={() => setReconnectNeeded(false)}
-              aria-label={t("tokens.reconnectDismiss")}
+              aria-label={t("accessKeys.reconnectDismiss")}
             >&times;</button>
           </div>
         )}
@@ -900,52 +900,52 @@ export function AccessKeyDetailView({ tokenId, onBack, onRefresh, presetsEnabled
         {accessKey.pass_through && (
           <div className="pass-through-header-banner">
             <p>
-              {tRich("tokens.ptHeaderBanner", { strong: (c) => <strong className="text-warning">{c}</strong> })}
+              {tRich("accessKeys.ptHeaderBanner", { strong: (c) => <strong className="text-warning">{c}</strong> })}
             </p>
           </div>
         )}
 
         <div className="two-col">
           {/* Left: Token info card */}
-          <div className="card token-info-card">
-            <div className="token-card-header">
-              <div className="token-card-name-row">
-                <img src={PHOENIX_ICON} className="token-card-icon" alt="" />
+          <div className="card access-key-info-card">
+            <div className="access-key-card-header">
+              <div className="access-key-card-name-row">
+                <img src={PHOENIX_ICON} className="access-key-card-icon" alt="" />
                 <EditableAccessKeyName accessKey={accessKey} onRenamed={(u) => { applyAccessKeyUpdate(u); onRefresh?.(); }} />
               </div>
-              <div className="token-card-badges">
+              <div className="access-key-card-badges">
                 <span className={`badge ${statusClass}`}>{accessKeyStatusLabel(status)}</span>
                 {accessKey.pass_through
-                  ? <span className="badge badge-amber">{t("tokens.passThrough")}</span>
-                  : <span className="badge badge-blue">{t("tokens.scoped")}</span>}
+                  ? <span className="badge badge-amber">{t("accessKeys.passThrough")}</span>
+                  : <span className="badge badge-blue">{t("accessKeys.scoped")}</span>}
               </div>
             </div>
 
-            <div className="token-card-body">
-              <div className="token-card-meta">
-                <div className="token-meta-table">
-                  <span className="stat-label">{t("tokens.colCreated")}</span>
+            <div className="access-key-card-body">
+              <div className="access-key-card-meta">
+                <div className="access-key-meta-table">
+                  <span className="stat-label">{t("accessKeys.colCreated")}</span>
                   <span title={accessKey.created_at ? localeDateTime(accessKey.created_at) : undefined}>{formatDateTime(accessKey.created_at)}</span>
-                  <span className="stat-label">{t("tokens.colUpdated")}</span>
+                  <span className="stat-label">{t("accessKeys.colUpdated")}</span>
                   <span title={accessKey.updated_at ? localeDateTime(accessKey.updated_at) : undefined}>{formatDateTime(accessKey.updated_at)}</span>
-                  <span className="stat-label">{t("tokens.colExpires")}</span>
+                  <span className="stat-label">{t("accessKeys.colExpires")}</span>
                   <span>{formatDateTime(accessKey.expires_at)}</span>
-                  <span className="stat-label">{t("tokens.colLastUsed")}</span>
+                  <span className="stat-label">{t("accessKeys.colLastUsed")}</span>
                   <span>{formatDateTime(accessKey.last_used_at)}</span>
                 </div>
               </div>
 
-              <div className="token-card-actions">
-                <button className="btn btn-outline btn-sm token-action-btn" onClick={() => openAction("rotate")}>
-                  {t("tokens.rotate")}
+              <div className="access-key-card-actions">
+                <button className="btn btn-outline btn-sm access-key-action-btn" onClick={() => openAction("rotate")}>
+                  {t("accessKeys.rotate")}
                 </button>
                 {!accessKey.pass_through && (
-                  <button className="btn btn-warning btn-sm token-action-btn" onClick={() => openAction("passThrough")}>
-                    {t("tokens.enablePtLabel")}
+                  <button className="btn btn-warning btn-sm access-key-action-btn" onClick={() => openAction("passThrough")}>
+                    {t("accessKeys.enablePtLabel")}
                   </button>
                 )}
-                <button className="btn btn-danger btn-sm token-action-btn" onClick={() => openAction("revoke")}>
-                  {t("tokens.revoke")}
+                <button className="btn btn-danger btn-sm access-key-action-btn" onClick={() => openAction("revoke")}>
+                  {t("accessKeys.revoke")}
                 </button>
               </div>
             </div>
@@ -954,16 +954,16 @@ export function AccessKeyDetailView({ tokenId, onBack, onRefresh, presetsEnabled
           {/* Right: Permission emulator */}
           <div className="card epe-card">
             <h3 className="card-header">
-              {t("tokens.emulatorTitle")}
-              <DocsHelpLink path="panel.html#emulator" label={t("tokens.emulatorTitle")} />
+              {t("accessKeys.emulatorTitle")}
+              <DocsHelpLink path="panel.html#emulator" label={t("accessKeys.emulatorTitle")} />
             </h3>
             {accessKey.pass_through ? (
               <p style={{ fontSize: 13, color: "var(--phx-text-2)", margin: 0 }}>
-                {t("tokens.emulatorPassThrough")}
+                {t("accessKeys.emulatorPassThrough")}
               </p>
             ) : (
               <PermissionSimulator
-                tokenId={tokenId}
+                accessKeyId={accessKeyId}
                 externalEntityId={selectedEntityId || undefined}
                 resolveDepth={selectedDepth}
                 triggerVersion={permissionsVersion}
@@ -976,35 +976,35 @@ export function AccessKeyDetailView({ tokenId, onBack, onRefresh, presetsEnabled
       </div>
 
       {/* Scrollable body */}
-      <div className="token-detail-body">
+      <div className="access-key-detail-body">
         <div className="two-col">
           <div>
-            <CollapsibleCard title={t("tokens.cardPersona")} summary={personaLabel} defaultOpen persistKey="phx:fold:persona" docsPath="capabilities.html#personas">
+            <CollapsibleCard title={t("accessKeys.cardPersona")} summary={personaLabel} defaultOpen persistKey="phx:fold:persona" docsPath="capabilities.html#personas">
               <PersonaPicker accessKey={accessKey} onUpdate={applyAccessKeyUpdate} esphome={esphome} />
             </CollapsibleCard>
 
             {presetsEnabled && (
-              <CollapsibleCard title={t("tokens.cardPresets")} summary={presetsSummary} persistKey="phx:fold:presets" docsPath="panel.html#presets">
+              <CollapsibleCard title={t("accessKeys.cardPresets")} summary={presetsSummary} persistKey="phx:fold:presets" docsPath="panel.html#presets">
                 <PresetsCard accessKey={accessKey} onUpdate={applyAccessKeyUpdate} />
               </CollapsibleCard>
             )}
 
-            <div className="advanced-section-label">{t("tokens.advanced")}</div>
-            <CollapsibleCard title={t("tokens.cardCapabilities")} summary={capsSummary} persistKey="phx:fold:capabilities" docsPath="capabilities.html#capability-flags">
+            <div className="advanced-section-label">{t("accessKeys.advanced")}</div>
+            <CollapsibleCard title={t("accessKeys.cardCapabilities")} summary={capsSummary} persistKey="phx:fold:capabilities" docsPath="capabilities.html#capability-flags">
               <CapabilityMatrix accessKey={accessKey} onUpdate={applyAccessKeyUpdate} esphome={esphome} />
             </CollapsibleCard>
-            <CollapsibleCard title={t("tokens.cardToolAnnouncement")} summary={announceSummary} persistKey="phx:fold:announce" docsPath="operations.html#advanced-token-options">
+            <CollapsibleCard title={t("accessKeys.cardToolAnnouncement")} summary={announceSummary} persistKey="phx:fold:announce" docsPath="operations.html#advanced-access-key-options">
               <ToolAnnouncementToggle accessKey={accessKey} onUpdate={applyAccessKeyUpdate} />
             </CollapsibleCard>
-            <CollapsibleCard title={t("tokens.cardRateLimiting")} summary={rateSummary} persistKey="phx:fold:ratelimit" docsPath="operations.html#rate-limiting">
+            <CollapsibleCard title={t("accessKeys.cardRateLimiting")} summary={rateSummary} persistKey="phx:fold:ratelimit" docsPath="operations.html#rate-limiting">
               <RateLimitConfig accessKey={accessKey} onUpdate={setAccessKey} />
             </CollapsibleCard>
 
             {!accessKey.pass_through && (
               <div className="card">
                 <h3 className="card-header">
-                  {t("tokens.permissionSummary")}
-                  <DocsHelpLink path="panel.html#summary" label={t("tokens.permissionSummary")} />
+                  {t("accessKeys.permissionSummary")}
+                  <DocsHelpLink path="panel.html#summary" label={t("accessKeys.permissionSummary")} />
                 </h3>
                 <PermissionSummary
                   permissions={accessKey.permissions}
@@ -1021,8 +1021,8 @@ export function AccessKeyDetailView({ tokenId, onBack, onRefresh, presetsEnabled
             {accessKey.pass_through ? (
               <div className="card">
                 <h3 className="card-header">
-                  {t("tokens.permissionsTree")}
-                  <DocsHelpLink path="panel.html#permission-tree" label={t("tokens.permissionsTree")} />
+                  {t("accessKeys.permissionsTree")}
+                  <DocsHelpLink path="panel.html#permission-tree" label={t("accessKeys.permissionsTree")} />
                 </h3>
                 <PassThroughNotice accessKey={accessKey} onUpdate={applyAccessKeyUpdate} />
               </div>
@@ -1030,25 +1030,25 @@ export function AccessKeyDetailView({ tokenId, onBack, onRefresh, presetsEnabled
               <div className="card">
                 <div className="card-header card-header-stack">
                   <h3 className="card-header-title">
-                    {t("tokens.permissionsTree")}
-                    <DocsHelpLink path="panel.html#permission-tree" label={t("tokens.permissionsTree")} />
+                    {t("accessKeys.permissionsTree")}
+                    <DocsHelpLink path="panel.html#permission-tree" label={t("accessKeys.permissionsTree")} />
                   </h3>
                   <div className="tree-header-actions">
                     {entityTree && (
                       <button className="btn btn-outline btn-sm" onClick={() => setShowSelectByPicker(true)}>
-                        {t("tokens.selectByAreaLabelIntegration")}
+                        {t("accessKeys.selectByAreaLabelIntegration")}
                       </button>
                     )}
                     <button
                       className="btn btn-danger btn-sm"
                       onClick={() => openAction("clearPerms")}
                     >
-                      {t("tokens.clearAll")}
+                      {t("accessKeys.clearAll")}
                     </button>
                   </div>
                 </div>
                 <EntityTree
-                  tokenId={tokenId}
+                  accessKeyId={accessKeyId}
                   permissions={accessKey.permissions}
                   onPermissionsChange={(tree) => {
                     setAccessKey((current) => current?.id === accessKey.id ? { ...current, permissions: tree } : current);
@@ -1072,7 +1072,7 @@ export function AccessKeyDetailView({ tokenId, onBack, onRefresh, presetsEnabled
 
       {showSelectByPicker && entityTree && (
         <SelectByPicker
-          tokenId={tokenId}
+          accessKeyId={accessKeyId}
           entityTree={entityTree}
           onDone={() => {
             setShowSelectByPicker(false);
@@ -1084,16 +1084,16 @@ export function AccessKeyDetailView({ tokenId, onBack, onRefresh, presetsEnabled
 
       {isOpen("clearPerms") && (
         <Modal titleId="clear-perms-title" onClose={isBusy("clearPerms") ? undefined : closeAction}>
-          <h3 className="modal-title" id="clear-perms-title">{t("tokens.clearPermsTitle")}</h3>
+          <h3 className="modal-title" id="clear-perms-title">{t("accessKeys.clearPermsTitle")}</h3>
           <p className="clear-perms-body">
-            {t("tokens.clearPermsBody")}
+            {t("accessKeys.clearPermsBody")}
           </p>
           <div className="modal-actions">
             <button className="btn btn-danger" onClick={clearPermissions} disabled={isBusy("clearPerms")}>
-              {isBusy("clearPerms") ? t("tokens.clearing") : t("tokens.clearAll")}
+              {isBusy("clearPerms") ? t("accessKeys.clearing") : t("accessKeys.clearAll")}
             </button>
             <button className="btn btn-text" onClick={closeAction} disabled={isBusy("clearPerms")}>
-              {t("tokens.cancel")}
+              {t("accessKeys.cancel")}
             </button>
           </div>
         </Modal>

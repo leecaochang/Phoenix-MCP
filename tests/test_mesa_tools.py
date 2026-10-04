@@ -33,7 +33,7 @@ def _access_key(*, cap_config_read="allow", pass_through=False, domains=None) ->
     return AccessKeyRecord(
         id="tok",
         name="scoped",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="admin",
         persona="read_only",

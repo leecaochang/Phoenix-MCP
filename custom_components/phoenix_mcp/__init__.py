@@ -617,8 +617,8 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
     cancel_expiry = async_track_time_interval(hass, _check_expired_access_keys, EXPIRY_CHECK_INTERVAL)
     entry.async_on_unload(cancel_expiry)
     def _cancel_expiry_timers() -> None:
-        for token_id in list(data.expiry_timers):
-            cancel_expiry_timer(data, token_id)
+        for access_key_id in list(data.expiry_timers):
+            cancel_expiry_timer(data, access_key_id)
 
     entry.async_on_unload(_cancel_expiry_timers)
 
@@ -673,8 +673,8 @@ async def _async_setup_entry_impl(hass: HomeAssistant, entry: ConfigEntry) -> bo
             fire_approval_resolved_event(hass, approval)
             audit.record(
                 request_id=approval.request_id,
-                token_id="admin",
-                token_name=f"admin:{approval.approved_by_user_id or 'unknown'}",
+                access_key_id="admin",
+                access_key_name=f"admin:{approval.approved_by_user_id or 'unknown'}",
                 method="approval/failed",
                 resource=f"approval:{approval.tool_name}:{approval.id}",
                 outcome="denied",
@@ -888,9 +888,9 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
         for access_key in store.list_access_keys():
             changed.extend(await async_cancel_approvals_for_access_key(store, access_key.id, reason="integration_removed"))
             await store.async_archive_access_key(access_key.id, revoked=True)
-        await store.async_patch_settings(assist_bound_token_id=None,
-            voice_agent_enabled=False, voice_agent_token_id=None,
-            voice_agent_provider_id=None, voice_agent_model=None, ai_task_enabled=False, ai_task_token_id=None,
+        await store.async_patch_settings(assist_bound_access_key_id=None,
+            voice_agent_enabled=False, voice_agent_access_key_id=None,
+            voice_agent_provider_id=None, voice_agent_model=None, ai_task_enabled=False, ai_task_access_key_id=None,
             ai_task_provider_id=None, ai_task_model=None, decision_provider_id=None)
     for record in changed:
         dismiss_approval_notification(hass, record.id)

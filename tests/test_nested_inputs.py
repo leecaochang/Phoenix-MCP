@@ -56,7 +56,7 @@ def test_group_members_are_validated_as_a_whole():
 
 
 def _environment(cap, mode):
-    access_key = AccessKeyRecord(id="nested", name="nested", token_hash="x", created_at=utcnow(), created_by="admin", **{cap: mode})
+    access_key = AccessKeyRecord(id="nested", name="nested", access_key_hash="x", created_at=utcnow(), created_by="admin", **{cap: mode})
     store = MagicMock()
     store.get_settings.return_value = GlobalSettings()
     return access_key, PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock())

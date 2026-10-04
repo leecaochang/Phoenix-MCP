@@ -87,21 +87,21 @@ function label(v: { alias: string | null; resource_id: string }): string {
 // since the change was recorded), falling back to the name captured at the time,
 // then to "admin" for admin-driven restores.
 function whoNow(
-  v: { token_id?: string | null; token_name: string | null; approved_by_user_id: string | null },
+  v: { access_key_id?: string | null; access_key_name: string | null; approved_by_user_id: string | null },
   current: Map<string, string>,
 ): string {
-  const cur = v.token_id ? current.get(v.token_id) : undefined;
-  return cur || v.token_name || (v.approved_by_user_id ? "admin" : "-");
+  const cur = v.access_key_id ? current.get(v.access_key_id) : undefined;
+  return cur || v.access_key_name || (v.approved_by_user_id ? "admin" : "-");
 }
 
 // Detail view: when the token has since been renamed, show "current (original)".
 function whoDetail(
-  v: { token_id: string | null; token_name: string | null; approved_by_user_id: string | null },
+  v: { access_key_id: string | null; access_key_name: string | null; approved_by_user_id: string | null },
   current: Map<string, string>,
 ): string {
-  const cur = v.token_id ? current.get(v.token_id) : undefined;
-  if (cur && v.token_name && cur !== v.token_name) return `${cur} (${v.token_name})`;
-  return cur || v.token_name || (v.approved_by_user_id ? "admin" : "-");
+  const cur = v.access_key_id ? current.get(v.access_key_id) : undefined;
+  if (cur && v.access_key_name && cur !== v.access_key_name) return `${cur} (${v.access_key_name})`;
+  return cur || v.access_key_name || (v.approved_by_user_id ? "admin" : "-");
 }
 
 const FEED_POLL_MS = 5_000;
@@ -142,7 +142,7 @@ export function ChangesView({ hass }: { hass: unknown }) {
   const selectedRef = useRef<string | null>(null);
   selectedRef.current = selected;
 
-  // token_id -> latest known name, so a renamed token shows its new name here.
+  // access_key_id -> latest known name, so a renamed token shows its new name here.
   // Covers archived tokens too, so a renamed-then-revoked token resolves to its
   // final name rather than the one captured with the change.
   const loadAccessKeys = useCallback(async () => {

@@ -28,7 +28,7 @@ from custom_components.phoenix_mcp.yaml_patch import PatchError, parse_value
 
 
 def _access_key(**kwargs):
-    return AccessKeyRecord(id="security", name="security", token_hash="hash", created_at=utcnow(), created_by="admin", **kwargs)
+    return AccessKeyRecord(id="security", name="security", access_key_hash="hash", created_at=utcnow(), created_by="admin", **kwargs)
 
 
 @pytest.mark.parametrize("registered", [False, True])
@@ -149,7 +149,7 @@ async def test_released_storage_loads_through_real_ha_store(hass, hass_storage, 
     }}
     store = await AccessKeyStore.async_create(hass)
     loaded = store.get_access_key_by_id(access_key.id)
-    assert loaded.token_hash == access_key.token_hash
+    assert loaded.access_key_hash == access_key.access_key_hash
     assert loaded.expires_at == access_key.expires_at
     assert store.get_settings().kill_switch
     assert store.get_pending_approvals()[0]["status"] == "cancelled"

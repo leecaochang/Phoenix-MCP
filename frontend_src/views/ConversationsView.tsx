@@ -291,7 +291,7 @@ function EntryDetail({ id, revision }: { id: string; revision: string }) {
   if (!entry) return <p role="status">{t("common.loading")}</p>;
   const finalTextIndex = entry.events.reduce((last, event, index) => event.kind === "assistant_text" && event.payload === entry.response ? index : last, -1);
   const identityFields = [
-    { key: "access_key_name", title: "conversations.tokenLabel", value: entry.metadata.access_key_name },
+    { key: "access_key_name", title: "conversations.accessKeyLabel", value: entry.metadata.access_key_name },
     { key: "provider", title: "conversations.providerLabel", value: entry.metadata.provider },
     { key: "model", title: "conversations.modelLabel", value: entry.metadata.model },
   ];

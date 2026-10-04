@@ -118,9 +118,9 @@ async def test_real_template_recreation_preserves_identity(hass, kind):
     assert runtime.config_recovery.records()[0]["phase"] == "verified"
 
 
-def _template_agent(domain: str, *, token_id: str | None = None) -> AccessKeyRecord:
+def _template_agent(domain: str, *, access_key_id: str | None = None) -> AccessKeyRecord:
     return AccessKeyRecord(
-        id=token_id or uuid.uuid4().hex, name="template-agent", token_hash="x",
+        id=access_key_id or uuid.uuid4().hex, name="template-agent", access_key_hash="x",
         created_at=utcnow(), created_by="test",
         permissions=PermissionTree(domains={domain: PermissionNode(state="GREEN")}),
         cap_helper_write="allow", cap_registry_read="allow",
@@ -190,7 +190,7 @@ async def test_agent_authored_file_restore_rechecks_digest_and_target(hass):
     from custom_components.phoenix_mcp.tools.recovery import _execute_restore_configuration
 
     access_key = AccessKeyRecord(
-        id=uuid.uuid4().hex, name="file-agent", token_hash="x",
+        id=uuid.uuid4().hex, name="file-agent", access_key_hash="x",
         created_at=utcnow(), created_by="test", permissions=PermissionTree(),
         cap_filesystem="allow",
     )
@@ -226,7 +226,7 @@ async def test_agent_authored_file_restore_removes_created_file(hass):
     from custom_components.phoenix_mcp.tools.recovery import _execute_restore_configuration
 
     access_key = AccessKeyRecord(
-        id=uuid.uuid4().hex, name="file-agent", token_hash="x",
+        id=uuid.uuid4().hex, name="file-agent", access_key_hash="x",
         created_at=utcnow(), created_by="test", permissions=PermissionTree(),
         cap_filesystem="allow",
     )
@@ -261,7 +261,7 @@ async def test_agent_blueprint_restore_uses_ha_blueprint_command(hass):
     from custom_components.phoenix_mcp.tools.recovery import _execute_restore_configuration
 
     access_key = AccessKeyRecord(
-        id=uuid.uuid4().hex, name="blueprint-agent", token_hash="x",
+        id=uuid.uuid4().hex, name="blueprint-agent", access_key_hash="x",
         created_at=utcnow(), created_by="test", permissions=PermissionTree(),
         cap_blueprint_write="allow", cap_automation_write="allow",
     )
@@ -303,7 +303,7 @@ async def test_agent_dashboard_registry_restore_uses_dashboard_command(hass):
     from custom_components.phoenix_mcp.tools.recovery import _execute_restore_configuration
 
     access_key = AccessKeyRecord(
-        id=uuid.uuid4().hex, name="dashboard-agent", token_hash="x",
+        id=uuid.uuid4().hex, name="dashboard-agent", access_key_hash="x",
         created_at=utcnow(), created_by="test", permissions=PermissionTree(),
         cap_lovelace_write="allow",
     )

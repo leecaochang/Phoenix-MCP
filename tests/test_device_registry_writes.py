@@ -67,7 +67,7 @@ def _access_key(
     return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="device-write-test",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="test",
         cap_registry_write=cap,
@@ -137,7 +137,7 @@ async def test_whole_device_write_requires_explicit_device_green(
     inherited = AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="inherited-only",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="test",
         cap_registry_write="allow",

@@ -98,8 +98,8 @@ describe("localized token statuses", () => {
       accessKey({ id: "expired", name: "Old agent", expires_at: "2020-01-01T00:00:00Z" }),
     ]);
 
-    fireEvent.change(screen.getByRole("textbox", { name: de.panel.tokens.filterAria }), {
-      target: { value: de.panel.tokens.statusActive },
+    fireEvent.change(screen.getByRole("textbox", { name: de.panel.accessKeys.filterAria }), {
+      target: { value: de.panel.accessKeys.statusActive },
     });
 
     expect(screen.getByText("Daily agent")).toBeInTheDocument();
@@ -115,7 +115,7 @@ describe("localized token statuses", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /Status/ }));
     const names = screen.getAllByRole("row").slice(1).map(
-      (row) => row.querySelector(".token-name")?.textContent,
+      (row) => row.querySelector(".access-key-name")?.textContent,
     );
     expect(names).toEqual(["Expired row", "Active row", "Revoked row"]);
   });

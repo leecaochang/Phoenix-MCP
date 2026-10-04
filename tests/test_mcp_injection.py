@@ -26,7 +26,7 @@ from custom_components.phoenix_mcp.access_key_store import PermissionNode, Permi
 def _access_key() -> AccessKeyRecord:
     tree = PermissionTree(domains={"light": PermissionNode(state="GREEN")})
     return AccessKeyRecord(
-        id=str(uuid.uuid4()), name="t", token_hash="x",
+        id=str(uuid.uuid4()), name="t", access_key_hash="x",
         created_at=utcnow(), created_by="u", permissions=tree,
         cap_config_read="allow",
     )

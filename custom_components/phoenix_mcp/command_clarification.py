@@ -53,7 +53,7 @@ class CommandClarifications:
 def clarification_binding(hass: Any, authority: Any, language: object, origin: dict | None = None) -> list:
     from .agentcli import decision_account_fingerprint
     settings = authority.settings
-    return [authority.token_id, authority.token_hash, authority.version, language, authority.settings_values,
+    return [authority.access_key_id, authority.access_key_hash, authority.version, language, authority.settings_values,
             decision_account_fingerprint(hass, settings.decision_provider_id), origin]
 
 

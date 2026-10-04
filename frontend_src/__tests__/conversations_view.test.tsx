@@ -79,7 +79,7 @@ describe("ConversationsView", () => {
   it("marks activity and failures with icons and exposes identity and error text without opening payloads", async () => {
     vi.mocked(api.getConversations).mockResolvedValue(list([{ ...summary, status: "failed" }]));
     vi.mocked(api.getConversation).mockResolvedValue({ ...detail, source: "agentcli", status: "failed", response_status: "failed",
-      metadata: { access_key_id: "token-id", access_key_name: "Kitchen client", provider: "openai", model: "selected-model" },
+      metadata: { access_key_id: "access-key-id", access_key_name: "Kitchen client", provider: "openai", model: "selected-model" },
       events: [...detail.events,
         { kind: "approval_requested", timestamp: summary.started_at, tool_id: "review", payload: { status: "pending" } },
         { kind: "error", timestamp: summary.updated_at, tool_id: null, payload: { code: "unauthorized", message: "This token is no longer authorized." } },
@@ -97,7 +97,7 @@ describe("ConversationsView", () => {
     const technical = view.container.querySelector(".conversation-technical")!;
     expect(technical.textContent).toContain('"source": "agentcli"');
     expect(technical.textContent).toContain('"response_outcome": "failed"');
-    expect(technical.textContent).toContain('"access_key_id": "token-id"');
+    expect(technical.textContent).toContain('"access_key_id": "access-key-id"');
   });
 
   it("rejects malformed API envelopes", () => {

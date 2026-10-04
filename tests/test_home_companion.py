@@ -526,7 +526,7 @@ async def test_chat_cancellation_stops_inner_planner(hass,companion,monkeypatch)
 async def test_companion_uses_wrapper_under_auto_routing_without_announcing_guessed_tools(hass,companion,monkeypatch,surface):
     from custom_components.phoenix_mcp.voice_agent import async_voice_answer
     data,access_key,_,_=companion
-    await data.store.async_patch_settings(voice_agent_enabled=True,voice_agent_token_id=access_key.id,
+    await data.store.async_patch_settings(voice_agent_enabled=True,voice_agent_access_key_id=access_key.id,
         voice_agent_routing_mode='auto',agentcli_routing_mode='auto')
     monkeypatch.setattr('custom_components.phoenix_mcp.command_routing.async_evaluate_command',
                         AsyncMock(side_effect=AssertionError('Wrapper persona must not use direct dispatch')))
@@ -582,7 +582,7 @@ async def test_count_source_must_reference_received_evidence(hass, companion, mo
 async def test_voice_report_uses_current_style_and_detail(hass, companion, monkeypatch):
     from custom_components.phoenix_mcp.voice_agent import async_voice_answer
     data, access_key, _, account = companion
-    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=access_key.id,
+    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
         voice_agent_provider_id=account, voice_agent_routing_mode='off')
     async def turn_on(call):
         hass.states.async_set('light.selected','on', {'friendly_name':'Selected lamp'})

@@ -65,7 +65,7 @@ describe("SelectByPicker", () => {
   });
 
   it("shows exact entry identity and coverage warnings without a copy control", async () => {
-    render(<SelectByPicker tokenId="token-1" entityTree={TREE} onDone={() => {}} onClose={() => {}} />);
+    render(<SelectByPicker accessKeyId="access-key-1" entityTree={TREE} onDone={() => {}} onClose={() => {}} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Integration" }));
     const picker = await screen.findByRole("combobox", { name: "Integration" });
@@ -81,7 +81,7 @@ describe("SelectByPicker", () => {
 
   it("applies the integration selection through one atomic request", async () => {
     const onDone = vi.fn();
-    render(<SelectByPicker tokenId="token-1" entityTree={TREE} onDone={onDone} onClose={() => {}} />);
+    render(<SelectByPicker accessKeyId="access-key-1" entityTree={TREE} onDone={onDone} onClose={() => {}} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Integration" }));
     fireEvent.change(await screen.findByRole("combobox", { name: "Integration" }), {
@@ -91,13 +91,13 @@ describe("SelectByPicker", () => {
 
     await waitFor(() => expect(mocks.bulkSelectPermissions).toHaveBeenCalledOnce());
     expect(mocks.bulkSelectPermissions).toHaveBeenCalledWith(
-      "token-1", "integration", OPTION.entry_id, "GREEN",
+      "access-key-1", "integration", OPTION.entry_id, "GREEN",
     );
     expect(onDone).toHaveBeenCalledOnce();
   });
 
   it("keeps area selection on the same atomic endpoint", async () => {
-    render(<SelectByPicker tokenId="token-1" entityTree={TREE} onDone={() => {}} onClose={() => {}} />);
+    render(<SelectByPicker accessKeyId="access-key-1" entityTree={TREE} onDone={() => {}} onClose={() => {}} />);
 
     fireEvent.change(screen.getByRole("combobox", { name: "Area" }), {
       target: { value: "kitchen" },
@@ -105,7 +105,7 @@ describe("SelectByPicker", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
 
     await waitFor(() => expect(mocks.bulkSelectPermissions).toHaveBeenCalledWith(
-      "token-1", "area", "kitchen", "GREEN",
+      "access-key-1", "area", "kitchen", "GREEN",
     ));
   });
 });

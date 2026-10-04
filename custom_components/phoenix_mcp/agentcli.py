@@ -2666,7 +2666,7 @@ def _parse_pending(
     *,
     outcome: str,
     data: PhoenixData,
-    token_id: str,
+    access_key_id: str,
     tool_name: str,
     request_id: str,
 ) -> dict | None:
@@ -2701,7 +2701,7 @@ def _parse_pending(
     if (
         record.status != STATUS_PENDING
         or record.expires_at <= utcnow()
-        or record.token_id != token_id
+        or record.access_key_id != access_key_id
         or record.tool_name not in (internal_name, MESA_APPROVED_EXECUTOR)
         or record.request_id != request_id
     ):
@@ -3390,7 +3390,7 @@ async def _run_tool_batch(
     *,
     hass: HomeAssistant,
     data: PhoenixData,
-    token_id: str,
+    access_key_id: str,
     client_ip: str,
     base_url: str,
     emit: Callable[[str, dict], Awaitable[None]],
@@ -3418,7 +3418,7 @@ async def _run_tool_batch(
     for tc in tool_calls:
         name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
         dispatch_access_key = None if (cancel.is_set() or stop_turn) \
-            else _current_dispatch_access_key(data, token_id)
+            else _current_dispatch_access_key(data, access_key_id)
         if dispatch_access_key is None:
             stop_turn = True
             if cancel.is_set():
@@ -3469,7 +3469,7 @@ async def _run_tool_batch(
         except BaseException:
             # Creation may have saved a queue entry before dispatch was interrupted.
             for saved in data.store.get_pending_approvals():
-                if saved.get("token_id") == token_id and saved.get("request_id") == dispatch_request_id:
+                if saved.get("access_key_id") == access_key_id and saved.get("request_id") == dispatch_request_id:
                     await _cancel_agent_approval(hass, data, saved["id"])
             raise
         result = dispatch_tool_result(resp_msg)
@@ -3479,7 +3479,7 @@ async def _run_tool_batch(
             result,
             outcome=outcome,
             data=data,
-            token_id=token_id,
+            access_key_id=access_key_id,
             tool_name=name,
             request_id=dispatch_request_id,
         )
@@ -3613,7 +3613,7 @@ async def async_run_agent_turn(
                     await emit("assistant_delta", {"text": report["message"]})
                 for url in report["review_urls"]:
                     record = get_approval(data.store, url.rsplit("/", 1)[-1])
-                    if record is not None and record.token_id == access_key.id:
+                    if record is not None and record.access_key_id == access_key.id:
                         await emit("approval_required", {
                             "approval_id": record.id, "review_url": url, "tool_name": record.tool_name,
                             "expires_at": record.expires_at, "diff": record.diff,
@@ -3650,7 +3650,7 @@ async def async_run_agent_turn(
     # effect. Each dispatch gets the inline-confirm wait zeroed so a confirm gate
     # returns pending immediately (snappy approval card); the loop's own longer,
     # cancel-aware wait runs afterward.
-    token_id = access_key.id
+    access_key_id = access_key.id
 
     stop_reason = "end_turn"
     dispatch_started = False
@@ -3753,7 +3753,7 @@ async def async_run_agent_turn(
         dispatch_started = True
         try:
             batch = await _run_tool_batch(
-                tool_calls, hass=hass, data=data, token_id=token_id,
+                tool_calls, hass=hass, data=data, access_key_id=access_key_id,
                 client_ip=client_ip, base_url=base_url, emit=emit, cancel=cancel,
             )
         except RecoveryRequired:
@@ -3909,7 +3909,7 @@ async def _run_headless_turn(
     agent_tools = build_agent_tool_list(access_key, data, routing_surface)
     tools = provider.format_tools(agent_tools)
     messages: list[dict] = [{"role": "user", "content": seed}]
-    token_id = access_key.id
+    access_key_id = access_key.id
     cancel = asyncio.Event()  # never fired; the stream primitive expects one
     final_text = ""
     review_urls: list[str] = []
@@ -4068,7 +4068,7 @@ async def _run_headless_turn(
         results: list[dict] = []
         for tc in tool_calls:
             name = str(tc.get("name") or "")[:MAX_TOOL_NAME_LENGTH]
-            dispatch_access_key = _current_dispatch_access_key(data, token_id)
+            dispatch_access_key = _current_dispatch_access_key(data, access_key_id)
             if dispatch_access_key is None:
                 record_rejected_tool(tc.get("id"), name, tc.get("input"),
                                      reason="This access key is no longer authorized; the tool was not run.", stage="authority_guard")
@@ -4101,7 +4101,7 @@ async def _run_headless_turn(
                 result,
                 outcome=outcome,
                 data=data,
-                token_id=token_id,
+                access_key_id=access_key_id,
                 tool_name=name,
                 request_id=dispatch_request_id,
             )
@@ -4280,7 +4280,7 @@ async def async_run_voice_turn(
     if turn.outcome == TURN_AUTHORITY_LOST:
         # The closing round usually produces a sentence ("I could not do that");
         # say it. The fallback covers a model that asked for tools again instead.
-        return turn.text.strip() or voice_text(language, "token_unavailable")
+        return turn.text.strip() or voice_text(language, "access_key_unavailable")
     if turn.outcome == TURN_EXHAUSTED:
         # By construction there is no partial answer here: the round that runs out
         # of steps is a tool round, which has already reset the text.
@@ -4373,7 +4373,7 @@ async def async_run_ai_task(
         report = await async_delegate(hass, data, access_key, instructions, hass.config.language, base_url,
                                       style=settings.ai_task_conversation_style, detail=settings.ai_task_detail_level)
         if companion_authority.current(hass) is None:
-            raise AiTaskError(voice_text(hass.config.language, "token_unavailable"))
+            raise AiTaskError(voice_text(hass.config.language, "access_key_unavailable"))
         if report["status"] != "completed":
             raise AiTaskError(report["message"])
         if structure_json is None:
@@ -4405,7 +4405,7 @@ async def async_run_ai_task(
         response_only=companion_authority is not None,
     )
     if companion_authority is not None and companion_authority.current(hass) is None:
-        raise AiTaskError(voice_text(hass.config.language, "token_unavailable"))
+        raise AiTaskError(voice_text(hass.config.language, "access_key_unavailable"))
     # Unlike the voice surface there is no one listening to an apology: an
     # automation asked for data, so every non-OK ending is an error the caller
     # wraps as a HomeAssistantError. These messages are operator-facing and
@@ -4459,7 +4459,7 @@ def _zero_inline_wait(access_key: AccessKeyRecord) -> AccessKeyRecord:
         return access_key
 
 
-def _current_dispatch_access_key(data: PhoenixData, token_id: str) -> AccessKeyRecord | None:
+def _current_dispatch_access_key(data: PhoenixData, access_key_id: str) -> AccessKeyRecord | None:
     """Re-resolve the token for one tool dispatch, or None if it may no longer act.
 
     A single Agent Chat turn can stay open a long time (a confirm gate blocks on
@@ -4475,7 +4475,7 @@ def _current_dispatch_access_key(data: PhoenixData, token_id: str) -> AccessKeyR
         or data.store.get_settings().kill_switch
     ):
         return None
-    access_key = data.store.get_access_key_by_id(token_id)
+    access_key = data.store.get_access_key_by_id(access_key_id)
     if access_key is None or not access_key.is_valid():
         return None
     return _zero_inline_wait(access_key)
@@ -4515,17 +4515,17 @@ class PhoenixAgentCliChatView(PhoenixView):
                 key="serviceDisabled",
             )
 
-        token_id = str(body.get("token_id") or "")
-        access_key = data.store.get_access_key_by_id(token_id)
+        access_key_id = str(body.get("access_key_id") or "")
+        access_key = data.store.get_access_key_by_id(access_key_id)
         if access_key is None:
             return _err(
                 "not_found", "Access key not found.", 404, rid,
-                key="tokenNotFound",
+                key="accessKeyNotFound",
             )
         if not access_key.is_valid():
             return _err(
                 "invalid_request", "This access key is revoked or expired.", 400, rid,
-                key="tokenInactive",
+                key="accessKeyInactive",
             )
 
         instance_id = str(body.get("instance_id") or "")
@@ -4628,7 +4628,7 @@ class PhoenixAgentCliChatView(PhoenixView):
 
         heartbeat = self.hass.loop.create_task(_heartbeat())
         try:
-            await emit("ready", {"provider": cfg.kind, "model": cfg.model, "token_id": token_id})
+            await emit("ready", {"provider": cfg.kind, "model": cfg.model, "access_key_id": access_key_id})
             await async_run_agent_turn(
                 hass=self.hass, data=data, access_key=access_key, provider=provider,
                 session=session, messages=messages, options=options or {},

@@ -1312,13 +1312,13 @@ def test_parse_pending_strict():
     record = SimpleNamespace(
         id="a1", status=STATUS_PENDING,
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
-        token_id="t1", tool_name="call_service", request_id="rid-1",
+        access_key_id="t1", tool_name="call_service", request_id="rid-1",
     )
     data = SimpleNamespace(store=object())
 
     def parse(result=pend, **overrides):
         context = {
-            "outcome": "pending_approval", "data": data, "token_id": "t1",
+            "outcome": "pending_approval", "data": data, "access_key_id": "t1",
             "tool_name": "call_service", "request_id": "rid-1",
         }
         context.update(overrides)
@@ -1329,7 +1329,7 @@ def test_parse_pending_strict():
         assert trusted["approval_id"] == "a1"
         assert trusted["review_url"] == "/phoenix-mcp/approvals/a1"
         assert parse(outcome="allowed") is None
-        assert parse(token_id="foreign") is None
+        assert parse(access_key_id="foreign") is None
         assert parse(tool_name="get_state") is None
         assert parse(request_id="other-invocation") is None
         record.tool_name = MESA_APPROVED_EXECUTOR
@@ -2304,7 +2304,7 @@ async def test_chat_view_refuses_when_kill_switch_or_shutting_down():
         data.store.get_settings.return_value = MagicMock(kill_switch=kill)
         view.hass = MagicMock()
         view.hass.data = {agentcli.DOMAIN: data}
-        req = _make_chat_request(json.dumps({"token_id": "t"}).encode())
+        req = _make_chat_request(json.dumps({"access_key_id": "t"}).encode())
         resp = await view.post(req)
         assert resp.status == expect
 
@@ -2325,7 +2325,7 @@ async def test_chat_view_refuses_revoked_or_missing_token():
     # Missing token: 404.
     view.hass = MagicMock()
     view.hass.data = {agentcli.DOMAIN: _data(None)}
-    resp = await view.post(_make_chat_request(json.dumps({"token_id": "t"}).encode()))
+    resp = await view.post(_make_chat_request(json.dumps({"access_key_id": "t"}).encode()))
     assert resp.status == 404
 
     # Revoked/expired token: 400 (never opens the stream).
@@ -2333,7 +2333,7 @@ async def test_chat_view_refuses_revoked_or_missing_token():
     revoked.is_valid.return_value = False
     view.hass = MagicMock()
     view.hass.data = {agentcli.DOMAIN: _data(revoked)}
-    resp = await view.post(_make_chat_request(json.dumps({"token_id": "t"}).encode()))
+    resp = await view.post(_make_chat_request(json.dumps({"access_key_id": "t"}).encode()))
     assert resp.status == 400
 
 
@@ -2382,7 +2382,7 @@ async def test_chat_view_streams_ready_and_cleans_up(hass, mode):
     hass.data[ac.DOMAIN] = data
 
     body = json.dumps({
-        "token_id": "t1", "instance_id": "i1", "user": "hi",
+        "access_key_id": "t1", "instance_id": "i1", "user": "hi",
         "messages": [
             {"role": "user", "content": "earlier"},
             {"role": "assistant", "content": "retained"},
@@ -2430,7 +2430,7 @@ async def test_chat_view_rejects_focus_bypass_without_new_message(hass):
     view.hass = hass
     hass.data[agentcli.DOMAIN] = data
     body = json.dumps({
-        "token_id": "t1", "instance_id": "i1", "continue": True,
+        "access_key_id": "t1", "instance_id": "i1", "continue": True,
         "messages": [{"role": "user", "content": "hi"}],
         "home_focus_bypass": True,
     }).encode()
@@ -2458,7 +2458,7 @@ async def test_await_agent_approval_cancels_orphaned_approval(hass):
 
     now = utcnow()
     appr = PendingApproval(
-        id="a1", token_id="t", token_name="n", tool_name="call_service",
+        id="a1", access_key_id="t", access_key_name="n", tool_name="call_service",
         cap_name="cap_physical_control", args={}, diff={}, status=STATUS_PENDING,
         created_at=now, expires_at=now, request_id="r",
     )
@@ -2510,7 +2510,7 @@ async def test_await_agent_approval_does_not_cancel_an_in_progress_approval(hass
 
     now = utcnow()
     appr = PendingApproval(
-        id="a1", token_id="t", token_name="n", tool_name="call_service",
+        id="a1", access_key_id="t", access_key_name="n", tool_name="call_service",
         cap_name="cap_physical_control", args={}, diff={}, status=STATUS_PENDING,
         created_at=now, expires_at=now, request_id="r",
     )
@@ -2949,7 +2949,7 @@ async def test_delete_provider_clears_voice_agent_binding(hass):
     from custom_components.phoenix_mcp.const import DOMAIN
     from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 
-    holder = {"s": GlobalSettings(voice_agent_enabled=True, voice_agent_token_id="t",
+    holder = {"s": GlobalSettings(voice_agent_enabled=True, voice_agent_access_key_id="t",
                                   voice_agent_provider_id="pid", voice_agent_model="m")}
     store = MagicMock()
     store.get_settings.side_effect = lambda: holder["s"]
@@ -2998,7 +2998,7 @@ async def test_delete_provider_clears_ai_task_binding(hass):
     from custom_components.phoenix_mcp.const import DOMAIN
     from custom_components.phoenix_mcp.access_key_store import GlobalSettings
 
-    holder = {"s": GlobalSettings(ai_task_enabled=True, ai_task_token_id="t",
+    holder = {"s": GlobalSettings(ai_task_enabled=True, ai_task_access_key_id="t",
                                   ai_task_provider_id="pid", ai_task_model="m")}
     store = MagicMock()
     store.get_settings.side_effect = lambda: holder["s"]

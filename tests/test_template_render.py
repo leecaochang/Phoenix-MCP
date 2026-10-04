@@ -19,7 +19,7 @@ from custom_components.phoenix_mcp.access_key_store import AccessKeyRecord
 
 
 def _env():
-    access_key = AccessKeyRecord(id='template', name='template', token_hash='hash', created_at=utcnow(), created_by='admin', pass_through=True)
+    access_key = AccessKeyRecord(id='template', name='template', access_key_hash='hash', created_at=utcnow(), created_by='admin', pass_through=True)
     return access_key, PhoenixData(store=MagicMock(), rate_limiter=RateLimiter(), audit=AuditLog())
 
 
@@ -223,7 +223,7 @@ async def test_diagnostics_recheck_real_authority_after_worker_wait(hass, change
         return b'{"kind":"syntax","message":"never-disclose","line":1}', b''
     process.communicate = communicate
     process.wait = AsyncMock()
-    authority_reset = request_authority.set(RequestAuthority(hass, data, access_key.id, access_key.token_hash))
+    authority_reset = request_authority.set(RequestAuthority(hass, data, access_key.id, access_key.access_key_hash))
     policy_reset = policy_version.set(access_key.settings_version)
     try:
         with patch.object(template_render.asyncio, 'create_subprocess_exec', AsyncMock(return_value=process)):

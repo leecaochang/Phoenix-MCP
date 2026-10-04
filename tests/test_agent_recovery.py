@@ -76,13 +76,13 @@ async def test_reconciliation_requires_attributed_approval_receipt(status, marke
     recovery = AgentRecovery()
     await recovery.begin("token", "call_service", "request")
     recovery.interrupted("request")
-    approval = {"request_id": "request", "token_id": "other", "status": status}
+    approval = {"request_id": "request", "access_key_id": "other", "status": status}
     if marker:
         approval["execution_started_at"] = "started"
     store = SimpleNamespace(get_pending_approvals=lambda: [approval])
     await recovery.reconcile(store, "token")
     assert recovery.records("token")
-    approval["token_id"] = "token"
+    approval["access_key_id"] = "token"
     await recovery.reconcile(store, "token")
     assert recovery.records("token")  # reconciliation reports evidence, never replays
     received = recovery.records("token")[0]["dispatch_result"]

@@ -54,7 +54,7 @@ def _access_key(device_id: str, *, cap: str = "allow", state: str = "GREEN") -> 
     return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="device-remove-test",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="test",
         cap_integration_write=cap,

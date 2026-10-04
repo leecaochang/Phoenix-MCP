@@ -257,7 +257,7 @@ async def test_authority_changed_during_event_read_blocks_write(calendar_env, mo
         access_key.settings_version += 1
         return rows
     monkeypatch.setattr(entity, 'async_get_events', change_after_read)
-    authority = request_authority.set(RequestAuthority(hass, data, access_key.id, access_key.token_hash))
+    authority = request_authority.set(RequestAuthority(hass, data, access_key.id, access_key.access_key_hash))
     epoch = policy_version.set(access_key.settings_version)
     try:
         with pytest.raises(AuthorityChangedError):
@@ -393,7 +393,7 @@ async def test_unknown_receipt_capacity_requires_explicit_review_without_replay(
     journal = tools.CalendarWriteJournal(hass)
     data.calendar_writes = journal
     journal.records = [{"receipt_id": f"r-{i}", "entity_id": entity.entity_id,
-                        "status": "outcome_unknown", "operation": "create", "token_id": access_key.id,
+                        "status": "outcome_unknown", "operation": "create", "access_key_id": access_key.id,
                         "created_at": "2026-10-02T00:00:00+00:00", "identity": {},
                         "requested": {}, "before": None, "after": None, "recovery": "Manual review required."}
                        for i in range(CALENDAR_RECEIPT_LIMIT)]
@@ -444,7 +444,7 @@ async def test_calendar_preparation_exits_retain_only_not_applied_receipts(calen
 
     async def mesa(*args, **kwargs):
         if failure == "pending" and data.calendar_writes is not None and data.calendar_writes.records:
-            approval = await async_create_pending_approval(data.store, token_id=access_key.id, token_name=access_key.name,
+            approval = await async_create_pending_approval(data.store, access_key_id=access_key.id, access_key_name=access_key.name,
                 tool_name="create_calendar_event", cap_name="cap_calendar_write", args={}, diff={}, request_id="held")
             return SimpleNamespace(decision="pending", approval=approval)
         return await original_mesa(*args, **kwargs)

@@ -550,7 +550,7 @@ def test_cap_tied_reads_are_not_reported_as_needing_approval():
     sets aligned but changes the bucketing still fails here.
     """
     access_key = AccessKeyRecord(
-        id="t1", name="t", token_hash="x", created_at=utcnow(), created_by="u",
+        id="t1", name="t", access_key_hash="x", created_at=utcnow(), created_by="u",
         permissions=PermissionTree(domains={"light": PermissionNode(state="GREEN")}),
         **{cap: "confirm" for cap in const.CAPABILITY_NAMES},
     )
@@ -566,7 +566,7 @@ def test_cap_tied_reads_are_not_reported_as_needing_approval():
 def test_list_integrations_is_visible_with_either_integration_capability():
     """The shared discovery read uses OR semantics, never accidental dual-cap AND."""
     base = dict(
-        id="t1", name="t", token_hash="x", created_at=utcnow(), created_by="u",
+        id="t1", name="t", access_key_hash="x", created_at=utcnow(), created_by="u",
         permissions=PermissionTree(),
     )
     definition = next(d for d in _all_defs() if d["name"] == "list_integrations")
@@ -580,7 +580,7 @@ def test_list_integrations_is_visible_with_either_integration_capability():
 def test_recognize_intent_is_visible_with_search_or_config_read():
     """Sentence diagnostics use OR semantics and never require both read caps."""
     base = dict(
-        id="t1", name="t", token_hash="x", created_at=utcnow(), created_by="u",
+        id="t1", name="t", access_key_hash="x", created_at=utcnow(), created_by="u",
         permissions=PermissionTree(),
     )
     definition = next(d for d in _all_defs() if d["name"] == "recognize_intent")

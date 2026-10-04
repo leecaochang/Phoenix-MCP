@@ -4,7 +4,7 @@ import { CASCADING_SCOPES, EDITOR_SCOPES } from "../views/MesaView";
 import { QUICK_ADD_SCOPES } from "../inject/QuickAdd";
 import { SUBPAGE_SURFACES } from "../inject/dom";
 import { RESOURCE_TYPE_LABEL_KEYS } from "../views/ChangesView";
-import contract from "../../tests/contract/token_record_keys.json";
+import contract from "../../tests/contract/access_key_record_keys.json";
 import versionContract from "../../tests/contract/version_resource_types.json";
 import providerContract from "../../tests/contract/agentcli_provider_kinds.json";
 import mesaContract from "../../tests/contract/mesa_scopes.json";
@@ -69,7 +69,7 @@ const TOKEN_RECORD_KEYS = {
 describe("frontend/backend AccessKeyRecord contract", () => {
   it("the TS type's keys match the Python serializer fixture", () => {
     expect(Object.keys(TOKEN_RECORD_KEYS).sort()).toEqual(
-      [...contract.token_record_keys].sort(),
+      [...contract.access_key_record_keys].sort(),
     );
   });
 });

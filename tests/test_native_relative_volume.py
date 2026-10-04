@@ -27,7 +27,7 @@ def _access_key() -> AccessKeyRecord:
     return AccessKeyRecord(
         id="token",
         name="test",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="admin",
         permissions=PermissionTree(),

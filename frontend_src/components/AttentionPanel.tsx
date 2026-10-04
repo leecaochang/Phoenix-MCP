@@ -92,7 +92,7 @@ export function AttentionPanel() {
         const reviewable = item.kind === "agent" || item.kind === "calendar";
         return <article className="phx-attention-item" key={key}>
           <h3>{t(TITLES[item.kind])}</h3>
-          {item.token_name && <p className="phx-attention-meta">{item.token_name}{item.started_at && ` · ${localeDateTime(item.started_at)}`}</p>}
+          {item.access_key_name && <p className="phx-attention-meta">{item.access_key_name}{item.started_at && ` · ${localeDateTime(item.started_at)}`}</p>}
           <p>{t(item.kind === "agent" || item.kind === "calendar" ? (item.dispatch_result === "received" ? "attention.received" : "attention.unknown") : HELP[item.kind])}</p>
           {reviewable && <>
             <details className="phx-attention-details"><summary>{t("attention.details")}</summary>

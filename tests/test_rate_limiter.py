@@ -20,8 +20,8 @@ def _rl() -> RateLimiter:
     return RateLimiter()
 
 
-def _check(rl: RateLimiter, token_id: str = "tok", requests: int = 5, burst: int = 3) -> RateLimitResult:
-    return rl.check(token_id, rate_limit_requests=requests, rate_limit_burst=burst)
+def _check(rl: RateLimiter, access_key_id: str = "tok", requests: int = 5, burst: int = 3) -> RateLimitResult:
+    return rl.check(access_key_id, rate_limit_requests=requests, rate_limit_burst=burst)
 
 
 def _make_times(start: float, count: int, step: float = 0.5) -> list[float]:

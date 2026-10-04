@@ -1192,8 +1192,8 @@ async def async_create_mesa_approval(
     async with data.store.async_lock:
         approval = await async_create_pending_approval(
             data.store,
-            token_id=access_key.id,
-            token_name=access_key.name,
+            access_key_id=access_key.id,
+            access_key_name=access_key.name,
             tool_name=tool_name,
             cap_name=MESA_CONFIRM_CAP,
             args=args,
@@ -1216,8 +1216,8 @@ def fire_mesa_blocked_event(
         hass.bus.async_fire(
             f"{DOMAIN}_mesa_blocked",
             {
-                "token_id": access_key.id,
-                "token_name": access_key.name,
+                "access_key_id": access_key.id,
+                "access_key_name": access_key.name,
                 "entity_id": entity_id,
                 "rule_applied": rule,
                 "timestamp": dt_util.utcnow().isoformat(),
@@ -1225,7 +1225,7 @@ def fire_mesa_blocked_event(
         )
 
 
-def release_access_key_leases(data: Any, token_id: str) -> int:
+def release_access_key_leases(data: Any, access_key_id: str) -> int:
     """Drop any advisory leases a token still holds. Returns how many.
 
     Called when a token is revoked or expires. Bookkeeping, not a safety
@@ -1243,7 +1243,7 @@ def release_access_key_leases(data: Any, token_id: str) -> int:
     if runtime is None:
         return 0
     try:
-        return runtime.lease_manager.release_session(token_id)
+        return runtime.lease_manager.release_session(access_key_id)
     except Exception:  # noqa: BLE001 - advisory cleanup never blocks a revocation
-        _LOGGER.debug("Phoenix MCP: releasing leases for access key %s failed", token_id, exc_info=True)
+        _LOGGER.debug("Phoenix MCP: releasing leases for access key %s failed", access_key_id, exc_info=True)
         return 0

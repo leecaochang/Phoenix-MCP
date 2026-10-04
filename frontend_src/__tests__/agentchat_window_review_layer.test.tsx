@@ -41,7 +41,7 @@ describe("global Agent Chat approval-review layer", () => {
     });
     vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {});
 
-    showAgentChat("token-1");
+    showAgentChat("access-key-1");
     const host = document.body.lastElementChild as HTMLElement;
     expect(host).toBeTruthy();
     expect(host.dataset.jsBuild).toBeTruthy();

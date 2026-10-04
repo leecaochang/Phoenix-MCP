@@ -56,26 +56,29 @@ class AgentRecovery:
             return
         if not isinstance(saved, dict) or not isinstance(saved.get("records"), dict):
             raise RecoveryRequired("Invalid agent recovery store")
-        records = saved["records"]
+        from .access_key_schema import normalize_access_key_fields
+
+        records = {rid: normalize_access_key_fields(row) if isinstance(row, dict) else row
+                   for rid, row in saved["records"].items()}
         for rid, record in records.items():
             if (not isinstance(rid, str) or not isinstance(record, dict)
-                    or not all(isinstance(record.get(k), str) for k in ("token_id", "tool", "started_at"))):
+                    or not all(isinstance(record.get(k), str) for k in ("access_key_id", "tool", "started_at"))):
                 raise RecoveryRequired("Invalid agent recovery record")
         self._records = records
 
-    def records(self, token_id: str) -> list[dict]:
+    def records(self, access_key_id: str) -> list[dict]:
         return [
             {"request_id": rid, "tool": r["tool"], "started_at": r["started_at"],
              "status": ("dispatching" if rid in self._active else
                         "in_progress" if r.get("turn_id") in self._live_turns else "outcome_unknown"),
              "dispatch_result": r.get("dispatch_result", "unknown")}
-            for rid, r in self._records.items() if r["token_id"] == token_id
+            for rid, r in self._records.items() if r["access_key_id"] == access_key_id
         ]
 
-    def blocks(self, token_id: str, own_request: str | None = None) -> bool:
+    def blocks(self, access_key_id: str, own_request: str | None = None) -> bool:
         turn = _turn_id.get()
         return any(
-            r["token_id"] == token_id and rid != own_request
+            r["access_key_id"] == access_key_id and rid != own_request
             and not (turn is not None and r.get("turn_id") == turn
                      and r.get("dispatch_result") == "received")
             for rid, r in self._records.items()
@@ -127,12 +130,12 @@ class AgentRecovery:
         if self._store is not None:
             await self._store.async_save({"records": self._records})
 
-    async def begin(self, token_id: str, tool: str, rid: str) -> None:
+    async def begin(self, access_key_id: str, tool: str, rid: str) -> None:
         async with self._lock:
-            if self.blocks(token_id) or len(self._records) >= MAX_RECORDS:
+            if self.blocks(access_key_id) or len(self._records) >= MAX_RECORDS:
                 raise RecoveryRequired("Reconcile the previous agent operation in Phoenix MCP > Needs attention before retrying.")
             tool = _journal_tool_name(tool)
-            self._records[rid] = {"token_id": token_id, "tool": tool, "started_at": utcnow().isoformat(), "turn_id": _turn_id.get()}
+            self._records[rid] = {"access_key_id": access_key_id, "tool": tool, "started_at": utcnow().isoformat(), "turn_id": _turn_id.get()}
             try:
                 await self._save()
             except Exception:
@@ -141,12 +144,12 @@ class AgentRecovery:
                 raise RecoveryRequired("Could not persist the dispatch barrier; nothing was dispatched.") from None
             self._active.add(rid)
 
-    async def retain_unknown(self, token_id: str, tool: str, rid: str) -> None:
+    async def retain_unknown(self, access_key_id: str, tool: str, rid: str) -> None:
         """Retain a write whose authority was lost after entering dispatch."""
         async with self._lock:
             if rid not in self._records:
                 self._records[rid] = {
-                    "token_id": token_id, "tool": _journal_tool_name(tool),
+                    "access_key_id": access_key_id, "tool": _journal_tool_name(tool),
                     "started_at": utcnow().isoformat(), "turn_id": _turn_id.get(),
                 }
             try:
@@ -170,13 +173,13 @@ class AgentRecovery:
     def interrupted(self, rid: str) -> None:
         self._active.discard(rid)
 
-    async def reconcile(self, store: AccessKeyStore, token_id: str) -> None:
+    async def reconcile(self, store: AccessKeyStore, access_key_id: str) -> None:
         """Use an attributed HA approval receipt; never infer from device state."""
         for rid, record in list(self._records.items()):
-            if record["token_id"] != token_id or rid in self._active or record.get("dispatch_result") == "received":
+            if record["access_key_id"] != access_key_id or rid in self._active or record.get("dispatch_result") == "received":
                 continue
             for approval in store.get_pending_approvals():
-                if approval.get("request_id") != rid or approval.get("token_id") != token_id:
+                if approval.get("request_id") != rid or approval.get("access_key_id") != access_key_id:
                     continue
                 status = approval.get("status")
                 if status in ("approved", "rejected", "cancelled", "expired") or (
@@ -219,9 +222,9 @@ class AgentRecovery:
 
     def admin_records(self) -> list[dict]:
         """Return bounded dispatch metadata for the authenticated admin panel."""
-        return [dict(row, token_id=token_id)
-                for token_id in dict.fromkeys(r["token_id"] for r in self._records.values())
-                for row in self.records(token_id)
+        return [dict(row, access_key_id=access_key_id)
+                for access_key_id in dict.fromkeys(r["access_key_id"] for r in self._records.values())
+                for row in self.records(access_key_id)
                 if row["status"] == "outcome_unknown"]
 
 

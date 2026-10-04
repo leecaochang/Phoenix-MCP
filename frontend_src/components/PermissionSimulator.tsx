@@ -8,7 +8,7 @@ import { PERMISSION_LABEL_KEYS } from "../utils";
 type ResolveDepth = "entity" | "device" | "domain";
 
 interface Props {
-  tokenId: string;
+  accessKeyId: string;
   externalEntityId?: string;
   resolveDepth?: ResolveDepth;
   triggerVersion?: number;
@@ -42,7 +42,7 @@ const EFFECTIVE_CLASS: Record<string, string> = {
   NOT_FOUND: "state-GREY",
 };
 
-export function PermissionSimulator({ tokenId, externalEntityId, resolveDepth = "entity", triggerVersion, mesaProfileEntities, onOpenMesa }: Props) {
+export function PermissionSimulator({ accessKeyId, externalEntityId, resolveDepth = "entity", triggerVersion, mesaProfileEntities, onOpenMesa }: Props) {
   const [entityInput, setEntityInput] = useState(externalEntityId ?? "");
   const [result, setResult] = useState<ResolveResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -58,7 +58,7 @@ export function PermissionSimulator({ tokenId, externalEntityId, resolveDepth = 
     setLoading(true);
     setError(null);
     try {
-      const data = await api.resolve(tokenId, eid.trim());
+      const data = await api.resolve(accessKeyId, eid.trim());
       if (gen !== genRef.current) return;
       setResult(data);
     } catch (e: unknown) {
@@ -69,7 +69,7 @@ export function PermissionSimulator({ tokenId, externalEntityId, resolveDepth = 
       if (gen !== genRef.current) return;
       setLoading(false);
     }
-  }, [tokenId]);
+  }, [accessKeyId]);
 
   // External entity set: update input and suppress the typing debounce (the
   // simulate effect below handles it).

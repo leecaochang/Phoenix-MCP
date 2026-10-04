@@ -48,7 +48,7 @@ def _make_token(*, announce_all: bool = False, cap_config_read: str = "allow") -
     return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="voice-token",
-        token_hash=hashlib.sha256(raw.encode()).hexdigest(),
+        access_key_hash=hashlib.sha256(raw.encode()).hexdigest(),
         created_at=utcnow(),
         created_by="admin",
         cap_config_read=cap_config_read,
@@ -58,7 +58,7 @@ def _make_token(*, announce_all: bool = False, cap_config_read: str = "allow") -
 
 
 def _make_data(access_key: AccessKeyRecord | None, *, kill_switch: bool = False, bound_id=None) -> SimpleNamespace:
-    settings = GlobalSettings(kill_switch=kill_switch, assist_bound_token_id=bound_id)
+    settings = GlobalSettings(kill_switch=kill_switch, assist_bound_access_key_id=bound_id)
     store = MagicMock()
     store.get_settings.return_value = settings
     store.get_access_key_by_id.side_effect = lambda tid: access_key if (access_key and tid == access_key.id) else None
@@ -437,7 +437,7 @@ async def test_confirm_gated_call_returns_queued(hass):
     }
     record = SimpleNamespace(
         id="ap-1", status="pending", expires_at=utcnow() + timedelta(minutes=5),
-        token_id=access_key.id, tool_name="call_service", request_id="",
+        access_key_id=access_key.id, tool_name="call_service", request_id="",
     )
 
     async def fake_dispatch(*a, **k):

@@ -186,8 +186,8 @@ def log_request(
         )
     data.audit.record(
         request_id=request_id,
-        token_id=access_key.id,
-        token_name=access_key.name,
+        access_key_id=access_key.id,
+        access_key_name=access_key.name,
         method=method,
         resource=resource,
         outcome=outcome,
@@ -210,8 +210,8 @@ def fire_rate_limit_events(hass: HomeAssistant, data: PhoenixData, access_key: A
         return
     data.rate_limit_notified[access_key.id] = now_mono
     hass.bus.async_fire("phoenix_mcp_rate_limited", {
-        "token_id": access_key.id,
-        "token_name": access_key.name,
+        "access_key_id": access_key.id,
+        "access_key_name": access_key.name,
         "timestamp": utcnow().isoformat(),
     })
     # Notification is throttled.
@@ -303,8 +303,8 @@ async def async_get_authenticated_access_key(
     if not presented.startswith(ACCESS_KEY_PREFIX) or len(presented) != ACCESS_KEY_LENGTH:
         return _401
 
-    token_hash = hashlib.sha256(presented.encode()).hexdigest()
-    access_key = data.store.get_access_key_by_hash(token_hash)
+    access_key_hash = hashlib.sha256(presented.encode()).hexdigest()
+    access_key = data.store.get_access_key_by_hash(access_key_hash)
 
     if access_key is None:
         return _401
@@ -343,9 +343,9 @@ async def async_get_authenticated_access_key(
     return access_key, rl_result
 
 
-def cancel_expiry_timer(data: PhoenixData, token_id: str) -> None:
+def cancel_expiry_timer(data: PhoenixData, access_key_id: str) -> None:
     """Cancel and remove the pending expiry timer for a token, if one exists."""
-    cancel = data.expiry_timers.pop(token_id, None)
+    cancel = data.expiry_timers.pop(access_key_id, None)
     if cancel is not None:
         cancel()
 
@@ -382,7 +382,7 @@ async def async_archive_expired_access_key(
     """Move an expired token to the archive and perform full cleanup.
 
     Archives the record to storage, closes its queued approvals, destroys rate
-    limiter and counter state, fires the phoenix_mcp_token_expired bus event, and
+    limiter and counter state, fires the phoenix_mcp_access_key_expired bus event, and
     removes sensor entities.
     """
     from .approvals import (  # noqa: PLC0415 - avoid import cycle at module load
@@ -420,12 +420,12 @@ async def async_archive_expired_access_key(
             # Clear bindings in the same transaction as token archival.
             _s = data.store.get_settings()
             _patch: dict[str, Any] = {}
-            if _s.assist_bound_token_id == current.id:
-                _patch["assist_bound_token_id"] = None
-            if _s.voice_agent_token_id == current.id:
-                _patch["voice_agent_token_id"] = None
-            if _s.ai_task_token_id == current.id:
-                _patch["ai_task_token_id"] = None
+            if _s.assist_bound_access_key_id == current.id:
+                _patch["assist_bound_access_key_id"] = None
+            if _s.voice_agent_access_key_id == current.id:
+                _patch["voice_agent_access_key_id"] = None
+            if _s.ai_task_access_key_id == current.id:
+                _patch["ai_task_access_key_id"] = None
             if _patch:
                 await data.store.async_patch_settings(**_patch)
             changed_approvals = await async_cancel_approvals_for_access_key(
@@ -440,21 +440,21 @@ async def async_archive_expired_access_key(
     release_access_key_leases(data, current.id)
     if data.async_sync_voice_agent is not None:
         data.async_sync_voice_agent()
-    if "voice_agent_token_id" in _patch:
+    if "voice_agent_access_key_id" in _patch:
         # The voice agent lost its token and is unregistered; remove any
         # Phoenix-created Assist pipeline so a broken assistant is not left behind.
         from .voice_agent import async_remove_assist_pipeline  # noqa: PLC0415
         await async_remove_assist_pipeline(hass, data)
-    if "ai_task_token_id" in _patch and data.async_sync_ai_task is not None:
+    if "ai_task_access_key_id" in _patch and data.async_sync_ai_task is not None:
         # The AI Task lost its token; remove the AI Task entity from HA (and picker).
         data.async_sync_ai_task()
     data.rate_limiter.destroy(current.id)
     data.rate_limit_notified.pop(current.id, None)
     data.access_key_counters.pop(current.id, None)
     data.stale_tools_advised.pop(current.id, None)
-    hass.bus.async_fire("phoenix_mcp_token_expired", {
-        "token_id": current.id,
-        "token_name": current.name,
+    hass.bus.async_fire("phoenix_mcp_access_key_expired", {
+        "access_key_id": current.id,
+        "access_key_name": current.name,
         "timestamp": now.isoformat(),
     })
     if data.async_on_access_key_archived:
@@ -1440,13 +1440,13 @@ def flush_sensor_writes(data: PhoenixData, _now=None) -> None:
     data.sensor_flush_cancel = None
     dirty = data.sensor_write_dirty
     data.sensor_write_dirty = set()
-    for token_id in dirty:
-        for sensor in data.access_key_id_sensors.get(token_id, []):
+    for access_key_id in dirty:
+        for sensor in data.access_key_id_sensors.get(access_key_id, []):
             if sensor.hass is not None:
                 sensor.async_write_ha_state()
 
 
-def update_access_key_counter(data: PhoenixData, token_id: str, outcome: str) -> None:
+def update_access_key_counter(data: PhoenixData, access_key_id: str, outcome: str) -> None:
     """Increment the in-memory request/denied/rate-limit counters for a token.
 
     Counters are initialised on first use and read by sensor.py and, directly, by
@@ -1456,20 +1456,20 @@ def update_access_key_counter(data: PhoenixData, token_id: str, outcome: str) ->
     request after a flush schedules one write SENSOR_WRITE_DEBOUNCE_SECONDS out;
     requests inside the window coalesce into it.
     """
-    if token_id not in data.access_key_counters:
-        data.access_key_counters[token_id] = {
+    if access_key_id not in data.access_key_counters:
+        data.access_key_counters[access_key_id] = {
             "request_count": 0,
             "denied_count": 0,
             "rate_limit_hits": 0,
         }
-    counters = data.access_key_counters[token_id]
+    counters = data.access_key_counters[access_key_id]
     counters["request_count"] += 1
     if outcome in ("denied", "not_found"):
         counters["denied_count"] += 1
     elif outcome == "rate_limited":
         counters["rate_limit_hits"] += 1
 
-    data.sensor_write_dirty.add(token_id)
+    data.sensor_write_dirty.add(access_key_id)
     if data.hass is None:
         # Without a hass there is no loop to schedule on; write immediately.
         flush_sensor_writes(data)
@@ -1699,8 +1699,8 @@ async def async_evaluate_capability(
         check_request_authority()
         approval = await async_create_pending_approval(
             data.store,
-            token_id=access_key.id,
-            token_name=access_key.name,
+            access_key_id=access_key.id,
+            access_key_name=access_key.name,
             tool_name=tool_name,
             cap_name=cap_name,
             args=args,

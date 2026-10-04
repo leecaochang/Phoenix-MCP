@@ -119,7 +119,7 @@ async def async_voice_answer(
                 conversation_id=conversation_id,
             )
     except AuthorityChangedError:
-        return voice_text(language, "token_unavailable")
+        return voice_text(language, "access_key_unavailable")
 
 
 @tracked_turn("voice")
@@ -157,15 +157,15 @@ async def _async_voice_answer(
         or not settings.voice_agent_enabled
     ):
         return voice_text(language, "unavailable")
-    if not (settings.voice_agent_token_id and settings.voice_agent_provider_id):
+    if not (settings.voice_agent_access_key_id and settings.voice_agent_provider_id):
         return voice_text(language, "not_configured")
 
     # Re-resolve the token every turn (never cache it). This also zeroes the
     # inline-confirm wait, so a confirm gate returns pending immediately and the
     # loop reports it queued instead of blocking the turn.
-    access_key = _current_dispatch_access_key(data, settings.voice_agent_token_id)
+    access_key = _current_dispatch_access_key(data, settings.voice_agent_access_key_id)
     if access_key is None:
-        return voice_text(language, "token_unavailable")
+        return voice_text(language, "access_key_unavailable")
 
     from .command_routing import RoutingAuthority, async_evaluate_command, effective_routing_mode
 
@@ -182,7 +182,7 @@ async def _async_voice_answer(
     from .home_companion import is_companion
     if authority is not None and not is_companion(access_key):
         if authority.current(hass) is None:
-            return voice_text(language, "token_unavailable")
+            return voice_text(language, "access_key_unavailable")
         from .voice_context import capture_voice_origin
         from .command_clarification import (async_clarification_reply, clarification_binding, clarification_prompt, is_clarification_cancel)
         origin = capture_voice_origin(hass, satellite_id, device_id)
@@ -196,7 +196,7 @@ async def _async_voice_answer(
                 language if isinstance(language, str) else 'en', ingress='voice', voice_origin=origin)
             access_key = authority.current(hass)
             if access_key is None:
-                return voice_text(language, 'token_unavailable')
+                return voice_text(language, 'access_key_unavailable')
             if reply is not None:
                 if not pending.get('_expired') and is_clarification_cancel(user_text):
                     from .command_execution import LocalCommandReply
@@ -213,7 +213,7 @@ async def _async_voice_answer(
         observation = await async_evaluate_command(hass, data, access_key, user_text, language or "en", **context)
         access_key = authority.current(hass)
         if access_key is None or observation['reason'] == 'authority_changed':
-            return voice_text(language, "token_unavailable")
+            return voice_text(language, "access_key_unavailable")
         if can_clarify and observation.get('_clarification') is not None:
             pending = observation['_clarification']
             data.command_routing.clarifications.remember(conversation, binding, pending)
@@ -222,7 +222,7 @@ async def _async_voice_answer(
         # Preserve the ordinary voice loop, including its zero inline wait.
         access_key = _current_dispatch_access_key(data, access_key.id)
         if access_key is None:
-            return voice_text(language, "token_unavailable")
+            return voice_text(language, "access_key_unavailable")
         if (settings.voice_agent_routing_mode in ("local", "local_shadow") and settings.decision_shadow_enabled and settings.decision_provider_id
                 and observation["reason"] in ("no_match", "unsupported", "no_target")):
             # Single-flight background observation: it cannot delay or influence
@@ -237,7 +237,7 @@ async def _async_voice_answer(
             if answer is not None:
                 return answer
             if authority.current(hass) is None:
-                return voice_text(language, "token_unavailable")
+                return voice_text(language, "access_key_unavailable")
         if routing_mode == "hybrid" and not observation["proposal"]:
             from .decision_shadow import async_preview_decision
             from .command_execution import async_execute_command_plan
@@ -247,7 +247,7 @@ async def _async_voice_answer(
             access_key = authority.current(hass)
             data.decision_shadow.observe_hybrid(decision, authority_changed=access_key is None)
             if access_key is None or decision["reason"] in ("authority_changed", "cancelled"):
-                return voice_text(language, "token_unavailable")
+                return voice_text(language, "access_key_unavailable")
             if decision.get("_plan") is not None:
                 return await async_execute_command_plan(
                     hass, data, access_key, decision["_plan"], authority, _base_url(hass), include_review_links, language=language,
@@ -354,7 +354,7 @@ def async_sync_voice_agent(hass: HomeAssistant, entry: Any, data: Any) -> None:
     """
     s = data.store.get_settings()
     fully_configured = bool(
-        s.voice_agent_enabled and s.voice_agent_token_id
+        s.voice_agent_enabled and s.voice_agent_access_key_id
         and s.voice_agent_provider_id and s.voice_agent_model
     )
     # Do not require data.ready: the agent is wired before the final ready flag is
@@ -459,7 +459,7 @@ async def async_create_assist_pipeline(
 
     s = data.store.get_settings()
     if not (
-        s.voice_agent_enabled and s.voice_agent_token_id
+        s.voice_agent_enabled and s.voice_agent_access_key_id
         and s.voice_agent_provider_id and s.voice_agent_model
     ):
         raise VoicePipelineError(

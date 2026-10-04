@@ -52,7 +52,7 @@ export function PersonaPicker(props: Props) {
       const updated = await api.patchAccessKey(props.accessKey.id, body);
       props.onUpdate(updated);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t("tokens.personaApplyFailed"));
+      setError(e instanceof Error ? e.message : t("accessKeys.personaApplyFailed"));
     } finally {
       setSaving(false);
     }

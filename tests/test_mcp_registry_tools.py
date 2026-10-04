@@ -43,7 +43,7 @@ def _access_key(
     return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="reg-token",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="user1",
         cap_registry_read=cap_registry_read,
@@ -1470,7 +1470,7 @@ class TestSearchMembership:
                 data.store.get_settings.return_value.kill_switch = True
             return func(matches, query)
 
-        authority = request_authority.set(RequestAuthority(hass, data, access_key.id, access_key.token_hash))
+        authority = request_authority.set(RequestAuthority(hass, data, access_key.id, access_key.access_key_hash))
         version = policy_version.set(access_key.settings_version)
         try:
             with patch.object(hass, "async_add_executor_job", side_effect=rank_after_change):

@@ -31,21 +31,21 @@ function addMinutes(m: number): string {
 
 interface Props {
   onCancel: () => void;
-  onFinish: (tokenId: string) => void;
+  onFinish: (accessKeyId: string) => void;
 }
 
 export function OnboardingWizard({ onCancel, onFinish }: Props) {
   const [step, setStep] = useState(0);
   const [branch, setBranch] = useState<Branch | null>(null);
   const [persona, setPersona] = useState<Persona | null>("new_user");
-  const [name, setName] = useState(() => t("tokens.namePlaceholder"));
+  const [name, setName] = useState(() => t("accessKeys.namePlaceholder"));
   const [ttlUnit, setTtlUnit] = useState<TtlUnit>("none");
   const [ttlValue, setTtlValue] = useState("24");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [rawAccessKey, setRawAccessKey] = useState<string | null>(null);
-  const [tokenId, setAccessKeyId] = useState<string | null>(null);
+  const [accessKeyId, setAccessKeyId] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<PermissionTree>({ domains: {}, devices: {}, entities: {} });
 
   const [entityTree, setEntityTree] = useState<EntityTreeData | null>(null);
@@ -91,7 +91,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
     try {
       const caps = PERSONA_CAP_DEFAULTS[persona];
       const patchBody: Record<string, unknown> = { persona, ...(caps || {}) };
-      if (!tokenId) {
+      if (!accessKeyId) {
         if (name && !NAME_REGEX.test(name)) {
           setError(t("wizard.nameError"));
           return;
@@ -104,7 +104,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
         }
         const body: CreateAccessKeyBody = { name, expires_at: expiresAt, pass_through: false };
         const resp = await api.createAccessKey(body);
-        const { token: raw, ...record } = resp;
+        const { access_key: raw, ...record } = resp;
         // Stash the irreversible bits BEFORE the persona patch so a patch
         // failure leaves a recoverable (retry-only-the-patch) state.
         setRawAccessKey(raw);
@@ -119,7 +119,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
         await api.patchAccessKey(record.id, patchBody);
       } else {
         // Token already created (back-navigation): re-apply persona only.
-        await api.patchAccessKey(tokenId, patchBody);
+        await api.patchAccessKey(accessKeyId, patchBody);
       }
       setStep(2);
     } catch (e) {
@@ -132,14 +132,14 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
   // Poll for connection while on the Test step.
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const poll = useCallback(async () => {
-    if (!tokenId) return;
+    if (!accessKeyId) return;
     try {
-      const c = await api.getAccessKeyConnection(tokenId);
+      const c = await api.getAccessKeyConnection(accessKeyId);
       if (c.request_count > 0) setConnected(true);
     } catch {
       // transient; keep polling
     }
-  }, [tokenId]);
+  }, [accessKeyId]);
 
   useEffect(() => {
     if (step !== 5 || branch !== "app" || connected) {
@@ -155,10 +155,10 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
   // their first prompt through the window it opened; close to the token page.
   useEffect(() => {
     if (step !== 5 || branch !== "chat") return;
-    const done = () => { if (tokenId) onFinish(tokenId); };
+    const done = () => { if (accessKeyId) onFinish(accessKeyId); };
     window.addEventListener("phx-agentcli-sent", done);
     return () => window.removeEventListener("phx-agentcli-sent", done);
-  }, [step, branch, tokenId, onFinish]);
+  }, [step, branch, accessKeyId, onFinish]);
 
   // Open Agent Chat on the new token with the chosen account/model preselected
   // and the test prompt pre-typed. Closing any already-open global window first
@@ -167,15 +167,15 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (window as any).__phxAgentChat?.close?.();
     patchAgentCliDurable({ instanceId, model, prefill: t("wizard.promptChat") });
-    window.dispatchEvent(new CustomEvent("phx-open-agentcli", { detail: { tokenId } }));
+    window.dispatchEvent(new CustomEvent("phx-open-agentcli", { detail: { accessKeyId } }));
     setStep(5);
-  }, [tokenId]);
+  }, [accessKeyId]);
 
   const prompts = buildTestPrompt(grantedFriendlyName || t("wizard.yourDevice"), mesaEnforced);
 
   const stepLabels = branch === "chat"
-    ? [t("wizard.stepPersona"), t("wizard.stepToken"), t("wizard.stepAccess"), t("wizard.stepChoose"), t("wizard.stepProvider"), t("wizard.stepTry")]
-    : [t("wizard.stepPersona"), t("wizard.stepToken"), t("wizard.stepAccess"), t("wizard.stepChoose"), t("wizard.stepConnect"), t("wizard.stepTest"), t("wizard.stepDone")];
+    ? [t("wizard.stepPersona"), t("wizard.stepAccessKey"), t("wizard.stepAccess"), t("wizard.stepChoose"), t("wizard.stepProvider"), t("wizard.stepTry")]
+    : [t("wizard.stepPersona"), t("wizard.stepAccessKey"), t("wizard.stepAccess"), t("wizard.stepChoose"), t("wizard.stepConnect"), t("wizard.stepTest"), t("wizard.stepDone")];
 
   function Stepper() {
     return (
@@ -211,17 +211,17 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
       case 1:
         return (
           <>
-            <h3 className="wizard-title">{t("wizard.tokenTitle")}</h3>
-            <p className="wizard-sub">{t("wizard.tokenSub")}</p>
+            <h3 className="wizard-title">{t("wizard.accessKeyTitle")}</h3>
+            <p className="wizard-sub">{t("wizard.accessKeySub")}</p>
             <div className="field">
               <label htmlFor="wiz-name">{t("wizard.nameLabel")}</label>
-              <input id="wiz-name" className="input" value={name} disabled={!!tokenId}
-                maxLength={32} onChange={(e) => setName(e.target.value)} placeholder={t("tokens.namePlaceholder")} />
+              <input id="wiz-name" className="input" value={name} disabled={!!accessKeyId}
+                maxLength={32} onChange={(e) => setName(e.target.value)} placeholder={t("accessKeys.namePlaceholder")} />
             </div>
             <div className="field">
               <label htmlFor="wiz-expiry-unit">{t("wizard.expiryLabel")}</label>
-              <div className="token-create-expiry-row">
-                <select id="wiz-expiry-unit" className="input input-auto" value={ttlUnit} disabled={!!tokenId}
+              <div className="access-key-create-expiry-row">
+                <select id="wiz-expiry-unit" className="input input-auto" value={ttlUnit} disabled={!!accessKeyId}
                   onChange={(e) => setTtlUnit(e.target.value as TtlUnit)}>
                   <option value="none">{t("wizard.expiryNone")}</option>
                   <option value="minutes">{t("wizard.expiryMinutes")}</option>
@@ -230,17 +230,17 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
                   <option value="weeks">{t("wizard.expiryWeeks")}</option>
                 </select>
                 {ttlUnit !== "none" && (
-                  <input className="input token-create-expiry-value" type="number" min={1}
+                  <input className="input access-key-create-expiry-value" type="number" min={1}
                     aria-label={t("wizard.expiryAmountAria")}
-                    value={ttlValue} disabled={!!tokenId} onChange={(e) => setTtlValue(e.target.value)} />
+                    value={ttlValue} disabled={!!accessKeyId} onChange={(e) => setTtlValue(e.target.value)} />
                 )}
               </div>
             </div>
-            {tokenId && <div className="banner banner-info">{t("wizard.tokenCreatedBanner")}</div>}
+            {accessKeyId && <div className="banner banner-info">{t("wizard.accessKeyCreatedBanner")}</div>}
             <div className="wizard-actions">
               <button className="btn btn-text" onClick={() => setStep(0)}>{t("wizard.back")}</button>
               <BusyButton className="btn btn-primary" busy={saving} onClick={createAndAdvance}>
-                {saving ? t("wizard.working") : tokenId ? t("wizard.next") : t("wizard.createToken")}
+                {saving ? t("wizard.working") : accessKeyId ? t("wizard.next") : t("wizard.createAccessKey")}
               </BusyButton>
             </div>
           </>
@@ -256,9 +256,9 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
                 <button className="btn btn-text btn-sm" onClick={() => setShowAllDomains(true)}>{t("wizard.showAllDevices")}</button>
               </div>
             )}
-            {tokenId && (
+            {accessKeyId && (
               <EntityTree
-                tokenId={tokenId}
+                accessKeyId={accessKeyId}
                 permissions={permissions}
                 onPermissionsChange={setPermissions}
                 domainAllowlist={showAllDomains ? undefined : ["light"]}
@@ -317,7 +317,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
               <h3 className="wizard-title">{t("wizard.chatReadyTitle")}</h3>
               <p className="wizard-sub">{tRich("wizard.chatReadySub", { strong: (c) => <strong>{c}</strong> })}</p>
               <div className="wizard-actions">
-                <button className="btn btn-primary" onClick={() => tokenId && onFinish(tokenId)}>{t("wizard.goToToken")}</button>
+                <button className="btn btn-primary" onClick={() => accessKeyId && onFinish(accessKeyId)}>{t("wizard.goToAccessKey")}</button>
               </div>
             </>
           );
@@ -356,7 +356,7 @@ export function OnboardingWizard({ onCancel, onFinish }: Props) {
             <h3 className="wizard-title">{t("wizard.doneTitle")}</h3>
             <p className="wizard-sub">{tRich("wizard.doneSub", { code: (c) => <code>{c}</code> }, { name })}</p>
             <div className="wizard-actions">
-              <button className="btn btn-primary" onClick={() => tokenId && onFinish(tokenId)}>{t("wizard.goToToken")}</button>
+              <button className="btn btn-primary" onClick={() => accessKeyId && onFinish(accessKeyId)}>{t("wizard.goToAccessKey")}</button>
             </div>
           </>
         );

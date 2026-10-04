@@ -16,8 +16,8 @@ vi.mock("../api", () => ({
 function record(over: Partial<ApprovalRecord> = {}): ApprovalRecord {
   return {
     id: "appr_summary",
-    token_id: "t1",
-    token_name: "foxy_token",
+    access_key_id: "t1",
+    access_key_name: "foxy_token",
     tool_name: "restart_ha",
     cap_name: "cap_restart",
     args: { technical: true },

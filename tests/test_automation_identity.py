@@ -29,7 +29,7 @@ async def identity_env(hass, tmp_path):
     (tmp_path / "configuration.yaml").write_text("automation: !include automations.yaml\n")
     reload = MagicMock()
     hass.services.async_register("automation", "reload", reload)
-    access_key = AccessKeyRecord(id="identity", name="identity", token_hash="x", created_at=utcnow(), created_by="u", cap_automation_write="allow")
+    access_key = AccessKeyRecord(id="identity", name="identity", access_key_hash="x", created_at=utcnow(), created_by="u", cap_automation_write="allow")
     data = PhoenixData(store=MagicMock(), rate_limiter=MagicMock(), audit=MagicMock(), versions=VersionStore())
     return access_key, data, reload
 

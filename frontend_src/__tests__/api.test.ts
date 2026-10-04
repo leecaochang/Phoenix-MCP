@@ -19,14 +19,14 @@ beforeEach(() => {
 });
 
 describe("api.listAccessKeys", () => {
-  it("sends GET to /api/phoenix-mcp/admin/tokens", async () => {
+  it("sends GET to /api/phoenix-mcp/admin/access-keys", async () => {
     const accessKeys = [{ id: "1", name: "test" }];
     globalThis.fetch = mockFetchResponse(200, accessKeys);
 
     const result = await api.listAccessKeys();
     expect(result).toEqual(accessKeys);
     expect(fetch).toHaveBeenCalledWith(
-      "/api/phoenix-mcp/admin/tokens",
+      "/api/phoenix-mcp/admin/access-keys",
       expect.objectContaining({ method: "GET" }),
     );
   });
@@ -34,14 +34,14 @@ describe("api.listAccessKeys", () => {
 
 describe("api.createAccessKey", () => {
   it("sends POST with JSON body", async () => {
-    const created = { id: "1", name: "new", token: "phx_abc" };
+    const created = { id: "1", name: "new", access_key: "phx_abc" };
     globalThis.fetch = mockFetchResponse(201, created);
 
     const result = await api.createAccessKey({ name: "new" });
     expect(result).toEqual(created);
 
     const [url, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(url).toBe("/api/phoenix-mcp/admin/tokens");
+    expect(url).toBe("/api/phoenix-mcp/admin/access-keys");
     expect(opts.method).toBe("POST");
     expect(JSON.parse(opts.body)).toEqual({ name: "new" });
   });
@@ -55,7 +55,7 @@ describe("api.patchAccessKey", () => {
     await api.patchAccessKey("tok-1", { pass_through: true, confirm_pass_through: true });
 
     const [url, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(url).toBe("/api/phoenix-mcp/admin/tokens/tok-1");
+    expect(url).toBe("/api/phoenix-mcp/admin/access-keys/tok-1");
     expect(opts.method).toBe("PATCH");
     expect(JSON.parse(opts.body)).toEqual({ pass_through: true, confirm_pass_through: true });
   });
@@ -67,7 +67,7 @@ describe("api.revokeAccessKey", () => {
 
     await api.revokeAccessKey("tok-1");
     expect(fetch).toHaveBeenCalledWith(
-      "/api/phoenix-mcp/admin/tokens/tok-1",
+      "/api/phoenix-mcp/admin/access-keys/tok-1",
       expect.objectContaining({ method: "DELETE" }),
     );
   });
@@ -104,11 +104,11 @@ describe("api.getAudit", () => {
   it("builds query string from params", async () => {
     globalThis.fetch = mockFetchResponse(200, { entries: [], total: 0 });
 
-    await api.getAudit({ limit: 50, outcome: "denied", token_id: "tok-1" });
+    await api.getAudit({ limit: 50, outcome: "denied", access_key_id: "tok-1" });
     const [url] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(url).toContain("limit=50");
     expect(url).toContain("outcome=denied");
-    expect(url).toContain("token_id=tok-1");
+    expect(url).toContain("access_key_id=tok-1");
   });
 
   it("sends no query string when params are empty", async () => {
@@ -126,7 +126,7 @@ describe("api.resolve", () => {
 
     await api.resolve("tok-1", "light.kitchen");
     const [url] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(url).toBe("/api/phoenix-mcp/admin/tokens/tok-1/resolve/light.kitchen");
+    expect(url).toBe("/api/phoenix-mcp/admin/access-keys/tok-1/resolve/light.kitchen");
   });
 });
 
@@ -135,7 +135,7 @@ describe("api.getAccessKeyConnection", () => {
     globalThis.fetch = mockFetchResponse(200, { last_used_at: null, request_count: 0 });
     await api.getAccessKeyConnection("tok-1");
     const [url, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(url).toBe("/api/phoenix-mcp/admin/tokens/tok-1/connection");
+    expect(url).toBe("/api/phoenix-mcp/admin/access-keys/tok-1/connection");
     expect(opts.method).toBe("GET");
   });
 });
@@ -282,15 +282,15 @@ describe("api.patchSettings", () => {
   });
 
   it("binds and unbinds the Assist token", async () => {
-    globalThis.fetch = mockFetchResponse(200, { assist_bound_token_id: "tok-1" });
-    await api.patchSettings({ assist_bound_token_id: "tok-1" });
+    globalThis.fetch = mockFetchResponse(200, { assist_bound_access_key_id: "tok-1" });
+    await api.patchSettings({ assist_bound_access_key_id: "tok-1" });
     let [, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(JSON.parse(opts.body)).toEqual({ assist_bound_token_id: "tok-1" });
+    expect(JSON.parse(opts.body)).toEqual({ assist_bound_access_key_id: "tok-1" });
 
-    globalThis.fetch = mockFetchResponse(200, { assist_bound_token_id: null });
-    await api.patchSettings({ assist_bound_token_id: null });
+    globalThis.fetch = mockFetchResponse(200, { assist_bound_access_key_id: null });
+    await api.patchSettings({ assist_bound_access_key_id: null });
     [, opts] = (fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-    expect(JSON.parse(opts.body)).toEqual({ assist_bound_token_id: null });
+    expect(JSON.parse(opts.body)).toEqual({ assist_bound_access_key_id: null });
   });
 
   it("patches voice-agent config fields", async () => {
@@ -401,7 +401,7 @@ describe("Home Assistant authentication", () => {
 
     await api.listAccessKeys();
     expect(fetchWithAuth).toHaveBeenCalledWith(
-      "/api/phoenix-mcp/admin/tokens",
+      "/api/phoenix-mcp/admin/access-keys",
       expect.objectContaining({ method: "GET" }),
     );
     expect(refreshAccessToken).not.toHaveBeenCalled();
@@ -509,7 +509,7 @@ it("sends the current panel language with chat using live HA authentication", as
   });
   setLanguagePreference("auto");
   setHass({ language: "fr", fetchWithAuth });
-  const body = { token_id: "t", instance_id: "i", messages: [], user: "hello" };
+  const body = { access_key_id: "t", instance_id: "i", messages: [], user: "hello" };
   await agentCliChat(body, vi.fn());
   expect(fetchWithAuth).toHaveBeenCalledTimes(1);
   expect(JSON.parse(fetchWithAuth.mock.calls[0][1].body)).toEqual({ ...body, language: "fr" });
@@ -525,7 +525,7 @@ describe("api.previewCommandRoute", () => {
     await api.previewCommandRoute("t", "打开台灯", true, true, language);
     expect(fetch).toHaveBeenCalledWith("/api/phoenix-mcp/admin/command-routing/preview", expect.objectContaining({
       method: "POST",
-      body: JSON.stringify({ token_id: "t", sentence: "打开台灯", language, decision: true, targets: true }),
+      body: JSON.stringify({ access_key_id: "t", sentence: "打开台灯", language, decision: true, targets: true }),
     }));
   });
 });
@@ -587,7 +587,7 @@ it("does not dispatch a queued permission edit under a different HA user", async
   expect(requests).toHaveBeenCalledOnce();
 });
 
-it.each([null, 42, "unexpected", { error: "parse_error" }, [null]])("refuses malformed token-list success data: %j", async (body) => {
+it.each([null, 42, "unexpected", { error: "parse_error" }, [null]])("refuses malformed access-key-list success data: %j", async (body) => {
   globalThis.fetch = mockFetchResponse(200, body);
   await expect(api.listAccessKeys()).rejects.toMatchObject({ status: 502, code: "invalid_response" });
 });

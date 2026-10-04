@@ -125,7 +125,7 @@ describe("buildAgentTabs", () => {
     }
   });
 
-  it("threads the token-derived server name into every tab", () => {
+  it("threads the access-key-derived server name into every tab", () => {
     const tabs = buildAgentTabs("http://ha/api/phoenix-mcp", "phx_abc", "Voice_Assist");
     expect(tabs.find((t) => t.key === "claude")!.blocks[0].code).toContain("phx-voice-assist");
     expect(tabs.find((t) => t.key === "gemini")!.blocks[0].code).toContain("phx-voice-assist");

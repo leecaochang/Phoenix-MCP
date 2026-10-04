@@ -45,7 +45,7 @@ def location_env(hass):
     hass.states.async_set(entity.entity_id, "off")
     labels = [lr.async_get(hass).async_create(name).label_id for name in ("first", "second")]
     access_key = AccessKeyRecord(
-        id="location-token", name="Location test", token_hash="hash", created_at=utcnow(),
+        id="location-token", name="Location test", access_key_hash="hash", created_at=utcnow(),
         created_by="test", cap_registry_write="allow", cap_registry_read="allow",
         permissions=PermissionTree(devices={device.id: PermissionNode(state="GREEN")}),
     )
@@ -288,8 +288,8 @@ async def test_dispatch_readback_failure_is_uncertain_without_retry(hass, locati
 
 async def test_authority_loss_during_history_does_not_undo_commit(hass, location_env):
     access_key, data, _, area_id, *_ = location_env
-    authority = RequestAuthority(hass=hass, data=data, token_id=access_key.id,
-                                 token_hash=access_key.token_hash)
+    authority = RequestAuthority(hass=hass, data=data, access_key_id=access_key.id,
+                                 access_key_hash=access_key.access_key_hash)
     ctx = request_authority.set(authority)
     policy_ctx = policy_version.set(access_key.settings_version)
 

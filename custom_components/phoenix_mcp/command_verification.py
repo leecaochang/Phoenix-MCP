@@ -92,7 +92,7 @@ async def async_verify_command_state(hass: Any, data: Any, access_key: Any, plan
     proposal = plan.get("proposal", {})
     if service_arguments(proposal) is None:
         return "unconfirmed"
-    authority = RequestAuthority(hass, data, access_key.id, access_key.token_hash)
+    authority = RequestAuthority(hass, data, access_key.id, access_key.access_key_hash)
     loop = asyncio.get_running_loop()
     deadline = loop.time() + COMMAND_VERIFICATION_WAIT_SECONDS
     while True:

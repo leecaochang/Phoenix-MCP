@@ -249,7 +249,7 @@ async def test_replacing_timed_override_preserves_original_baseline():
     await manager.async_set(
         domain="demo", desired=IntegrationOverride("INFO", "none"),
         prior=IntegrationOverride("WARNING", "none"),
-        loggers={"homeassistant.components.demo"}, owner_token_id="second",
+        loggers={"homeassistant.components.demo"}, owner_access_key_id="second",
         duration_minutes=10,
     )
     assert manager.records["demo"].prior == original
@@ -269,7 +269,7 @@ async def test_storage_failure_disables_timers_without_blocking_initialization()
         await manager.async_set(
             domain="demo", desired=IntegrationOverride("WARNING", "none"),
             prior=None, loggers={"homeassistant.components.demo"},
-            owner_token_id="token", duration_minutes=5,
+            owner_access_key_id="token", duration_minutes=5,
         )
     manager.adapter.apply.assert_not_awaited()
 

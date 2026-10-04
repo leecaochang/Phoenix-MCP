@@ -9,8 +9,8 @@ import { auditSourceLabel, isNamedAuditSource } from "../utils/audit_source";
 interface Props {
   entries: AuditEntry[];
   loading?: boolean;
-  // Current token_id -> name, so a renamed token's existing audit rows show its
-  // current name. The stored entry.token_name is the fallback for tokens no
+  // Current access_key_id -> name, so a renamed token's existing audit rows show its
+  // current name. The stored entry.access_key_name is the fallback for tokens no
   // longer active (archived/revoked) and for admin actions.
   accessKeyNames?: Record<string, string>;
 }
@@ -71,7 +71,7 @@ const OUTCOME_CLASS: Record<Outcome, string> = {
   pending_approval: "outcome-pending_approval",
 };
 
-type SortKey = "timestamp" | "token_name" | "method" | "resource" | "outcome" | "client_ip";
+type SortKey = "timestamp" | "access_key_name" | "method" | "resource" | "outcome" | "client_ip";
 type SortDir = "asc" | "desc";
 
 function SortArrow({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
@@ -111,12 +111,12 @@ function EntryDetailModal({ entry, accessKeyName, onClose, onNavigatePrevious, o
       <h3 className="modal-title audit-section-title" id="audit-detail-title">{t("audit.detailTitle")}</h3>
       <DetailRow label={t("audit.rowTime")} value={formatTs(entry.timestamp)} />
       <DetailRow
-        label={t("audit.rowToken")}
-        value={accessKeyName !== entry.token_name
-          ? `${formatAccessKeyName(accessKeyName)} (${formatAccessKeyName(entry.token_name)})`
+        label={t("audit.rowAccessKey")}
+        value={accessKeyName !== entry.access_key_name
+          ? `${formatAccessKeyName(accessKeyName)} (${formatAccessKeyName(entry.access_key_name)})`
           : formatAccessKeyName(accessKeyName)}
       />
-      <DetailRow label={t("audit.rowMode")} value={entry.pass_through ? t("tokens.passThrough") : t("tokens.scoped")} />
+      <DetailRow label={t("audit.rowMode")} value={entry.pass_through ? t("accessKeys.passThrough") : t("accessKeys.scoped")} />
       <DetailRow label={t("audit.rowMethod")} value={entry.method} mono />
       <DetailRow label={t("audit.rowResource")} value={friendlyResource(entry.resource)} mono />
       <DetailRow label={t("audit.rowOutcome")} value={outcomeLabel(entry)} />
@@ -147,7 +147,7 @@ export function AuditTable({ entries, loading, accessKeyNames }: Props) {
 
   // Prefer the token's current name (by id) over the snapshot stored on the row,
   // so a rename is reflected in its historical audit entries.
-  const displayName = (e: AuditEntry): string => accessKeyNames?.[e.token_id] ?? e.token_name;
+  const displayName = (e: AuditEntry): string => accessKeyNames?.[e.access_key_id] ?? e.access_key_name;
 
   if (loading) {
     return <div className="loading-wrap"><div className="spinner" /><span>{t("common.loading")}</span></div>;
@@ -168,10 +168,10 @@ export function AuditTable({ entries, loading, accessKeyNames }: Props) {
   }
 
   const sorted = [...entries].sort((a, b) => {
-    const va = sortKey === "token_name"
+    const va = sortKey === "access_key_name"
       ? displayName(a)
       : sortKey === "client_ip" ? auditSourceLabel(a.client_ip) : (a[sortKey] ?? "");
-    const vb = sortKey === "token_name"
+    const vb = sortKey === "access_key_name"
       ? displayName(b)
       : sortKey === "client_ip" ? auditSourceLabel(b.client_ip) : (b[sortKey] ?? "");
     if (va < vb) return sortDir === "asc" ? -1 : 1;
@@ -213,7 +213,7 @@ export function AuditTable({ entries, loading, accessKeyNames }: Props) {
         <thead>
           <tr>
             {th(t("audit.rowOutcome"), "outcome")}
-            {th(t("audit.rowToken"), "token_name")}
+            {th(t("audit.rowAccessKey"), "access_key_name")}
             {th(t("audit.rowTime"), "timestamp")}
             {th(t("audit.rowMethod"), "method")}
             {th(t("audit.rowResource"), "resource")}

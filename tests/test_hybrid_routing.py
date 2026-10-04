@@ -33,7 +33,7 @@ async def hybrid_home(hass, access_key_store, immediate_command_observation):
     # Generic sequential protocol; jev_hybrid_home configures the qualified JEV variant.
     decision = await store.add("typesafe", {"api_key": "decision-secret", "model": "test-model"})
     chat = await store.add("deepseek", {"api_key": "chat-secret", "model": "chat"})
-    await access_key_store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=access_key.id,
+    await access_key_store.async_patch_settings(voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
         voice_agent_provider_id=chat, voice_agent_model="chat", voice_agent_routing_mode="hybrid",
         decision_provider_id=decision, mesa_mode="off", command_routing_timeout_ms=5000)
     assert await async_setup_component(hass, "homeassistant", {})

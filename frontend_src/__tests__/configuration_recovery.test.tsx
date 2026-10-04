@@ -10,7 +10,7 @@ vi.mock("../api", () => ({
 }));
 
 const recovery: ApprovalRecord = {
-  id: "appr_recovery", token_id: "__configuration_recovery__", token_name: "Phoenix MCP",
+  id: "appr_recovery", access_key_id: "__configuration_recovery__", access_key_name: "Phoenix MCP",
   tool_name: "restore_configuration", cap_name: "__configuration_recovery__",
   args: { recovery_id: "saved-record", side: "before" },
   diff: {

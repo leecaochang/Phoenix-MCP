@@ -65,7 +65,7 @@ class CalendarWriteJournal:
                             or not row["receipt_id"] or row["receipt_id"] in seen
                             or row.get("status") not in {"outcome_unknown", "applied", "reviewed", "not_applied"}
                             or not all(isinstance(row.get(key), str) and row[key]
-                                       for key in ("entity_id", "token_id", "created_at", "recovery"))
+                                       for key in ("entity_id", "access_key_id", "created_at", "recovery"))
                             or row.get("operation") not in {"create", "update", "delete"}
                             or not isinstance(row.get("identity"), dict)
                             or not isinstance(row.get("requested"), dict)
@@ -375,7 +375,7 @@ async def _execute_calendar_write(args: dict, access_key: AccessKeyRecord, hass:
                 if removable is None:
                     raise ValueError("Calendar recovery storage is full. No write was dispatched.")
                 records.remove(removable)
-            receipt = {"receipt_id": uuid.uuid4().hex, "token_id": access_key.id,
+            receipt = {"receipt_id": uuid.uuid4().hex, "access_key_id": access_key.id,
                        "identity": target_binding([entity_id], hass), "entity_id": entity_id,
                        "status": "outcome_unknown", "created_at": dt_util.utcnow().isoformat(),
                        "operation": operation, "before": copy.deepcopy(plan["before"]),
@@ -472,7 +472,7 @@ async def _execute_calendar_write(args: dict, access_key: AccessKeyRecord, hass:
 def _calendar_result(receipt: dict, access_key: AccessKeyRecord, hass: HomeAssistant, *, error: bool = False) -> tuple[dict, str, str]:
     check_request_authority()
     _calendar_entity(receipt["entity_id"], access_key, hass)
-    body = {key: value for key, value in receipt.items() if key not in ("token_id", "identity")}
+    body = {key: value for key, value in receipt.items() if key not in ("access_key_id", "identity")}
     if receipt["after"] is not None:
         body["after"] = {**receipt["after"], "content_hash": content_hash(receipt["after"])}
     result = _tool_success(json.dumps(_safe_calendar_data(body, access_key, hass)))
@@ -502,7 +502,7 @@ async def _tool_get_calendar_write(args: dict, access_key: AccessKeyRecord, hass
     async with journal.lock:
         records = await journal.load()
         check_request_authority()
-        visible = [row for row in records if row["entity_id"] == args["entity_id"] and row["token_id"] == access_key.id
+        visible = [row for row in records if row["entity_id"] == args["entity_id"] and row["access_key_id"] == access_key.id
                    and row["identity"] == target_binding([args["entity_id"]], hass)]
         if "receipt_id" not in args:
             check_request_authority()

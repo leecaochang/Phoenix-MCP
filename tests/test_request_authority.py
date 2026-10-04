@@ -36,7 +36,7 @@ async def _environment(hass):
     access_key, raw = await store.async_create_access_key('audit-boundary', 'admin', rate_limit_requests=0)
     access_key.pass_through = True
     data = PhoenixData(store=store, rate_limiter=RateLimiter(), audit=AuditLog())
-    data.mcp_sessions["authority-session"] = {"token_id": access_key.id, "initialized": True,
+    data.mcp_sessions["authority-session"] = {"access_key_id": access_key.id, "initialized": True,
         "last_seen": mcp_view.time.monotonic(), "protocol_version": "2025-03-26"}
     hass.data[DOMAIN] = data
     return data, access_key, raw
@@ -297,7 +297,7 @@ async def _internal_ingress(kind, hass, data, access_key, name, arguments):
     call = {'id': 'call', 'name': name, 'input': arguments}
     if kind == 'interactive':
         result = await agentcli._run_tool_batch(
-            [call], hass=hass, data=data, token_id=access_key.id, client_ip='agentcli',
+            [call], hass=hass, data=data, access_key_id=access_key.id, client_ip='agentcli',
             base_url='http://example.invalid', emit=AsyncMock(), cancel=asyncio.Event(),
         )
         return result.results

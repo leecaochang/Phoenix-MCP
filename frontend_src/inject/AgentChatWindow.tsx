@@ -33,9 +33,9 @@ interface BootData {
 }
 
 function Boot({
-  tokenId, onClose, summonVersion,
+  accessKeyId, onClose, summonVersion,
 }: {
-  tokenId: string;
+  accessKeyId: string;
   onClose: () => void;
   summonVersion: number;
 }) {
@@ -89,7 +89,7 @@ function Boot({
       accessKeys={data.accessKeys}
       instances={data.instances}
       scrollbackLines={data.scrollback}
-      initialAccessKeyId={tokenId || data.accessKeys[0]?.id || ""}
+      initialAccessKeyId={accessKeyId || data.accessKeys[0]?.id || ""}
       onClose={onClose}
       hass={getHass()}
       getHass={getHass}
@@ -150,7 +150,7 @@ function paintAgentChat(): void {
   root?.render(
     <ErrorBoundary key={persistenceOwner} onClose={hideAgentChat}>
     <Boot
-      tokenId={activeAccessKeyId}
+      accessKeyId={activeAccessKeyId}
       onClose={hideAgentChat}
       summonVersion={summonVersion}
     />
@@ -235,8 +235,8 @@ export function hideAgentChat(): void {
   summonVersion = 0;
 }
 
-export function showAgentChat(tokenId?: string): void {
-  if (tokenId !== undefined) activeAccessKeyId = tokenId;
+export function showAgentChat(accessKeyId?: string): void {
+  if (accessKeyId !== undefined) activeAccessKeyId = accessKeyId;
   if (host) {
     // Keep the mounted chat and its live conversation intact. A fresh render of
     // the same Boot tree only changes this signal; AgentCliWindow uses it to

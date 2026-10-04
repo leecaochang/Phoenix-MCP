@@ -110,7 +110,7 @@ export interface AccessKeyRecord extends CapabilityFlagsMap {
 }
 
 export interface AccessKeyCreateResponse extends AccessKeyRecord {
-  token: string;
+  access_key: string;
 }
 
 export interface ArchivedAccessKeyRecord {
@@ -151,7 +151,7 @@ export interface GlobalSettings {
   audit_log_maxlen: number;
   mesa_mode: MesaMode;
   mesa_inject_enabled: boolean;
-  token_presets_enabled: boolean;
+  access_key_presets_enabled: boolean;
   agentcli_scrollback_lines: number;
   agentcli_max_iterations: number;
   agentcli_global: boolean;
@@ -160,7 +160,7 @@ export interface GlobalSettings {
   agentcli_home_focused: boolean;
   // Assist bridge: the token id whose scoped tools HA's native Assist/voice
   // pipeline resolves against (null = unbound). Writable.
-  assist_bound_token_id?: string | null;
+  assist_bound_access_key_id?: string | null;
   // Read-only: whether the running HA exposes the llm.API seam (server-computed,
   // not persisted). The Assist bind toggle is disabled when false.
   assist_api_supported?: boolean;
@@ -176,7 +176,7 @@ export interface GlobalSettings {
   decision_timeout_ms?: number;
   decision_request_budget?: number;
   voice_agent_enabled?: boolean;
-  voice_agent_token_id?: string | null;
+  voice_agent_access_key_id?: string | null;
   voice_agent_provider_id?: string | null;
   voice_agent_model?: string | null;
   voice_agent_conversation_style?: ConversationStyle;
@@ -190,7 +190,7 @@ export interface GlobalSettings {
   // Phoenix MCP AI Task entity: Phoenix MCP registered as an HA AITaskEntity running its own model
   // on the chosen token's scope. Independent of the voice agent and the bridge.
   ai_task_enabled?: boolean;
-  ai_task_token_id?: string | null;
+  ai_task_access_key_id?: string | null;
   ai_task_provider_id?: string | null;
   ai_task_model?: string | null;
   ai_task_conversation_style?: ConversationStyle;
@@ -423,8 +423,8 @@ export interface MesaImportResult {
 export interface AuditEntry {
   request_id: string;
   timestamp: string;
-  token_id: string;
-  token_name: string;
+  access_key_id: string;
+  access_key_name: string;
   method: string;
   resource: string;
   outcome: Outcome;
@@ -506,8 +506,8 @@ export interface AccessKeyConnection {
 }
 
 export interface AccessKeyStats {
-  token_id: string;
-  token_name: string;
+  access_key_id: string;
+  access_key_name: string;
   request_count: number;
   denied_count: number;
   rate_limit_hits: number;
@@ -516,8 +516,8 @@ export interface AccessKeyStats {
 }
 
 export interface ScopeResult {
-  token_id: string;
-  token_name: string;
+  access_key_id: string;
+  access_key_name: string;
   readable: string[];
   writable: string[];
   persona: Persona;
@@ -582,7 +582,7 @@ export interface PermissionPatchBody {
 export interface AuditQueryParams {
   limit?: number;
   offset?: number;
-  token_id?: string;
+  access_key_id?: string;
   outcome?: string;
   ip?: string;
   method?: string;
@@ -645,8 +645,8 @@ export interface BatchApproveResult {
 
 export interface ApprovalRecord {
   id: string;
-  token_id: string;
-  token_name: string;
+  access_key_id: string;
+  access_key_name: string;
   tool_name: string;
   cap_name: string;
   args: Record<string, unknown>;
@@ -677,7 +677,7 @@ export interface ApprovalListResponse {
 
 export interface ApprovalListParams {
   status?: ApprovalStatus;
-  token_id?: string;
+  access_key_id?: string;
   limit?: number;
   offset?: number;
 }
@@ -710,8 +710,8 @@ export interface VersionSummary {
   resource_id: string;
   alias: string | null;
   action: VersionAction;
-  token_id: string | null;
-  token_name: string | null;
+  access_key_id: string | null;
+  access_key_name: string | null;
   approved_by_user_id: string | null;
   timestamp: string;
   // One-line what-changed description (older records have none), plus the
@@ -731,8 +731,8 @@ export interface VersionRecord {
   action: VersionAction;
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;
-  token_id: string | null;
-  token_name: string | null;
+  access_key_id: string | null;
+  access_key_name: string | null;
   request_id: string | null;
   approved_by_user_id: string | null;
   timestamp: string;
@@ -887,7 +887,7 @@ export interface AttentionItem {
   id: string;
   kind: "agent" | "calendar" | "mesa" | "calendar_storage";
   tool?: string;
-  token_name?: string;
+  access_key_name?: string;
   started_at?: string;
   entity_id?: string;
   dispatch_result?: string;

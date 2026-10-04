@@ -26,7 +26,7 @@ def _may_restore_record(record: dict | None, access_key) -> bool:
     if record is None:
         return False
     context = _restore_ctx.get()
-    return record.get("token_id") == access_key.id or (
+    return record.get("access_key_id") == access_key.id or (
         context is not None and access_key.id == f"__restore__:{context['user_id']}"
     )
 

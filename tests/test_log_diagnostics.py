@@ -773,7 +773,7 @@ async def test_detail_references_are_bound_to_token_namespace_and_current_bucket
     body, _result, _outcome = await _call("get_logs", {}, access_key=access_key, hass=hass, data=data)
     args = {"detail_ref": body["entries"][0]["detail_ref"]}
     other, _ = _make_token(cap_log_read="allow")
-    data.store.get_access_key_by_hash.side_effect = lambda value: access_key if value == access_key.token_hash else other if value == other.token_hash else None
+    data.store.get_access_key_by_hash.side_effect = lambda value: access_key if value == access_key.access_key_hash else other if value == other.access_key_hash else None
     for tool, caller in (("get_logs", other), ("get_phoenix_diagnostics", access_key)):
         error, result, outcome = await _call(tool, args, access_key=caller, hass=hass, data=data)
         assert outcome == "invalid_request" and result["isError"]
@@ -850,7 +850,7 @@ async def test_detail_authority_changes_during_collection_block_disclosure(chang
         if change == "revoke":
             access_key.revoked = True
         elif change == "rotate":
-            access_key.token_hash = "different"
+            access_key.access_key_hash = "different"
         elif change == "kill":
             data.store.get_settings().kill_switch = True
         elif change == "unload":

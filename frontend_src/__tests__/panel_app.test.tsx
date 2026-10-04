@@ -28,7 +28,7 @@ const { apiMock } = vi.hoisted(() => {
     ...Object.fromEntries(CAPS.map((c) => [c, "deny"])),
   };
   const approval = {
-    id: "ap-9", token_id: accessKey.id, token_name: accessKey.name,
+    id: "ap-9", access_key_id: accessKey.id, access_key_name: accessKey.name,
     cap_name: "cap_restart", tool_name: "restart_ha", args: {},
     status: "pending", created_at: new Date().toISOString(),
     expires_at: new Date(Date.now() + 60_000).toISOString(),

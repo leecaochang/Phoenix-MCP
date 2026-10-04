@@ -78,7 +78,7 @@ async def test_permissions_put_returns_400_not_500_for_bad_section():
 
     body = json.dumps({"domains": []}).encode()
     request = _make_admin_request(body=body)
-    resp = await view.put(request, token_id=access_key.id)
+    resp = await view.put(request, access_key_id=access_key.id)
 
     assert resp.status == 400
 
@@ -229,7 +229,7 @@ async def test_patch_rejects_non_integer_rate_limits(payload):
     view = PhoenixAdminAccessKeyView()
     view.hass = hass
 
-    resp = await view.patch(_make_admin_request(body=json.dumps(payload).encode()), token_id=access_key.id)
+    resp = await view.patch(_make_admin_request(body=json.dumps(payload).encode()), access_key_id=access_key.id)
 
     assert resp.status == 400, f"{payload!r} should be refused"
     data.store.async_patch_access_key.assert_not_called()

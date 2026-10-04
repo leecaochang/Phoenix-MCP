@@ -25,7 +25,7 @@ PKG = REPO / "custom_components" / "phoenix_mcp"
 
 # Names that hold a secret or its digest. A == against any of these is forbidden:
 # tokens are compared with hmac.compare_digest on their SHA-256 hashes.
-SECRET_NAMES = {"token_hash", "presented_hash", "stored_hash", "presented_token", "raw_access_key"}
+SECRET_NAMES = {"access_key_hash", "presented_hash", "stored_hash", "presented_token", "raw_access_key"}
 
 
 def _package_files() -> list[pathlib.Path]:
@@ -91,7 +91,7 @@ def test_authentication_lookups_route_through_the_helper():
     tree = ast.parse(src)
     lookups = [n for n in ast.walk(tree)
                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))
-               and "token_hash" in ast.unparse(n)
+               and "access_key_hash" in ast.unparse(n)
                and n.name != "hmac_compare"
                and ("get_access_key_by_hash" in n.name or "by_hash" in n.name)]
     assert lookups, "no token-by-hash lookup found; has it been renamed?"

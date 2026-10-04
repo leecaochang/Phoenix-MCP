@@ -51,11 +51,11 @@ def _make_token(
     from homeassistant.util.dt import utcnow
 
     raw = _raw_token()
-    token_hash = hashlib.sha256(raw.encode()).hexdigest()
+    access_key_hash = hashlib.sha256(raw.encode()).hexdigest()
     record = AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="test-token",
-        token_hash=token_hash,
+        access_key_hash=access_key_hash,
         created_at=utcnow(),
         created_by="user1",
         pass_through=pass_through,
@@ -2586,7 +2586,7 @@ def _make_physical_token(cap_physical_control: str) -> AccessKeyRecord:
     return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="phys-token",
-        token_hash=hashlib.sha256(raw.encode()).hexdigest(),
+        access_key_hash=hashlib.sha256(raw.encode()).hexdigest(),
         created_at=utcnow(),
         created_by="user1",
         cap_physical_control=cap_physical_control,
@@ -2944,7 +2944,7 @@ def _approval_record(status: str, *, result=None, rejected_reason=None) -> dict:
     from homeassistant.util.dt import utcnow
     from datetime import timedelta
     return {
-        "id": "appr-1", "token_id": "tid", "token_name": "t",
+        "id": "appr-1", "access_key_id": "tid", "access_key_name": "t",
         "tool_name": "create_scene", "cap_name": "cap_scene_write",
         "args": {}, "diff": {}, "status": status,
         "created_at": utcnow().isoformat(),
@@ -3860,11 +3860,11 @@ async def test_prompts_list_returns_the_assist_prompt_for_a_pass_through_token()
 # --- the inline wait steps aside once a backlog exists (batch approval) --------
 
 
-def _pending_for(approval_id: str, token_id: str = "tid") -> dict:
+def _pending_for(approval_id: str, access_key_id: str = "tid") -> dict:
     """A stored pending record, shaped like _approval_record but addressable."""
     rec = _approval_record("pending")
     rec["id"] = approval_id
-    rec["token_id"] = token_id
+    rec["access_key_id"] = access_key_id
     return rec
 
 
@@ -3954,7 +3954,7 @@ async def test_another_tokens_backlog_does_not_suppress_this_tokens_wait():
     access_key = _make_physical_token("confirm")
     access_key.confirm_inline_wait_seconds = 60
     access_key.id = "tid"
-    data = _inline_wait_data([_pending_for("appr-9", token_id="someone-else")])
+    data = _inline_wait_data([_pending_for("appr-9", access_key_id="someone-else")])
 
     with patch("custom_components.phoenix_mcp.tool_common._await_inline_confirm",
                new=AsyncMock(return_value=("x", "pending_approval", "r"))) as inline:
@@ -4022,7 +4022,7 @@ async def test_wait_for_many_refuses_another_tokens_approval(hass):
 
     other = _approval_record("pending")
     other["id"] = "appr-1"
-    other["token_id"] = "someone-else"
+    other["access_key_id"] = "someone-else"
     data = _inline_wait_data([other])
     access_key = _make_physical_token("confirm")
     access_key.id = "tid"

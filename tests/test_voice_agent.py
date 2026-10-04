@@ -209,7 +209,7 @@ async def test_voice_turn_pending_becomes_queued_without_blocking():
     provider = _MockProvider()
     record = SimpleNamespace(
         id="ap1", status="pending", expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
-        token_id=access_key.id, tool_name="call_service", request_id="",
+        access_key_id=access_key.id, tool_name="call_service", request_id="",
     )
 
     async def dispatch_pending(method, msg_id, params, *a, **k):
@@ -239,7 +239,7 @@ async def test_voice_turn_appends_review_link_only_when_requested():
     data = _make_data()
     record = SimpleNamespace(
         id="ap1", status="pending", expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
-        token_id=access_key.id, tool_name="call_service", request_id="",
+        access_key_id=access_key.id, tool_name="call_service", request_id="",
     )
 
     async def dispatch_pending(method, msg_id, params, *a, **k):
@@ -451,7 +451,7 @@ async def test_voice_answer_disabled_is_unavailable():
 
 @pytest.mark.asyncio
 async def test_voice_answer_incomplete_config():
-    data = _make_data(voice_agent_enabled=True, voice_agent_token_id=None)
+    data = _make_data(voice_agent_enabled=True, voice_agent_access_key_id=None)
     text = await voice_agent.async_voice_answer(MagicMock(), data, "hi")
     assert "not fully configured" in text.lower()
 
@@ -459,7 +459,7 @@ async def test_voice_answer_incomplete_config():
 @pytest.mark.asyncio
 async def test_voice_answer_happy_path_runs_the_loop():
     data = _make_data(
-        voice_agent_enabled=True, voice_agent_token_id="tok-1",
+        voice_agent_enabled=True, voice_agent_access_key_id="tok-1",
         voice_agent_provider_id="i1", voice_agent_model="m",
     )
     store = MagicMock()
@@ -475,7 +475,7 @@ async def test_voice_answer_happy_path_runs_the_loop():
 @pytest.mark.asyncio
 async def test_voice_answer_unknown_provider_is_misconfigured():
     data = _make_data(
-        voice_agent_enabled=True, voice_agent_token_id="tok-1",
+        voice_agent_enabled=True, voice_agent_access_key_id="tok-1",
         voice_agent_provider_id="gone", voice_agent_model="m",
     )
     store = MagicMock()
@@ -549,7 +549,7 @@ def test_spoken_text_removes_formatting_without_changing_literal_symbols(
 
 
 _FULL_CFG = dict(
-    voice_agent_enabled=True, voice_agent_token_id="t",
+    voice_agent_enabled=True, voice_agent_access_key_id="t",
     voice_agent_provider_id="p", voice_agent_model="m",
 )
 
@@ -563,7 +563,7 @@ def test_sync_registers_only_when_fully_configured():
         assert unset_agent.call_count == 0
 
         # Enabled but no provider selected: NOT registered (would answer "not configured").
-        voice_agent.async_sync_voice_agent(hass, entry, _make_data(voice_agent_enabled=True, voice_agent_token_id="t"))
+        voice_agent.async_sync_voice_agent(hass, entry, _make_data(voice_agent_enabled=True, voice_agent_access_key_id="t"))
         assert set_agent.call_count == 1
         assert unset_agent.call_count == 1
 
@@ -749,7 +749,7 @@ async def test_create_pipeline_sets_preferred_and_tracks_id():
 
 @pytest.mark.asyncio
 async def test_create_pipeline_requires_full_config():
-    data = _make_pipeline_data(voice_agent_enabled=True, voice_agent_token_id="t")  # no provider/model
+    data = _make_pipeline_data(voice_agent_enabled=True, voice_agent_access_key_id="t")  # no provider/model
     with patch.object(voice_agent, "_pipeline_store", return_value=_FakePipelineStore()):
         with pytest.raises(voice_agent.VoicePipelineError):
             await voice_agent.async_create_assist_pipeline(

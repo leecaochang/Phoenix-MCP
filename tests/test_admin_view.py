@@ -58,11 +58,11 @@ def _make_active_token(name: str = "test-token", pass_through: bool = False) -> 
     from homeassistant.util.dt import utcnow
 
     raw = ACCESS_KEY_PREFIX + secrets.token_hex(32)
-    token_hash = hashlib.sha256(raw.encode()).hexdigest()
+    access_key_hash = hashlib.sha256(raw.encode()).hexdigest()
     return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name=name,
-        token_hash=token_hash,
+        access_key_hash=access_key_hash,
         created_at=utcnow(),
         created_by="user1",
         pass_through=pass_through,
@@ -174,7 +174,7 @@ async def test_admin_can_list_tokens():
     body = json.loads(resp.text)
     assert len(body) == 1
     assert body[0]["id"] == access_key.id
-    assert "token_hash" not in body[0]
+    assert "access_key_hash" not in body[0]
     assert "token" not in body[0]
 
 
@@ -196,7 +196,7 @@ async def test_create_token_returns_raw_token_once():
 
     assert resp.status == 201
     result = json.loads(resp.text)
-    assert result["token"] == "phx_rawtoken123"
+    assert result["access_key"] == "phx_rawtoken123"
     assert result["id"] == access_key.id
 
 
@@ -364,7 +364,7 @@ async def test_patch_non_boolean_pass_through_rejected():
         {"use_assist_exposure": "true"},
     ):
         request = _make_admin_request(body=json.dumps(body_dict).encode())
-        resp = await view.patch(request, token_id=access_key.id)
+        resp = await view.patch(request, access_key_id=access_key.id)
         assert resp.status == 400, body_dict
     data.store.async_patch_access_key.assert_not_called()
 
@@ -385,7 +385,7 @@ async def test_patch_token_rename_succeeds():
 
     body = json.dumps({"name": "new-name"}).encode()
     request = _make_admin_request(body=body)
-    resp = await view.patch(request, token_id=access_key.id)
+    resp = await view.patch(request, access_key_id=access_key.id)
 
     assert resp.status == 200
     data.store.async_patch_access_key.assert_awaited_once()
@@ -405,7 +405,7 @@ async def test_patch_token_rename_clash_rejected():
 
     body = json.dumps({"name": "taken-name"}).encode()
     request = _make_admin_request(body=body)
-    resp = await view.patch(request, token_id=access_key.id)
+    resp = await view.patch(request, access_key_id=access_key.id)
 
     assert resp.status == 400
 
@@ -423,7 +423,7 @@ async def test_patch_token_rename_invalid_name_rejected():
 
     body = json.dumps({"name": "no"}).encode()  # too short for ACCESS_KEY_NAME_REGEX
     request = _make_admin_request(body=body)
-    resp = await view.patch(request, token_id=access_key.id)
+    resp = await view.patch(request, access_key_id=access_key.id)
 
     assert resp.status == 400
 
@@ -440,7 +440,7 @@ async def test_patch_token_rejects_expires_at_field():
 
     body = json.dumps({"expires_at": "2030-01-01T00:00:00Z"}).encode()
     request = _make_admin_request(body=body)
-    resp = await view.patch(request, token_id=access_key.id)
+    resp = await view.patch(request, access_key_id=access_key.id)
 
     assert resp.status == 400
 
@@ -457,7 +457,7 @@ async def test_patch_token_pass_through_requires_confirm():
 
     body = json.dumps({"pass_through": True}).encode()
     request = _make_admin_request(body=body)
-    resp = await view.patch(request, token_id=access_key.id)
+    resp = await view.patch(request, access_key_id=access_key.id)
 
     assert resp.status == 400
     body_parsed = json.loads(resp.text)
@@ -477,7 +477,7 @@ async def test_patch_token_pass_through_already_enabled_no_confirm_needed():
 
     body = json.dumps({"pass_through": True}).encode()
     request = _make_admin_request(body=body)
-    resp = await view.patch(request, token_id=access_key.id)
+    resp = await view.patch(request, access_key_id=access_key.id)
 
     assert resp.status == 200
     # Assert the actual patch payload, not just the status: re-affirming pass_through
@@ -500,7 +500,7 @@ async def test_patch_token_announce_all_tools_accepted():
     view.hass = hass
 
     body = json.dumps({"announce_all_tools": True}).encode()
-    resp = await view.patch(_make_admin_request(body=body), token_id=access_key.id)
+    resp = await view.patch(_make_admin_request(body=body), access_key_id=access_key.id)
 
     assert resp.status == 200
     assert data.store.async_patch_access_key.call_args.kwargs["announce_all_tools"] is True
@@ -518,7 +518,7 @@ async def test_patch_token_announce_all_tools_rejects_non_bool():
     view.hass = hass
 
     body = json.dumps({"announce_all_tools": "yes"}).encode()
-    resp = await view.patch(_make_admin_request(body=body), token_id=access_key.id)
+    resp = await view.patch(_make_admin_request(body=body), access_key_id=access_key.id)
 
     assert resp.status == 400
 
@@ -537,7 +537,7 @@ async def test_patch_token_inline_wait_accepted():
     # In-range durations and 0 (disable, the unattended-agent mode) all pass.
     for good in (30, 60, 180, 0):
         body = json.dumps({"confirm_inline_wait_seconds": good}).encode()
-        resp = await view.patch(_make_admin_request(body=body), token_id=access_key.id)
+        resp = await view.patch(_make_admin_request(body=body), access_key_id=access_key.id)
         assert resp.status == 200, good
         assert data.store.async_patch_access_key.call_args.kwargs["confirm_inline_wait_seconds"] == good
 
@@ -556,7 +556,7 @@ async def test_patch_token_inline_wait_rejects_out_of_range():
     # Below the floor (but nonzero), above the ceiling, non-int, and bool all fail.
     for bad in (29, 181, -1, "60", True):
         body = json.dumps({"confirm_inline_wait_seconds": bad}).encode()
-        resp = await view.patch(_make_admin_request(body=body), token_id=access_key.id)
+        resp = await view.patch(_make_admin_request(body=body), access_key_id=access_key.id)
         assert resp.status == 400, bad
 
 
@@ -582,7 +582,7 @@ async def test_patch_uses_async_lock():
 
     body = json.dumps({"cap_restart": "allow"}).encode()
     request = _make_admin_request(body=body)
-    await view.patch(request, token_id=access_key.id)
+    await view.patch(request, access_key_id=access_key.id)
 
     assert len(lock_acquired) == 1
 
@@ -599,13 +599,13 @@ async def test_delete_token_fires_revoked_event():
     view.hass = hass
 
     request = _make_admin_request()
-    resp = await view.delete(request, token_id=access_key.id)
+    resp = await view.delete(request, access_key_id=access_key.id)
 
     assert resp.status == 204
     hass.bus.async_fire.assert_called_once()
     event_type, payload = hass.bus.async_fire.call_args[0]
-    assert event_type == "phoenix_mcp_token_revoked"
-    assert payload["token_id"] == access_key.id
+    assert event_type == "phoenix_mcp_access_key_revoked"
+    assert payload["access_key_id"] == access_key.id
     assert payload["revoked_by"] == "admin-user-id"
 
 
@@ -620,9 +620,9 @@ async def test_delete_token_cancels_pending_approvals():
     data = _make_data([access_key])
     now_iso = _utcnow().isoformat()
 
-    def _entry(appr_id: str, token_id: str) -> dict:
+    def _entry(appr_id: str, access_key_id: str) -> dict:
         return {
-            "id": appr_id, "token_id": token_id, "token_name": "t",
+            "id": appr_id, "access_key_id": access_key_id, "access_key_name": "t",
             "tool_name": "restart_ha", "cap_name": "cap_restart",
             "args": {}, "diff": {}, "status": "pending",
             "created_at": now_iso, "expires_at": now_iso, "request_id": "r",
@@ -645,12 +645,12 @@ async def test_delete_token_cancels_pending_approvals():
     with patch(
         "custom_components.phoenix_mcp.approvals.dismiss_approval_notification"
     ) as dismiss:
-        resp = await view.delete(_make_admin_request(), token_id=access_key.id)
+        resp = await view.delete(_make_admin_request(), access_key_id=access_key.id)
 
     assert resp.status == 204
     by_id = {e["id"]: e for e in pending}
     assert by_id["appr_mine"]["status"] == "cancelled"
-    assert by_id["appr_mine"]["rejected_reason"] == "token_revoked"
+    assert by_id["appr_mine"]["rejected_reason"] == "access_key_revoked"
     assert by_id["appr_other"]["status"] == "pending"
     assert by_id["appr_running"]["status"] == "pending"
     dismiss.assert_called_once_with(hass, "appr_mine")
@@ -659,7 +659,7 @@ async def test_delete_token_cancels_pending_approvals():
         if c.args[0] == "phoenix_mcp_approval_resolved"
     ]
     assert [p["approval_id"] for p in resolved] == ["appr_mine"]
-    assert resolved[0]["rejected_reason"] == "token_revoked"
+    assert resolved[0]["rejected_reason"] == "access_key_revoked"
 
 
 @pytest.mark.asyncio
@@ -674,7 +674,7 @@ async def test_delete_token_destroys_rate_limiter_state():
     view.hass = hass
 
     request = _make_admin_request()
-    await view.delete(request, token_id=access_key.id)
+    await view.delete(request, access_key_id=access_key.id)
 
     data.rate_limiter.destroy.assert_called_once_with(access_key.id)
 
@@ -692,7 +692,7 @@ async def test_delete_token_cleans_token_counters():
     view.hass = hass
 
     request = _make_admin_request()
-    await view.delete(request, token_id=access_key.id)
+    await view.delete(request, access_key_id=access_key.id)
 
     assert access_key.id not in data.access_key_counters
 
@@ -707,7 +707,7 @@ async def test_delete_nonexistent_token_returns_404():
     view.hass = hass
 
     request = _make_admin_request()
-    resp = await view.delete(request, token_id="nonexistent-id")
+    resp = await view.delete(request, access_key_id="nonexistent-id")
 
     assert resp.status == 404
 
@@ -725,7 +725,7 @@ async def test_permission_domain_patch_valid_state():
 
     body = json.dumps({"state": "GREEN"}).encode()
     request = _make_admin_request(body=body)
-    resp = await view.patch(request, token_id=access_key.id, node_id="light")
+    resp = await view.patch(request, access_key_id=access_key.id, node_id="light")
 
     assert resp.status == 200
     data.store.async_patch_permission_node.assert_called_once_with(
@@ -745,7 +745,7 @@ async def test_permission_patch_invalid_state_rejected():
 
     body = json.dumps({"state": "PURPLE"}).encode()
     request = _make_admin_request(body=body)
-    resp = await view.patch(request, token_id=access_key.id, node_id="light")
+    resp = await view.patch(request, access_key_id=access_key.id, node_id="light")
 
     assert resp.status == 400
 
@@ -763,7 +763,7 @@ async def test_permission_patch_grey_removes_node():
 
     body = json.dumps({"state": "GREY"}).encode()
     request = _make_admin_request(body=body)
-    resp = await view.patch(request, token_id=access_key.id, node_id="light")
+    resp = await view.patch(request, access_key_id=access_key.id, node_id="light")
 
     assert resp.status == 200
     data.store.async_patch_permission_node.assert_called_once_with(
@@ -784,7 +784,7 @@ async def test_permission_patch_with_hint():
 
     body = json.dumps({"state": "YELLOW", "hint": "Living room lights only"}).encode()
     request = _make_admin_request(body=body)
-    await view.patch(request, token_id=access_key.id, node_id="light")
+    await view.patch(request, access_key_id=access_key.id, node_id="light")
 
     data.store.async_patch_permission_node.assert_called_once_with(
         access_key.id, "domains", "light", "YELLOW", "Living room lights only"
@@ -834,7 +834,7 @@ async def test_integration_permission_options_use_exact_entry_and_warn_shared_de
 
     view = PhoenixAdminPermissionIntegrationOptionsView()
     view.hass = hass
-    response = await view.get(_make_admin_request(), token_id=access_key.id)
+    response = await view.get(_make_admin_request(), access_key_id=access_key.id)
 
     payload = json.loads(response.text)
     option = next(item for item in payload["integrations"] if item["entry_id"] == first.entry_id)
@@ -888,7 +888,7 @@ async def test_integration_bulk_selection_is_one_atomic_write_and_preserves_chil
         "selector_id": entry.entry_id,
         "state": "GREEN",
     }).encode())
-    response = await view.post(request, token_id=access_key.id)
+    response = await view.post(request, access_key_id=access_key.id)
 
     assert response.status == 200
     data.store.async_set_permissions.assert_awaited_once()
@@ -1022,8 +1022,8 @@ async def test_token_revoke_before_settings_validation_rejects_dead_reference():
     archive_started = asyncio.Event()
     release_archive = asyncio.Event()
 
-    async def archive(token_id, **_kwargs):
-        archived = active.pop(token_id, None)
+    async def archive(access_key_id, **_kwargs):
+        archived = active.pop(access_key_id, None)
         archive_started.set()
         await release_archive.wait()
         return archived
@@ -1036,11 +1036,11 @@ async def test_token_revoke_before_settings_validation_rejects_dead_reference():
     settings_view.hass = hass
 
     revoke = asyncio.create_task(token_view.delete(
-        _make_admin_request(), token_id=access_key.id
+        _make_admin_request(), access_key_id=access_key.id
     ))
     await archive_started.wait()
     bind = asyncio.create_task(settings_view.patch(_make_admin_request(
-        body=json.dumps({"voice_agent_token_id": access_key.id}).encode()
+        body=json.dumps({"voice_agent_access_key_id": access_key.id}).encode()
     )))
     await asyncio.sleep(0)
     assert not bind.done()
@@ -1067,13 +1067,13 @@ async def test_settings_bind_before_token_revoke_finishes_cleared():
     async def patch_settings(**kwargs):
         nonlocal current
         current = GlobalSettings.from_dict({**current.to_dict(), **kwargs})
-        if kwargs.get("voice_agent_token_id") == access_key.id:
+        if kwargs.get("voice_agent_access_key_id") == access_key.id:
             binding_persisted.set()
             await release_binding.wait()
         return current
 
-    async def archive(token_id, **_kwargs):
-        return active.pop(token_id, None)
+    async def archive(access_key_id, **_kwargs):
+        return active.pop(access_key_id, None)
 
     data.store.async_patch_settings = AsyncMock(side_effect=patch_settings)
     data.store.async_archive_access_key = AsyncMock(side_effect=archive)
@@ -1084,11 +1084,11 @@ async def test_settings_bind_before_token_revoke_finishes_cleared():
     settings_view.hass = hass
 
     bind = asyncio.create_task(settings_view.patch(_make_admin_request(
-        body=json.dumps({"voice_agent_token_id": access_key.id}).encode()
+        body=json.dumps({"voice_agent_access_key_id": access_key.id}).encode()
     )))
     await binding_persisted.wait()
     revoke = asyncio.create_task(token_view.delete(
-        _make_admin_request(), token_id=access_key.id
+        _make_admin_request(), access_key_id=access_key.id
     ))
     await asyncio.sleep(0)
     assert not revoke.done()
@@ -1098,7 +1098,7 @@ async def test_settings_bind_before_token_revoke_finishes_cleared():
 
     assert bind_response.status == 200
     assert revoke_response.status == 204
-    assert current.voice_agent_token_id is None
+    assert current.voice_agent_access_key_id is None
 
 
 @pytest.mark.asyncio
@@ -1242,7 +1242,7 @@ async def test_token_patch_rejects_unknown_fields_atomically():
     view.hass = hass
 
     body = json.dumps({"cap_restart": "allow", "cap_restert": "allow"}).encode()
-    resp = await view.patch(_make_admin_request(body=body), token_id=access_key.id)
+    resp = await view.patch(_make_admin_request(body=body), access_key_id=access_key.id)
 
     assert resp.status == 400
     assert json.loads(resp.text)["message_params"] == {"fields": "cap_restert"}
@@ -1437,7 +1437,7 @@ async def test_token_stats_returns_zero_counters_for_new_token():
     view.hass = hass
 
     request = _make_admin_request()
-    resp = await view.get(request, token_id=access_key.id)
+    resp = await view.get(request, access_key_id=access_key.id)
 
     assert resp.status == 200
     body = json.loads(resp.text)
@@ -1459,7 +1459,7 @@ async def test_token_stats_reflects_live_counters():
     view.hass = hass
 
     request = _make_admin_request()
-    resp = await view.get(request, token_id=access_key.id)
+    resp = await view.get(request, access_key_id=access_key.id)
 
     body = json.loads(resp.text)
     assert body["request_count"] == 42
@@ -1481,7 +1481,7 @@ async def test_token_connection_no_session_zero_counters():
     view = _connection_view()
     view.hass = hass
 
-    resp = await view.get(_make_admin_request(), token_id=access_key.id)
+    resp = await view.get(_make_admin_request(), access_key_id=access_key.id)
     assert resp.status == 200
     body = json.loads(resp.text)
     assert body == {"last_used_at": None, "request_count": 0}
@@ -1498,7 +1498,7 @@ async def test_token_connection_reports_request_count():
     view = _connection_view()
     view.hass = hass
 
-    resp = await view.get(_make_admin_request(), token_id=access_key.id)
+    resp = await view.get(_make_admin_request(), access_key_id=access_key.id)
     body = json.loads(resp.text)
     assert body["request_count"] == 3
 
@@ -1514,7 +1514,7 @@ async def test_token_connection_reports_last_used_iso():
     view = _connection_view()
     view.hass = hass
 
-    resp = await view.get(_make_admin_request(), token_id=access_key.id)
+    resp = await view.get(_make_admin_request(), access_key_id=access_key.id)
     body = json.loads(resp.text)
     assert body["last_used_at"] == access_key.last_used_at.isoformat()
 
@@ -1527,7 +1527,7 @@ async def test_token_connection_404_for_unknown_token():
     view = _connection_view()
     view.hass = hass
 
-    resp = await view.get(_make_admin_request(), token_id="nope")
+    resp = await view.get(_make_admin_request(), access_key_id="nope")
     assert resp.status == 404
 
 
@@ -1540,7 +1540,7 @@ async def test_token_connection_requires_admin():
     view = _connection_view()
     view.hass = hass
 
-    resp = await view.get(_make_admin_request(is_admin=False), token_id=access_key.id)
+    resp = await view.get(_make_admin_request(is_admin=False), access_key_id=access_key.id)
     assert resp.status == 403
 
 
@@ -1556,10 +1556,10 @@ async def test_audit_log_query_paginates():
 
     request = _make_admin_request()
     request.query = {"limit": "50", "offset": "10"}
-    await view.get(request, token_id=access_key.id)
+    await view.get(request, access_key_id=access_key.id)
 
     data.audit.query.assert_called_once_with(
-        token_id=access_key.id,
+        access_key_id=access_key.id,
         outcome=None,
         client_ip=None,
         limit=50,
@@ -1580,7 +1580,7 @@ async def test_global_audit_query_all_tokens():
     await view.get(request)
 
     data.audit.count.assert_called_once_with(
-        token_id=None,
+        access_key_id=None,
         outcome=None,
         client_ip=None,
         method=None,
@@ -1588,7 +1588,7 @@ async def test_global_audit_query_all_tokens():
         since=None,
     )
     data.audit.query.assert_called_once_with(
-        token_id=None,
+        access_key_id=None,
         outcome=None,
         client_ip=None,
         method=None,
@@ -1630,7 +1630,7 @@ async def test_global_audit_forwards_method_resource_since():
     await view.get(request)
 
     data.audit.query.assert_called_once_with(
-        token_id=None,
+        access_key_id=None,
         outcome=None,
         client_ip=None,
         method="create_automation",
@@ -1953,10 +1953,10 @@ async def test_wipe_core_tears_down_pending_approvals():
     # One pending approval (must be dismissed) + one already-terminal (must be
     # ignored). Only "pending" gets a notification dismiss + resolved event.
     data.store.get_pending_approvals = MagicMock(return_value=[
-        {"id": "ap-pending", "token_id": "gone", "tool_name": "call_service",
+        {"id": "ap-pending", "access_key_id": "gone", "tool_name": "call_service",
          "status": "pending", "created_at": "2026-07-10T00:00:00+00:00",
          "expires_at": "2026-07-10T01:00:00+00:00"},
-        {"id": "ap-old", "token_id": "gone", "tool_name": "call_service",
+        {"id": "ap-old", "access_key_id": "gone", "tool_name": "call_service",
          "status": "approved", "created_at": "2026-07-10T00:00:00+00:00",
          "expires_at": "2026-07-10T01:00:00+00:00"},
     ])
@@ -2020,7 +2020,7 @@ async def test_wipe_core_preserves_a_pending_interrupted_approval():
 async def test_wipe_providers_only_leaves_approvals_untouched():
     data = _make_wipe_data()
     data.store.get_pending_approvals = MagicMock(return_value=[
-        {"id": "ap1", "token_id": "gone", "tool_name": "call_service",
+        {"id": "ap1", "access_key_id": "gone", "tool_name": "call_service",
          "status": "pending", "created_at": "2026-07-10T00:00:00+00:00",
          "expires_at": "2026-07-10T01:00:00+00:00"},
     ])
@@ -2211,11 +2211,11 @@ async def test_settings_patch_binds_active_token():
     data, holder = _settings_data([access_key])
     view = PhoenixAdminSettingsView()
     view.hass = _make_hass(data)
-    body = json.dumps({"assist_bound_token_id": access_key.id}).encode()
+    body = json.dumps({"assist_bound_access_key_id": access_key.id}).encode()
     resp = await view.patch(_make_admin_request(body=body))
     assert resp.status == 200
-    assert holder["s"].assist_bound_token_id == access_key.id
-    assert json.loads(resp.text)["assist_bound_token_id"] == access_key.id
+    assert holder["s"].assist_bound_access_key_id == access_key.id
+    assert json.loads(resp.text)["assist_bound_access_key_id"] == access_key.id
 
 
 @pytest.mark.asyncio
@@ -2223,7 +2223,7 @@ async def test_settings_patch_rejects_unknown_token():
     data, _ = _settings_data([])
     view = PhoenixAdminSettingsView()
     view.hass = _make_hass(data)
-    body = json.dumps({"assist_bound_token_id": "does-not-exist"}).encode()
+    body = json.dumps({"assist_bound_access_key_id": "does-not-exist"}).encode()
     resp = await view.patch(_make_admin_request(body=body))
     assert resp.status == 400
     assert json.loads(resp.text)["error"] == "invalid_request"
@@ -2233,41 +2233,41 @@ async def test_settings_patch_rejects_unknown_token():
 async def test_settings_patch_null_unbinds():
     access_key = _make_active_token()
     data, holder = _settings_data([access_key])
-    holder["s"] = GlobalSettings(assist_bound_token_id=access_key.id)
+    holder["s"] = GlobalSettings(assist_bound_access_key_id=access_key.id)
     view = PhoenixAdminSettingsView()
     view.hass = _make_hass(data)
-    body = json.dumps({"assist_bound_token_id": None}).encode()
+    body = json.dumps({"assist_bound_access_key_id": None}).encode()
     resp = await view.patch(_make_admin_request(body=body))
     assert resp.status == 200
-    assert holder["s"].assist_bound_token_id is None
+    assert holder["s"].assist_bound_access_key_id is None
 
 
 @pytest.mark.asyncio
 async def test_revoke_clears_assist_binding():
     access_key = _make_active_token()
     data, holder = _settings_data([access_key])
-    holder["s"] = GlobalSettings(assist_bound_token_id=access_key.id)
+    holder["s"] = GlobalSettings(assist_bound_access_key_id=access_key.id)
     data.store.async_archive_access_key = AsyncMock(return_value=MagicMock())
     view = PhoenixAdminAccessKeyView()
     view.hass = _make_hass(data)
-    resp = await view.delete(_make_admin_request(), token_id=access_key.id)
+    resp = await view.delete(_make_admin_request(), access_key_id=access_key.id)
     assert resp.status == 204
-    assert holder["s"].assist_bound_token_id is None
+    assert holder["s"].assist_bound_access_key_id is None
 
 
 @pytest.mark.asyncio
 async def test_revoke_clears_voice_agent_token_and_resyncs():
     access_key = _make_active_token()
     data, holder = _settings_data([access_key])
-    holder["s"] = GlobalSettings(voice_agent_enabled=True, voice_agent_token_id=access_key.id,
+    holder["s"] = GlobalSettings(voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
                                  voice_agent_provider_id="p", voice_agent_model="m")
     data.store.async_archive_access_key = AsyncMock(return_value=MagicMock())
     data.async_sync_voice_agent = MagicMock()
     view = PhoenixAdminAccessKeyView()
     view.hass = _make_hass(data)
-    resp = await view.delete(_make_admin_request(), token_id=access_key.id)
+    resp = await view.delete(_make_admin_request(), access_key_id=access_key.id)
     assert resp.status == 204
-    assert holder["s"].voice_agent_token_id is None
+    assert holder["s"].voice_agent_access_key_id is None
     data.async_sync_voice_agent.assert_called_once()
 
 
@@ -2286,7 +2286,7 @@ async def test_settings_patch_voice_agent_config_resyncs():
     provider_store = MagicMock()
     provider_store.get.return_value = {"kind": "claude"}
     body = json.dumps({
-        "voice_agent_enabled": True, "voice_agent_token_id": access_key.id,
+        "voice_agent_enabled": True, "voice_agent_access_key_id": access_key.id,
         "voice_agent_provider_id": "i1", "voice_agent_model": "m",
     }).encode()
     with patch("custom_components.phoenix_mcp.agentcli._get_secret_store", AsyncMock(return_value=provider_store)):
@@ -2303,7 +2303,7 @@ async def test_settings_patch_voice_agent_rejects_inactive_token():
     data, _ = _settings_data([])
     view = PhoenixAdminSettingsView()
     view.hass = _make_hass(data)
-    body = json.dumps({"voice_agent_token_id": "does-not-exist"}).encode()
+    body = json.dumps({"voice_agent_access_key_id": "does-not-exist"}).encode()
     resp = await view.patch(_make_admin_request(body=body))
     assert resp.status == 400
     assert json.loads(resp.text)["error"] == "invalid_request"
@@ -2382,7 +2382,7 @@ async def test_voice_pipeline_create_serializes_with_disable_cleanup():
     access_key = _make_active_token()
     data, holder = _settings_data([access_key])
     holder["s"] = GlobalSettings(
-        voice_agent_enabled=True, voice_agent_token_id=access_key.id,
+        voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
         voice_agent_provider_id="p", voice_agent_model="m",
     )
     data.async_sync_voice_agent = MagicMock()
@@ -2452,7 +2452,7 @@ async def test_voice_pipeline_create_serializes_with_wipe_cleanup(wipe_flags):
     access_key = _make_active_token()
     data = _make_wipe_data([access_key])
     holder = {"s": GlobalSettings(
-        voice_agent_enabled=True, voice_agent_token_id=access_key.id,
+        voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
         voice_agent_provider_id="p", voice_agent_model="m",
     )}
     data.store.get_settings.side_effect = lambda: holder["s"]
@@ -2533,7 +2533,7 @@ async def test_concurrent_voice_pipeline_posts_create_once():
     access_key = _make_active_token()
     data, holder = _settings_data([access_key])
     holder["s"] = GlobalSettings(
-        voice_agent_enabled=True, voice_agent_token_id=access_key.id,
+        voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
         voice_agent_provider_id="p", voice_agent_model="m",
     )
     view = PhoenixAdminVoiceAgentPipelineView()
@@ -2571,7 +2571,7 @@ async def test_disabling_voice_agent_removes_tracked_pipeline():
     access_key = _make_active_token()
     data, holder = _settings_data([access_key])
     holder["s"] = GlobalSettings(
-        voice_agent_enabled=True, voice_agent_token_id=access_key.id,
+        voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
         voice_agent_provider_id="p", voice_agent_model="m", voice_agent_pipeline_id="pl1",
     )
     data.async_sync_voice_agent = MagicMock()
@@ -2607,7 +2607,7 @@ async def test_settings_patch_ai_task_config():
     provider_store = MagicMock()
     provider_store.get.return_value = {"kind": "deepseek"}
     body = json.dumps({
-        "ai_task_enabled": True, "ai_task_token_id": access_key.id,
+        "ai_task_enabled": True, "ai_task_access_key_id": access_key.id,
         "ai_task_provider_id": "i1", "ai_task_model": "m",
     }).encode()
     with patch("custom_components.phoenix_mcp.agentcli._get_secret_store", AsyncMock(return_value=provider_store)):
@@ -2622,7 +2622,7 @@ async def test_settings_patch_ai_task_rejects_inactive_token():
     data, _ = _settings_data([])
     view = PhoenixAdminSettingsView()
     view.hass = _make_hass(data)
-    body = json.dumps({"ai_task_token_id": "does-not-exist"}).encode()
+    body = json.dumps({"ai_task_access_key_id": "does-not-exist"}).encode()
     resp = await view.patch(_make_admin_request(body=body))
     assert resp.status == 400
     assert json.loads(resp.text)["error"] == "invalid_request"
@@ -2646,15 +2646,15 @@ async def test_revoke_clears_ai_task_token():
     access_key = _make_active_token()
     data, holder = _settings_data([access_key])
     holder["s"] = GlobalSettings(
-        ai_task_enabled=True, ai_task_token_id=access_key.id,
+        ai_task_enabled=True, ai_task_access_key_id=access_key.id,
         ai_task_provider_id="p", ai_task_model="m",
     )
     data.store.async_archive_access_key = AsyncMock(return_value=MagicMock())
     view = PhoenixAdminAccessKeyView()
     view.hass = _make_hass(data)
-    resp = await view.delete(_make_admin_request(), token_id=access_key.id)
+    resp = await view.delete(_make_admin_request(), access_key_id=access_key.id)
     assert resp.status == 204
-    assert holder["s"].ai_task_token_id is None
+    assert holder["s"].ai_task_access_key_id is None
 
 
 @pytest.mark.asyncio
@@ -2749,12 +2749,12 @@ def _patchable_hass():
         ({"audit_log_maxlen": 250}, "audit_log_maxlen must be one of"),
         ({"agentcli_scrollback_lines": "many"}, "agentcli_scrollback_lines must be an integer"),
         ({"agentcli_max_iterations": "lots"}, "agentcli_max_iterations must be an integer"),
-        ({"assist_bound_token_id": 42}, "must be an access key id string or null"),
-        ({"assist_bound_token_id": "ghost"}, "must reference an active access key"),
-        ({"voice_agent_token_id": 7}, "voice_agent_token_id must be a string or null"),
+        ({"assist_bound_access_key_id": 42}, "must be an access key id string or null"),
+        ({"assist_bound_access_key_id": "ghost"}, "must reference an active access key"),
+        ({"voice_agent_access_key_id": 7}, "voice_agent_access_key_id must be a string or null"),
         ({"ai_task_model": []}, "ai_task_model must be a string or null"),
-        ({"voice_agent_token_id": "ghost"}, "voice_agent_token_id must reference an active access key"),
-        ({"ai_task_token_id": "ghost"}, "ai_task_token_id must reference an active access key"),
+        ({"voice_agent_access_key_id": "ghost"}, "voice_agent_access_key_id must reference an active access key"),
+        ({"ai_task_access_key_id": "ghost"}, "ai_task_access_key_id must reference an active access key"),
     ],
 )
 async def test_settings_patch_rejects_invalid_values(payload, fragment):
@@ -2771,8 +2771,8 @@ async def test_settings_patch_rejects_invalid_values(payload, fragment):
 @pytest.mark.parametrize(
     "key",
     [
-        "assist_bound_token_id", "voice_agent_token_id", "voice_agent_provider_id",
-        "voice_agent_model", "ai_task_token_id", "ai_task_provider_id", "ai_task_model",
+        "assist_bound_access_key_id", "voice_agent_access_key_id", "voice_agent_provider_id",
+        "voice_agent_model", "ai_task_access_key_id", "ai_task_provider_id", "ai_task_model",
     ],
 )
 async def test_settings_patch_blank_string_clears_to_none(key, blank):
@@ -2882,11 +2882,11 @@ def _token_patch_data(access_key):
     return data
 
 
-async def _token_patch(data, token_id, body: dict):
+async def _token_patch(data, access_key_id, body: dict):
     view = PhoenixAdminAccessKeyView()
     view.hass = _make_hass(data)
     # require_admin's wrapper forwards extras as keyword-only.
-    return await view.patch(_make_admin_request(body=json.dumps(body).encode()), token_id=token_id)
+    return await view.patch(_make_admin_request(body=json.dumps(body).encode()), access_key_id=access_key_id)
 
 
 @pytest.mark.asyncio
@@ -3006,31 +3006,31 @@ async def test_command_preview_requires_admin(authenticated, admin, status):
 
 
 @pytest.mark.parametrize("body", [
-    {}, {"token_id": "t", "sentence": "x", "execute": True},
-    {"token_id": "t", "sentence": "x", "decision": True, "targets": True, "prepare": True},
-    {"token_id": [], "sentence": "x"}, {"token_id": "t", "sentence": " "},
-    {"token_id": "t", "sentence": "x" * 513},
-    {"token_id": "t", "sentence": "x", "language": "not-a-language"},
-    {"token_id": "t", "sentence": "x", "references": True},
-    {"token_id": "t", "sentence": "x", "decision": True, "references": True},
-    {"token_id": "t", "sentence": "x", "references": 1},
-    {"token_id": "t", "sentence": "x", "references": "true"},
-    {"token_id": "t", "sentence": "x", "targets": True},
-    {"token_id": "t", "sentence": "x", "batch": True},
-    {"token_id": "t", "sentence": "x", "decision": True, "targets": True, "numeric": True},
-    {"token_id": "t", "sentence": "x", "decision": True, "targets": True, "batch": True, "numeric": 1},
-    {"token_id": "t", "sentence": "x", "decision": True, "targets": True, "batch": True, "numeric": "true"},
-    {"token_id": "t", "sentence": "x", "decision": True, "batch": True},
-    {"token_id": "t", "sentence": "x", "decision": True, "targets": True, "batch": "true"},
-    {"token_id": "t", "sentence": "x", "decision": True, "targets": True, "batch": True,
+    {}, {"access_key_id": "t", "sentence": "x", "execute": True},
+    {"access_key_id": "t", "sentence": "x", "decision": True, "targets": True, "prepare": True},
+    {"access_key_id": [], "sentence": "x"}, {"access_key_id": "t", "sentence": " "},
+    {"access_key_id": "t", "sentence": "x" * 513},
+    {"access_key_id": "t", "sentence": "x", "language": "not-a-language"},
+    {"access_key_id": "t", "sentence": "x", "references": True},
+    {"access_key_id": "t", "sentence": "x", "decision": True, "references": True},
+    {"access_key_id": "t", "sentence": "x", "references": 1},
+    {"access_key_id": "t", "sentence": "x", "references": "true"},
+    {"access_key_id": "t", "sentence": "x", "targets": True},
+    {"access_key_id": "t", "sentence": "x", "batch": True},
+    {"access_key_id": "t", "sentence": "x", "decision": True, "targets": True, "numeric": True},
+    {"access_key_id": "t", "sentence": "x", "decision": True, "targets": True, "batch": True, "numeric": 1},
+    {"access_key_id": "t", "sentence": "x", "decision": True, "targets": True, "batch": True, "numeric": "true"},
+    {"access_key_id": "t", "sentence": "x", "decision": True, "batch": True},
+    {"access_key_id": "t", "sentence": "x", "decision": True, "targets": True, "batch": "true"},
+    {"access_key_id": "t", "sentence": "x", "decision": True, "targets": True, "batch": True,
      "messages": [{"role": "user", "content": "x"}, {"role": "assistant", "content": "y"}]},
-    {"token_id": "t", "sentence": "x", "decision": True, "targets": "true"},
-    {"token_id": "t", "sentence": "x", "messages": []},
-    {"token_id": "t", "sentence": "x", "decision": True, "messages": None},
-    {"token_id": "t", "sentence": "x", "decision": True, "messages": [{"role": "user", "content": "x"}]},
-    {"token_id": "t", "sentence": "x", "decision": True, "targets": True,
+    {"access_key_id": "t", "sentence": "x", "decision": True, "targets": "true"},
+    {"access_key_id": "t", "sentence": "x", "messages": []},
+    {"access_key_id": "t", "sentence": "x", "decision": True, "messages": None},
+    {"access_key_id": "t", "sentence": "x", "decision": True, "messages": [{"role": "user", "content": "x"}]},
+    {"access_key_id": "t", "sentence": "x", "decision": True, "targets": True,
      "messages": [{"role": "user", "content": "x"}, {"role": "assistant", "content": "y"}]},
-    {"token_id": "t", "sentence": "x",
+    {"access_key_id": "t", "sentence": "x",
      "messages": [{"role": "user", "content": "x"}, {"role": "assistant", "content": "y"}]},
 ])
 async def test_command_preview_rejects_bad_shapes(body):
@@ -3047,7 +3047,7 @@ async def test_command_preview_is_scoped_inert_and_does_not_record_voice_observa
     view = PhoenixAdminCommandPreviewView()
     view.hass = hass
     with patch("custom_components.phoenix_mcp.command_routing.async_recognize", AsyncMock(return_value=None)) as recognize:
-        response = await view.post(_make_admin_request(body=json.dumps({"token_id": access_key.id, "sentence": "hello"}).encode()))
+        response = await view.post(_make_admin_request(body=json.dumps({"access_key_id": access_key.id, "sentence": "hello"}).encode()))
     assert response.status == 200
     body = json.loads(response.text)
     assert body["executed"] is False
@@ -3086,7 +3086,7 @@ async def test_command_preview_context_opt_in_and_stale_disclosure(hass, access_
                 "decision_context.async_preview_context"), side_effect=context) as review,
           patch("custom_components.phoenix_mcp.decision_shadow.async_preview_decision") as old_review):
         response = await view.post(_make_admin_request(body=json.dumps({
-            "token_id": access_key.id, "sentence": "turn on Desk lamp", "decision": True, "messages": history, "references": references,
+            "access_key_id": access_key.id, "sentence": "turn on Desk lamp", "decision": True, "messages": history, "references": references,
         }).encode()))
     assert response.status == 200
     review.assert_awaited_once()
@@ -3123,7 +3123,7 @@ async def test_command_preview_batch_is_explicit_inert_and_discards_stale_local_
           patch("custom_components.phoenix_mcp.decision_shadow.async_preview_decision") as old_review,
           patch("custom_components.phoenix_mcp.mcp_view._dispatch_mcp") as dispatch):
         response = await view.post(_make_admin_request(body=json.dumps({
-            "token_id": access_key.id, "sentence": "turn on Desk lamp", "decision": True, "targets": True, "batch": True,
+            "access_key_id": access_key.id, "sentence": "turn on Desk lamp", "decision": True, "targets": True, "batch": True,
             **({"numeric": True} if numeric else {}),
         }).encode()))
     assert response.status == 200
@@ -3173,7 +3173,7 @@ async def test_command_preview_target_opt_in_and_authority_recheck(hass, access_
     with (patch("custom_components.phoenix_mcp.command_routing.async_recognize", AsyncMock(return_value=None)),
           patch("custom_components.phoenix_mcp.decision_shadow.async_preview_decision", side_effect=decision) as compare):
         response = await view.post(_make_admin_request(body=json.dumps({
-            "token_id": access_key.id, "sentence": "light up my desk", "decision": True, "targets": targets,
+            "access_key_id": access_key.id, "sentence": "light up my desk", "decision": True, "targets": targets,
         }).encode()))
     compare.assert_awaited_once()
     body = json.loads(response.text)
@@ -3192,7 +3192,7 @@ async def test_command_preview_passes_explicit_language_without_plan_authority(h
     with (patch("custom_components.phoenix_mcp.command_routing.async_recognize", AsyncMock(return_value=None)) as recognize,
           patch("custom_components.phoenix_mcp.decision_shadow.async_preview_decision", AsyncMock(return_value={"reason": "observed"})) as decision):
         response = await view.post(_make_admin_request(body=json.dumps({
-            "token_id": access_key.id, "sentence": "打开台灯", "language": language, "decision": True, "targets": True,
+            "access_key_id": access_key.id, "sentence": "打开台灯", "language": language, "decision": True, "targets": True,
         }).encode()))
     assert response.status == 200
     recognize.assert_awaited_once_with(hass, "打开台灯", ha_language, strict=True)
@@ -3207,7 +3207,7 @@ async def test_command_preview_accepts_complete_provider_history_only_with_opt_i
     data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
     view = PhoenixAdminCommandPreviewView(); view.hass = hass
-    body = {'token_id': access_key.id, 'sentence': 'turn on Desk lamp', 'messages': provider_context_history}
+    body = {'access_key_id': access_key.id, 'sentence': 'turn on Desk lamp', 'messages': provider_context_history}
     local = {'reason': 'supported', 'proposal': {'intent': 'HassTurnOn', 'entity_ids': ['light.test']},
              'executed': False, 'elapsed_ms': 1}
     with (patch('custom_components.phoenix_mcp.command_routing.async_evaluate_command', AsyncMock(return_value=local)),

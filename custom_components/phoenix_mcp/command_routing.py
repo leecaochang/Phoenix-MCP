@@ -88,15 +88,15 @@ class RoutingAuthority:
     """Snapshot admitted identity and configuration across recognition waits."""
 
     data: PhoenixData
-    token_id: str
-    token_hash: str
+    access_key_id: str
+    access_key_hash: str
     version: int
     settings: GlobalSettings
     settings_values: dict
 
     @classmethod
     def capture(cls, data: PhoenixData, access_key: AccessKeyRecord) -> RoutingAuthority:
-        return cls(data, access_key.id, access_key.token_hash, access_key.settings_version,
+        return cls(data, access_key.id, access_key.access_key_hash, access_key.settings_version,
                    data.store.get_settings(), data.store.get_settings().to_dict())
 
     def current(self, hass: HomeAssistant) -> AccessKeyRecord | None:
@@ -105,7 +105,7 @@ class RoutingAuthority:
                 or self.settings.to_dict() != self.settings_values):
             return None
         try:
-            access_key = RequestAuthority(hass, data, self.token_id, self.token_hash).current_access_key()
+            access_key = RequestAuthority(hass, data, self.access_key_id, self.access_key_hash).current_access_key()
         except AuthorityChangedError:
             return None
         return access_key if access_key.settings_version == self.version else None

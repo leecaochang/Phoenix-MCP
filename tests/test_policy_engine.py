@@ -50,7 +50,7 @@ def _make_token(
     return AccessKeyRecord(
         id="test-id",
         name="test",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="admin",
         pass_through=pass_through,

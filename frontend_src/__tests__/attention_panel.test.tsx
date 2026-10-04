@@ -5,7 +5,7 @@ import { api } from "../api";
 import type { AttentionItem } from "../types";
 
 vi.mock("../api", () => ({ api: { listAttention: vi.fn(), reviewAttention: vi.fn() } }));
-const item: AttentionItem = { kind: "agent", id: "request", tool: "call_service", token_name: "Kitchen assistant", started_at: "2026-10-03T00:00:00Z", dispatch_result: "received" };
+const item: AttentionItem = { kind: "agent", id: "request", tool: "call_service", access_key_name: "Kitchen assistant", started_at: "2026-10-03T00:00:00Z", dispatch_result: "received" };
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -82,7 +82,7 @@ it("discards stale polls after review and unmounted responses", async () => {
 
 it("opens a deep link directly and preserves escaped request metadata", async () => {
   window.history.replaceState({}, "", "/phoenix-mcp#attention");
-  vi.mocked(api.listAttention).mockResolvedValue({ items: [{ ...item, token_name: "<script>unsafe</script>", id: "r/escaped" }] });
+  vi.mocked(api.listAttention).mockResolvedValue({ items: [{ ...item, access_key_name: "<script>unsafe</script>", id: "r/escaped" }] });
   const view = render(<AttentionPanel />);
   expect(await view.findByText(/<script>unsafe<\/script>/)).toBeVisible();
   expect(view.container.querySelector("script")).toBeNull();

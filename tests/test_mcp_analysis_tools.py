@@ -30,7 +30,7 @@ def _access_key(**caps) -> AccessKeyRecord:
     base = {"cap_search": "allow", "cap_diagnostics": "allow"}
     base.update(caps)
     return AccessKeyRecord(
-        id=str(uuid.uuid4()), name="t", token_hash="x",
+        id=str(uuid.uuid4()), name="t", access_key_hash="x",
         created_at=utcnow(), created_by="u", permissions=tree, **base,
     )
 
@@ -121,7 +121,7 @@ class TestAuditSummary:
         # mesa_advisory omitted when false (matches AuditEntry.to_dict)
         assert "mesa_advisory" not in body["entries"][0]
         # query must be scoped to this token
-        assert data.audit.query.call_args.kwargs["token_id"] == access_key.id
+        assert data.audit.query.call_args.kwargs["access_key_id"] == access_key.id
 
     async def test_surfaces_mesa_advisory_flag(self, hass):
         access_key = _access_key()
@@ -143,10 +143,10 @@ class TestAuditSummary:
 
 # --- get_approval_status ---
 
-def _approval_dict(approval_id: str, token_id: str, status: str = "pending") -> dict:
+def _approval_dict(approval_id: str, access_key_id: str, status: str = "pending") -> dict:
     now = utcnow()
     return {
-        "id": approval_id, "token_id": token_id, "token_name": "t",
+        "id": approval_id, "access_key_id": access_key_id, "access_key_name": "t",
         "tool_name": "create_backup", "cap_name": "cap_backup",
         "args": {}, "diff": {}, "status": status,
         "created_at": now.isoformat(), "expires_at": now.isoformat(),

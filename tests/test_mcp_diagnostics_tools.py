@@ -21,7 +21,7 @@ from custom_components.phoenix_mcp.access_key_store import PermissionNode, Permi
 def _access_key(permissions: PermissionTree | None = None, **caps) -> AccessKeyRecord:
     tree = permissions or PermissionTree(domains={"light": PermissionNode(state="GREEN")})
     return AccessKeyRecord(
-        id=str(uuid.uuid4()), name="t", token_hash="x",
+        id=str(uuid.uuid4()), name="t", access_key_hash="x",
         created_at=utcnow(), created_by="u", permissions=tree, **caps,
     )
 
@@ -447,7 +447,7 @@ class TestDiagnostics:
             )
         first_token = _access_key(cap_diagnostics="allow")
         second_token = _access_key(cap_diagnostics="allow")
-        second_token.token_hash = "different-token-hash"
+        second_token.access_key_hash = "different-token-hash"
         first = _json((await _call(
             "get_repairs", {"domain": "bounded", "limit": 2}, first_token, hass,
         ))[0])

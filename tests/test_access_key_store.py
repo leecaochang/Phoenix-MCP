@@ -99,7 +99,7 @@ class TestTokenRecord:
         defaults = {
             "id": "test-uuid",
             "name": "test",
-            "token_hash": "abc",
+            "access_key_hash": "abc",
             "created_at": utcnow(),
             "created_by": "user1",
         }
@@ -145,7 +145,7 @@ class TestTokenRecord:
         access_key = AccessKeyRecord.from_dict({
             "id": "x",
             "name": "x",
-            "token_hash": "x",
+            "access_key_hash": "x",
             "created_at": utcnow().isoformat(),
             "created_by": "user1",
         })
@@ -162,7 +162,7 @@ class TestTokenRecord:
         access_key = AccessKeyRecord.from_dict({
             "id": "x",
             "name": "x",
-            "token_hash": "x",
+            "access_key_hash": "x",
             "created_at": utcnow().isoformat(),
             "created_by": "user1",
             "cap_config_read": CAP_ALLOW,
@@ -192,7 +192,7 @@ class TestTokenRecord:
         # TypeError, and the startup expiry sweep runs during setup, so one bad
         # record would abort the whole integration.
         access_key = AccessKeyRecord.from_dict({
-            "id": "x", "name": "x", "token_hash": "x",
+            "id": "x", "name": "x", "access_key_hash": "x",
             "created_at": utcnow().isoformat(), "created_by": "user1",
             "expires_at": "2030-01-01T12:00:00",
         })
@@ -201,7 +201,7 @@ class TestTokenRecord:
         assert access_key.is_expired() is False
 
         past = AccessKeyRecord.from_dict({
-            "id": "y", "name": "y", "token_hash": "y",
+            "id": "y", "name": "y", "access_key_hash": "y",
             "created_at": utcnow().isoformat(), "created_by": "user1",
             "expires_at": "2020-01-01T12:00:00",
         })
@@ -210,7 +210,7 @@ class TestTokenRecord:
     def test_from_dict_rate_limits_sanitized(self):
         def _load(requests, burst):
             return AccessKeyRecord.from_dict({
-                "id": "x", "name": "x", "token_hash": "x",
+                "id": "x", "name": "x", "access_key_hash": "x",
                 "created_at": utcnow().isoformat(), "created_by": "user1",
                 "rate_limit_requests": requests, "rate_limit_burst": burst,
             })
@@ -237,7 +237,7 @@ class TestTokenRecord:
         # the record.
         for garbage in (None, "corrupt", [1, 2], 7):
             access_key = AccessKeyRecord.from_dict({
-                "id": "x", "name": "x", "token_hash": "x",
+                "id": "x", "name": "x", "access_key_hash": "x",
                 "created_at": utcnow().isoformat(), "created_by": "user1",
                 "permissions": garbage,
             })
@@ -255,7 +255,7 @@ class TestArchivedTokenRecord:
     def test_round_trip(self):
         now = utcnow()
         record = ArchivedAccessKeyRecord(
-            id="a", name="b", token_hash="c",
+            id="a", name="b", access_key_hash="c",
             created_at=now, created_by="u", revoked_at=now,
             revoked=True,
         )
@@ -340,63 +340,63 @@ class TestGlobalSettings:
         assert GlobalSettings.from_dict(s.to_dict()).mesa_inject_enabled is True
 
     def test_assist_binding_default_none(self):
-        assert GlobalSettings().assist_bound_token_id is None
+        assert GlobalSettings().assist_bound_access_key_id is None
 
     def test_assist_binding_round_trip(self):
-        s = GlobalSettings(assist_bound_token_id="tok-123")
-        assert GlobalSettings.from_dict(s.to_dict()).assist_bound_token_id == "tok-123"
+        s = GlobalSettings(assist_bound_access_key_id="tok-123")
+        assert GlobalSettings.from_dict(s.to_dict()).assist_bound_access_key_id == "tok-123"
 
     def test_assist_binding_empty_string_coerces_to_none(self):
-        assert GlobalSettings.from_dict({"assist_bound_token_id": ""}).assist_bound_token_id is None
-        assert GlobalSettings.from_dict({"assist_bound_token_id": 5}).assist_bound_token_id is None
+        assert GlobalSettings.from_dict({"assist_bound_access_key_id": ""}).assist_bound_access_key_id is None
+        assert GlobalSettings.from_dict({"assist_bound_access_key_id": 5}).assist_bound_access_key_id is None
 
     def test_voice_agent_defaults(self):
         s = GlobalSettings()
         assert s.voice_agent_enabled is False
-        assert s.voice_agent_token_id is None
+        assert s.voice_agent_access_key_id is None
         assert s.voice_agent_provider_id is None
         assert s.voice_agent_model is None
         assert s.voice_agent_pipeline_id is None
 
     def test_voice_agent_round_trip(self):
         s = GlobalSettings(
-            voice_agent_enabled=True, voice_agent_token_id="tok",
+            voice_agent_enabled=True, voice_agent_access_key_id="tok",
             voice_agent_provider_id="inst", voice_agent_model="claude-opus-4-8",
             voice_agent_pipeline_id="pl1",
         )
         r = GlobalSettings.from_dict(s.to_dict())
         assert r.voice_agent_enabled is True
-        assert r.voice_agent_token_id == "tok"
+        assert r.voice_agent_access_key_id == "tok"
         assert r.voice_agent_provider_id == "inst"
         assert r.voice_agent_model == "claude-opus-4-8"
         assert r.voice_agent_pipeline_id == "pl1"
 
     def test_voice_agent_empty_strings_coerce_to_none(self):
-        r = GlobalSettings.from_dict({"voice_agent_token_id": "", "voice_agent_model": ""})
-        assert r.voice_agent_token_id is None
+        r = GlobalSettings.from_dict({"voice_agent_access_key_id": "", "voice_agent_model": ""})
+        assert r.voice_agent_access_key_id is None
         assert r.voice_agent_model is None
 
     def test_ai_task_defaults(self):
         s = GlobalSettings()
         assert s.ai_task_enabled is False
-        assert s.ai_task_token_id is None
+        assert s.ai_task_access_key_id is None
         assert s.ai_task_provider_id is None
         assert s.ai_task_model is None
 
     def test_ai_task_round_trip(self):
         s = GlobalSettings(
-            ai_task_enabled=True, ai_task_token_id="tok",
+            ai_task_enabled=True, ai_task_access_key_id="tok",
             ai_task_provider_id="inst", ai_task_model="claude-opus-4-8",
         )
         r = GlobalSettings.from_dict(s.to_dict())
         assert r.ai_task_enabled is True
-        assert r.ai_task_token_id == "tok"
+        assert r.ai_task_access_key_id == "tok"
         assert r.ai_task_provider_id == "inst"
         assert r.ai_task_model == "claude-opus-4-8"
 
     def test_ai_task_empty_strings_coerce_to_none(self):
-        r = GlobalSettings.from_dict({"ai_task_token_id": "", "ai_task_provider_id": ""})
-        assert r.ai_task_token_id is None
+        r = GlobalSettings.from_dict({"ai_task_access_key_id": "", "ai_task_provider_id": ""})
+        assert r.ai_task_access_key_id is None
         assert r.ai_task_provider_id is None
 
 
@@ -414,14 +414,14 @@ class TestTokenStoreLoad:
         now = utcnow()
         existing = {
             "version": STORAGE_VERSION,
-            "tokens": [{
+            "access_keys": [{
                 "id": "tok1",
                 "name": "mytoken",
-                "token_hash": "hash1",
+                "access_key_hash": "hash1",
                 "created_at": now.isoformat(),
                 "created_by": "admin",
             }],
-            "archived_tokens": [],
+            "archived_access_keys": [],
             "settings": {"kill_switch": True},
         }
         mock_store = AsyncMock()
@@ -443,17 +443,17 @@ class TestTokenStoreLoad:
         # (KeyError, TypeError, ValueError) catch would let escape, aborting setup.
         now = utcnow()
         good = {
-            "id": "tok-good", "name": "good", "token_hash": "h1",
+            "id": "tok-good", "name": "good", "access_key_hash": "h1",
             "created_at": now.isoformat(), "created_by": "admin",
         }
         nested_corrupt = dict(
-            good, id="tok-bad", name="bad", token_hash="h2",
+            good, id="tok-bad", name="bad", access_key_hash="h2",
             permissions={"domains": ["not-a-node-map"]},
         )
         existing = {
             "version": STORAGE_VERSION,
-            "tokens": [nested_corrupt, "not-even-a-dict", good],
-            "archived_tokens": ["garbage"],
+            "access_keys": [nested_corrupt, "not-even-a-dict", good],
+            "archived_access_keys": ["garbage"],
             "settings": {},
         }
         mock_store = AsyncMock()
@@ -480,12 +480,12 @@ class TestTokenStoreLoad:
         """
         now = utcnow()
         good = {
-            "id": "tok-good", "name": "good", "token_hash": "h1",
+            "id": "tok-good", "name": "good", "access_key_hash": "h1",
             "created_at": now.isoformat(), "created_by": "admin",
         }
-        bad = dict(good, id="tok-bad", name="bad", token_hash="h2",
+        bad = dict(good, id="tok-bad", name="bad", access_key_hash="h2",
                    created_at=bad_created_at)
-        existing = {"version": STORAGE_VERSION, "tokens": [bad, good], "settings": {}}
+        existing = {"version": STORAGE_VERSION, "access_keys": [bad, good], "settings": {}}
         mock_store = AsyncMock()
         mock_store.async_load = AsyncMock(return_value=existing)
         mock_store.async_save = AsyncMock()
@@ -499,15 +499,15 @@ class TestTokenStoreLoad:
         """Same rule for an archived record's revoked_at, also non-optional."""
         now = utcnow()
         archived_good = {
-            "id": "arch-good", "name": "g", "token_hash": "h1",
+            "id": "arch-good", "name": "g", "access_key_hash": "h1",
             "created_at": now.isoformat(), "created_by": "admin",
             "revoked_at": now.isoformat(), "revoked": True,
         }
-        archived_bad = dict(archived_good, id="arch-bad", name="b", token_hash="h2",
+        archived_bad = dict(archived_good, id="arch-bad", name="b", access_key_hash="h2",
                             revoked_at="nonsense")
         existing = {
-            "version": STORAGE_VERSION, "tokens": [],
-            "archived_tokens": [archived_bad, archived_good], "settings": {},
+            "version": STORAGE_VERSION, "access_keys": [],
+            "archived_access_keys": [archived_bad, archived_good], "settings": {},
         }
         mock_store = AsyncMock()
         mock_store.async_load = AsyncMock(return_value=existing)
@@ -540,8 +540,8 @@ class TestTokenStoreLoad:
         # list of characters).
         existing = {
             "version": STORAGE_VERSION,
-            "tokens": 7,
-            "archived_tokens": {"x": 1},
+            "access_keys": 7,
+            "archived_access_keys": {"x": 1},
             "pending_approvals": "abc",
             "settings": [],
             "entity_hints": ["not", "a", "map"],
@@ -563,12 +563,12 @@ class TestTokenStoreLoad:
         now = utcnow()
         existing = {
             "version": STORAGE_VERSION,
-            "tokens": [{
-                "id": "tok1", "name": "mytoken", "token_hash": "h",
+            "access_keys": [{
+                "id": "tok1", "name": "mytoken", "access_key_hash": "h",
                 "created_at": now.isoformat(), "created_by": "admin",
                 "persona": "custom",
             }],
-            "archived_tokens": [],
+            "archived_access_keys": [],
             "pending_approvals": [],
             "settings": GlobalSettings().to_dict(),
             "entity_hints": {"light.kitchen": "hint"},
@@ -605,11 +605,11 @@ class TestTokenStoreLoad:
         # A correctly-typed pending_approvals LIST can still hold a string/int
         # member; the startup expiry sweep calls entry.get(...) on each, which
         # would abort setup. Non-dict members are discarded (and healed).
-        good_approval = {"id": "ap1", "token_id": "t", "status": "pending"}
+        good_approval = {"id": "ap1", "access_key_id": "t", "status": "pending"}
         existing = {
             "version": STORAGE_VERSION,
-            "tokens": [],
-            "archived_tokens": [],
+            "access_keys": [],
+            "archived_access_keys": [],
             "pending_approvals": [good_approval, "corrupt", 7, None],
             "settings": {},
         }
@@ -627,15 +627,15 @@ class TestTokenStoreLoad:
         now = utcnow()
         existing = {
             "version": STORAGE_VERSION,
-            "tokens": [{
-                "id": "tok1", "name": "t", "token_hash": "h",
+            "access_keys": [{
+                "id": "tok1", "name": "t", "access_key_hash": "h",
                 "created_at": now.isoformat(), "created_by": "admin",
                 "persona": "custom",
                 "pass_through": "false",
                 "use_assist_exposure": "true",
                 "announce_all_tools": 1,
             }],
-            "archived_tokens": [],
+            "archived_access_keys": [],
             "settings": {},
         }
         mock_store = AsyncMock()
@@ -665,8 +665,8 @@ class TestTokenCreation:
     async def test_raw_token_not_stored(self, access_key_store):
         record, raw = await access_key_store.async_create_access_key("t1", "u")
         expected_hash = _sha256(raw)
-        assert record.token_hash == expected_hash
-        assert raw not in record.token_hash
+        assert record.access_key_hash == expected_hash
+        assert raw not in record.access_key_hash
 
     async def test_create_saves_immediately(self, access_key_store, mock_store):
         await access_key_store.async_create_access_key("t1", "u")
@@ -714,7 +714,7 @@ class TestTokenCreation:
     async def test_multiple_tokens_have_unique_hashes(self, access_key_store):
         r1, _ = await access_key_store.async_create_access_key("t1", "u")
         r2, _ = await access_key_store.async_create_access_key("t2", "u")
-        assert r1.token_hash != r2.token_hash
+        assert r1.access_key_hash != r2.access_key_hash
 
 
 # ---------------------------------------------------------------------------
@@ -1160,7 +1160,7 @@ class TestWipe:
         # An orphaned pending approval must not survive a wipe (and thus must not
         # be persisted back to disk by the async_save inside async_wipe).
         access_key_store.set_pending_approvals([
-            {"id": "ap1", "token_id": "gone", "status": "pending"},
+            {"id": "ap1", "access_key_id": "gone", "status": "pending"},
         ])
         await access_key_store.async_wipe()
         assert access_key_store.get_pending_approvals() == []
@@ -1288,7 +1288,7 @@ class TestPresets:
 
     def test_new_field_defaults_on_legacy_records(self):
         base = {
-            "id": "tid", "name": "t", "token_hash": "h",
+            "id": "tid", "name": "t", "access_key_hash": "h",
             "created_at": utcnow().isoformat(), "created_by": "u",
         }
         loaded = AccessKeyRecord.from_dict(base)
@@ -1311,7 +1311,7 @@ class TestPresets:
 
     def test_inline_wait_round_trips_and_clamps(self):
         base = {
-            "id": "tid", "name": "t", "token_hash": "h",
+            "id": "tid", "name": "t", "access_key_hash": "h",
             "created_at": utcnow().isoformat(), "created_by": "u",
         }
         assert AccessKeyRecord.from_dict({**base, "confirm_inline_wait_seconds": 30}).confirm_inline_wait_seconds == 30
@@ -1418,7 +1418,7 @@ class TestPresets:
     async def test_create_token_seeds_when_enabled(self, access_key_store):
         from custom_components.phoenix_mcp.const import DEFAULT_PRESET_NAME
 
-        await access_key_store.async_patch_settings(token_presets_enabled=True)
+        await access_key_store.async_patch_settings(access_key_presets_enabled=True)
         record, _ = await access_key_store.async_create_access_key("t1", "u")
         assert record.presets[0].name == DEFAULT_PRESET_NAME
         assert record.active_preset_id == record.presets[0].id
@@ -1462,6 +1462,6 @@ class TestSettingsVersion:
         assert access_key_store.get_access_key_by_id(record.id).settings_version == before + 2
 
     def test_settings_toggle_round_trip(self):
-        assert GlobalSettings.from_dict({"token_presets_enabled": True}).token_presets_enabled is True
-        assert GlobalSettings().token_presets_enabled is False
-        assert GlobalSettings(token_presets_enabled=True).to_dict()["token_presets_enabled"] is True
+        assert GlobalSettings.from_dict({"access_key_presets_enabled": True}).access_key_presets_enabled is True
+        assert GlobalSettings().access_key_presets_enabled is False
+        assert GlobalSettings(access_key_presets_enabled=True).to_dict()["access_key_presets_enabled"] is True

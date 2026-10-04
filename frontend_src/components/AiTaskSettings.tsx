@@ -32,7 +32,7 @@ export function AiTaskSettings({
   const supported = settings.ai_task_supported !== false;
   const enabled = !!settings.ai_task_enabled;
   const providerId = settings.ai_task_provider_id ?? "";
-  const tokenId = settings.ai_task_token_id ?? "";
+  const accessKeyId = settings.ai_task_access_key_id ?? "";
   const model = settings.ai_task_model ?? "";
   const noProviders = instances.length === 0;
 
@@ -64,7 +64,7 @@ export function AiTaskSettings({
   useEffect(() => {
     loadPref();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supported, enabled, tokenId, providerId, model]);
+  }, [supported, enabled, accessKeyId, providerId, model]);
 
   // Throws on error so the confirm modal can surface it; updates status on success.
   async function setDefault() {
@@ -125,17 +125,17 @@ export function AiTaskSettings({
 
       <div className="toggle-row toggle-row-stacked-control">
         <div className="toggle-label">
-          <span>{t("settings.token")}</span>
-          <small>{t("settings.aiTaskTokenHelp")}</small>
+          <span>{t("settings.accessKey")}</span>
+          <small>{t("settings.aiTaskAccessKeyHelp")}</small>
         </div>
         <BusySelect
-          aria-label={t("settings.aiTaskTokenAria")}
+          aria-label={t("settings.aiTaskAccessKeyAria")}
           className="input input-auto"
-          value={tokenId}
+          value={accessKeyId}
           busy={saving} disabled={!supported}
-          onChange={(e) => onChange("ai_task_token_id", e.target.value)}
+          onChange={(e) => onChange("ai_task_access_key_id", e.target.value)}
         >
-          <option value="">{t("settings.selectToken")}</option>
+          <option value="">{t("settings.selectAccessKey")}</option>
           {accessKeys.map((tok) => (
             <option key={tok.id} value={tok.id}>{tok.name}</option>
           ))}

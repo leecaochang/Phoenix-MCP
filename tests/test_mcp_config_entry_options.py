@@ -55,7 +55,7 @@ def _access_key(**caps) -> AccessKeyRecord:
     base = {"cap_helper_write": "allow"}
     base.update(caps)
     return AccessKeyRecord(
-        id=str(uuid.uuid4()), name="t", token_hash="x", created_at=utcnow(), created_by="u",
+        id=str(uuid.uuid4()), name="t", access_key_hash="x", created_at=utcnow(), created_by="u",
         permissions=PermissionTree(domains={
             "sensor": PermissionNode(state="GREEN"),
             # Readable but not writable: the case that separates the WRITE bar

@@ -58,29 +58,29 @@ async function ensureMod(): Promise<typeof import("./AgentChatWindow")> {
   return winMod;
 }
 
-async function open(tokenId?: string): Promise<void> {
+async function open(accessKeyId?: string): Promise<void> {
   try {
     const generation = identityGeneration;
     const module = await ensureMod();
-    if (!disposed && generation === identityGeneration && getHass()?.user?.is_admin) module.showAgentChat(tokenId);
+    if (!disposed && generation === identityGeneration && getHass()?.user?.is_admin) module.showAgentChat(accessKeyId);
   } catch (e) {
     // eslint-disable-next-line no-console
     console.debug(LOG, "open failed", e);
   }
 }
 
-async function summon(tokenId?: string): Promise<void> {
+async function summon(accessKeyId?: string): Promise<void> {
   if (disposed) return;
   // If the mounted chat lives in its popup, this button press is the browser
   // user gesture that can bring that window forward. Do it synchronously before
   // any async import boundary or durable geometry update consumes the gesture.
-  if (tokenId === undefined && winMod?.focusAgentChatPopup()) return;
+  if (accessKeyId === undefined && winMod?.focusAgentChatPopup()) return;
   const durable = getAgentCliDurable();
-  patchAgentCliDurable(agentCliOpenPatch(durable, tokenId, {
+  patchAgentCliDurable(agentCliOpenPatch(durable, accessKeyId, {
     w: window.innerWidth,
     h: window.innerHeight,
   }));
-  await open(tokenId);
+  await open(accessKeyId);
 }
 
 async function restore(): Promise<void> {

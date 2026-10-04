@@ -52,7 +52,7 @@ def registry_name_env(hass, request):
         name_field = "name_by_user"
         other_field = "enabled"
     access_key = AccessKeyRecord(
-        id=str(uuid.uuid4()), name="name-validation", token_hash="x",
+        id=str(uuid.uuid4()), name="name-validation", access_key_hash="x",
         created_at=utcnow(), created_by="test", cap_registry_write="allow",
         permissions=PermissionTree(devices={device.id: PermissionNode(state="GREEN")}),
     )

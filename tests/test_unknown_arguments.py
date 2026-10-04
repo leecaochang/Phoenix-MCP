@@ -44,7 +44,7 @@ CASES = [
 
 def access_key(**caps):
     return AccessKeyRecord(
-        id='test', name='test', token_hash='x', created_at=utcnow(), created_by='test',
+        id='test', name='test', access_key_hash='x', created_at=utcnow(), created_by='test',
         permissions=PermissionTree(domains={'light': PermissionNode(state='GREEN')}), **caps,
     )
 

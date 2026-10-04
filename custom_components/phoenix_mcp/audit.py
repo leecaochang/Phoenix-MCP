@@ -61,8 +61,8 @@ def generate_request_id() -> str:
 class AuditEntry:
     request_id: str
     timestamp: datetime
-    token_id: str
-    token_name: str
+    access_key_id: str
+    access_key_name: str
     method: str
     resource: str
     outcome: Outcome
@@ -78,14 +78,14 @@ class AuditEntry:
     stale_tools_advisory: bool = False
     ha_user_id: str | None = None
     # Server-owned source identity, never a bearer credential.
-    originating_token_id: str | None = None
+    originating_access_key_id: str | None = None
 
     def to_dict(self) -> dict:
         d = {
             "request_id": self.request_id,
             "timestamp": self.timestamp.isoformat(),
-            "token_id": self.token_id,
-            "token_name": self.token_name,
+            "access_key_id": self.access_key_id,
+            "access_key_name": self.access_key_name,
             "method": self.method,
             "resource": self.resource,
             "outcome": self.outcome,
@@ -102,8 +102,8 @@ class AuditEntry:
             d["stale_tools_advisory"] = True
         if self.ha_user_id is not None:
             d["ha_user_id"] = self.ha_user_id
-        if self.originating_token_id is not None:
-            d["originating_token_id"] = self.originating_token_id
+        if self.originating_access_key_id is not None:
+            d["originating_access_key_id"] = self.originating_access_key_id
         return d
 
 
@@ -127,8 +127,8 @@ class AuditLog:
         self,
         *,
         request_id: str,
-        token_id: str,
-        token_name: str,
+        access_key_id: str,
+        access_key_name: str,
         method: str,
         resource: str,
         outcome: Outcome,
@@ -141,7 +141,7 @@ class AuditLog:
         stale_tools_advisory: bool = False,
         timestamp: datetime | None = None,
         ha_user_id: str | None = None,
-        originating_token_id: str | None = None,
+        originating_access_key_id: str | None = None,
     ) -> None:
         """Append an audit entry, subject to the current logging settings.
 
@@ -192,13 +192,13 @@ class AuditLog:
         from .household_authority import household_authority
 
         household = household_authority.get()
-        if ha_user_id is None and token_id == "admin" and token_name.startswith("admin:"):
-            ha_user_id = token_name.removeprefix("admin:")
+        if ha_user_id is None and access_key_id == "admin" and access_key_name.startswith("admin:"):
+            ha_user_id = access_key_name.removeprefix("admin:")
         self._log.append(AuditEntry(
             request_id=request_id,
             timestamp=timestamp or utcnow(),
-            token_id=token_id,
-            token_name=token_name,
+            access_key_id=access_key_id,
+            access_key_name=access_key_name,
             method=method,
             resource=logged_resource,
             outcome=outcome,
@@ -209,7 +209,7 @@ class AuditLog:
             preset=preset,
             stale_tools_advisory=stale_tools_advisory,
             ha_user_id=ha_user_id if ha_user_id is not None else household.user_id if household else None,
-            originating_token_id=originating_token_id,
+            originating_access_key_id=originating_access_key_id,
         ))
 
     _VALID_OUTCOMES = frozenset({"allowed", "denied", "not_found", "rate_limited", "not_implemented", "invalid_request", "pending_approval"})
@@ -217,7 +217,7 @@ class AuditLog:
     def _filtered(
         self,
         *,
-        token_id: str | None = None,
+        access_key_id: str | None = None,
         outcome: str | None = None,
         client_ip: str | None = None,
         method: str | None = None,
@@ -234,8 +234,8 @@ class AuditLog:
 
         entries = list(self._log)
 
-        if token_id is not None:
-            entries = [e for e in entries if e.token_id == token_id]
+        if access_key_id is not None:
+            entries = [e for e in entries if e.access_key_id == access_key_id]
         if outcome is not None:
             entries = [e for e in entries if e.outcome == outcome]
         if client_ip is not None:
@@ -257,7 +257,7 @@ class AuditLog:
     def query(
         self,
         *,
-        token_id: str | None = None,
+        access_key_id: str | None = None,
         outcome: str | None = None,
         client_ip: str | None = None,
         method: str | None = None,
@@ -273,7 +273,7 @@ class AuditLog:
         limit is capped at MAX_QUERY_LIMIT (500). offset is applied after filtering.
         """
         entries = self._filtered(
-            token_id=token_id, outcome=outcome, client_ip=client_ip,
+            access_key_id=access_key_id, outcome=outcome, client_ip=client_ip,
             method=method, resource=resource, since=since,
         )
         if entries is None:
@@ -284,7 +284,7 @@ class AuditLog:
     def count(
         self,
         *,
-        token_id: str | None = None,
+        access_key_id: str | None = None,
         outcome: str | None = None,
         client_ip: str | None = None,
         method: str | None = None,
@@ -296,7 +296,7 @@ class AuditLog:
         Returns None for an unrecognised outcome, like query().
         """
         entries = self._filtered(
-            token_id=token_id, outcome=outcome, client_ip=client_ip,
+            access_key_id=access_key_id, outcome=outcome, client_ip=client_ip,
             method=method, resource=resource, since=since,
         )
         return None if entries is None else len(entries)
@@ -344,8 +344,11 @@ class AuditLog:
                 raw_version, AUDIT_STORAGE_VERSION,
             )
             return
+        from .access_key_schema import normalize_access_key_fields
+
         for r in raw.get("entries", []):
             try:
+                r = normalize_access_key_fields(r)
                 ts = parse_datetime(r["timestamp"])
                 if ts is None:
                     raise ValueError(f"unparseable timestamp: {r['timestamp']!r}")
@@ -355,8 +358,8 @@ class AuditLog:
                 self._log.append(AuditEntry(
                     request_id=r["request_id"],
                     timestamp=ts,
-                    token_id=r["token_id"],
-                    token_name=r["token_name"],
+                    access_key_id=r["access_key_id"],
+                    access_key_name=r["access_key_name"],
                     method=r["method"],
                     resource=r["resource"],
                     outcome=outcome,
@@ -367,7 +370,7 @@ class AuditLog:
                     preset=r.get("preset"),
                     stale_tools_advisory=r.get("stale_tools_advisory", False),
                     ha_user_id=r.get("ha_user_id"),
-                    originating_token_id=r.get("originating_token_id"),
+                    originating_access_key_id=r.get("originating_access_key_id"),
                 ))
             except (KeyError, TypeError, ValueError) as exc:
                 _LOGGER.warning("Skipping corrupt audit entry: %s", exc)

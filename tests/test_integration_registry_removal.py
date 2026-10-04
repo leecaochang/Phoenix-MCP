@@ -58,7 +58,7 @@ def _access_key(env: dict, *, cap: str = "allow", device_state: str = "GREEN") -
     return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="integration-remove-test",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="test",
         cap_integration_write=cap,
@@ -426,7 +426,7 @@ async def test_entity_less_and_phoenix_entries_fail_closed(hass: HomeAssistant):
     pass_through = AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="entityless-remove-pass-through",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="test",
         pass_through=True,

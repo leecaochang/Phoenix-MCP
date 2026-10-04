@@ -27,8 +27,8 @@ function entry(over: Partial<AuditEntry> = {}): AuditEntry {
   return {
     request_id: "r1",
     timestamp: new Date(0).toISOString(),
-    token_id: "t1",
-    token_name: "daily",
+    access_key_id: "t1",
+    access_key_name: "daily",
     method: "POST",
     resource: "call_service",
     outcome: "allowed",

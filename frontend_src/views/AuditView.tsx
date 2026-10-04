@@ -58,7 +58,7 @@ export function AuditView({ accessKeys }: Props) {
 
   const filterParams = useMemo(() => ({
     outcome: outcomeFilter || undefined,
-    token_id: accessKeyFilter || undefined,
+    access_key_id: accessKeyFilter || undefined,
     since: timeWindow ? new Date(Date.now() - TIME_WINDOW_MS[timeWindow]).toISOString() : undefined,
     method: debouncedMethod || undefined,
     resource: debouncedResource || undefined,
@@ -108,12 +108,12 @@ export function AuditView({ accessKeys }: Props) {
             <option value="pending_approval">{t("audit.outcomePendingApproval")}</option>
           </select>
           <select
-            aria-label={t("audit.filterTokenAria")}
+            aria-label={t("audit.filterAccessKeyAria")}
             className="input input-auto"
             value={accessKeyFilter}
             onChange={(e) => setAccessKeyFilter(e.target.value)}
           >
-            <option value="">{t("audit.allTokens")}</option>
+            <option value="">{t("audit.allAccessKeys")}</option>
             {accessKeys.map((t) => (
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}

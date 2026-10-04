@@ -41,7 +41,7 @@ async def test_review_requires_confirmation_and_inactive_action(attention_env, h
     assert data.agent_recovery.blocks(access_key.id)
     response = await client.get("/api/phoenix-mcp/admin/attention")
     items = (await response.json())["items"]
-    assert items[0]["token_name"] == "Review token"
+    assert items[0]["access_key_name"] == "Review token"
     assert items[0]["tool"] == "call_service" and "arguments" not in json.dumps(items)
     assert not ir.async_get(hass).issues
     data.store.get_settings().kill_switch = True
@@ -66,7 +66,7 @@ async def test_failed_review_preserves_barrier_and_hides_exception(attention_env
 async def test_calendar_and_mesa_items_do_not_expose_payloads(attention_env, hass):
     client, data, access_key = attention_env
     data.calendar_writes = CalendarWriteJournal(hass)
-    data.calendar_writes.records = [{"receipt_id": "r", "entity_id": "calendar.test", "token_id": access_key.id,
+    data.calendar_writes.records = [{"receipt_id": "r", "entity_id": "calendar.test", "access_key_id": access_key.id,
                                     "operation": "create", "created_at": "2026-10-03T00:00:00Z",
                                     "status": "outcome_unknown", "requested": {"summary": "private event"}}]
     data.calendar_writes.save = AsyncMock()

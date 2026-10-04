@@ -29,7 +29,7 @@ function addMinutes(m: number): string {
 }
 
 
-export function CopyButton({ text, label = t("tokens.copyToClipboard") }: { text: string; label?: string }) {
+export function CopyButton({ text, label = t("accessKeys.copyToClipboard") }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
     await copyToClipboard(text);
@@ -39,10 +39,10 @@ export function CopyButton({ text, label = t("tokens.copyToClipboard") }: { text
   return (
     <>
       <button className="btn btn-primary" onClick={copy}>
-        {copied ? t("tokens.copied") : label}
+        {copied ? t("accessKeys.copied") : label}
       </button>
       {/* Announce the visual Copy -> Copied! swap to assistive tech. */}
-      <span className="sr-only" role="status">{copied ? t("tokens.copiedToClipboard") : ""}</span>
+      <span className="sr-only" role="status">{copied ? t("accessKeys.copiedToClipboard") : ""}</span>
     </>
   );
 }
@@ -55,7 +55,7 @@ export function RawAccessKeyDisplay({ rawAccessKey, note }: { rawAccessKey: stri
   return (
     <>
       <div className="amber-block">
-        {note ?? <p>{tRich("tokens.rawTokenNote", { strong: (c) => <strong>{c}</strong> })}</p>}
+        {note ?? <p>{tRich("accessKeys.rawAccessKeyNote", { strong: (c) => <strong>{c}</strong> })}</p>}
       </div>
       <CopyCodeBox value={rawAccessKey} />
     </>
@@ -73,7 +73,7 @@ interface PostCreateProps {
 // token immediately: connect an external agent, set up in-panel Agent Chat, or
 // just reveal the token to copy.
 function PostCreateModal({ rawAccessKey, accessKeyName, onOpenSettings, onDone }: PostCreateProps) {
-  const [view, setView] = useState<"choice" | "connect" | "token">("choice");
+  const [view, setView] = useState<"choice" | "connect" | "access-key">("choice");
 
   // On view switches the clicked control unmounts; refocus the first control
   // of the new view so keyboard focus never falls out of the dialog.
@@ -88,25 +88,25 @@ function PostCreateModal({ rawAccessKey, accessKeyName, onOpenSettings, onDone }
   }, [view]);
 
   return (
-    <Modal titleId="created-token-title" onClose={onDone}>
-      <h3 className="modal-title" id="created-token-title">{t("tokens.tokenCreatedTitle", { name: accessKeyName })}</h3>
+    <Modal titleId="created-access-key-title" onClose={onDone}>
+      <h3 className="modal-title" id="created-access-key-title">{t("accessKeys.accessKeyCreatedTitle", { name: accessKeyName })}</h3>
       <div ref={viewsRef} style={{ display: "contents" }}>
 
       {view === "choice" && (
         <>
-          <p className="wizard-sub">{t("tokens.postCreateQuestion")}</p>
+          <p className="wizard-sub">{t("accessKeys.postCreateQuestion")}</p>
           <div className="post-create-choices">
             <button className="post-create-choice" onClick={() => setView("connect")}>
-              <span className="post-create-choice-title">{t("tokens.postCreateConnectTitle")}</span>
-              <span className="post-create-choice-sub">{t("tokens.postCreateConnectSub")}</span>
+              <span className="post-create-choice-title">{t("accessKeys.postCreateConnectTitle")}</span>
+              <span className="post-create-choice-sub">{t("accessKeys.postCreateConnectSub")}</span>
             </button>
             <button className="post-create-choice" onClick={onOpenSettings}>
-              <span className="post-create-choice-title">{t("tokens.postCreateChatTitle")}</span>
-              <span className="post-create-choice-sub">{t("tokens.postCreateChatSub")}</span>
+              <span className="post-create-choice-title">{t("accessKeys.postCreateChatTitle")}</span>
+              <span className="post-create-choice-sub">{t("accessKeys.postCreateChatSub")}</span>
             </button>
-            <button className="post-create-choice" onClick={() => setView("token")}>
-              <span className="post-create-choice-title">{t("tokens.postCreateShowTitle")}</span>
-              <span className="post-create-choice-sub">{t("tokens.postCreateShowSub")}</span>
+            <button className="post-create-choice" onClick={() => setView("access-key")}>
+              <span className="post-create-choice-title">{t("accessKeys.postCreateShowTitle")}</span>
+              <span className="post-create-choice-sub">{t("accessKeys.postCreateShowSub")}</span>
             </button>
           </div>
           <div className="modal-actions">
@@ -117,23 +117,23 @@ function PostCreateModal({ rawAccessKey, accessKeyName, onOpenSettings, onDone }
 
       {view === "connect" && (
         <>
-          <button className="btn btn-text btn-sm" onClick={() => setView("choice")}><span aria-hidden="true">&larr;</span> {t("tokens.back")}</button>
+          <button className="btn btn-text btn-sm" onClick={() => setView("choice")}><span aria-hidden="true">&larr;</span> {t("accessKeys.back")}</button>
           <ConnectInstructions accessKey={rawAccessKey} accessKeyName={accessKeyName} />
           <div className="modal-actions">
-            <button className="btn btn-primary" onClick={onDone}>{t("tokens.done")}</button>
+            <button className="btn btn-primary" onClick={onDone}>{t("accessKeys.done")}</button>
           </div>
         </>
       )}
 
-      {view === "token" && (
+      {view === "access-key" && (
         <>
-          <button className="btn btn-text btn-sm" onClick={() => setView("choice")}><span aria-hidden="true">&larr;</span> {t("tokens.back")}</button>
+          <button className="btn btn-text btn-sm" onClick={() => setView("choice")}><span aria-hidden="true">&larr;</span> {t("accessKeys.back")}</button>
           <RawAccessKeyDisplay rawAccessKey={rawAccessKey} />
           <div className="banner banner-info">
-            {t("tokens.postCreateReplaceNote")}
+            {t("accessKeys.postCreateReplaceNote")}
           </div>
           <div className="modal-actions">
-            <button className="btn btn-primary" onClick={onDone}>{t("tokens.done")}</button>
+            <button className="btn btn-primary" onClick={onDone}>{t("accessKeys.done")}</button>
           </div>
         </>
       )}
@@ -156,9 +156,9 @@ export function AccessKeyCreateModal({ existingNames, onCreated, onClose, onOpen
 
   const nameError = (() => {
     if (!name) return null;
-    if (!NAME_REGEX.test(name)) return t("tokens.nameFormatError");
+    if (!NAME_REGEX.test(name)) return t("accessKeys.nameFormatError");
     const slug = slugify(name);
-    if (existingNames.some((n) => slugify(n) === slug)) return t("tokens.nameDuplicateError");
+    if (existingNames.some((n) => slugify(n) === slug)) return t("accessKeys.nameDuplicateError");
     return null;
   })();
 
@@ -194,13 +194,13 @@ export function AccessKeyCreateModal({ existingNames, onCreated, onClose, onOpen
         rate_limit_burst: burstNum,
       };
       const resp = await api.createAccessKey(body);
-      const { token: rawAccessKey, ...record } = resp;
+      const { access_key: rawAccessKey, ...record } = resp;
       setCreatedAccessKey({ record, raw: rawAccessKey });
       // The caller's onRefresh covers the panel shell, but the floating chat
       // window is a separate bundle that only learns about new tokens here.
       window.dispatchEvent(new CustomEvent("phx-access-keys-changed"));
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t("tokens.createFailed"));
+      setError(e instanceof Error ? e.message : t("accessKeys.createFailed"));
     } finally {
       setSaving(false);
     }
@@ -221,44 +221,44 @@ export function AccessKeyCreateModal({ existingNames, onCreated, onClose, onOpen
   }
 
   return (
-    <Modal titleId="create-token-title" onClose={saving ? undefined : onClose}>
-      <h3 className="modal-title" id="create-token-title">{t("tokens.createToken")}</h3>
+    <Modal titleId="create-access-key-title" onClose={saving ? undefined : onClose}>
+      <h3 className="modal-title" id="create-access-key-title">{t("accessKeys.createAccessKey")}</h3>
 
       <div className="field">
-        <label htmlFor="token-name-input">{t("tokens.nameLabel")}</label>
+        <label htmlFor="access-key-name-input">{t("accessKeys.nameLabel")}</label>
           <input
-            id="token-name-input"
+            id="access-key-name-input"
             className={`input${nameError ? " error" : ""}`}
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder={t("tokens.namePlaceholder")}
+            placeholder={t("accessKeys.namePlaceholder")}
             maxLength={32}
             autoFocus
             aria-invalid={nameError ? true : undefined}
-            aria-describedby={nameError ? "token-name-error" : undefined}
+            aria-describedby={nameError ? "access-key-name-error" : undefined}
           />
-          {nameError && <span className="field-error" id="token-name-error" role="alert">{nameError}</span>}
+          {nameError && <span className="field-error" id="access-key-name-error" role="alert">{nameError}</span>}
         </div>
 
         <div className="field">
-          <label htmlFor="token-expiry-unit">{t("tokens.expiryLabel")}</label>
-          <div className="token-create-expiry-row">
+          <label htmlFor="access-key-expiry-unit">{t("accessKeys.expiryLabel")}</label>
+          <div className="access-key-create-expiry-row">
             <select
-              id="token-expiry-unit"
+              id="access-key-expiry-unit"
               className="input input-auto"
               value={ttlUnit}
               onChange={(e) => setTtlUnit(e.target.value as TtlUnit)}
             >
-              <option value="none">{t("tokens.expiryNone")}</option>
-              <option value="minutes">{t("tokens.expiryMinutes")}</option>
-              <option value="hours">{t("tokens.expiryHours")}</option>
-              <option value="days">{t("tokens.expiryDays")}</option>
-              <option value="weeks">{t("tokens.expiryWeeks")}</option>
+              <option value="none">{t("accessKeys.expiryNone")}</option>
+              <option value="minutes">{t("accessKeys.expiryMinutes")}</option>
+              <option value="hours">{t("accessKeys.expiryHours")}</option>
+              <option value="days">{t("accessKeys.expiryDays")}</option>
+              <option value="weeks">{t("accessKeys.expiryWeeks")}</option>
             </select>
             {ttlUnit !== "none" && (
               <input
-                aria-label={t("tokens.expiryAmountAria")}
-                className="input token-create-expiry-value"
+                aria-label={t("accessKeys.expiryAmountAria")}
+                className="input access-key-create-expiry-value"
                 type="number"
                 min={1}
                 value={ttlValue}
@@ -270,13 +270,13 @@ export function AccessKeyCreateModal({ existingNames, onCreated, onClose, onOpen
 
         <div className="toggle-row">
           <div className="toggle-label">
-            <span>{t("tokens.passThroughMode")}</span>
-            <small>{t("tokens.passThroughModeHelp")}</small>
+            <span>{t("accessKeys.passThroughMode")}</span>
+            <small>{t("accessKeys.passThroughModeHelp")}</small>
           </div>
           <label className="toggle-switch">
             <input
               type="checkbox"
-              aria-label={t("tokens.passThroughMode")}
+              aria-label={t("accessKeys.passThroughMode")}
               checked={passThrough}
               onChange={(e) => { setPassThrough(e.target.checked); setPtConfirmed(false); }}
             />
@@ -287,14 +287,14 @@ export function AccessKeyCreateModal({ existingNames, onCreated, onClose, onOpen
         {passThrough ? (
           <div className="amber-block">
             <p>
-              {tRich("tokens.createPtWarning", { strong: (c) => <strong>{c}</strong> })}
+              {tRich("accessKeys.createPtWarning", { strong: (c) => <strong>{c}</strong> })}
             </p>
             <div className="toggle-row mt-10">
-              <div className="toggle-label"><span>{t("tokens.createPtUnderstand")}</span></div>
+              <div className="toggle-label"><span>{t("accessKeys.createPtUnderstand")}</span></div>
               <label className="toggle-switch">
                 <input
                   type="checkbox"
-                  aria-label={t("tokens.createPtUnderstand")}
+                  aria-label={t("accessKeys.createPtUnderstand")}
                   checked={ptConfirmed}
                   onChange={(e) => setPtConfirmed(e.target.checked)}
                 />
@@ -303,10 +303,10 @@ export function AccessKeyCreateModal({ existingNames, onCreated, onClose, onOpen
             </div>
           </div>
         ) : (
-          <div className="token-create-rate-section">
-            <div className="token-create-rate-fields">
-              <div className="field token-create-rate-field">
-                <label htmlFor="create-rate-requests">{t("tokens.rateRequestsLabel")}</label>
+          <div className="access-key-create-rate-section">
+            <div className="access-key-create-rate-fields">
+              <div className="field access-key-create-rate-field">
+                <label htmlFor="create-rate-requests">{t("accessKeys.rateRequestsLabel")}</label>
                 <input
                   id="create-rate-requests"
                   className="input"
@@ -316,8 +316,8 @@ export function AccessKeyCreateModal({ existingNames, onCreated, onClose, onOpen
                   onChange={(e) => setRateLimitRequests(e.target.value)}
                 />
               </div>
-              <div className="field token-create-rate-field">
-                <label htmlFor="create-rate-burst">{t("tokens.rateBurstLabel")}</label>
+              <div className="field access-key-create-rate-field">
+                <label htmlFor="create-rate-burst">{t("accessKeys.rateBurstLabel")}</label>
                 <input
                   id="create-rate-burst"
                   className="input"
@@ -336,9 +336,9 @@ export function AccessKeyCreateModal({ existingNames, onCreated, onClose, onOpen
 
       <div className="modal-actions">
         <BusyButton className="btn btn-primary" onClick={submit} disabled={!canSubmit} busy={saving}>
-          {saving ? t("tokens.creating") : t("tokens.create")}
+          {saving ? t("accessKeys.creating") : t("accessKeys.create")}
         </BusyButton>
-        <BusyButton className="btn btn-text" onClick={onClose} busy={saving}>{t("tokens.cancel")}</BusyButton>
+        <BusyButton className="btn btn-text" onClick={onClose} busy={saving}>{t("accessKeys.cancel")}</BusyButton>
       </div>
     </Modal>
   );

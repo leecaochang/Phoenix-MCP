@@ -21,7 +21,7 @@ export interface AgentCliDurable {
   pos: { x: number; y: number };
   pillPos: { x: number; y: number };
   size: { w: number; h: number };
-  tokenId: string;
+  accessKeyId: string;
   instanceId: string;
   model: string;
   options: AgentCliOptions;
@@ -90,7 +90,7 @@ export function defaultDurable(): AgentCliDurable {
     pos: { x: -1, y: -1 }, // -1 => "unset", the window computes a default
     pillPos: { x: -1, y: -1 }, // -1 => "unset", seeded from the window on minimize
     size: { w: 440, h: 560 },
-    tokenId: "",
+    accessKeyId: "",
     instanceId: "",
     model: "",
     options: { thinking: true, effort: "high", temperature: "", verbose: false },
@@ -106,17 +106,19 @@ export function getDurable(): AgentCliDurable {
     const key = storageKey(LS_KEY);
     const raw = key ? localStorage.getItem(key) : null;
     if (!raw) return defaultDurable();
-    const p = JSON.parse(raw) as Partial<AgentCliDurable> & { showUsage?: unknown };
+    const p = JSON.parse(raw) as Partial<AgentCliDurable> & { showUsage?: unknown; tokenId?: unknown };
     // A legacy `showUsage` key (it hid only the token count) is honored as
     // showFooter when the new key is absent, and dropped from the next
     // persisted object.
-    const { showUsage: legacyShowUsage, ...persisted } = p;
+    const { showUsage: legacyShowUsage, tokenId: legacyAccessKeyId, ...persisted } = p;
     const d = defaultDurable();
     const showFooter = typeof p.showFooter === "boolean"
       ? p.showFooter
       : typeof legacyShowUsage === "boolean" ? legacyShowUsage : d.showFooter;
     return {
       ...d, ...persisted,
+      accessKeyId: typeof p.accessKeyId === "string" ? p.accessKeyId
+        : typeof legacyAccessKeyId === "string" ? legacyAccessKeyId : d.accessKeyId,
       pos: { ...d.pos, ...(p.pos || {}) },
       pillPos: { ...d.pillPos, ...(p.pillPos || {}) },
       size: { ...d.size, ...(p.size || {}) },
@@ -138,11 +140,11 @@ export function getDurable(): AgentCliDurable {
  */
 export function agentCliOpenPatch(
   durable: AgentCliDurable,
-  tokenId?: string,
+  accessKeyId?: string,
   viewport?: { w: number; h: number },
 ): Partial<AgentCliDurable> {
   const patch: Partial<AgentCliDurable> = {
-    ...(tokenId ? { tokenId } : {}),
+    ...(accessKeyId ? { accessKeyId } : {}),
     open: true,
     minimized: false,
   };

@@ -259,7 +259,7 @@ async def test_voice_shadow_never_waits_for_decision_or_replaces_provider(hass,d
     from custom_components.phoenix_mcp import voice_agent
     data,access_key,store,account=decision_home
     chat=await store.add('deepseek',{'api_key':'chat','model':'model'})
-    await data.store.async_patch_settings(voice_agent_enabled=True,voice_agent_token_id=access_key.id,
+    await data.store.async_patch_settings(voice_agent_enabled=True,voice_agent_access_key_id=access_key.id,
         voice_agent_provider_id=chat,voice_agent_model='model',voice_agent_routing_mode='local_shadow',
         decision_shadow_enabled=True)
     entered=asyncio.Event();release=asyncio.Event()

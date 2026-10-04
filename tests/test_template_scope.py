@@ -30,7 +30,7 @@ from custom_components.phoenix_mcp.tools import helper
 
 def agent(**caps):
     return AccessKeyRecord(
-        id=uuid.uuid4().hex, name="scope-test", token_hash="x", created_at=utcnow(), created_by="test",
+        id=uuid.uuid4().hex, name="scope-test", access_key_hash="x", created_at=utcnow(), created_by="test",
         permissions=PermissionTree(domains={"sensor": PermissionNode(state="GREEN"),
                                            "button": PermissionNode(state="GREEN")}),
         cap_helper_write=caps.get("cap_helper_write", "allow"),

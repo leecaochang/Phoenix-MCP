@@ -35,7 +35,7 @@ async def async_route_chat_command(hass: Any, data: Any, access_key: Any,
         return True
     assert isinstance(language, str)
     authority = RoutingAuthority.capture(data, access_key)
-    binding = [access_key.id, access_key.token_hash, access_key.settings_version, language, authority.settings_values]
+    binding = [access_key.id, access_key.access_key_hash, access_key.settings_version, language, authority.settings_values]
     from .command_clarification import (async_clarification_reply, clarification_binding, clarification_prompt, is_clarification_cancel)
     clarification_key = ['chat', messages[:-1]]
     clarification_scope = clarification_binding(hass, authority, language)

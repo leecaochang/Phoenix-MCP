@@ -13,12 +13,12 @@ function relativeTime(iso: string | null): string {
   if (!iso) return t("common.never");
   const diff = Date.now() - new Date(iso).getTime();
   const s = Math.floor(diff / 1000);
-  if (s < 60) return t("tokens.justNow");
+  if (s < 60) return t("accessKeys.justNow");
   const m = Math.floor(s / 60);
-  if (m < 60) return t("tokens.minutesAgo", { m });
+  if (m < 60) return t("accessKeys.minutesAgo", { m });
   const h = Math.floor(m / 60);
-  if (h < 24) return t("tokens.hoursAgo", { h });
-  return t("tokens.daysAgo", { d: Math.floor(h / 24) });
+  if (h < 24) return t("accessKeys.hoursAgo", { h });
+  return t("accessKeys.daysAgo", { d: Math.floor(h / 24) });
 }
 
 
@@ -132,12 +132,12 @@ export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpe
     return (
       <div className="view-root">
         <div className="card wizard-hero">
-          <div className="wizard-hero-title">{t("tokens.heroTitle")}</div>
+          <div className="wizard-hero-title">{t("accessKeys.heroTitle")}</div>
           <p className="wizard-hero-sub">
-            {t("tokens.heroSub")}
+            {t("accessKeys.heroSub")}
           </p>
           <div className="wizard-hero-actions">
-            <button className="btn btn-primary" onClick={onLaunchWizard}>{t("tokens.setUpFirstAgent")}</button>
+            <button className="btn btn-primary" onClick={onLaunchWizard}>{t("accessKeys.setUpFirstAgent")}</button>
           </div>
         </div>
         {showCreate && (
@@ -156,7 +156,7 @@ export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpe
     <div className="view-root">
       {accessKeys.length >= MAX_ACTIVE_ACCESS_KEYS_WARNING && (
         <div className="banner banner-warn">
-          {t("tokens.maxWarning", { max: MAX_ACTIVE_ACCESS_KEYS_WARNING })}
+          {t("accessKeys.maxWarning", { max: MAX_ACTIVE_ACCESS_KEYS_WARNING })}
         </div>
       )}
 
@@ -164,8 +164,8 @@ export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpe
         <div className="filter-row">
           <input
             className="input"
-            aria-label={t("tokens.filterAria")}
-            placeholder={t("tokens.filterPlaceholder")}
+            aria-label={t("accessKeys.filterAria")}
+            placeholder={t("accessKeys.filterPlaceholder")}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
           />
@@ -174,19 +174,19 @@ export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpe
               className="btn btn-ghost btn-sm"
               onClick={onLaunchWizard}
             >
-              {t("tokens.setUpAgent")}
+              {t("accessKeys.setUpAgent")}
             </button>
             <button
               className="btn btn-ghost btn-sm"
               onClick={() => setShowArchived((v) => !v)}
             >
-              {showArchived ? t("tokens.hideArchived") : t("tokens.showArchived")}
+              {showArchived ? t("accessKeys.hideArchived") : t("accessKeys.showArchived")}
             </button>
             <button
               className="btn btn-ghost btn-sm"
               onClick={onOpenCreate}
             >
-              {t("tokens.createToken")}
+              {t("accessKeys.createAccessKey")}
             </button>
           </div>
           {/* Own flex item (not nested in filter-row-right) so mobile CSS can
@@ -196,7 +196,7 @@ export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpe
             className="btn btn-ghost btn-sm btn-icon filter-row-refresh"
             onClick={onRefresh}
             title={t("common.refresh")}
-            aria-label={t("tokens.refreshAria")}
+            aria-label={t("accessKeys.refreshAria")}
           >
             <RefreshIcon />
           </button>
@@ -207,23 +207,23 @@ export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpe
         ) : error ? (
           <ErrorMsg msg={error} />
         ) : (
-          <table className="data-table token-table">
+          <table className="data-table access-key-table">
             <thead>
               <tr>
-                {th(t("tokens.colName"), "name")}
-                {th(t("tokens.colMode"), "mode")}
-                {th(t("tokens.colStatus"), "status")}
-                {th(t("tokens.colCreated"), "created")}
-                {th(t("tokens.colUpdated"), "updated")}
-                {th(t("tokens.colExpires"), "expires")}
-                {th(t("tokens.colLastUsed"), "last_used")}
+                {th(t("accessKeys.colName"), "name")}
+                {th(t("accessKeys.colMode"), "mode")}
+                {th(t("accessKeys.colStatus"), "status")}
+                {th(t("accessKeys.colCreated"), "created")}
+                {th(t("accessKeys.colUpdated"), "updated")}
+                {th(t("accessKeys.colExpires"), "expires")}
+                {th(t("accessKeys.colLastUsed"), "last_used")}
               </tr>
             </thead>
             <tbody>
               {sorted.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="token-table-empty">
-                    {filter ? t("tokens.emptyFiltered") : t("tokens.empty")}
+                  <td colSpan={7} className="access-key-table-empty">
+                    {filter ? t("accessKeys.emptyFiltered") : t("accessKeys.empty")}
                   </td>
                 </tr>
               )}
@@ -236,7 +236,7 @@ export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpe
                     className={`clickable${tok.pass_through ? " pass-through-row" : ""}`}
                     onClick={() => onOpenDetail(tok.id)}
                   >
-                    <td className="token-name">
+                    <td className="access-key-name">
                       {/* The row's own onClick (above) makes the whole row
                           clickable for the mouse; this button keeps it
                           keyboard- and screen-reader-accessible (tab to it,
@@ -247,15 +247,15 @@ export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpe
                         type="button"
                         className="row-open"
                         onClick={(e) => { e.stopPropagation(); onOpenDetail(tok.id); }}
-                        aria-label={t("tokens.editAria", { name: tok.name })}
+                        aria-label={t("accessKeys.editAria", { name: tok.name })}
                       >
                         {tok.name}
                       </button>
                     </td>
                     <td>
                       {tok.pass_through
-                        ? <span className="badge badge-amber">{t("tokens.passThrough")}</span>
-                        : <span className="badge badge-blue">{t("tokens.scoped")}</span>}
+                        ? <span className="badge badge-amber">{t("accessKeys.passThrough")}</span>
+                        : <span className="badge badge-blue">{t("accessKeys.scoped")}</span>}
                     </td>
                     <td><span className={`badge ${statusClass}`}>{accessKeyStatusLabel(status)}</span></td>
                     <td title={tok.created_at ? localeDateTime(tok.created_at) : undefined}>{formatDate(tok.created_at)}</td>
@@ -273,7 +273,7 @@ export function AccessKeyListView({ accessKeys, loading, error, onRefresh, onOpe
       {showArchived && (
         <div className="card">
           <div className="card-header">
-            <h3 className="card-header-title">{t("tokens.archivedTitle")}</h3>
+            <h3 className="card-header-title">{t("accessKeys.archivedTitle")}</h3>
           </div>
           {archivedLoading ? (
             <Loading />

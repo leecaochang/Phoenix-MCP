@@ -35,7 +35,7 @@ import {
 import { Loading, ErrorMsg, RefreshIcon, DOCS_BASE_URL } from "./components/common";
 import PANEL_CSS from "./phoenix-mcp-panel.css?inline";
 
-type Tab = "tokens" | "approvals" | "changes" | "mesa" | "audit" | "conversations" | "settings";
+type Tab = "accessKeys" | "approvals" | "changes" | "mesa" | "audit" | "conversations" | "settings";
 type Theme = "light" | "dark" | "auto";
 
 export { HIGH_RISK_DOMAINS } from "./utils";
@@ -47,31 +47,37 @@ export { Loading, ErrorMsg, RefreshIcon };
 
 type View =
   | { name: "list" }
-  | { name: "detail"; tokenId: string }
+  | { name: "detail"; accessKeyId: string }
   | { name: "wizard" };
 
-const TAB_LABEL_KEYS: Record<Tab, string> = { tokens: "shell.tabTokens", approvals: "shell.tabApprovals", changes: "shell.tabChanges", mesa: "shell.tabMesa", audit: "shell.tabAudit", conversations: "conversations.title", settings: "shell.tabSettings" };
+const TAB_LABEL_KEYS: Record<Tab, string> = { accessKeys: "shell.tabAccessKeys", approvals: "shell.tabApprovals", changes: "shell.tabChanges", mesa: "shell.tabMesa", audit: "shell.tabAudit", conversations: "conversations.title", settings: "shell.tabSettings" };
 
 // Persist the active tab so it survives a reload or navigating away and back.
 const TAB_STORAGE_KEY = "phx-tab";
 function readStoredTab(): Tab {
   try {
-    const v = localStorage.getItem(TAB_STORAGE_KEY);
+    const stored = localStorage.getItem(TAB_STORAGE_KEY);
+    const v = stored === "tokens" ? "accessKeys" : stored;
     if (v && v in TAB_LABEL_KEYS) return v as Tab;
   } catch {
     // localStorage unavailable (e.g. blocked): fall back to the default.
   }
-  return "tokens";
+  return "accessKeys";
 }
 
 // Persist the token being edited so returning to the Tokens tab reopens its
 // detail; with none stored (or any other tab), reopen at the Tokens list.
-const TOKEN_DETAIL_STORAGE_KEY = "phx-token-detail";
+const ACCESS_KEY_DETAIL_STORAGE_KEY = "phx-access-key-detail";
 function readStoredView(tab: Tab): View {
-  if (tab !== "tokens") return { name: "list" };
+  if (tab !== "accessKeys") return { name: "list" };
   try {
-    const id = localStorage.getItem(TOKEN_DETAIL_STORAGE_KEY);
-    if (id) return { name: "detail", tokenId: id };
+    const id = localStorage.getItem(ACCESS_KEY_DETAIL_STORAGE_KEY)
+      ?? localStorage.getItem("phx-token-detail");
+    if (id) {
+      localStorage.setItem(ACCESS_KEY_DETAIL_STORAGE_KEY, id);
+      localStorage.removeItem("phx-token-detail");
+    }
+    if (id) return { name: "detail", accessKeyId: id };
   } catch {
     // localStorage unavailable: fall back to the list.
   }
@@ -145,7 +151,7 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
   // never looks like a rise. Used to detect a genuinely NEW approval arriving
   // while History is open, distinct from "some approval happens to be pending".
   const lastSeenPendingCountRef = useRef<number | null>(null);
-  const openAgentCliRef = useRef<(tokenId?: string) => void>(() => {});
+  const openAgentCliRef = useRef<(accessKeyId?: string) => void>(() => {});
 
   // Deep-link from a notification: /phoenix-mcp/approvals/{id} opens the
   // Approvals tab and that specific approval. Legacy fragment links remain
@@ -208,10 +214,10 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
   // so returning lands on the list rather than a stale detail.
   useEffect(() => {
     try {
-      if (tab === "tokens" && view.name === "detail") {
-        localStorage.setItem(TOKEN_DETAIL_STORAGE_KEY, view.tokenId);
+      if (tab === "accessKeys" && view.name === "detail") {
+        localStorage.setItem(ACCESS_KEY_DETAIL_STORAGE_KEY, view.accessKeyId);
       } else {
-        localStorage.removeItem(TOKEN_DETAIL_STORAGE_KEY);
+        localStorage.removeItem(ACCESS_KEY_DETAIL_STORAGE_KEY);
       }
     } catch { /* storage blocked: skip */ }
   }, [tab, view]);
@@ -234,8 +240,8 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
     // (kill switch, global-vs-panel window) before settings loaded and always
     // fall through to the panel-only window.
     const onOpen = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { tokenId?: string } | undefined;
-      openAgentCliRef.current(detail?.tokenId);
+      const detail = (e as CustomEvent).detail as { accessKeyId?: string } | undefined;
+      openAgentCliRef.current(detail?.accessKeyId);
     };
     // A token created or revoked elsewhere (wizard, Token Detail) must reach
     // the panel fallback window's own tokens prop independent of navigation,
@@ -258,21 +264,21 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
   // window (floats over all of HA); otherwise render the panel-only window (also
   // the fallback when global injection is unsupported). The key bump forces a
   // remount that re-reads the centered geometry.
-  const openAgentCli = useCallback((tokenId?: string, preservePosition = false) => {
+  const openAgentCli = useCallback((accessKeyId?: string, preservePosition = false) => {
     if (settings?.kill_switch) return;
     // The panel-local fallback can also be popped out. Keep its live React tree
     // intact and use this direct button gesture to request popup focus.
-    if (tokenId === undefined && focusAgentCliPopup()) return;
+    if (accessKeyId === undefined && focusAgentCliPopup()) return;
     const d = getAgentCliDurable();
     patchAgentCliDurable(agentCliOpenPatch(
       d,
-      tokenId,
+      accessKeyId,
       preservePosition ? undefined : { w: window.innerWidth, h: window.innerHeight },
     ));
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const g = (window as any).__phxAgentChat;
     if (settings?.agentcli_global && g?.ready) {
-      g.open(tokenId);
+      g.open(accessKeyId);
       return;
     }
     setAgentCliKey((k) => k + 1);
@@ -368,7 +374,7 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
       const data = await api.listAccessKeys();
       setAccessKeys(data);
     } catch (e: unknown) {
-      setAccessKeysError(e instanceof Error ? e.message : t("shell.loadTokensFailed"));
+      setAccessKeysError(e instanceof Error ? e.message : t("shell.loadAccessKeysFailed"));
     } finally {
       setLoadingAccessKeys(false);
     }
@@ -431,12 +437,12 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
   }, [hass, refreshPendingCount]);
 
   const openDetail = useCallback((id: string) => {
-    setView({ name: "detail", tokenId: id });
-    setTab("tokens");
+    setView({ name: "detail", accessKeyId: id });
+    setTab("accessKeys");
   }, []);
 
   const openWizard = useCallback(() => {
-    setTab("tokens");
+    setTab("accessKeys");
     setView({ name: "wizard" });
   }, []);
 
@@ -467,10 +473,10 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
     }
     setTab(t);
     setView({ name: "list" });
-    if (t === "tokens") refreshAccessKeys();
+    if (t === "accessKeys") refreshAccessKeys();
   }, [refreshAccessKeys, approvalsTab, pendingCount]);
 
-  const TABS: Tab[] = ["tokens", "approvals", "changes", "mesa", "audit", "conversations", "settings"];
+  const TABS: Tab[] = ["accessKeys", "approvals", "changes", "mesa", "audit", "conversations", "settings"];
 
   function handleTabKeyDown(e: React.KeyboardEvent) {
     const idx = TABS.indexOf(tab);
@@ -577,8 +583,8 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
       >
         <ErrorBoundary><AttentionPanel /></ErrorBoundary>
         <h2 className="sr-only">{t(TAB_LABEL_KEYS[tab])}</h2>
-        <ErrorBoundary key={`${tab}:${view.name}:${view.name === "detail" ? view.tokenId : ""}`} >
-        {tab === "tokens" && view.name === "list" && (
+        <ErrorBoundary key={`${tab}:${view.name}:${view.name === "detail" ? view.accessKeyId : ""}`} >
+        {tab === "accessKeys" && view.name === "list" && (
           <AccessKeyListView
             accessKeys={accessKeys}
             loading={loadingAccessKeys}
@@ -592,15 +598,15 @@ function PhoenixApp({ hass, narrow, theme, onThemeChange, language, onLanguageCh
             onOpenSettings={goToSettings}
           />
         )}
-        {tab === "tokens" && view.name === "wizard" && (
+        {tab === "accessKeys" && view.name === "wizard" && (
           <OnboardingWizard onCancel={goBack} onFinish={openDetail} />
         )}
-        {tab === "tokens" && view.name === "detail" && (
+        {tab === "accessKeys" && view.name === "detail" && (
           <AccessKeyDetailView
-            tokenId={view.tokenId}
+            accessKeyId={view.accessKeyId}
             onBack={goBack}
             onRefresh={refreshAccessKeys}
-            presetsEnabled={settings?.token_presets_enabled ?? false}
+            presetsEnabled={settings?.access_key_presets_enabled ?? false}
             esphome={
               settings
                 ? {

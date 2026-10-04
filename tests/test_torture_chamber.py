@@ -253,7 +253,7 @@ def _access_key(mode: str) -> AccessKeyRecord:
     No entity is ever in scope, so nothing real is actuated.
     """
     return AccessKeyRecord(
-        id=str(uuid.uuid4()), name="torture", token_hash="x", created_at=utcnow(),
+        id=str(uuid.uuid4()), name="torture", access_key_hash="x", created_at=utcnow(),
         created_by="admin", permissions=PermissionTree(domains={}),
         **{cap: mode for cap in CAPABILITY_NAMES},
     )

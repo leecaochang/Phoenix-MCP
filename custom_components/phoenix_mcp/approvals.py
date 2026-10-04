@@ -39,12 +39,12 @@ TERMINAL_STATUSES = frozenset({
     STATUS_CANCELLED,
 })
 
-REASON_ACCESS_KEY_INACTIVE = "token_inactive"
+REASON_ACCESS_KEY_INACTIVE = "access_key_inactive"
 REASON_CAPABILITY_DENIED = "capability_denied"
 REASON_KILL_SWITCH = "kill_switch"
 REASON_ADMIN_CANCELLED = "admin_cancelled"
-REASON_REVOKED = "token_revoked"
-REASON_ACCESS_KEY_EXPIRED = "token_expired"
+REASON_REVOKED = "access_key_revoked"
+REASON_ACCESS_KEY_EXPIRED = "access_key_expired"
 REASON_WIPED = "phoenix_mcp_data_wiped"
 # The execution claim was persisted but Home Assistant stopped before its
 # outcome was saved, so whether the side effect landed is UNKNOWN.
@@ -70,8 +70,8 @@ class PendingApproval:
     """One queued approval request awaiting admin decision."""
 
     id: str
-    token_id: str
-    token_name: str
+    access_key_id: str
+    access_key_name: str
     tool_name: str
     cap_name: str
     args: dict
@@ -119,8 +119,8 @@ class PendingApproval:
             }
         return {
             "id": self.id,
-            "token_id": self.token_id,
-            "token_name": self.token_name,
+            "access_key_id": self.access_key_id,
+            "access_key_name": self.access_key_name,
             "tool_name": self.tool_name,
             "cap_name": self.cap_name,
             "args": self.args if not redact_args else public_args,
@@ -146,8 +146,8 @@ class PendingApproval:
     def from_dict(cls, data: dict) -> PendingApproval:
         return cls(
             id=data["id"],
-            token_id=data["token_id"],
-            token_name=data.get("token_name", ""),
+            access_key_id=data["access_key_id"],
+            access_key_name=data.get("access_key_name", ""),
             tool_name=data["tool_name"],
             cap_name=data.get("cap_name", ""),
             args=data.get("args", {}),
@@ -184,8 +184,8 @@ def _new_approval_id() -> str:
 async def async_create_pending_approval(
     store: AccessKeyStore,
     *,
-    token_id: str,
-    token_name: str,
+    access_key_id: str,
+    access_key_name: str,
     tool_name: str,
     cap_name: str,
     args: dict,
@@ -202,11 +202,11 @@ async def async_create_pending_approval(
     raw = store.get_pending_approvals()
     pending_for_access_key = sum(
         1 for entry in raw
-        if entry.get("token_id") == token_id and entry.get("status") == STATUS_PENDING
+        if entry.get("access_key_id") == access_key_id and entry.get("status") == STATUS_PENDING
     )
     if pending_for_access_key >= MAX_PENDING_APPROVALS_PER_ACCESS_KEY:
         raise PendingApprovalCapacityError(
-            f"access key {token_id} already has {pending_for_access_key} pending approvals"
+            f"access key {access_key_id} already has {pending_for_access_key} pending approvals"
         )
     from .household_authority import household_authority
 
@@ -214,8 +214,8 @@ async def async_create_pending_approval(
     now = utcnow()
     approval = PendingApproval(
         id=_new_approval_id(),
-        token_id=token_id,
-        token_name=token_name,
+        access_key_id=access_key_id,
+        access_key_name=access_key_name,
         tool_name=tool_name,
         cap_name=cap_name,
         args=args,
@@ -250,14 +250,14 @@ def list_approvals(
     store: AccessKeyStore,
     *,
     status: str | None = None,
-    token_id: str | None = None,
+    access_key_id: str | None = None,
 ) -> list[PendingApproval]:
     """Return approvals matching optional filters, newest first."""
     out: list[PendingApproval] = []
     for entry in store.get_pending_approvals():
         if status is not None and entry.get("status") != status:
             continue
-        if token_id is not None and entry.get("token_id") != token_id:
+        if access_key_id is not None and entry.get("access_key_id") != access_key_id:
             continue
         try:
             out.append(PendingApproval.from_dict(entry))
@@ -444,7 +444,7 @@ async def async_reconcile_interrupted_approvals(
 
 async def async_cancel_approvals_for_access_key(
     store: AccessKeyStore,
-    token_id: str,
+    access_key_id: str,
     reason: str,
     *,
     skip_ids: set[str] | frozenset[str] | None = None,
@@ -464,7 +464,7 @@ async def async_cancel_approvals_for_access_key(
     changed: list[PendingApproval] = []
     now_iso = utcnow().isoformat()
     for entry in raw:
-        if entry.get("token_id") != token_id:
+        if entry.get("access_key_id") != access_key_id:
             continue
         if entry.get("status") != STATUS_PENDING:
             continue
@@ -549,8 +549,8 @@ def fire_approval_requested_event(hass: HomeAssistant, approval: PendingApproval
         f"{DOMAIN}_approval_requested",
         {
             "approval_id": approval.id,
-            "token_id": approval.token_id,
-            "token_name": approval.token_name,
+            "access_key_id": approval.access_key_id,
+            "access_key_name": approval.access_key_name,
             "tool_name": approval.tool_name,
             "cap_name": approval.cap_name,
             "review_url": f"/phoenix-mcp/approvals/{approval.id}",
@@ -568,8 +568,8 @@ def fire_approval_resolved_event(hass: HomeAssistant, approval: PendingApproval)
         f"{DOMAIN}_approval_resolved",
         {
             "approval_id": approval.id,
-            "token_id": approval.token_id,
-            "token_name": approval.token_name,
+            "access_key_id": approval.access_key_id,
+            "access_key_name": approval.access_key_name,
             "tool_name": approval.tool_name,
             "status": approval.status,
             "rejected_reason": approval.rejected_reason,
@@ -627,7 +627,7 @@ def create_approval_notification(hass: HomeAssistant, approval: PendingApproval)
         hass,
         message=notification_text(
             hass, "approval.message",
-            access_key=approval.token_name,
+            access_key=approval.access_key_name,
             url=f"/phoenix-mcp/approvals/{approval.id}",
         ),
         title=notification_text(hass, "approval.title"),

@@ -21,7 +21,7 @@ from custom_components.phoenix_mcp.access_key_store import GlobalSettings, Acces
 
 @pytest.fixture
 def conversation_data(hass):
-    access_key = AccessKeyRecord(id="test-id", name="test-client", token_hash="hash", created_at=utcnow(),
+    access_key = AccessKeyRecord(id="test-id", name="test-client", access_key_hash="hash", created_at=utcnow(),
                         created_by="test-admin", pass_through=True)
     store = MagicMock(spec=AccessKeyStore)
     store.get_settings.return_value = GlobalSettings(conversation_log_enabled=True, mesa_mode="off")

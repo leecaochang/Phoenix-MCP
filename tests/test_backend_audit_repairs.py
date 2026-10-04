@@ -24,7 +24,7 @@ from custom_components.phoenix_mcp.tools.config_files import _recoverable_file_w
 
 
 def access_key(**changes):
-    return AccessKeyRecord(id="audit-token", name="audit-token", token_hash="hash", created_at=utcnow(), created_by="u",
+    return AccessKeyRecord(id="audit-token", name="audit-token", access_key_hash="hash", created_at=utcnow(), created_by="u",
                        permissions=PermissionTree(entities={"light.visible": PermissionNode(state="GREEN")}), **changes)
 
 
@@ -186,11 +186,11 @@ async def test_rate_limit_event_bus_is_throttled_independently_of_notifications(
         fire_rate_limit_events(hass, data, other)
         fire_rate_limit_events(hass, data, other)
     await hass.async_block_till_done()
-    assert [event.data["token_id"] for event in events] == [caller.id, other.id]
+    assert [event.data["access_key_id"] for event in events] == [caller.id, other.id]
     with patch("custom_components.phoenix_mcp.helpers.time.monotonic", return_value=61):
         fire_rate_limit_events(hass, data, caller)
     await hass.async_block_till_done()
-    assert [event.data["token_id"] for event in events] == [caller.id, other.id, caller.id]
+    assert [event.data["access_key_id"] for event in events] == [caller.id, other.id, caller.id]
 
 
 def test_internal_failure_records_location_without_exception_values(caplog):

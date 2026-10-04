@@ -252,7 +252,7 @@ async def test_authority_loss_wire_code_matches_era_after_real_dispatch(http_aut
     assert response.status == 200
     assert reply["error"]["code"] == (MCP_AUTHORITY_CHANGED_ERROR if modern else -32000)
     assert "result" not in reply
-    rows = data.audit.query(token_id=access_key.id, limit=20)
+    rows = data.audit.query(access_key_id=access_key.id, limit=20)
     assert any(row.request_id == response.headers["X-Phoenix-Request-ID"] and row.outcome == "denied" for row in rows)
 
 

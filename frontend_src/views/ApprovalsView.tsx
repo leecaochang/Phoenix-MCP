@@ -415,7 +415,7 @@ export function ApprovalsView({ tab, onTabChange, onCountChange, refreshSignal =
     const q = search.trim().toLowerCase();
     if (!q || tab === "pending") return records;
     return records.filter((r) =>
-      `${r.token_name} ${r.tool_name} ${friendlyToolName(r.tool_name)} ${friendlyApprovalSummary(r.diff).title} ${diffSummary(r.diff)} ${r.rejected_reason ?? ""}`.toLowerCase().includes(q),
+      `${r.access_key_name} ${r.tool_name} ${friendlyToolName(r.tool_name)} ${friendlyApprovalSummary(r.diff).title} ${diffSummary(r.diff)} ${r.rejected_reason ?? ""}`.toLowerCase().includes(q),
     );
   }, [records, search, tab]);
 
@@ -657,7 +657,7 @@ function HistoryRow({ record, view, onClick }: { record: ApprovalRecord; view: A
     <button type="button" className="approval-history-row" onClick={onClick}>
       <StatusBadge status={record.status} />
       <code className="approval-history-tool">{friendlyToolName(record.tool_name)}</code>
-      <span className="approval-history-token">{record.token_name}</span>
+      <span className="approval-history-access-key">{record.access_key_name}</span>
       <span className="approval-history-note">{note}</span>
       <span className="approval-history-time">{formatDateTime(record.resolved_at || record.created_at)}</span>
     </button>
@@ -727,7 +727,7 @@ function ApprovalCard({ record, view, claimed, checked, selectable, onToggle, on
     <button type="button" className="approval-card" onClick={onClick}>
       <div className="approval-card-header">
         <div className="approval-card-title">
-          <span className="approval-card-token">{record.token_name}</span>
+          <span className="approval-card-access-key">{record.access_key_name}</span>
           <span className="approval-card-tool">{friendlyToolName(record.tool_name)}</span>
         </div>
         <div className="approval-card-meta">
@@ -1016,7 +1016,7 @@ function ApprovalDetailModal({ record, defaultView, claimed, onClose, onResolved
             {diffSummary(record.diff) || friendlyToolName(record.tool_name)}
           </h3>
           <div className="approval-detail-meta">
-            <span className="stat-label">{t("approvals.metaToken")}</span><span>{record.token_name}</span>
+            <span className="stat-label">{t("approvals.metaAccessKey")}</span><span>{record.access_key_name}</span>
             <span className="stat-label">{t("approvals.metaTool")}</span><span><code>{friendlyToolName(record.tool_name)}</code></span>
             <span className="stat-label">{t("approvals.metaCapability")}</span><span><code>{record.cap_name}</code></span>
             <span className="stat-label">{t("approvals.metaCreated")}</span><span>{formatDateTime(record.created_at)}</span>

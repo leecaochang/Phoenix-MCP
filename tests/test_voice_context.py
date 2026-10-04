@@ -21,7 +21,7 @@ async def satellite_home(hass, access_key_store):
     access_key.permissions = PermissionTree(domains={'light': PermissionNode(state='GREEN')})
     data = PhoenixData(store=access_key_store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
-    await access_key_store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=access_key.id,
+    await access_key_store.async_patch_settings(voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
         voice_agent_routing_mode='local', command_routing_timeout_ms=5000)
     config = MockConfigEntry(domain='test_integration')
     config.add_to_hass(hass)

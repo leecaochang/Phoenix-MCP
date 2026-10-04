@@ -25,7 +25,7 @@ export function RateLimitConfig({ accessKey, onUpdate }: Props) {
     const reqNum = parseInt(reqStr, 10);
     const burstNum = burstDisabled ? 0 : parseInt(burstStr, 10);
     if (isNaN(reqNum) || reqNum < 0 || isNaN(burstNum) || burstNum < 0) {
-      setError(t("tokens.rateValuesError"));
+      setError(t("accessKeys.rateValuesError"));
       return;
     }
     setError(null);
@@ -37,7 +37,7 @@ export function RateLimitConfig({ accessKey, onUpdate }: Props) {
       const updated = await api.patchAccessKey(accessKey.id, body);
       onUpdate(updated);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t("tokens.rateSaveFailed"));
+      setError(e instanceof Error ? e.message : t("accessKeys.rateSaveFailed"));
     }
   }
 
@@ -46,7 +46,7 @@ export function RateLimitConfig({ accessKey, onUpdate }: Props) {
       {error && <div className="banner banner-error mb-8">{error}</div>}
       <div className="rate-limit-row">
         <div className="field">
-          <label htmlFor="rate-limit-requests">{t("tokens.rateRequestsLabel")}</label>
+          <label htmlFor="rate-limit-requests">{t("accessKeys.rateRequestsLabel")}</label>
           <input
             id="rate-limit-requests"
             className="input"
@@ -58,7 +58,7 @@ export function RateLimitConfig({ accessKey, onUpdate }: Props) {
           />
         </div>
         <div className="field">
-          <label htmlFor="rate-limit-burst">{t("tokens.rateBurstLabel")}</label>
+          <label htmlFor="rate-limit-burst">{t("accessKeys.rateBurstLabel")}</label>
           <input
             id="rate-limit-burst"
             className="input"
@@ -73,7 +73,7 @@ export function RateLimitConfig({ accessKey, onUpdate }: Props) {
       </div>
       {requestsNum === 0 && (
         <p className="rate-limit-disabled-text">
-          {t("tokens.rateLimitingDisabled")}
+          {t("accessKeys.rateLimitingDisabled")}
         </p>
       )}
     </div>

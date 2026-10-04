@@ -63,7 +63,7 @@ def _access_key(env: dict, *, cap: str = "allow") -> AccessKeyRecord:
     return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="integration-mesa-matrix",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="test",
         cap_integration_write=cap,

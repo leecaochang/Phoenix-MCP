@@ -22,7 +22,7 @@ def _access_key(**overrides) -> AccessKeyRecord:
     defaults = dict(
         id="t",
         name="test",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="admin",
         permissions=PermissionTree(),

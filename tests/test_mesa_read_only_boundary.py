@@ -49,7 +49,7 @@ async def env(hass):
     data = PhoenixData(store=store, audit=MagicMock(), rate_limiter=MagicMock(),
                        mesa=await async_setup_mesa(hass, "advisory"))
     hass.data[DOMAIN] = data
-    access_key = AccessKeyRecord(id="boundary", name="Boundary", token_hash="x", created_at=utcnow(),
+    access_key = AccessKeyRecord(id="boundary", name="Boundary", access_key_hash="x", created_at=utcnow(),
                         created_by="admin", pass_through=True, cap_registry_write="allow")
     return data, access_key, entity, calls
 
@@ -124,7 +124,7 @@ async def test_host_read_only_audit_is_attributed_once_and_excludes_previews(has
         assert outcome == "denied" and not calls
         data.audit.record.assert_called_once()
         event = data.audit.record.call_args.kwargs
-        assert event["token_id"] == access_key.id
+        assert event["access_key_id"] == access_key.id
         assert event["request_id"] == "read-only-request"
         assert event["payload"]["rule_applied"] == "control_mode:read_only"
     finally:

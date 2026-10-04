@@ -22,7 +22,7 @@ export function AssistBridgeSettings({
 }) {
   const [accessKeys, setAccessKeys] = useState<AccessKeyRecord[]>([]);
   const supported = settings.assist_api_supported !== false;
-  const boundId = settings.assist_bound_token_id ?? "";
+  const boundId = settings.assist_bound_access_key_id ?? "";
 
   useEffect(() => {
     api.listAccessKeys().then(setAccessKeys).catch(() => setAccessKeys([]));
@@ -39,7 +39,7 @@ export function AssistBridgeSettings({
       </p>
       <div className="toggle-row toggle-row-stacked-control">
         <div className="toggle-label">
-          <span>{t("settings.assistBoundToken")}</span>
+          <span>{t("settings.assistBoundAccessKey")}</span>
           <small>
             {supported ? (
               tRich("settings.assistBoundHelp", { strong: (c) => <strong>{c}</strong> })
@@ -49,11 +49,11 @@ export function AssistBridgeSettings({
           </small>
         </div>
         <BusySelect
-          aria-label={t("settings.assistBoundTokenAria")}
+          aria-label={t("settings.assistBoundAccessKeyAria")}
           className="input input-auto"
           value={boundId}
           busy={saving} disabled={!supported}
-          onChange={(e) => onChange("assist_bound_token_id", e.target.value)}
+          onChange={(e) => onChange("assist_bound_access_key_id", e.target.value)}
         >
           <option value="">{t("settings.assistNotBound")}</option>
           {accessKeys.map((tok) => (

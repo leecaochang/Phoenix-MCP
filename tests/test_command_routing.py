@@ -129,7 +129,7 @@ async def test_authority_is_checked_after_recognition(hass, routing, english_hom
         if change == "scope":
             access_key.settings_version += 1
         elif change == "rotate":
-            access_key.token_hash = "replacement"
+            access_key.access_key_hash = "replacement"
         elif change == "revoke":
             access_key.revoked = True
         elif change == "kill":
@@ -219,7 +219,7 @@ async def test_uncertain_targets_do_not_become_candidates(hass, routing, english
 async def test_voice_shadow_preserves_normal_provider_turn(hass, routing, english_home):
     from custom_components.phoenix_mcp import agentcli, voice_agent
     data, access_key = routing
-    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=access_key.id,
+    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
         voice_agent_provider_id="p", voice_agent_model="model", voice_agent_routing_mode="local_shadow")
     provider_store = MagicMock()
     provider_store.resolve.return_value = SimpleNamespace(model="model")
@@ -241,7 +241,7 @@ async def test_voice_shadow_preserves_normal_provider_turn(hass, routing, englis
 async def test_voice_off_skips_recognition(hass, routing):
     from custom_components.phoenix_mcp import agentcli, voice_agent
     data, access_key = routing
-    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=access_key.id,
+    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
         voice_agent_provider_id="p", voice_agent_model="model")
     provider_store = MagicMock()
     provider_store.resolve.return_value = SimpleNamespace(model="model")
@@ -255,7 +255,7 @@ async def test_voice_off_skips_recognition(hass, routing):
 async def test_voice_does_not_contact_provider_after_authority_changes(hass, routing):
     from custom_components.phoenix_mcp import agentcli, voice_agent
     data, access_key = routing
-    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=access_key.id,
+    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
         voice_agent_provider_id="p", voice_agent_model="model", voice_agent_routing_mode="local_shadow")
     provider_store = MagicMock()
     provider_store.resolve.return_value = SimpleNamespace(model="model")
@@ -273,7 +273,7 @@ async def test_voice_does_not_contact_provider_after_authority_changes(hass, rou
 async def test_voice_rechecks_settings_after_loading_provider_config(hass, routing):
     from custom_components.phoenix_mcp import agentcli, voice_agent
     data, access_key = routing
-    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=access_key.id,
+    await data.store.async_patch_settings(voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
         voice_agent_provider_id="p", voice_agent_model="model", voice_agent_routing_mode="local_shadow")
     async def provider_store(_hass):
         await data.store.async_patch_settings(voice_agent_routing_mode="off")

@@ -56,7 +56,7 @@ export function ArchivedAccessKeyTable({ accessKeys, onDeleted }: Props) {
       await api.deleteArchivedAccessKey(id);
       onDeleted(id);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t("tokens.archivedDeleteFailed"));
+      setError(e instanceof Error ? e.message : t("accessKeys.archivedDeleteFailed"));
     } finally {
       setDeleting(null);
       setConfirmId(null);
@@ -64,7 +64,7 @@ export function ArchivedAccessKeyTable({ accessKeys, onDeleted }: Props) {
   }
 
   if (accessKeys.length === 0) {
-    return <p className="archived-empty">{t("tokens.archivedEmpty")}</p>;
+    return <p className="archived-empty">{t("accessKeys.archivedEmpty")}</p>;
   }
 
   function th(key: SortKey, label: string) {
@@ -83,12 +83,12 @@ export function ArchivedAccessKeyTable({ accessKeys, onDeleted }: Props) {
       <table className="data-table archived-table">
         <thead>
           <tr>
-            {th("name", t("tokens.colName"))}
-            {th("status", t("tokens.colStatus"))}
-            {th("created", t("tokens.colCreated"))}
-            {th("archived", t("tokens.colArchivedOn"))}
-            {th("last_used", t("tokens.colLastUsed"))}
-            <th>{t("tokens.colActions")}</th>
+            {th("name", t("accessKeys.colName"))}
+            {th("status", t("accessKeys.colStatus"))}
+            {th("created", t("accessKeys.colCreated"))}
+            {th("archived", t("accessKeys.colArchivedOn"))}
+            {th("last_used", t("accessKeys.colLastUsed"))}
+            <th>{t("accessKeys.colActions")}</th>
           </tr>
         </thead>
         <tbody>
@@ -113,13 +113,13 @@ export function ArchivedAccessKeyTable({ accessKeys, onDeleted }: Props) {
                         onClick={() => deletePermanently(tok.id)}
                         disabled={deleting === tok.id}
                       >
-                        {deleting === tok.id ? "..." : t("tokens.confirmDelete")}
+                        {deleting === tok.id ? "..." : t("accessKeys.confirmDelete")}
                       </button>
                       <button
                         className="btn btn-text btn-sm"
                         onClick={() => setConfirmId(null)}
                       >
-                        {t("tokens.cancel")}
+                        {t("accessKeys.cancel")}
                       </button>
                     </span>
                   ) : (
@@ -127,7 +127,7 @@ export function ArchivedAccessKeyTable({ accessKeys, onDeleted }: Props) {
                       className="btn btn-danger btn-sm"
                       onClick={() => setConfirmId(tok.id)}
                     >
-                      {t("tokens.deletePermanently")}
+                      {t("accessKeys.deletePermanently")}
                     </button>
                   )}
                 </td>

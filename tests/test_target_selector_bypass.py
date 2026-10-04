@@ -50,7 +50,7 @@ def _make_token(**caps: str) -> tuple[AccessKeyRecord, str]:
         AccessKeyRecord(
             id=str(uuid.uuid4()),
             name="test-token",
-            token_hash=hashlib.sha256(raw.encode()).hexdigest(),
+            access_key_hash=hashlib.sha256(raw.encode()).hexdigest(),
             created_at=utcnow(),
             created_by="user1",
             **caps,

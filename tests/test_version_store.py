@@ -40,7 +40,7 @@ async def test_record_captures_fields_and_assigns_id_and_timestamp():
     store = VersionStore()
     rec = await _rec(
         store, action="create", before=None, after={"alias": "Foo"},
-        alias="Foo", token_id="tok1", token_name="Agent", request_id="req-1",
+        alias="Foo", access_key_id="tok1", access_key_name="Agent", request_id="req-1",
     )
     assert rec.id and len(rec.id) == 32  # uuid4 hex
     assert rec.resource_type == "automation"
@@ -48,8 +48,8 @@ async def test_record_captures_fields_and_assigns_id_and_timestamp():
     assert rec.before is None
     assert rec.after == {"alias": "Foo"}
     assert rec.alias == "Foo"
-    assert rec.token_id == "tok1"
-    assert rec.token_name == "Agent"
+    assert rec.access_key_id == "tok1"
+    assert rec.access_key_name == "Agent"
     assert rec.request_id == "req-1"
     assert rec.approved_by_user_id is None
     assert rec.timestamp  # iso string set
@@ -222,7 +222,7 @@ async def test_corrupt_record_is_skipped(hass: HomeAssistant):
     good = {
         "id": "good", "resource_type": "automation", "resource_id": "a",
         "alias": None, "action": "edit", "before": None, "after": {"v": 1},
-        "token_id": None, "token_name": None, "request_id": None,
+        "access_key_id": None, "access_key_name": None, "request_id": None,
         "approved_by_user_id": None, "timestamp": "2026-06-18T00:00:00+00:00",
     }
     await backing.async_save({

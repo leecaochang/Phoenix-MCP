@@ -125,7 +125,7 @@ def _access_key(
     return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="reconfigure-test",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="test",
         pass_through=pass_through,

@@ -261,11 +261,11 @@ async def test_cursor_bound_to_snapshot_filters_and_token(context):
     for args in ({"order": "oldest_first"}, {"search": "old"}, {"cursor": cursor[:-1] + "X"}):
         _, outcome, error = await _call(context, **{"cursor": cursor, **args})
         assert outcome == "invalid_request" and error
-    old_hash = access_key.token_hash
-    access_key.token_hash = "b" * 64
+    old_hash = access_key.access_key_hash
+    access_key.access_key_hash = "b" * 64
     _, outcome, error = await _call(context, cursor=cursor)
     assert outcome == "invalid_request" and error
-    access_key.token_hash = old_hash
+    access_key.access_key_hash = old_hash
     path.write_text(path.read_text() + _dump("newest"))
     _, outcome, error = await _call(context, cursor=cursor)
     assert outcome == "invalid_request" and error

@@ -35,7 +35,7 @@ class RateLimiter:
     """Sliding window rate limiter keyed by token ID.
 
     State is in-memory only and is lost on HA restart. Destroy a token's state
-    immediately on revocation or archival by calling destroy(token_id).
+    immediately on revocation or archival by calling destroy(access_key_id).
 
     Algorithm per request (when rate limiting is enabled):
       1. Evict timestamps older than WINDOW_SECONDS from the per-token deque.
@@ -50,11 +50,11 @@ class RateLimiter:
 
     def check(
         self,
-        token_id: str,
+        access_key_id: str,
         rate_limit_requests: int,
         rate_limit_burst: int,
     ) -> RateLimitResult:
-        """Check and record a request against the rate limit for token_id.
+        """Check and record a request against the rate limit for access_key_id.
 
         Returns a RateLimitResult with allowed=True if the request may proceed.
         A denied result does NOT record the request in the window.
@@ -67,9 +67,9 @@ class RateLimiter:
         window_cutoff = now - WINDOW_SECONDS
         burst_cutoff = now - BURST_WINDOW_SECONDS
 
-        if token_id not in self._windows:
-            self._windows[token_id] = deque()
-        window = self._windows[token_id]
+        if access_key_id not in self._windows:
+            self._windows[access_key_id] = deque()
+        window = self._windows[access_key_id]
 
         # Step 1: evict stale entries
         while window and window[0] <= window_cutoff:
@@ -124,7 +124,7 @@ class RateLimiter:
 
     def charge_batch(
         self,
-        token_id: str,
+        access_key_id: str,
         rate_limit_requests: int,
         rate_limit_burst: int,
         extra: int,
@@ -153,7 +153,7 @@ class RateLimiter:
 
         now = time.monotonic()
         wall_now = time.time()
-        window = self._windows.setdefault(token_id, deque())
+        window = self._windows.setdefault(access_key_id, deque())
         while window and window[0] <= now - WINDOW_SECONDS:
             window.popleft()
 
@@ -191,9 +191,9 @@ class RateLimiter:
             retry_after=0,
         )
 
-    def destroy(self, token_id: str) -> None:
+    def destroy(self, access_key_id: str) -> None:
         """Destroy rate limit state for a single token (call on revocation/archival)."""
-        self._windows.pop(token_id, None)
+        self._windows.pop(access_key_id, None)
 
     def destroy_all(self) -> None:
         """Destroy all rate limit state (call on wipe action)."""

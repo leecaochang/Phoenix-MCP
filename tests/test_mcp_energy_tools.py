@@ -52,7 +52,7 @@ def _data() -> PhoenixData:
 def _access_key(**caps) -> AccessKeyRecord:
     caps.setdefault("cap_config_read", "allow")
     return AccessKeyRecord(
-        id=str(uuid.uuid4()), name="t", token_hash="x", created_at=utcnow(),
+        id=str(uuid.uuid4()), name="t", access_key_hash="x", created_at=utcnow(),
         created_by="u",
         permissions=PermissionTree(domains={"sensor": PermissionNode(state="GREEN")}),
         **caps,

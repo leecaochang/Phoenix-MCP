@@ -22,7 +22,7 @@ GITHUB_URL = "https://github.com/leecaochang/Phoenix-MCP"
 DOMAIN = "phoenix_mcp"
 RUNTIME_READY_KEY = "phoenix_mcp_runtime_ready"
 STORAGE_KEY = "phoenix_mcp"
-STORAGE_VERSION = 4
+STORAGE_VERSION = 5
 
 CALENDAR_MAX_WINDOW_DAYS = 31
 CALENDAR_MAX_EVENTS = 500
@@ -77,7 +77,7 @@ DEFAULT_RATE_LIMIT_REQUESTS = 60
 DEFAULT_RATE_LIMIT_BURST = 10
 
 # Token settings presets (named snapshots of a token's full configuration,
-# switchable from the panel; gated by settings.token_presets_enabled).
+# switchable from the panel; gated by settings.access_key_presets_enabled).
 MAX_PRESETS_PER_ACCESS_KEY = 8
 PRESET_NAME_MAX_LENGTH = 40
 DEFAULT_PRESET_NAME = "Default preset"
@@ -1800,7 +1800,7 @@ VOICE_TEMPLATES: dict[str, str] = {
     "local_attribute_unavailable": "Home Assistant is not reporting a value for the requested property right now.",
     "unavailable": "The Phoenix MCP voice agent is currently unavailable.",
     "not_configured": "The Phoenix MCP voice agent is not fully configured.",
-    "token_unavailable": "The Phoenix MCP voice agent's access key is no longer available.",
+    "access_key_unavailable": "The Phoenix MCP voice agent's access key is no longer available.",
     "error": "Sorry, the Phoenix MCP voice agent hit an error.",
     # How a turn that did not finish cleanly is SPOKEN. The loop reports an
     # outcome code and each surface renders it from here, so a Chinese pipeline

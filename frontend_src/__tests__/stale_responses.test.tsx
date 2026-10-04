@@ -42,8 +42,8 @@ function deferred<T>() {
 function approval(id: string, status: string) {
   return {
     id,
-    token_id: "t1",
-    token_name: "tok",
+    access_key_id: "t1",
+    access_key_name: "tok",
     tool_name: "call_service",
     cap_name: "cap_physical_control",
     args: {},
@@ -71,8 +71,8 @@ function version(alias: string) {
     resource_id: "aid1",
     alias,
     action: "create",
-    token_id: "t1",
-    token_name: "my_access_key",
+    access_key_id: "t1",
+    access_key_name: "my_access_key",
     approved_by_user_id: null,
     timestamp: "2026-01-01T00:00:00Z",
     has_before: false,

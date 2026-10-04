@@ -44,8 +44,8 @@ describe("accessibility regressions", () => {
     const entry: AuditEntry = {
       request_id: "req-1",
       timestamp: "2026-06-30T00:00:00Z",
-      token_id: "tok-1",
-      token_name: "demo",
+      access_key_id: "tok-1",
+      access_key_name: "demo",
       method: "GET",
       resource: "/api/phoenix-mcp/states",
       outcome: "allowed",
@@ -71,8 +71,8 @@ describe("accessibility regressions", () => {
     const older: AuditEntry = {
       request_id: "req-older",
       timestamp: "2026-06-29T00:00:00Z",
-      token_id: "tok-1",
-      token_name: "demo",
+      access_key_id: "tok-1",
+      access_key_name: "demo",
       method: "GET",
       resource: "/api/older",
       outcome: "allowed",
@@ -96,8 +96,8 @@ describe("accessibility regressions", () => {
     const approved: AuditEntry = {
       request_id: "approve-request",
       timestamp: "2026-08-29T07:00:00Z",
-      token_id: "admin",
-      token_name: "admin:user",
+      access_key_id: "admin",
+      access_key_name: "admin:user",
       method: "approval/approved",
       resource: "approval:restart_ha:appr-1",
       outcome: "allowed",
@@ -128,8 +128,8 @@ describe("accessibility regressions", () => {
     const entry: AuditEntry = {
       request_id: "req-2",
       timestamp: "2026-06-30T00:00:00Z",
-      token_id: "tok-1",
-      token_name: "demo",
+      access_key_id: "tok-1",
+      access_key_name: "demo",
       method: "GET",
       resource: "/api/phoenix-mcp/states",
       outcome: "allowed",
@@ -149,7 +149,7 @@ describe("accessibility regressions", () => {
     expect(container.querySelector("tr.clickable button.row-open")).not.toBeNull();
   });
 
-  it("associates the token-name validation error with the input", () => {
+  it("associates the access-key-name validation error with the input", () => {
     render(
       <AccessKeyCreateModal
         existingNames={[]}
@@ -166,9 +166,9 @@ describe("accessibility regressions", () => {
     // Too-short name: aria-invalid + described-by the alert-role error.
     fireEvent.change(input, { target: { value: "ab" } });
     expect(input).toHaveAttribute("aria-invalid", "true");
-    expect(input).toHaveAttribute("aria-describedby", "token-name-error");
+    expect(input).toHaveAttribute("aria-describedby", "access-key-name-error");
     const error = screen.getByRole("alert");
-    expect(error).toHaveAttribute("id", "token-name-error");
+    expect(error).toHaveAttribute("id", "access-key-name-error");
     expect(error.textContent).toMatch(/3-32 characters/);
   });
 

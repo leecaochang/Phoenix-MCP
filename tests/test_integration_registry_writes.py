@@ -70,7 +70,7 @@ def _access_key(
     return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="integration-write-test",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="test",
         cap_integration_write=cap,
@@ -442,7 +442,7 @@ async def test_entityless_entry_fails_closed_when_mesa_is_active(
     access_key = AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="entityless-pass-through",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="test",
         pass_through=True,

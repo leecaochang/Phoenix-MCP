@@ -54,7 +54,7 @@ def _access_key(domain: str, *, cap: str = "confirm") -> AccessKeyRecord:
     return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="helper-mesa-test",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="test",
         cap_helper_write=cap,

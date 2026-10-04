@@ -34,7 +34,7 @@ def _access_key(*, camera: str = "allow", camera_scope: str = "GREEN") -> Access
     return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="camera-test",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="test",
         cap_camera_read=camera,

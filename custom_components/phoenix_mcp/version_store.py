@@ -49,8 +49,8 @@ class VersionRecord:
     action: str
     before: dict | None
     after: dict | None
-    token_id: str | None
-    token_name: str | None
+    access_key_id: str | None
+    access_key_name: str | None
     request_id: str | None
     approved_by_user_id: str | None
     timestamp: str
@@ -68,6 +68,9 @@ class VersionRecord:
 
     @classmethod
     def from_dict(cls, raw: dict) -> "VersionRecord":
+        from .access_key_schema import normalize_access_key_fields
+
+        raw = normalize_access_key_fields(raw)
         return cls(
             id=raw["id"],
             resource_type=raw["resource_type"],
@@ -76,8 +79,8 @@ class VersionRecord:
             action=raw["action"],
             before=raw.get("before"),
             after=raw.get("after"),
-            token_id=raw.get("token_id"),
-            token_name=raw.get("token_name"),
+            access_key_id=raw.get("access_key_id"),
+            access_key_name=raw.get("access_key_name"),
             request_id=raw.get("request_id"),
             approved_by_user_id=raw.get("approved_by_user_id"),
             timestamp=raw["timestamp"],
@@ -108,8 +111,8 @@ class VersionStore:
         before: dict | None,
         after: dict | None,
         alias: str | None = None,
-        token_id: str | None = None,
-        token_name: str | None = None,
+        access_key_id: str | None = None,
+        access_key_name: str | None = None,
         request_id: str | None = None,
         approved_by_user_id: str | None = None,
         summary: str | None = None,
@@ -135,8 +138,8 @@ class VersionStore:
             # rewrite stored history: snapshots are immutable.
             before=copy.deepcopy(before),
             after=copy.deepcopy(after),
-            token_id=token_id,
-            token_name=token_name,
+            access_key_id=access_key_id,
+            access_key_name=access_key_name,
             request_id=request_id,
             approved_by_user_id=approved_by_user_id,
             timestamp=utcnow().isoformat(),

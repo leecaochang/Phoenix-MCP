@@ -9,7 +9,7 @@ import { Modal } from "./Modal";
 import { compareStrings, t, tn } from "../i18n";
 
 interface Props {
-  tokenId: string;
+  accessKeyId: string;
   entityTree: EntityTree;
   onDone: () => void;
   onClose: () => void;
@@ -35,7 +35,7 @@ interface Group {
   integration?: IntegrationPermissionOption;
 }
 
-export function SelectByPicker({ tokenId, entityTree, onDone, onClose }: Props) {
+export function SelectByPicker({ accessKeyId, entityTree, onDone, onClose }: Props) {
   const [mode, setMode] = useState<Mode>("area");
   const [selectedKey, setSelectedKey] = useState("");
   const [selectedState, setSelectedState] = useState<NodeState>("GREEN");
@@ -46,7 +46,7 @@ export function SelectByPicker({ tokenId, entityTree, onDone, onClose }: Props) 
 
   useEffect(() => {
     let active = true;
-    api.getPermissionIntegrationOptions(tokenId)
+    api.getPermissionIntegrationOptions(accessKeyId)
       .then((result) => {
         if (active) setIntegrations(result.integrations);
       })
@@ -59,7 +59,7 @@ export function SelectByPicker({ tokenId, entityTree, onDone, onClose }: Props) 
         if (active) setLoadingIntegrations(false);
       });
     return () => { active = false; };
-  }, [tokenId]);
+  }, [accessKeyId]);
 
   const groups = useMemo<Group[]>(() => {
     if (mode === "integration") {
@@ -109,7 +109,7 @@ export function SelectByPicker({ tokenId, entityTree, onDone, onClose }: Props) 
     setApplying(true);
     setError(null);
     try {
-      await api.bulkSelectPermissions(tokenId, mode, selectedKey, selectedState);
+      await api.bulkSelectPermissions(accessKeyId, mode, selectedKey, selectedState);
       onDone();
     } catch (reason: unknown) {
       setError(reason instanceof Error ? reason.message : t("selectBy.applyFailed"));

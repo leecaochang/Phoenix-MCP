@@ -37,7 +37,7 @@ def _access_key(persona: str = "voice_assistant") -> AccessKeyRecord:
     return AccessKeyRecord(
         id="tok-1",
         name="my_token",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="admin",
         persona=persona,

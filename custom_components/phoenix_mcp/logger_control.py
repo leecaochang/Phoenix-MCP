@@ -50,7 +50,7 @@ class TimedOverride:
     applied: IntegrationOverride
     prior: IntegrationOverride | None
     loggers: list[str]
-    owner_token_id: str
+    owner_access_key_id: str
     created_at: datetime
     expires_at: datetime
 
@@ -60,7 +60,7 @@ class TimedOverride:
             "applied": self.applied.to_dict(),
             "prior": self.prior.to_dict() if self.prior else None,
             "loggers": list(self.loggers),
-            "owner_token_id": self.owner_token_id,
+            "owner_access_key_id": self.owner_access_key_id,
             "created_at": self.created_at.isoformat(),
             "expires_at": self.expires_at.isoformat(),
         }
@@ -228,7 +228,7 @@ class LoggerOverrideManager:
         desired: IntegrationOverride | None,
         prior: IntegrationOverride | None,
         loggers: set[str],
-        owner_token_id: str,
+        owner_access_key_id: str,
         duration_minutes: int | None,
     ) -> None:
         existing = self.records.get(domain)
@@ -265,7 +265,7 @@ class LoggerOverrideManager:
             applied=desired,
             prior=baseline,
             loggers=sorted(loggers),
-            owner_token_id=owner_token_id,
+            owner_access_key_id=owner_access_key_id,
             created_at=now,
             expires_at=now + timedelta(minutes=duration_minutes),
         )

@@ -18,7 +18,7 @@ def _access_key() -> AccessKeyRecord:
     return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="t",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="u",
         permissions=PermissionTree(domains={"sensor": PermissionNode(state="GREEN")}),

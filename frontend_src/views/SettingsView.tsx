@@ -236,9 +236,9 @@ export function SettingsView({ settings, onSettingsChange, theme, onThemeChange,
                 <BusyInput
                   type="checkbox"
                   aria-label={t("settings.presetsLabel")}
-                  checked={settings.token_presets_enabled}
+                  checked={settings.access_key_presets_enabled}
                   busy={saving}
-                  onChange={(e) => patchSetting("token_presets_enabled", e.target.checked)}
+                  onChange={(e) => patchSetting("access_key_presets_enabled", e.target.checked)}
                 />
                 <span className="toggle-switch-track" />
               </label>

@@ -126,7 +126,7 @@ def _capture_plan(hass: Any, data: Any, access_key: Any, proposal: dict, *, ingr
                     for entity_id in proposal["entity_ids"]}
     if not fingerprints or any(value is None for value in fingerprints.values()):
         return None
-    return {"proposal": proposal, "fingerprints": fingerprints, "token_id": access_key.id, "ingress": ingress,
+    return {"proposal": proposal, "fingerprints": fingerprints, "access_key_id": access_key.id, "ingress": ingress,
             "token_version": access_key.settings_version, "settings": _digest(data.store.get_settings().to_dict())}
 
 
@@ -282,11 +282,11 @@ def plan_is_current(plan: dict, hass: Any, data: Any, access_key: Any) -> bool:
             enabled = effective_routing_mode(settings, "chat") in ("local", "hybrid")
         elif ingress == "voice":
             enabled = (settings.voice_agent_enabled and effective_routing_mode(settings) in ("local", "hybrid")
-                       and settings.voice_agent_token_id == access_key.id)
+                       and settings.voice_agent_access_key_id == access_key.id)
         else:
             return False
         return bool(
-            enabled and access_key.is_valid() and access_key.id == plan["token_id"]
+            enabled and access_key.is_valid() and access_key.id == plan["access_key_id"]
             and access_key.settings_version == plan["token_version"]
             and _digest(settings.to_dict()) == plan["settings"]
             and _decision_plan_current(plan, hass, data, access_key)
@@ -353,7 +353,7 @@ async def _dispatch_command(hass: Any, data: Any, access_key: Any, plan: dict,
     if cancel is not None and cancel.is_set():
         return LocalCommandReply(voice_text(language, "local_cancelled"), "cancelled")
     if current is None or not plan_is_current(plan, hass, data, current):
-        return LocalCommandReply(voice_text(language, "token_unavailable"), "unauthorized")
+        return LocalCommandReply(voice_text(language, "access_key_unavailable"), "unauthorized")
     access_key = replace(current, confirm_inline_wait_seconds=0)
     proposal = plan["proposal"]
     read = proposal["intent"] in COMMAND_ROUTING_READ_INTENTS
@@ -372,7 +372,7 @@ async def _dispatch_command(hass: Any, data: Any, access_key: Any, plan: dict,
         name = "call_service"
         service_args = service_arguments(proposal)
         if service_args is None:
-            return LocalCommandReply(voice_text(language, "token_unavailable"), "unauthorized")
+            return LocalCommandReply(voice_text(language, "access_key_unavailable"), "unauthorized")
         arguments = {"service": {"domain": service_args["domain"], "name": service_args["service"], "data": service_args["service_data"]},
                      "targets": [{"kind": "entity", "ids": proposal["entity_ids"]}]}
     request_id = generate_request_id()
@@ -387,9 +387,9 @@ async def _dispatch_command(hass: Any, data: Any, access_key: Any, plan: dict,
     finally:
         _local_plan.reset(context)
     if authority.current(hass) is None:
-        return LocalCommandReply(voice_text(language, "outcome_unknown" if not read else "token_unavailable"), "outcome_unknown")
+        return LocalCommandReply(voice_text(language, "outcome_unknown" if not read else "access_key_unavailable"), "outcome_unknown")
     result = dispatch_tool_result(response)
-    pending = _parse_pending(result, outcome=outcome, data=data, token_id=access_key.id,
+    pending = _parse_pending(result, outcome=outcome, data=data, access_key_id=access_key.id,
                              tool_name=name, request_id=request_id)
     if pending:
         text = voice_text(language, "local_pending")
@@ -418,7 +418,7 @@ async def _dispatch_command(hass: Any, data: Any, access_key: Any, plan: dict,
         return LocalCommandReply(voice_text(language, "outcome_unknown"), "outcome_unknown")
     if read:
         if not plan_is_current(plan, hass, data, access_key):
-            return LocalCommandReply(voice_text(language, "token_unavailable"), "unauthorized")
+            return LocalCommandReply(voice_text(language, "access_key_unavailable"), "unauthorized")
         attributes = payload.get("attributes", {})
         if not isinstance(attributes, dict):
             return LocalCommandReply(voice_text(language, "local_read_failed"), "failed")
@@ -435,7 +435,7 @@ async def _dispatch_command(hass: Any, data: Any, access_key: Any, plan: dict,
             temperature_unit=temperature_unit if isinstance(temperature_unit, str) else None)
         current = authority.current(hass)
         if current is None or not plan_is_current(plan, hass, data, current):
-            return LocalCommandReply(voice_text(language, "token_unavailable"), "unauthorized")
+            return LocalCommandReply(voice_text(language, "access_key_unavailable"), "unauthorized")
         if isinstance(state, str) and len(state) <= 1024:
             return LocalCommandReply(voice_text(language, "local_state", state=state), allows_local_followup=True, statistics_completed=True)
         return LocalCommandReply(voice_text(language, "local_read_failed"), "failed")
@@ -476,7 +476,7 @@ async def async_execute_chat_plan(hass: Any, data: Any, access_key: Any, plan: d
                                   client_ip: str, cancel: asyncio.Event, *, language: object = "en") -> LocalCommandReply:
     """Consume the frozen Chat plan within its outer recovery turn, without replay."""
     if plan.get("ingress") != "chat":
-        return LocalCommandReply(voice_text(language, "token_unavailable"), "unauthorized")
+        return LocalCommandReply(voice_text(language, "access_key_unavailable"), "unauthorized")
     try:
         return await _dispatch_command(hass, data, access_key, plan, authority, base_url, True,
                                        client_ip=client_ip, cancel=cancel, language=language)

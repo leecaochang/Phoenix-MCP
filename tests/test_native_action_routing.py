@@ -38,7 +38,7 @@ async def native_home(hass, access_key_store, immediate_command_observation):
     access_key.cap_physical_control = 'allow'
     data = PhoenixData(store=access_key_store, rate_limiter=RateLimiter(), audit=AuditLog())
     hass.data[DOMAIN] = data
-    await access_key_store.async_patch_settings(voice_agent_enabled=True, voice_agent_token_id=access_key.id,
+    await access_key_store.async_patch_settings(voice_agent_enabled=True, voice_agent_access_key_id=access_key.id,
                                           voice_agent_routing_mode='local', command_routing_timeout_ms=5000,
                                           voice_agent_provider_id='p', voice_agent_model='model',
                                           agentcli_routing_mode='local', mesa_mode='off')

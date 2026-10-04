@@ -1601,10 +1601,10 @@ export function MesaView() {
 
       {loading ? <Loading /> : totalCount === 0 ? (
         <div className="card">
-          <p className="token-table-empty">{t("mesa.emptyState")}</p>
+          <p className="access-key-table-empty">{t("mesa.emptyState")}</p>
         </div>
       ) : (filtered.length === 0 && scopeFiltered.length === 0) ? (
-        <div className="card"><p className="token-table-empty">{t("mesa.noMatch")}</p></div>
+        <div className="card"><p className="access-key-table-empty">{t("mesa.noMatch")}</p></div>
       ) : (
         <>
           {scopeFiltered.length > 0 && (

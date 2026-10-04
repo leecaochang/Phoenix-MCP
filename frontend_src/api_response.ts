@@ -10,17 +10,17 @@ function records(value: unknown): value is Record<string, unknown>[] {
 /** Unknown optional fields remain compatible with newer server revisions. */
 export function validApiResponse(path: string, method: string, value: unknown): boolean {
   const route = path.split("?")[0];
-  if (route === "/tokens" && method === "GET" || route === "/tokens/archived" && method === "GET") {
+  if (route === "/access-keys" && method === "GET" || route === "/access-keys/archived" && method === "GET") {
     return records(value) && value.every(row => typeof row.id === "string" && typeof row.name === "string");
   }
-  if (method === "GET" && /^\/tokens\/[^/]+\/audit$/.test(route)) return records(value);
+  if (method === "GET" && /^\/access-keys\/[^/]+\/audit$/.test(route)) return records(value);
   if (!object(value)) return false;
   if (route.startsWith("/attention/") && method === "POST") return value.reviewed === true;
   if (route === "/attention" && method === "GET") {
     return records(value.items) && value.items.every(row => typeof row.id === "string"
       && ["agent", "calendar", "mesa", "calendar_storage"].includes(row.kind as string)
       && (row.kind !== "agent" && row.kind !== "calendar" ||
-        typeof row.tool === "string" && typeof row.token_name === "string"
+        typeof row.tool === "string" && typeof row.access_key_name === "string"
         && typeof row.started_at === "string" && typeof row.dispatch_result === "string"));
   }
   const field = route === "/approvals" ? "approvals" : route === "/audit" ? "entries"
@@ -47,7 +47,7 @@ export function validApiResponse(path: string, method: string, value: unknown): 
       && records(value.events) && value.events.every(row => typeof row.kind === "string" && typeof row.timestamp === "string");
   }
   if (route === "/settings") {
-    for (const key of ["kill_switch", "disable_all_logging", "log_allowed", "log_denied", "token_presets_enabled", "mesa_inject_enabled", "agentcli_global", "conversation_log_enabled"]) {
+    for (const key of ["kill_switch", "disable_all_logging", "log_allowed", "log_denied", "access_key_presets_enabled", "mesa_inject_enabled", "agentcli_global", "conversation_log_enabled"]) {
       if (key in value && typeof value[key] !== "boolean") return false;
     }
     if ("mesa_mode" in value && !["off", "advisory", "enforced"].includes(value.mesa_mode as string)) return false;

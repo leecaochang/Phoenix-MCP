@@ -162,11 +162,11 @@ if _ASSIST_API_SUPPORTED:
     class PhoenixAssistTool(_llm.Tool):
         """One announced Phoenix MCP tool, dispatched through the bound token's scope."""
 
-        def __init__(self, name: str, description: str | None, parameters: Any, token_id: str) -> None:
+        def __init__(self, name: str, description: str | None, parameters: Any, access_key_id: str) -> None:
             self.name = name
             self.description = description
             self.parameters = parameters
-            self._access_key_id = token_id
+            self._access_key_id = access_key_id
 
         async def async_call(self, hass, tool_input, llm_context) -> dict:
             """Run one tool call end-to-end through Phoenix MCP's scoped dispatch path."""
@@ -202,7 +202,7 @@ if _ASSIST_API_SUPPORTED:
                     result,
                     outcome=outcome,
                     data=data,
-                    token_id=self._access_key_id,
+                    access_key_id=self._access_key_id,
                     tool_name=self.name,
                     request_id=request_id,
                 )
@@ -235,9 +235,9 @@ if _ASSIST_API_SUPPORTED:
             # Unbound, missing, invalid, or Phoenix MCP disabled yields zero tools and
             # never raises (raising would fail the whole conversation turn).
             if data.ready and not data.shutting_down and not settings.kill_switch:
-                token_id = settings.assist_bound_token_id
-                if token_id:
-                    candidate = data.store.get_access_key_by_id(token_id)
+                access_key_id = settings.assist_bound_access_key_id
+                if access_key_id:
+                    candidate = data.store.get_access_key_by_id(access_key_id)
                     if candidate is not None and candidate.is_valid():
                         access_key = candidate
 

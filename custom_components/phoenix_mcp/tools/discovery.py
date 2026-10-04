@@ -1697,7 +1697,7 @@ _MAX_REPAIR_ISSUES = 50
 def _repair_ref(access_key: AccessKeyRecord, domain: str, issue_id: str) -> str:
     """Return a stable per-token reference without disclosing HA's raw issue id."""
     digest = hmac.new(
-        access_key.token_hash.encode(),
+        access_key.access_key_hash.encode(),
         f"{domain}\0{issue_id}".encode(),
         hashlib.sha256,
     ).hexdigest()[:20]
@@ -2250,7 +2250,7 @@ async def _tool_get_audit_summary(
     limit = max(1, min(limit, 200))
 
     outcome = args.get("outcome")
-    entries = data.audit.query(token_id=access_key.id, outcome=outcome, limit=limit)
+    entries = data.audit.query(access_key_id=access_key.id, outcome=outcome, limit=limit)
     if entries is None:
         return _tool_error("Invalid outcome filter."), "invalid_request", "get_audit_summary"
 

@@ -36,7 +36,7 @@ async def _environment(hass):
 @pytest.mark.parametrize("claimed", [False, True])
 async def test_actual_task_cancellation_resolves_only_unclaimed_review(hass, claimed):
     data, access_key, _ = await _environment(hass)
-    record = await async_create_pending_approval(data.store, token_id=access_key.id, token_name=access_key.name,
+    record = await async_create_pending_approval(data.store, access_key_id=access_key.id, access_key_name=access_key.name,
         tool_name="restart_ha", cap_name="cap_restart", args={}, diff={}, request_id="turn")
     if claimed:
         # A durable claim must survive even if no live claim remains in memory.
@@ -74,7 +74,7 @@ async def test_real_chat_disconnect_cancels_approval(hass, hass_access_token, so
          patch.object(agentcli, "build_provider", return_value=provider), \
          patch.object(agentcli, "AGENTCLI_HEARTBEAT_SECONDS", 0.02):
         try:
-            response = await client.post(view.url, json={"token_id": access_key.id, "instance_id": "fixture", "user": "restart"})
+            response = await client.post(view.url, json={"access_key_id": access_key.id, "instance_id": "fixture", "user": "restart"})
             assert response.status == 200
             async with asyncio.timeout(3):
                 buffer = ""
@@ -308,14 +308,14 @@ async def test_cancel_before_approval_emission_cleans_saved_review(hass):
     data, access_key, _ = await _environment(hass)
     pending_created = asyncio.Event()
     async def dispatch(*args, request_id, **kwargs):
-        await async_create_pending_approval(data.store, token_id=access_key.id, token_name=access_key.name,
+        await async_create_pending_approval(data.store, access_key_id=access_key.id, access_key_name=access_key.name,
             tool_name="restart_ha", cap_name="cap_restart", args={}, diff={}, request_id=request_id)
         pending_created.set()
         await asyncio.Event().wait()
     with patch.object(mcp_view, "_dispatch_mcp", side_effect=dispatch):
         task = asyncio.create_task(agentcli._run_tool_batch(
             [{"id": "call", "name": "restart_ha", "input": {}}], hass=hass, data=data,
-            token_id=access_key.id, client_ip="agentcli", base_url="", emit=AsyncMock(), cancel=asyncio.Event()))
+            access_key_id=access_key.id, client_ip="agentcli", base_url="", emit=AsyncMock(), cancel=asyncio.Event()))
         await asyncio.wait_for(pending_created.wait(), 2)
         task.cancel()
         with pytest.raises(asyncio.CancelledError):
@@ -420,7 +420,7 @@ async def test_emit_failure_after_pending_review_still_closes_it(hass):
     with pytest.raises(ConnectionResetError):
         await agentcli._run_tool_batch(
             [{"id": "call", "name": "restart_ha", "input": {}}], hass=hass, data=data,
-            token_id=access_key.id, client_ip="agentcli", base_url="", emit=emit, cancel=asyncio.Event())
+            access_key_id=access_key.id, client_ip="agentcli", base_url="", emit=emit, cancel=asyncio.Event())
     pending = data.store.get_pending_approvals()
     assert pending
     assert get_approval(data.store, pending[0]["id"]).status == "cancelled"

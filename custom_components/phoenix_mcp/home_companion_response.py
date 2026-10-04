@@ -256,7 +256,7 @@ def build_report(status: str, model_message: str, evidence: ResponseEvidence, la
     if status == 'authority_lost':
         execution = 'uncertain' if evidence.attempts else 'not_attempted'
         next_step = 'check_state' if evidence.attempts else 'check_access'
-        parts.append(voice_text(language, 'token_unavailable'))
+        parts.append(voice_text(language, 'access_key_unavailable'))
         if evidence.attempts:
             parts.append(voice_text(language, 'companion_unverified'))
     elif recovery_required or status == 'outcome_unknown':

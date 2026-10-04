@@ -23,7 +23,7 @@ import type { GlobalSettings } from "../types";
 function settings(over: Partial<GlobalSettings> = {}): GlobalSettings {
   return {
     voice_agent_enabled: false,
-    voice_agent_token_id: null,
+    voice_agent_access_key_id: null,
     voice_agent_provider_id: null,
     voice_agent_model: null,
     voice_agent_pipeline_id: null,
@@ -34,7 +34,7 @@ function settings(over: Partial<GlobalSettings> = {}): GlobalSettings {
 
 const FULL = {
   voice_agent_enabled: true,
-  voice_agent_token_id: "tok-1",
+  voice_agent_access_key_id: "tok-1",
   voice_agent_provider_id: "i1",
   voice_agent_model: "claude-opus-4-8",
 };
@@ -66,7 +66,7 @@ describe("VoiceAgentSettings", () => {
     const { onChange } = renderCard(settings());
     await waitFor(() => expect(screen.getByRole("option", { name: "voice-token" })).toBeTruthy());
     fireEvent.change(screen.getByLabelText("Voice agent access key"), { target: { value: "tok-1" } });
-    expect(onChange).toHaveBeenCalledWith("voice_agent_token_id", "tok-1");
+    expect(onChange).toHaveBeenCalledWith("voice_agent_access_key_id", "tok-1");
   });
 
   it("places select help above all three dropdowns without stacking the switch", () => {
@@ -166,10 +166,10 @@ describe("VoiceAgentSettings", () => {
   it("does not expose internal decision review for any token", async () => {
     listAccessKeys.mockResolvedValue([{ id: "tok-1", name: "Home token", persona: "home_companion" },
       { id: "tok-2", name: "Ordinary token", persona: "voice_assistant" }]);
-    const { rerender } = render(<VoiceAgentSettings settings={settings({ voice_agent_token_id: "tok-1", voice_agent_tool_routing_mode: "observe" })} onChange={vi.fn()} saving={false} />);
+    const { rerender } = render(<VoiceAgentSettings settings={settings({ voice_agent_access_key_id: "tok-1", voice_agent_tool_routing_mode: "observe" })} onChange={vi.fn()} saving={false} />);
     await screen.findByRole("option", { name: "Home token" });
     expect(screen.queryByLabelText("Tool selection review")).toBeNull();
-    rerender(<VoiceAgentSettings settings={settings({ voice_agent_token_id: "tok-2", voice_agent_tool_routing_mode: "observe" })} onChange={vi.fn()} saving={false} />);
+    rerender(<VoiceAgentSettings settings={settings({ voice_agent_access_key_id: "tok-2", voice_agent_tool_routing_mode: "observe" })} onChange={vi.fn()} saving={false} />);
     expect(screen.queryByLabelText("Tool selection review")).toBeNull();
   });
 

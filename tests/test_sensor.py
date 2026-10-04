@@ -43,11 +43,11 @@ def _make_token(
     from homeassistant.util.dt import utcnow
 
     raw = ACCESS_KEY_PREFIX + secrets.token_hex(32)
-    token_hash = hashlib.sha256(raw.encode()).hexdigest()
+    access_key_hash = hashlib.sha256(raw.encode()).hexdigest()
     return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name=name,
-        token_hash=token_hash,
+        access_key_hash=access_key_hash,
         created_at=utcnow(),
         created_by="user1",
         revoked=revoked,
@@ -667,7 +667,7 @@ async def test_generated_entity_ids_match_the_documentation(hass, enable_custom_
 
     from homeassistant.helpers.entity_platform import EntityPlatform
 
-    access_key = _make_token(name="my-token")
+    access_key = _make_token(name="my_access_key")
     data = _make_data(access_keys=[access_key])
     hass.data[DOMAIN] = data
     entry = MockConfigEntry(domain=DOMAIN)
@@ -716,7 +716,7 @@ async def test_generated_entity_ids_match_the_documentation(hass, enable_custom_
 
     generated = {s._sensor_type: s.entity_id for s in sensors}
     documented = {
-        sensor_type: f"sensor.phoenix_mcp_token_my_token_{sensor_type}"
+        sensor_type: f"sensor.phoenix_mcp_token_my_access_key_{sensor_type}"
         for sensor_type in _SENSOR_TYPES
     }
     assert generated == documented, (

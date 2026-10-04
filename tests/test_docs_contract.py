@@ -379,7 +379,7 @@ def test_audit_prose_keeps_master_off_and_administrator_provenance() -> None:
     assert '"Never" disables the periodic flush; stop, reload and unload still attempt a final save' in operations
     for name in ("security.html", "admin-api.html"):
         page = _plain_page(name)
-        assert "originating_token_id" in page
+        assert "originating_access_key_id" in page
         assert "administrator as actor" in page
         assert "not the Phoenix audit store" not in page
 

@@ -69,7 +69,7 @@ def log_detail_ref(entry: dict, access_key: Any, *, phoenix_only: bool, bucket_i
     token or after the bucket content changes.
     """
     payload = json.dumps([phoenix_only, bucket_id, entry], sort_keys=True).encode("utf-8")
-    return hmac.new(access_key.token_hash.encode(), payload, hashlib.sha256).hexdigest()
+    return hmac.new(access_key.access_key_hash.encode(), payload, hashlib.sha256).hexdigest()
 
 
 def compact_log_entry(entry: dict, detail_ref: str | None, *, text_divisor: int = 1) -> dict:

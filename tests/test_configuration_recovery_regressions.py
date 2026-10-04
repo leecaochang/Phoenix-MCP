@@ -22,7 +22,7 @@ def runtime():
 
 
 def access_key(**caps):
-    return AccessKeyRecord(id="audit", name="audit", token_hash="x", created_at=utcnow(), created_by="test", permissions=PermissionTree(), **caps)
+    return AccessKeyRecord(id="audit", name="audit", access_key_hash="x", created_at=utcnow(), created_by="test", permissions=PermissionTree(), **caps)
 
 
 def body(result):

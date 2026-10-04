@@ -56,7 +56,7 @@ def _access_key(*, cap: str = "allow", state: str = "GREEN") -> AccessKeyRecord:
     return AccessKeyRecord(
         id=str(uuid.uuid4()),
         name="registry-test",
-        token_hash="x",
+        access_key_hash="x",
         created_at=utcnow(),
         created_by="test",
         cap_registry_write=cap,

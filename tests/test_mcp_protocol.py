@@ -566,10 +566,10 @@ class TestLegacyProtocolEra:
         access_key, raw, data, hass = _strict_env()
         session_id = "owned-session"
         now = mcp_view.time.monotonic()
-        data.mcp_sessions[session_id] = {"token_id": access_key.id, "last_seen": now}
+        data.mcp_sessions[session_id] = {"access_key_id": access_key.id, "last_seen": now}
         for index in range(mcp_view._MCP_LEGACY_SESSION_LIMIT - 1):
             data.mcp_sessions[f"other-{index}"] = {
-                "token_id": f"other-token-{index}",
+                "access_key_id": f"other-token-{index}",
                 "last_seen": now,
             }
 
@@ -590,7 +590,7 @@ class TestLegacyProtocolEra:
         _access_key, raw, data, hass = _strict_env()
         session_id = "foreign-session"
         data.mcp_sessions[session_id] = {
-            "token_id": "another-token",
+            "access_key_id": "another-token",
             "last_seen": mcp_view.time.monotonic(),
         }
 
@@ -719,7 +719,7 @@ async def test_session_quota_cannot_evict_another_token():
 async def test_global_session_capacity_refuses_without_eviction():
     access_key, _, data, _ = _strict_env()
     for i in range(mcp_view._MCP_LEGACY_SESSION_LIMIT):
-        data.mcp_sessions[str(i)] = {'token_id': str(i), 'last_seen': mcp_view.time.monotonic()}
+        data.mcp_sessions[str(i)] = {'access_key_id': str(i), 'last_seen': mcp_view.time.monotonic()}
     original = dict(data.mcp_sessions)
     assert mcp_view._open_legacy_session(data, access_key) is None
     assert data.mcp_sessions == original

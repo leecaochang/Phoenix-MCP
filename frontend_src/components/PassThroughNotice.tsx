@@ -23,7 +23,7 @@ export const PassThroughNotice = React.memo(function PassThroughNotice({ accessK
       const updated = await api.patchAccessKey(accessKey.id, body);
       onUpdate(updated);
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : t("tokens.ptConvertFailed"));
+      setError(e instanceof Error ? e.message : t("accessKeys.ptConvertFailed"));
     } finally {
       setSaving(false);
       setConfirming(false);
@@ -34,13 +34,13 @@ export const PassThroughNotice = React.memo(function PassThroughNotice({ accessK
     <div>
       <div className="pass-through-header-banner">
         <p>
-          {tRich("tokens.ptNoticeIntro", { strong: (c) => <strong className="text-warning">{c}</strong> })}
+          {tRich("accessKeys.ptNoticeIntro", { strong: (c) => <strong className="text-warning">{c}</strong> })}
         </p>
         <p className="mt-8">
-          {t("tokens.ptNoticeCaps")}
+          {t("accessKeys.ptNoticeCaps")}
         </p>
         <p className="mt-8">
-          {t("tokens.ptNoticeUsage")}
+          {t("accessKeys.ptNoticeUsage")}
         </p>
       </div>
 
@@ -51,12 +51,12 @@ export const PassThroughNotice = React.memo(function PassThroughNotice({ accessK
           className="btn btn-outline"
           onClick={() => setConfirming(true)}
         >
-          {t("tokens.switchToScoped")}
+          {t("accessKeys.switchToScoped")}
         </button>
       ) : (
         <div className="card pass-through-convert-card">
           <p className="pass-through-convert-body">
-            {t("tokens.ptConvertBody")}
+            {t("accessKeys.ptConvertBody")}
           </p>
           <div className="pass-through-actions">
             <BusyButton
@@ -64,10 +64,10 @@ export const PassThroughNotice = React.memo(function PassThroughNotice({ accessK
               onClick={convertToScoped}
               busy={saving}
             >
-              {saving ? t("tokens.switching") : t("tokens.switchToScoped")}
+              {saving ? t("accessKeys.switching") : t("accessKeys.switchToScoped")}
             </BusyButton>
             <button className="btn btn-text" onClick={() => setConfirming(false)}>
-              {t("tokens.cancel")}
+              {t("accessKeys.cancel")}
             </button>
           </div>
         </div>

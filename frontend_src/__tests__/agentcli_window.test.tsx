@@ -1908,7 +1908,7 @@ describe("AgentCliWindow streaming", () => {
     fireEvent.click(screen.getByLabelText("Show verbose output"));
 
     await waitFor(() => expect(getDurable().model).toBe("m-b"));
-    expect(getDurable().tokenId).toBe("t2");
+    expect(getDurable().accessKeyId).toBe("t2");
     expect(getDurable().options.verbose).toBe(true);
 
     unmount();

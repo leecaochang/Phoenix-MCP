@@ -24,7 +24,7 @@ from custom_components.phoenix_mcp.version_store import VersionStore
 
 def _access_key():
     return AccessKeyRecord(
-        id="registration", name="registration", token_hash="test", created_at=utcnow(),
+        id="registration", name="registration", access_key_hash="test", created_at=utcnow(),
         created_by="admin", cap_script_write="allow", cap_scene_write="allow",
         cap_registry_read="allow", cap_registry_write="allow",
         permissions=PermissionTree(domains={
@@ -132,7 +132,7 @@ async def test_authority_change_during_wait_blocks_disclosure(hass, short_budget
     store.get_settings.return_value.kill_switch = False
     data = PhoenixData(store=store, rate_limiter=MagicMock(), audit=MagicMock())
     hass.data[DOMAIN] = data
-    authority = request_authority.set(RequestAuthority(hass, data, access_key.id, access_key.token_hash))
+    authority = request_authority.set(RequestAuthority(hass, data, access_key.id, access_key.access_key_hash))
     version = policy_version.set(access_key.settings_version)
     task = asyncio.create_task(observation.async_observe_registration(hass, access_key, "script", "stored"))
     try:

@@ -50,10 +50,10 @@ async def _seed(data: PhoenixData):
     """Create then edit one automation; return the edit record."""
     await data.versions.record(
         resource_type="automation", resource_id="aid1", action="create",
-        before=None, after={"alias": "A"}, alias="A", token_name="agent")
+        before=None, after={"alias": "A"}, alias="A", access_key_name="agent")
     return await data.versions.record(
         resource_type="automation", resource_id="aid1", action="edit",
-        before={"alias": "A"}, after={"alias": "B"}, alias="B", token_name="agent")
+        before={"alias": "A"}, after={"alias": "B"}, alias="B", access_key_name="agent")
 
 
 DEVICE_YAML = (
@@ -79,7 +79,7 @@ async def _seed_esphome(data: PhoenixData, before: str | None, after: str | None
         resource_type="esphome_yaml", resource_id="dev.yaml", action="edit",
         before=None if before is None else {"content": before},
         after=None if after is None else {"content": after},
-        alias="dev.yaml", token_name="agent")
+        alias="dev.yaml", access_key_name="agent")
 
 
 class TestVersionDetailEsphomeMasking:
@@ -212,7 +212,7 @@ class TestVersionsList:
         await _seed(data)  # two automation versions
         await data.versions.record(
             resource_type="script", resource_id="s1", action="create",
-            before=None, after={"alias": "S"}, alias="S", token_name="agent")
+            before=None, after={"alias": "S"}, alias="S", access_key_name="agent")
         view = PhoenixAdminVersionsView()
         view.hass = _hass(data)
         resp = await view.get(_request())  # neither param: global recent feed
@@ -232,7 +232,7 @@ class TestVersionsList:
         await _seed(data)  # two automation versions
         await data.versions.record(
             resource_type="script", resource_id="s1", action="create",
-            before=None, after={"alias": "S"}, alias="S", token_name="agent")
+            before=None, after={"alias": "S"}, alias="S", access_key_name="agent")
         view = PhoenixAdminVersionsView()
         view.hass = _hass(data)
         resp = await view.get(_request({"limit": "1"}))
@@ -247,7 +247,7 @@ class TestVersionsList:
         await _seed(data)  # two automation versions
         await data.versions.record(
             resource_type="script", resource_id="s1", action="create",
-            before=None, after={"alias": "S"}, alias="S", token_name="agent")
+            before=None, after={"alias": "S"}, alias="S", access_key_name="agent")
         view = PhoenixAdminVersionsView()
         view.hass = _hass(data)
         page1 = _body(await view.get(_request({"limit": "1", "offset": "0"})))
@@ -288,7 +288,7 @@ async def test_restore_audit_keeps_admin_actor_and_opaque_source_identity():
     record = await data.versions.record(
         resource_type="automation", resource_id="fixture", action="edit",
         before={"alias": "Before"}, after={"alias": "After"},
-        token_id="source-identity", token_name="source",
+        access_key_id="source-identity", access_key_name="source",
     )
     view = PhoenixAdminVersionRestoreView()
     view.hass = _hass(data)
@@ -300,6 +300,6 @@ async def test_restore_audit_keeps_admin_actor_and_opaque_source_identity():
         response = await view.post(req, version_id=record.id)
     assert response.status == 200
     entry = data.audit.query(limit=1)[0].to_dict()
-    assert entry["token_id"] == "admin"
+    assert entry["access_key_id"] == "admin"
     assert entry["ha_user_id"] == "admin-user"
-    assert entry["originating_token_id"] == "source-identity"
+    assert entry["originating_access_key_id"] == "source-identity"

@@ -99,7 +99,7 @@ async def _async_review_reference(hass: Any, data: Any, access_key: Any, sentenc
                 snapshot = capture_batch_targets(hass, current, extended=extended)
                 # A successful, exact transcript can carry its last subject across pronoun turns.
                 # Never search older messages for a convenient referent.
-                binding = [current.id, current.token_hash, current.settings_version, language, authority.settings_values]
+                binding = [current.id, current.access_key_hash, current.settings_version, language, authority.settings_values]
                 remembered = data.command_routing.chat_history.subject(
                     history, [binding, decision_account_fingerprint(hass, account)]) if prepare else None
                 anchor = ({"reason": "supported", "proposal": remembered} if remembered else

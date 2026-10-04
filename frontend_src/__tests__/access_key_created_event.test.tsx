@@ -41,7 +41,7 @@ describe("token creation announces phx-access-keys-changed", () => {
     vi.clearAllMocks();
     fired = 0;
     window.addEventListener("phx-access-keys-changed", bump);
-    createAccessKey.mockResolvedValue({ token: "phx_" + "a".repeat(64), ...RECORD });
+    createAccessKey.mockResolvedValue({ access_key: "phx_" + "a".repeat(64), ...RECORD });
     patchAccessKey.mockResolvedValue(RECORD);
   });
 

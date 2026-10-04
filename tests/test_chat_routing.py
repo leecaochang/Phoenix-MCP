@@ -293,7 +293,7 @@ async def test_chat_local_dispatches_once_without_either_model(hass, executing_c
     assert data.store.get_settings().voice_agent_routing_mode == 'off'
     assert not data.store.get_settings().voice_agent_enabled
     assert data.command_routing.summary()['agent_chat']['candidates'] == 1
-    assert data.audit.query(token_id=access_key.id)[0].client_ip == 'agentcli'
+    assert data.audit.query(access_key_id=access_key.id)[0].client_ip == 'agentcli'
 
 
 async def test_chat_read_then_explicit_command_uses_local_routing(hass, executing_chat):

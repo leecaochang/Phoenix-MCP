@@ -138,7 +138,7 @@ def clear_ai_task_preferred(hass: HomeAssistant, entry) -> dict:
 
 def _is_fully_configured(settings: Any) -> bool:
     return bool(
-        settings.ai_task_enabled and settings.ai_task_token_id
+        settings.ai_task_enabled and settings.ai_task_access_key_id
         and settings.ai_task_provider_id and settings.ai_task_model
     )
 
@@ -381,7 +381,7 @@ async def _async_generate_ai_task_data(
     if not _is_fully_configured(settings):
         raise HomeAssistantError("The Phoenix MCP AI Task entity is not fully configured.")
 
-    access_key = _current_dispatch_access_key(data, settings.ai_task_token_id)
+    access_key = _current_dispatch_access_key(data, settings.ai_task_access_key_id)
     if access_key is None:
         raise HomeAssistantError("The Phoenix MCP AI Task entity's access key is no longer available.")
 

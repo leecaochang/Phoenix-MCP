@@ -33,7 +33,7 @@ from custom_components.phoenix_mcp.access_key_store import GlobalSettings, Permi
 
 def _access_key(**kw) -> AccessKeyRecord:
     return AccessKeyRecord(
-        id="tok", name="Road test", token_hash="x", created_at=utcnow(),
+        id="tok", name="Road test", access_key_hash="x", created_at=utcnow(),
         created_by="admin", permissions=PermissionTree(), **kw,
     )
 
@@ -98,7 +98,7 @@ class TestFiltering:
         assert e.method == "mesa:enforcement_decision"
         assert e.resource == "lock.front"
         assert e.request_id == "req-1"
-        assert e.token_id == "tok" and e.token_name == "Road test"
+        assert e.access_key_id == "tok" and e.access_key_name == "Road test"
         assert e.client_ip == "10.0.0.5"
         # The rule is the whole point of the row: "denied" alone does not say which
         # MESA rule fired.
@@ -421,7 +421,7 @@ async def test_real_ingress_attributes_mesa_denials_and_resets_context(hass, acc
         await _call_tool(tool, args, access_key, hass, data, "audit-ingress", "192.0.2.1")
         rows = data.audit.query()
         assert len(rows) == 1
-        assert rows[0].token_id == access_key.id
+        assert rows[0].access_key_id == access_key.id
         assert rows[0].request_id == "audit-ingress"
         assert rows[0].client_ip == "192.0.2.1"
         assert rows[0].method == ("mesa:lease" if surface == "lease" else "mesa:privacy_access")

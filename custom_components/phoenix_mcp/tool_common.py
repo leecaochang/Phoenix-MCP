@@ -425,7 +425,7 @@ def _access_key_has_other_pending(data: PhoenixData, access_key: AccessKeyRecord
     from .approvals import STATUS_PENDING, list_approvals  # noqa: PLC0415
 
     try:
-        pending = list_approvals(data.store, status=STATUS_PENDING, token_id=access_key.id)
+        pending = list_approvals(data.store, status=STATUS_PENDING, access_key_id=access_key.id)
     except Exception:  # noqa: BLE001 - advisory only; never fail a gate over this
         _LOGGER.debug("Could not read pending approvals for %s", access_key.id, exc_info=True)
         return False
@@ -559,8 +559,8 @@ async def _record_version(
             before=before,
             after=after,
             alias=alias,
-            token_id=access_key.id,
-            token_name=access_key.name,
+            access_key_id=access_key.id,
+            access_key_name=access_key.name,
             approved_by_user_id=approved_by_user_id,
             **(summary or {}),
         )
@@ -868,8 +868,8 @@ async def _create_registry_mesa_approval(
         check_request_authority()
         approval = await async_create_pending_approval(
             data.store,
-            token_id=access_key.id,
-            token_name=access_key.name,
+            access_key_id=access_key.id,
+            access_key_name=access_key.name,
             tool_name=tool_name,
             cap_name=cap_name,
             args=args,

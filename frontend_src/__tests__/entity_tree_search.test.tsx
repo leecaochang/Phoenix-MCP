@@ -53,7 +53,7 @@ function renderTree(permissions: PermissionTree = EMPTY_PERMISSIONS) {
   const onPermissionsChange = vi.fn();
   render(
     <EntityTree
-      tokenId="token-1"
+      accessKeyId="access-key-1"
       permissions={permissions}
       onPermissionsChange={onPermissionsChange}
     />,
@@ -139,7 +139,7 @@ describe("permission tree search and device cleanup", () => {
     fireEvent.pointerDown(clearButton, { pointerId: 1 });
 
     await waitFor(() => expect(mocks.patchDevicePermission).toHaveBeenCalledWith(
-      "token-1", GHOST_DEVICE_ID, { state: "GREY" },
+      "access-key-1", GHOST_DEVICE_ID, { state: "GREY" },
     ));
     expect(onPermissionsChange).toHaveBeenCalledWith(EMPTY_PERMISSIONS);
   });

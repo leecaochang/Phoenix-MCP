@@ -12,8 +12,8 @@ function entry(over: Partial<AuditEntry> = {}): AuditEntry {
   return {
     request_id: "r1",
     timestamp: "2026-01-01T00:00:00Z",
-    token_id: "t1",
-    token_name: "my_access_key",
+    access_key_id: "t1",
+    access_key_name: "my_access_key",
     method: "tools/call",
     resource: "create_automation",
     outcome: "allowed",
@@ -42,7 +42,7 @@ describe("AuditView", () => {
     await findByText("create_automation");
 
     expect(api.getAudit).toHaveBeenCalledWith({
-      outcome: undefined, token_id: undefined, since: undefined,
+      outcome: undefined, access_key_id: undefined, since: undefined,
       method: undefined, resource: undefined, ip: undefined,
       limit: 100, offset: 0,
     });

@@ -158,7 +158,7 @@ class DecisionShadow:
                     enabled = effective_routing_mode(settings, "chat") == "hybrid"
                 elif ingress == "voice":
                     enabled = (effective_routing_mode(settings) == "hybrid" and settings.voice_agent_enabled
-                               and settings.voice_agent_token_id == authority.token_id)
+                               and settings.voice_agent_access_key_id == authority.access_key_id)
                 else:
                     enabled = False
                 if not targets or not enabled:

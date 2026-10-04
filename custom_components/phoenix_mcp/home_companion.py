@@ -33,7 +33,7 @@ _LOGGER = logging.getLogger(__name__)
 class CompanionTurn:
     """Private turn-local execution admission; never populated from MCP arguments."""
 
-    token_id: str
+    access_key_id: str
     language: str = "en"
     request: str = ""
     style: str = "direct"
@@ -57,7 +57,7 @@ def is_companion(access_key: Any) -> bool:
 
 def internal_turn(access_key: Any) -> bool:
     turn = _turn.get()
-    return bool(turn is not None and turn.token_id == access_key.id)
+    return bool(turn is not None and turn.access_key_id == access_key.id)
 
 
 def wrapper_tool() -> dict:

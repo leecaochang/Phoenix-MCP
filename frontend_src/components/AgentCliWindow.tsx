@@ -588,7 +588,7 @@ export function AgentCliWindow({
   const firstInstance = (instances.some((i) => i.id === saved.instanceId) && saved.instanceId)
     || instances[0]?.id || "";
 
-  const [tokenId, setAccessKeyId] = useState(saved.tokenId || initialAccessKeyId || accessKeys[0]?.id || "");
+  const [accessKeyId, setAccessKeyId] = useState(saved.accessKeyId || initialAccessKeyId || accessKeys[0]?.id || "");
   const [instanceId, setInstanceId] = useState<string>(firstInstance);
   const [models, setModels] = useState<string[]>([]);
   const [model, setModel] = useState<string>(saved.model);
@@ -630,7 +630,7 @@ export function AgentCliWindow({
   const [usage, setUsage] = useState<SessionUsage>(() => getSessionUsage());
   // Screen-reader announcement of discrete chat events (completed replies,
   // approvals, errors). Deliberately NOT the streaming transcript itself:
-  // a live region over token-by-token deltas would announce every chunk.
+  // a live region over access-key-by-token deltas would announce every chunk.
   const [announcement, setAnnouncement] = useState("");
   const [popupMount, setPopupMount] = useState<HTMLElement | null>(null);
   const [popOutError, setPopOutError] = useState("");
@@ -762,7 +762,7 @@ export function AgentCliWindow({
                        [kind, model, options.thinking, declaredCaps]);
 
   // Persist the selections, options, and geometry so they survive reopen/reload.
-  useEffect(() => { patchDurable({ tokenId }, persistenceOwner); }, [persistenceOwner, tokenId]);
+  useEffect(() => { patchDurable({ accessKeyId }, persistenceOwner); }, [persistenceOwner, accessKeyId]);
   useEffect(() => { patchDurable({ instanceId }, persistenceOwner); }, [instanceId, persistenceOwner]);
   useEffect(() => { patchDurable({ model }, persistenceOwner); }, [model, persistenceOwner]);
   useEffect(() => { patchDurable({ options }, persistenceOwner); }, [options, persistenceOwner]);
@@ -839,7 +839,7 @@ export function AgentCliWindow({
     setTurns([]);
     setLive([]);
     resetUsage();
-  }, [tokenId, instanceId, resetUsage]);
+  }, [accessKeyId, instanceId, resetUsage]);
 
   // If an account is added or removed while the window is open, keep the
   // selection valid without a page reload. When the last account is removed,
@@ -854,12 +854,12 @@ export function AgentCliWindow({
   // phx-access-keys-changed, which both window hosts turn into a fresh tokens prop)
   // must not leave a dead token selected. Falls back to another available
   // token, or "" if none remain; the conversation-reset effect above already
-  // clears history whenever tokenId changes, including this reselect.
+  // clears history whenever accessKeyId changes, including this reselect.
   useEffect(() => {
-    if (tokenId && !accessKeys.some((tok) => tok.id === tokenId)) {
+    if (accessKeyId && !accessKeys.some((tok) => tok.id === accessKeyId)) {
       setAccessKeyId(accessKeys[0]?.id ?? "");
     }
-  }, [accessKeys, tokenId]);
+  }, [accessKeys, accessKeyId]);
 
   const scrollToLatest = useCallback(() => {
     const el = bodyRef.current;
@@ -1054,7 +1054,7 @@ export function AgentCliWindow({
     setPendingContinue(null);
     cancelledRef.current = false;
     lastQueryRef.current = mode === "continue" ? "" : text;
-    const stateless = accessKeys.find((accessKey) => accessKey.id === tokenId)?.persona === "home_companion";
+    const stateless = accessKeys.find((accessKey) => accessKey.id === accessKeyId)?.persona === "home_companion";
     if (stateless) {
       setTurns([]);
       setSessionTurns([], persistenceOwner);
@@ -1114,7 +1114,7 @@ export function AgentCliWindow({
     try {
       await agentCliChat(
         {
-          token_id: tokenId,
+          access_key_id: accessKeyId,
           instance_id: instanceId,
           model: model || undefined,
           messages: sentMessages,
@@ -1269,7 +1269,7 @@ export function AgentCliWindow({
         if (finalText) setAnnouncement(finalText);
       }
     }
-  }, [sending, accessKeys, turns, scrollbackLines, tokenId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps]);
+  }, [sending, accessKeys, turns, scrollbackLines, accessKeyId, persistenceOwner, resetUsage, instanceId, model, kind, options, caps]);
 
   const answerAnyway = useCallback((prompt: string) => {
     if (sending || !prompt) return;
@@ -1862,9 +1862,9 @@ export function AgentCliWindow({
       {!collapsed && (
         <>
           <div className="agentcli-controls">
-            <label className="agentcli-control" title={t("agentchat.tokenHint")}>
-              <span>{t("agentchat.token")}</span>
-              <select className="input agentcli-select" value={tokenId} onChange={(e) => { setGearOpen(false); setAccessKeyId(e.target.value); }} aria-label={t("agentchat.token")} disabled={sending}>
+            <label className="agentcli-control" title={t("agentchat.accessKeyHint")}>
+              <span>{t("agentchat.accessKey")}</span>
+              <select className="input agentcli-select" value={accessKeyId} onChange={(e) => { setGearOpen(false); setAccessKeyId(e.target.value); }} aria-label={t("agentchat.accessKey")} disabled={sending}>
                 {accessKeys.map((tok) => <option key={tok.id} value={tok.id}>{tok.name}</option>)}
               </select>
             </label>

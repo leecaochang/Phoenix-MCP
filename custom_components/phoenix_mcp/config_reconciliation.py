@@ -122,7 +122,7 @@ def _matches(record: dict, observed: dict) -> bool:
 
 def is_recovery_approval(approval, data) -> bool:
     """Only system-created records with a durable back-reference get admin authority."""
-    if approval.token_id != CONFIG_RECOVERY_APPROVAL_ACCESS_KEY or approval.cap_name != CONFIG_RECOVERY_APPROVAL_CAP:
+    if approval.access_key_id != CONFIG_RECOVERY_APPROVAL_ACCESS_KEY or approval.cap_name != CONFIG_RECOVERY_APPROVAL_CAP:
         return False
     record = data.config_recovery.get(approval.args.get("recovery_id"))
     return record is not None and record.get("approval_id") == approval.id
@@ -177,7 +177,7 @@ async def _queue_recovery(hass, data, record: dict, observed: dict | None) -> No
         if current is None or current["phase"] not in CONFIG_RECOVERY_UNRESOLVED or not data.config_recovery.inactive(record["id"]):
             return
         existing = next((a for a in data.store.get_pending_approvals()
-                         if a.get("token_id") == CONFIG_RECOVERY_APPROVAL_ACCESS_KEY
+                         if a.get("access_key_id") == CONFIG_RECOVERY_APPROVAL_ACCESS_KEY
                          and a.get("status") == "pending" and a.get("args", {}).get("recovery_id") == record["id"]), None)
         if existing is not None:
             if existing["id"] in data.approvals_in_progress or existing.get("execution_started_at"):
@@ -191,7 +191,7 @@ async def _queue_recovery(hass, data, record: dict, observed: dict | None) -> No
         else:
             try:
                 approval = await async_create_pending_approval(data.store,
-                    token_id=CONFIG_RECOVERY_APPROVAL_ACCESS_KEY, token_name="Phoenix MCP",
+                    access_key_id=CONFIG_RECOVERY_APPROVAL_ACCESS_KEY, access_key_name="Phoenix MCP",
                     tool_name="restore_configuration", cap_name=CONFIG_RECOVERY_APPROVAL_CAP,
                     args=args, diff=diff, request_id=record["id"])
                 newly_created = True

@@ -34,13 +34,13 @@ describe("flattenCatalog", () => {
 
 describe("t", () => {
   it("returns the stored string", () => {
-    primeTranslations({ tokens: { revoke: "Revoke" } });
-    expect(t("tokens.revoke")).toBe("Revoke");
+    primeTranslations({ accessKeys: { revoke: "Revoke" } });
+    expect(t("accessKeys.revoke")).toBe("Revoke");
   });
 
   it("returns the key itself when it is missing, so gaps are visible", () => {
     primeTranslations({});
-    expect(t("tokens.nope")).toBe("tokens.nope");
+    expect(t("accessKeys.nope")).toBe("accessKeys.nope");
   });
 
   it("substitutes {name} params", () => {
@@ -193,25 +193,25 @@ describe("loadTranslations", () => {
   });
 
   it("installs the served resources, which are already dotted and unprefixed", async () => {
-    mockFetch({ resources: { "tokens.revoke": "Revoke" } });
+    mockFetch({ resources: { "accessKeys.revoke": "Revoke" } });
     await loadTranslations(authenticatedHass(), "en");
-    expect(t("tokens.revoke")).toBe("Revoke");
+    expect(t("accessKeys.revoke")).toBe("Revoke");
     expect(isI18nReady()).toBe(true);
   });
 
   it("ignores a non-string value rather than rendering it", async () => {
-    primeTranslations({ tokens: { revoke: "Revoke" } });
-    mockFetch({ resources: { "tokens.revoke": "撤销", "tokens.bad": { nested: 1 } } });
+    primeTranslations({ accessKeys: { revoke: "Revoke" } });
+    mockFetch({ resources: { "accessKeys.revoke": "撤销", "accessKeys.bad": { nested: 1 } } });
     await loadTranslations(authenticatedHass(), "zh-Hans");
-    expect(t("tokens.revoke")).toBe("撤销");
-    expect(t("tokens.bad")).toBe("tokens.bad");
+    expect(t("accessKeys.revoke")).toBe("撤销");
+    expect(t("accessKeys.bad")).toBe("accessKeys.bad");
   });
 
   it("keeps the existing catalog when a fetch returns nothing", async () => {
-    primeTranslations({ tokens: { revoke: "Revoke" } });
+    primeTranslations({ accessKeys: { revoke: "Revoke" } });
     mockFetch({ resources: {} });
     await loadTranslations(authenticatedHass(), "en");
-    expect(t("tokens.revoke")).toBe("Revoke");
+    expect(t("accessKeys.revoke")).toBe("Revoke");
   });
 
   it("never refreshes Home Assistant authentication directly", async () => {
@@ -255,10 +255,10 @@ describe("loadTranslations", () => {
   });
 
   it("keeps the existing catalog when the request fails", async () => {
-    primeTranslations({ tokens: { revoke: "Revoke" } });
+    primeTranslations({ accessKeys: { revoke: "Revoke" } });
     mockFetch(null, false);
     await loadTranslations(authenticatedHass(), "en");
-    expect(t("tokens.revoke")).toBe("Revoke");
+    expect(t("accessKeys.revoke")).toBe("Revoke");
     expect(isI18nReady()).toBe(true);
   });
 

@@ -12,7 +12,7 @@ import {
   getSessionDraft, setSessionDraft,
   getSessionUsage, setSessionUsage,
   agentCliOpenPatch, getDurable, patchDurable,
-  __resetAgentCliState, __reloadFromStorage,
+  __resetAgentCliState, __reloadFromStorage, setAgentCliOwner,
 } from "../utils/agentcli_state";
 
 const CONV_KEY = "phx-agentcli-conversation:test-admin";
@@ -43,7 +43,7 @@ describe("conversation survives a reload", () => {
   });
 
   it("keeps the conversation separate from the window state", () => {
-    patchDurable({ size: { w: 700, h: 500 }, tokenId: "t1" });
+    patchDurable({ size: { w: 700, h: 500 }, accessKeyId: "t1" });
     setSessionTurns([{ id: 1 }]);
     // Losing the conversation must not disturb geometry or account selection.
     localStorage.removeItem(CONV_KEY);
@@ -51,7 +51,7 @@ describe("conversation survives a reload", () => {
 
     expect(getSessionTurns()).toEqual([]);
     expect(getDurable().size).toEqual({ w: 700, h: 500 });
-    expect(getDurable().tokenId).toBe("t1");
+    expect(getDurable().accessKeyId).toBe("t1");
   });
 
   it("strips camera bytes while preserving an unavailable image placeholder", () => {
@@ -105,13 +105,13 @@ describe("Agent Chat open geometry", () => {
   it("centers a button-driven summon in the supplied viewport", () => {
     patchDurable({ pos: { x: 137, y: 246 }, size: { w: 620, h: 480 } });
 
-    patchDurable(agentCliOpenPatch(getDurable(), "token-2", { w: 1200, h: 900 }));
+    patchDurable(agentCliOpenPatch(getDurable(), "access-key-2", { w: 1200, h: 900 }));
 
     expect(getDurable()).toMatchObject({
       open: true,
       minimized: false,
       pos: { x: 290, y: 210 },
-      tokenId: "token-2",
+      accessKeyId: "access-key-2",
     });
   });
 });
@@ -174,18 +174,18 @@ describe("HA user isolation", () => {
     const { setAgentCliOwner } = await import("../utils/agentcli_state");
     setAgentCliOwner("first");
     setSessionTurns([{ text: "first private reply" }]);
-    patchDurable({ tokenId: "first-token" });
+    patchDurable({ accessKeyId: "first-token" });
     setAgentCliOwner("second");
     expect(getSessionTurns()).toEqual([]);
-    expect(getDurable().tokenId).toBe("");
+    expect(getDurable().accessKeyId).toBe("");
     setSessionTurns([{ text: "late first reply" }], "first");
-    patchDurable({ tokenId: "late-first-token" }, "first");
+    patchDurable({ accessKeyId: "late-first-token" }, "first");
     expect(getSessionTurns()).toEqual([]);
-    expect(getDurable().tokenId).toBe("");
+    expect(getDurable().accessKeyId).toBe("");
     setSessionTurns([{ text: "second private reply" }]);
     setAgentCliOwner("first");
     expect(getSessionTurns()).toEqual([{ text: "first private reply" }]);
-    expect(getDurable().tokenId).toBe("first-token");
+    expect(getDurable().accessKeyId).toBe("first-token");
     setAgentCliOwner(null);
     expect(getSessionTurns()).toEqual([]);
     setSessionTurns([{ text: "anonymous" }]);
@@ -226,4 +226,20 @@ it("supports local HTTP without randomUUID and never blocks chat when randomness
   expect(getLogConversationId(false)).toBe("");
   random.mockRestore();
   expect(getLogConversationId(true)).not.toBe(original);
+});
+
+it("keeps the owner-scoped access key selection when loading the former field", () => {
+  __resetAgentCliState();
+  setAgentCliOwner("migration-owner");
+  localStorage.setItem("phx-agentcli:migration-owner", JSON.stringify({
+    tokenId: "existing-key", instanceId: "existing-provider", model: "existing-model",
+    size: { w: 700, h: 500 },
+  }));
+  expect(getDurable()).toMatchObject({ accessKeyId: "existing-key", instanceId: "existing-provider", model: "existing-model", size: { w: 700, h: 500 } });
+  patchDurable({ open: true });
+  const saved = JSON.parse(localStorage.getItem("phx-agentcli:migration-owner")!);
+  expect(saved.accessKeyId).toBe("existing-key");
+  expect(saved).not.toHaveProperty("tokenId");
+  setAgentCliOwner("different-owner");
+  expect(getDurable().accessKeyId).toBe("");
 });
