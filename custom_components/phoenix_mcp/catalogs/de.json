@@ -2239,7 +2239,30 @@
       "toolResult": "Werkzeugergebnis",
       "conversation": "Unterhaltung",
       "turns": "Gesprächsrunden: {count}",
-      "historyMissing": "Frühere Gesprächsrunden sind nicht verfügbar. Sie liegen möglicherweise vor dem Aufzeichnungsbeginn oder wurden aufgrund der Aufbewahrungsgrenzen gelöscht."
+      "historyMissing": "Frühere Gesprächsrunden sind nicht verfügbar. Sie liegen möglicherweise vor dem Aufzeichnungsbeginn oder wurden aufgrund der Aufbewahrungsgrenzen gelöscht.",
+      "routing": {
+        "classify": "Zweck: die angeforderte Aktion einordnen.",
+        "target": "Zweck: ein Gerät aus den verfügbaren Kandidaten auswählen.",
+        "batch": "Zweck: Aktion und Ziel gemeinsam prüfen.",
+        "context": "Zweck: die vorgeschlagene Aktion anhand des Gesprächsverlaufs prüfen.",
+        "reference": "Zweck: einen Gerätebezug anhand des Gesprächsverlaufs auflösen.",
+        "tool": "Zweck: den nächsten vorgeschlagenen Werkzeugaufruf prüfen.",
+        "models": "Zweck: die verfügbaren Entscheidungsmodelle prüfen.",
+        "noMatch": "Assist hat keinen unterstützten Befehl erkannt.",
+        "contextUnavailable": "Das Gespräch konnte nicht sicher zur Entscheidungsprüfung weitergegeben werden.",
+        "contextUnverified": "Dieser Kontext ist nicht für eine direkte entscheidungsbasierte Ausführung qualifiziert.",
+        "invalidContext": "Der verfügbare Verlauf konnte nicht zur Entscheidungsprüfung verwendet werden.",
+        "busy": "Die Entscheidungsprüfung war beschäftigt; es wurde keine neue Anfrage gestartet.",
+        "targetDeclined": "Der Entscheidungsanbieter hat kein eindeutiges Ziel ausgewählt.",
+        "toolResults": "Werkzeugergebnisse und Gesprächskontext wurden für den nächsten Schritt an das Modell gesendet.",
+        "conversation": "Das Gespräch wurde an das Modell gesendet, um den nächsten Schritt zu bestimmen.",
+        "output": "Zurückgegebener Text: {characters} Zeichen. Vorgeschlagene Werkzeugaufrufe: {tools}. Die Ausführung wird separat protokolliert.",
+        "legacy": "Dieser Eintrag enthält keine Zusammenfassung der Ein- und Ausgabe.",
+        "assistMatched": "Assist hat einen möglichen Befehl erkannt. Die Ausführung wird separat protokolliert.",
+        "input": "Geprüfter Text",
+        "contextHelp": "Dies ist der Benutzertext in der strukturierten Entscheidungsanfrage. Kontextmengen stehen unter Rohdaten; Anbieteranweisungen sind ausgeschlossen.",
+        "requestCompleted": "Modellanfrage abgeschlossen"
+      }
     },
     "attention": {
       "title": "Handlungsbedarf",

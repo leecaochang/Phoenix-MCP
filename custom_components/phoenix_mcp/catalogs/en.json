@@ -2243,7 +2243,30 @@
       "toolResult": "Tool result",
       "conversation": "Conversation",
       "turns": "Turns: {count}",
-      "historyMissing": "Earlier turns are unavailable. They may predate recording or have been removed by retention limits."
+      "historyMissing": "Earlier turns are unavailable. They may predate recording or have been removed by retention limits.",
+      "routing": {
+        "classify": "Purpose: classify the requested action.",
+        "target": "Purpose: select a device from the available candidates.",
+        "batch": "Purpose: check the action and target together.",
+        "context": "Purpose: check the proposed action against conversation history.",
+        "reference": "Purpose: resolve a device reference using conversation history.",
+        "tool": "Purpose: review the next proposed tool.",
+        "models": "Purpose: check the available decision models.",
+        "noMatch": "Assist did not recognize a supported command.",
+        "contextUnavailable": "The conversation could not safely be shared for decision review.",
+        "contextUnverified": "This context is not qualified for direct decision-based execution.",
+        "invalidContext": "The available history could not be used for decision review.",
+        "busy": "Decision review was busy; no new decision request was started.",
+        "targetDeclined": "The decision provider did not select an unambiguous target.",
+        "toolResults": "Sent tool results and conversation context to the model for the next step.",
+        "conversation": "Sent the conversation to the model to determine the next step.",
+        "output": "Returned text: {characters} characters. Proposed tool calls: {tools}. Tool execution is recorded separately.",
+        "legacy": "This entry has no recorded input/output summary.",
+        "assistMatched": "Assist recognized a candidate command. Execution is recorded separately.",
+        "input": "Text checked",
+        "contextHelp": "This is the user text in the structured decision request. Context counts appear in Raw data; provider instructions are excluded.",
+        "requestCompleted": "Model request completed"
+      }
     },
     "attention": {
       "title": "Needs attention",

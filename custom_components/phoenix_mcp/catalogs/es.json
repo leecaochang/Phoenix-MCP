@@ -2239,7 +2239,30 @@
       "toolResult": "Resultado de la herramienta",
       "conversation": "Conversación",
       "turns": "Turnos: {count}",
-      "historyMissing": "Los turnos anteriores no están disponibles. Pueden ser anteriores al inicio del registro o haberse eliminado por los límites de retención."
+      "historyMissing": "Los turnos anteriores no están disponibles. Pueden ser anteriores al inicio del registro o haberse eliminado por los límites de retención.",
+      "routing": {
+        "classify": "Objetivo: clasificar la acción solicitada.",
+        "target": "Objetivo: seleccionar un dispositivo entre los candidatos disponibles.",
+        "batch": "Objetivo: comprobar la acción y su destino conjuntamente.",
+        "context": "Objetivo: comprobar la acción propuesta con el historial.",
+        "reference": "Objetivo: resolver una referencia a un dispositivo usando el historial.",
+        "tool": "Objetivo: revisar la siguiente herramienta propuesta.",
+        "models": "Objetivo: comprobar los modelos de decisión disponibles.",
+        "noMatch": "Assist no reconoció un comando compatible.",
+        "contextUnavailable": "No se pudo compartir la conversación de forma segura para revisar la decisión.",
+        "contextUnverified": "Este contexto no está validado para la ejecución directa mediante decisiones.",
+        "invalidContext": "El historial disponible no se pudo usar para revisar la decisión.",
+        "busy": "La revisión de decisiones estaba ocupada; no se inició otra solicitud.",
+        "targetDeclined": "El proveedor de decisiones no seleccionó un destino inequívoco.",
+        "toolResults": "Se enviaron los resultados de herramientas y el contexto al modelo para el siguiente paso.",
+        "conversation": "Se envió la conversación al modelo para determinar el siguiente paso.",
+        "output": "Texto devuelto: {characters} caracteres. Llamadas a herramientas propuestas: {tools}. La ejecución se registra por separado.",
+        "legacy": "Esta entrada no tiene un resumen de entrada y salida registrado.",
+        "assistMatched": "Assist reconoció un posible comando. La ejecución se registra por separado.",
+        "input": "Texto comprobado",
+        "contextHelp": "Este es el texto del usuario en la solicitud de decisión estructurada. Las cantidades de contexto aparecen en Datos sin procesar; se excluyen las instrucciones del proveedor.",
+        "requestCompleted": "Solicitud al modelo completada"
+      }
     },
     "attention": {
       "title": "Requiere atención",

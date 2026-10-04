@@ -2239,7 +2239,30 @@
       "toolResult": "Risultato dello strumento",
       "conversation": "Conversazione",
       "turns": "Turni: {count}",
-      "historyMissing": "I turni precedenti non sono disponibili. Potrebbero precedere l’attivazione del registro o essere stati eliminati dai limiti di conservazione."
+      "historyMissing": "I turni precedenti non sono disponibili. Potrebbero precedere l’attivazione del registro o essere stati eliminati dai limiti di conservazione.",
+      "routing": {
+        "classify": "Scopo: classificare l’azione richiesta.",
+        "target": "Scopo: selezionare un dispositivo tra i candidati disponibili.",
+        "batch": "Scopo: controllare insieme l’azione e il destinatario.",
+        "context": "Scopo: verificare l’azione proposta rispetto alla cronologia.",
+        "reference": "Scopo: risolvere un riferimento a un dispositivo usando la cronologia.",
+        "tool": "Scopo: esaminare il prossimo strumento proposto.",
+        "models": "Scopo: controllare i modelli decisionali disponibili.",
+        "noMatch": "Assist non ha riconosciuto un comando supportato.",
+        "contextUnavailable": "Non è stato possibile condividere la conversazione in sicurezza per la verifica decisionale.",
+        "contextUnverified": "Questo contesto non è validato per l’esecuzione diretta basata su decisioni.",
+        "invalidContext": "La cronologia disponibile non era utilizzabile per la verifica decisionale.",
+        "busy": "La verifica decisionale era occupata; non è stata avviata una nuova richiesta.",
+        "targetDeclined": "Il fornitore decisionale non ha selezionato un destinatario univoco.",
+        "toolResults": "I risultati degli strumenti e il contesto sono stati inviati al modello per il passaggio successivo.",
+        "conversation": "La conversazione è stata inviata al modello per determinare il passaggio successivo.",
+        "output": "Testo restituito: {characters} caratteri. Chiamate a strumenti proposte: {tools}. L’esecuzione viene registrata separatamente.",
+        "legacy": "Questa voce non contiene un riepilogo registrato di input e output.",
+        "assistMatched": "Assist ha riconosciuto un possibile comando. L’esecuzione viene registrata separatamente.",
+        "input": "Testo verificato",
+        "contextHelp": "Questo è il testo dell’utente nella richiesta decisionale strutturata. Le quantità di contesto sono nei dati grezzi; le istruzioni del fornitore sono escluse.",
+        "requestCompleted": "Richiesta al modello completata"
+      }
     },
     "attention": {
       "title": "Richiede attenzione",

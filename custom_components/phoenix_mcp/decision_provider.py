@@ -230,10 +230,22 @@ class DecisionProvider:
         parsed = None
         from .routing_statistics import begin_decision, end_decision
         statistics = begin_decision(self.metric_scope) if method == "POST" and payload is not None else None
+        questions = set(payload.get("questions", {})) if payload else set()
+        operation = ("models" if method == "GET" else
+                     "tool" if any(q.startswith("tool_") for q in questions) else
+                     "reference" if questions == set(DECISION_REFERENCE_CHECKS) else
+                     "batch" if {"route", "target"} <= questions else
+                     "context" if questions == set(DECISION_CONTEXT_CHECKS) else
+                     "target" if "target" in questions else "classify")
+        state = payload.get("state", {}) if payload else {}
+        # Project only the user text and context counts, never classifier instructions.
+        input_facts = {"text": state.get("utterance"), "language": state.get("language"),
+                       "history_messages": len(state.get("history", [])),
+                       "target_count": len(state.get("targets", {}))}
         from .conversation_log import routing_span
         with routing_span("decision_provider", provider=self.cfg.kind, model=self.cfg.model,
                           scope=self.metric_scope, observation_only="shadow" in self.metric_scope,
-                          method=method) as receipt:
+                          method=method, operation=operation, input=input_facts) as receipt:
             try:
                 async with session.request(method, f"{self.cfg.base_url}/{path}", headers=headers,
                                            json=payload, allow_redirects=False,
@@ -259,12 +271,6 @@ class DecisionProvider:
                 receipt["response_received"] = parsed is not None
                 end_decision(statistics, parsed)
                 if self.metrics is not None and method == "POST" and payload is not None:
-                    questions = set(payload.get("questions", {}))
-                    operation = ("tool" if any(q.startswith("tool_") for q in questions) else
-                                 "reference" if questions == set(DECISION_REFERENCE_CHECKS) else
-                                 "batch" if {"route", "target"} <= questions else
-                                 "context" if questions == set(DECISION_CONTEXT_CHECKS) else
-                                 "target" if "target" in questions else "classify")
                     self.metrics.record(self.metric_scope, operation, size, (monotonic() - started) * 1000, parsed,
                                         provider_kind=self.cfg.kind)
 

@@ -903,3 +903,109 @@ async def test_nested_dispatch_records_parent_operation(conversation_data):
     assert events[0]['parent_tool_id'] is None
     assert events[1]['parent_tool_id'] == events[0]['tool_id']
     assert events[2]['tool_id'] == events[1]['tool_id']
+
+
+@pytest.mark.asyncio
+async def test_provider_receipts_explain_each_round_without_copying_envelopes(conversation_data):
+    from custom_components.phoenix_mcp.routing_statistics import provider_events
+    data, _ = conversation_data
+    log = history.recorder(data)
+    handle = log.begin('agentcli', prompt='read it')
+    ctx = history._current.set(handle)
+    async def stream():
+        yield {'type': 'thinking_delta', 'text': 'private-reasoning-canary'}
+        yield {'type': 'text_delta', 'text': 'Checking.'}
+        yield {'type': 'tool_use_complete', 'name': 'get_state', 'input': {'private': 'argument-canary'}}
+        yield {'type': 'message_done', 'stop_reason': 'tool_use', 'assistant_msg': {'private': 'envelope-canary'}}
+    try:
+        for messages in ([{'role': 'user', 'content': 'prompt-canary'}],
+                         [{'role': 'tool', 'content': 'result-canary'}],
+                         [{'role': 'user', 'content': [{'type': 'tool_result', 'content': 'result-canary'}]}]):
+            async for _ in provider_events(stream(), messages=messages, config=SimpleNamespace(kind='test', model='test-model')):
+                pass
+        events = log.detail(handle[1])['events']
+        assert [e['payload']['purpose'] for e in events] == ['conversation', 'tool_results', 'tool_results']
+        assert all(e['payload']['text_characters'] == 9 and e['payload']['tool_call_count'] == 1 for e in events)
+        assert all(e['payload']['result'] == 'completed' and e['payload']['stop_reason'] == 'tool_use' for e in events)
+        assert 'canary' not in json.dumps(events)
+        async def broken():
+            yield {'type': 'text_delta', 'text': 'partial'}
+        async for _ in provider_events(broken()):
+            pass
+        assert log.detail(handle[1])['events'][-1]['payload']['result'] == 'interrupted'
+    finally:
+        history._current.reset(ctx)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('private', [False, True])
+async def test_assist_records_actual_trimmed_input_under_privacy_controls(hass, conversation_data, monkeypatch, private):
+    from custom_components.phoenix_mcp import command_routing
+    data, token = conversation_data
+    data.store.get_settings().log_entity_names = not private
+    recognize = AsyncMock(return_value=None)
+    monkeypatch.setattr(command_routing, '_recognize_command', recognize)
+    log = history.recorder(data)
+    handle = log.begin('agentcli', prompt='test')
+    ctx = history._current.set(handle)
+    try:
+        await command_routing.async_evaluate_command(hass, data, token, '  my password is canary-private  ', 'en')
+        assert recognize.call_args.args[2] == 'my password is canary-private'
+        events = log.detail(handle[1])['events']
+        assert 'canary-private' not in json.dumps(events)
+        if private:
+            assert events[-1]['payload'] is None
+        else:
+            assert events[-1]['payload']['input'] == {'text': 'my password is <redacted>', 'language': 'en'}
+    finally:
+        history._current.reset(ctx)
+
+
+@pytest.mark.asyncio
+async def test_decision_input_is_sanitized_projection_of_actual_http_payload(conversation_data, socket_enabled):
+    from aiohttp import ClientSession, web
+    from aiohttp.test_utils import TestServer
+    from custom_components.phoenix_mcp.agentcli import ProviderConfig
+    from custom_components.phoenix_mcp.decision_provider import DecisionProvider
+    data, _ = conversation_data
+    log = history.recorder(data)
+    handle = log.begin('agentcli', prompt='test')
+    ctx = history._current.set(handle)
+    received = []
+    async def handler(request):
+        received.append(await request.json())
+        return web.json_response({'answers': {}})
+    app = web.Application()
+    app.router.add_post('/systemone', handler)
+    payload = {'state': {'utterance': 'the code is 4821', 'language': 'en', 'targets': {'one': 'target-canary'},
+                         'history': [{'role': 'assistant', 'reasoning_content': 'reasoning-canary'}]},
+               'questions': {'target': {'instructions': 'instruction-canary'}}}
+    try:
+        async with TestServer(app) as server, ClientSession() as session:
+            provider = DecisionProvider(ProviderConfig('typesafe', 'test-model', str(server.make_url('')).rstrip('/'), ''), 'systemone')
+            await provider._request(session, 'POST', 'systemone', 1000, payload)
+        assert received == [payload]
+        event = log.detail(handle[1])['events'][-1]['payload']
+        assert event['operation'] == 'target'
+        assert event['input'] == {'text': 'the code is <redacted>', 'language': 'en', 'target_count': 1, 'history_messages': 1}
+        assert event['response_received'] is True
+        assert 'canary' not in json.dumps(event) and '4821' not in json.dumps(event)
+    finally:
+        history._current.reset(ctx)
+
+
+@pytest.mark.asyncio
+async def test_context_review_records_why_no_decision_request_was_made(hass, conversation_data):
+    from custom_components.phoenix_mcp.decision_context import async_prepare_chat_context
+    data, token = conversation_data
+    log = history.recorder(data)
+    handle = log.begin('agentcli', prompt='follow up')
+    ctx = history._current.set(handle)
+    try:
+        result = await async_prepare_chat_context(hass, data, token, 'follow up', 'en', [],
+                                                  {'proposal': None, 'reason': 'no_match'}, asyncio.Event())
+        assert result['reason'] == 'invalid_context'
+        assert log.detail(handle[1])['events'][-1]['payload'] == {
+            'route': 'decision_result', 'stage': 'context', 'reason': 'invalid_context', 'executed': False}
+    finally:
+        history._current.reset(ctx)

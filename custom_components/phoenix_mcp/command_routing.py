@@ -305,6 +305,7 @@ async def async_evaluate_command(
         from .conversation_log import record_current
         record_current("routing", {"route": "assist", "attempted": attempted, "reason": reason,
                                    "matched": proposal is not None, "executed": False,
+                                   "input": {"text": sentence.strip(), "language": recognition_language} if attempted and isinstance(sentence, str) else None,
                                    "observation_only": preview or effective_routing_mode(data.store.get_settings(), ingress) not in {"local", "hybrid"},
                                    "elapsed_ms": round((monotonic() - start) * 1000, 2)})
         return {"route": "local_candidate" if proposal else "provider",

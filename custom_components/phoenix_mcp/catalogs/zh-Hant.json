@@ -2244,7 +2244,30 @@
       "toolResult": "工具結果",
       "conversation": "對話",
       "turns": "回合：{count}",
-      "historyMissing": "較早的回合無法取得，可能發生於啟用記錄之前，或已因保留限制而刪除。"
+      "historyMissing": "較早的回合無法取得，可能發生於啟用記錄之前，或已因保留限制而刪除。",
+      "routing": {
+        "classify": "目的：判斷請求的操作類型。",
+        "target": "目的：從可用候選項中選擇裝置。",
+        "batch": "目的：同時檢查操作及其目標。",
+        "context": "目的：結合對話歷史檢查擬執行的操作。",
+        "reference": "目的：根據對話歷史解析裝置指代。",
+        "tool": "目的：審核下一項擬呼叫的工具。",
+        "models": "目的：檢查可用的決策模型。",
+        "noMatch": "Assist 未識別到支援的命令。",
+        "contextUnavailable": "無法安全地分享對話以進行決策審核。",
+        "contextUnverified": "此上下文尚未通過直接決策執行的驗證。",
+        "invalidContext": "現有歷史記錄無法用於決策審核。",
+        "busy": "決策審核正忙，未發起新的決策請求。",
+        "targetDeclined": "決策供應商未選出明確的目標。",
+        "toolResults": "已將工具結果和對話上下文傳送給模型，以確定下一步。",
+        "conversation": "已將對話傳送給模型，以確定下一步。",
+        "output": "回傳文字：{characters} 個字元。擬呼叫工具：{tools} 次。工具執行情況另行記錄。",
+        "legacy": "此項目未記錄輸入和輸出摘要。",
+        "assistMatched": "Assist 已識別到候選命令，執行情況另行記錄。",
+        "input": "檢查的文字",
+        "contextHelp": "這是結構化決策請求中的使用者文字。上下文數量見原始資料，不包含供應商指令。",
+        "requestCompleted": "模型請求已完成"
+      }
     },
     "attention": {
       "title": "需要關注",

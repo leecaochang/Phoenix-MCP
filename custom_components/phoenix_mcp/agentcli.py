@@ -3133,7 +3133,7 @@ async def _stream_turn_resilient(
         retry = False
         events = _cancelable_provider_events(provider_events(provider.stream_turn(
             session, system_prompt=system_prompt, messages=messages, tools=tools, options=options,
-        ), config=getattr(provider, "cfg", None)), cancel)
+        ), config=getattr(provider, "cfg", None), messages=messages), cancel)
         async with aclosing(events):
             async for ev in events:
                 etype = ev.get("type")

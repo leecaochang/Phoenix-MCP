@@ -2239,7 +2239,30 @@
       "toolResult": "工具结果",
       "conversation": "对话",
       "turns": "轮次：{count}",
-      "historyMissing": "较早的轮次不可用，可能发生于启用记录之前，或已因保留限制而删除。"
+      "historyMissing": "较早的轮次不可用，可能发生于启用记录之前，或已因保留限制而删除。",
+      "routing": {
+        "classify": "目的：判断请求的操作类型。",
+        "target": "目的：从可用候选项中选择设备。",
+        "batch": "目的：同时检查操作及其目标。",
+        "context": "目的：结合对话历史检查拟执行的操作。",
+        "reference": "目的：根据对话历史解析设备指代。",
+        "tool": "目的：审核下一项拟调用的工具。",
+        "models": "目的：检查可用的决策模型。",
+        "noMatch": "Assist 未识别到受支持的命令。",
+        "contextUnavailable": "无法安全地共享对话以进行决策审核。",
+        "contextUnverified": "此上下文尚未通过直接决策执行的验证。",
+        "invalidContext": "现有历史记录无法用于决策审核。",
+        "busy": "决策审核正忙，未发起新的决策请求。",
+        "targetDeclined": "决策提供方未选出明确的目标。",
+        "toolResults": "已将工具结果和对话上下文发送给模型，以确定下一步。",
+        "conversation": "已将对话发送给模型，以确定下一步。",
+        "output": "返回文本：{characters} 个字符。拟调用工具：{tools} 次。工具执行情况单独记录。",
+        "legacy": "此条目未记录输入和输出摘要。",
+        "assistMatched": "Assist 已识别到候选命令，执行情况单独记录。",
+        "input": "检查的文本",
+        "contextHelp": "这是结构化决策请求中的用户文本。上下文数量见原始数据，不包含提供方指令。",
+        "requestCompleted": "模型请求已完成"
+      }
     },
     "attention": {
       "title": "需要关注",

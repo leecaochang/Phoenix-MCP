@@ -133,10 +133,11 @@ class DecisionShadow:
         from .decision_batch import async_prepare_batch, batch_execution_eligible
 
         started = monotonic()
-        def result(reason: str, decision: dict | None = None) -> dict:
+        def result(reason: str, decision: dict | None = None, *, selection: dict | None = None) -> dict:
             from .conversation_log import record_current
             record_current("routing", {"route": "decision_result", "reason": reason,
                                        "choice": decision.get("choice") if decision else None,
+                                       "selection_reason": selection.get("reason") if selection else None,
                                        "observation_only": not prepare, "executed": False})
             return {"reason": reason, "decision": decision, "executed": False,
                     "elapsed_ms": round((monotonic() - started) * 1000, 2)}
@@ -203,7 +204,7 @@ class DecisionShadow:
                 if (authority.current(hass) is None or store.resolve(account, purpose="decision") != cfg):
                     return result("authority_changed")
                 plan = selection.pop("_plan", None)
-                observation = {**result("observed", answer), "target_selection": selection}
+                observation = {**result("observed", answer, selection=selection), "target_selection": selection}
                 if plan is not None:
                     fingerprint = decision_account_fingerprint(hass, account)
                     if fingerprint is None:

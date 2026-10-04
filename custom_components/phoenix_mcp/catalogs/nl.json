@@ -2317,7 +2317,30 @@
       "toolResult": "Toolresultaat",
       "conversation": "Gesprek",
       "turns": "Beurten: {count}",
-      "historyMissing": "Eerdere beurten zijn niet beschikbaar. Ze kunnen van vóór het vastleggen zijn of door de bewaarlimieten zijn verwijderd."
+      "historyMissing": "Eerdere beurten zijn niet beschikbaar. Ze kunnen van vóór het vastleggen zijn of door de bewaarlimieten zijn verwijderd.",
+      "routing": {
+        "classify": "Doel: de gevraagde actie classificeren.",
+        "target": "Doel: een apparaat uit de beschikbare kandidaten selecteren.",
+        "batch": "Doel: de actie en het doel samen controleren.",
+        "context": "Doel: de voorgestelde actie aan de gespreksgeschiedenis toetsen.",
+        "reference": "Doel: een apparaatverwijzing oplossen met de gespreksgeschiedenis.",
+        "tool": "Doel: het volgende voorgestelde hulpmiddel beoordelen.",
+        "models": "Doel: de beschikbare beslismodellen controleren.",
+        "noMatch": "Assist herkende geen ondersteunde opdracht.",
+        "contextUnavailable": "Het gesprek kon niet veilig worden gedeeld voor besliscontrole.",
+        "contextUnverified": "Deze context is niet gevalideerd voor directe uitvoering via beslissingen.",
+        "invalidContext": "De beschikbare geschiedenis kon niet voor besliscontrole worden gebruikt.",
+        "busy": "De besliscontrole was bezet; er is geen nieuw beslisverzoek gestart.",
+        "targetDeclined": "De beslisprovider heeft geen eenduidig doel geselecteerd.",
+        "toolResults": "Hulpmiddelresultaten en gesprekscontext zijn naar het model gestuurd voor de volgende stap.",
+        "conversation": "Het gesprek is naar het model gestuurd om de volgende stap te bepalen.",
+        "output": "Teruggegeven tekst: {characters} tekens. Voorgestelde hulpmiddelaanroepen: {tools}. Uitvoering wordt apart vastgelegd.",
+        "legacy": "Dit item heeft geen vastgelegde samenvatting van invoer en uitvoer.",
+        "assistMatched": "Assist herkende een mogelijke opdracht. Uitvoering wordt apart vastgelegd.",
+        "input": "Gecontroleerde tekst",
+        "contextHelp": "Dit is de gebruikerstekst in het gestructureerde beslisverzoek. Contextaantallen staan bij Ruwe gegevens; providerinstructies zijn uitgesloten.",
+        "requestCompleted": "Modelverzoek voltooid"
+      }
     },
     "attention": {
       "title": "Aandacht nodig",

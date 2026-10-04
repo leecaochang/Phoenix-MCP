@@ -126,10 +126,16 @@ async def async_prepare_chat_context(hass: Any, data: Any, token: Any, sentence:
                                      cancel: asyncio.Event) -> dict:
     """Internal Chat admission preserves the shared execution and approval boundaries."""
     if not local.get("proposal"):
-        return await _async_review_decision_context(hass, data, token, sentence, language, messages, local,
-                                                    prepare=True, cancel=cancel)
-    return await _async_review_context(hass, data, token, sentence, language, messages, local,
-                                       prepare=True, cancel=cancel)
+        result = await _async_review_decision_context(hass, data, token, sentence, language, messages, local,
+                                                      prepare=True, cancel=cancel)
+    else:
+        result = await _async_review_context(hass, data, token, sentence, language, messages, local,
+                                             prepare=True, cancel=cancel)
+    from .conversation_log import record_current
+    record_current("routing", {"route": "decision_result", "stage": "context",
+                               "reason": "plan_ready" if result.get("_plan") else result["reason"],
+                               "executed": False})
+    return result
 
 
 async def _async_review_context(hass: Any, data: Any, token: Any, sentence: str,

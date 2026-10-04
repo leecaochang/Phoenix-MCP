@@ -186,3 +186,29 @@ it("does not label a missing tool receipt as still running after interruption", 
   await view.findByText("get_state");
   expect(view.container.querySelector(".conversation-event-body > .conversation-outcome")?.textContent).toBe("Outcome unknown");
 });
+
+it("shows copyable tool invocations and explains provider purpose, output and checked text", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText } });
+  vi.mocked(api.getConversation).mockResolvedValue({ ...detail, events: [
+    ...detail.events,
+    { kind: "routing", tool_id: null, timestamp: summary.started_at, payload: { route: "assist", matched: false, reason: "no_match", input: { text: "turn on the lamp" } } },
+    { kind: "routing", tool_id: null, timestamp: summary.started_at, payload: { route: "decision_provider", result: "completed", operation: "target", input: { text: "turn on the lamp" } } },
+    { kind: "routing", tool_id: null, timestamp: summary.started_at, payload: { route: "provider", result: "completed", provider: "test-provider", model: "test-model", purpose: "tool_results", text_characters: 25, tool_call_count: 1 } },
+    { kind: "routing", tool_id: null, timestamp: summary.started_at, payload: { route: "decision_result", reason: "context_unavailable", executed: false } },
+  ] });
+  const view = render(<ConversationsView />);
+  fireEvent.click((await view.findByText("Tool exchange; prompt unavailable")).closest("summary")!);
+  const invocation = await view.findByText(/get_state \{/);
+  expect(invocation.closest("details")?.className).toBe("conversation-entry");
+  fireEvent.click(invocation.parentElement!.querySelector("button")!);
+  await waitFor(() => expect(writeText).toHaveBeenCalledWith('get_state {\n  "entity_id": "light.test"\n}'));
+  expect(view.getByText("Assist did not recognize a supported command.")).toBeTruthy();
+  expect(view.getByText("Purpose: select a device from the available candidates.")).toBeTruthy();
+  expect(view.getByText("Sent tool results and conversation context to the model for the next step.")).toBeTruthy();
+  expect(view.getByText("Returned text: 25 characters. Proposed tool calls: 1. Tool execution is recorded separately.")).toBeTruthy();
+  expect(view.getByText("The conversation could not safely be shared for decision review.")).toBeTruthy();
+  expect(view.getAllByText("Text checked")).toHaveLength(2);
+  expect(view.getAllByText("Model request completed")).toHaveLength(2);
+  expect(view.getAllByText("turn on the lamp")).toHaveLength(2);
+});

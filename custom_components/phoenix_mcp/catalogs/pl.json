@@ -2347,7 +2347,30 @@
       "toolResult": "Wynik narzędzia",
       "conversation": "Rozmowa",
       "turns": "Tury: {count}",
-      "historyMissing": "Wcześniejsze tury są niedostępne. Mogły powstać przed włączeniem rejestrowania lub zostać usunięte z powodu limitów przechowywania."
+      "historyMissing": "Wcześniejsze tury są niedostępne. Mogły powstać przed włączeniem rejestrowania lub zostać usunięte z powodu limitów przechowywania.",
+      "routing": {
+        "classify": "Cel: sklasyfikowanie żądanej czynności.",
+        "target": "Cel: wybranie urządzenia spośród dostępnych kandydatów.",
+        "batch": "Cel: wspólne sprawdzenie czynności i jej celu.",
+        "context": "Cel: sprawdzenie proponowanej czynności względem historii rozmowy.",
+        "reference": "Cel: rozpoznanie odniesienia do urządzenia na podstawie historii.",
+        "tool": "Cel: sprawdzenie następnego proponowanego narzędzia.",
+        "models": "Cel: sprawdzenie dostępnych modeli decyzyjnych.",
+        "noMatch": "Assist nie rozpoznał obsługiwanego polecenia.",
+        "contextUnavailable": "Nie można było bezpiecznie udostępnić rozmowy do oceny decyzji.",
+        "contextUnverified": "Ten kontekst nie jest zatwierdzony do bezpośredniego wykonania na podstawie decyzji.",
+        "invalidContext": "Dostępnej historii nie można było użyć do oceny decyzji.",
+        "busy": "Ocena decyzji była zajęta; nie rozpoczęto nowego żądania.",
+        "targetDeclined": "Dostawca decyzji nie wybrał jednoznacznego celu.",
+        "toolResults": "Wysłano wyniki narzędzi i kontekst rozmowy do modelu, aby ustalić następny krok.",
+        "conversation": "Wysłano rozmowę do modelu, aby ustalić następny krok.",
+        "output": "Zwrócony tekst: {characters} znaków. Proponowane wywołania narzędzi: {tools}. Wykonanie jest rejestrowane osobno.",
+        "legacy": "Ten wpis nie zawiera zapisanego podsumowania danych wejściowych i wyjściowych.",
+        "assistMatched": "Assist rozpoznał możliwe polecenie. Wykonanie jest rejestrowane osobno.",
+        "input": "Sprawdzony tekst",
+        "contextHelp": "To tekst użytkownika w ustrukturyzowanym żądaniu decyzji. Liczby elementów kontekstu są w danych surowych; instrukcje dostawcy są pominięte.",
+        "requestCompleted": "Żądanie do modelu zakończone"
+      }
     },
     "attention": {
       "title": "Wymaga uwagi",

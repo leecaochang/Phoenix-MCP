@@ -2239,7 +2239,30 @@
       "toolResult": "Résultat de l’outil",
       "conversation": "Conversation",
       "turns": "Tours : {count}",
-      "historyMissing": "Les tours précédents ne sont pas disponibles. Ils peuvent précéder l’activation du journal ou avoir été supprimés selon les limites de conservation."
+      "historyMissing": "Les tours précédents ne sont pas disponibles. Ils peuvent précéder l’activation du journal ou avoir été supprimés selon les limites de conservation.",
+      "routing": {
+        "classify": "But : classer l’action demandée.",
+        "target": "But : sélectionner un appareil parmi les candidats disponibles.",
+        "batch": "But : vérifier l’action et sa cible ensemble.",
+        "context": "But : vérifier l’action proposée à partir de l’historique.",
+        "reference": "But : résoudre une référence à un appareil à partir de l’historique.",
+        "tool": "But : examiner le prochain outil proposé.",
+        "models": "But : vérifier les modèles de décision disponibles.",
+        "noMatch": "Assist n’a reconnu aucune commande prise en charge.",
+        "contextUnavailable": "La conversation ne pouvait pas être partagée en toute sécurité pour examiner la décision.",
+        "contextUnverified": "Ce contexte n’est pas validé pour une exécution directe fondée sur une décision.",
+        "invalidContext": "L’historique disponible ne pouvait pas servir à examiner la décision.",
+        "busy": "L’examen des décisions était occupé ; aucune nouvelle demande n’a été lancée.",
+        "targetDeclined": "Le fournisseur de décisions n’a pas sélectionné de cible sans ambiguïté.",
+        "toolResults": "Les résultats des outils et le contexte ont été envoyés au modèle pour la suite.",
+        "conversation": "La conversation a été envoyée au modèle pour déterminer la suite.",
+        "output": "Texte renvoyé : {characters} caractères. Appels d’outils proposés : {tools}. L’exécution est consignée séparément.",
+        "legacy": "Cette entrée ne contient aucun résumé des entrées et sorties.",
+        "assistMatched": "Assist a reconnu une commande possible. L’exécution est consignée séparément.",
+        "input": "Texte vérifié",
+        "contextHelp": "Il s’agit du texte utilisateur dans la demande de décision structurée. Les quantités de contexte figurent dans les données brutes ; les instructions du fournisseur sont exclues.",
+        "requestCompleted": "Demande au modèle terminée"
+      }
     },
     "attention": {
       "title": "À vérifier",

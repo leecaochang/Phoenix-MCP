@@ -171,7 +171,7 @@ def decision_usage(scope: str, body: Any) -> None:
     end_decision(begin_decision(scope), body)
 
 
-async def provider_events(events, *, config=None):
+async def provider_events(events, *, config=None, messages=None):
     """Replace cumulative usage within each actual request, then add requests once."""
     from .conversation_log import routing_span
     turn = _current.get()
@@ -180,18 +180,32 @@ async def provider_events(events, *, config=None):
         turn.provider_used = True
         turn.route = "provider"
         turn.provider_usage["requests"] += 1
-    with routing_span("provider", provider=getattr(config, "kind", None), model=getattr(config, "model", None)) as receipt:
+    # Inspect only message shape. Never copy provider envelopes or private reasoning.
+    last = messages[-1] if messages else {}
+    content = last.get("content")
+    tool_results = last.get("role") == "tool" or (last.get("role") == "user" and isinstance(content, list)
+        and any(isinstance(block, dict) and block.get("type") == "tool_result" for block in content))
+    with routing_span("provider", provider=getattr(config, "kind", None), model=getattr(config, "model", None),
+                      purpose="tool_results" if tool_results else "conversation", message_count=len(messages or []),
+                      text_characters=0, tool_call_count=0) as receipt:
         try:
             async for event in events:
                 if event.get("type") == "usage_update":
                     usage = event
+                if event.get("type") == "text_delta" and isinstance(event.get("text"), str):
+                    receipt["text_characters"] += len(event["text"])
+                if event.get("type") == "tool_use_complete":
+                    receipt["tool_call_count"] += 1
                 if event.get("type") == "message_done":
                     receipt["result"] = "completed"
+                    receipt["stop_reason"] = event.get("stop_reason")
                 if event.get("type") == "error":
                     receipt["result"] = "failed"
                     receipt["reason"] = event.get("code", "provider_error")
                 yield event
         finally:
+            if receipt["result"] == "running":
+                receipt["result"] = "interrupted"
             await events.aclose()
             if turn is not None:
                 turn.usage("provider_usage", usage, started=True)

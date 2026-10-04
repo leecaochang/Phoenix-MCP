@@ -160,6 +160,39 @@ function routeHeading(payload: Record<string, unknown> | null): string {
   return t(key) + (typeof payload?.provider === "string" ? `: ${payload.provider}` : "");
 }
 
+const ROUTING_PURPOSE: Record<string, string> = {
+  classify: "conversations.routing.classify", target: "conversations.routing.target",
+  batch: "conversations.routing.batch", context: "conversations.routing.context",
+  reference: "conversations.routing.reference", tool: "conversations.routing.tool",
+  models: "conversations.routing.models",
+};
+const ROUTING_REASON: Record<string, string> = {
+  no_match: "conversations.routing.noMatch", context_unavailable: "conversations.routing.contextUnavailable",
+  context_unverified: "conversations.routing.contextUnverified", invalid_context: "conversations.routing.invalidContext",
+  busy: "conversations.routing.busy", target_declined: "conversations.routing.targetDeclined",
+};
+function RoutingEvidence({ payload }: { payload: Record<string, unknown> }) {
+  const operation = typeof payload.operation === "string" ? ROUTING_PURPOSE[payload.operation] : undefined;
+  const reason = String(payload.selection_reason || payload.reason || "");
+  const input = payload.input && typeof payload.input === "object" ? payload.input as Record<string, unknown> : null;
+  return <>
+    {operation && <p>{t(operation)}</p>}
+    {payload.route === "provider" && <>
+      {typeof payload.model === "string" && <p className="conversation-secondary">{t("conversations.modelLabel")}: <code>{payload.model}</code></p>}
+      {typeof payload.purpose === "string" && <p>{t(payload.purpose === "tool_results" ? "conversations.routing.toolResults" : "conversations.routing.conversation")}</p>}
+      {typeof payload.text_characters === "number" && typeof payload.tool_call_count === "number"
+        ? <p>{t("conversations.routing.output", { characters: localeNumber(payload.text_characters), tools: localeNumber(payload.tool_call_count) })}</p>
+        : <p className="conversation-secondary">{t("conversations.routing.legacy")}</p>}
+    </>}
+    {payload.route === "assist" && payload.matched === true && <p>{t("conversations.routing.assistMatched")}</p>}
+    {ROUTING_REASON[reason] && <p>{t(ROUTING_REASON[reason])}</p>}
+    {typeof input?.text === "string" && <details><summary>{t("conversations.routing.input")}</summary>
+      <TextEvidence value={input.text} />
+      {payload.route === "decision_provider" && <p className="conversation-secondary">{t("conversations.routing.contextHelp")}</p>}
+    </details>}
+  </>;
+}
+
 function EventRow({ event, responseStatus }: { event: ConversationEvent; responseStatus?: ConversationEntry["response_status"] }) {
   const payload = event.payload && typeof event.payload === "object" && !Array.isArray(event.payload)
     ? event.payload as Record<string, unknown> : null;
@@ -189,13 +222,14 @@ function EventRow({ event, responseStatus }: { event: ConversationEvent; respons
     </div>
     {event.kind === "routing" && payload?.observation_only === true && <p className="conversation-secondary">{t("conversations.observationOnly")}</p>}
     {event.kind === "routing" && payload?.executed === false && payload?.observation_only !== true && <p className="conversation-secondary">{t("conversations.routingOnly")}</p>}
+    {event.kind === "routing" && payload && <RoutingEvidence payload={payload} />}
     {responseStatus && <p className="conversation-secondary">{label("responseStatus", responseStatus)}</p>}
     {event.omission && <p className="conversation-secondary">{label("omission", event.omission)}</p>}
-    {outcome && <p className={`conversation-outcome conversation-signal-${signal}`}>{label("outcome", outcome)}</p>}
+    {outcome && <p className={`conversation-outcome conversation-signal-${signal}`}>{event.kind === "routing" && ["provider", "decision_provider"].includes(String(payload?.route)) && outcome === "completed" ? t("conversations.routing.requestCompleted") : label("outcome", outcome)}</p>}
     {event.kind === "error" && typeof payload?.message === "string" && <div className="conversation-prose conversation-error-message">{payload.message}</div>}
     {event.payload !== null && event.payload !== undefined
-      ? event.kind === "assistant_text" ? <TextEvidence value={event.payload} /> : <details><summary>{t(event.kind === "tool_call" ? "conversations.parameters" : event.kind === "change" ? "conversations.changeEvidence" : "conversations.details")}</summary>
-          <TextEvidence value={event.kind === "tool_call" && payload ? payload.arguments : event.payload} code />
+      ? event.kind === "assistant_text" ? <TextEvidence value={event.payload} /> : event.kind === "tool_call" && payload ? <TextEvidence value={`${name} ${raw(payload.arguments ?? {})}`} code /> : <details><summary>{t(event.kind === "change" ? "conversations.changeEvidence" : "conversations.details")}</summary>
+          <TextEvidence value={event.payload} code />
         </details>
       : <p className="conversation-secondary">{t("conversations.payloadUnavailable")}</p>}
     </div>
@@ -235,7 +269,7 @@ function TimelineRow({ item, finalIndex, running, responseStatus }: { item: Time
       <div className="conversation-event-heading"><span><strong>{heading}</strong> <code>{name}</code></span><time dateTime={item.event.timestamp}>{localeDateTime(item.event.timestamp)}</time></div>
       <p className={`conversation-outcome conversation-signal-${signal}`}>{label("outcome", outcome)}</p>
       {item.event.omission && <p className="conversation-secondary">{label("omission", item.event.omission)}</p>}
-      {payload && <details><summary>{t("conversations.parameters")}</summary><TextEvidence value={payload.arguments} code /></details>}
+      {payload && <div role="group" aria-label={t("conversations.parameters")}><TextEvidence value={`${name} ${raw(payload.arguments ?? {})}`} code /></div>}
       {item.children[0]?.event.kind === "routing" && <ul className="conversation-route-inline"><EventRow event={item.children[0].event} /></ul>}
       {item.children.slice(item.children[0]?.event.kind === "routing" ? 1 : 0).length > 0 && <ol className="conversation-timeline conversation-nested">{item.children.slice(item.children[0]?.event.kind === "routing" ? 1 : 0).map(child => <TimelineRow key={child.index} item={child} finalIndex={finalIndex} running={running} responseStatus={responseStatus} />)}</ol>}
       {item.result && <details><summary>{t("conversations.toolResult")}</summary><ol className="conversation-timeline"><EventRow event={item.result} /></ol></details>}

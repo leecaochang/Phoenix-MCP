@@ -721,7 +721,8 @@ async def test_decision_request_records_identity_and_outcome_without_request_env
         assert events[0]['payload']['observation_only'] is True
         assert events[0]['payload']['provider'] == 'typesafe'
         assert events[0]['payload']['model'] == 'jev-latest'
-        assert 'private request envelope' not in json.dumps(events)
+        assert events[0]['payload']['input']['text'] == 'private request envelope'
+        assert 'questions' not in json.dumps(events) and 'instructions' not in json.dumps(events)
         assert 'canary-api-secret' not in json.dumps(events)
     finally:
         history._current.reset(ctx)
