@@ -1748,7 +1748,7 @@
       "trigLikely": "可能性あり",
       "trigNone": "なし",
       "trigUnknown": "不明",
-      "triggerIssueRow": "<code>{entityId}</code>は<code>{declared}</code>と宣言されていますが、オートメーション {automationId} ({role}) で使用されています",
+      "triggerIssueRow": "<code>{entityId}</code>は<code>{declared}</code>と宣言されていますが、オートメーション <automation>{automationId}</automation> ({role}) で使用されています",
       "triggerIssues": "MESA の検証結果: {count} 件",
       "validationWarning": "警告:",
       "validationError": "エラー:",

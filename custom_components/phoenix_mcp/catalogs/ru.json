@@ -1331,7 +1331,7 @@
       "trigLikely": "Вероятно",
       "trigNone": "Нет",
       "trigUnknown": "Неизвестно",
-      "triggerIssueRow": "<code>{entityId}</code> объявлен как <code>{declared}</code>, но встречается в автоматизации {automationId} ({role})",
+      "triggerIssueRow": "<code>{entityId}</code> объявлен как <code>{declared}</code>, но встречается в автоматизации <automation>{automationId}</automation> ({role})",
       "triggerIssues": "Результаты проверки MESA: {count}",
       "validationWarning": "Предупреждение:",
       "validationError": "Ошибка:",

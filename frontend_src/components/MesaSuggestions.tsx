@@ -1,3 +1,4 @@
+import { MesaIdentity } from "./MesaIdentity";
 import { BusyButton } from "./BusyButton";
 // The MESA tab's "Suggested profiles" section: rows computed by the backend
 // scanner (blast-radius orchestrators, naked risky devices) with Apply /
@@ -52,6 +53,7 @@ const MODE_BADGE: Record<string, string> = {
 
 export function MesaSuggestions({
   suggestions,
+  friendlyName,
   dismissedCount,
   busyKey,
   rescanning,
@@ -62,6 +64,7 @@ export function MesaSuggestions({
   onRescan,
 }: {
   suggestions: MesaSuggestion[];
+  friendlyName?: (s: MesaSuggestion) => string;
   dismissedCount: number;
   busyKey: string | null;
   rescanning: boolean;
@@ -109,7 +112,7 @@ export function MesaSuggestions({
               <div key={s.key} className="preset-row mesa-suggest-row">
                 <div className="mesa-suggest-main">
                   <div className="mesa-suggest-head">
-                    <code>{s.scope === "domain" ? t("mesa.suggestDomainSubject", { id: s.subject_id }) : s.subject_id}</code>
+                    <MesaIdentity id={s.scope === "domain" ? t("mesa.suggestDomainSubject", { id: s.subject_id }) : s.subject_id} name={friendlyName?.(s)} />
                     <span className="mesa-suggest-badges">
                       <span className="badge badge-grey">{SIGNAL_LABEL_KEYS[s.signal] ? t(SIGNAL_LABEL_KEYS[s.signal]) : s.signal}</span>
                       <span className={`badge ${MODE_BADGE[s.suggested_mode] ?? "badge-grey"}`}>{MODE_LABEL_KEYS[s.suggested_mode] ? t(MODE_LABEL_KEYS[s.suggested_mode]) : s.suggested_mode}</span>

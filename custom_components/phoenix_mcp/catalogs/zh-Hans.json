@@ -453,7 +453,7 @@
       "trigLikely": "可能",
       "trigNone": "无",
       "trigUnknown": "未知",
-      "triggerIssueRow": "<code>{entityId}</code> 声明为 <code>{declared}</code>，但出现在自动化 {automationId} 中（{role}）",
+      "triggerIssueRow": "<code>{entityId}</code> 声明为 <code>{declared}</code>，但出现在自动化 <automation>{automationId}</automation> 中（{role}）",
       "triggerIssues": "MESA 校验结果：{count} 项",
       "validationWarning": "警告：",
       "validationError": "错误：",

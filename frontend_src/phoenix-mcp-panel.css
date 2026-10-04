@@ -2292,8 +2292,12 @@ button.changes-row:hover { background: var(--phx-surface-2); }
 .mesa-group .data-table td { vertical-align: middle; overflow: hidden; }
 .mesa-group .data-table td:nth-child(2) { width: 260px; }
 .mesa-group .data-table td:nth-child(3) { width: 22%; }
-.mesa-row-name { font-size: 13px; color: var(--phx-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mesa-row-id { font-size: 11px; color: var(--phx-text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mesa-identity { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; max-width: 100%; vertical-align: top; }
+.mesa-identity-name { font-size: 13px; font-weight: 700; color: var(--phx-text); overflow-wrap: anywhere; }
+.mesa-identity-id { font-size: 13px; overflow-wrap: anywhere; white-space: normal; }
+.mesa-identity .mesa-identity-secondary { font-size: 11px; color: var(--phx-text-2); }
+.mesa-notice-identities { margin: 6px 0; padding-left: 20px; }
+.mesa-notice-identities li, .mesa-notice-details li { margin-top: 4px; }
 .mesa-row-modes { white-space: normal; }
 .mesa-row-modes .badge + .badge { margin-left: 6px; }
 .mesa-row-tags { font-size: 12px; color: var(--phx-text-2); white-space: normal; overflow-wrap: anywhere; }

@@ -1180,7 +1180,7 @@
       "trigLikely": "Probabile",
       "trigNone": "Nessuno",
       "trigUnknown": "Sconosciuto",
-      "triggerIssueRow": "<code>{entityId}</code> dichiarata <code>{declared}</code> ma compare nell'automazione {automationId} ({role})",
+      "triggerIssueRow": "<code>{entityId}</code> dichiarata <code>{declared}</code> ma compare nell'automazione <automation>{automationId}</automation> ({role})",
       "triggerIssues": "Risultati della convalida MESA: {count}",
       "validationWarning": "Avviso:",
       "validationError": "Errore:",

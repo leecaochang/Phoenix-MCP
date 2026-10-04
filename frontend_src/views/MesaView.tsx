@@ -15,6 +15,7 @@ import { api, ApiError, currentHass } from "../api";
 import { Modal } from "../components/Modal";
 import { TagInput } from "../components/TagInput";
 import { MesaSuggestions } from "../components/MesaSuggestions";
+import { MesaIdentity } from "../components/MesaIdentity";
 import { Loading, ErrorMsg, RefreshIcon, ExportIcon, ImportIcon } from "../components/common";
 import { compareStrings, localeNumber, t, tn } from "../i18n";
 import { tRich } from "../i18n/rich";
@@ -1306,9 +1307,30 @@ export function MesaView() {
   // so unlike an area there is nothing an admin could type from memory.
   useEffect(() => { api.getMesaDeviceOptions().then((r) => setDeviceOptions(r.devices)).catch(() => null); }, []);
 
+  const hassStates = (currentHass() as { states?: Record<string, { attributes?: Record<string, unknown> }> } | null)?.states;
   const friendly = useCallback((eid: string): string => {
-    return entityTree?.[domainOf(eid)]?.entity_details[eid]?.friendly_name ?? "";
-  }, [entityTree]);
+    const name = entityTree?.[domainOf(eid)]?.entity_details[eid]?.friendly_name
+      || hassStates?.[eid]?.attributes?.friendly_name;
+    return typeof name === "string" ? name : "";
+  }, [entityTree, hassStates]);
+
+  // Validator automation IDs are configuration IDs, not always entity IDs.
+  // Resolve only known identities; never guess a name from a similar slug.
+  const automationNames = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const [eid, state] of Object.entries(hassStates ?? {})) {
+      if (domainOf(eid) !== "automation") continue;
+      const name = friendly(eid);
+      const configId = state.attributes?.id;
+      if (name && typeof configId === "string" && configId) names.set(configId, name);
+    }
+    for (const eid of Object.keys(entityTree?.automation?.entity_details ?? {})) {
+      const name = friendly(eid);
+      if (name) { names.set(eid, name); names.set(eid.slice("automation.".length), name); }
+    }
+    return names;
+  }, [entityTree, hassStates, friendly]);
+  const automationName = (id: string) => friendly(id) || automationNames.get(id) || "";
 
   // What to CALL a cascading-scope profile key, per scope.
   //
@@ -1480,7 +1502,7 @@ export function MesaView() {
           <details className="mesa-notice-details">
             <summary>{t("mesa.viewAutomationDetails")}</summary>
             <ul>
-              {partialInspectionAutomations.map((id) => <li key={id}><code>{id}</code></li>)}
+              {partialInspectionAutomations.map((id) => <li key={id}><MesaIdentity id={id} name={automationName(id)} /></li>)}
             </ul>
           </details>
         </MesaNotice>
@@ -1494,8 +1516,8 @@ export function MesaView() {
               <li key={idx}>
                 <strong>{i.severity === "error" ? t("mesa.validationError") : t("mesa.validationWarning")}</strong>{" "}
                 {i.role === "configuration"
-                  ? tRich("mesa.validationAutomation", { code: (c) => <code>{c}</code> }, { automationId: i.automation_id })
-                  : tRich("mesa.triggerIssueRow", { code: (c) => <code>{c}</code> }, { entityId: i.entity_id, declared: i.declared_value, automationId: i.automation_id, role: i.role })}
+                  ? tRich("mesa.validationAutomation", { code: (c) => <MesaIdentity id={c} name={automationName(c)} /> }, { automationId: i.automation_id })
+                  : tRich("mesa.triggerIssueRow", { code: (c) => c === i.entity_id ? <MesaIdentity id={c} name={friendly(c)} /> : <code>{c}</code>, automation: (c) => <MesaIdentity id={c} name={automationName(c)} /> }, { entityId: i.entity_id, declared: i.declared_value, automationId: i.automation_id, role: i.role })}
                 <div>{i.recommendation}</div>
               </li>
             ))}
@@ -1512,22 +1534,26 @@ export function MesaView() {
         ]}>
           {issues.orphans.length > 0 && (
             <div>
-              {tRich("mesa.orphanEntities", { strong: (c) => <strong>{c}</strong> }, { count: issues.orphans.length, list: issues.orphans.join(t("common.listSeparator")) })}
+              {tRich("mesa.orphanEntities", { strong: (c) => <strong>{c}</strong> }, { count: issues.orphans.length, list: "" })}
+              <ul className="mesa-notice-identities">{issues.orphans.map((id) => <li key={id}><MesaIdentity id={id} name={friendly(id)} /></li>)}</ul>
             </div>
           )}
           {issues.orphan_devices.length > 0 && (
-            <p className="mesa-orphan-line">
-              {tRich("mesa.orphanDevices", { strong: (c) => <strong>{c}</strong> }, { count: issues.orphan_devices.length, list: issues.orphan_devices.join(t("common.listSeparator")) })}
-            </p>
+            <div className="mesa-orphan-line">
+              {tRich("mesa.orphanDevices", { strong: (c) => <strong>{c}</strong> }, { count: issues.orphan_devices.length, list: "" })}
+              <ul className="mesa-notice-identities">{issues.orphan_devices.map((id) => <li key={id}><MesaIdentity id={id} name={scopeKeyName("device", id)} /></li>)}</ul>
+            </div>
           )}
           {issues.orphan_areas.length > 0 && (
             <div>
-              {tRich("mesa.orphanAreas", { strong: (c) => <strong>{c}</strong> }, { count: issues.orphan_areas.length, list: issues.orphan_areas.join(t("common.listSeparator")) })}
+              {tRich("mesa.orphanAreas", { strong: (c) => <strong>{c}</strong> }, { count: issues.orphan_areas.length, list: "" })}
+              <ul className="mesa-notice-identities">{issues.orphan_areas.map((id) => <li key={id}><MesaIdentity id={id} name={scopeKeyName("area", id)} /></li>)}</ul>
             </div>
           )}
           {issues.orphan_integrations.length > 0 && (
             <div>
-              {tRich("mesa.orphanIntegrations", { strong: (c) => <strong>{c}</strong> }, { count: issues.orphan_integrations.length, list: issues.orphan_integrations.join(t("common.listSeparator")) })}
+              {tRich("mesa.orphanIntegrations", { strong: (c) => <strong>{c}</strong> }, { count: issues.orphan_integrations.length, list: "" })}
+              <ul className="mesa-notice-identities">{issues.orphan_integrations.map((id) => <li key={id}><MesaIdentity id={id} name={scopeKeyName("integration", id)} /></li>)}</ul>
             </div>
           )}
           <p>{t("mesa.advisoryOnly")}</p>
@@ -1535,6 +1561,7 @@ export function MesaView() {
       )}
 
       <MesaSuggestions
+        friendlyName={(s) => s.scope === "entity" ? friendly(s.subject_id) : ""}
         suggestions={issues.suggestions}
         dismissedCount={issues.dismissed_suggestions.length}
         busyKey={suggestBusyKey}
@@ -1612,14 +1639,10 @@ export function MesaView() {
                                 <td>
                                   <button
                                     type="button"
-                                    className="row-link-btn"
+                                    className="row-link-btn row-link-btn-stack"
                                     onClick={() => setEditing({ scope: c.scope, key: r.key, isNew: false })}
                                   >
-                                    {/* Name first, key second, mirroring the entity rows. The key
-                                        is still shown because it is what the API and the audit log
-                                        record, and for an orphaned profile it is all that is left. */}
-                                    <span className="mesa-row-name">{name}</span>
-                                    {name !== r.key && <code className="mesa-row-id">{r.key}</code>}
+                                    <MesaIdentity id={r.key} name={name} />
                                   </button>
                                 </td>
                                 <td className="mesa-row-modes">
@@ -1665,8 +1688,7 @@ export function MesaView() {
                                   className="row-link-btn row-link-btn-stack"
                                   onClick={() => setEditing({ scope: "entity", key: p.entity_id, isNew: false })}
                                 >
-                                  <span className="mesa-row-name">{friendly(p.entity_id) || p.entity_id}</span>
-                                  {friendly(p.entity_id) && <code className="mesa-row-id">{p.entity_id}</code>}
+                                  <MesaIdentity id={p.entity_id} name={friendly(p.entity_id)} />
                                 </button>
                               </td>
                               <td className="mesa-row-modes">

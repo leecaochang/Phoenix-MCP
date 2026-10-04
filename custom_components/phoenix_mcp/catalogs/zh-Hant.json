@@ -1246,7 +1246,7 @@
       "trigLikely": "可能",
       "trigNone": "無",
       "trigUnknown": "未知",
-      "triggerIssueRow": "<code>{entityId}</code> 宣告為 <code>{declared}</code>，但出現在自動化 {automationId} 中（{role}）",
+      "triggerIssueRow": "<code>{entityId}</code> 宣告為 <code>{declared}</code>，但出現在自動化 <automation>{automationId}</automation> 中（{role}）",
       "triggerIssues": "MESA 驗證結果：{count} 項",
       "validationWarning": "警告：",
       "validationError": "錯誤：",

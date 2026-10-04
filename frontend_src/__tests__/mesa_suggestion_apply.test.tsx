@@ -192,3 +192,55 @@ it("still allows dismissal when browser storage is unavailable or malformed", as
     expect(screen.queryByText(/sensor.retained/)).toBeNull();
   } finally { write.mockRestore(); }
 });
+
+it("uses bold friendly names with IDs underneath for every profile scope and suggestions", async () => {
+  const document = { semantic_profile: { operational_boundaries: { control_mode: "confirm" } } };
+  const entity = { entity_id: "fan.office", friendly_name: "Office fan", device_id: "device-office", area_id: "office", area_name: "Office", labels: [] };
+  vi.mocked(api.getEntityTree).mockResolvedValue({ fan: { devices: {}, deviceless_entities: [entity.entity_id], entity_details: { [entity.entity_id]: entity } } });
+  vi.mocked(api.listMesaProfiles).mockResolvedValue({ profiles: [{ entity_id: "fan.office", document }], total_matched: 1, has_more: false, next_cursor: null });
+  vi.mocked(api.listMesaDevices).mockResolvedValue({ devices: [{ device_id: "device-office", document }] });
+  vi.mocked(api.listMesaAreas).mockResolvedValue({ areas: [{ area_id: "office", document }] });
+  vi.mocked(api.listMesaIntegrations).mockResolvedValue({ integrations: [{ integration: "test_integration", document }] });
+  vi.mocked(api.listMesaDomains).mockResolvedValue({ domains: [{ domain: "fan", document }] });
+  vi.mocked(api.getMesaDeviceOptions).mockResolvedValue({ devices: [{ id: "device-office", name: "Office device" }] });
+  vi.mocked(api.getMesaIntegrationOptions).mockResolvedValue({ integrations: [{ id: "test_integration", name: "Test integration" }] });
+  vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, suggestions: [{ key: "fan-suggestion", signal: "naked_risky", scope: "entity", subject_id: "fan.office", suggested_mode: "confirm", reason: "Review this entity.", evidence: {} }] });
+  render(<MesaView />);
+  await screen.findByRole("button", { name: "Test integration test_integration" });
+  for (const [name, id] of [["Office fan", "fan.office"], ["Office device", "device-office"], ["Office", "office"], ["Test integration", "test_integration"]]) {
+    const button = screen.getByRole("button", { name: `${name} ${id}` });
+    const identity = button.querySelector(".mesa-identity")!;
+    expect(identity.children[0].tagName).toBe("STRONG");
+    expect(identity.children[0]).toHaveTextContent(name);
+    expect(identity.children[1].tagName).toBe("CODE");
+    expect(identity.children[1]).toHaveTextContent(id);
+    expect(button).toHaveClass("row-link-btn-stack");
+  }
+  const suggestion = screen.getByText("Review this entity.").closest<HTMLElement>(".mesa-suggest-row")!;
+  expect(within(suggestion).getByText("Office fan").tagName).toBe("STRONG");
+  expect(within(suggestion).getByText("fan.office").tagName).toBe("CODE");
+});
+
+it("resolves automation configuration IDs and renders friendly names in advisory details and validation", async () => {
+  const hostileName = "Night fan <img src=x onerror=alert(1)>";
+  setHass({ user: { id: "test-admin" }, states: {
+    "automation.night_fan": { attributes: { id: "1740000000000", friendly_name: hostileName } },
+    "fan.office": { attributes: { friendly_name: "Office fan" } },
+  } });
+  const inspection = { entity_id: "", declared_value: "unknown", automation_id: "1740000000000", role: "configuration", severity: "warning", recommendation: "templates or blueprint inputs require host expansion; reference coverage is incomplete" };
+  vi.mocked(api.getMesaIssues).mockResolvedValue({ ...empty, issues: [inspection, {
+    entity_id: "fan.office", declared_value: "none", automation_id: "1740000000000", role: "trigger", severity: "error", recommendation: "Review declaration.",
+  }, { ...inspection, automation_id: "missing_automation", recommendation: "Unknown finding." }] });
+  const { container } = render(<MesaView />);
+  await screen.findByText("View automations");
+  fireEvent.click(screen.getByText("View automations"));
+  const details = screen.getByText("View automations").closest("details")!;
+  expect(within(details).getByText(hostileName).tagName).toBe("STRONG");
+  expect(within(details).getByText("1740000000000").tagName).toBe("CODE");
+  const row = screen.getByText("Review declaration.").closest("li")!;
+  expect(within(row).getByText("Office fan").tagName).toBe("STRONG");
+  expect(within(row).getByText(hostileName).tagName).toBe("STRONG");
+  expect(within(row).getByText("fan.office")).toHaveClass("mesa-identity-secondary");
+  expect(screen.getByText("missing_automation")).not.toHaveClass("mesa-identity-secondary");
+  expect(container.querySelector("img")).toBeNull();
+});

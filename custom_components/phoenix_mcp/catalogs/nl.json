@@ -1564,7 +1564,7 @@
       "trigLikely": "Waarschijnlijk",
       "trigNone": "Geen",
       "trigUnknown": "Onbekend",
-      "triggerIssueRow": "<code>{entityId}</code> is gedeclareerd als <code>{declared}</code> maar komt voor in automatisering {automationId} ({role})",
+      "triggerIssueRow": "<code>{entityId}</code> is gedeclareerd als <code>{declared}</code> maar komt voor in automatisering <automation>{automationId}</automation> ({role})",
       "triggerIssues": "MESA-validatiebevindingen: {count}",
       "validationWarning": "Waarschuwing:",
       "validationError": "Fout:",

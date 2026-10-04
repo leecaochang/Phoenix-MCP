@@ -1395,7 +1395,7 @@
       "trigLikely": "Probable",
       "trigNone": "Ninguno",
       "trigUnknown": "Desconocido",
-      "triggerIssueRow": "<code>{entityId}</code> declaró <code>{declared}</code> pero aparece en la automatización {automationId} ({role})",
+      "triggerIssueRow": "<code>{entityId}</code> declaró <code>{declared}</code> pero aparece en la automatización <automation>{automationId}</automation> ({role})",
       "triggerIssues": "Resultados de validación de MESA: {count}",
       "validationWarning": "Advertencia:",
       "validationError": "Error de validación:",
